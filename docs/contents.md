@@ -51,6 +51,10 @@
 - [ADR-008: Opt-in agent-native policy configuration][adr-008]:
   review the accepted 7.1.1 policy configuration surface, the enforcement and
   advertisement defaults, the report contract, and the reserved 7.1.2 seam.
+- [ADR-008: Optional-value boolean CLI metadata](adr-008-optional-value-boolean-cli-metadata.md):
+  review the accepted `value_optional` marker, the documentation IR version
+  bump, and the rejected alternatives for expressing the new boolean flag
+  surface.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

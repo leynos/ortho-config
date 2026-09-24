@@ -96,6 +96,13 @@ or other human-facing reference material. Those fields are versioned by
 `OrthoConfigSubcommandDocs` is part of the same human-documentation IR contract
 and uses the same versioning boundary for recursive subcommand metadata.
 
+Adding, removing, or changing a field in `ortho_config::docs` requires a matching
+change in `cargo-orthohelp::schema`, which mirrors the IR for the standalone
+generator. The two definitions must stay byte-for-byte aligned;
+`ORTHO_DOCS_IR_VERSION` is bumped in both, and the version-alignment test fails
+if the pair drifts. Add fields with `#[serde(default)]` so documents written
+before the field existed still read correctly, as ADR-003 requires.
+
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` for compatibility. Do not add Fluent

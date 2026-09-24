@@ -246,3 +246,95 @@ fn compose_layers_collects_env_and_file_errors() -> Result<()> {
     })?;
     Ok(())
 }
+
+/// A configuration with exactly one field.
+///
+/// The single field is what makes this a regression test rather than a
+/// duplicate of `compose_layers_collects_cli_env_and_file`: the defect it pins
+/// only appears when the sanitised CLI object can equal the defaults object
+/// field for field, which a one-field struct reaches as soon as the user
+/// restates the default.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct SingleFieldConfig {
+    #[ortho_config(default = false)]
+    excited: bool,
+}
+
+/// An explicit CLI value that happens to equal the struct default must still
+/// produce a CLI layer.
+///
+/// The generated guard used to compare the whole sanitised CLI object against
+/// the whole defaults object and skip `composer.push_cli` when they matched.
+/// Restating a default on the command line therefore discarded the entire CLI
+/// layer, and a lower-precedence environment value silently won. The layer
+/// stack is asserted directly so the regression is named at its source rather
+/// than surfacing as a distant merge mismatch.
+#[rstest]
+fn compose_layers_keeps_cli_layer_when_value_equals_default() -> Result<()> {
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        jail.set_env("APP_EXCITED", "true");
+
+        let composition = SingleFieldConfig::compose_layers_from_iter(["prog", "--excited=false"]);
+        let (layers, errors) = composition.into_parts();
+
+        if !errors.is_empty() {
+            return Err(figment::Error::from("expected composition without errors"));
+        }
+        let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+        let expected = vec![
+            MergeProvenance::Defaults,
+            MergeProvenance::Environment,
+            MergeProvenance::Cli,
+        ];
+        if provenances != expected {
+            return Err(figment::Error::from(
+                "an explicit CLI value equal to the default must still push a CLI layer",
+            ));
+        }
+
+        let merged = SingleFieldConfig::merge_from_layers(layers).to_figment()?;
+        if merged.excited {
+            return Err(figment::Error::from(
+                "explicit --excited=false should clear the environment true",
+            ));
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// The same struct with no CLI argument must not push a CLI layer, so the
+/// environment value still wins. This is the absent-versus-present distinction
+/// the fix must preserve.
+#[rstest]
+fn compose_layers_omits_cli_layer_when_no_argument_is_supplied() -> Result<()> {
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        jail.set_env("APP_EXCITED", "true");
+
+        let composition = SingleFieldConfig::compose_layers_from_iter(["prog"]);
+        let (layers, errors) = composition.into_parts();
+
+        if !errors.is_empty() {
+            return Err(figment::Error::from("expected composition without errors"));
+        }
+        let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+        let expected = vec![MergeProvenance::Defaults, MergeProvenance::Environment];
+        if provenances != expected {
+            return Err(figment::Error::from(
+                "an absent flag must not push a CLI layer",
+            ));
+        }
+
+        let merged = SingleFieldConfig::merge_from_layers(layers).to_figment()?;
+        if !merged.excited {
+            return Err(figment::Error::from(
+                "the environment value should survive an absent flag",
+            ));
+        }
+        Ok(())
+    })?;
+    Ok(())
+}

@@ -22,6 +22,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-localization",
     "guide-tracing",
     "guide-orthohelp-metadata",
+    "guide-boolean-override",
 ];
 
 #[test]
@@ -42,6 +43,8 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         "field=host\n",
     )?;
     assert_sanitized_binary_environment(&mut workspace)?;
+
+    assert_boolean_override_flow(&mut workspace)?;
 
     assert_error_flow(&mut workspace)?;
 
@@ -156,6 +159,49 @@ fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> 
         ExampleId("guide-localization"),
         [],
         "verbose=true\n",
+    )
+}
+
+/// Asserts the boolean-flag spellings promised by the user's guide.
+fn assert_boolean_override_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
+    assert_run(
+        workspace,
+        ExampleId("guide-boolean-override"),
+        [],
+        "excited=false\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-boolean-override"),
+        ["--excited"],
+        "excited=true\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-boolean-override"),
+        ["--excited=false"],
+        "excited=false\n",
+    )?;
+
+    assert_run_with_environment(
+        workspace,
+        ExampleId("guide-boolean-override"),
+        [],
+        [EnvironmentVariable {
+            name: "ACME_EXCITED",
+            value: "true",
+        }],
+        "excited=true\n",
+    )?;
+    assert_run_with_environment(
+        workspace,
+        ExampleId("guide-boolean-override"),
+        ["--excited=false"],
+        [EnvironmentVariable {
+            name: "ACME_EXCITED",
+            value: "true",
+        }],
+        "excited=false\n",
     )
 }
 
@@ -326,6 +372,29 @@ fn assert_run<const N: usize>(
     expected_stdout: &str,
 ) -> Result<()> {
     let output = workspace.run(ExampleId(id), args)?;
+    ensure!(
+        output.status.success(),
+        "{id} failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout =
+        String::from_utf8(output.stdout).with_context(|| format!("{id} stdout is UTF-8"))?;
+    ensure!(
+        stdout == expected_stdout,
+        "{id} stdout differed: expected {expected_stdout:?}, got {stdout:?}"
+    );
+    Ok(())
+}
+
+/// Runs a documented example with environment overrides and asserts its stdout.
+fn assert_run_with_environment<const N: usize, const E: usize>(
+    workspace: &mut ExampleWorkspace,
+    ExampleId(id): ExampleId<'_>,
+    args: [&str; N],
+    environment: [EnvironmentVariable<'_>; E],
+    expected_stdout: &str,
+) -> Result<()> {
+    let output = workspace.run_with_environment(ExampleId(id), args, environment)?;
     ensure!(
         output.status.success(),
         "{id} failed:\n{}",

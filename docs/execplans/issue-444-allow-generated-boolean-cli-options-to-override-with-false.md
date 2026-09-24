@@ -59,7 +59,29 @@ true` alone still resolves to `true`.
   `cargo-orthohelp/src/agent_context/mod.rs::should_skip_non_flag_input`.
 - **`default_value` replay still behaves.** With both `default_value = "false"`
   and the new attributes, absent → `DefaultValue` source, explicit forms →
-  `CommandLine`. `differs_from_defaults` therefore still gates correctly.
+  `CommandLine`.
+- **`differs_from_defaults` was broken, and the earlier note that it "still
+  gates correctly" was wrong.** The guard compared the whole sanitised CLI
+  object against the whole defaults object and skipped `composer.push_cli`
+  when the two were equal. For any configuration whose explicit CLI value
+  equals its struct default, the entire CLI layer was discarded, so a lower
+  file or environment value silently won over an explicit user argument. The
+  one-field case is the minimal reproduction:
+
+  ```plaintext
+  # Defaults={"excited":false}  Environment={"excited":true}
+  probe --excited=false   ->  before: excited=true  (CLI layer dropped)
+                          ->  after:  excited=false (CLI layer retained)
+  ```
+
+  The bug is **not boolean-specific**: `port: u16` with `default = 8080` and
+  `ACME_PORT=9000` ignored an explicit `--port 8080` in exactly the same way.
+  It is pre-existing (introduced with `LayerComposition` in #246) and was
+  previously masked because every test fixture carried enough other fields to
+  make the two objects unequal. Boolean `--flag=false` is simply the value
+  most likely to coincide with a default, which is why #444's acceptance
+  criteria expose it. `defaults_value` was removed from the generated code and
+  the guard now asks clap's per-argument `matches.value_source()` instead.
 - **Do not run `cargo test --workspace` while editing.** The `cargo-orthohelp`
   behavioural scenarios spawn the real `target/debug/cargo-orthohelp` binary;
   recompiling it mid-run produced nine spurious failures that vanish when the
