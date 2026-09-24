@@ -22,13 +22,13 @@ use ortho_config::declarative::merge_value;
 /// Returns an error when the layer names a different file, or when either path
 /// cannot be canonicalised.
 pub fn assert_layer_path(layer: &ortho_config::MergeLayer<'_>, expected: &Path) -> Result<()> {
-    let actual = layer
+    let recorded = layer
         .path()
         .ok_or_else(|| anyhow!("layer has no path, expected {}", expected.display()))?
         .as_std_path()
         .to_path_buf();
-    let shown = actual.display().to_string();
-    let actual = ortho_config::file::canonicalise(&actual)
+    let shown = recorded.display().to_string();
+    let actual = ortho_config::file::canonicalise(&recorded)
         .map_err(|err| anyhow!("canonicalise layer path {shown}: {err}"))?;
     let expected_canonical = ortho_config::file::canonicalise(expected)
         .map_err(|err| anyhow!("canonicalise expected path {}: {err}", expected.display()))?;

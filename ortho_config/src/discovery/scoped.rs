@@ -146,10 +146,10 @@ impl ConfigDiscovery {
     /// The reversal happens here, in one named place, so that no call site has
     /// to hold two opposite orderings in mind: everything downstream of this
     /// function merely appends in application order.
-    fn scope_candidates<'set>(
+    fn scope_candidates(
         scope: DiscoveryScope,
-        set: &'set CandidateSet,
-    ) -> impl Iterator<Item = (usize, &'set Candidate)> {
+        set: &CandidateSet,
+    ) -> impl Iterator<Item = (usize, &Candidate)> {
         set.candidates
             .iter()
             .enumerate()

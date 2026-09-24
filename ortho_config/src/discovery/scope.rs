@@ -31,7 +31,10 @@ pub enum AutomaticMode {
     /// Scopes are applied in the requested order, so a later scope overrides an
     /// earlier one. Within a scope the candidate list is a preference order:
     /// the least-preferred candidate that loads is applied first and the
-    /// most-preferred is applied last, so the historic winner still wins. See
-    /// [`crate::discovery::scoped`] for the two orderings this maps between.
+    /// most-preferred is applied last, so the historic winner still wins. That
+    /// reversal is what lets one rule — later applied wins — serve both the
+    /// layer stack and the historical preference order; without it a fallback
+    /// such as `~/.demo.toml` would override `$XDG_CONFIG_HOME/demo/config.toml`
+    /// as soon as a second location started loading.
     StackScopes,
 }
