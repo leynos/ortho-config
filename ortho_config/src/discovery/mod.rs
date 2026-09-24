@@ -18,6 +18,7 @@ mod load;
 mod outcome;
 mod policy;
 mod scope;
+mod scoped;
 mod telemetry;
 
 pub use builder::ConfigDiscoveryBuilder;

@@ -1,24 +1,19 @@
 //! File-loading and layer-composition routines for `ConfigDiscovery`.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 
-use crate::file::canonicalise;
 use crate::{
     MergeLayer, OrthoError, OrthoMergeExt, OrthoResult, load_config_file, load_config_file_as_chain,
 };
 
 use super::outcome::DiscoveryOutcome;
 use super::telemetry;
-use super::{
-    AutomaticMode, ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome,
-    DiscoveryLoadOutcome, DiscoveryScope,
-};
+use super::{ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome, DiscoveryLoadOutcome};
 
 /// Candidate errors partitioned by whether the candidate was required.
 ///
@@ -28,7 +23,7 @@ use super::{
 /// that decision in a single place is what stops the emitted event and the
 /// reported error disagreeing.
 #[derive(Debug, Default)]
-struct PartitionedErrors {
+pub(super) struct PartitionedErrors {
     required: Vec<Arc<OrthoError>>,
     optional: Vec<Arc<OrthoError>>,
 }
@@ -39,20 +34,14 @@ struct PartitionedErrors {
 /// four-argument ceiling and keeps the telemetry decision in one place: the
 /// error's category is derived from the error itself at the recording site,
 /// so the emitted event and the stored error cannot disagree.
-struct CandidateFailure {
-    operation: &'static str,
-    required: bool,
-    source: &'static str,
-}
-
-/// One scope's first successful chain and its discovery diagnostics.
-struct ScopeLayers {
-    layers: Vec<MergeLayer<'static>>,
-    errors: PartitionedErrors,
+pub(super) struct CandidateFailure {
+    pub(super) operation: &'static str,
+    pub(super) required: bool,
+    pub(super) source: &'static str,
 }
 
 impl PartitionedErrors {
-    fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
+    pub(super) fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
         telemetry::candidate_failure(
             failure.operation,
             failure.required,
@@ -74,12 +63,25 @@ impl PartitionedErrors {
         }
     }
 
-    fn into_layers_outcome(self, value: Vec<MergeLayer<'static>>) -> DiscoveryLayersOutcome {
+    pub(super) fn into_layers_outcome(
+        self,
+        value: Vec<MergeLayer<'static>>,
+    ) -> DiscoveryLayersOutcome {
         DiscoveryLayersOutcome {
             value,
             required_errors: self.required,
             optional_errors: self.optional,
         }
+    }
+
+    /// Merge another partition into this one, preserving each bucket's order.
+    ///
+    /// Scope stacking accumulates diagnostics across scopes, and which bucket an
+    /// error lands in is the whole point of the split; appending here keeps the
+    /// caller from having to name the two fields and risk transposing them.
+    pub(super) fn append(&mut self, mut other: Self) {
+        self.required.append(&mut other.required);
+        self.optional.append(&mut other.optional);
     }
 }
 
@@ -157,7 +159,10 @@ impl ConfigDiscovery {
     }
 
     /// Returns true if the candidate at `idx` is required.
-    const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
+    ///
+    /// Shared with [`ConfigDiscovery::compose_scoped_layers`], which walks the
+    /// same list and must partition its diagnostics identically.
+    pub(super) const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
         idx < required_bound
     }
 
@@ -249,111 +254,12 @@ impl ConfigDiscovery {
         errors.into_layers_outcome(value.unwrap_or_default())
     }
 
-    /// Compose automatic file layers according to an explicit scope policy.
-    ///
-    /// [`AutomaticMode::FirstWins`] preserves [`Self::compose_layers`] exactly.
-    /// [`AutomaticMode::StackScopes`] finds one successful `extends` chain per
-    /// requested scope and appends scopes in order, allowing later scopes to
-    /// override earlier scopes through the existing `MergeComposer` semantics.
-    pub fn compose_scoped_layers(
-        &self,
-        mode: AutomaticMode,
-        scopes: &[DiscoveryScope],
-    ) -> DiscoveryLayersOutcome {
-        if matches!(mode, AutomaticMode::FirstWins) {
-            return self.compose_layers();
-        }
-
-        telemetry::attempt(telemetry::OPERATION_COMPOSE_LAYERS);
-        let set = self.candidate_set();
-        set.decisions.emit();
-        let mut errors = PartitionedErrors::default();
-        let mut layers = Vec::new();
-        let mut loaded_paths = HashSet::new();
-
-        for scope in scopes {
-            let mut scope_layers = Self::compose_scope(*scope, &set, &mut loaded_paths);
-            layers.append(&mut scope_layers.layers);
-            errors.required.append(&mut scope_layers.errors.required);
-            errors.optional.append(&mut scope_layers.errors.optional);
-        }
-
-        telemetry::load_outcome(
-            telemetry::OPERATION_COMPOSE_LAYERS,
-            if layers.is_empty() {
-                telemetry::OUTCOME_NOT_FOUND
-            } else {
-                telemetry::OUTCOME_SUCCESS
-            },
-            None,
-        );
-        errors.into_layers_outcome(layers)
-    }
-
-    fn compose_scope(
-        scope: DiscoveryScope,
-        set: &super::candidate_set::CandidateSet,
-        loaded_paths: &mut HashSet<std::path::PathBuf>,
-    ) -> ScopeLayers {
-        let mut errors = PartitionedErrors::default();
-        for (index, candidate) in set.candidates.iter().enumerate() {
-            if candidate.scope != Some(scope) {
-                continue;
-            }
-            let required = Self::is_required_candidate(index, set.required_bound);
-            match Self::chain_layers(&candidate.path, required) {
-                Ok(Some(chain)) => {
-                    let layers = Self::unique_layers(chain, loaded_paths);
-                    telemetry::load_outcome(
-                        telemetry::OPERATION_COMPOSE_LAYERS,
-                        telemetry::OUTCOME_SUCCESS,
-                        Some(candidate.source),
-                    );
-                    return ScopeLayers { layers, errors };
-                }
-                Ok(None) => {}
-                Err(error) => errors.record(
-                    &CandidateFailure {
-                        operation: telemetry::OPERATION_COMPOSE_LAYERS,
-                        required,
-                        source: candidate.source,
-                    },
-                    error,
-                ),
-            }
-        }
-        ScopeLayers {
-            layers: Vec::new(),
-            errors,
-        }
-    }
-
-    fn unique_layers(
-        chain: Vec<MergeLayer<'static>>,
-        loaded_paths: &mut HashSet<std::path::PathBuf>,
-    ) -> Vec<MergeLayer<'static>> {
-        chain
-            .into_iter()
-            .filter(|layer| Self::record_first_canonical_path(loaded_paths, layer))
-            .collect()
-    }
-
-    /// Keep the earliest scope's copy of a successfully loaded file.
-    ///
-    /// The loader canonicalises every chain path, so canonical identity also
-    /// collapses aliases and symlinks without changing public layer metadata.
-    fn record_first_canonical_path(
-        loaded_paths: &mut HashSet<std::path::PathBuf>,
-        layer: &MergeLayer<'static>,
-    ) -> bool {
-        layer.path().is_none_or(|path| {
-            canonicalise(path.as_std_path())
-                .map_or(true, |canonical| loaded_paths.insert(canonical))
-        })
-    }
-
     /// Load one candidate's `extends` chain as a layer stack.
-    fn chain_layers(
+    ///
+    /// Shared with [`ConfigDiscovery::compose_scoped_layers`]: both modes must
+    /// expand a chain identically, and the only difference between them is how
+    /// many candidates they apply it to.
+    pub(super) fn chain_layers(
         path: &Path,
         required: bool,
     ) -> Result<Option<Vec<MergeLayer<'static>>>, Arc<OrthoError>> {
