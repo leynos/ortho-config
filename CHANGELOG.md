@@ -121,7 +121,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Keep the generated CLI layer when an explicit command-line value happens to
-  equal the struct default. The layering guard compared the whole sanitised CLI
+  equal the struct default. The layering guard compared the whole sanitized CLI
   object against the whole defaults object and skipped the CLI layer when they
   matched, so for a single-field configuration an explicit `--flag=false` or
   `--port 8080` was discarded and a lower-precedence file or environment value

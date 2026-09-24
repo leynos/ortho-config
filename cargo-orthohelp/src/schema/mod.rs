@@ -108,6 +108,15 @@ pub struct FieldMetadata {
 }
 
 /// CLI documentation metadata for a field.
+///
+/// The four flags are independent facts about a single flag rather than the
+/// states of one machine: a flag can repeat *and* take a value *and* accept it
+/// optionally *and* be hidden. Collapsing them into enums would change the IR
+/// wire format that consumers read.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Mirrors `ortho_config::docs::CliMetadata` byte for byte."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliMetadata {
     /// Long CLI flag name (without the leading dashes).

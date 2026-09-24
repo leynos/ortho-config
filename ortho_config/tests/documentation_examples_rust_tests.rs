@@ -371,22 +371,18 @@ fn assert_run<const N: usize>(
     args: [&str; N],
     expected_stdout: &str,
 ) -> Result<()> {
-    let output = workspace.run(ExampleId(id), args)?;
-    ensure!(
-        output.status.success(),
-        "{id} failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stdout =
-        String::from_utf8(output.stdout).with_context(|| format!("{id} stdout is UTF-8"))?;
-    ensure!(
-        stdout == expected_stdout,
-        "{id} stdout differed: expected {expected_stdout:?}, got {stdout:?}"
-    );
-    Ok(())
+    assert_run_with_environment(workspace, ExampleId(id), args, [], expected_stdout)
 }
 
 /// Runs a documented example with environment overrides and asserts its stdout.
+///
+/// The five inputs are the natural call-site shape: the arguments and the
+/// environment are varied independently, so grouping them would only push the
+/// assembly cost onto every caller.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Test helpers read better with the subjects spelled out."
+)]
 fn assert_run_with_environment<const N: usize, const E: usize>(
     workspace: &mut ExampleWorkspace,
     ExampleId(id): ExampleId<'_>,

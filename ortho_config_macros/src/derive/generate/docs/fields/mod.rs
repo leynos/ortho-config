@@ -164,7 +164,7 @@ impl<'a> FieldMetaBuilder<'a> {
         // `--flag[=<BOOL>]` form rather than an unexplained bare switch.
         // Every other option takes a required value, so only boolean flags
         // mark their value as optional.
-        let (value_name, value_optional, possible_values) = if meta.is_bool {
+        let (value_name, value_optional, resolved_possible_values) = if meta.is_bool {
             (
                 option_string_tokens(Some("BOOL")),
                 quote! { true },
@@ -190,7 +190,7 @@ impl<'a> FieldMetaBuilder<'a> {
                 multiple: #multiple,
                 takes_value: true,
                 value_optional: #value_optional,
-                possible_values: vec![ #( #possible_values ),* ],
+                possible_values: vec![ #( #resolved_possible_values ),* ],
                 hide_in_help: #hide_in_help,
             })
         })
