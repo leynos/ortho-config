@@ -1,12 +1,16 @@
 //! Tests for merging selected subcommand enums via `SelectedSubcommandMerge`.
 
+use anyhow::{Context as _, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ortho_config::{
-    LoadGlobalsAndSelectedSubcommandError, OrthoConfig, SelectedSubcommandMerge,
-    SelectedSubcommandMergeError, load_globals_and_merge_selected_subcommand,
+    LoadGlobalsAndSelectedSubcommandError, MapEnv, OrthoConfig, SelectedSubcommandMerge,
+    SelectedSubcommandMergeError, SelectedSubcommandSources, SubcommandFileContext,
+    load_globals_and_merge_selected_subcommand_with_sources,
 };
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -49,53 +53,93 @@ struct Globals {
     value: u8,
 }
 
-#[rstest]
-fn selected_subcommand_merge_respects_cli_default_as_absent() {
-    figment::Jail::expect_with(|jail| {
-        jail.create_file(".app.toml", "[cmds.greet]\npunctuation = \"??\"")?;
-
-        let command = Cli::command();
-        let matches = command
-            .try_get_matches_from(["prog", "greet"])
-            .expect("expected clap parsing to succeed");
-        let cli = Cli::from_arg_matches(&matches).expect("expected clap decoding to succeed");
-
-        let merged = cli
-            .cmd
-            .load_and_merge_selected(&matches)
-            .map_err(<figment::Error as serde::de::Error>::custom)?;
-        let Commands::Greet(cfg) = merged else {
-            panic!("expected greet command");
-        };
-        assert_eq!(cfg.punctuation, "??");
-        Ok(())
-    });
+/// Write one selected-subcommand fixture in a scoped temporary directory.
+///
+/// These tests use the same file shape but keep their merge assertions at each
+/// call site. The returned root stays alive while the selected command loads.
+fn selected_file(contents: &str) -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().context("create selected-subcommand fixture root")?;
+    let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
+        .context("open selected-subcommand fixture root")?;
+    directory
+        .write(".app.toml", contents.as_bytes())
+        .context("write selected-subcommand configuration")?;
+    Ok(root)
 }
 
 #[rstest]
-fn unified_helper_returns_globals_and_merged_command() {
-    figment::Jail::expect_with(|jail| {
-        jail.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
+fn selected_subcommand_merge_respects_cli_default_as_absent() -> Result<()> {
+    let root = selected_file("[cmds.greet]\npunctuation = \"??\"")?;
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    let files = SubcommandFileContext::new(root.path(), &discovery);
+    let matches = Cli::command()
+        .try_get_matches_from(["prog", "greet"])
+        .context("parse greet arguments")?;
+    let cli = Cli::from_arg_matches(&matches).context("decode greet arguments")?;
+    let merged =
+        cli.cmd
+            .load_and_merge_selected_with_sources(&matches, files, Arc::new(MapEnv::new()))?;
+    let Commands::Greet(cfg) = merged else {
+        anyhow::bail!("expected greet command");
+    };
+    ensure!(
+        cfg.punctuation == "??",
+        "file should override the clap default"
+    );
+    Ok(())
+}
 
-        let command = Cli::command();
-        let matches = command
-            .try_get_matches_from(["prog", "run"])
-            .expect("expected clap parsing to succeed");
-        let cli = Cli::from_arg_matches(&matches).expect("expected clap decoding to succeed");
+#[rstest]
+fn unified_helper_returns_globals_and_merged_command() -> Result<()> {
+    let root = selected_file("[cmds.run]\noption = \"file\"")?;
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    let files = SubcommandFileContext::new(root.path(), &discovery);
+    let matches = Cli::command()
+        .try_get_matches_from(["prog", "run"])
+        .context("parse run arguments")?;
+    let cli = Cli::from_arg_matches(&matches).context("decode run arguments")?;
+    let (globals, merged) = load_globals_and_merge_selected_subcommand_with_sources(
+        &matches,
+        cli.cmd,
+        SelectedSubcommandSources::new(files, Arc::new(MapEnv::new())),
+        || Ok::<_, std::io::Error>(Globals { value: 7 }),
+    )?;
+    ensure!(
+        globals == Globals { value: 7 },
+        "globals should be retained"
+    );
+    let Commands::Run(cfg) = merged else {
+        anyhow::bail!("expected run command");
+    };
+    ensure!(
+        cfg.option.as_deref() == Some("file"),
+        "file value should merge"
+    );
+    Ok(())
+}
 
-        let (globals, merged) =
-            load_globals_and_merge_selected_subcommand(&matches, cli.cmd, || {
-                Ok::<_, std::io::Error>(Globals { value: 7 })
-            })
-            .map_err(<figment::Error as serde::de::Error>::custom)?;
+#[rstest]
+fn selected_subcommand_merge_uses_injected_environment() -> Result<()> {
+    let root = selected_file("# no command defaults\n")?;
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    let files = SubcommandFileContext::new(root.path(), &discovery);
+    let matches = Cli::command()
+        .try_get_matches_from(["prog", "run"])
+        .context("parse run arguments")?;
+    let cli = Cli::from_arg_matches(&matches).context("decode run arguments")?;
+    let environment = Arc::new(MapEnv::new().with_var("APP_CMDS_RUN_OPTION", "injected"));
+    let merged = cli
+        .cmd
+        .load_and_merge_selected_with_sources(&matches, files, environment)?;
 
-        assert_eq!(globals, Globals { value: 7 });
-        let Commands::Run(cfg) = merged else {
-            panic!("expected run command");
-        };
-        assert_eq!(cfg.option.as_deref(), Some("file"));
-        Ok(())
-    });
+    let Commands::Run(config) = merged else {
+        anyhow::bail!("expected run command");
+    };
+    ensure!(
+        config.option.as_deref() == Some("injected"),
+        "selected merge should read the injected environment"
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -119,44 +163,45 @@ fn selected_subcommand_merge_errors_when_missing_subcommand_matches() {
 }
 
 #[rstest]
-fn unified_helper_surfaces_globals_error() {
-    let command = Cli::command();
-    let matches = command
+fn unified_helper_surfaces_globals_error() -> Result<()> {
+    let root = selected_file("# no command defaults\n")?;
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    let files = SubcommandFileContext::new(root.path(), &discovery);
+    let matches = Cli::command()
         .try_get_matches_from(["prog", "run"])
-        .expect("expected clap parsing to succeed");
-    let cli = Cli::from_arg_matches(&matches).expect("expected clap decoding to succeed");
-
-    let err = load_globals_and_merge_selected_subcommand(&matches, cli.cmd, || {
-        Err::<Globals, std::io::Error>(std::io::Error::other("boom"))
-    })
-    .expect_err("expected globals error");
-
-    assert!(
-        matches!(err, LoadGlobalsAndSelectedSubcommandError::Globals(_)),
-        "expected globals error, got {err:?}"
+        .context("parse run arguments")?;
+    let cli = Cli::from_arg_matches(&matches).context("decode run arguments")?;
+    let error = load_globals_and_merge_selected_subcommand_with_sources(
+        &matches,
+        cli.cmd,
+        SelectedSubcommandSources::new(files, Arc::new(MapEnv::new())),
+        || Err::<Globals, std::io::Error>(std::io::Error::other("boom")),
     );
+    ensure!(
+        matches!(
+            error,
+            Err(LoadGlobalsAndSelectedSubcommandError::Globals(_))
+        ),
+        "expected global loading failure: {error:?}"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn selected_subcommand_merge_surfaces_merge_error() {
-    figment::Jail::expect_with(|jail| {
-        jail.create_file(".app.toml", "[cmds.greet]\npunctuation = 123")?;
-
-        let command = Cli::command();
-        let matches = command
-            .try_get_matches_from(["prog", "greet"])
-            .expect("expected clap parsing to succeed");
-        let cli = Cli::from_arg_matches(&matches).expect("expected clap decoding to succeed");
-
-        let err = cli
-            .cmd
-            .load_and_merge_selected(&matches)
-            .expect_err("expected merge error");
-
-        assert!(
-            matches!(err, SelectedSubcommandMergeError::Merge(_)),
-            "expected merge error, got {err:?}"
-        );
-        Ok(())
-    });
+fn selected_subcommand_merge_surfaces_merge_error() -> Result<()> {
+    let root = selected_file("[cmds.greet]\npunctuation = 123")?;
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    let files = SubcommandFileContext::new(root.path(), &discovery);
+    let matches = Cli::command()
+        .try_get_matches_from(["prog", "greet"])
+        .context("parse greet arguments")?;
+    let cli = Cli::from_arg_matches(&matches).context("decode greet arguments")?;
+    let error =
+        cli.cmd
+            .load_and_merge_selected_with_sources(&matches, files, Arc::new(MapEnv::new()));
+    ensure!(
+        matches!(error, Err(SelectedSubcommandMergeError::Merge(_))),
+        "expected selected-subcommand merge failure: {error:?}"
+    );
+    Ok(())
 }

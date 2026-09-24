@@ -762,6 +762,15 @@ variables for tests.
 - `first_existing_xdg_candidate` is private to subcommand path
   discovery and is called only by `push_xdg_candidates`. It skips `NotFound`
   and propagates other metadata errors with the candidate path.
+- The derived `SelectedSubcommandMerge::load_and_merge_selected_with_sources`
+  uses that file context and a separate `SharedScanEnvSource` to merge the
+  selected enum variant. Its file base and environment values are supplied by
+  the caller; the existing `load_and_merge_selected` remains process-backed.
+  `SelectedSubcommandSources` groups the two capabilities only for
+  `load_globals_and_merge_selected_subcommand_with_sources`; its global loader
+  remains caller-owned. Manual trait implementations must override the injected
+  method or receive `SourceInjectionUnsupported`, without falling back to the
+  process environment.
 
 ### Composition rules
 

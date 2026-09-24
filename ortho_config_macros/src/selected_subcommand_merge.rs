@@ -89,6 +89,46 @@ fn merge_expr(has_matches: bool, selected_label: &syn::LitStr, krate: &TokenStre
     }
 }
 
+fn merge_with_sources_expr(
+    has_matches: bool,
+    selected_label: &syn::LitStr,
+    krate: &TokenStream,
+) -> TokenStream {
+    if has_matches {
+        quote! {
+            {
+                let subcommand_matches = matches
+                    .subcommand()
+                    .map(|(_, subcommand_matches)| subcommand_matches)
+                    .ok_or_else(|| {
+                        #krate::SelectedSubcommandMergeError::MissingSubcommandMatches {
+                            selected: #selected_label,
+                        }
+                    })?;
+                let cli_matches = #krate::subcommand::SubcommandCliMatches::new(
+                    &args,
+                    subcommand_matches,
+                );
+                #krate::load_and_merge_subcommand_for_with_matches_with_sources_at(
+                    &cli_matches,
+                    files,
+                    merge_source,
+                )
+                .map_err(#krate::SelectedSubcommandMergeError::from)?
+            }
+        }
+    } else {
+        quote! {
+            #krate::load_and_merge_subcommand_for_with_sources_at(
+                &args,
+                files,
+                merge_source,
+            )
+            .map_err(#krate::SelectedSubcommandMergeError::from)?
+        }
+    }
+}
+
 fn build_arm(variant_ident: &syn::Ident, merge_expr: &TokenStream) -> TokenStream {
     quote! {
         Self::#variant_ident(args) => {
@@ -115,6 +155,7 @@ pub(crate) fn derive_selected_subcommand_merge(input: DeriveInput) -> syn::Resul
     };
 
     let mut arms = Vec::new();
+    let mut source_arms = Vec::new();
     for variant in enum_data.variants {
         let has_matches = variant_has_matches(&variant)?;
         let selected_label = clap_variant_name(&variant)?
@@ -124,6 +165,8 @@ pub(crate) fn derive_selected_subcommand_merge(input: DeriveInput) -> syn::Resul
         validate_tuple_variant(&variant_ident, &variant.fields)?;
         let merge_tokens = merge_expr(has_matches, &selected_label, &krate);
         arms.push(build_arm(&variant_ident, &merge_tokens));
+        let source_merge_tokens = merge_with_sources_expr(has_matches, &selected_label, &krate);
+        source_arms.push(build_arm(&variant_ident, &source_merge_tokens));
     }
 
     Ok(quote! {
@@ -134,6 +177,17 @@ pub(crate) fn derive_selected_subcommand_merge(input: DeriveInput) -> syn::Resul
             ) -> std::result::Result<Self, #krate::SelectedSubcommandMergeError> {
                 match self {
                     #(#arms)*
+                }
+            }
+
+            fn load_and_merge_selected_with_sources(
+                self,
+                matches: &clap::ArgMatches,
+                files: #krate::SubcommandFileContext<'_>,
+                merge_source: #krate::SharedScanEnvSource,
+            ) -> std::result::Result<Self, #krate::SelectedSubcommandMergeError> {
+                match self {
+                    #(#source_arms)*
                 }
             }
         }
