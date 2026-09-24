@@ -32,13 +32,14 @@ pub use localization::LocalizeCmd;
 pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides};
 
 /// Command-line surface exposed by the example.
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
 #[command(
     name = "hello-world",
     bin_name = "hello-world",
     about = "Friendly greeting demo showcasing OrthoConfig layering",
     version
 )]
+#[ortho_config(prefix = "HELLO_WORLD", localization_base = "hello_world.cli")]
 pub struct CommandLine {
     /// Overrides configuration discovery with an explicit file path.
     #[arg(
@@ -48,11 +49,14 @@ pub struct CommandLine {
         global = true,
         help = "Path to the configuration file"
     )]
+    #[ortho_config(cli_short = 'c')]
     pub config_path: Option<PathBuf>,
     /// Global switches shared by every subcommand.
     #[command(flatten)]
+    #[ortho_config(skip_cli)]
     pub globals: GlobalArgs,
     /// Selected workflow to execute.
+    #[serde(skip)]
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -125,6 +129,8 @@ impl GlobalArgs {
     PartialEq,
     Eq,
     Subcommand,
+    Deserialize,
+    Serialize,
     ortho_config_macros::SelectedSubcommandMerge,
     OrthoConfigSubcommandDocs,
 )]

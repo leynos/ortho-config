@@ -120,6 +120,26 @@ duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
 resource ids such as dotted catalogue keys before Fluent parses them, and must
 not be used to validate generated command ids.
 
+`#[derive(OrthoConfig)]` emits `OrthoConfigLocalization` for the deriving
+configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
+`#[ortho_config(localization_base = "…")]` (or the normalized application-name
+default), while the command-level constants and `ARG_IDS` use the normalized,
+hyphen-joined Fluent ids. Each `ArgLocalizationIds` entry records the Clap
+argument name and its help, long-help, and value-name ids. Argument ids are
+validated for normalized collisions during expansion; flattened, subcommand, and
+`skip_cli` fields are excluded from `ARG_IDS`. Set
+`ORTHO_CONFIG_EMIT_IDENTIFIERS=1` for an opt-in standalone inventory at
+`${OUT_DIR}/ortho-config/cli-identifiers.json`; the derive writes this file
+through per-expansion fragments and merges them deterministically. Mounted
+command-tree identifiers remain owned by the path-aware documentation IR.
+
+Normalized argument-ID collisions within one derived struct fail at compile
+time. Hand-built and dynamic command trees retain the runtime panic contract.
+Cargo does not include proc-macro environment reads in its rebuild fingerprint;
+after changing the opt-in variable or source, refresh the artefact with
+`cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`.
+Do not rely on a warm build to observe changed artefact output.
+
 Use `LocalizedParse` for default-base localized clap parsing and
 `parse_localized_command` when callers need to pass a command that has already
 been localized with `LocalizeCmd::with_base`. Keep the two parse-error paths in
@@ -134,6 +154,13 @@ command identifiers are still a documented runtime panic contract owned by
 `message_id_for` and `LocalizeCmd::localize`, so keep that coverage in ordinary
 runtime panic tests until derive-emitted identifiers move validation to compile
 time.
+
+The runtime and macro normalizers are deliberate twins, locked by their shared
+version marker and property tests against `message_id_for`. Generated docs IR
+receives mounted paths through path-aware trait methods; handwritten trait
+implementations use their provided fallback. The optional identifier artefact
+uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
+schema has standalone scope until a downstream consumer joins it to docs IR.
 
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
@@ -954,6 +981,8 @@ a no-source-build policy, so every release must carry prebuilt archives that
 `cargo binstall` can resolve. `.github/workflows/release.yml` publishes them
 for five targets, each built on a runner of its own architecture and operating
 system rather than cross-compiled:
+
+Release targets for `cargo-orthohelp`:
 
 | Target                      | Runner             |
 | --------------------------- | ------------------ |
