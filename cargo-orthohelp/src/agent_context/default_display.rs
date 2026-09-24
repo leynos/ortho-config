@@ -158,4 +158,3 @@ fn normalize_path_separator(
         chars.next();
     }
 }
-
