@@ -1,6 +1,5 @@
 //! Scenario state structs and `rstest` fixture providers for the BDD scaffolding.
 
-use crate::cli_default_mode::CliDefaultMode;
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
 use ortho_config::{Localizer, MergeLayer, OrthoConfig, OrthoConfigSubcommandDocs};
@@ -11,13 +10,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
+#[path = "scenario_state_cli_default.rs"]
+mod scenario_state_cli_default;
 #[cfg(test)]
 #[path = "scenario_state_tests.rs"]
 mod scenario_state_tests;
+
 /// Re-exported so BDD merge-error steps can reference the sample config
 /// struct without reaching into the shared fixtures module directly.
 pub use super::fixtures::merge_fixtures::MergeErrorSample;
 pub use super::nested_docs_fixture::*;
+pub use scenario_state_cli_default::{
+    CliDefaultArgs, CliDefaultContext, CliDefaultSources, cli_default_context,
+};
 pub use scenario_state_profiles::{ProfilesConfig, ProfilesContext, profiles_context};
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
@@ -55,6 +60,7 @@ pub struct ComposerContext {
     pub config: Slot<RulesConfig>,
     pub profile_value: Slot<String>,
 }
+
 /// Scenario state for aggregated error reporting scenarios.
 #[derive(Debug, Default, ScenarioState)]
 pub struct ErrorContext {
@@ -156,6 +162,7 @@ pub fn extends_context() -> ExtendsContext {
 pub fn composer_context() -> ComposerContext {
     ComposerContext::default()
 }
+
 /// Provides a clean error context for aggregated error scenarios.
 #[fixture]
 pub fn error_context() -> ErrorContext {
@@ -302,6 +309,7 @@ pub struct RulesConfig {
 pub struct DynamicRule {
     pub enabled: bool,
 }
+
 /// Configuration struct with replacement strategy for rules.
 ///
 /// Used to test that `merge_strategy = "replace"` restores replacement
@@ -321,53 +329,10 @@ pub struct MergeErrorContext {
     pub result: Slot<ortho_config::OrthoResult<MergeErrorSample>>,
 }
 
-/// Captures the optional punctuation inputs used by CLI default-as-absent scenarios.
-#[derive(Debug, Default, Clone)]
-pub struct CliDefaultSources {
-    /// The clap default value (always present for non-Option fields).
-    pub clap_default: Option<String>,
-    /// Explicit CLI argument value (user typed --punctuation on CLI).
-    pub explicit_cli: Option<String>,
-    /// Value from configuration file.
-    pub file: Option<String>,
-    /// Value from environment variable.
-    pub env: Option<String>,
-}
-
-/// Scenario state for `cli_default_as_absent` precedence scenarios.
-#[derive(Debug, Default, ScenarioState)]
-pub struct CliDefaultContext {
-    pub sources: Slot<CliDefaultSources>,
-    pub merge_result: Slot<Result<CliDefaultArgs, Error>>,
-    pub extracted: Slot<serde_json::Value>,
-}
-
-/// CLI struct used for `cli_default_as_absent` behavioural tests.
-#[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, Clone, PartialEq)]
-#[command(name = "greet")]
-#[ortho_config(prefix = "APP_")]
-pub struct CliDefaultArgs {
-    /// Punctuation at the end of the greeting.
-    #[arg(long, id = "punctuation", default_value = "!")]
-    #[ortho_config(cli_default_as_absent)]
-    pub punctuation: String,
-
-    /// Output mode used to exercise clap `ValueEnum` default inference.
-    #[arg(long, default_value = "fast", value_enum)]
-    #[ortho_config(cli_default_as_absent)]
-    pub mode: CliDefaultMode,
-}
-
 /// Provides a clean merge error context for error routing scenarios.
 #[fixture]
 pub fn merge_error_context() -> MergeErrorContext {
     MergeErrorContext::default()
-}
-
-/// Provides a clean CLI default-as-absent context for precedence scenarios.
-#[fixture]
-pub fn cli_default_context() -> CliDefaultContext {
-    CliDefaultContext::default()
 }
 
 /// Configuration used to verify aggregated error reporting.
