@@ -11,6 +11,7 @@ use quote::quote;
 use syn::Ident;
 
 use crate::derive::load_impl::LoadImplArgs;
+use crate::derive::load_impl::LoadSourceTokens;
 use crate::derive::load_impl::cli::build_profile_cli_layer_tokens;
 
 pub(crate) fn build_profile_compose_layers_impl(
@@ -27,7 +28,7 @@ pub(crate) fn build_profile_compose_layers_impl(
     let krate = tokens.krate;
     let cli_default_as_absent_fields = &tokens.default_struct_init.cli_default_as_absent_fields;
     let parse_setup = build_profile_parse_setup(krate);
-    let selection = build_profile_selection(krate, profile_env_var);
+    let selection = build_profile_selection(krate, profile_env_var, tokens.sources.as_ref());
     let defaults = build_profile_defaults(args);
     let file_layers = build_profile_file_layers(krate, file_discovery);
     let environment_layer = build_profile_environment_layer(krate, env_section);
@@ -92,11 +93,29 @@ fn build_profile_parse_setup(krate: &proc_macro2::TokenStream) -> proc_macro2::T
 /// env-filled value stays attributed to the environment variable; when clap
 /// parsing failed the environment is read directly so selection errors never
 /// mask parse errors.
+///
+/// When the caller injected a discovery source, the selector is read through
+/// that source so selection honours the same environment the file discovery
+/// saw. Only the process-backed entry points fall back to `std::env::var`.
 fn build_profile_selection(
     krate: &proc_macro2::TokenStream,
     profile_env_var: &str,
+    sources: Option<&LoadSourceTokens<'_>>,
 ) -> proc_macro2::TokenStream {
     let selector_env = syn::LitStr::new(profile_env_var, proc_macro2::Span::call_site());
+    // `into_string` mirrors `std::env::var` by treating a non-Unicode value as
+    // absent rather than as a selection error.
+    let read_env = sources.map_or_else(
+        || quote! { std::env::var(#selector_env).ok() },
+        |injected| {
+            let discovery_source = injected.discovery;
+            quote! {
+                #discovery_source
+                    .get(#selector_env)
+                    .and_then(|value| value.into_string().ok())
+            }
+        },
+    );
     quote! {
         // Resolve the selection. The flag counts only when clap reports a
         // command-line origin, so an env-filled value stays attributed to the
@@ -112,7 +131,7 @@ fn build_profile_selection(
                     None
                 }
             });
-            let env_value = std::env::var(#selector_env).ok();
+            let env_value = #read_env;
             match #krate::SelectedProfile::resolve(flag_value, env_value.as_deref()) {
                 Ok(selection) => selection,
                 Err(err) => {

@@ -480,6 +480,76 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       `UnknownProfile.available.as_slice()` cannot expose an unbounded list.
       The 20-profile extraction test verifies both the 16-name payload and the
       unchanged `and 4 more` display suffix.
+- [x] (2026-09-24) Rebased onto `origin/main` (`c144641e`). Five conflicts
+      resolved by taking the rebased branch's structure with `main`'s
+      converged content; the parser-faithful clap-defaults work (#290/#463)
+      that both sides had landed in different encodings now lives solely in
+      `load_impl/cli.rs`. `Cargo.lock` restored to `main`'s resolution plus
+      the four genuinely-new dev-deps. See Surprises & discoveries.
+- [x] (2026-09-24) Module-cap repair: the rebase resolution left
+      `ortho_config/tests/rstest_bdd/scenario_state.rs` at 406 lines, over
+      Whitaker's `module_max_lines` default of 400. The `cli_default_as_absent`
+      state, fixture, and argument struct were extracted to a sibling
+      `scenario_state_cli_default.rs` and re-exported, mirroring the existing
+      `scenario_state_profiles.rs` split.
+- [x] (2026-09-24) Review round on PR #418. Six findings, three failed checks,
+      and two warnings addressed:
+      1. `docs/contents.md` — ADR-008 list item rewrapped to 80 columns.
+      2. `cli_tokens.rs` — the effective config long is registered in
+         `used_longs` *before* `build_profile_flag_field`, so a config long of
+         `profile` collides at compile time instead of producing two `--profile`
+         arguments. New UI fixture `profile_config_long_collision` pins it.
+      3. `load_impl_entry.rs` — Oxford spelling in the generated doc comment.
+      4. `load_impl_profiles.rs` — profile-env selection now reads through the
+         injected discovery source when one is supplied, falling back to
+         `std::env::var` only on the process-backed path. Supersedes the
+         process-only read that made `load_from_iter_with_sources` inconsistent
+         with the file discovery it had just performed.
+      5. `profile/name.rs` — `AvailableProfileNames` gained a
+         `files_discovered` discriminator. A chain that discovered files but
+         defines no profile tables now reports "no profiles were found"; only a
+         genuinely empty chain reports "no configuration files were found".
+      6. `docs/ir.rs` — `SourceKind::Profile` inserted between `File` and
+         `Env`, mirrored in `cargo-orthohelp`'s schema, roff, and PowerShell
+         renderers. Profile-aware structs now emit a five-tier precedence;
+         legacy structs keep four.
+      Checks: the malformed-flag/unknown-profile BDD scenario now observes both
+      retained sub-errors via an `error_variants` slot that flattens
+      `OrthoError::Aggregate` (the helper's `.chunks(2)` flag parser had been
+      silently dropping valueless flags); the profile UI fixtures carry `//!`
+      docstrings; and `merge_telemetry` gained a `profile_load` operation
+      instrumenting the generated `load_with_profile_from_iter` boundary.
+      Warning D (migration guide) is tracked separately below.
+- [x] (2026-09-25) Warning D closed and the last gate blocker cleared.
+      `docs/v0-10-0-migration-guide.md` grew 159 → 276 lines with an
+      `## Adopt optional profile overlays` section covering the five-tier
+      precedence, the selection rules, name and body constraints, the
+      selection-aware load entry points, agent-context consumers, and unknown
+      profile errors, plus a closing section naming both additive features and
+      the one Rust-level break.
+      `make check-fmt`'s second half, `mdtablefix --check`, then failed on this
+      file and on this ExecPlan (`+14 -14` and `+7 -8`): the new prose had been
+      wrapped by hand but not reflowed by the repository's own formatter, which
+      is the only authority on where a wrapped line may break. `make fmt` fixed
+      both. Note that `make check-fmt` runs `cargo fmt` first, so this half of
+      the gate is unreachable until the Rust formatting is clean — the two
+      failures had to be cleared in that order.
+- [x] (2026-09-25) Self-review of the warning-E telemetry found a mislabel in
+      this branch's own new code. `profile_load_started`/`profile_load_finished`
+      hard-coded `SOURCE_INJECTED`, but the profile-aware entry points take no
+      injected source: `LoadImplTokens.sources` is `None` on the top-level path
+      (`ortho_config_macros/src/lib.rs`), so `load_with_profile_from_iter`
+      reads the selector and environment layer from the live process. The
+      events therefore claimed an injected source that does not exist, and the
+      new test pinned the wrong label. `result_outcome` now takes the source as
+      a parameter; the two genuinely source-aware callers keep `injected` and
+      `profile_load` reports `process`. The metrics counter test was split so
+      `profile_load` is asserted under `process` and the rest under `injected`.
+      Two further `-D warnings` failures surfaced while re-verifying and were
+      fixed at source rather than suppressed: `clippy::shadow_reuse` on the
+      `available` binding in `profile/extract.rs` (renamed to `reported`) and
+      `clippy::assigning_clones` on `parse_flags` in `profiles_steps.rs`
+      (`clone_into`).
 
 Progress entries from milestone 1 onward must carry timestamps.
 
@@ -558,6 +628,63 @@ Progress entries from milestone 1 onward must carry timestamps.
       as 20 before the correction. Impact: programmatic consumers of
       `OrthoError::UnknownProfile` could receive unbounded configuration
       metadata despite D4's stated cap.
+- Observation (2026-09-24, rebase): this branch and `main` independently
+      landed the same "parser-faithful clap defaults" feature with different
+      encodings, so the rebase is a convergence rather than a set of
+      independent conflicts. Evidence: `main` extracted
+      `ortho_config_macros/src/derive/load_impl/cli.rs` with
+      `build_cli_parse_tokens`/`build_cli_layer_tokens`, whereas the branch
+      used the older `try_parse_from`/`build_profile_cli_push` shapes. Impact:
+      every resolution took the rebased branch's decomposition with `main`'s
+      content, and `build_profile_cli_push` was dropped in favour of the
+      converged `cli::build_profile_cli_layer_tokens`.
+- Observation (2026-09-24, rebase): `main` switched the generated compose
+      helpers from `#[expect(dead_code)]` to `#[allow(dead_code)]`. Evidence:
+      `#[expect]` becomes an unfulfilled-expectation *error* once the generated
+      method is actually used; a unit test now pins `allow (dead_code` == 3 and
+      rejects `expect (dead_code` in the `profiles: false` output. Impact:
+      `load_impl_entry.rs` carries `#[allow]` on all five generated helpers.
+- Observation (2026-09-24, rebase): `Cargo.lock` must be rebuilt from
+      `main`'s resolution rather than merged. Evidence: the branch lock carried
+      98 version drifts plus 8 `main`-only and 7 branch-only packages;
+      restoring `main`'s lock and running `cargo update --workspace --offline`
+      yields `main`'s exact resolution plus only the four new dev-deps
+      (`diff`, `googletest`, `googletest_macro`, `pretty_assertions`). Impact:
+      the older `assert_cmd` 2.1.2 re-introduced `deprecated` warnings on
+      `Command::cargo_bin`, so `main`'s `#[expect(deprecated, ...)]` attributes
+      were restored in the four example test files.
+- Observation (2026-09-24, module cap): Whitaker's `module_max_lines` counts
+      every line and defaults to 400, and this repository sets no override.
+      Evidence: `whitaker` reported `Module scenario_state spans 406 lines,
+      exceeding the allowed 400` despite only 281 non-comment lines; the branch
+      author had already trimmed blank lines to fit exactly 400 pre-rebase.
+      Impact: the fix is to extract a submodule (as `scenario_state_profiles.rs`
+      does), never to add `#[allow(module_max_lines)]`.
+- Observation (2026-09-24, review round): an *empty* `TokenStream` inside an
+      inline `vec![...]` literal is a hard compile error, not an absent
+      element. Evidence: emitting `profile_tier.unwrap_or_else(TokenStream::new)`
+      as the third element of `vec![Defaults, File, _, Env, Cli]` produced
+      `error: no rules expected ','` / "while trying to match meta-variable
+      `$x:expr`" from `alloc/src/macros.rs:49`. Impact: the five-tier
+      precedence vector in `generate/docs/sections.rs` is assembled by
+      `Vec::push` behind an `if profiles` guard, with a comment recording why.
+- Observation (2026-09-24, review round): the BDD helper `parse_flags` grouped
+      tokens with `.chunks(2)`, so a valueless flag such as `--bogus` was
+      silently dropped rather than reaching clap. Evidence: the new
+      "malformed flag and unknown env-selected profile both survive" scenario
+      failed to produce any parse error until the helper was rewritten to
+      start a new pair on every `--`-prefixed token. Impact: a scenario that
+      means to exercise a malformed flag must assert the flag actually parses
+      into the argument vector.
+- Observation (2026-09-24, review round): `EnvSource` is deliberately
+      lookup-only, so honouring an injected source for profile selection means
+      calling `get` on the injected discovery handle rather than enumerating.
+      Evidence: `env_source.rs` exposes no enumeration method, preserving
+      RFC 0001's "the crate never scans the whole process environment"
+      property. Impact: `build_profile_selection` takes the optional
+      `LoadSourceTokens` and emits `discovery_source.get(..)` when present,
+      keeping the injected path and the process path on the same lookup-only
+      contract.
 
 ## Decision log
 
@@ -623,7 +750,13 @@ Progress entries from milestone 1 onward must carry timestamps.
   files were found" when the list is empty. The rare "files discovered but none
   define profile tables" case renders the same message; this is a documented
   edge case, not a correctness issue. Date/Author: 2026-08-09, implementing
-  agent.
+  agent. **Superseded 2026-09-24** by the PR #418 review round: the review held
+  that conflating the two cases misdirects the operator towards missing files
+  that are present, so the type now carries a `files_discovered` discriminator
+  and the two empty cases render distinctly ("no profiles were found" versus
+  "no configuration files were found"). Regression coverage:
+  `chain_without_profile_tables_reports_no_profiles_found` and the "unknown
+  env-selected profile against a file chain with no profiles" BDD scenario.
 - Decision: milestone 4 attributes the selection source via clap's
   `ArgMatches::value_source` rather than reading the CLI struct's `profile`
   field directly. Rationale: clap fills the field from the `env` fallback too,
@@ -658,6 +791,31 @@ Progress entries from milestone 1 onward must carry timestamps.
       error boundary protects programmatic consumers as well as display output,
       while the count preserves the existing `and N more` diagnostic. Date/Author:
       2026-08-12, implementing agent.
+- Decision: instrument the generated `load_with_profile_from_iter` boundary as
+      a new `profile_load` telemetry operation rather than treating the
+      profile-aware load as covered by the existing `derived_load` operation.
+      Rationale: the review asked for profile-aware load boundaries to be
+      instrumented; `profile_load` is the narrowest label that names the
+      boundary actually added by this feature, and the emitted fields stay
+      wholly within the module's closed vocabulary. The failure category is the
+      existing `CATEGORY_PROFILE`, so a selection failure reduces correctly
+      without a new category. Date/Author: 2026-09-24, implementing agent.
+      Amended 2026-09-25: the operation's source label is `process`, not
+      `injected`. The profile-aware entry points accept no injected source, so
+      labelling them `injected` would claim a caller-supplied source that does
+      not exist and would mislead an operator triaging environment-layer
+      problems. Only the source-aware entry points, which do take injected
+      sources, are labelled `injected`.
+- Decision: add `SourceKind::Profile` to the documentation IR, ordered between
+      `File` and `Env`, rather than leaving profile overlays unrepresented in
+      the precedence metadata. Rationale: a profile overlay is selected from
+      the file chain and is therefore still configuration data, so it belongs
+      above the file tier and below both the environment and the command line;
+      omitting it would have the generated man pages and PowerShell help
+      describe a five-tier merge as four tiers. `cargo-orthohelp` duplicates
+      the IR types by design, so the variant is mirrored in its schema, roff,
+      and about renderers. Profile-opted-in structs emit five tiers; legacy
+      structs keep four. Date/Author: 2026-09-24, implementing agent.
 
 ## Outcomes & retrospective
 

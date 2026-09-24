@@ -167,6 +167,38 @@ fn no_files_discovered_reports_clear_error() {
 }
 
 #[test]
+fn chain_without_profile_tables_reports_no_profiles_found() {
+    let layers = vec![
+        file_layer(json!({ "retries": 3 }), "base.toml"),
+        file_layer(json!({ "retries": 4 }), "app.toml"),
+    ];
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect_err("unknown profile against a real file chain must error");
+    let message = err.to_string();
+    assert_that!(message, contains_substring("ci"));
+    assert_that!(message, contains_substring("no profiles were found"));
+    assert_that!(
+        message,
+        not(contains_substring("no configuration files were found"))
+    );
+}
+
+#[test]
+fn chain_with_an_unrelated_profile_names_that_profile() {
+    let layers = vec![file_layer(
+        json!({ "retries": 3, "profile": { "local": { "retries": 9 } } }),
+        "app.toml",
+    )];
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect_err("unknown profile with an unrelated profile defined must error");
+    let message = err.to_string();
+    // The chain defines a profile, so the message names it instead of
+    // claiming no profiles exist.
+    assert_that!(message, contains_substring("local"));
+    assert_that!(message, not(contains_substring("no profiles were found")));
+}
+
+#[test]
 fn unknown_profile_body_keys_flow_through_to_merge() {
     let layers = vec![file_layer(
         json!({

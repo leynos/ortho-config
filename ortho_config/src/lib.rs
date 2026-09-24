@@ -177,6 +177,16 @@ pub mod __private {
     pub fn source_aware_derived_load_finished<T>(result: &crate::OrthoResult<T>) {
         crate::merge_telemetry::source_aware_derived_load_finished(result);
     }
+
+    /// Record the start of a profile-aware derived load.
+    pub fn profile_load_started() {
+        crate::merge_telemetry::profile_load_started();
+    }
+
+    /// Record a profile-aware derived-load result using its bounded category.
+    pub fn profile_load_finished<T>(result: &crate::OrthoResult<T>) {
+        crate::merge_telemetry::profile_load_finished(result);
+    }
 }
 
 /// Trait implemented for structs that represent application configuration.

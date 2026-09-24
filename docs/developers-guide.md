@@ -584,21 +584,25 @@ contract stays discoverable.
 ### Environment merge telemetry
 
 The environment merge boundary emits a `merge.layer` tracing event at the
-decision and terminal points of source-aware work. Events use only these
-bounded fields:
+decision and terminal points of source-aware and profile-aware work. Events use
+only these bounded fields:
 
-- `operation`: `csv_env`, `derived_load`, or `subcommand_load`;
+- `operation`: `csv_env`, `derived_load`, `profile_load`, or `subcommand_load`;
 - `source`: `process` or `injected`;
 - `outcome`: `attempt`, `success`, or `failure`; and
 - `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
-  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or `aggregate`.
+  `default_value_conversion`, `file`, `cyclic_extends`, `gathering`, `merge`,
+  `validation`, `profile`, or `aggregate`.
 
-`CsvEnv` emits process-backed and injected events. Derive-generated loads and
-subcommand loads emit events when their source-aware entry points are used. The
-events never contain environment values, keys, paths, configuration data,
-caller-supplied prefixes, or raw error text. Error categories are reduced to
-the closed vocabulary before emission so subscribers can aggregate failures
-without receiving sensitive input.
+`CsvEnv` emits process-backed events, or injected events when `with_source`
+supplies a scanning source. Derive-generated and subcommand source-aware loads
+(`*_with_sources`) take injected sources and emit `source = injected`; the
+profile-aware entry points (`load_with_profile_from_iter` and
+`load_with_profile`) accept no injected source and read the live process, so
+they emit `source = process`. The events never contain environment values,
+keys, paths, configuration data, caller-supplied prefixes, or raw error text.
+Error categories are reduced to the closed vocabulary before emission so
+subscribers can aggregate failures without receiving sensitive input.
 
 Capture tests must cover successful and failing paths for each emitting
 operation. They assert the operation, source, outcome, and category fields, and

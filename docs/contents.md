@@ -51,9 +51,9 @@
 - [ADR-008: Opt-in agent-native policy configuration][adr-008]:
   review the accepted 7.1.1 policy configuration surface, the enforcement and
   advertisement defaults, the report contract, and the reserved 7.1.2 seam.
-- [ADR-009: Profile selection and layering](adr-009-profile-selection-and-layering.md):
-  review the decision for optional profile overlays, the five-tier merge order,
-  stateless selection, and the opt-in profile contract.
+- [ADR-009](adr-009-profile-selection-and-layering.md): review the decision for
+  optional profile overlays, the five-tier merge order, stateless selection,
+  and the opt-in profile contract.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
