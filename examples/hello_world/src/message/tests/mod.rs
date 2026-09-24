@@ -4,11 +4,8 @@ mod assertions;
 mod fixtures;
 
 use super::*;
-use crate::cli::{
-    FarewellChannel, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_greet_defaults,
-};
+use crate::cli::{FarewellChannel, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::ValidationError;
-use crate::test_support::{figment_error, with_jail};
 use anyhow::{Result, anyhow, ensure};
 use assertions::{assert_greeting, assert_plan, assert_sample_config_greeting};
 use fixtures::{
@@ -137,10 +134,11 @@ fn build_take_leave_plan_produces_steps() -> Result<()> {
         remind_in: Some(10),
         ..TakeLeaveCommand::default()
     };
-    let plan = with_jail(|jail| {
-        jail.clear_env();
-        build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command).map_err(figment_error)
-    })?;
+    let plan = build_take_leave_plan_with_greet_loader(
+        &HelloWorldCli::default(),
+        &take_leave_command,
+        || Ok(GreetCommand::default()),
+    )?;
     ensure!(
         plan.greeting().message() == "Hello, World!",
         "unexpected greeting"
@@ -168,10 +166,8 @@ fn build_take_leave_plan_applies_greeting_overrides(
     command.greeting_preamble = Some(String::from("Until next time"));
     command.greeting_punctuation = Some(String::from("?"));
     let base = base_config?;
-    let plan = with_jail(|jail| {
-        jail.clear_env();
-        build_take_leave_plan(&base, &command).map_err(figment_error)
-    })?;
+    let plan =
+        build_take_leave_plan_with_greet_loader(&base, &command, || Ok(GreetCommand::default()))?;
     ensure!(
         plan.greeting().preamble() == Some("Until next time"),
         "unexpected greeting preamble"
@@ -205,17 +201,18 @@ fn join_fragments_writes_list() -> Result<()> {
 
 #[rstest]
 fn build_take_leave_plan_uses_greet_defaults() -> Result<()> {
-    assert_sample_config_greeting(|config| {
-        build_take_leave_plan(config, &TakeLeaveCommand::default())
-            .map(|plan| plan.greeting().clone())
-            .map_err(figment_error)
+    assert_sample_config_greeting(|config, defaults| {
+        build_take_leave_plan_with_greet_loader(config, &TakeLeaveCommand::default(), || {
+            Ok(defaults.clone())
+        })
+        .map(|plan| plan.greeting().clone())
+        .map_err(|err| anyhow!(err.to_string()))
     })
 }
 
 #[rstest]
 fn build_plan_uses_sample_overrides() -> Result<()> {
-    assert_sample_config_greeting(|config| {
-        let greet = load_greet_defaults().map_err(figment_error)?;
-        build_plan(config, &greet).map_err(figment_error)
+    assert_sample_config_greeting(|config, greet| {
+        build_plan(config, greet).map_err(|err| anyhow!(err.to_string()))
     })
 }

@@ -11,17 +11,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ValidationError;
 mod commands;
+
 mod config_loading;
+
 pub mod context;
+
 mod discovery;
+
 mod global_config;
+
 mod localization;
+
 mod overrides;
 
 #[cfg(test)]
-pub(crate) use self::config_loading::{
-    load_config_overrides, load_config_overrides_from_discovery,
-};
+pub(crate) use self::config_loading::load_config_overrides_from_discovery;
 pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
 pub use context::ContextCommand;
 pub use global_config::{
