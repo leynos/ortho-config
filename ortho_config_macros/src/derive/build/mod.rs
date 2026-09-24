@@ -17,7 +17,7 @@ mod override_tests;
 mod profile_flag;
 
 pub(crate) use cli::{CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields};
-pub(crate) use config_flag::build_config_flag_field;
+pub(crate) use config_flag::{build_config_flag_field, effective_config_cli_long};
 pub(crate) use defaults::{
     DefaultStructInit, build_default_struct_fields, build_default_struct_init,
 };

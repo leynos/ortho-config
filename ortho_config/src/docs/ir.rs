@@ -263,12 +263,20 @@ pub struct PrecedenceMeta {
 }
 
 /// Kinds of configuration sources.
+///
+/// The variants follow the merge order reported by
+/// [`MergeProvenance`](crate::declarative::MergeProvenance), from lowest to
+/// highest precedence. `Profile` sits between `File` and `Env` because a
+/// profile overlay is selected from the file chain and is therefore still
+/// configuration data: the environment and the command line both outrank it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SourceKind {
     /// Defaults supplied by the application.
     Defaults,
     /// Values loaded from configuration files.
     File,
+    /// Values loaded from a selected profile overlay.
+    Profile,
     /// Values loaded from environment variables.
     Env,
     /// Values loaded from CLI arguments.

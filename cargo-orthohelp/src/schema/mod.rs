@@ -262,12 +262,18 @@ pub struct PrecedenceMeta {
 }
 
 /// Kinds of configuration sources.
+///
+/// Mirrors `ortho_config::docs::SourceKind`; keep the two in sync. Variants
+/// run from lowest to highest precedence, with `Profile` between `File` and
+/// `Env` because a profile overlay is selected configuration data.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SourceKind {
     /// Defaults supplied by the application.
     Defaults,
     /// Values loaded from configuration files.
     File,
+    /// Values loaded from a selected profile overlay.
+    Profile,
     /// Values loaded from environment variables.
     Env,
     /// Values loaded from CLI arguments.

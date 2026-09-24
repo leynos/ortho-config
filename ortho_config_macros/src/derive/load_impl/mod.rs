@@ -12,7 +12,7 @@ pub(crate) mod cli;
 use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
 
 mod source;
-use source::LoadSourceTokens;
+pub(crate) use source::LoadSourceTokens;
 /// Identifiers used when generating the load implementation.
 #[expect(
     clippy::struct_field_names,

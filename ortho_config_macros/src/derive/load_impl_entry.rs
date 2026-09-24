@@ -71,7 +71,7 @@ fn build_source_aware_methods(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         /// Load configuration from arguments and explicit environment sources.
         ///
         /// The generated implementation records only bounded merge telemetry:
-        /// it never serialises source values, keys, paths, or raw errors.
+        /// it never serializes source values, keys, paths, or raw errors.
         pub fn load_from_iter_with_sources<I, T>(
             iter: I,
             discovery_source: #krate::SharedEnvSource,
@@ -138,16 +138,23 @@ fn build_profile_cli_impl(
             }
 
             /// Load configuration and report the selected profile.
+            ///
+            /// The generated implementation records only bounded merge
+            /// telemetry: it never serializes source values, keys, paths, or
+            /// raw errors.
             pub fn load_with_profile_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>>
             where
                 I: IntoIterator<Item = T>,
                 T: Into<std::ffi::OsString> + Clone,
             {
+                #krate::__private::profile_load_started();
                 let (composition, selection) =
                     Self::compose_layers_with_selection_from_iter(iter);
-                composition
+                let result = composition
                     .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
-                    .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection))
+                    .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection));
+                #krate::__private::profile_load_finished(&result);
+                result
             }
 
             /// Load configuration using the current process arguments and

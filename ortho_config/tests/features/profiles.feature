@@ -37,6 +37,20 @@ Feature: Profile selection and precedence
     Then loading fails naming "ci" from the selector environment variable
     And the error states that no configuration files were found
 
+  Scenario: An unknown env-selected profile against a file chain with no profiles
+    Given a config file with key "retries" set to "3"
+    And the selector environment variable names profile "staging"
+    When the CLI loads
+    Then loading fails naming "staging" from the selector environment variable
+    And the error states that no profiles were found
+
+  Scenario: A malformed flag and an unknown env-selected profile both survive
+    Given a config file with key "retries" set to "3"
+    And the selector environment variable names profile "staging"
+    When the CLI loads with "--bogus"
+    Then loading fails naming "staging" from the selector environment variable
+    And loading fails reporting parse and unknown-profile errors
+
   Scenario: A profile table must not configure subcommands
     Given a config file defining profile "ci" containing a "cmds" table
     When the CLI loads with "--profile ci"

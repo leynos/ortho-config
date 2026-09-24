@@ -49,6 +49,7 @@ pub fn extract_profile_layers(
     layers: Vec<MergeLayer<'static>>,
     selected: Option<&SelectedProfile>,
 ) -> OrthoResult<ExtractionOutcome> {
+    let chain_is_empty = layers.is_empty();
     let mut file_layers = Vec::with_capacity(layers.len());
     let mut profile_layers = Vec::new();
     let mut available = Vec::new();
@@ -78,10 +79,19 @@ pub fn extract_profile_layers(
     }
 
     if let Some(selected_profile) = selected.filter(|_| !selected_found) {
+        // Distinguish the two empty cases: a chain with no files at all is a
+        // discovery problem, while a non-empty chain that defines no profile
+        // tables is a selector problem. Reporting the former for the latter
+        // would send the operator hunting for files that are already present.
+        let reported = if chain_is_empty {
+            AvailableProfileNames::no_files_discovered()
+        } else {
+            AvailableProfileNames::new(available)
+        };
         return Err(Arc::new(OrthoError::UnknownProfile {
             selected: selected_profile.name.to_string(),
             selection_source: selected_profile.source,
-            available: AvailableProfileNames::new(available),
+            available: reported,
         }));
     }
 

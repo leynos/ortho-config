@@ -6,6 +6,7 @@
 use crate::CliFieldInfo;
 use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
+    effective_config_cli_long,
 };
 use crate::derive::parse::{SerdeRenameAll, clap_arg_id, serde_serialized_field_key};
 
@@ -74,6 +75,12 @@ pub(crate) fn build_cli_struct_tokens(
             &cli_struct.used_longs,
             &cli_struct.field_names,
         )?;
+        // Claim the effective long before the profile flag is built so an
+        // opted-in struct whose `config_cli_long` is `profile` is rejected at
+        // compile time rather than emitted as duplicate `--profile` options.
+        cli_struct
+            .used_longs
+            .insert(effective_config_cli_long(struct_attrs));
         cli_struct.fields.push(config_field);
     }
     if let Some(profile_field) = build_profile_flag_field(

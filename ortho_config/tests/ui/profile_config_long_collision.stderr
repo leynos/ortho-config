@@ -1,5 +1,5 @@
 error: duplicate `cli_long` value 'profile' conflicts with the generated profile flag
-  --> tests/ui/profile_long_flag_collision.rs:12:34
+  --> tests/ui/profile_config_long_collision.rs:12:34
    |
 12 | #[derive(Deserialize, Serialize, OrthoConfig)]
    |                                  ^^^^^^^^^^^

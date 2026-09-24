@@ -83,6 +83,7 @@ const fn source_label(source: &SourceKind) -> &'static str {
     match source {
         SourceKind::Defaults => "Defaults",
         SourceKind::File => "File",
+        SourceKind::Profile => "Profile",
         SourceKind::Env => "Environment",
         SourceKind::Cli => "CLI",
     }

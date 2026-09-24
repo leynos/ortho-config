@@ -144,6 +144,27 @@ fn error_states_no_files(profiles_context: &ProfilesContext) -> Result<()> {
     Ok(())
 }
 
+/// Asserts the load found files but none of them define a profile.
+///
+/// Distinct from the no-files case: the chain discovered real configuration,
+/// so the message must not send the operator looking for missing files.
+#[then("the error states that no profiles were found")]
+fn error_states_no_profiles(profiles_context: &ProfilesContext) -> Result<()> {
+    let message = profiles_context
+        .error_message
+        .take()
+        .ok_or_else(|| anyhow!("load error message not recorded"))?;
+    ensure!(
+        message.contains("no profiles were found"),
+        "error should state that no profiles were found: {message}"
+    );
+    ensure!(
+        !message.contains("no configuration files were found"),
+        "error must not claim no configuration files were found when files exist: {message}"
+    );
+    Ok(())
+}
+
 /// Asserts the load failed identifying the forbidden key in a profile.
 #[then("loading fails identifying the forbidden {key} key in {profile}")]
 fn loading_fails_forbidden_key(
@@ -174,6 +195,32 @@ fn parse_source(source: &str) -> ProfileSource {
         "flag" => ProfileSource::Flag,
         _ => ProfileSource::Environment,
     }
+}
+
+/// Asserts a failed load retained both a parse error and an unknown-profile
+/// error, in that order.
+///
+/// A parse failure must not mask the selector error, nor the reverse: when the
+/// CLI cannot be parsed *and* the selector names a profile no file defines,
+/// dropping either error would hide a root cause. The parse error is reported
+/// first because it is the reason clap could not supply the flag value. This
+/// is the CLI-side counterpart to ADR-008's rule that a file parse error must
+/// not be masked by an unknown-profile error.
+#[then("loading fails reporting parse and unknown-profile errors")]
+fn loading_fails_reporting_parse_and_unknown(profiles_context: &ProfilesContext) -> Result<()> {
+    let variants = profiles_context
+        .error_variants
+        .take()
+        .ok_or_else(|| anyhow!("load error variants not recorded"))?;
+    ensure!(
+        variants.first().map(String::as_str) == Some("CliParsing"),
+        "expected the parse error to be reported first, got {variants:?}"
+    );
+    ensure!(
+        variants.iter().any(|name| name == "UnknownProfile"),
+        "expected the unknown-profile error to be retained alongside the parse error, got {variants:?}"
+    );
+    Ok(())
 }
 
 /// Asserts no composed layer leaks the reserved selector key.

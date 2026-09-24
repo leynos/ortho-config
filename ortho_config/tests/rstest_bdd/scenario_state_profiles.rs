@@ -41,6 +41,10 @@ pub struct ProfilesContext {
     pub error_key: Slot<String>,
     /// Rendered message of any load error.
     pub error_message: Slot<String>,
+    /// Every error the load retained, in the order they are reported. An
+    /// aggregated failure records one entry per sub-error; a single failure
+    /// records that one error.
+    pub error_variants: Slot<Vec<String>>,
 }
 
 /// Provides a clean profile context for profile selection scenarios.
