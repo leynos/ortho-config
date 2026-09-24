@@ -4,6 +4,7 @@
 use camino::Utf8PathBuf;
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
+use rstest::rstest;
 use serde_json::{Value, json};
 use std::borrow::Cow;
 
@@ -128,28 +129,22 @@ fn cmds_key_inside_profile_body_is_forbidden() {
         .expect("cmds profile body key is forbidden");
 }
 
-#[test]
-fn invalid_name_is_rejected_even_when_not_selected() {
+/// An invalid profile name is rejected whatever the selection is.
+///
+/// Validation covers every table in every file layer, so a bad name is a hard
+/// error even when the operator selected a different profile, or selected
+/// none at all.
+#[rstest]
+#[case::selection_targets_another_profile(Some("local"))]
+#[case::without_a_selection(None)]
+fn invalid_name_is_rejected_regardless_of_selection(#[case] selected: Option<&str>) {
     let layers = vec![file_layer(
         json!({ "profile": { "ci!": { "retries": 7 } } }),
         "app.toml",
     )];
-    let err = extract_profile_layers(layers, Some(&selection("local").expect("valid test name")))
-        .expect_err("an invalid name must be rejected even when it is not selected");
-    match *err {
-        OrthoError::InvalidProfileName { ref name } => assert_eq!(name, "ci!"),
-        ref other => panic!("expected InvalidProfileName, got {other:?}"),
-    }
-}
-
-#[test]
-fn invalid_name_is_rejected_without_a_selection() {
-    let layers = vec![file_layer(
-        json!({ "profile": { "ci!": { "retries": 7 } } }),
-        "app.toml",
-    )];
-    let err = extract_profile_layers(layers, None)
-        .expect_err("an invalid name must be rejected even with no selection");
+    let resolved = selected.map(|name| selection(name).expect("valid test name"));
+    let err = extract_profile_layers(layers, resolved.as_ref())
+        .expect_err("an invalid name must be rejected regardless of the selection");
     match *err {
         OrthoError::InvalidProfileName { ref name } => assert_eq!(name, "ci!"),
         ref other => panic!("expected InvalidProfileName, got {other:?}"),
