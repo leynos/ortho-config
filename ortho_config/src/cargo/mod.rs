@@ -92,12 +92,12 @@ mod tests;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let args_command = clap::Command::new("demo")
-///     .arg(clap::Arg::new("all").long("all"));
+///     .arg(clap::Arg::new("all").long("all").action(clap::ArgAction::SetTrue));
 /// let cli = external_subcommand("cargo-demo", "demo", args_command);
 ///
 /// // Cargo dispatch: `cargo demo --all` injects the `demo` token.
 /// let matches = cli.try_get_matches_from(["cargo-demo", "demo", "--all"])?;
-/// assert!(matches.subcommand_matches("demo").is_some());
+/// assert!(matches.subcommand_matches("demo").is_some_and(|demo| demo.get_flag("all")));
 /// # Ok(())
 /// # }
 /// ```
