@@ -6,11 +6,15 @@
 use super::common::SlotTakeOrExt;
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{PrArgs, SubcommandContext, SubcommandSources};
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
-use ortho_config::SubcmdConfigMerge;
+use ortho_config::subcommand::{
+    Prefix, SubcommandFileContext, load_and_merge_subcommand_with_sources_at,
+};
+use ortho_config::{MapEnv, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use std::sync::Arc;
 
 fn take_sources(subcommand_context: &SubcommandContext) -> SubcommandSources {
     subcommand_context.sources.take().unwrap_or_default()
@@ -107,28 +111,46 @@ fn load_sub(subcommand_context: &SubcommandContext) -> Result<()> {
         let cli = PrArgs {
             reference: sources.cli.clone(),
         };
-        setup_test_environment(&sources, &cli)?
+        load_from_isolated_sources(&sources, &cli)?
     };
     subcommand_context.result.set(result);
     Ok(())
 }
 
-fn setup_test_environment(
+fn load_from_isolated_sources(
     sources: &SubcommandSources,
     cli: &PrArgs,
 ) -> Result<Result<PrArgs, anyhow::Error>> {
-    figment_helpers::with_jail(|j| {
-        if let Some(file_reference) = sources.file.as_ref() {
-            j.create_file(
+    let fixture_dir = tempfile::tempdir().context("create subcommand fixture directory")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open subcommand fixture directory")?;
+    if let Some(file_reference) = sources.file.as_ref() {
+        fixture
+            .write(
                 ".app.toml",
-                &format!("[cmds.test]\nreference = \"{file_reference}\""),
-            )?;
-        }
-        if let Some(env_reference) = sources.env.as_ref() {
-            j.set_env("APP_CMDS_TEST_REFERENCE", env_reference);
-        }
-        Ok(cli.load_and_merge().map_err(anyhow::Error::from))
-    })
+                format!("[cmds.test]\nreference = \"{file_reference}\"").as_bytes(),
+            )
+            .context("write subcommand fixture")?;
+    }
+
+    let isolated_home = fixture_dir.path().join("home");
+    let isolated_xdg_home = fixture_dir.path().join("xdg-home");
+    let isolated_xdg_dirs = fixture_dir.path().join("xdg-dirs");
+    let mut environment = MapEnv::new()
+        .with_var("HOME", isolated_home.as_os_str())
+        .with_var("XDG_CONFIG_HOME", isolated_xdg_home.as_os_str())
+        .with_var("XDG_CONFIG_DIRS", isolated_xdg_dirs.as_os_str());
+    if let Some(env_reference) = sources.env.as_ref() {
+        environment.insert("APP_CMDS_TEST_REFERENCE", env_reference);
+    }
+    let source = Arc::new(environment);
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+    let files = SubcommandFileContext::new(fixture_dir.path(), discovery.as_ref());
+    let prefix = Prefix::new("APP_");
+    let result = load_and_merge_subcommand_with_sources_at(&prefix, cli, files, merge)
+        .map_err(anyhow::Error::from);
+    Ok(result)
 }
 
 #[then("the merged reference is {expected}")]

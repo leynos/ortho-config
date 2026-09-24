@@ -2,11 +2,12 @@
 
 use super::common::SlotTakeOrExt;
 use crate::scenario_state::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
-use anyhow::{Result, anyhow, ensure};
-use ortho_config::{OrthoConfig, OrthoResult};
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, OrthoConfig, OrthoResult, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 #[given("a configuration file extending a base file")]
 fn create_files(extends_context: &ExtendsContext) -> Result<()> {
@@ -68,14 +69,37 @@ fn create_replace_strategy(extends_context: &ExtendsContext) -> Result<()> {
     Ok(())
 }
 
-fn with_jail_load<F>(setup: F) -> Result<OrthoResult<RulesConfig>>
+/// Write one fixture file into this module's isolated extends graph.
+fn write_fixture(dir: &Dir, relative_path: &str, contents: &str) -> Result<()> {
+    dir.write(relative_path, contents.as_bytes())
+        .with_context(|| format!("write extends fixture {relative_path}"))?;
+    Ok(())
+}
+
+/// Prepare an isolated extends graph and its closed discovery and merge sources.
+///
+/// This is private to the BDD extends scenarios. Callers must keep the returned
+/// `TempDir` alive while the generated loader reads the required child path.
+fn prepare_fixture<F>(
+    setup: F,
+) -> Result<(
+    tempfile::TempDir,
+    PathBuf,
+    SharedEnvSource,
+    SharedScanEnvSource,
+)>
 where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    F: FnOnce(&Dir) -> Result<()>,
 {
-    figment_helpers::with_jail(|j| {
-        setup(j)?;
-        Ok(RulesConfig::load_from_iter(["prog"]))
-    })
+    let fixture_dir = tempfile::tempdir().context("create extends fixture directory")?;
+    let dir = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open extends fixture directory")?;
+    setup(&dir)?;
+    let child_path = fixture_dir.path().join(".ddlint.toml");
+    let source = Arc::new(MapEnv::new().with_var("DDLINT_CONFIG_PATH", &child_path));
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+    Ok((fixture_dir, child_path, discovery, merge))
 }
 
 fn load_with_flag<F>(
@@ -85,11 +109,17 @@ fn load_with_flag<F>(
     extends_context: &ExtendsContext,
 ) -> Result<()>
 where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    F: FnOnce(&Dir) -> Result<()>,
 {
     ensure!(flag.is_filled(), "{flag_name} was not initialised");
     flag.clear();
-    let result = with_jail_load(setup)?;
+    let (_fixture_dir, child_path, discovery, merge) = prepare_fixture(setup)?;
+    let args = [
+        OsString::from("prog"),
+        OsString::from("--config"),
+        child_path.into_os_string(),
+    ];
+    let result = RulesConfig::load_from_iter_with_sources(args, discovery, merge);
     extends_context.result.set(result);
     Ok(())
 }
@@ -124,71 +154,78 @@ impl ExtendsScenario {
         }
     }
 
-    fn setup(self, j: &mut figment::Jail) -> figment::error::Result<()> {
+    fn setup(self, dir: &Dir) -> Result<()> {
         match self {
-            Self::Extended => Self::setup_extended(j),
-            Self::Cyclic => Self::setup_cyclic(j),
-            Self::MissingBase => Self::setup_missing_base(j),
-            Self::MultiLevel => Self::setup_multi_level(j),
-            Self::NonString => Self::setup_non_string(j),
+            Self::Extended => Self::setup_extended(dir),
+            Self::Cyclic => Self::setup_cyclic(dir),
+            Self::MissingBase => Self::setup_missing_base(dir),
+            Self::MultiLevel => Self::setup_multi_level(dir),
+            Self::NonString => Self::setup_non_string(dir),
         }
     }
 
-    fn setup_extended(j: &mut figment::Jail) -> figment::error::Result<()> {
-        j.create_file("base.toml", "rules = [\"base\"]")?;
-        j.create_file(
+    fn setup_extended(dir: &Dir) -> Result<()> {
+        write_fixture(dir, "base.toml", "rules = [\"base\"]")?;
+        write_fixture(
+            dir,
             ".ddlint.toml",
             "extends = \"base.toml\"\nrules = [\"child\"]",
         )?;
         Ok(())
     }
 
-    fn setup_cyclic(j: &mut figment::Jail) -> figment::error::Result<()> {
-        j.create_file("a.toml", "extends = \"b.toml\"\nrules = [\"a\"]")?;
-        j.create_file("b.toml", "extends = \"a.toml\"\nrules = [\"b\"]")?;
-        j.create_file(".ddlint.toml", "extends = \"a.toml\"")?;
+    fn setup_cyclic(dir: &Dir) -> Result<()> {
+        write_fixture(dir, "a.toml", "extends = \"b.toml\"\nrules = [\"a\"]")?;
+        write_fixture(dir, "b.toml", "extends = \"a.toml\"\nrules = [\"b\"]")?;
+        write_fixture(dir, ".ddlint.toml", "extends = \"a.toml\"")?;
         Ok(())
     }
 
-    fn setup_missing_base(j: &mut figment::Jail) -> figment::error::Result<()> {
-        j.create_file(
+    fn setup_missing_base(dir: &Dir) -> Result<()> {
+        write_fixture(
+            dir,
             ".ddlint.toml",
             "extends = \"missing.toml\"\nrules = [\"main\"]",
         )?;
         Ok(())
     }
 
-    fn setup_multi_level(j: &mut figment::Jail) -> figment::error::Result<()> {
+    fn setup_multi_level(dir: &Dir) -> Result<()> {
         let grandparent = concat!("rules = [\"grandparent\"]\n");
         let parent = concat!("extends = \"grandparent.toml\"\n", "rules = [\"parent\"]\n",);
         let child = concat!("extends = \"parent.toml\"\n", "rules = [\"child\"]\n",);
-        j.create_file("grandparent.toml", grandparent)?;
-        j.create_file("parent.toml", parent)?;
-        j.create_file(".ddlint.toml", child)?;
+        write_fixture(dir, "grandparent.toml", grandparent)?;
+        write_fixture(dir, "parent.toml", parent)?;
+        write_fixture(dir, ".ddlint.toml", child)?;
         Ok(())
     }
 
-    fn setup_non_string(j: &mut figment::Jail) -> figment::error::Result<()> {
-        j.create_file(".ddlint.toml", "extends = 1")?;
+    fn setup_non_string(dir: &Dir) -> Result<()> {
+        write_fixture(dir, ".ddlint.toml", "extends = 1")?;
         Ok(())
     }
 }
 
-fn with_jail_load_replace<F>(setup: F) -> Result<OrthoResult<ReplaceRulesConfig>>
+fn load_replace_with_fixture<F>(setup: F) -> Result<OrthoResult<ReplaceRulesConfig>>
 where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    F: FnOnce(&Dir) -> Result<()>,
 {
-    figment_helpers::with_jail(|j| {
-        setup(j)?;
-        Ok(ReplaceRulesConfig::load_from_iter(["prog"]))
-    })
+    let (_fixture_dir, child_path, discovery, merge) = prepare_fixture(setup)?;
+    let args = [
+        OsString::from("prog"),
+        OsString::from("--config-path"),
+        child_path.into_os_string(),
+    ];
+    Ok(ReplaceRulesConfig::load_from_iter_with_sources(
+        args, discovery, merge,
+    ))
 }
 
 fn load_scenario(scenario: ExtendsScenario, context: &ExtendsContext) -> Result<()> {
     load_with_flag(
         scenario.flag(context),
         scenario.name(),
-        |j| scenario.setup(j),
+        |dir| scenario.setup(dir),
         context,
     )
 }
@@ -303,9 +340,10 @@ fn load_replace_strategy(extends_context: &ExtendsContext) -> Result<()> {
         "replace-strategy configuration was not initialised"
     );
     extends_context.replace_strategy_flag.clear();
-    let result = with_jail_load_replace(|j| {
-        j.create_file("base.toml", "rules = [\"base\"]")?;
-        j.create_file(
+    let result = load_replace_with_fixture(|dir| {
+        write_fixture(dir, "base.toml", "rules = [\"base\"]")?;
+        write_fixture(
+            dir,
             ".ddlint.toml",
             "extends = \"base.toml\"\nrules = [\"child\"]",
         )?;

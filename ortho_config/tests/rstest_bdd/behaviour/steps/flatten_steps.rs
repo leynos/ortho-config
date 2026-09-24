@@ -3,31 +3,34 @@
 use super::common::{SlotTakeOrExt, set_scalar_once};
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{FlatArgs, FlattenContext};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use figment::{Figment, providers::Serialized};
 use ortho_config::{
     OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
 };
 use rstest_bdd_macros::{given, then, when};
-use std::path::Path;
-use test_helpers::figment as figment_helpers;
 
 fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs>> {
-    figment_helpers::with_jail(|j| {
-        if let Some(contents) = file.as_ref() {
-            j.create_file(".flat.toml", contents)?;
-        }
-        let cli = FlatArgs::parse_from(args);
-        let mut fig = Figment::from(Serialized::defaults(&FlatArgs::default()));
-        if let Some(f) = load_config_file(Path::new(".flat.toml")).to_figment()? {
-            fig = fig.merge(f);
-        }
-        Ok(fig
-            .merge(sanitized_provider(&cli).to_figment()?)
-            .extract()
-            .into_ortho_merge())
-    })
+    let fixture_dir = tempfile::tempdir().context("create flattened configuration fixture")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open flattened configuration fixture")?;
+    if let Some(contents) = file.as_ref() {
+        fixture
+            .write(".flat.toml", contents.as_bytes())
+            .context("write flattened configuration fixture")?;
+    }
+    let config_path = fixture_dir.path().join(".flat.toml");
+    let cli = FlatArgs::parse_from(args);
+    let mut fig = Figment::from(Serialized::defaults(&FlatArgs::default()));
+    if let Some(f) = load_config_file(&config_path).to_figment()? {
+        fig = fig.merge(f);
+    }
+    Ok(fig
+        .merge(sanitized_provider(&cli).to_figment()?)
+        .extract()
+        .into_ortho_merge())
 }
 
 /// Helper to initialise flat_file with given content.

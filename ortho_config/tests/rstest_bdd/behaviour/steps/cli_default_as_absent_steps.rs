@@ -7,12 +7,16 @@
 use super::value_parsing::normalize_scalar;
 use crate::cli_default_mode::CliDefaultMode;
 use crate::scenario_state::{CliDefaultArgs, CliDefaultContext, CliDefaultSources};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches};
-use ortho_config::subcommand::Prefix;
-use ortho_config::{CliValueExtractor, load_and_merge_subcommand_with_matches};
+use ortho_config::subcommand::{
+    Prefix, SubcommandCliMatches, SubcommandFileContext,
+    load_and_merge_subcommand_with_matches_with_sources_at,
+};
+use ortho_config::{CliValueExtractor, MapEnv, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use std::sync::Arc;
 
 fn take_sources(ctx: &CliDefaultContext) -> CliDefaultSources {
     ctx.sources.take().unwrap_or_default()
@@ -68,39 +72,59 @@ fn set_explicit_cli_punctuation(
 #[when("the subcommand configuration is merged")]
 fn merge_subcommand(cli_default_context: &CliDefaultContext) -> Result<()> {
     let sources = take_sources(cli_default_context);
-
-    let result = figment_helpers::with_jail(|j| {
-        // Write config file if provided
-        if let Some(file_value) = &sources.file {
-            j.create_file(
-                ".app.toml",
-                &format!("[cmds.greet]\npunctuation = \"{file_value}\""),
-            )?;
-        }
-
-        // Set environment variable if provided
-        if let Some(env_value) = &sources.env {
-            j.set_env("APP_CMDS_GREET_PUNCTUATION", env_value);
-        }
-
-        // Build CLI args
-        let cli_args: Vec<&str> = if let Some(explicit_value) = &sources.explicit_cli {
-            vec!["greet", "--punctuation", explicit_value.as_str()]
-        } else {
-            vec!["greet"]
-        };
-
-        let matches = CliDefaultArgs::command().get_matches_from(cli_args);
-        let args = CliDefaultArgs::from_arg_matches(&matches)
-            .map_err(|err| figment::Error::from(err.to_string()))?;
-        let prefix = Prefix::new("APP_");
-        let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
-            .map_err(|err| figment::Error::from(err.to_string()))?;
-        Ok(merged)
-    });
-
+    let result = merge_from_isolated_sources(&sources)?;
     cli_default_context.merge_result.set(result);
     Ok(())
+}
+
+fn merge_from_isolated_sources(sources: &CliDefaultSources) -> Result<Result<CliDefaultArgs>> {
+    let fixture_dir = tempfile::tempdir().context("create CLI default fixture directory")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open CLI default fixture directory")?;
+    if let Some(file_value) = sources.file.as_ref() {
+        fixture
+            .write(
+                ".app.toml",
+                format!("[cmds.greet]\npunctuation = \"{file_value}\"").as_bytes(),
+            )
+            .context("write CLI default fixture")?;
+    }
+
+    let isolated_home = fixture_dir.path().join("home");
+    let isolated_xdg_home = fixture_dir.path().join("xdg-home");
+    let isolated_xdg_dirs = fixture_dir.path().join("xdg-dirs");
+    let mut environment = MapEnv::new()
+        .with_var("HOME", isolated_home.as_os_str())
+        .with_var("XDG_CONFIG_HOME", isolated_xdg_home.as_os_str())
+        .with_var("XDG_CONFIG_DIRS", isolated_xdg_dirs.as_os_str());
+    if let Some(env_value) = sources.env.as_ref() {
+        environment.insert("APP_CMDS_GREET_PUNCTUATION", env_value);
+    }
+    let source = Arc::new(environment);
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+
+    let cli_args: Vec<&str> = if let Some(explicit_value) = &sources.explicit_cli {
+        vec!["greet", "--punctuation", explicit_value.as_str()]
+    } else {
+        vec!["greet"]
+    };
+    let matches = CliDefaultArgs::command().get_matches_from(cli_args);
+    let result = CliDefaultArgs::from_arg_matches(&matches)
+        .map_err(|err| anyhow::Error::from(err).context("parse CLI default arguments"))
+        .and_then(|args| {
+            let cli_matches = SubcommandCliMatches::new(&args, &matches);
+            let files = SubcommandFileContext::new(fixture_dir.path(), discovery.as_ref());
+            let prefix = Prefix::new("APP_");
+            load_and_merge_subcommand_with_matches_with_sources_at(
+                &prefix,
+                &cli_matches,
+                files,
+                merge,
+            )
+            .map_err(|err| anyhow::Error::from(err).context("merge CLI default sources"))
+        });
+    Ok(result)
 }
 
 #[when("CLI values are extracted")]

@@ -2,10 +2,11 @@
 
 use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::scenario_state::{ComposerContext, RulesConfig, RulesContext};
-use anyhow::{Result, anyhow, ensure};
-use ortho_config::{MergeProvenance, OrthoError};
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, MergeProvenance, OrthoError, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{then, when};
-use test_helpers::figment as figment_helpers;
+use std::sync::Arc;
 
 #[when("the rule layers are composed with CLI rules {cli_rules}")]
 fn compose_rule_layers(
@@ -17,19 +18,27 @@ fn compose_rule_layers(
     let cli_rules = normalize_scalar(&cli_rules);
     let file_val = rules_context.file_value.get();
     let env_val = rules_context.env_value.get();
-    let composition = figment_helpers::with_jail(|j| {
-        if let Some(value) = file_val.as_ref() {
-            j.create_file(".ddlint.toml", &format!("rules = [\"{value}\"]"))?;
-        }
-        if let Some(value) = env_val.as_ref() {
-            j.set_env("DDLINT_RULES", value);
-        }
-        Ok(RulesConfig::compose_layers_from_iter([
-            binary_name,
-            "--rules",
-            cli_rules.as_str(),
-        ]))
-    })?;
+    let fixture_dir = tempfile::tempdir().context("create layer-composition fixture directory")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open layer-composition fixture directory")?;
+    if let Some(value) = file_val.as_ref() {
+        fixture
+            .write(".ddlint.toml", format!("rules = [\"{value}\"]").as_bytes())
+            .context("write layer-composition configuration fixture")?;
+    }
+    let config_path = fixture_dir.path().join(".ddlint.toml");
+    let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", &config_path);
+    if let Some(value) = env_val.as_ref() {
+        source = source.with_var("DDLINT_RULES", value);
+    }
+    let source = Arc::new(source);
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+    let composition = RulesConfig::compose_layers_from_iter_with_sources(
+        [binary_name, "--rules", cli_rules.as_str()],
+        discovery,
+        merge,
+    );
 
     let (layers, errors) = composition.into_parts();
     if let Some(err) = OrthoError::try_aggregate(errors) {
