@@ -186,8 +186,20 @@ mod tests {
             .map(std::string::ToString::to_string)
             .ok_or_else(|| anyhow!("expected generated field tokens"))?;
         ensure!(
-            field_ts.contains("ArgAction :: SetTrue"),
-            "boolean CLI fields should use ArgAction::SetTrue"
+            field_ts.contains("num_args"),
+            "boolean CLI fields should accept an optional value"
+        );
+        ensure!(
+            field_ts.contains("require_equals"),
+            "boolean CLI fields should require `=` before an explicit value"
+        );
+        ensure!(
+            field_ts.contains("default_missing_value"),
+            "boolean CLI fields should default a bare flag to `true`"
+        );
+        ensure!(
+            !field_ts.contains("ArgAction :: SetTrue"),
+            "boolean CLI fields should not use presence-only ArgAction::SetTrue"
         );
         ensure!(
             !field_ts.contains("skip_serializing_if"),
@@ -199,6 +211,20 @@ mod tests {
         ensure!(
             figment.extract_inner::<bool>("excited").is_err(),
             "absent boolean flags should not appear in Figment"
+        );
+
+        // An explicit `false` must survive so it can clear a lower-precedence
+        // `true` from a file or environment variable.
+        let cli = __Cli {
+            excited: Some(false),
+        };
+        let figment = figment::Figment::from(figment::providers::Serialized::defaults(&cli));
+        let extracted = figment
+            .extract_inner::<bool>("excited")
+            .map_err(|err| anyhow!("explicit false should appear in Figment: {err}"))?;
+        ensure!(
+            !extracted,
+            "explicit boolean false should serialise to `false`, got {extracted}"
         );
         Ok(())
     }

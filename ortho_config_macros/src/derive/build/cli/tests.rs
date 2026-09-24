@@ -34,6 +34,53 @@ fn skips_fields_marked_with_skip_cli() -> Result<()> {
     Ok(())
 }
 
+/// Renders the generated `#[arg(...)]` attribute for a single-field struct.
+fn generated_attribute(ty: &str) -> Result<String> {
+    let input: syn::DeriveInput = syn::parse_str(&format!("struct Demo {{ excited: {ty} }}"))
+        .map_err(|err| anyhow!(err))?;
+    let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+    let tokens = build_cli_struct_fields(&fields, &field_attrs)?;
+    tokens
+        .fields
+        .first()
+        .map(std::string::ToString::to_string)
+        .ok_or_else(|| anyhow!("expected generated field tokens"))
+}
+
+#[rstest]
+#[case("bool")]
+#[case("Option<bool>")]
+fn boolean_fields_accept_an_optional_value(#[case] ty: &str) -> Result<()> {
+    let field_ts = generated_attribute(ty)?;
+    for expected in [
+        "num_args = 0 ..= 1",
+        "require_equals = true",
+        "default_missing_value = \"true\"",
+    ] {
+        ensure!(
+            field_ts.contains(expected),
+            "{ty} fields should emit `{expected}`, got: {field_ts}"
+        );
+    }
+    ensure!(
+        !field_ts.contains("ArgAction :: SetTrue"),
+        "{ty} fields should not use presence-only ArgAction::SetTrue, got: {field_ts}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("std::string::String")]
+#[case("Option<u16>")]
+fn non_boolean_fields_take_a_value(#[case] ty: &str) -> Result<()> {
+    let field_ts = generated_attribute(ty)?;
+    ensure!(
+        !field_ts.contains("num_args") && !field_ts.contains("default_missing_value"),
+        "{ty} fields should keep the default clap value semantics, got: {field_ts}"
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case("")]
 #[case("bad/flag")]

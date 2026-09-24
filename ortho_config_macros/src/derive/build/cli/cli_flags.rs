@@ -268,12 +268,23 @@ fn process_cli_field(
     let replay_attributes = clap_replay_attributes(attrs, resolved.is_bool);
 
     let arg_attr = if resolved.is_bool {
+        // Presence-only flags (`ArgAction::SetTrue`) can express `true` but not
+        // an explicit `false`, so a `true` supplied by a file or environment
+        // variable can never be cleared from the command line. Accepting an
+        // optional `=<BOOL>` value keeps the bare flag meaning `true` while
+        // making `--flag=false` reach the parser as a real `Some(false)`.
+        //
+        // `require_equals` keeps `--flag false` from swallowing the next
+        // argument, and `default_missing_value` preserves the flag-only
+        // spelling. Absent flags stay `None` so lower layers still win.
         quote_spanned! { span =>
             #[arg(
                 long = #long_lit,
                 short = #short_lit,
                 #replay_attributes
-                action = clap::ArgAction::SetTrue
+                num_args = 0..=1,
+                require_equals = true,
+                default_missing_value = "true"
             )]
         }
     } else {
