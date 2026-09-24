@@ -115,19 +115,37 @@ fn assert_inferred_default_parity() -> Result<()> {
     )
 }
 
-fn assert_file_overrides_inferred_default_parity() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir(
-        "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
-    )?;
-    let matches = DefaultParityArgs::command().get_matches_from(["default-parity"]);
-    let args = DefaultParityArgs::from_arg_matches(&matches).context("parse defaults")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
+/// Configuration file shared by the file-backed default parity cases.
+const DEFAULT_PARITY_FILE: &str =
+    "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n";
+
+/// Parses `cli_args` and merges them over [`DEFAULT_PARITY_FILE`].
+///
+/// The temporary directory and current-directory guard live until the merge
+/// completes, so discovery always sees the shared configuration file.
+fn merge_default_parity_over_file(
+    cli_args: &[&str],
+    parse_context: &'static str,
+    merge_context: &'static str,
+) -> Result<DefaultParityArgs> {
+    let (_temp_dir, _cwd_guard) = config_dir(DEFAULT_PARITY_FILE)?;
+    let matches = DefaultParityArgs::command().get_matches_from(cli_args);
+    let args = DefaultParityArgs::from_arg_matches(&matches).context(parse_context)?;
+    load_and_merge_subcommand_with_matches_with_sources(
         &Prefix::new("APP_"),
         &args,
         &matches,
         Arc::new(MapEnv::new()),
     )
-    .context("merge parser-faithful defaults")?;
+    .context(merge_context)
+}
+
+fn assert_file_overrides_inferred_default_parity() -> Result<()> {
+    let merged = merge_default_parity_over_file(
+        &["default-parity"],
+        "parse defaults",
+        "merge parser-faithful defaults",
+    )?;
     assert_default_parity(
         &merged,
         DefaultParityExpected {
@@ -140,28 +158,21 @@ fn assert_file_overrides_inferred_default_parity() -> Result<()> {
 }
 
 fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir(
-        "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
+    let merged = merge_default_parity_over_file(
+        &[
+            "default-parity",
+            "--count",
+            "9",
+            "--mode",
+            "fast",
+            "--port",
+            "tcp:10",
+            "--label",
+            "cli",
+        ],
+        "parse explicit values",
+        "merge explicit values",
     )?;
-    let matches = DefaultParityArgs::command().get_matches_from([
-        "default-parity",
-        "--count",
-        "9",
-        "--mode",
-        "fast",
-        "--port",
-        "tcp:10",
-        "--label",
-        "cli",
-    ]);
-    let args = DefaultParityArgs::from_arg_matches(&matches).context("parse explicit values")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
-        &Prefix::new("APP_"),
-        &args,
-        &matches,
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge explicit values")?;
     assert_default_parity(
         &merged,
         DefaultParityExpected {
