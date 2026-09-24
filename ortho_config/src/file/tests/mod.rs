@@ -3,10 +3,12 @@
 use super::canonicalise;
 use super::path::normalize_cycle_key;
 use anyhow::{Context, Result};
+use cap_std::ambient_authority;
+use cap_std::fs::Dir;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use test_helpers::figment as figment_helpers;
+use tempfile::TempDir;
 
 pub(super) mod extends_tests;
 pub(super) mod normalise_tests;
@@ -14,15 +16,14 @@ pub(super) mod path_tests;
 #[cfg(feature = "yaml")]
 pub(super) mod yaml_tests;
 
-pub(super) fn canonical_root_and_current() -> Result<(PathBuf, PathBuf)> {
-    canonical_root_and_current_with(canonicalise)
-}
-
-fn canonical_root_and_current_with<F>(canonicalise_fn: F) -> Result<(PathBuf, PathBuf)>
+fn canonical_root_and_current_with<F>(
+    root_path: &Path,
+    canonicalise_fn: F,
+) -> Result<(PathBuf, PathBuf)>
 where
     F: FnOnce(&Path) -> crate::OrthoResult<PathBuf>,
 {
-    let root = canonicalise_fn(Path::new("."))
+    let root = canonicalise_fn(root_path)
         .map_err(anyhow::Error::new)
         .context("canonicalise configuration root directory")?;
     let current = root.join("config.toml");
@@ -31,28 +32,15 @@ where
 
 pub(super) fn with_fresh_graph<F>(f: F) -> Result<()>
 where
-    F: FnOnce(
-        &mut figment::Jail,
-        &Path,
-        &Path,
-        &mut HashSet<PathBuf>,
-        &mut Vec<PathBuf>,
-    ) -> Result<()>,
+    F: FnOnce(&Dir, &Path, &Path, &mut HashSet<PathBuf>, &mut Vec<PathBuf>) -> Result<()>,
 {
-    figment_helpers::with_jail(|j| {
-        let (root, current) =
-            canonical_root_and_current().map_err(figment_helpers::figment_error)?;
-        let mut visited = HashSet::new();
-        let mut stack = Vec::new();
-        f(j, &root, &current, &mut visited, &mut stack).map_err(figment_helpers::figment_error)
-    })
-}
-
-pub(super) fn with_jail<F>(f: F) -> Result<()>
-where
-    F: FnOnce(&mut figment::Jail) -> Result<()>,
-{
-    figment_helpers::with_jail(|j| f(j).map_err(figment_helpers::figment_error))
+    let temp = TempDir::new().context("create isolated configuration directory")?;
+    let dir = Dir::open_ambient_dir(temp.path(), ambient_authority())
+        .context("open isolated configuration directory")?;
+    let (root, current) = canonical_root_and_current_with(temp.path(), canonicalise)?;
+    let mut visited = HashSet::new();
+    let mut stack = Vec::new();
+    f(&dir, &root, &current, &mut visited, &mut stack)
 }
 
 pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {
@@ -117,8 +105,9 @@ fn sample_file_error(path: &str) -> Arc<crate::OrthoError> {
 
 #[test]
 fn canonical_root_and_current_preserves_error_chain() -> Result<()> {
-    let err = canonical_root_and_current_with(|_| Err(sample_file_error("config.toml")))
-        .expect_err("expected canonical_root_and_current to fail");
+    let err =
+        canonical_root_and_current_with(Path::new("."), |_| Err(sample_file_error("config.toml")))
+            .expect_err("expected canonical_root_and_current to fail");
     let chain: Vec<String> = err.chain().map(ToString::to_string).collect();
     anyhow::ensure!(
         chain
