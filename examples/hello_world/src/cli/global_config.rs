@@ -75,9 +75,12 @@ pub fn load_global_config(
     config_override: Option<&Path>,
     program_name: impl AsRef<std::ffi::OsStr>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    let args = build_composition_args(program_name.as_ref(), config_override);
-    let composition = HelloWorldCli::compose_layers_from_iter(args);
-    resolve_global_composition(globals, composition)
+    load_global_config_with_composition(
+        globals,
+        config_override,
+        program_name,
+        HelloWorldCli::compose_layers_from_iter,
+    )
 }
 
 /// Resolves global configuration using the supplied environment capabilities.
@@ -120,13 +123,19 @@ pub fn load_global_config_with_sources(
     program_name: impl AsRef<std::ffi::OsStr>,
     sources: GlobalConfigSources,
 ) -> Result<HelloWorldCli, HelloWorldError> {
+    load_global_config_with_composition(globals, config_override, program_name, |args| {
+        HelloWorldCli::compose_layers_from_iter_with_sources(args, sources.discovery, sources.merge)
+    })
+}
+
+fn load_global_config_with_composition(
+    globals: &GlobalArgs,
+    config_override: Option<&Path>,
+    program_name: impl AsRef<std::ffi::OsStr>,
+    compose_layers: impl FnOnce(Vec<std::ffi::OsString>) -> ortho_config::declarative::LayerComposition,
+) -> Result<HelloWorldCli, HelloWorldError> {
     let args = build_composition_args(program_name.as_ref(), config_override);
-    let composition = HelloWorldCli::compose_layers_from_iter_with_sources(
-        args,
-        sources.discovery,
-        sources.merge,
-    );
-    resolve_global_composition(globals, composition)
+    resolve_global_composition(globals, compose_layers(args))
 }
 
 fn resolve_global_composition(
