@@ -66,3 +66,8 @@ fn default_value_applied() -> Result<()> {
 fn exposes_prefix() {
     assert_eq!(Prefixed::prefix(), "CFG_");
 }
+
+#[test]
+fn default_prefix_is_empty() {
+    assert_eq!(CustomCli::prefix(), "");
+}
