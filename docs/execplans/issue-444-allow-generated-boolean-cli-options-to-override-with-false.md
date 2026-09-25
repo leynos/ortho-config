@@ -68,6 +68,16 @@ Observable success: a config file that sets `enabled = true` combined with
       same-directory; the migration-guide "Before" block now shows the real
       `TooManyValues` parse failure instead of output the old code could not
       produce; and the ExecPlan itself is indexed in `docs/contents.md`.
+- [x] (2026-09-25) CodeRabbit round 2 returned three further findings, none
+      blocking and none re-litigating the design. All three actioned: the five
+      `figment::Jail::try_with` sites in `ortho_config/tests/compose_layers.rs`
+      now go through `test_helpers::figment::with_jail`, the repository's own
+      shared env-guard helper, per `AGENTS.md:253-256` (bare `figment::Jail`
+      calls are direct environment mutation, which the policy forbids in
+      tests); the PowerShell optional-value sentence falls back to the short
+      flag and, when neither flag exists, names no spelling instead of the
+      nonsense `the flag=false`; and the `--excited --port 3000` illustration
+      no longer names a `port` field the example's `Config` does not declare.
 - [ ] Re-run gates; push; draft PR.
 
 ## Surprises & discoveries
@@ -128,6 +138,20 @@ Observable success: a config file that sets `enabled = true` combined with
   scenario runs against a quiescent tree. Re-verify after edits settle.
 - **The derived short flag for `is_excited` is `i`,** because `r` and `s` are
   already claimed by `recipient` and `salutations`.
+- **Bare `figment::Jail` calls are direct environment mutation.** The jail is a
+  process-wide lock, not a guard registered in a shared crate, so a test file
+  that calls `figment::Jail::try_with` itself violates `AGENTS.md:253-256`. The
+  repository already ships `test_helpers::figment::with_jail` for exactly this
+  purpose, and it takes a closure returning `figment::error::Result<T>`, so the
+  call-site bodies survive the conversion untouched.
+  `test_helpers::figment:: figment_error` replaces the raw
+  `figment::Error::from(…)` conversions. Six further test files still call the
+  jail directly and would benefit from the same conversion; that is out of
+  scope here.
+- **The PowerShell fallback was a latent defect, not a live one.** Reachability
+  needs metadata carrying `value_optional: true` with neither a long nor a
+  short flag. No current fixture produces that, so the goldens never exercised
+  the branch — the new unit test pins it directly rather than through a golden.
 
 ## Decision log
 
