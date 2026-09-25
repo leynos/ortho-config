@@ -697,6 +697,11 @@ variables for tests.
   `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the
   crate requires a decision about scope, not a call site.
+- Subcommand file loading may use `SubcommandFileContext` for named lookup of
+  `HOME`, `USERPROFILE`, and XDG configuration keys while resolving candidate
+  files from its explicit base. On non-Unix and non-Redox targets it may also
+  use the source's native platform configuration-directory fallback. It must
+  not enumerate variables or become a general-purpose environment service.
 
 ### Composition rules
 
@@ -725,6 +730,10 @@ variables for tests.
 - **`home_fallback` defaults to `None`.** `ProcessEnv` overrides it by
   default, and custom sources may too. See the users' guide for why an injected
   source must be able to suppress the platform lookup.
+- **`config_dir_fallback` defaults to `None`.** Only non-Unix and non-Redox
+  subcommand discovery uses it. `ProcessEnv` retains `directories::BaseDirs`
+  native-path behaviour; `MapEnv` stays closed, and custom sources may supply
+  an explicit native configuration root for deterministic tests.
 
 ## Dependency management
 
