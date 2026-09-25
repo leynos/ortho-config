@@ -31,8 +31,21 @@ global-timeout = "30m"
 # child cargo was still compiling beside other compile-heavy tests. Reserve
 # every nextest slot for each trybuild binary on Windows so their child builds
 # do not compete with other nextest tests. Keep the existing 600s ceiling.
+#
+# The Windows failures that followed were all
+# cargo-orthohelp::compile_time's must_use_compile_tests at 600s (runs
+# 36127709137, 36127710357, 36127710423, 36127710779 and 36127709460). Its
+# cold child build overlapped those of ortho_config's compile_fail and
+# crate_path_trybuild. So the Windows exclusivity names every binary whose
+# test drives a cold trybuild build: the two above, compile_fail and
+# compile_time.
 [[profile.default.overrides]]
-filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
+filter = '''
+binary_id(ortho_config::crate_path_trybuild)
+| binary_id(ortho_config::declarative_merge_trybuild)
+| binary_id(ortho_config::compile_fail)
+| binary_id(cargo-orthohelp::compile_time)
+'''
 platform = 'cfg(windows)'
 threads-required = "num-test-threads"
 slow-timeout = { period = "120s", terminate-after = 5 }
