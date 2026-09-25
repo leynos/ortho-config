@@ -269,6 +269,18 @@ Observable success: a config file that sets `enabled = true` combined with
       a finding — the `--flag[=]` render fix, its three tests, and the
       corrected `require_equals` rationale all passed review cleanly.
 
+- [x] (2026-09-25) CodeRabbit round 9 reviewed `cd30e431` (51 files) and
+      returned two findings, which are duplicates of a single action item: the
+      `Outcomes & retrospective` status paragraph still said "Seven rounds" and
+      named round 7 as the most recent change, one round after the Progress log
+      had moved to eight. The staleness was self-inflicted — the round-8 commit
+      added the Progress entry but did not refresh the summary paragraph above
+      it — and the finding is a fair catch: a living plan whose two halves
+      disagree is worse than one that omits detail. The paragraph now reports
+      eight rounds, presents the round-8 fixes as latest with round 7 retained
+      as preceding, and states the remaining work. None of the round-8 fixes
+      themselves drew a finding.
+
 ## Surprises & discoveries
 
 - **A probe with an *undefined* argument reverses its own answer.** The
@@ -553,13 +565,17 @@ The trace chain from requirement to evidence runs:
 
 Status: **complete, pending review.** Every acceptance criterion in issue #444
 is implemented and covered, all six gates have been green on the rebased tree,
-and draft PR #532 is open against `main`. Seven rounds of CodeRabbit review
-have been actioned. The round-7 fixes are the most recent change: a real
-renderer defect that printed `--flag[=]`, a falsified `require_equals`
-rationale corrected in three documents, and a module split forced by the
-400-line limit once the new tests landed. That change set is green across all
-six gates, as recorded in `Progress`; what remains is a further `--agent` pass
-over it and whatever it raises.
+and draft PR #532 is open against `main`. Eight rounds of CodeRabbit review
+have been actioned, the latest of which raised two minor prose nits and no
+substantive objection. The round-8 fixes are the most recent change: the
+rustdoc compound "per-argument" was rejoined after a line break rendered it as
+"per- argument", and ADR-009's "users' guide" became "user's guide" to match
+the project's own style guide. Before those, the round-7 fixes corrected a real
+renderer defect that printed `--flag[=]`, replaced an empirically falsified
+`require_equals` rationale across three documents, and split the `roff/escape`
+module to satisfy the 400-line limit once the new tests landed. That change set
+is green across all six gates, as recorded in `Progress`; what remains is a
+further `--agent` pass over it and whatever it raises.
 
 What was achieved, in the order the work forced it:
 
