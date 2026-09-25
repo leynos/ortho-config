@@ -232,19 +232,19 @@ shared report model if downstream libraries need to construct identical reports.
 The implemented command is:
 
 ```console
-cargo orthohelp --check-agent-native[=off|warn|deny]
+cargo orthohelp --check-agent-native [--policy-mode <off|warn|deny>]
 ```
 
-When the flag is present without a value, the mode defaults to `warn`. The
-check evaluates the compiled agent context and writes exactly one machine-stable
-`PolicyReport` JSON document to stdout. It writes a one-line human-readable
-summary to stderr.
+The enforcement mode comes from `[package.metadata.ortho_config.policy]` and
+defaults to `off`; `--policy-mode` overrides it for the report and requires the
+check flag. The check resolves the package manifest without the bridge build,
+so it also runs for a package that has no `root_type` or library target.
 
-`cargo orthohelp --check-agent-native` always emits a machine-stable policy
-report written atomically to the output directory, and prints a short human
-summary to standard error. Tests and CI should parse `rule_id` and `code` for
-deterministic handling; prose in `message` is explanatory and may improve
-without changing the machine contract.
+`cargo orthohelp --check-agent-native` always writes a machine-stable policy
+report atomically to `policy-report.json` in the output directory, and prints a
+short human summary to standard error. Tests and CI should parse `rule_id` and
+`code` for deterministic handling; prose in `message` is explanatory and may
+improve without changing the machine contract.
 
 <!-- markdownlint-disable MD013 -->
 ```json
@@ -298,8 +298,7 @@ Each result must contain:
   repository-relative or package-relative path, and whose optional `range`
   holds one-based `start`/`end` positions (matching the shipped
   `cargo_orthohelp::policy` types rather than the draft's flat `file`/`range`
-  pair).
-  The behaviour lint runs over agent context, which carries no source
+  pair). The behaviour lint runs over agent context, which carries no source
   spans, so its findings use `null`.
 
 Mode handling is direct: `off` suppresses checks, `warn` emits findings without
@@ -431,7 +430,7 @@ configure that convention once and expose it in agent context.
 This is realized in the derive attribute surface as
 `behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
 flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
-[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) and the §8.1 table
+[ADR-009](adr-009-behavioural-metadata-attribute-surface.md) and the §8.1 table
 below for the defaulting and compatibility contract.
 
 ### 6.2 Structured output
@@ -530,7 +529,7 @@ confirmation bypass flag. Consequential commands should declare whether
 This is realized in the derive attribute surface as `behaviour(mutation = ...)`
 with the optional `behaviour(dry_run = ...)` flag, and in agent context as
 `mutation_effect` plus `dry_run_flag`. See
-[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) for the attribute
+[ADR-009](adr-009-behavioural-metadata-attribute-surface.md) for the attribute
 grammar and the no-inference rule.
 
 Create-like commands should prefer idempotency tokens or natural keys where the

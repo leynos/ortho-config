@@ -157,11 +157,12 @@ when interaction or mutation is not declared, the corresponding values remain
 `unknown`. No interaction or mutation semantics are inferred from command names
 or flags.
 
-Opt into policy checking with `--check-agent-native=off`, `=warn`, or `=deny`;
-bare `--check-agent-native` selects `warn`. The check emits one JSON policy
-report on stdout and a human-readable summary on stderr. Warnings are
-non-fatal, while deny findings exit with code 3 after explicitly requested
-artefacts are generated.
+Opt into policy checking with `--check-agent-native`. The enforcement mode
+comes from `[package.metadata.ortho_config.policy]` and defaults to `off`; a
+`--policy-mode <off|warn|deny>` override applies to the report. The check writes
+`policy-report.json` atomically to the output directory and a human-readable
+summary to stderr. Warnings are non-fatal, while deny findings report a policy
+violation and exit non-zero after the report has been written.
 
 ## Adopt the Cargo external-subcommand helper
 

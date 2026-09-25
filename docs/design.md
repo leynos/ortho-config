@@ -1184,7 +1184,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
   declare interaction, mutation, bypass, and dry-run metadata that the derive
   carries into IR 1.2 and the agent-context bridge populates into
   `interaction_mode`, `mutation_effect`, `bypass_flag`, and `dry_run_flag`.
-  ADR-008 records the attribute shape, the no-inference rule, the pinned
+  ADR-009 records the attribute shape, the no-inference rule, the pinned
   bypass/dry-run flag grammar, the non-interactive/bypass contradiction rule,
   and the IR version-skew contract.
 

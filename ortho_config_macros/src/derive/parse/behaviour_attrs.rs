@@ -12,7 +12,7 @@ use super::literals::lit_str;
 /// Validates the `--flag` grammar shared by `bypass` and `dry_run`.
 ///
 /// A declared flag must match `--[a-z0-9]+(-[a-z0-9]+)*` so consumers can rely
-/// on a single unambiguous wire shape (see ADR-008).
+/// on a single unambiguous wire shape (see ADR-009).
 fn validate_flag_grammar(value: &str, span: proc_macro2::Span) -> syn::Result<()> {
     let body = value.strip_prefix("--").unwrap_or("");
     let valid = !body.is_empty()
@@ -134,7 +134,7 @@ fn apply_dry_run(nested: &ParseNestedMeta, behaviour: &mut BehaviourAttrs) -> sy
 ///
 /// A bypass flag exists to skip a confirmation prompt; a command declared
 /// non-interactive never prompts, so the combination is contradictory
-/// (see ADR-008). The check runs against the merged state so a
+/// (see ADR-009). The check runs against the merged state so a
 /// non-interactive declaration and a bypass split across repeated
 /// `behaviour(...)` groups is still rejected.
 fn validate_behaviour(meta: &ParseNestedMeta, behaviour: &BehaviourAttrs) -> syn::Result<()> {

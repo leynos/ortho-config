@@ -860,20 +860,25 @@ compile error: a command that never prompts has nothing to bypass.
 
 ## Lint the declared behaviour
 
-`cargo orthohelp --check-agent-native[=off|warn|deny]` runs the agent-native
-behaviour lint over the compiled command tree and writes a machine-stable JSON
-policy report to stdout (a human-readable one-line summary goes to stderr). The
-mode defaults to `warn` when the flag is given without `=...`.
-
-For example, a first run over a CLI that declares no behaviour reports every
-command as undeclared:
+The 7.2.1 behaviour rules are exported by `cargo_orthohelp::policy::rules` as
+`check_behaviour(context, mode) -> PolicyReport`. They consume a compiled agent
+context rather than a package manifest, which is why they are a library API
+instead of part of the checks described above: the policy-only run deliberately
+skips the bridge build, and the behaviour rules need its output.
 
 <!-- tested-example: guide-check-command -->
-```console
-cargo orthohelp --check-agent-native=warn
+```rust
+use cargo_orthohelp::policy::PolicyMode;
+use cargo_orthohelp::policy::rules::behaviour::check_behaviour;
+
+let report = check_behaviour(&agent_context, PolicyMode::Warn);
+assert!(report.results.iter().all(|result| result.location.is_none()));
 ```
 
-The report is exactly one JSON document on stdout:
+Each behaviour finding carries a stable `rule_id` and `code`. `location` is
+always `null` for now: agent context carries no source spans, so the `message`
+is the entire operator experience and names the command path plus the exact
+annotation to add. A report produced by the rule set looks like this:
 
 <!-- markdownlint-disable MD013 -->
 <!-- tested-example: guide-check-report -->
@@ -898,29 +903,40 @@ The report is exactly one JSON document on stdout:
       "location": null
     }
   ],
-  "summary": { "off": 0, "warn": 2, "deny": 0, "total": 2 }
+  "summary": { "off": 0, "warn": 2, "deny": 0, "total": 2 },
+  "exceptions": [],
+  "vocabulary": {
+    "verbs": ["get", "list", "create", "update", "delete", "jobs", "profile", "feedback"],
+    "flags": ["--json", "--no-input", "--force", "--dry-run", "--limit", "--cursor", "--wait", "--profile", "--deliver"]
+  }
 }
 ```
 <!-- markdownlint-enable MD013 -->
 
-Each result carries a stable `rule_id` and `code`. `location` is always `null`
-for now: the check runs on agent context, which has no source spans, so the
-`message` is the entire operator experience and names the command path plus the
-exact annotation to add. Annotate incrementally, starting with destructive
+The rule set contains four rules:
+
+- `agent-native.behaviour.destructive-bypass` / `destructive_bypass_missing` —
+  a `mutation = "delete"` command that declares no bypass;
+- `agent-native.behaviour.prompt-bypass` / `prompt_bypass_missing` — an
+  `interaction = "interactive"` command that declares no bypass;
+- `agent-native.behaviour.bypass-unknown` / `bypass_flag_unknown` — a declared
+  bypass that matches no declared input, which is contradiction detection
+  between two declarations rather than name inference;
+- `agent-native.behaviour.undeclared` / `interaction_unknown` and
+  `mutation_unknown` — omitted metadata, which stays undeclared.
+
+Findings follow command-path order. A command declared `non_interactive` is
+exempt from `destructive-bypass`: it cannot prompt, so the declaration itself
+is the approved non-interactive path. `PolicyMode::Off` returns an empty report
+without evaluating any rule. Annotate incrementally, starting with destructive
 commands:
 
-1. Run `--check-agent-native=warn` and read the findings.
-2. Add `behaviour(mutation = "delete", bypass = "--force", ...)` to each
+1. Declare `behaviour(mutation = "delete", bypass = "--force", ...)` on each
    destructive command's arguments struct.
-3. Add `interaction` and other `mutation` declarations as the command surface
+2. Add `interaction` and other `mutation` declarations as the command surface
    stabilizes.
-4. Move to `--check-agent-native=deny` in CI once findings are resolved.
-
-In `deny` mode any finding makes the process exit with code 3 (after writing
-any explicitly requested `--format` artefacts); run failures keep exit code 1
-and clap usage errors keep exit code 2. `off` disables the check. The
-provisional exit-code-3 contract is scheduled to be superseded by the exit-code
-taxonomy in roadmap item 7.2.5.
+3. Run the check in warning mode before enforcing it in continuous
+   integration.
 
 ## Use an aliased dependency
 

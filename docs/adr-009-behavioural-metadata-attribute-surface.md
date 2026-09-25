@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 008: Behavioural metadata attribute surface
+# Architectural decision record (ADR) 009: Behavioural metadata attribute surface
 
 ## Status
 
@@ -120,7 +120,8 @@ the declared enums without an `Unknown` variant; agent context has `Unknown`.
   - Let authors declare interaction and mutation boundaries at the derive site.
   - Populate the reserved agent-context fields without a schema version bump.
   - Add the optional `bypass_flag` and `dry_run_flag` fields.
-  - Provide the `--check-agent-native[=off|warn|deny]` lint.
+  - Provide the behaviour rule set behind the shipped `--check-agent-native`
+    lint.
 - Non-goals:
   - Infer any semantics from command names or flags.
   - Grow the `behaviour(...)` group beyond runtime execution semantics.
@@ -134,15 +135,18 @@ The phases were implemented as milestones B–F of the 7.2.1 execplan:
 1. Milestone B: IR and agent-context schema types plus the version bump.
 2. Milestone C: derive attribute surface with validation.
 3. Milestone D: bridge population and fixture coverage.
-4. Milestone E: `--check-agent-native` lint with policy report.
+4. Milestone E: the `cargo_orthohelp::policy::rules` behaviour rule set plus
+   the policy report.
 5. Milestone F: documentation and closure.
 
 ## Known risks and limitations
 
-- The lint's exit code 3 presently collides with no other `cargo-orthohelp`
-  exit class, but the exit-code taxonomy is scheduled for roadmap item 7.2.5,
-  which may supersede this provisional code. The developers' guide records the
-  decision.
+- The behaviour rules need a compiled agent context, but the shipped
+  `--check-agent-native` run deliberately skips the bridge build so it can run
+  for packages that have no `root_type`, library target, or `ortho_config`
+  dependency. The rule set is therefore reachable as library API rather than
+  through the check flag; wiring it into the CLI depends on the bridge IR the
+  7.1.2 `PolicyInputs` seam is reserved to carry.
 - The executable report has no source locations: `AgentContext` carries no
   source spans, so `PolicyResult.location` is `None`. The finding message is
   the entire operator experience and names the command path plus the exact

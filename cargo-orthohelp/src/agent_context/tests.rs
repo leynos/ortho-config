@@ -320,7 +320,7 @@ fn transform_maps_declared_behaviour(#[case] case: DeclaredBehaviourCase) {
 }
 
 /// An IR command with no behaviour block reports `Unknown`, never a guess:
-/// ADR-008 forbids inferring behaviour from a command's name.
+/// ADR-009 forbids inferring behaviour from a command's name.
 #[test]
 fn transform_keeps_behaviour_fields_unknown_when_undeclared() {
     let metadata = doc(DocSpec::child("version", "cmd.version"));

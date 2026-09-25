@@ -144,7 +144,7 @@ proptest! {
             Just(PolicyMode::Deny),
         ],
     ) {
-        let requested = mode.clone();
+        let requested = mode;
         let report = check_behaviour(&context, mode);
         prop_assert_eq!(report.mode, requested);
         prop_assert_eq!(

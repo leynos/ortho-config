@@ -37,11 +37,14 @@ With this implementation, three things become observable:
 2. The agent-context JSON emitted by `cargo orthohelp --format agent-context`
    reports `"interaction_mode": "interactive"`, `"mutation_effect": "delete"`,
    and `"bypass_flag": "--force"` for that command instead of `"unknown"`.
-3. Running `cargo orthohelp --check-agent-native[=off|warn|deny]` transforms
-   the same IR into agent context, evaluates the behaviour rules, and emits a
-   machine-stable policy report on stdout plus a human-readable summary on
-   stderr. Deny findings produce exit code 3 after explicitly requested
-   artefacts are generated.
+3. `cargo_orthohelp::policy::rules::behaviour::check_behaviour` evaluates the
+   behaviour rules over the same IR transformed into agent context and returns
+   a machine-stable policy report; and `cargo orthohelp --check-agent-native`
+   (with the `--policy-mode` override) evaluates the package's policy
+   configuration and writes `policy-report.json` atomically to the output
+   directory, with a human-readable summary on stderr. See the rebase
+   reconciliation entry in `Progress` for why the two surfaces are distinct
+   today.
 
 This realizes roadmap item 7.2.1 and implements
 `docs/agent-native-cli-design.md` §6.1 (non-interactive execution) and §6.4
@@ -130,7 +133,7 @@ escalation, not workarounds.
   (7.2.2 dual renderer, 7.2.3 structured output) that will add more metadata.
   Severity: medium. Likelihood: medium. Mitigation: use one nested
   `behaviour(...)` attribute group scoped to runtime execution semantics only,
-  with the admission criterion recorded in ADR-008 (output-contract metadata
+  with the admission criterion recorded in ADR-009 (output-contract metadata
   gets sibling groups such as `output(...)` in later items).
 - Risk: `#[ortho_config(...)]` parsing silently discards unknown keys at
   struct and field level (`discard_unknown` in
@@ -195,7 +198,7 @@ escalation, not workarounds.
   groups is rejected. Parser unit tests cover both group orders; trybuild
   fixture `behaviour_noninteractive_bypass_split.rs` (+ `.stderr`) added.
 - [x] Milestone F: documentation (design doc §8.1 rows, users' guide,
-  developers' guide, ADR-008), roadmap ticked, final gates, final CodeRabbit
+  developers' guide, ADR-009), roadmap ticked, final gates, final CodeRabbit
   pass.
 - [x] (2026-08-16) Milestone F closure: users' guide gained
   `behaviour(...)` and `--check-agent-native[=off|warn|deny]` sections (report
@@ -231,7 +234,7 @@ escalation, not workarounds.
 - [x] (2026-09-25) Post-review work items: (a) the CLI parser gained
   `check_agent_native_rejects_invalid_values`, pinning
   `ErrorKind::InvalidValue` and the rendered error naming the rejected value;
-  (b) policy evaluation was separated from localisation —
+  (b) policy evaluation was separated from localization —
   `crate::agent_native::build_policy_context` builds the policy context
   straight from the IR via `bridge_ir_to_agent_context(.., None)`, so the check
   no longer depends on `build_en_us_localizer`, consumer Fluent resources, or
@@ -248,6 +251,31 @@ escalation, not workarounds.
   test), and `module_max_lines` (doc comments pushed
   `cargo-orthohelp/src/agent_context/tests.rs` to 405; condensed to 399).
   `make lint` subsequently passed cleanly (rustdoc, clippy, Whitaker).
+- [x] (2026-09-25) Rebase reconciliation against the shipped 7.1.1 policy
+  framework. `main` merged roadmap item 7.1.1 (PR #416) while this branch was
+  open, and both branches had independently designed the same agent-native CLI.
+  The shipped surface won: `--check-agent-native` is a boolean plus a separate
+  `--policy-mode <off|warn|deny>` override, the mode resolves from
+  `[package.metadata.ortho_config.policy]`, and the report is written
+  atomically as `policy-report.json` into the output directory rather than to
+  stdout. This branch's unique contribution — the four
+  `cargo_orthohelp::policy::rules::behaviour` lint rules, re-exported through
+  `policy::rules` — is retained. Deleted as orphans whose only callers were the
+  superseded pipeline: `cargo-orthohelp/src/agent_native.rs` (which held
+  `GenerationPlan`, `AgentContextResources`, `build_resources`, and
+  `build_policy_context`) and `cargo-orthohelp/src/cli/tests.rs` (which tested
+  the removed `CheckMode` value enum). `locale.rs` dropped a stale
+  `check_agent_native: None` fixture field left by the auto-merge.
+- [x] (2026-09-25) Documentation realigned with the shipped surface. The
+  superseded grammar `--check-agent-native[=off|warn|deny]`, the stdout report
+  channel, and the exit-code-3 contract were removed from `docs/users-guide.md`,
+  `docs/developers-guide.md`, `docs/cargo-orthohelp-design.md`,
+  `docs/agent-native-cli-design.md`, `docs/v0-10-0-migration-guide.md`, and the
+  behavioural ADR-009. The `guide-check-report` example gained the `exceptions`
+  and `vocabulary` blocks the shipped evaluator emits, and
+  `guide-check-command` now shows the actual library call, because the
+  behaviour rules consume a compiled agent context that the policy-only run
+  deliberately does not build.
 
 ## Surprises & discoveries
 
@@ -364,7 +392,7 @@ escalation, not workarounds.
   `OrthohelpError::PolicyViolation`; 7.2.1 took the mode inline on the flag,
   wrote the report to stdout with a stderr summary, and used
   `std::process::exit(3)`. Both also claimed **ADR-008** for different
-  decisions (ours is `adr-008-behavioural-metadata-attribute-surface.md`,
+  decisions (ours is `adr-009-behavioural-metadata-attribute-surface.md`,
   main's is `adr-008-agent-native-policy-configuration.md`, already indexed in
   `docs/contents.md`), and both created a `cargo-orthohelp/src/generation.rs`
   with different contents (ours untracked). This is exactly the contingency the
@@ -400,7 +428,7 @@ escalation, not workarounds.
   companion-trait delegation (`metadata_expr` overwrites only `app_name` and
   `about_id`, verified in review). Variant-level attributes have no parse path
   today and would duplicate state. The admission criterion is recorded in
-  ADR-008. Date/Author: 2026-08-06, planning session; scope rule added after
+  ADR-009. Date/Author: 2026-08-06, planning session; scope rule added after
   expert review.
 - Decision: represent §6.1's three states ("non-interactive, may prompt, or
   requires a bypass flag") as the pair `interaction` × `bypass`:
@@ -409,7 +437,7 @@ escalation, not workarounds.
   treats the bypass flag as a property ("which flag bypasses prompting"), not a
   distinct mode; adding a v1 wire-enum variant needs an unknown-variant
   fallback contract for no expressive gain. This mirrors the MCP annotation
-  style of orthogonal hints. ADR-008 records the explicit mapping so the choice
+  style of orthogonal hints. ADR-009 records the explicit mapping so the choice
   is not reopened. Date/Author: 2026-08-06, planning session; confirmed by
   expert review.
 - Decision: the derive rejects `interaction = "non_interactive"` combined
@@ -423,7 +451,7 @@ escalation, not workarounds.
   review.
 - Decision: bump `ORTHO_DOCS_IR_VERSION` from `"1.1"` to `"1.2"` for the new
   optional `behaviour` block, and record the IR compatibility reasoning in
-  ADR-008, including the skew contract: an older reader given 1.2 IR ignores
+  ADR-009, including the skew contract: an older reader given 1.2 IR ignores
   `behaviour` (no `deny_unknown_fields`); a newer reader given 1.1 IR gets
   `behaviour: None` via `#[serde(default)]`. Rationale: prior execplans treat
   IR schema additions as requiring an IR version bump plus an ADR; the design
@@ -501,18 +529,18 @@ escalation, not workarounds.
   migration a breaking change — so the string shape must be chosen now.
   Trade-off accepted: the tri-state bool's "declared absent" state is lost;
   absence of declaration means unknown, and an explicit declared-absent marker
-  is deferred until a consumer needs it (recorded in ADR-008). Date/Author:
+  is deferred until a consumer needs it (recorded in ADR-009). Date/Author:
   2026-08-06, revised after expert review (two review lenses disagreed;
   symmetry and §8.2 irreversibility decided it).
 - Decision: `mutation = "submit"` neither requires nor implies the existing
   `async_submission` contract on `AgentCommand`; 7.2.1 does not couple them and
-  the lint does not cross-check them. Recorded in ADR-008 so 7.2.3 inherits a
+  the lint does not cross-check them. Recorded in ADR-009 so 7.2.3 inherits a
   stated position rather than an ambiguity. Date/Author: 2026-08-06, added
   after expert review.
 - Decision: the declared bypass grammar is pinned: a bypass value must match
   `--[a-z0-9]+(-[a-z0-9]+)*`. The same grammar applies to `dry_run` values.
   Rationale: "plausible long flag" is unreviewable; a pinned grammar goes in
-  ADR-008 and the trybuild `.stderr` goldens. Date/Author: 2026-08-06, added
+  ADR-009 and the trybuild `.stderr` goldens. Date/Author: 2026-08-06, added
   after expert review.
 - Decision: use `proptest` for serde round-trip invariants of the new types
   and the totality/severity-monotonicity of `check_behaviour`; skip `kani`/
@@ -531,21 +559,46 @@ escalation, not workarounds.
   complete set of executable documentation fences, so dropping either branch's
   IDs would turn unrelated documentation coverage into an untracked exception.
   Date/Author: 2026-09-07, rebase validation.
+- Decision: adopt the shipped 7.1.1 CLI (`--check-agent-native` boolean +
+  `--policy-mode` override, manifest-sourced mode, `policy-report.json` in the
+  output directory) as the single agent-native check, and retain this branch's
+  `policy/rules` behaviour rule set as library API. Supersedes the `CheckMode`
+  /stdout/exit-3 decisions recorded above. Rationale: this plan anticipated the
+  resolution in its own decision log — the flag carried the mode only "because
+  the 7.1.1 policy configuration file does not exist yet, so when 7.1.1 lands
+  the flag becomes an override" — and 7.1.1 has now landed. The
+  already-resolved BDD feature file encodes the 7.1.1 contract, including that
+  a policy-only run must not build the bridge or create generator artefacts,
+  which is precisely incompatible with running context-derived behaviour rules
+  under the same flag. `PolicyInputs`' `#[non_exhaustive]` doc reserves the
+  bridge IR seam for 7.1.2, so wiring the rules into the CLI is a later,
+  additive step. Keeping the rules as public library API preserves this
+  branch's unique contribution and its full test coverage. Date/Author:
+  2026-09-25, rebase reconciliation.
 
 ## Outcomes & retrospective
 
 Roadmap item 7.2.1 is complete. Authors can declare interaction, mutation,
 bypass, and dry-run behaviour through the derive attribute; the generated IR
-and agent context carry those declarations without inference; and
-`cargo orthohelp --check-agent-native` reports stable, mode-sensitive policy
-findings for incomplete declarations. The checked roadmap item and this
-ExecPlan preserve the scope boundary: later capability, renderer, output, and
-execution-ledger metadata remain separate roadmap work.
+and agent context carry those declarations without inference; and the
+`cargo_orthohelp::policy::rules::behaviour` rule set reports stable,
+mode-sensitive policy findings for incomplete declarations. The checked roadmap
+item and this ExecPlan preserve the scope boundary: later capability, renderer,
+output, and execution-ledger metadata remain separate roadmap work.
 
 The final rebase retained both the branch implementation and target-branch
 documentation improvements. The only shared registry was resolved by evidence
 from the live documentation markers, keeping executable-documentation coverage
 complete.
+
+One integration boundary is worth recording. The 7.1.1 policy framework that
+`main` supplied reaches its verdict from the package manifest alone, and its
+BDD scenarios pin that property: a policy-only run must not build the bridge or
+create generator artefacts. The 7.2.1 behaviour rules reach theirs from a
+compiled agent context. Both cannot drive one flag as things stand, so the rule
+set ships as library API and the CLI integration waits on the bridge IR that the
+`PolicyInputs` seam is reserved to carry (roadmap 7.1.2). The rules, their
+tests, and their proptests are complete and unaffected by that sequencing.
 
 ## Context and orientation
 
@@ -593,16 +646,18 @@ labelled explicitly. The relevant crates are:
   policy-report schema (`PolicyReport`, `PolicyResult`,
   `PolicyMode { Off, Warn, Deny }`,
   `ORTHO_POLICY_REPORT_SCHEMA_VERSION = "1"`), and
-  `cargo-orthohelp/src/policy/rules/behaviour.rs` supplies the behaviour rules.
-  `cargo-orthohelp/src/main.rs` loads the bridge IR once, runs the in-memory
-  bridge transform for `--check-agent-native`, and calls `check_behaviour`. The
-  runner writes exactly one JSON report to stdout and a one-line summary to
-  stderr. At the rule layer, `Off` produces an empty report; the CLI treats
-  `--check-agent-native=off` as disabled and does not invoke the runner or
-  suppress normal artefacts. `Warn` produces non-fatal findings, and `Deny`
-  produces deny findings and makes the command exit 3 after explicitly
-  requested artefacts are generated. With no explicit `--format`, an enforcing
-  check skips artefact generation.
+  `cargo-orthohelp/src/policy/rules/behaviour.rs` supplies the behaviour rules,
+  exported through `policy::rules`. `cargo-orthohelp/src/policy/check/mod.rs`
+  owns the shipped check: it resolves the package with the light `metadata`
+  selection, evaluates `PolicyConfig` with `PolicyInputs::default()`, writes
+  `policy-report.json` atomically into the output directory, and prints a
+  one-line summary to stderr. The check deliberately does not build the bridge,
+  so it runs for packages with no `root_type`, library target, or
+  `ortho_config` dependency — which is also why the context-driven behaviour
+  rules cannot run under this flag. `Off` produces an empty report and the CLI
+  treats a non-enforcing check as a no-op; `Warn` produces non-fatal findings,
+  and `Deny` returns `OrthohelpError::PolicyViolation` after the report has
+  been written, so the process exits non-zero with `policy-report.json` on disk.
 - `tests/fixtures/orthohelp_fixture/` — a fixture crate compiled by
   cargo-orthohelp's ephemeral bridge during tests (`SimpleFixtureConfig`,
   `FixtureConfig`, `NestedFixtureConfig` with a three-level subcommand tree
@@ -820,6 +875,16 @@ values; the mapping turns them green.
 
 ### Milestone E — the `--check-agent-native` lint
 
+> **Superseded (2026-09-25).** This milestone was written before `main` merged
+> roadmap item 7.1.1, and it describes a CLI this branch no longer ships: an
+> inline `--check-agent-native[=off|warn|deny]` value flag (`CheckMode`), a
+> report on stdout, and exit code 3. The shipped surface is the boolean
+> `--check-agent-native` plus `--policy-mode`, writing `policy-report.json` to
+> the output directory. The steps below are retained as the historical record
+> of Milestone E's completion; read the rebase reconciliation entry in
+> `Progress` for what actually replaced them. The rule set they specify is
+> unchanged and still shipped.
+
 1. Prerequisite: point `init_tracing` in `cargo-orthohelp/src/main.rs` at
    stderr (`.with_writer(std::io::stderr)`), so tracing output can never
    interleave with the stdout JSON report. This is a behaviour fix in its own
@@ -915,7 +980,7 @@ error, recorded as the red evidence.
    rows (status v1, default `null`) to the §8.1 table; correct the §3.3 example
    to the implemented `location` nesting; note in §6.1/§6.4 that the metadata
    is now realized.
-2. New `docs/adr-008-behavioural-metadata-attribute-surface.md` (per
+2. New `docs/adr-009-behavioural-metadata-attribute-surface.md` (per
    `docs/documentation-style-guide.md`): records the attribute shape and its
    admission criterion (runtime execution semantics only), the §6.1 three-state
    mapping onto the interaction × bypass pair, the non-interactive/bypass
@@ -992,11 +1057,16 @@ Acceptance is behavioural:
    `"bypass_flag": "--force"`, while an unannotated command still reports
    `"unknown"` for both enums and `null` for the new fields. Proven by the
    golden snapshots and the `orthohelp_agent_context.feature` scenario above.
-2. `cargo orthohelp --check-agent-native` (warn) on the fixture tree prints
-   exactly one JSON `PolicyReport` (schema version "1") to stdout listing
-   `destructive_bypass_missing` for the fixture's declared-destructive,
-   bypass-less command and exits 0; `--check-agent-native=deny` exits 3. Proven
-   by the `orthohelp_policy.feature` scenarios.
+2. `cargo orthohelp --check-agent-native` on the fixture tree writes exactly
+   one JSON `PolicyReport` (schema version "1") atomically to
+   `policy-report.json` in the output directory, with a one-line human-readable
+   summary on stderr, and exits non-zero when the resolved mode is `deny`.
+   Misdeclared behaviour is reported by
+   `cargo_orthohelp::policy::rules::behaviour::check_behaviour`, which takes a
+   compiled agent context and is therefore exercised as library API rather than
+   through the flag: the policy-only run deliberately skips the bridge build.
+   Proven by the `orthohelp_policy.feature` scenarios and the `policy::rules`
+   unit and property tests.
 3. Misdeclarations fail to compile: `behaviour(interaction = "sometimes")`,
    `behaviour(mutation = "destroy")`, `behaviour(bypass = "force")`,
    `behaviour(interation = ...)`,
@@ -1138,7 +1208,7 @@ Two implementation adaptations worth recording:
   values surfaced as a confusing "expected `=`" parse error.
 - The flag grammar requires the `--` prefix: `strip_prefix("--").unwrap_or(...)`
   would accept a bare word. `unwrap_or("")` makes `force` invalid and `--force`
-  valid, matching ADR-008's pinned grammar.
+  valid, matching ADR-009's pinned grammar.
 
 Trybuild compile-fail fixtures (7) added under `ortho_config/tests/ui/` with
 `.stderr` goldens: `behaviour_invalid_interaction.rs`,
@@ -1245,11 +1315,13 @@ At the end of the work these items exist:
   `interaction`, `mutation`, `bypass`, and `dry_run` on structs deriving the
   docs metadata, flowing through `OrthoConfigSubcommandDocs` unchanged.
 - `check_behaviour(&AgentContext, PolicyMode) -> PolicyReport` in
-  `cargo_orthohelp::policy::rules::behaviour`, the CLI enum
-  `cargo_orthohelp::cli::CheckMode`, and the flag
-  `cargo orthohelp --check-agent-native[=off|warn|deny]` (exit 3 on deny
-  findings; tracing on stderr).
-- `docs/adr-008-behavioural-metadata-attribute-surface.md`, updated design
+  `cargo_orthohelp::policy::rules::behaviour`, and the shipped flag
+  `cargo orthohelp --check-agent-native` with the
+  `--policy-mode <off|warn|deny>` override (report written atomically to
+  `policy-report.json`; tracing on stderr). The inline-mode flag and the
+  `cargo_orthohelp::cli::CheckMode` enum this entry originally recorded were
+  removed in the 2026-09-25 rebase reconciliation.
+- `docs/adr-009-behavioural-metadata-attribute-surface.md`, updated design
   doc, users' guide, developers' guide, and a ticked roadmap entry 7.2.1.
 
 No new external dependencies.
@@ -1291,7 +1363,7 @@ three panels). What changed and why:
   emitted context's `policy.agent_native` stays at its default until 7.1.1, and
   stated the bridge-failure contract (no report emitted).
 - Widened the IR-version work to replace hard-coded `"1.1"` literals with
-  the constant; documented the version-skew contract for ADR-008; isolated the
+  the constant; documented the version-skew contract for ADR-009; isolated the
   two snapshot-churn sources in separate commits; softened the
   independent-revert claim.
 - Added trybuild fixtures for the unknown-nested-key, contradiction, and
@@ -1299,9 +1371,29 @@ three panels). What changed and why:
   of being silently discarded.
 - Expanded Milestone F documentation duties (first-run `undeclared` noise
   warning in the users' guide; stream and exit-code contract in the developers'
-  guide) and the ADR-008 contents list; recorded deferred items (per-code
+  guide) and the ADR-009 contents list; recorded deferred items (per-code
   summary counts, verb/mutation contradiction advisory, source spans).
 
 Effect on remaining work: milestone count drops to five (B–F); Milestone E
 grows by the tracing prerequisite and the artefact-skip logic; everything else
 is clarification rather than new scope.
+
+### Revision 4 (2026-09-25)
+
+Revised after the rebase reconciliation with the shipped 7.1.1 framework:
+
+- Adopted the shipped CLI surface (`--check-agent-native` boolean plus
+  `--policy-mode`, manifest-sourced mode, `policy-report.json` in the output
+  directory) and marked Milestone E as superseded, retaining its text as the
+  historical record.
+- Renumbered the behavioural ADR from 008 to 009, because `main` had already
+  published `adr-008-agent-native-policy-configuration.md` and
+  `docs/contents.md` indexed that one. Both files had claimed ADR-008, making
+  every bare prose reference ambiguous.
+- Recorded the integration boundary between the two rule sources in
+  `Outcomes & retrospective`: the manifest-driven policy check cannot build the
+  bridge, so the context-driven behaviour rules ship as library API pending the
+  7.1.2 `PolicyInputs` seam.
+- Realigned the guide, design-doc, and migration-guide prose with the shipped
+  grammar and report channel, and added the CHANGELOG entry the branch had
+  never carried.

@@ -51,6 +51,10 @@
 - [ADR-008: Opt-in agent-native policy configuration][adr-008]:
   review the accepted 7.1.1 policy configuration surface, the enforcement and
   advertisement defaults, the report contract, and the reserved 7.1.2 seam.
+- [ADR-009: Behavioural metadata attribute surface](adr-009-behavioural-metadata-attribute-surface.md):
+  review the accepted 7.2.1 `behaviour(...)` derive attribute, the no-inference
+  rule, the pinned bypass and dry-run flag grammar, and the
+  `agent-native.behaviour.*` rule set.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

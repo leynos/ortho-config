@@ -181,7 +181,7 @@ fn rejects_bad_bypass_grammar(#[case] bypass: &str) -> Result<()> {
 /// A bypass on a non-interactive command is contradictory within one group.
 ///
 /// A command that never prompts has nothing to bypass, so this must be a hard
-/// error rather than a warning (ADR-008).
+/// error rather than a warning (ADR-009).
 #[test]
 fn rejects_non_interactive_with_bypass() -> Result<()> {
     let input: DeriveInput = parse_quote! {
