@@ -223,6 +223,11 @@ pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_nam
 /// the placeholder distinguishes the optional value from the required form
 /// produced by [`format_flag_with_value`].
 ///
+/// The placeholder is joined directly to the flag, with no intervening space,
+/// because the value must follow an `=`. Rendering `--flag [=BOOL]` would
+/// document the invalid `--flag =BOOL` spelling. This matches the suffix that
+/// `clap` itself emits for an argument with `require_equals` set.
+///
 /// # Examples
 ///
 /// ```
@@ -230,7 +235,7 @@ pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_nam
 ///
 /// assert_eq!(
 ///     format_flag_with_optional_value(Some("is-excited"), Some('i'), "BOOL"),
-///     "\\fB\\-\\-is-excited\\fR \\fI[=BOOL]\\fR, \\fB\\-i\\fR \\fI[=BOOL]\\fR"
+///     "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR, \\fB\\-i\\fR\\fI[=BOOL]\\fR"
 /// );
 /// ```
 #[must_use]
@@ -241,9 +246,9 @@ pub fn format_flag_with_optional_value(
 ) -> String {
     let value = italic(&format!("[={value_name}]"));
     match (long, short) {
-        (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR {value}, \\fB\\-{s}\\fR {value}"),
-        (Some(l), None) => format!("\\fB\\-\\-{l}\\fR {value}"),
-        (None, Some(s)) => format!("\\fB\\-{s}\\fR {value}"),
+        (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR{value}, \\fB\\-{s}\\fR{value}"),
+        (Some(l), None) => format!("\\fB\\-\\-{l}\\fR{value}"),
+        (None, Some(s)) => format!("\\fB\\-{s}\\fR{value}"),
         (None, None) => value,
     }
 }
@@ -348,6 +353,27 @@ mod tests {
         #[case] expected: &str,
     ) {
         assert_eq!(format_flag(long, short), expected);
+    }
+
+    #[rstest]
+    #[case(
+        Some("is-excited"),
+        Some('i'),
+        "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR, \\fB\\-i\\fR\\fI[=BOOL]\\fR"
+    )]
+    #[case(Some("is-excited"), None, "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR")]
+    #[case(None, Some('E'), "\\fB\\-E\\fR\\fI[=BOOL]\\fR")]
+    fn optional_value_placeholder_joins_the_flag(
+        #[case] long: Option<&str>,
+        #[case] short: Option<char>,
+        #[case] expected: &str,
+    ) {
+        // A space between the flag and the placeholder would document the
+        // invalid `--flag =BOOL` spelling, which `require_equals` rejects.
+        assert_eq!(
+            format_flag_with_optional_value(long, short, "BOOL"),
+            expected
+        );
     }
 
     #[rstest]

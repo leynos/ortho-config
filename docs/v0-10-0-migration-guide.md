@@ -374,14 +374,19 @@ caller. Commands that pass a space-separated value are the exception:
 `--flag false` was never accepted and now fails with a clearer error, because
 the value must follow an `=`.
 
-Before, a boolean flag could only express `true`, and a `true` from a
-configuration file or environment variable could not be cleared from the
-command line:
+Before, a boolean flag was a presence-only switch. It could only express
+`true`, so a `true` from a configuration file or environment variable could not
+be cleared from the command line. `--excited=false` was rejected outright
+rather than silently ignored:
 
 ```plaintext
 # config.toml sets excited = true
 $ app --excited=false
-excited = true     # the explicit false was not representable
+error: unexpected value 'false' for '--excited' found; no more were expected
+
+Usage: app [OPTIONS]
+
+For more information, try '--help'.
 ```
 
 After, `--flag=false` supplies an explicit `false` that overrides any lower
@@ -401,13 +406,15 @@ prefer omission when the intent is to defer. The same spelling applies to
 `Option<bool>` fields, which continue to distinguish "supplied nowhere" from an
 explicit `false`.
 
-Generated man pages and PowerShell help now print the `--flag[=<BOOL>]` form,
-and the documentation IR reports `CliMetadata.value_optional = true` alongside
-the `BOOL` value name and the `true`/`false` possible values. The IR version
-advanced to 2.0 alongside the identifier-value change; consumers that pin the
-version should read `ortho_config::docs::ORTHO_DOCS_IR_VERSION` rather than
-hard-code either value. Older documents remain readable, because the field
-carries a serde default.
+Generated man pages now print the `--flag[=<BOOL>]` form, with the placeholder
+joined to the flag so it cannot be misread as the invalid `--flag =BOOL`
+spelling. PowerShell help explains the optional value in prose instead. The
+documentation IR reports `CliMetadata.value_optional = true` alongside the
+`BOOL` value name and the `true`/`false` possible values. The IR version
+advanced to 2.0 alongside the identifier-value change; consumers that pin
+the version should read `ortho_config::docs::ORTHO_DOCS_IR_VERSION` rather than
+hard-code either value.
+Older documents remain readable, because the field carries a serde default.
 
 ## Expect explicit CLI values to win
 

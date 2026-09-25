@@ -51,13 +51,43 @@ Observable success: a config file that sets `enabled = true` combined with
 - [x] M4 (Task 4): users-guide section, changelog entries, v0.10.0 migration
       guide sections (flag spellings, explicit-value precedence) with impact
       table and upgrade checklist.
-- [ ] Gates via `scrutineer`; CodeRabbit review; draft PR.
+- [x] (2026-09-24) All seven deterministic gates green at `cb0a8c65`
+      (`check-fmt`, `typecheck`, `lint-clippy`, `lint-whitaker`, `test`,
+      `markdownlint`, `nixie`). Cleared the latent violations that clippy had
+      been masking: `shadow_reuse`, `self_named_module_files`,
+      `shadow_unrelated` x2, `struct_excessive_bools`, `too_many_arguments`;
+      split `cli_flags.rs` and `agent_context/mod.rs` for `module-max-lines`;
+      corrected six `-ise` spellings to the house `-ize` form.
+- [x] (2026-09-25) CodeRabbit `--agent --committed --base main` reviewed the
+      46-file diff and returned five distinct concerns, none re-litigating the
+      accepted design. All five actioned: the roff optional-value placeholder
+      now joins the flag (`--flag[=<BOOL>]`, matching clap's own
+      `require_equals` suffix) with a regression test proven non-vacuous; the
+      406-line doc-example test file split into
+      `documentation_examples/boolean_override.rs`; ADR-008 links made
+      same-directory; the migration-guide "Before" block now shows the real
+      `TooManyValues` parse failure instead of output the old code could not
+      produce; and the ExecPlan itself is indexed in `docs/contents.md`.
+- [ ] Re-run gates; push; draft PR.
 
 ## Surprises & discoveries
 
 - **`-ffalse` is rejected.** With `require_equals(true)`, an attached short
   value is an `ArgumentConflict`; only `-f=false` works. Worth one sentence in
   the user guide.
+- **The roff renderer copied the wrong spacing.**
+  `format_flag_with_optional_value` was modelled on `format_flag_with_value`,
+  which separates the flag from its placeholder with a space. That is correct
+  for a required value but wrong here: `require_equals` means the value must
+  follow `=`, so the documented `--flag [=BOOL]` form implies the invalid
+  `--flag =BOOL`. `clap`'s own `stylize_arg_suffix` emits the suffix as
+  `(placeholder, "[=")` with no separator space, versus `(placeholder, " [")`
+  when `require_equals` is unset. The placeholder is now joined directly to the
+  flag.
+- **A CHANGELOG claim outran the code.** The entry said the PowerShell renderer
+  printed the same `--flag[=<BOOL>]` form, but `push_cli_paragraphs` emits a
+  prose sentence instead. The entry and the migration guide now describe what
+  each renderer actually produces.
 - **`--flag false` is rejected.** `require_equals` forces the `=` spelling, so
   a space-separated value is an `UnknownArgument`. This is deliberate: without
   it, `--flag --other x` would try to consume `--other` as the flag's value.

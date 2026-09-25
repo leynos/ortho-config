@@ -31,7 +31,7 @@ Greets a named recipient.
 .PP
 OPTIONS:
 .TP
-\fB\-\-excited\fR \fI[=BOOL]\fR
+\fB\-\-excited\fR\fI[=BOOL]\fR
 Adds an exclamation mark to the greeting.
 .TP
 \fB\-\-recipient\fR \fIRECIPIENT\fR

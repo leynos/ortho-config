@@ -197,6 +197,9 @@
     and their documentation.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
+  - [Boolean CLI overrides](execplans/issue-444-allow-generated-boolean-cli-options-to-override-with-false.md):
+    plan for the optional-value boolean flag, the `value_optional` IR marker,
+    and the explicit-false override.
 
 [adr-008]: adr-008-agent-native-policy-configuration.md
 [adr-009]: adr-009-linux-build-test-runner-placement.md
