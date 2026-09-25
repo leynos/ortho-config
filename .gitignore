@@ -41,3 +41,8 @@ scripts/.venv/
 .vtcode/
 *.swp
 *.swo
+
+# Netsuke generated manifest, Ninja state, and sidecars.
+/build.ninja
+/.ninja_log
+/.netsuke/

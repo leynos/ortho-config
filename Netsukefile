@@ -1,5 +1,12 @@
 netsuke_version: "1.0.0"
 
+vars:
+  # The shared spelling dictionary that reproduces the committed `typos.toml`.
+  # `generated-config` renders from this commit rather than from the
+  # dictionary's moving branch, so the gate checks the generator and the
+  # committed output, not whether the shared dictionary changed since.
+  typos_base: "https://raw.githubusercontent.com/leynos/agent-helper-scripts/91b0fe0fbf6f1680f6afeef9bc1c5167f84ca33d/data/typos-oxendict-base.toml"
+
 actions:
   - name: check-fmt
     command: "cargo fmt --all -- --check"
@@ -19,7 +26,8 @@ actions:
   - name: markdownlint
     command: "markdownlint-cli2 '**/*.md'"
   - name: generated-config
-    command: "uv run scripts/generate_typos_config.py && git diff --exit-code -- typos.toml"
+    description: Regenerate `typos.toml` from the pinned dictionary and require no change.
+    command: "PYTHONPATH=scripts uv run --no-project --python 3.13 python -c 'import generate_typos_config as g; g.main(source=\"{{ typos_base }}\")' && git diff --exit-code -- typos.toml"
   - name: powershell-wrapper-validate
     description: Validate generated wrapper output on a native Windows runner.
     command: "pwsh -File scripts/validate_powershell_wrapper.ps1"
