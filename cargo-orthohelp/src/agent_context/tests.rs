@@ -158,6 +158,49 @@ fn transform_recovers_enum_values_from_cli_metadata_for_custom_types() {
 }
 
 #[test]
+fn transform_reports_boolean_flags_without_enum_values() {
+    // Generated boolean flags carry `true`/`false` as possible values. Those
+    // must not surface as enum values: the input is already typed `bool`, and
+    // describing it as a choice between named variants contradicts that.
+    let metadata = doc(DocSpec {
+        app_name: "demo",
+        bin_name: Some("demo-bin"),
+        about_id: "root.about",
+        fields: vec![cli_field_with_possible_values(
+            FieldSpec {
+                name: "excited",
+                long: Some("excited"),
+                short: Some('e'),
+                takes_value: true,
+                hide_in_help: false,
+                value: Some(ValueType::Bool),
+                default: Some("false"),
+                required: false,
+            },
+            ["true", "false"],
+        )],
+        subcommands: Vec::new(),
+    });
+
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let command = context
+        .commands
+        .first()
+        .expect("root command should be generated");
+    let input = command
+        .inputs
+        .first()
+        .expect("excited input should be generated");
+
+    assert_eq!(input.value_type.as_deref(), Some("bool"));
+    assert!(
+        input.enum_values.is_empty(),
+        "a boolean should not report enum values, got {:?}",
+        input.enum_values
+    );
+}
+
+#[test]
 fn transform_normalizes_default_path_separators() {
     let metadata = doc(DocSpec {
         app_name: "demo",

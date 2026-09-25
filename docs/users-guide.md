@@ -192,8 +192,9 @@ argument, and `--excited --other` would read `--other` as the flag's value.
 Omitting the flag is not the same as passing `--excited=false`. An omitted flag
 leaves the value absent, which lets a configuration file or environment
 variable supply it. Passing `--excited=false` always produces `false`, even
-when a higher-precedence source would otherwise be present. Use the explicit
-form when the intent is to override, and omission when the intent is to defer.
+when a lower-precedence file or environment value supplies `true`. Use the
+explicit form when the intent is to override, and omission when the intent is
+to defer.
 
 An explicit value always wins over the lower layers, including when it happens
 to repeat the field's own default. `--port 8080` therefore overrides

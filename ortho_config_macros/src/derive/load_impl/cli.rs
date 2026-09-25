@@ -5,7 +5,7 @@ use quote::quote;
 /// Generate the guard that decides whether the CLI layer may be pushed.
 ///
 /// The CLI layer must be pushed whenever the user supplied *any* argument,
-/// regardless of whether the resulting sanitised object happens to equal the
+/// regardless of whether the resulting sanitized object happens to equal the
 /// defaults object. Comparing whole objects instead silently discards the CLI
 /// layer for a single-field configuration whose explicit value matches the
 /// struct default, letting a lower-precedence file or environment value win

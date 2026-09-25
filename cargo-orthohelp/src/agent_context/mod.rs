@@ -236,9 +236,18 @@ fn map_value_type(value: &ValueType) -> String {
     }
 }
 
+/// Collects the named variants an enum-like input accepts.
+///
+/// Boolean flags advertise `true`/`false` as possible values, but a boolean is
+/// not a choice between named variants: `value_type` already reports `bool`, and
+/// repeating the two literals as enum values would hand an agent a second,
+/// differently shaped description of the same input. Booleans therefore yield
+/// no enum values, and `cli.possible_values` remains the bridge for fields whose
+/// variants are only known through the CLI metadata.
 fn enum_values(field: &FieldMetadata) -> Vec<String> {
     match &field.value {
         Some(ValueType::Enum { variants }) => variants.clone(),
+        Some(ValueType::Bool) => Vec::new(),
         _ => field
             .cli
             .as_ref()

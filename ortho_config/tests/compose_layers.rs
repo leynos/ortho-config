@@ -256,7 +256,7 @@ fn compose_layers_collects_env_and_file_errors() -> Result<()> {
 ///
 /// The single field is what makes this a regression test rather than a
 /// duplicate of `compose_layers_collects_cli_env_and_file`: the defect it pins
-/// only appears when the sanitised CLI object can equal the defaults object
+/// only appears when the sanitized CLI object can equal the defaults object
 /// field for field, which a one-field struct reaches as soon as the user
 /// restates the default.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -269,7 +269,7 @@ struct SingleFieldConfig {
 /// An explicit CLI value that happens to equal the struct default must still
 /// produce a CLI layer.
 ///
-/// The generated guard used to compare the whole sanitised CLI object against
+/// The generated guard used to compare the whole sanitized CLI object against
 /// the whole defaults object and skip `composer.push_cli` when they matched.
 /// Restating a default on the command line therefore discarded the entire CLI
 /// layer, and a lower-precedence environment value silently won. The layer

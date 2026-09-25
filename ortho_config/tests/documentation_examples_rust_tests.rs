@@ -325,29 +325,52 @@ fn assert_console_flows(workspace: &mut ExampleWorkspace) -> Result<()> {
     Ok(())
 }
 
+/// One documented example invocation: its arguments and its environment.
+///
+/// The two vary independently at call sites, so grouping them under a name
+/// keeps the assertion helpers short enough to read without spelling the
+/// subjects out at every caller.
+struct Invocation<'a, const N: usize, const E: usize> {
+    args: [&'a str; N],
+    environment: [EnvironmentVariable<'a>; E],
+}
+
 fn assert_run<const N: usize>(
     workspace: &mut ExampleWorkspace,
     ExampleId(id): ExampleId<'_>,
     args: [&str; N],
     expected_stdout: &str,
 ) -> Result<()> {
-    assert_run_with_environment(workspace, ExampleId(id), args, [], expected_stdout)
+    assert_run_with_environment(
+        workspace,
+        ExampleId(id),
+        Invocation {
+            args,
+            environment: [],
+        },
+        expected_stdout,
+    )
 }
 
-/// Runs a documented example with environment overrides and asserts its stdout.
+/// Runs a documented example with an explicit invocation and asserts its stdout.
 ///
-/// The five inputs are the natural call-site shape: the arguments and the
-/// environment are varied independently, so grouping them would only push the
-/// assembly cost onto every caller.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Test helpers read better with the subjects spelled out."
-)]
+/// # Examples
+///
+/// ```ignore
+/// assert_run_with_environment(
+///     workspace,
+///     ExampleId("guide-boolean-override"),
+///     Invocation {
+///         args: ["--excited=false"],
+///         environment: [EnvironmentVariable { name: "ACME_EXCITED", value: "true" }],
+///     },
+///     "excited=false\n",
+/// )?;
+/// ```
 fn assert_run_with_environment<const N: usize, const E: usize>(
     workspace: &mut ExampleWorkspace,
     ExampleId(id): ExampleId<'_>,
-    args: [&str; N],
-    environment: [EnvironmentVariable<'_>; E],
+    Invocation { args, environment }: Invocation<'_, N, E>,
     expected_stdout: &str,
 ) -> Result<()> {
     let output = workspace.run_with_environment(ExampleId(id), args, environment)?;

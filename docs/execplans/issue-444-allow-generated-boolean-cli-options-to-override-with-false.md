@@ -87,6 +87,25 @@ Observable success: a config file that sets `enabled = true` combined with
       `too_many_arguments` is not raised by the `RUSTFLAGS="-D warnings"` test
       build; `make lint` also stops at `lint-clippy` and never reaches
       `lint-whitaker`, so whitaker was re-run separately and is green.
+- [x] (2026-09-25) CodeRabbit round 3 returned thirteen findings (two of them
+      duplicates of the same `Invocation` refactor). All actioned: five `-ise`
+      spellings on branch-added lines corrected to the house `-ize` form; the
+      `replay.rs` doc rewritten so it no longer contradicts its own
+      `is_bool.then(…)` branch; the user's-guide precedence paragraph
+      reworded to describe `--excited=false` defeating a lower-precedence
+      `true` rather than an incoherent "higher-precedence source"; a stray
+      space removed from this plan; `enum_values` now returns empty for
+      `ValueType::Bool` with a new non-vacuous unit test, and the three
+      agent-context goldens regenerated (every hunk is the boolean revert —
+      the `log_level` variants survive); and `assert_run_with_environment`
+      now takes a named `Invocation` grouping `args` with `environment`,
+      removing the `#[expect(clippy::too_many_arguments)]` suppression. One
+      style preference (`concat!` over backslash-continued literals) was
+      declined: it is 4 uses versus 10 in `src`, so the finding asked for
+      deviation from the dominant local idiom. Non-vacuity of the
+      `Invocation` refactor was proven by reverting to the 5-parameter
+      signature with the suppression deleted and observing
+      `clippy::too_many_arguments` fire.
 - [ ] Push; draft PR.
 
 ## Surprises & discoveries
@@ -153,7 +172,7 @@ Observable success: a config file that sets `enabled = true` combined with
   repository already ships `test_helpers::figment::with_jail` for exactly this
   purpose, and it takes a closure returning `figment::error::Result<T>`, so the
   call-site bodies survive the conversion untouched.
-  `test_helpers::figment:: figment_error` replaces the raw
+  `test_helpers::figment::figment_error` replaces the raw
   `figment::Error::from(…)` conversions. Six further test files still call the
   jail directly and would benefit from the same conversion; that is out of
   scope here.
@@ -161,6 +180,16 @@ Observable success: a config file that sets `enabled = true` combined with
   needs metadata carrying `value_optional: true` with neither a long nor a
   short flag. No current fixture produces that, so the goldens never exercised
   the branch — the new unit test pins it directly rather than through a golden.
+- **`typos.toml` churn is not ours to commit.** The spellcheck gate regenerates
+  this tracked file through `typos-config-builder`, whose pinned dictionary
+  drifts ahead of the committed copy, so every gate run leaves it dirty. The
+  twelve entries it currently adds are unrelated to this branch: words such as
+  `currentColor`, `color-mix`, `navbar-center`, and `AppVar.iamge_id` appear
+  nowhere in the tree, and the one exception (`flavor = `) already lives in
+  `docs/rstest-bdd-users-guide.md` and `typos.local.toml` on `main`. Three
+  sibling worktrees, including one on an unrelated branch, carry the same
+  churn, with two of them byte-identical to each other. The file is therefore
+  left out of the commit; the spelling gate is green with it dirty.
 
 ## Decision log
 

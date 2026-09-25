@@ -112,7 +112,7 @@ pub struct FieldMetadata {
 /// wire format that consumers read.
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "Independent flag properties mirror the serialised schema."
+    reason = "Independent flag properties mirror the serialized schema."
 )]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliMetadata {

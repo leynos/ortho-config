@@ -1,4 +1,4 @@
-//! Normalisation of rendered Rust default values for agent context.
+//! Normalization of rendered Rust default values for agent context.
 //!
 //! Default values reach the agent-context bridge as the strings the IR
 //! renderers produced, which may contain whitespace around path separators
