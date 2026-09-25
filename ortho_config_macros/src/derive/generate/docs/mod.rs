@@ -13,7 +13,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-use crate::derive::build::CliFieldMetadata;
+use crate::derive::build::{CliFieldMetadata, compute_profile_env_var};
 use crate::derive::parse::{
     DocExampleAttr, DocLinkAttr, DocNoteAttr, FieldAttrs, SerdeRenameAll, StructAttrs,
 };
@@ -51,6 +51,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
     let about_id_lit = syn::LitStr::new(&about_id, proc_macro2::Span::call_site());
     let bin_name_tokens = option_string_tokens(args.struct_attrs.doc.bin_name.as_deref());
     let synopsis_tokens = option_string_tokens(args.struct_attrs.doc.synopsis_id.as_deref());
+    let profiles_tokens = build_profiles_meta(args, krate);
 
     let ident = args.ident;
 
@@ -67,6 +68,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
                     fields: vec![ #( #fields ),* ],
                     subcommands: #subcommands,
                     windows: #windows,
+                    profiles: #profiles_tokens,
                 }
             }
         }
@@ -187,4 +189,24 @@ pub(super) fn note_tokens(notes: &[DocNoteAttr], krate: &TokenStream) -> Vec<Tok
             }
         })
         .collect()
+}
+
+/// Build the `profiles` IR metadata tokens (decision D15).
+///
+/// Opted-in structs emit `Some(DocProfilesMeta { flag, env_var })`; legacy
+/// structs emit `None` so the IR stays additive and unchanged for them.
+fn build_profiles_meta(args: &DocsArgs<'_>, krate: &TokenStream) -> TokenStream {
+    if !args.struct_attrs.profiles {
+        return quote! { None };
+    }
+    let env_var = syn::LitStr::new(
+        &compute_profile_env_var(args.struct_attrs),
+        proc_macro2::Span::call_site(),
+    );
+    quote! {
+        Some(#krate::docs::DocProfilesMeta {
+            flag: String::from("profile"),
+            env_var: String::from(#env_var),
+        })
+    }
 }

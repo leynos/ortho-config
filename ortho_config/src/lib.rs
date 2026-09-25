@@ -56,6 +56,7 @@ mod localizer;
 mod merge;
 mod merge_telemetry;
 mod post_merge;
+pub mod profile;
 mod result_ext;
 pub mod subcommand;
 #[cfg(feature = "serde_json")]
@@ -67,8 +68,8 @@ pub use agent_context::json::{serialize_agent_context, serialize_agent_context_p
 pub use agent_context::{
     AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, AgentExample, AgentInput, AgentPolicy,
     AsyncSubmission, AsyncSubmissionMode, DeliveryRoute, InteractionMode, MutationEffect,
-    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PaginationContract, PolicyMode, SkillCommandRef,
-    SkillManifest, SupportDeclaration, agent_context_kind,
+    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PaginationContract, PolicyMode, ProfileSelectionContract,
+    ProfilesDeclaration, SkillCommandRef, SkillManifest, SupportDeclaration, agent_context_kind,
 };
 pub use docs::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
@@ -156,6 +157,7 @@ pub use localizer::{
 #[cfg(feature = "serde_json")]
 pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_without_nones};
 pub use post_merge::{PostMergeContext, PostMergeHook};
+pub use profile::{ProfileLoadOutcome, ProfileName, ProfileSource, SelectedProfile};
 use std::sync::Arc;
 pub use unic_langid::{LanguageIdentifier, langid};
 
@@ -174,6 +176,16 @@ pub mod __private {
     /// Record a derived injected-load result using its bounded error category.
     pub fn source_aware_derived_load_finished<T>(result: &crate::OrthoResult<T>) {
         crate::merge_telemetry::source_aware_derived_load_finished(result);
+    }
+
+    /// Record the start of a profile-aware derived load.
+    pub fn profile_load_started() {
+        crate::merge_telemetry::profile_load_started();
+    }
+
+    /// Record a profile-aware derived-load result using its bounded category.
+    pub fn profile_load_finished<T>(result: &crate::OrthoResult<T>) {
+        crate::merge_telemetry::profile_load_finished(result);
     }
 }
 

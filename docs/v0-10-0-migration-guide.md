@@ -3,10 +3,11 @@
 ## Who should read this
 
 Read this guide when adopting source-aware environment merging, parser-faithful
-clap string defaults, or the Cargo external-subcommand helper. Existing callers
-can upgrade without changing their loading code: process-backed behaviour
-remains the default, and applications that do not use the Cargo helper require
-no changes.
+clap string defaults, optional profile overlays, or the Cargo
+external-subcommand helper. Existing callers can upgrade without changing their
+loading code: process-backed behaviour remains the default, profile support is
+opt-in, and applications that use neither profiles nor the helper require no
+changes.
 
 ## Adopt the opt-in agent-native policy check
 
@@ -128,6 +129,122 @@ duplicated a string default in both clap and `#[ortho_config(default = ...)]`,
 the duplicate can be removed after confirming that the field shape and parser
 are supported by this guide.
 
+## Adopt optional profile overlays
+
+Profile support is opt-in and additive. Adding the struct-level attribute
+`#[ortho_config(profiles)]` enables three things on that configuration struct:
+
+- `[profile.<name>]` overlay tables inside the resolved configuration files,
+  using the equivalent `profile.<name>` key path for JSON5 and YAML;
+- a generated `--profile <name>` flag; and
+- a `<PREFIX>PROFILE` environment selector, where `<PREFIX>` is the struct's
+  `prefix` attribute, so `APP_` gives `APP_PROFILE`.
+
+### Decide whether to migrate
+
+Most applications need to do nothing. Derives without the attribute compile
+unchanged, keep the four-layer merge order, gain no `--profile` flag, and treat
+a `[profile.*]` table in a shared file like any other unknown key.
+
+To adopt profile support:
+
+1. add `profiles` to the struct's existing `#[ortho_config(...)]` attribute;
+2. declare `[profile.<name>]` tables in the configuration files the
+   application already loads; and
+3. select a profile with `--profile <name>` or `<PREFIX>PROFILE`.
+
+The change is reversible, with two costs to weigh. Removing the attribute
+restores the four-layer merge order and removes the `--profile` flag, so any
+invocation that already scripts that flag breaks, and any `[profile.*]` tables
+left in configuration files become inert unknown keys.
+
+Opting in reserves the `profile` root key across all three projections. File
+tables named `profile` are extracted and never merged as ordinary values, the
+selector environment variable is stripped from the environment layer, and the
+generated flag is excluded from the serialized command-line layer. A downstream
+field that claims the `profile` key, the `--profile` flag, or the
+`<PREFIX>PROFILE` binding is a compile-time error, so add the attribute as part
+of a normal build and test cycle.
+
+### Expect five precedence tiers
+
+```text
+built-in defaults < config files < selected profile < environment < flags
+```
+
+A profile overlay is still configuration data: it is selected from the file
+chain, so the environment and the command line both outrank it. The profile
+tier adds one layer per contributing file that defines the selected profile, in
+file-chain order with the base file first, pushed after every file layer and
+before the environment layer.
+
+### Review the selection rules
+
+The `--profile` flag beats the `<PREFIX>PROFILE` environment variable whenever
+both are present, and an empty flag value likewise suppresses the environment
+fallback. An empty selector value, for example `APP_PROFILE=""` left behind by
+a leaked export, means "no selection" rather than an invalid name. The reserved
+name `default` also means "no selection".
+
+### Check profile names and bodies
+
+Profile names are case-sensitive and must match `[A-Za-z0-9_-]+` (non-empty),
+following Cargo's validation precedent. `default` is reserved: defining
+`[profile.default]` fails with `OrthoError::ReservedProfileName`, and selecting
+`default` is equivalent to selecting no profile. The keys `cmds` and `inherits`
+are forbidden inside a profile body and fail with
+`OrthoError::ProfileForbiddenKey`: `cmds` because subcommand loading ignores
+profiles, and `inherits` because it is reserved for future single-parent
+inheritance. Subcommand configuration must therefore stay outside the profile
+tables.
+
+### Adopt the selection-aware load entry points
+
+The existing `load_from_iter` and `load_and_merge` entry points keep their
+signatures and their return types. Opted-in structs additionally gain the
+generated associated functions `load_with_profile_from_iter(iter)` and
+`load_with_profile()`, which return `OrthoResult<ProfileLoadOutcome<Config>>`.
+Use them when the application must report which profile produced the loaded
+configuration:
+
+```rust
+let outcome = Config::load_with_profile()?;
+for selected in outcome.selection() {
+    println!("{} selected via {}", selected.name, selected.source);
+}
+let config = outcome.into_config();
+```
+
+`ProfileLoadOutcome` borrows the configuration through `config()`, consumes it
+through `into_config()`, and reports the resolved selection through
+`selection()`. That slice is empty or holds one `SelectedProfile` today, and
+each entry carries the profile `name` and whether it came from the flag or the
+environment. Downstream `context --json` commands own the JSON mapping; the
+[user's guide](users-guide.md) shows the recommended rendering.
+
+### Review agent-context consumers
+
+Retyping `AgentContext.profiles` from `SupportDeclaration` to
+`ProfilesDeclaration` is a Rust-level change for consumers that construct or
+match `AgentContext` by struct literal. Build those values with the
+`ProfilesDeclaration::unsupported()` and `ProfilesDeclaration::supported(...)`
+constructors instead. The wire contract is unchanged: a struct that did not opt
+in still serializes as `{ "supported": false }`.
+
+### Handle unknown profile errors
+
+Selecting a profile that no file defines fails with
+`OrthoError::UnknownProfile`. The error names the selection, records whether it
+came from the `--profile` flag or the selector environment variable, and lists
+the available names sorted and capped at 16, rendering further names as "and N
+more". When the chain discovered no configuration files at all, the error says
+so explicitly; when files exist but define no profile tables, it reports "no
+profiles were found" instead, so a leaked `<PREFIX>PROFILE` is not mistaken for
+missing files. These variants reach an application alongside the other load
+failures rather than replacing them: a malformed command line and an unknown
+selector are reported together, with the parse error first, so neither root
+cause is masked.
+
 ## Adopt the Cargo external-subcommand helper
 
 Cargo invokes `cargo <name>` by executing `cargo-<name>` with `<name>` injected
@@ -164,8 +281,12 @@ single-variant `#[command(subcommand)]` wrapper used by `cargo-orthohelp`.
 
 ## No migration required for other users
 
-The helper is additive. Existing configuration loading, derive usage, and
-subcommand merging continue unchanged. Add the helper only when adopting the
-Cargo external-subcommand entry-point shape.
+Profile support and the Cargo helper are additive. Existing configuration
+loading, derive usage, and subcommand merging continue unchanged. Add the
+`profiles` attribute only when an application wants profile overlays, and add
+the helper only when adopting the Cargo external-subcommand entry-point shape.
+The one Rust-level change in this release is the `AgentContext.profiles`
+retype, which affects only consumers that build or match `AgentContext` by
+struct literal.
 
 [users-guide-policy]: users-guide.md#agent-native-policy-checking

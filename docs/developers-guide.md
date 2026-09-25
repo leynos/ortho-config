@@ -49,6 +49,17 @@ file or environment value overrides the inferred default, while an explicit CLI
 value still wins. Run the standard quality gates before requesting a CodeRabbit
 review.
 
+### Scoped use of `googletest` and `pretty_assertions`
+
+The `googletest` and `pretty_assertions` dev dependencies (decision D9 of
+[execplan 9-1-1](execplans/9-1-1-profile-metadata.md)) are scoped to the
+profile test modules and the profile-layer tests only. New tests elsewhere
+should keep using the existing `assert_eq!`/`ensure!` conventions; do not
+migrate existing tests to these crates. When a new assertion needs richer
+matcher output, prefer `googletest::assert_that!` with matchers for shape
+inspection and `pretty_assertions::assert_eq!` for scalar equality, and keep
+the use local to the module that needs it.
+
 ### Nextest test-group serialization
 
 `.config/nextest.toml` assigns two test binaries to single-threaded groups:
@@ -111,6 +122,18 @@ Skill manifest descriptors are part of this agent-context contract: keep
 `SkillManifest`, `SkillCommandRef`, and `AgentContext.skill_manifests` in
 `ortho_config::agent_context`, and keep downstream manifest prose
 application-owned.
+
+Profile support (roadmap 9.1.1) adds two agent-context fields with an
+omitted-when-absent rule: `ProfilesDeclaration.selection` and
+`ProfilesDeclaration.list_command` are `Option` fields that serialize only when
+present, so the unsupported `{ "supported": false }` case stays byte-identical
+to the pre-profile schema. New optional fields must follow that rule and the
+`ProfilesDeclaration::unsupported()`/`supported()` constructor convention so
+struct-literal construction keeps working. The derive emits the matching IR
+`DocMetadata.profiles` only for opted-in structs; the `cargo-orthohelp` bridge
+maps it into the declaration. The runtime "which profile is active" concern is
+`SelectedProfile`/`ProfileLoadOutcome`, deliberately separate from the static
+agent-context contract.
 
 `localizer::identifier::normalize_segment` is the single source of truth for
 strict runtime and derive-time Fluent identifier segments. Reuse it from
@@ -561,21 +584,25 @@ contract stays discoverable.
 ### Environment merge telemetry
 
 The environment merge boundary emits a `merge.layer` tracing event at the
-decision and terminal points of source-aware work. Events use only these
-bounded fields:
+decision and terminal points of source-aware and profile-aware work. Events use
+only these bounded fields:
 
-- `operation`: `csv_env`, `derived_load`, or `subcommand_load`;
+- `operation`: `csv_env`, `derived_load`, `profile_load`, or `subcommand_load`;
 - `source`: `process` or `injected`;
 - `outcome`: `attempt`, `success`, or `failure`; and
 - `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
-  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or `aggregate`.
+  `default_value_conversion`, `file`, `cyclic_extends`, `gathering`, `merge`,
+  `validation`, `profile`, or `aggregate`.
 
-`CsvEnv` emits process-backed and injected events. Derive-generated loads and
-subcommand loads emit events when their source-aware entry points are used. The
-events never contain environment values, keys, paths, configuration data,
-caller-supplied prefixes, or raw error text. Error categories are reduced to
-the closed vocabulary before emission so subscribers can aggregate failures
-without receiving sensitive input.
+`CsvEnv` emits process-backed events, or injected events when `with_source`
+supplies a scanning source. Derive-generated and subcommand source-aware loads
+(`*_with_sources`) take injected sources and emit `source = injected`; the
+profile-aware entry points (`load_with_profile_from_iter` and
+`load_with_profile`) accept no injected source and read the live process, so
+they emit `source = process`. The events never contain environment values,
+keys, paths, configuration data, caller-supplied prefixes, or raw error text.
+Error categories are reduced to the closed vocabulary before emission so
+subscribers can aggregate failures without receiving sensitive input.
 
 Capture tests must cover successful and failing paths for each emitting
 operation. They assert the operation, source, outcome, and category fields, and

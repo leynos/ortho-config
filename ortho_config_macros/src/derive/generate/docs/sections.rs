@@ -51,7 +51,7 @@ pub(super) fn build_sections_metadata(
 ) -> syn::Result<TokenStream> {
     let headings = build_headings_ids(&struct_attrs.doc.headings, krate);
     let discovery = build_discovery_metadata(app_name, struct_attrs, krate);
-    let precedence = build_precedence_metadata(&struct_attrs.doc, krate)?;
+    let precedence = build_precedence_metadata(&struct_attrs.doc, struct_attrs.profiles, krate)?;
     let examples = example_tokens(&struct_attrs.doc.examples, krate);
     let links = link_tokens(&struct_attrs.doc.links, krate);
     let notes = note_tokens(&struct_attrs.doc.notes, krate);
@@ -162,6 +162,7 @@ fn merge_headings(overrides: &HeadingOverrides) -> HeadingOverrides {
 
 fn build_precedence_metadata(
     doc: &DocStructAttrs,
+    profiles: bool,
     krate: &TokenStream,
 ) -> syn::Result<TokenStream> {
     let order_values = doc
@@ -170,12 +171,20 @@ fn build_precedence_metadata(
         .map_or(&[][..], |meta| meta.order.as_slice());
 
     let order = if order_values.is_empty() {
-        vec![
+        // The tiers are assembled by push rather than by an inline `vec!`:
+        // the profile tier is optional, and an absent tier would otherwise
+        // leave an empty token stream between two commas, which the `vec!`
+        // macro rejects as a missing expression.
+        let mut tiers = vec![
             quote! { #krate::docs::SourceKind::Defaults },
             quote! { #krate::docs::SourceKind::File },
-            quote! { #krate::docs::SourceKind::Env },
-            quote! { #krate::docs::SourceKind::Cli },
-        ]
+        ];
+        if profiles {
+            tiers.push(quote! { #krate::docs::SourceKind::Profile });
+        }
+        tiers.push(quote! { #krate::docs::SourceKind::Env });
+        tiers.push(quote! { #krate::docs::SourceKind::Cli });
+        tiers
     } else {
         order_values
             .iter()
@@ -201,6 +210,7 @@ fn is_source_kind(value: &str) -> Option<&'static str> {
     match value.trim().to_ascii_lowercase().as_str() {
         "default" | "defaults" => Some("Defaults"),
         "file" | "files" => Some("File"),
+        "profile" | "profiles" => Some("Profile"),
         "env" | "environment" => Some("Env"),
         "cli" | "commandline" | "command-line" => Some("Cli"),
         _ => None,
@@ -214,7 +224,7 @@ fn source_kind_tokens(value: &str, krate: &TokenStream) -> syn::Result<TokenStre
             syn::Error::new(
                 proc_macro2::Span::call_site(),
                 format!(
-                    "unknown precedence source '{value}'; expected defaults, file, env, or cli",
+                    "unknown precedence source '{value}'; expected defaults, file, profile, env, or cli",
                 ),
             )
         })?;

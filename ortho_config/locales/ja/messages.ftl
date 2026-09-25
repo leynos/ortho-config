@@ -5,3 +5,7 @@ clap-error-missing-argument = 必須の引数が不足しています: { $argume
 clap-error-unknown-argument = 不明な引数です: { $argument }
 clap-error-invalid-value = { $argument } の値が無効です: { $value }
 clap-error-missing-subcommand = サブコマンドが必要です。利用可能なオプション: { $valid_subcommands }
+profile-error-unknown-profile = 不明なプロファイル「{ $selected }」が { $source } で選択されました: { $available }
+profile-error-invalid-name = プロファイル名「{ $name }」が無効です。[A-Za-z0-9_-]+ に一致する必要があります
+profile-error-reserved-name = プロファイル名「{ $name }」は予約されています
+profile-error-forbidden-key = プロファイル「{ $profile }」に禁止キー「{ $key }」を定義してはいけません

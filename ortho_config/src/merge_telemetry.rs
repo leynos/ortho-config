@@ -20,6 +20,8 @@ const SOURCE_INJECTED: &str = "injected";
 const OPERATION_CSV_ENV: &str = "csv_env";
 /// A derive-generated complete configuration load.
 const OPERATION_DERIVED_LOAD: &str = "derived_load";
+/// A derive-generated load that also resolves a profile selection.
+const OPERATION_PROFILE_LOAD: &str = "profile_load";
 /// A source-aware subcommand defaults-and-CLI load.
 const OPERATION_SUBCOMMAND_LOAD: &str = "subcommand_load";
 
@@ -50,6 +52,8 @@ const CATEGORY_GATHERING: &str = "gathering";
 const CATEGORY_MERGE: &str = "merge";
 /// A loaded value did not meet the configuration's validation rules.
 const CATEGORY_VALIDATION: &str = "validation";
+/// Profile selection or profile-table validation prevented loading.
+const CATEGORY_PROFILE: &str = "profile";
 /// Several loading errors were retained for reporting together.
 const CATEGORY_AGGREGATE: &str = "aggregate";
 
@@ -95,7 +99,21 @@ pub(crate) fn source_aware_derived_load_started() {
 
 /// Record the terminal outcome of a generated load without serialising errors.
 pub(crate) fn source_aware_derived_load_finished<T>(result: &OrthoResult<T>) {
-    result_outcome(OPERATION_DERIVED_LOAD, result);
+    result_outcome(OPERATION_DERIVED_LOAD, SOURCE_INJECTED, result);
+}
+
+/// Record the start of a profile-aware generated load.
+///
+/// The profile-aware entry points take no injected source: they read the
+/// selector and the environment layer from the live process, so this boundary
+/// is labelled [`SOURCE_PROCESS`] rather than [`SOURCE_INJECTED`].
+pub(crate) fn profile_load_started() {
+    attempt(OPERATION_PROFILE_LOAD, SOURCE_PROCESS);
+}
+
+/// Record the terminal outcome of a profile-aware generated load.
+pub(crate) fn profile_load_finished<T>(result: &OrthoResult<T>) {
+    result_outcome(OPERATION_PROFILE_LOAD, SOURCE_PROCESS, result);
 }
 
 /// Record the start of a source-aware subcommand load.
@@ -105,7 +123,7 @@ pub(super) fn source_aware_subcommand_load_started() {
 
 /// Record the terminal outcome of a source-aware subcommand load.
 pub(super) fn source_aware_subcommand_load_finished<T>(result: &OrthoResult<T>) {
-    result_outcome(OPERATION_SUBCOMMAND_LOAD, result);
+    result_outcome(OPERATION_SUBCOMMAND_LOAD, SOURCE_INJECTED, result);
 }
 
 /// Emit a decision event using only closed operation, source, and outcome sets.
@@ -148,10 +166,10 @@ fn failure(operation: &'static str, source: &'static str, category: &'static str
 }
 
 /// Record a result while ensuring error contents never become event fields.
-fn result_outcome<T>(operation: &'static str, result: &OrthoResult<T>) {
+fn result_outcome<T>(operation: &'static str, source: &'static str, result: &OrthoResult<T>) {
     match result {
-        Ok(_) => success(operation, SOURCE_INJECTED),
-        Err(error) => failure(operation, SOURCE_INJECTED, error_category(error)),
+        Ok(_) => success(operation, source),
+        Err(error) => failure(operation, source, error_category(error)),
     }
 }
 
@@ -165,6 +183,10 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::Gathering(_) => CATEGORY_GATHERING,
         OrthoError::Merge { .. } => CATEGORY_MERGE,
         OrthoError::Validation { .. } => CATEGORY_VALIDATION,
+        OrthoError::UnknownProfile { .. }
+        | OrthoError::InvalidProfileName { .. }
+        | OrthoError::ReservedProfileName { .. }
+        | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
     }
 }

@@ -79,6 +79,7 @@ fn empty_metadata(app_name: &str) -> DocMetadata {
         fields: Vec::new(),
         subcommands: Vec::new(),
         windows: None,
+        profiles: None,
     }
 }
 
