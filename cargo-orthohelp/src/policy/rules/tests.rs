@@ -14,6 +14,11 @@ fn context_with(command: AgentCommand) -> AgentContext {
     context
 }
 
+/// Builds a minimal command with the given path and declared semantics.
+///
+/// Every optional field starts empty so a test can mutate exactly the field it
+/// exercises; `summary` and `canonical_verb` stay absent because the behaviour
+/// rules never read them.
 fn command(path: &[&str], interaction: InteractionMode, mutation: MutationEffect) -> AgentCommand {
     AgentCommand {
         path: path.iter().map(|s| (*s).to_owned()).collect(),
@@ -32,6 +37,11 @@ fn command(path: &[&str], interaction: InteractionMode, mutation: MutationEffect
     }
 }
 
+/// Builds an optional agent input whose long flag matches its name.
+///
+/// The identity between name and long flag is what the bypass-known rule
+/// matches against, so a caller testing an unknown bypass supplies an input
+/// named differently from the declared flag.
 fn input(name: &str, value_type: &str) -> AgentInput {
     AgentInput {
         name: name.to_owned(),
@@ -43,14 +53,21 @@ fn input(name: &str, value_type: &str) -> AgentInput {
     }
 }
 
+/// Wraps one command in a context, as most cases need exactly one.
 fn ctx_for_command(command: AgentCommand) -> AgentContext {
     context_with(command)
 }
 
+/// Collects the rule codes from a report, in the order the rules emitted them.
 fn codes(report: &crate::policy::PolicyReport) -> Vec<&str> {
     report.results.iter().map(|r| r.code.as_str()).collect()
 }
 
+/// A fully declared destructive command must satisfy every rule at once.
+///
+/// This is the pass condition the other cases are contrasted against: the
+/// command declares a destructive mutation, an interactive mode, and a bypass
+/// flag that matches a real input.
 #[test]
 fn fully_declared_destructive_tree_yields_empty_report_in_warn_mode() {
     let mut cmd = command(
@@ -70,6 +87,7 @@ fn fully_declared_destructive_tree_yields_empty_report_in_warn_mode() {
     );
 }
 
+/// A destructive command with no bypass flag is the primary deny case.
 #[test]
 fn destructive_without_bypass_triggers_destructive_bypass_missing() {
     let context = ctx_for_command(command(
@@ -82,6 +100,7 @@ fn destructive_without_bypass_triggers_destructive_bypass_missing() {
     assert!(codes(&report).contains(&"destructive_bypass_missing"));
 }
 
+/// An interactive command needs an escape hatch even when it mutates nothing.
 #[test]
 fn interactive_without_bypass_triggers_prompt_bypass_missing() {
     let context = ctx_for_command(command(
@@ -94,6 +113,10 @@ fn interactive_without_bypass_triggers_prompt_bypass_missing() {
     assert!(codes(&report).contains(&"prompt_bypass_missing"));
 }
 
+/// A command that trips two rules reports the destructive rule first.
+///
+/// The ordering is contractual for CLI consumers reading the report, so it is
+/// pinned here rather than left to rule registration order.
 #[test]
 fn interactive_destructive_command_without_bypass_preserves_finding_order() {
     let context = ctx_for_command(command(
@@ -109,6 +132,7 @@ fn interactive_destructive_command_without_bypass_preserves_finding_order() {
     );
 }
 
+/// A declared bypass naming no real input cannot be passed by an agent.
 #[test]
 fn declared_bypass_not_matching_an_input_triggers_bypass_flag_unknown() {
     let mut cmd = command(
@@ -124,6 +148,7 @@ fn declared_bypass_not_matching_an_input_triggers_bypass_flag_unknown() {
     assert!(codes(&report).contains(&"bypass_flag_unknown"));
 }
 
+/// A command declaring neither axis produces both undeclared findings.
 #[test]
 fn undeclared_metadata_produces_interaction_unknown_and_mutation_unknown() {
     let context = ctx_for_command(command(
@@ -137,6 +162,10 @@ fn undeclared_metadata_produces_interaction_unknown_and_mutation_unknown() {
     assert!(codes(&report).contains(&"mutation_unknown"));
 }
 
+/// Findings follow command-path order, not the order commands were pushed.
+///
+/// `zebra` is inserted before `alpha`, so an unsorted walk would emit the
+/// findings reversed; the assertion pins the sorted result.
 #[test]
 fn findings_are_emitted_in_command_path_order() {
     let mut context = AgentContext::new("fixture");
@@ -169,6 +198,10 @@ fn findings_are_emitted_in_command_path_order() {
     assert_eq!(command_paths, ["alpha", "alpha", "zebra", "zebra"]);
 }
 
+/// The undeclared-mutation remedy must teach the whole permitted vocabulary.
+///
+/// A remedy that omitted a boundary would push authors towards the values it
+/// happens to mention, so all four are asserted present.
 #[test]
 fn undeclared_mutation_remedy_lists_every_supported_boundary() {
     let context = ctx_for_command(command(
@@ -194,6 +227,10 @@ fn undeclared_mutation_remedy_lists_every_supported_boundary() {
     }
 }
 
+/// A bypass on a read-only command is legitimate and must stay unreported.
+///
+/// It also exercises the negative case for the bypass-known rule: the declared
+/// flag does match an input here, so no finding is the correct result.
 #[test]
 fn bypass_on_non_destructive_command_produces_no_finding() {
     let mut cmd = command(
@@ -217,6 +254,10 @@ fn bypass_on_non_destructive_command_produces_no_finding() {
     );
 }
 
+/// Only `delete` is destructive; the other boundaries must not be treated so.
+///
+/// `write` and `submit` change state, so a name-based heuristic could mistake
+/// them for destructive; the rule keys off the declared mutation alone.
 #[rstest]
 #[case(MutationEffect::Write)]
 #[case(MutationEffect::Submit)]
@@ -227,6 +268,10 @@ fn non_delete_mutations_do_not_trigger_the_destructive_rule(#[case] mutation: Mu
     assert!(!codes(&report).contains(&"destructive_bypass_missing"));
 }
 
+/// Declaring a command non-interactive is the approved way to skip a bypass.
+///
+/// A destructive command that never prompts has nothing to bypass, so the
+/// destructive rule must not fire on it.
 #[test]
 fn non_interactive_destructive_command_without_bypass_is_exempt() {
     let context = ctx_for_command(command(
@@ -241,6 +286,7 @@ fn non_interactive_destructive_command_without_bypass_is_exempt() {
     );
 }
 
+/// A package with no commands is vacuously compliant.
 #[test]
 fn empty_command_list_yields_empty_report() {
     let context = AgentContext::new("empty");
@@ -248,6 +294,10 @@ fn empty_command_list_yields_empty_report() {
     assert!(report.results.is_empty());
 }
 
+/// `off` suppresses every rule but still reports the mode it was asked for.
+///
+/// The command below would trip both undeclared rules in an enforcing mode, so
+/// an empty result proves the rules were skipped rather than satisfied.
 #[test]
 fn off_mode_returns_empty_report_without_evaluating_rules() {
     let context = ctx_for_command(command(
@@ -260,6 +310,10 @@ fn off_mode_returns_empty_report_without_evaluating_rules() {
     assert_eq!(report.mode, PolicyMode::Off);
 }
 
+/// Every finding carries the severity implied by the mode, with no stragglers.
+///
+/// The summary counters must agree with the results list, so both are checked:
+/// a finding labelled deny must not be counted as a warning.
 #[rstest]
 #[case::warn(PolicyMode::Warn, PolicySeverity::Warn)]
 #[case::deny(PolicyMode::Deny, PolicySeverity::Deny)]
@@ -288,6 +342,11 @@ fn policy_mode_assigns_the_expected_severity_to_every_finding(
     }
 }
 
+/// A finding carries the stable rule id, code, and an actionable message.
+///
+/// The identifiers are the published contract that suppressions key off, and
+/// `location` is asserted absent because behaviour findings address commands
+/// rather than source spans.
 #[test]
 fn findings_carry_expected_rule_and_code_identifiers() {
     let context = ctx_for_command(command(
@@ -315,6 +374,10 @@ fn findings_carry_expected_rule_and_code_identifiers() {
     );
 }
 
+/// The report serializes to one flat JSON document with stable header fields.
+///
+/// `version` and `mode` are asserted by value because downstream CI parses them
+/// to decide how to treat the run.
 #[test]
 fn report_serializes_as_a_single_json_document() {
     let context = ctx_for_command(command(

@@ -16,6 +16,7 @@ fn parse_behaviour(decl: &str) -> Result<BehaviourAttrs> {
         .ok_or_else(|| anyhow::anyhow!("expected behaviour attrs"))
 }
 
+/// All four nested keys parse into their matching fields.
 #[test]
 fn parses_fully_declared_behaviour() -> Result<()> {
     let b = parse_behaviour(
@@ -49,6 +50,10 @@ fn parses_fully_declared_behaviour() -> Result<()> {
     Ok(())
 }
 
+/// Declaring one key leaves the rest undeclared rather than defaulted.
+///
+/// The distinction matters downstream: `None` is what the policy check reports
+/// as undeclared, so an omitted key must not quietly become a default value.
 #[test]
 fn parses_partial_behaviour() -> Result<()> {
     let b = parse_behaviour(r#"behaviour(interaction = "non_interactive")"#)?;
@@ -121,6 +126,11 @@ struct InvalidBehaviourCase {
     "#,
     expected_substring: "unknown behaviour attribute",
 })]
+/// Each malformed declaration fails with a message naming the actual problem.
+///
+/// The cases cover an American spelling, a field-level placement, unknown
+/// values for each keyed attribute, a malformed flag, and a misspelt nested
+/// key. Asserting the message text keeps the diagnostics actionable.
 fn rejects_invalid_behaviour_declarations(#[case] case: InvalidBehaviourCase) -> Result<()> {
     let input: DeriveInput = syn::parse_str(case.source).context("failed to parse test input")?;
     let error = parse_input(&input)
@@ -141,6 +151,11 @@ fn rejects_invalid_behaviour_declarations(#[case] case: InvalidBehaviourCase) ->
 #[case("--force!")]
 #[case("--force--")]
 #[case("x --force")]
+/// Values outside the pinned flag grammar are rejected.
+///
+/// The cases cover a missing `--` prefix, uppercase, trailing punctuation, a
+/// trailing separator, and an embedded space, each of which would otherwise
+/// produce a flag an agent could not pass.
 fn rejects_bad_bypass_grammar(#[case] bypass: &str) -> Result<()> {
     let source = format!(
         r#"
@@ -163,6 +178,10 @@ fn rejects_bad_bypass_grammar(#[case] bypass: &str) -> Result<()> {
     Ok(())
 }
 
+/// A bypass on a non-interactive command is contradictory within one group.
+///
+/// A command that never prompts has nothing to bypass, so this must be a hard
+/// error rather than a warning (ADR-008).
 #[test]
 fn rejects_non_interactive_with_bypass() -> Result<()> {
     let input: DeriveInput = parse_quote! {
@@ -183,6 +202,10 @@ fn rejects_non_interactive_with_bypass() -> Result<()> {
     Ok(())
 }
 
+/// The contradiction is detected even when the keys sit in separate groups.
+///
+/// Because `behaviour(...)` may be repeated, validation runs against the merged
+/// state rather than each group in isolation.
 #[test]
 fn rejects_non_interactive_with_bypass_across_behaviour_groups() -> Result<()> {
     let input: DeriveInput = parse_quote! {
@@ -201,6 +224,10 @@ fn rejects_non_interactive_with_bypass_across_behaviour_groups() -> Result<()> {
     Ok(())
 }
 
+/// The same contradiction is caught when the groups are written in reverse.
+///
+/// Group order must not affect the outcome, which is what testing only the
+/// forward order would leave unproven.
 #[test]
 fn rejects_non_interactive_with_bypass_split_across_groups_reversed() -> Result<()> {
     let input: DeriveInput = parse_quote! {

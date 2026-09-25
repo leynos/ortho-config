@@ -216,6 +216,10 @@ fn string_array_field(value: &Value, field: JsonField) -> StepResult<Vec<String>
         .collect()
 }
 
+/// Finds the command whose `path` array equals `path_segments`.
+///
+/// Comparison is element-wise over the whole path, so a subcommand is not
+/// matched by a shorter prefix or a shared leaf name.
 fn command_by_path<'a>(value: &'a Value, path_segments: &[&str]) -> Option<&'a Value> {
     value
         .get(JsonField::Commands.as_str())
@@ -233,6 +237,11 @@ fn command_by_path<'a>(value: &'a Value, path_segments: &[&str]) -> Option<&'a V
         })
 }
 
+/// Asserts one string field of a command identified by its full path.
+///
+/// Fails with the offending path and field name when either the command or the
+/// field is missing, so a mismatch is traceable to the fixture rather than the
+/// assertion.
 fn assert_command_string_field(
     orthohelp_context: &mut OrthoHelpContext,
     path: &[&str],
@@ -250,6 +259,7 @@ fn assert_command_string_field(
     }
 }
 
+/// The fixture's declared interactive mode survives into the artefact.
 #[then("the command admin purge reports interaction mode interactive")]
 fn admin_purge_interaction_interactive(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_command_string_field(
@@ -260,6 +270,7 @@ fn admin_purge_interaction_interactive(orthohelp_context: &mut OrthoHelpContext)
     )
 }
 
+/// A declared destructive mutation is reported verbatim, not normalised.
 #[then("the command admin purge reports mutation effect delete")]
 fn admin_purge_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_command_string_field(
@@ -270,6 +281,7 @@ fn admin_purge_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> Step
     )
 }
 
+/// The declared bypass flag reaches agents so they can actually pass it.
 #[then("the command admin purge reports bypass flag --force")]
 fn admin_purge_bypass_force(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_command_string_field(
@@ -280,6 +292,10 @@ fn admin_purge_bypass_force(orthohelp_context: &mut OrthoHelpContext) -> StepRes
     )
 }
 
+/// A destructive command with no bypass still reports its mutation.
+///
+/// This is the fixture command the policy check flags in deny mode, so the
+/// artefact must describe it accurately for the report to make sense.
 #[then("the command admin prune reports mutation effect delete")]
 fn admin_prune_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_command_string_field(
@@ -290,6 +306,7 @@ fn admin_prune_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> Step
     )
 }
 
+/// A declared non-interactive command reports that mode, not a guess.
 #[then("the command greet reports interaction mode non_interactive")]
 fn greet_interaction_non_interactive(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_command_string_field(
@@ -300,6 +317,7 @@ fn greet_interaction_non_interactive(orthohelp_context: &mut OrthoHelpContext) -
     )
 }
 
+/// The read-only boundary is reported for a command that changes nothing.
 #[then("the command greet reports mutation effect read_only")]
 fn greet_mutation_read_only(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_command_string_field(
@@ -310,6 +328,10 @@ fn greet_mutation_read_only(orthohelp_context: &mut OrthoHelpContext) -> StepRes
     )
 }
 
+/// A command declaring nothing reports `unknown` rather than a default.
+///
+/// This is the no-inference rule observed end-to-end: the bridge must not
+/// guess `non_interactive` merely because `version` sounds harmless.
 #[then("the command version reports interaction mode unknown")]
 fn version_interaction_unknown(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_command_string_field(

@@ -228,6 +228,26 @@ escalation, not workarounds.
   marker. No Cargo manifests or lockfiles were in the branch range. The full
   post-rebase gate suite passed: `make check-fmt`, `make test`,
   `make typecheck`, `make lint`, `make markdownlint`, and `make nixie`.
+- [x] (2026-09-25) Post-review work items: (a) the CLI parser gained
+  `check_agent_native_rejects_invalid_values`, pinning
+  `ErrorKind::InvalidValue` and the rendered error naming the rejected value;
+  (b) policy evaluation was separated from localisation —
+  `crate::agent_native::build_policy_context` builds the policy context
+  straight from the IR via `bridge_ir_to_agent_context(.., None)`, so the check
+  no longer depends on `build_en_us_localizer`, consumer Fluent resources, or
+  `AgentContextResources`, which are now constructed only for
+  `--format=agent-context|all`; (c) docstring coverage of diff-touched
+  functions was raised from 32.05% to 100% (133/133) without any `#[allow]`,
+  exclusion, or coverage suppression; (d) the CodeScene "Large Method" refactor
+  extracted `PreparedRun`/`prepare_run` from `run`, bringing `main.rs` from 488
+  back to 268 lines and moving the multi-format output pipeline into a new
+  `cargo-orthohelp/src/generation.rs` (246 lines). Real gate failures found and
+  fixed at source, not suppressed: `clippy::doc_markdown` (`snake_case` needed
+  backticks in `ortho_config/tests/docs_ir_behaviour.rs`), `indexing_slicing`
+  (direct `context.commands[0]` indexing in the new `build_policy_context`
+  test), and `module_max_lines` (doc comments pushed
+  `cargo-orthohelp/src/agent_context/tests.rs` to 405; condensed to 399).
+  `make lint` subsequently passed cleanly (rustdoc, clippy, Whitaker).
 
 ## Surprises & discoveries
 
@@ -332,6 +352,33 @@ escalation, not workarounds.
   independent documentation changes. During the rebase, the correct conflict
   test was whether each branch-only ID still named a live `tested-example`
   marker, rather than choosing one side of the registry.
+- Observation (2026-09-25): `origin/main` advanced to `8835347c` — PR #416
+  (roadmap 7.1.1, "Opt-in agent-native policy configuration") merged *after*
+  this branch's last rebase at `c144641e`. PR #417 is consequently
+  `mergeStateStatus: DIRTY` with 13 conflicted files. Impact: the final rebase
+  is a design reconciliation, not a textual merge. 7.1.1 and 7.2.1
+  independently designed the same CLI surface: 7.1.1 takes
+  `--check-agent-native` as a plain bool plus a separate `--policy-mode`,
+  sources the mode from `[package.metadata.ortho_config.policy]`, writes
+  `policy-report.json` into `out_dir`, and signals deny findings with
+  `OrthohelpError::PolicyViolation`; 7.2.1 took the mode inline on the flag,
+  wrote the report to stdout with a stderr summary, and used
+  `std::process::exit(3)`. Both also claimed **ADR-008** for different
+  decisions (ours is `adr-008-behavioural-metadata-attribute-surface.md`,
+  main's is `adr-008-agent-native-policy-configuration.md`, already indexed in
+  `docs/contents.md`), and both created a `cargo-orthohelp/src/generation.rs`
+  with different contents (ours untracked). This is exactly the contingency the
+  Decision log anticipated when it recorded that the flag "carries the mode"
+  only "because the 7.1.1 policy configuration file does not exist yet, so when
+  7.1.1 lands the flag becomes an override" — 7.1.1 has now landed, so that
+  sentence is the resolution direction to follow.
+- Observation (2026-09-25): the Whitaker `module_max_lines` lint *does* fire for
+  nested `mod` items while exempting crate roots. Adding 12 lines of doc
+  comments to `cargo-orthohelp/src/agent_context/tests.rs` (393 -> 405) failed
+  `make lint` with the diagnostic anchored at the `mod tests;` declaration in
+  `agent_context/mod.rs`, confirming both that the 400-line cap is enforced for
+  submodules and that the `generation.rs` split (which moved lines out of a
+  crate-root `main.rs`) was necessary rather than merely conventional.
 
 ## Decision log
 
