@@ -70,9 +70,21 @@ contributes once, at the lowest-precedence position it occupies.
       frozen tree; the run was fingerprinted before and after and nothing
       drifted except the predicted `typos.toml` side effect, which was
       reverted rather than committed.
+- [x] Trybuild allowance raised to 960s and the filter widened to all seven
+      binaries; `trybuild_tier.py` + `trybuild_tier_test.py` added so a new
+      trybuild binary cannot land on the base allowance unnoticed.
 - [ ] Push; Windows CI reports full suite and coverage artefact.
       Pushed `69aae8de` with lease bound to `2e6cfbf7`; CI run `36070786646`.
       The failing run this replaces was `34212392891` at head `2e6cfbf7`.
+
+      That run timed out `must_use_compile_tests` at 600.224s, which the
+      fail-fast then left with 225 tests unrun and no coverage artefact. Two
+      independent defects were behind it: the filter named two binaries of
+      seven, and the override's 120s x 5 was the same 600s product as the base
+      60s x 10, so adding a binary to it bought nothing. Both are now fixed and
+      both are contracted against. Run `36068184976`, which finished, shows the
+      old figure was already too small rather than unlucky:
+      `crate_path_trybuild` passed at 572.5s of 600s.
 
 ## Implementation notes
 
