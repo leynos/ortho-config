@@ -304,11 +304,58 @@ attribute mirrors the builder surface and lists:
 - `config_cli_long`
 - `config_cli_short`
 - `config_cli_visible`
+- `env_vars`
+- `explicit_mode`
+- `automatic_mode`
+- `scope_order`
+- `project_root_from`
 
 It retains the previous defaults when callers omit these properties.
 Behavioural tests in the `hello_world` example exercise the new `--config`/`-c`
 flags alongside the environment overrides to confirm the precedence order is
 preserved.
+
+Automatic candidates are partitioned into `System`, `User`, and `Project`
+scopes. `compose_layers()` retains its historic first-successful-file
+behaviour: the candidate list is scanned most-preferred first and the scan
+stops at the first file that loads.
+
+Consumers that need layered configuration select `AutomaticMode::StackScopes`
+and an ordered scope list. Every requested scope is resolved in `scope_order`
+and every applicable candidate within it is loaded, so the result is a stack of
+all the files that exist rather than the one highest-priority file. Because a
+`MergeComposer` applies layers in order and the last one wins, scope order is
+precedence order: project layers naturally override user layers.
+
+Two orderings meet here and they run in opposite directions. The candidate list
+is a *preference* order — most-preferred first, since index 0 is what the
+first-wins scan selects. A composed layer list is a *precedence* order — last
+applied is highest. A scope therefore walks its candidates in reverse
+preference order, applying the least-preferred location first and the
+most-preferred last, so the historically-winning location still wins while
+every lower-preferred location contributes a base layer for the keys it alone
+sets. This keeps "later applied wins" as the single rule for the whole system.
+Emitting candidates in preference order instead would let a fallback such as
+`~/.demo.toml` silently override `$XDG_CONFIG_HOME/demo/config.toml`, inverting
+established behaviour the moment a second location starts loading.
+
+Canonical paths are de-duplicated across scopes, retaining the earliest
+position in application order — which, within a scope, is the lowest-precedence
+one. The `extends` chain of each file remains parent-first, so a parent is
+still applied before the child that overrides it.
+
+`StackScopes` attempts every applicable candidate rather than stopping at the
+first success, so it opens files the first-wins scan never reached. Their
+defects are reported through the usual partitioned diagnostics instead of being
+swallowed, and a failed lower-preferred candidate does not prevent the layers
+that did load from being returned.
+
+`ConfigFilePolicy` adds an ordered chain of explicit selectors above automatic
+discovery. A winning CLI or environment selector suppresses later selectors and
+automatic probing. `RequiredExclusive` reports a selected-file failure without
+falling back; `Optional` accepts an absent selected path. The policy returns a
+replayable `FileLayerOutcome`, allowing callers to inspect scalar file values
+early and then add the same layers to a `MergeComposer`.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can

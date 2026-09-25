@@ -13,6 +13,11 @@
 # 301.8s on Linux (run 34120845807), so 600s is about 1.6 times the
 # worst seen and still catches a hang inside the whole-run budget.
 #
+# `must_use_compile_tests` has since left this set: it is a trybuild
+# binary and now takes the trybuild override below, which was raised for
+# it. The 364.8s above is what sized the base allowance, and it is kept
+# as the record of that sizing rather than as a current member.
+#
 # The whole-run budget is 30m. The longest nextest run in that sample
 # was 1,023.6s, on Windows with serde_saphyr; the other three runs
 # sampled took 648.2s, 620.0s and 417.7s. 1,800s is about 1.76 times the
@@ -25,11 +30,34 @@
 slow-timeout = { period = "60s", terminate-after = 10 }
 global-timeout = "30m"
 
-# These trybuild binaries spawn child cargo processes in a separate target
-# directory, so they do not share cargo-llvm-cov's warmed llvm-cov target cache.
+# Every trybuild binary, not two of them. These spawn child cargo processes
+# in a separate target directory, so they do not share cargo-llvm-cov's
+# warmed llvm-cov target cache and each pays a cold dependency build; they
+# also share one package cache, so they block on its lock while their
+# neighbours build.
+#
+# The names are listed rather than globbed. There is no single pattern for
+# them -- five end in `trybuild` and `compile_fail` and `compile_time` do
+# not -- and only exact-name matching is proved against the pinned
+# `cargo-nextest@0.9.120` the coverage action installs, where the logs show
+# `binary(crate_path_trybuild)` taking this override and
+# `binary(compile_fail)` not. `trybuild_tier_test.py` reads this filter and
+# the Rust sources and fails when the two sets drift apart, so a new
+# trybuild binary cannot quietly land on the wrong tier as these five did.
+#
+# The allowance is 960s: eight warning periods of 120s. The worst this
+# binary class reached on a run that finished was 572.5s
+# (`crate_path_trybuild`, run 36068184976), which is 0.95 of the 600s it
+# used to get -- the old figure was not marginal, it was already too small,
+# and `must_use_compile_tests` was killed at 600.224s on run 36070786646
+# while still cold-compiling its first dependencies. 960s is 1.68 times
+# that worst case, the same headroom the base allowance was sized with.
+#
+# Keep below [profile.default]'s global-timeout, which the contract in
+# tests/workflow_contracts asserts.
 [[profile.default.overrides]]
-filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
-slow-timeout = { period = "120s", terminate-after = 5 }
+filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localized_parse_trybuild) | binary(compile_fail) | binary(compile_time)'
+slow-timeout = { period = "120s", terminate-after = 8 }
 
 # Serialise orthohelp BDD scenarios: each runs in its own nextest process,
 # so inter-process races on the shared orthohelp cache must be prevented

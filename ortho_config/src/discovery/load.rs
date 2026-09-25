@@ -23,7 +23,7 @@ use super::{ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome, Disc
 /// that decision in a single place is what stops the emitted event and the
 /// reported error disagreeing.
 #[derive(Debug, Default)]
-struct PartitionedErrors {
+pub(super) struct PartitionedErrors {
     required: Vec<Arc<OrthoError>>,
     optional: Vec<Arc<OrthoError>>,
 }
@@ -34,14 +34,14 @@ struct PartitionedErrors {
 /// four-argument ceiling and keeps the telemetry decision in one place: the
 /// error's category is derived from the error itself at the recording site,
 /// so the emitted event and the stored error cannot disagree.
-struct CandidateFailure {
-    operation: &'static str,
-    required: bool,
-    source: &'static str,
+pub(super) struct CandidateFailure {
+    pub(super) operation: &'static str,
+    pub(super) required: bool,
+    pub(super) source: &'static str,
 }
 
 impl PartitionedErrors {
-    fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
+    pub(super) fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
         telemetry::candidate_failure(
             failure.operation,
             failure.required,
@@ -63,12 +63,25 @@ impl PartitionedErrors {
         }
     }
 
-    fn into_layers_outcome(self, value: Vec<MergeLayer<'static>>) -> DiscoveryLayersOutcome {
+    pub(super) fn into_layers_outcome(
+        self,
+        value: Vec<MergeLayer<'static>>,
+    ) -> DiscoveryLayersOutcome {
         DiscoveryLayersOutcome {
             value,
             required_errors: self.required,
             optional_errors: self.optional,
         }
+    }
+
+    /// Merge another partition into this one, preserving each bucket's order.
+    ///
+    /// Scope stacking accumulates diagnostics across scopes, and which bucket an
+    /// error lands in is the whole point of the split; appending here keeps the
+    /// caller from having to name the two fields and risk transposing them.
+    pub(super) fn append(&mut self, mut other: Self) {
+        self.required.append(&mut other.required);
+        self.optional.append(&mut other.optional);
     }
 }
 
@@ -146,7 +159,10 @@ impl ConfigDiscovery {
     }
 
     /// Returns true if the candidate at `idx` is required.
-    const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
+    ///
+    /// Shared with [`ConfigDiscovery::compose_scoped_layers`], which walks the
+    /// same list and must partition its diagnostics identically.
+    pub(super) const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
         idx < required_bound
     }
 
@@ -239,7 +255,11 @@ impl ConfigDiscovery {
     }
 
     /// Load one candidate's `extends` chain as a layer stack.
-    fn chain_layers(
+    ///
+    /// Shared with [`ConfigDiscovery::compose_scoped_layers`]: both modes must
+    /// expand a chain identically, and the only difference between them is how
+    /// many candidates they apply it to.
+    pub(super) fn chain_layers(
         path: &Path,
         required: bool,
     ) -> Result<Option<Vec<MergeLayer<'static>>>, Arc<OrthoError>> {
@@ -270,7 +290,7 @@ impl ConfigDiscovery {
         (figment, required_errors)
     }
 
-    fn missing_required_error(path: &Path) -> Arc<OrthoError> {
+    pub(super) fn missing_required_error(path: &Path) -> Arc<OrthoError> {
         Arc::new(OrthoError::File {
             path: path.to_path_buf(),
             source: Box::new(io::Error::new(
