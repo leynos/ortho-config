@@ -47,6 +47,7 @@ fn render_help_renders_enum_values(mut minimal_doc: LocalizedDocMetadata) {
             value_name: None,
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
         }),
@@ -74,6 +75,111 @@ fn render_help_renders_enum_values(mut minimal_doc: LocalizedDocMetadata) {
     assert!(xml.contains("Possible values: info, warn."));
     assert!(xml.contains("Environment variable: FIXTURE_LEVEL."));
     assert!(xml.contains("Config key: level."));
+}
+
+/// Builds a document holding one optional-value boolean flag with the given
+/// flag spellings, so each help-text branch can be exercised in isolation.
+fn optional_value_doc(
+    mut minimal_doc: LocalizedDocMetadata,
+    long: Option<&str>,
+    short: Option<char>,
+) -> LocalizedDocMetadata {
+    minimal_doc.fields.push(LocalizedFieldMetadata {
+        name: "excited".to_owned(),
+        help: "Adds an exclamation mark to the greeting.".to_owned(),
+        long_help: None,
+        value: Some(ValueType::Bool),
+        default: None,
+        required: false,
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: long.map(str::to_owned),
+            short,
+            value_name: Some("BOOL".to_owned()),
+            multiple: false,
+            takes_value: true,
+            value_optional: true,
+            possible_values: vec!["true".to_owned(), "false".to_owned()],
+            hide_in_help: false,
+        }),
+        env: None,
+        file: None,
+        examples: vec![],
+        links: vec![],
+        notes: vec![],
+    });
+    minimal_doc
+}
+
+#[rstest]
+#[case::long_preferred(
+    Some("excited"),
+    Some('e'),
+    ("`--excited` means `true`", "`--excited=false`")
+)]
+#[case::short_when_no_long(
+    None,
+    Some('e'),
+    ("`-e` means `true`", "`-e=false`")
+)]
+fn render_help_names_the_optional_value_spelling(
+    minimal_doc: LocalizedDocMetadata,
+    #[case] long: Option<&str>,
+    #[case] short: Option<char>,
+    #[case] expected: (&str, &str),
+) {
+    let doc = optional_value_doc(minimal_doc, long, short);
+    let command = CommandSpec {
+        name: "fixture".to_owned(),
+        metadata: &doc,
+    };
+    let xml = render_help(
+        &[command],
+        MamlOptions {
+            should_include_common_parameters: false,
+        },
+    );
+
+    let (true_phrase, false_phrase) = expected;
+    assert!(
+        xml.contains(true_phrase),
+        "expected {true_phrase:?} in:\n{xml}"
+    );
+    assert!(
+        xml.contains(false_phrase),
+        "expected {false_phrase:?} in:\n{xml}"
+    );
+}
+
+#[rstest]
+fn render_help_avoids_a_nonsense_flag_name(minimal_doc: LocalizedDocMetadata) {
+    // Metadata with neither a long nor a short flag cannot name a spelling.
+    // The sentence must still describe the value, and must not render the
+    // meaningless `the flag=false` that the previous fallback produced.
+    let doc = optional_value_doc(minimal_doc, None, None);
+    let command = CommandSpec {
+        name: "fixture".to_owned(),
+        metadata: &doc,
+    };
+    let xml = render_help(
+        &[command],
+        MamlOptions {
+            should_include_common_parameters: false,
+        },
+    );
+
+    assert!(
+        !xml.contains("the flag=false"),
+        "unexpected fallback in:\n{xml}"
+    );
+    assert!(
+        xml.contains("the flag without a value means `true`"),
+        "expected the bare-flag meaning in:\n{xml}"
+    );
+    assert!(
+        xml.contains("clears a lower-precedence `true`"),
+        "expected the flag-free description in:\n{xml}"
+    );
 }
 
 #[rstest]

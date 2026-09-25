@@ -9,7 +9,9 @@ use heck::ToKebabCase;
 use quote::{quote, quote_spanned};
 use syn::{Ident, Type};
 
-use crate::derive::parse::{ClapInferredDefault, FieldAttrs, option_inner};
+use crate::derive::parse::{FieldAttrs, option_inner};
+
+mod replay;
 
 const RESERVED_SHORTS: &[char] = &['h', 'V'];
 const RESERVED_LONGS: &[&str] = &["help", "version"];
@@ -40,36 +42,6 @@ fn is_bool_type(ty: &Type) -> bool {
         inner,
         Type::Path(type_path) if type_path.qself.is_none() && type_path.path.is_ident("bool")
     )
-}
-
-/// Replay parser settings that affect values accepted by the generated CLI.
-fn clap_replay_attributes(attrs: &FieldAttrs, is_bool: bool) -> proc_macro2::TokenStream {
-    let Some(ClapInferredDefault::Value(default)) = attrs.inferred_clap_default.as_ref() else {
-        return proc_macro2::TokenStream::new();
-    };
-
-    let bool_default = is_bool.then(|| {
-        let value = &default.value;
-        quote! { default_value = #value, }
-    });
-    let value_parser = default.value_parser.as_ref().map(|parser| {
-        quote! { value_parser = #parser, }
-    });
-    let value_enum = default.value_enum.then(|| quote! { value_enum, });
-    let value_delimiter = default.value_delimiter.as_ref().map(|delimiter| {
-        quote! { value_delimiter = #delimiter, }
-    });
-    let ignore_case = default.ignore_case.as_ref().map(|ignore_case| {
-        quote! { ignore_case = #ignore_case, }
-    });
-
-    quote! {
-        #bool_default
-        #value_parser
-        #value_enum
-        #value_delimiter
-        #ignore_case
-    }
 }
 
 const fn is_empty_long(long: &str) -> bool {
@@ -265,15 +237,34 @@ fn process_cli_field(
     let long_lit = syn::LitStr::new(&resolved.long, proc_macro2::Span::call_site());
     let short_lit = syn::LitChar::new(resolved.short, proc_macro2::Span::call_site());
     let span = resolved.name.span();
-    let replay_attributes = clap_replay_attributes(attrs, resolved.is_bool);
+    let replay_attributes = replay::clap_replay_attributes(attrs, resolved.is_bool);
 
     let arg_attr = if resolved.is_bool {
+        // Presence-only flags (`ArgAction::SetTrue`) can express `true` but not
+        // an explicit `false`, so a `true` supplied by a file or environment
+        // variable can never be cleared from the command line. Accepting an
+        // optional `=<BOOL>` value keeps the bare flag meaning `true` while
+        // making `--flag=false` reach the parser as a real `Some(false)`.
+        //
+        // `require_equals` keeps `--flag false` from reading the word after the
+        // flag as its value, so a positional operand such as `--flag notes.txt`
+        // still reaches the field it belongs to; `default_missing_value`
+        // preserves the flag-only spelling. Absent flags stay `None` so lower
+        // layers still win.
+        //
+        // `value_name` is set explicitly because clap otherwise derives the
+        // placeholder from the field name, so `excited` would render as
+        // `--excited[=<EXCITED>]`. Naming it `BOOL` matches the placeholder the
+        // documentation IR reports, so generated help and the IR agree.
         quote_spanned! { span =>
             #[arg(
                 long = #long_lit,
                 short = #short_lit,
                 #replay_attributes
-                action = clap::ArgAction::SetTrue
+                value_name = "BOOL",
+                num_args = 0..=1,
+                require_equals = true,
+                default_missing_value = "true"
             )]
         }
     } else {

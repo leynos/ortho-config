@@ -7,14 +7,16 @@ expression: content
 fixture-greet \- Greets a named recipient.
 .SH SYNOPSIS
 .B fixture-greet
-[\fB\-\-excited\fR]
+[\fB\-\-excited\fR\fI[=BOOL]\fR]
 [\fB\-\-recipient\fR \fIRECIPIENT\fR]
 .SH DESCRIPTION
 Greets a named recipient.
 .SH OPTIONS
 .TP
-\fB\-\-excited\fR
+\fB\-\-excited\fR\fI[=BOOL]\fR
 Adds an exclamation mark to the greeting.
+.br
+Possible values: \fItrue, false\fR
 .TP
 \fB\-\-recipient\fR \fIRECIPIENT\fR
 Recipient to greet.

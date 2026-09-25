@@ -143,6 +143,76 @@ resolved from the file that declares them, and parent layers are merged before
 the child. OrthoConfig reports a missing parent with its absolute path and the
 referencing file so the failure is actionable.
 
+## Switch a boolean off from the command line
+
+A boolean field has three meaningful states: absent, explicitly `true`, and
+explicitly `false`. The last one matters when a file or environment variable
+supplies `true` and the operator wants to override it for a single run.
+
+Generated boolean flags accept an optional value, so the flag does the work
+without a separate negation option:
+
+<!-- tested-example: guide-boolean-override -->
+```rust
+use ortho_config::{OrthoConfig, OrthoResult};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_")]
+struct Config {
+    /// Adds an exclamation mark to the greeting.
+    #[ortho_config(default = false)]
+    excited: bool,
+}
+
+fn main() -> OrthoResult<()> {
+    let config = Config::load()?;
+    println!("excited={}", config.excited);
+    Ok(())
+}
+```
+
+The three spellings behave as follows:
+
+| Command line      | File or environment | Result  | Why                                     |
+| ----------------- | ------------------- | ------- | --------------------------------------- |
+| _(omitted)_       | `excited = true`    | `true`  | The lower-precedence source still wins  |
+| `--excited`       | _(none)_            | `true`  | A bare flag means `true`                |
+| `--excited=true`  | _(none)_            | `true`  | The explicit spelling of the same value |
+| `--excited=false` | `excited = true`    | `false` | The command line clears the lower layer |
+
+_Table 2: Boolean flag spellings and the resulting value._
+
+Use `=` when supplying a value. A bare `--excited` never consumes the argument
+that follows it, so another option may follow it without being swallowed. The
+space-separated form, `--excited false`, is rejected instead: without that rule
+the flag would swallow the token after it, so `--excited notes.txt` would try
+to read `notes.txt` as the boolean value rather than as a positional operand.
+
+Omitting the flag is not the same as passing `--excited=false`. An omitted flag
+leaves the value absent, which lets a configuration file or environment
+variable supply it. Passing `--excited=false` always produces `false`, even
+when a lower-precedence file or environment value supplies `true`. Use the
+explicit form when the intent is to override, and omission when the intent is
+to defer.
+
+An explicit value always wins over the lower layers, including when it happens
+to repeat the field's own default. `--port 8080` therefore overrides
+`ACME_PORT=9000`, just as `--excited=false` overrides `ACME_EXCITED=true`. Use
+omission, not a repeated default, when the intent is to let the lower layer
+supply the value.
+
+Every boolean field behaves this way, including `Option<bool>` fields. A field
+declared as `Option<bool>` distinguishes "no value was supplied anywhere" from
+an explicit `false`; the ambient merge described in
+[Load first, then merge](#give-each-subcommand-its-own-settings) relies on that
+distinction, and `cli_default_as_absent` preserves it for `clap` defaults.
+
+The generated documentation metadata describes the same surface. Boolean fields
+report `takes_value: true` with a `BOOL` value name, `true` and `false` as
+possible values, and `value_optional: true`. Man pages render the flag as
+`--excited[=BOOL]`, with the bracketed placeholder italicized.
+
 ## Make discovery match the application
 
 Application names do not need to bend around OrthoConfig's defaults. Put the

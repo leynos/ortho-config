@@ -225,16 +225,7 @@ fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
             content.push_str(".TP\n");
 
             let placeholder = field.value.as_ref().map(escape::value_type_placeholder);
-            let flag_line = if cli.takes_value {
-                let value_name = cli
-                    .value_name
-                    .as_deref()
-                    .or(placeholder.as_deref())
-                    .unwrap_or("VALUE");
-                escape::format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
-            } else {
-                escape::format_flag(cli.long.as_deref(), cli.short)
-            };
+            let flag_line = escape::format_option(cli, placeholder.as_deref(), "VALUE");
             content.push_str(&flag_line);
             content.push('\n');
             content.push_str(&escape::escape_text(&field.help));
@@ -269,7 +260,7 @@ mod tests {
     #[fixture]
     fn minimal_metadata() -> LocalizedDocMetadata {
         LocalizedDocMetadata {
-            ir_version: "1.1".to_owned(),
+            ir_version: "1.2".to_owned(),
             locale: "en-US".to_owned(),
             app_name: "test-app".to_owned(),
             bin_name: None,

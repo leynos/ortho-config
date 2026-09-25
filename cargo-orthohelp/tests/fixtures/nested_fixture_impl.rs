@@ -123,7 +123,7 @@ macro_rules! define_nested_fixture {
 
         fn command(app_name: &str, about: &str) -> LocalizedDocMetadata {
             LocalizedDocMetadata {
-                ir_version: "1.1".to_owned(),
+                ir_version: "1.2".to_owned(),
                 locale: "en-US".to_owned(),
                 app_name: app_name.to_owned(),
                 bin_name: None,
@@ -171,10 +171,13 @@ macro_rules! define_nested_fixture {
                 cli: Some(CliMetadata {
                     long: Some(long.to_owned()),
                     short: None,
-                    value_name: None,
+                    // Generated boolean flags accept an optional `=<BOOL>`
+                    // value, so the fixture mirrors the real CLI surface.
+                    value_name: Some("BOOL".to_owned()),
                     multiple: false,
-                    takes_value: false,
-                    possible_values: Vec::new(),
+                    takes_value: true,
+                    value_optional: true,
+                    possible_values: vec!["true".to_owned(), "false".to_owned()],
                     hide_in_help: false,
                 }),
                 env: None,
@@ -212,6 +215,7 @@ macro_rules! define_nested_fixture {
                     value_name: Some(spec.name.to_ascii_uppercase()),
                     multiple: false,
                     takes_value: true,
+                    value_optional: false,
                     possible_values: Vec::new(),
                     hide_in_help: false,
                 }),

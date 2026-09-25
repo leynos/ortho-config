@@ -10,7 +10,7 @@ use crate::ir::{
 use crate::schema::{FileMetadata, SourceKind};
 
 use super::entry;
-use super::escape::{bold, escape_macro_arg, escape_text, format_flag, format_flag_with_value};
+use super::escape::{bold, escape_macro_arg, escape_text};
 use super::types::ManSection;
 
 /// Metadata for the man page title header.
@@ -90,20 +90,11 @@ fn format_synopsis_option(
     field: &LocalizedFieldMetadata,
     cli: &crate::schema::CliMetadata,
 ) -> String {
-    let flag = if cli.takes_value {
-        let placeholder = field
-            .value
-            .as_ref()
-            .map(super::escape::value_type_placeholder);
-        let value_name = cli
-            .value_name
-            .as_deref()
-            .or(placeholder.as_deref())
-            .unwrap_or("VALUE");
-        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
-    } else {
-        format_flag(cli.long.as_deref(), cli.short)
-    };
+    let placeholder = field
+        .value
+        .as_ref()
+        .map(super::escape::value_type_placeholder);
+    let flag = super::escape::format_option(cli, placeholder.as_deref(), "VALUE");
 
     if field.required {
         format!("{flag}\n")

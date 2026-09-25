@@ -248,12 +248,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         let mut composer = #krate::MergeComposer::with_capacity(4);
         #(#default_resolutions)*
         let defaults = #defaults_ident { #( #default_fields, )* };
-        let mut defaults_value = None;
         match #krate::sanitize_value(&defaults) {
-            Ok(value) => {
-                defaults_value = Some(value.clone());
-                composer.push_defaults(value);
-            }
+            Ok(value) => composer.push_defaults(value),
             Err(err) => errors.push(err),
         }
 

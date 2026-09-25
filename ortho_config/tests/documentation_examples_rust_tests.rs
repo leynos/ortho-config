@@ -1,5 +1,7 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
 
+#[path = "documentation_examples/boolean_override.rs"]
+mod boolean_override;
 mod documentation_examples;
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
@@ -7,6 +9,7 @@ mod process_runner;
 mod workspace;
 
 use anyhow::{Context, Result, ensure};
+use boolean_override::assert_boolean_override_flow;
 use documentation_examples::{DocumentedExample, documented_example};
 use std::path::{Path, PathBuf};
 use workspace::{DependencyAlias, EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile};
@@ -22,6 +25,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-localization",
     "guide-tracing",
     "guide-orthohelp-metadata",
+    "guide-boolean-override",
 ];
 
 #[test]
@@ -42,6 +46,8 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         "field=host\n",
     )?;
     assert_sanitized_binary_environment(&mut workspace)?;
+
+    assert_boolean_override_flow(&mut workspace)?;
 
     assert_error_flow(&mut workspace)?;
 
@@ -319,13 +325,55 @@ fn assert_console_flows(workspace: &mut ExampleWorkspace) -> Result<()> {
     Ok(())
 }
 
+/// One documented example invocation: its arguments and its environment.
+///
+/// The two vary independently at call sites, so grouping them under a name
+/// keeps the assertion helpers short enough to read without spelling the
+/// subjects out at every caller.
+struct Invocation<'a, const N: usize, const E: usize> {
+    args: [&'a str; N],
+    environment: [EnvironmentVariable<'a>; E],
+}
+
 fn assert_run<const N: usize>(
     workspace: &mut ExampleWorkspace,
     ExampleId(id): ExampleId<'_>,
     args: [&str; N],
     expected_stdout: &str,
 ) -> Result<()> {
-    let output = workspace.run(ExampleId(id), args)?;
+    assert_run_with_environment(
+        workspace,
+        ExampleId(id),
+        Invocation {
+            args,
+            environment: [],
+        },
+        expected_stdout,
+    )
+}
+
+/// Runs a documented example with an explicit invocation and asserts its stdout.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_run_with_environment(
+///     workspace,
+///     ExampleId("guide-boolean-override"),
+///     Invocation {
+///         args: ["--excited=false"],
+///         environment: [EnvironmentVariable { name: "ACME_EXCITED", value: "true" }],
+///     },
+///     "excited=false\n",
+/// )?;
+/// ```
+fn assert_run_with_environment<const N: usize, const E: usize>(
+    workspace: &mut ExampleWorkspace,
+    ExampleId(id): ExampleId<'_>,
+    Invocation { args, environment }: Invocation<'_, N, E>,
+    expected_stdout: &str,
+) -> Result<()> {
+    let output = workspace.run_with_environment(ExampleId(id), args, environment)?;
     ensure!(
         output.status.success(),
         "{id} failed:\n{}",

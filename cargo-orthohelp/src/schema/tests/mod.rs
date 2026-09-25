@@ -190,6 +190,7 @@ fn sample_cli_metadata() -> ortho_docs::CliMetadata {
         value_name: Some("PORT".to_owned()),
         multiple: false,
         takes_value: true,
+        value_optional: false,
         possible_values: vec!["8080".to_owned(), "9090".to_owned()],
         hide_in_help: false,
     }

@@ -6,7 +6,7 @@
 use crate::ir::{LocalizedConfigDiscoveryMeta, LocalizedFieldMetadata};
 use crate::schema::{CliMetadata, ConfigFormat};
 
-use super::escape::{bold, escape_text, format_flag, format_flag_with_value, italic};
+use super::escape::{bold, escape_text, italic};
 
 /// Formats a CLI option entry for the OPTIONS section.
 pub fn format_option_entry(field: &LocalizedFieldMetadata, cli: &CliMetadata) -> String {
@@ -51,20 +51,11 @@ pub fn format_option_entry(field: &LocalizedFieldMetadata, cli: &CliMetadata) ->
 
 /// Formats the flag line for an option entry.
 fn format_option_flag_line(field: &LocalizedFieldMetadata, cli: &CliMetadata) -> String {
-    if cli.takes_value {
-        let placeholder = field
-            .value
-            .as_ref()
-            .map(super::escape::value_type_placeholder);
-        let value_name = cli
-            .value_name
-            .as_deref()
-            .or(placeholder.as_deref())
-            .unwrap_or("VALUE");
-        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
-    } else {
-        format_flag(cli.long.as_deref(), cli.short)
-    }
+    let placeholder = field
+        .value
+        .as_ref()
+        .map(super::escape::value_type_placeholder);
+    super::escape::format_option(cli, placeholder.as_deref(), "VALUE")
 }
 
 /// Formats an environment variable entry for the ENVIRONMENT section.

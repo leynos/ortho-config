@@ -6,12 +6,12 @@
 use serde::{Deserialize, Serialize};
 
 /// Current IR schema version.
-pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
+pub const ORTHO_DOCS_IR_VERSION: &str = "1.2";
 
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DocMetadata {
-    /// IR schema version string (for example, "1.1").
+    /// IR schema version string (for example, "1.2").
     pub ir_version: String,
     /// Application name used for display and identifier generation.
     pub app_name: String,
@@ -108,6 +108,15 @@ pub struct FieldMetadata {
 }
 
 /// CLI documentation metadata for a field.
+///
+/// The four flags are independent facts about a single flag rather than the
+/// states of one machine: a flag can repeat *and* take a value *and* accept it
+/// optionally *and* be hidden. Collapsing them into enums would change the IR
+/// wire format that consumers read.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Mirrors `ortho_config::docs::CliMetadata` byte for byte."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliMetadata {
     /// Long CLI flag name (without the leading dashes).
@@ -120,6 +129,16 @@ pub struct CliMetadata {
     pub multiple: bool,
     /// Whether the CLI flag takes a value (false for switches).
     pub takes_value: bool,
+    /// Whether the value is optional, as in `--flag[=<BOOL>]`.
+    ///
+    /// Boolean flags accept a value but do not require one: the bare spelling
+    /// means `true`, and `--flag=false` supplies an explicit `false`. Renderers
+    /// bracket the placeholder when this is set.
+    ///
+    /// Defaults to `false` so IR written before this field existed still reads
+    /// as a plain switch, per ADR-003.
+    #[serde(default)]
+    pub value_optional: bool,
     /// Allowed values for enum-like options.
     pub possible_values: Vec<String>,
     /// Whether the flag is hidden from help output.

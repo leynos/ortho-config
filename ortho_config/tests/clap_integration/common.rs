@@ -211,6 +211,17 @@ pub(crate) struct OptionConfig {
     pub(crate) maybe: Option<u32>,
 }
 
+/// An `Option<bool>` field, the shape that distinguishes "supplied nowhere"
+/// from an explicit `false`.
+///
+/// The prefix is deliberately distinct from `TestConfig` so the two structs
+/// cannot read each other's environment variables.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
+#[ortho_config(prefix = "OPTL_")]
+pub(crate) struct OptionBoolConfig {
+    pub(crate) flag: Option<bool>,
+}
+
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
 pub(crate) struct RequiredConfig {
     pub(crate) sample_value: String,
