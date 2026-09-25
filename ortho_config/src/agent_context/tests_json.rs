@@ -126,6 +126,10 @@ fn assert_localization_fields_are_absent(value: &Value, command: &Value) -> Resu
     Ok(())
 }
 
+/// An undeclared flag is written as an explicit `null`, never omitted.
+///
+/// Agents distinguish "no bypass exists" from "the field is missing", so the
+/// wire contract pins the null rather than relying on `skip_serializing_if`.
 #[rstest]
 fn absent_bypass_and_dry_run_flags_serialize_as_explicit_nulls() -> Result<()> {
     let mut context = sample_agent_context();
@@ -143,6 +147,7 @@ fn absent_bypass_and_dry_run_flags_serialize_as_explicit_nulls() -> Result<()> {
     ensure_field_is_null(serialized_command, "dry_run_flag")
 }
 
+/// Declared flags survive serialization and parsing unchanged.
 #[rstest]
 fn declared_bypass_and_dry_run_flags_round_trip() {
     let mut command = sample_agent_context()
@@ -169,6 +174,11 @@ fn declared_bypass_and_dry_run_flags_round_trip() {
     assert_eq!(parsed, command);
 }
 
+/// A document written before the flag fields existed still parses.
+///
+/// This is the backward-compatibility guarantee for the schema addition: an
+/// older producer's command, carrying neither field, becomes `None` rather
+/// than a parse error.
 #[rstest]
 fn legacy_commands_without_flag_fields_deserialize_with_nulls() {
     let context: AgentContext = serde_json::from_value(json!({

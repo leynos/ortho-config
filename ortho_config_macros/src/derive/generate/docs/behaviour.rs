@@ -31,6 +31,11 @@ pub(super) fn build_behaviour_metadata(doc: &DocStructAttrs, krate: &TokenStream
     }
 }
 
+/// Emits the `interaction` field initialiser for a behaviour literal.
+///
+/// An absent or unrecognised declaration emits `None` rather than erroring,
+/// because the parser has already rejected invalid values; this keeps the
+/// generator total and leaves "undeclared" as the only remaining state.
 fn interaction_tokens(behaviour: &BehaviourAttrs, krate: &TokenStream) -> TokenStream {
     let Some(value) = behaviour.interaction.as_deref() else {
         return quote! { None };
@@ -42,6 +47,11 @@ fn interaction_tokens(behaviour: &BehaviourAttrs, krate: &TokenStream) -> TokenS
     }
 }
 
+/// Emits the `mutation` field initialiser for a behaviour literal.
+///
+/// As with [`interaction_tokens`], an absent or unrecognised declaration emits
+/// `None`; the parser has already rejected invalid values, so the only
+/// remaining state is "undeclared".
 fn mutation_tokens(behaviour: &BehaviourAttrs, krate: &TokenStream) -> TokenStream {
     let Some(value) = behaviour.mutation.as_deref() else {
         return quote! { None };
@@ -56,6 +66,10 @@ fn mutation_tokens(behaviour: &BehaviourAttrs, krate: &TokenStream) -> TokenStre
     quote! { Some(#krate::docs::MutationKind::#variant) }
 }
 
+/// Emits an `Option<String>` initialiser for a declared flag name.
+///
+/// A declared flag becomes `Some(String::from("--flag"))`; an absent one
+/// becomes `None`, so `bypass` and `dry_run` share one emission path.
 fn string_option_tokens(value: Option<&str>) -> TokenStream {
     value.map_or_else(
         || quote! { None },

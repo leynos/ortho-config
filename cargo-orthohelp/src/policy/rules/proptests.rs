@@ -45,6 +45,10 @@ fn slug() -> impl Strategy<Value = String> {
         })
 }
 
+/// Generates every interaction mode, including the undeclared `Unknown`.
+///
+/// `Unknown` is included because the policy rules treat it as a finding rather
+/// than as an absence, so the generated contexts cover the failing case too.
 fn interaction_mode() -> impl Strategy<Value = InteractionMode> {
     prop_oneof![
         Just(InteractionMode::Unknown),
@@ -53,6 +57,7 @@ fn interaction_mode() -> impl Strategy<Value = InteractionMode> {
     ]
 }
 
+/// Generates every mutation boundary, including the undeclared `Unknown`.
 fn mutation_effect() -> impl Strategy<Value = MutationEffect> {
     prop_oneof![
         Just(MutationEffect::Unknown),
@@ -63,6 +68,11 @@ fn mutation_effect() -> impl Strategy<Value = MutationEffect> {
     ]
 }
 
+/// Generates an agent input, optionally guaranteeing a long flag.
+///
+/// The bypass-known rule matches a declared flag against inputs with a matching
+/// long flag, so `maybe_long` lets a caller force the matchable case instead of
+/// relying on the generator to produce one.
 fn input(maybe_long: bool) -> impl Strategy<Value = AgentInput> {
     (slug(), prop::bool::ANY, any::<u8>()).prop_map(move |(name, use_long, seed)| AgentInput {
         long: if maybe_long && use_long {

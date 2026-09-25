@@ -9,4 +9,8 @@ struct Bad {
     value: u8,
 }
 
+/// Compile-fail harness needs a `main`, but compilation stops at the
+/// attribute that rejects a misspelt key nested inside `behaviour(...)`.
+/// The pinned diagnostic is compared verbatim from the sibling `.stderr`
+/// file.
 fn main() {}

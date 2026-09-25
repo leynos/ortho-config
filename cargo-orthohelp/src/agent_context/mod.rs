@@ -146,6 +146,12 @@ fn command_path(meta: &DocMetadata, parent_path: &[String]) -> Vec<String> {
     path
 }
 
+/// Resolves the command summary from the IR's `about_id` Fluent message.
+///
+/// Returns `None` when no localizer was supplied, when the catalogue has no
+/// entry for the message, when the resolved text is blank, or when the lookup
+/// returned a `[missing: ...]` placeholder. A summary is cosmetic, so every one
+/// of those cases degrades to an absent summary rather than an error.
 fn resolve_summary(meta: &DocMetadata, localizer: Option<&dyn Localizer>) -> Option<String> {
     let resolved = localizer?.lookup(&meta.about_id, None)?;
     let trimmed = resolved.trim();
@@ -156,6 +162,11 @@ fn resolve_summary(meta: &DocMetadata, localizer: Option<&dyn Localizer>) -> Opt
     }
 }
 
+/// Returns the canonical verb for a command path's final segment.
+///
+/// Only segments listed in [`CANONICAL_VERBS`] are recognised, so a
+/// consumer-specific name yields `None` rather than being coerced into a
+/// standard verb.
 fn canonical_verb_for(last_segment: &str) -> Option<String> {
     CANONICAL_VERBS
         .contains(&last_segment)
@@ -231,6 +242,12 @@ const fn should_skip_non_flag_input(field: &FieldMetadata) -> bool {
     cli.long.is_none() && cli.short.is_none() && !cli.takes_value
 }
 
+/// Reports the agent-facing value type for a CLI-visible input.
+///
+/// An enumerated field is reported as `"enum"` whether the variants come from
+/// the value type or from clap's `possible_values`, because agents act on the
+/// closed value set either way. Fields with no declared value type yield
+/// `None`, which the agent-context schema renders as an absent `value_type`.
 fn map_input_value_type(field: &FieldMetadata) -> Option<String> {
     if matches!(&field.value, Some(ValueType::Enum { .. })) {
         return Some("enum".to_owned());
@@ -245,6 +262,11 @@ fn map_input_value_type(field: &FieldMetadata) -> Option<String> {
     field.value.as_ref().map(map_value_type)
 }
 
+/// Renders an IR value type as the lowercase name used on the agent-context wire.
+///
+/// A [`ValueType::Custom`] keeps its declared name verbatim because only the
+/// consumer's derive macro knows that type; every built-in maps to a fixed
+/// lowercase spelling.
 fn map_value_type(value: &ValueType) -> String {
     match value {
         ValueType::String => "string".to_owned(),
@@ -263,6 +285,12 @@ fn map_value_type(value: &ValueType) -> String {
     }
 }
 
+/// Collects the permitted values for an enumerated input.
+///
+/// The declared [`ValueType::Enum`] variants win; otherwise clap's
+/// `possible_values` are used, so a `value_parser`-constrained string field is
+/// still reported as a closed set. A field that is enumerated by neither route
+/// yields an empty vector.
 fn enum_values(field: &FieldMetadata) -> Vec<String> {
     match &field.value {
         Some(ValueType::Enum { variants }) => variants.clone(),
