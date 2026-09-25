@@ -129,6 +129,19 @@ contributes once, at the lowest-precedence position it occupies.
       names no upload action of its own at all, so the deprecation is
       inherited rather than owned, and cannot be fixed here.
 
+- [x] Green again after this plan's own commits. Run `36087864052` at
+      `4ca6483e`, all five jobs success. Four suites, all passing:
+      1,316 / 1,292 on Windows and 1,322 / 1,294 on Linux, 10 and 15 skipped,
+      zero lock waits and zero cancellations. All four coverage artefacts are
+      present, the two Windows lcov files among them — the artefact whose
+      absence the failing run is now recorded as causing. The 96 targeted
+      assertions pass again, and `must_use_compile_tests` passed at 367.998s
+      on the `[>120s][>240s][>360s]` cadence. That last figure is the useful
+      one: it is well inside the 960s now allowed and well outside the 600s
+      that killed it, but it is also well inside the 600s — so on this runner,
+      with a warm cache, the old allowance would have passed. The margin was
+      never the thing being bought; the seven-binary coverage was.
+
 ## Implementation notes
 
 The scoped-composition code moved out of `load.rs` into
