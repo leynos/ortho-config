@@ -144,8 +144,9 @@ are supported by this guide.
 Generated boolean flags accept an optional `=<BOOL>` value. The bare flag and
 omitted flag keep their previous meanings, so the change is additive for every
 caller. Commands that pass a space-separated value are the exception:
-`--flag false` was never accepted and now fails with a clearer error, because
-the value must follow an `=`.
+`--flag false` is still rejected, with the same `unexpected argument 'false'
+found` error as before, because the value must follow an `=`. That spelling was
+never a way to express `false` and still is not; use `--flag=false`.
 
 Before, a boolean flag was a presence-only switch. It could only express
 `true`, so a `true` from a configuration file or environment variable could not

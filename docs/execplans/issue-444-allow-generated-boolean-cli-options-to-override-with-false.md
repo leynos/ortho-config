@@ -109,8 +109,9 @@ Observable success: a config file that sets `enabled = true` combined with
 - [x] (2026-09-25) Rebasing onto the advanced `origin/main` (`8835347c`, PR
       #416) found and fixed a defect no gate could catch: this branch's ADR-008
       collided with the ADR-008 that PR #416 had already merged, so two
-      different ADRs would have claimed number 008. Our unpublished ADR
-      renumbers to 009. Four conflicts were resolved by hand — three in
+      different ADRs would have claimed number 008. This branch's
+      unpublished ADR renumbers to 009. Four conflicts were resolved by
+      hand — three in
       `docs/contents.md` and one each in `docs/v0-10-0-migration-guide.md`,
       `cargo-orthohelp/src/agent_context/mod.rs` (main moved `CANONICAL_VERBS`
       into `policy::vocabulary` while this branch split the module), and the
@@ -126,7 +127,17 @@ Observable success: a config file that sets `enabled = true` combined with
       and opened draft PR #532. The remote branch was still at the pre-rebase
       merge base `c144641e`, so the push was a plain fast-forward and rewrote
       no published history. `gh pr view` reports `MERGEABLE`, base `main`.
-- [ ] CodeRabbit `--agent` review of the rebased tree.
+- [x] (2026-09-25) CodeRabbit round 4 reviewed the rebased tree and returned
+      four findings, all `minor` and all docs-only. One was actioned as a
+      genuine correction (see the `--flag false` note below); the other three
+      were the first-person pronouns and a garbled sentence in this plan.
+- [x] (2026-09-25) Added the `Option<bool>` half of the acceptance matrix,
+      which the issue requires and which earlier rounds had covered only at
+      the token and figment levels. `ortho_config/tests/clap_integration/`
+      `option_cases.rs` gains eight cases over `OptionBoolConfig`. Writing them
+      exposed two further defects; both are fixed (see `Surprises &
+      discoveries`), and all ten `parses_option_*` cases are green.
+- [ ] Re-run the seven gates and push.
 
 ## Surprises & discoveries
 
@@ -142,8 +153,11 @@ Observable success: a config file that sets `enabled = true` combined with
   before opening the pull request, not by a gate.
 
 - **`-ffalse` is rejected.** With `require_equals(true)`, an attached short
-  value is an `ArgumentConflict`; only `-f=false` works. Worth one sentence in
-  the user guide.
+  value raises `clap::error::ErrorKind::ArgumentConflict`; only `-f=false`
+  works. Verified against a minimal `clap::Parser` fixture, together with the
+  other spellings: `--flag=false` and `-f=false` parse, plain `--flag` parses,
+  `--flag=bogus` raises `InvalidValue`, and `--flag false` raises
+  `UnknownArgument`.
 - **The roff renderer copied the wrong spacing.**
   `format_flag_with_optional_value` was modelled on `format_flag_with_value`,
   which separates the flag from its placeholder with a space. That is correct
@@ -157,9 +171,13 @@ Observable success: a config file that sets `enabled = true` combined with
   printed the same `--flag[=<BOOL>]` form, but `push_cli_paragraphs` emits a
   prose sentence instead. The entry and the migration guide now describe what
   each renderer actually produces.
-- **`--flag false` is rejected.** `require_equals` forces the `=` spelling, so
-  a space-separated value is an `UnknownArgument`. This is deliberate: without
-  it, `--flag --other x` would try to consume `--other` as the flag's value.
+- **`--flag false` is rejected, and always was.** `require_equals` forces the
+  `=` spelling, so a space-separated value raises
+  `clap::error::ErrorKind::UnknownArgument`. A fixture confirms the error text
+  is byte-identical to what the old presence-only flag produced — so this
+  spelling is unchanged, not newly rejected, and the migration guide must not
+  claim the error became clearer. The restriction is deliberate: without it,
+  `--flag --other x` would try to consume `--other` as the flag's value.
 - **`clap_derive` would infer `ArgAction::Set` for `Option<bool>`** and add a
   `.required(...)` obligation for a bare `bool`. The generated `Option<bool>`
   field type plus *explicit* attributes is therefore required, not optional.
@@ -211,17 +229,55 @@ Observable success: a config file that sets `enabled = true` combined with
   needs metadata carrying `value_optional: true` with neither a long nor a
   short flag. No current fixture produces that, so the goldens never exercised
   the branch — the new unit test pins it directly rather than through a golden.
-- **`typos.toml` churn is not ours to commit.** The spellcheck gate regenerates
-  this tracked file through `typos-config-builder`, whose pinned dictionary
-  drifts ahead of the committed copy, so every gate run leaves it dirty. The
-  entries it currently adds are unrelated to this branch: CSS alignment
-  utilities, the camel-cased `currentColor`, and one entry that is itself a
-  misspelling appear nowhere in the tree, and the single exception — a
-  `tokio::test` attribute default already recorded in
+- **`typos.toml` churn is not this branch's to commit.** The spellcheck gate
+  regenerates this tracked file through `typos-config-builder`, whose pinned
+  dictionary drifts ahead of the committed copy, so every gate run leaves it
+  dirty. The entries it currently adds are unrelated to this branch: CSS
+  alignment utilities, the camel-cased `currentColor`, and one entry that is
+  itself a misspelling appear nowhere in the tree. The sole exception is a
+  `tokio::test` attribute default, which is already recorded in
   `docs/rstest-bdd-users-guide.md` and `typos.local.toml` on `main`. Three
   sibling worktrees, including one on an unrelated branch, carry the same
   churn, with two of them byte-identical to each other. The file is therefore
   left out of the commit; the spelling gate is green with it dirty.
+
+- **A merge that supplies nothing failed for every struct shape, not just this
+  branch's.** The generated declarative state derives `Default`, so its
+  accumulator starts as `serde_json::Value::Null`; `merge_layer` deliberately
+  skips empty maps rather than seating it; so `finish` handed `Null` to the
+  deserialiser and reported `invalid type: null, expected struct …`. Calling
+  `merge_from_layers([])` reproduces it for a defaulted one-field struct, an
+  all-`Option` struct, and an empty struct alike, and every file in the path —
+  `generate/declarative/merge_tokens.rs`, `guards.rs`,
+  `generate/declarative/mod.rs`, `src/declarative/*` — is byte-identical to
+  `main`. `Null` can carry no other meaning there: a layer whose whole value is
+  `null` is rejected by the non-object guard in `merge_layer`. The fix is one
+  guard in the generated `finish`: normalise a `Null` accumulator to an empty
+  object before deserialising. The negative control matters as much as the
+  fix: a struct with a required field must still report `missing field …`,
+  which the new test pins.
+- **`OptionConfig` passed only by accident.** It is unprefixed, so it builds
+  `CsvEnv::raw()`, whose object is non-empty whenever *any* environment
+  variable is set; that non-empty layer seated the accumulator and hid the
+  defect above. Any prefixed, all-optional struct reaches the failing path as
+  soon as nothing supplies a value — which is the ordinary `absent` case this
+  ticket's acceptance criteria name.
+- **A prefixed struct does not read `.config.toml`.** `compute_dotfile_name`
+  derives `.optl.toml` from `prefix = "OPTL_"`, so the file cases in the new
+  matrix had to be repointed; as first written, `cli_false_clears_file_true`
+  passed *vacuously* because no file layer existed at all. Non-vacuity is now
+  proven by mutation: flipping the fixture file to `flag = false` fails
+  `file_true_without_flag` and nothing else.
+- **`--flag false` is not newly rejected, and its error is not clearer.** A
+  `clap::Parser` fixture rendering both the old presence-only flag and the new
+  hybrid flag shows byte-identical `unexpected argument 'false' found` output
+  (`ErrorKind::UnknownArgument`) for that spelling. The real change is that
+  `--flag=false` used to fail with `TooManyValues` and is now accepted. The
+  migration guide previously claimed the space-separated error had improved;
+  that claim was unevidenced and is corrected. The same fixture confirmed the
+  other spellings: `-f=false` and `--flag` parse, `--flag=bogus` raises
+  `InvalidValue`, and `-ffalse` raises `ArgumentConflict` as this plan already
+  said.
 
 ## Decision log
 
@@ -274,7 +330,17 @@ Observable success: a config file that sets `enabled = true` combined with
   to `false` and `None` yields no value.
 - M2: `ortho_config/tests/clap_integration/parsing.rs` rstest cases covering
   absent, `--flag`, `--flag=false`, file/env `true` with no flag (lower layer
-  wins), and file/env `true` with `--flag=false` (CLI clears to false).
+  wins), and file/env `true` with `--flag=false` (CLI clears to false). The
+  `Option<bool>` half of the same matrix lives in
+  `option_cases.rs::parses_option_bool_across_sources`, whose `absent` row
+  asserts `None` — the row that distinguishes an unwritten field from an
+  explicit `false`, and the row that exposed the empty-accumulator defect.
+  Non-vacuity of the file rows is proven by mutation: writing `flag = false`
+  into the fixture fails exactly `file_true_without_flag`.
+- M2b: `ortho_config/tests/declarative_merge_empty_layers.rs` pins the
+  empty-accumulator fix: an empty layer list yields all-`None` through both
+  `merge_from_layers` and the generated `load` path, while a required field is
+  still reported as `missing field` rather than silently defaulted.
 - M3: `ortho_config/tests/docs_ir.rs` asserts `takes_value == true`, the
   `BOOL` value name, `["true", "false"]` possible values, and
   `value_optional == true`; renderer goldens regenerate and are reviewed.
