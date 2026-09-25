@@ -62,31 +62,47 @@ pub fn extract_profile_layers(
         selected_found |= found;
 
         file_layers.push(MergeLayer::file(Cow::Owned(value), path.clone()));
-        if let Some(body) = selected_body {
-            profile_layers.push(MergeLayer::profile(Cow::Owned(body), path));
-        }
+        // `map` over the optional body keeps the loop body free of a
+        // conditional: zero or one profile layer falls out of each file.
+        let profile_layer = selected_body.map(|body| MergeLayer::profile(Cow::Owned(body), path));
+        profile_layers.extend(profile_layer);
     }
 
     if let Some(selected_profile) = selected.filter(|_| !selected_found) {
-        // Distinguish the two empty cases: a chain with no files at all is a
-        // discovery problem, while a non-empty chain that defines no profile
-        // tables is a selector problem. Reporting the former for the latter
-        // would send the operator hunting for files that are already present.
-        let reported = if chain_is_empty {
-            AvailableProfileNames::no_files_discovered()
-        } else {
-            AvailableProfileNames::new(available)
-        };
-        return Err(Arc::new(OrthoError::UnknownProfile {
-            selected: selected_profile.name.to_string(),
-            selection_source: selected_profile.source,
-            available: reported,
-        }));
+        return Err(unknown_profile_error(
+            selected_profile,
+            chain_is_empty,
+            available,
+        ));
     }
 
     Ok(ExtractionOutcome {
         file_layers,
         profile_layers,
+    })
+}
+
+/// Build the error for a selection that no file defines.
+///
+/// The two ways an empty name list can arise are reported distinctly: a chain
+/// with no files at all is a discovery problem, while a non-empty chain that
+/// defines no profile tables is a selector problem. Reporting the former for
+/// the latter would send the operator hunting for files that are already
+/// present.
+fn unknown_profile_error(
+    selected: &SelectedProfile,
+    chain_is_empty: bool,
+    available: Vec<String>,
+) -> Arc<OrthoError> {
+    let reported = if chain_is_empty {
+        AvailableProfileNames::no_files_discovered()
+    } else {
+        AvailableProfileNames::new(available)
+    };
+    Arc::new(OrthoError::UnknownProfile {
+        selected: selected.name.to_string(),
+        selection_source: selected.source,
+        available: reported,
     })
 }
 

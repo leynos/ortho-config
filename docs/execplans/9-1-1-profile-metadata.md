@@ -700,6 +700,41 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       as with the earlier CodeScene round, the correct response to an active
       suppression is repair at source.
 
+- [x] (2026-09-25) Gate regression caught on `36ba848d`, and fixed. The
+      docs-only commit introduced four `typos-config-builder` failures: the
+      abbreviation `59a52ba8` splits across a digit/letter boundary so that its
+      middle two characters read as a word, which the gate then rejects as a
+      misspelling of "be"/"by". `markdownlint-cli2`
+      itself was clean; the `spellcheck` prerequisite is what failed, which
+      made the gate red even though the commit touched only prose.
+      Repaired in the overlay, not in the generated file: `typos.toml` is
+      regenerated on every gate run and must never be hand-edited, so the
+      exception belongs in `typos.local.toml`. The added pattern is
+      `` `[0-9a-f]{7,40}` `` — bound to a *complete* code span, so it cannot
+      mask prose, and open-ended in length so it covers every abbreviation
+      rather than one SHA at a time.
+- [x] (2026-09-25) Recorded a mistake in that repair, because the first
+      attempt was wrong: the pattern was written as `` `[0-9a-f]{7}\b`` on the
+      theory that a word boundary would end it. It cannot match — `{7}` consumes
+      seven of the eight characters and then `\b` fails against the remaining
+      digit. The corrected form uses backticks at *both* ends, which is what
+      the thirteen pre-existing patterns in the overlay already do; the
+      in-file patterns are the worked examples for this file, and reading them
+      first would have avoided the detour. `make spellcheck` went from exit 2
+      to exit 0.
+- [x] (2026-09-25) CodeScene re-filed *Bumpy Road Ahead* on
+      `extract_profile_layers` against `36ba848d`, having reported the same
+      biomarker as addressed two revisions earlier. Re-verified against the
+      current source rather than trusting either report: it was genuine — two
+      blocks of depth-2 nested conditional logic, the `if let Some(body)`
+      inside the `for`, and the `if chain_is_empty` inside the `if let`. The
+      later reading is the correct one; the earlier "addressed" applied to a
+      revision whose shape has since changed. Repaired by extracting
+      `unknown_profile_error` and replacing the loop's `if let` with
+      `Option::map` feeding `Vec::extend`, which leaves no conditional inside
+      either the loop or the `if let`. Both findings in this round were fixed
+      at source; the offered *Suppress* link was not used.
+
 Progress entries from milestone 1 onward must carry timestamps.
 
 ## Surprises & discoveries
