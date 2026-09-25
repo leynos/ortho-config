@@ -170,6 +170,7 @@ mod tests {
     //! Regression coverage for subprocess output and duration bounds.
 
     use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
+    use anyhow::{Context, Result};
     use rstest::rstest;
     use std::io::Write;
     use std::process::Command;
@@ -177,7 +178,8 @@ mod tests {
 
     #[test]
     fn output_capture_is_limited_per_stream() {
-        let mut command = probe_command("bounded_output_probe");
+        let mut command = probe_command("bounded_output_probe")
+            .expect("the bounded-output probe command should be available");
         let output = run_command_with_limits(
             &mut command,
             Operation("capture bounded output"),
@@ -194,7 +196,8 @@ mod tests {
 
     #[test]
     fn stalled_process_is_terminated_at_the_deadline() {
-        let mut command = probe_command("bounded_timeout_probe");
+        let mut command = probe_command("bounded_timeout_probe")
+            .expect("the bounded-timeout probe command should be available");
         let error = run_command_with_limits(
             &mut command,
             Operation("run timeout probe"),
@@ -222,12 +225,12 @@ mod tests {
         assert_eq!(format!("{error:#}"), expected);
     }
 
-    fn probe_command(test_name: &str) -> Command {
-        let mut command = Command::new(
-            std::env::current_exe().expect("the integration-test executable should have a path"),
-        );
+    fn probe_command(test_name: &str) -> Result<Command> {
+        let executable = std::env::current_exe()
+            .context("the integration-test executable should have a path")?;
+        let mut command = Command::new(executable);
         command.args(["--ignored", "--nocapture", test_name]);
-        command
+        Ok(command)
     }
 
     #[test]
