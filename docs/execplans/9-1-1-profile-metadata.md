@@ -756,6 +756,25 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       reconciliation comment was posted. Refreshing it is CodeRabbit's action,
       driven by the queued review; do not re-post the reconciliation.
 
+- [x] (2026-09-25) CI confirmed green on `713029b5` (run `36076745780`):
+      `build-test` on both ubuntu-latest and windows-latest plus all three
+      packaging dry runs succeeded. The decisive step is `Spelling
+      (en-GB-oxendict)`, which had failed on `36ba848d` with the same four
+      misspelling diagnostics — so the overlay pattern is validated by the
+      same CI check that caught the regression, not merely by a local run.
+      `mergeStateStatus` moved from `BLOCKED` to `CLEAN` with
+      `mergeable = MERGEABLE`.
+- [x] (2026-09-25) What still blocks, stated precisely so it is not
+      misread as done: `reviewDecision` remains `CHANGES_REQUESTED`. That
+      decision is a stale artefact pinned to `0ea812c5` and it is *not*
+      cleared by green CI or by resolved threads. Clearing it requires a
+      fresh CodeRabbit review to supersede it (`4f999571` is queued) or the
+      maintainer's own action. It was deliberately left alone: dismissing a
+      review, ticking an Ignore box, or bypassing branch protection to make
+      the status look green is out of bounds, and read-back of the current
+      decision is the honest state. Note the pre-merge table is still pinned
+      to `0ea812c5` as well.
+
 Progress entries from milestone 1 onward must carry timestamps.
 
 ## Surprises & discoveries
