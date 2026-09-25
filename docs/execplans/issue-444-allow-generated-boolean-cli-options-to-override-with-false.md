@@ -183,9 +183,10 @@ Observable success: a config file that sets `enabled = true` combined with
 - **`typos.toml` churn is not ours to commit.** The spellcheck gate regenerates
   this tracked file through `typos-config-builder`, whose pinned dictionary
   drifts ahead of the committed copy, so every gate run leaves it dirty. The
-  twelve entries it currently adds are unrelated to this branch: words such as
-  `currentColor`, `color-mix`, `navbar-center`, and `AppVar.iamge_id` appear
-  nowhere in the tree, and the one exception (`flavor = `) already lives in
+  entries it currently adds are unrelated to this branch: CSS alignment
+  utilities, the camel-cased `currentColor`, and one entry that is itself a
+  misspelling appear nowhere in the tree, and the single exception — a
+  `tokio::test` attribute default already recorded in
   `docs/rstest-bdd-users-guide.md` and `typos.local.toml` on `main`. Three
   sibling worktrees, including one on an unrelated branch, carry the same
   churn, with two of them byte-identical to each other. The file is therefore
