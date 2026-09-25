@@ -115,16 +115,18 @@ fn optional_value_doc(
 #[case::long_preferred(
     Some("excited"),
     Some('e'),
-    "`--excited` means `true`",
-    "`--excited=false`"
+    ("`--excited` means `true`", "`--excited=false`")
 )]
-#[case::short_when_no_long(None, Some('e'), "`-e` means `true`", "`-e=false`")]
+#[case::short_when_no_long(
+    None,
+    Some('e'),
+    ("`-e` means `true`", "`-e=false`")
+)]
 fn render_help_names_the_optional_value_spelling(
     minimal_doc: LocalizedDocMetadata,
     #[case] long: Option<&str>,
     #[case] short: Option<char>,
-    #[case] true_phrase: &str,
-    #[case] false_phrase: &str,
+    #[case] expected: (&str, &str),
 ) {
     let doc = optional_value_doc(minimal_doc, long, short);
     let command = CommandSpec {
@@ -138,6 +140,7 @@ fn render_help_names_the_optional_value_spelling(
         },
     );
 
+    let (true_phrase, false_phrase) = expected;
     assert!(
         xml.contains(true_phrase),
         "expected {true_phrase:?} in:\n{xml}"
