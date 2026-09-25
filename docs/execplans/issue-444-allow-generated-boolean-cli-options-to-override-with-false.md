@@ -302,6 +302,31 @@ Observable success: a config file that sets `enabled = true` combined with
       truth for them, and a future round cannot desynchronize a count from a
       list it no longer contains.
 
+- [x] (2026-09-25) CodeRabbit round 11 reviewed `407b21ee` (51 files) and
+      returned one finding, the first new material it has raised in three
+      rounds: `ortho_config/tests/docs_ir.rs` had reached 407 lines, over the
+      400-line limit at `AGENTS.md:33`. The finding is fair and this branch is
+      what caused it — the file was 393 lines on `origin/main` and the four
+      `ensure!` blocks added for the boolean metadata pushed it over. Note the
+      limit is not gate-enforced here: `lint-whitaker` runs with
+      `--all-targets` and stayed green, because `dylint.toml` carries no
+      `[module_max_lines]` section, so only human review caught this. The
+      round-7 `roff/escape.rs` split was different — that one tripped the lint
+      in a crate the config does cover. The split shares `DocsConfig` through a
+      new `ortho_config/tests/support/docs_ir_config.rs`, alongside the existing
+      `support/` modules, and moves the seven per-field tests plus
+      `field_by_name` into a sibling `docs_ir_fields.rs`. The 48-line
+      `#[ortho_config(...)]` attribute is the reason the config is shared rather
+      than duplicated: two copies would drift the first time a feature was
+      added. A probe established that `rstest` fixtures cannot be imported
+      across modules without tripping `unused_import`, which is fatal under
+      `-D warnings`, so each suite keeps a three-line fixture of its own rather
+      than sharing one. `docs_ir.rs` falls to 182 lines and the new file is
+      201, both with headroom. The test count is unchanged at fourteen (7 + 7),
+      and non-vacuity was shown by inverting the moved `value_optional`
+      assertion: `test_field_verbose` then fails for the intended reason and
+      the other six pass.
+
 ## Surprises & discoveries
 
 - **A probe with an *undefined* argument reverses its own answer.** The
@@ -623,28 +648,3 @@ The codebase was left healthy with respect to this change: `make clippy` and
 the Whitaker suite are green, no lint or type violations remain on branch
 lines, and the two latent Clippy violations the boolean work would have masked
 (`shadow_reuse`, `too_many_arguments`) were cleared rather than suppressed.
-
-- [x] (2026-09-25) CodeRabbit round 11 reviewed `407b21ee` (51 files) and
-      returned one finding, the first new material it has raised in three
-      rounds: `ortho_config/tests/docs_ir.rs` had reached 407 lines, over the
-      400-line limit at `AGENTS.md:33`. The finding is fair and this branch is
-      what caused it — the file was 393 lines on `origin/main` and the four
-      `ensure!` blocks added for the boolean metadata pushed it over. Note the
-      limit is not gate-enforced here: `lint-whitaker` runs with
-      `--all-targets` and stayed green, because `dylint.toml` carries no
-      `[module_max_lines]` section, so only human review caught this. The
-      round-7 `roff/escape.rs` split was different — that one tripped the lint
-      in a crate the config does cover. The split shares `DocsConfig` through a
-      new `ortho_config/tests/support/docs_ir_config.rs`, alongside the existing
-      `support/` modules, and moves the seven per-field tests plus
-      `field_by_name` into a sibling `docs_ir_fields.rs`. The 48-line
-      `#[ortho_config(...)]` attribute is the reason the config is shared rather
-      than duplicated: two copies would drift the first time a feature was
-      added. A probe established that `rstest` fixtures cannot be imported
-      across modules without tripping `unused_import`, which is fatal under
-      `-D warnings`, so each suite keeps a three-line fixture of its own rather
-      than sharing one. `docs_ir.rs` falls to 182 lines and the new file is
-      201, both with headroom. The test count is unchanged at fourteen (7 + 7),
-      and non-vacuity was shown by inverting the moved `value_optional`
-      assertion: `test_field_verbose` then fails for the intended reason and
-      the other six pass.
