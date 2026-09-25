@@ -66,7 +66,7 @@
 - [ADR-012: Profile selection and layering](adr-012-profile-selection-and-layering.md):
   review the decision for optional profile overlays, the five-tier merge order,
   stateless selection, and the opt-in profile contract.
-- [ADR-008: Optional-value boolean CLI metadata](adr-008-optional-value-boolean-cli-metadata.md):
+- [ADR-013: Optional-value boolean CLI metadata](adr-013-optional-value-boolean-cli-metadata.md):
   review the accepted `value_optional` marker, the documentation IR version
   bump, and the rejected alternatives for expressing the new boolean flag
   surface.

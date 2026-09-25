@@ -1,4 +1,4 @@
-# ADR-008: Optional-value boolean CLI metadata
+# ADR-013: Optional-value boolean CLI metadata
 
 Status: Accepted.
 
@@ -49,8 +49,8 @@ placeholder.
 
 ### Option B: Add an optional-value marker to `CliMetadata`
 
-`CliMetadata` gains `value_optional: bool`, `ORTHO_DOCS_IR_VERSION` moves from
-"1.1" to "1.2", and the mirrored schema definition changes in step. Boolean
+`CliMetadata` gains `value_optional: bool`, `ORTHO_DOCS_IR_VERSION` moves to
+"2.0", and the mirrored schema definition changes in step. Boolean
 flags are reported with `takes_value: true`, `value_name: Some("BOOL")`,
 `possible_values: ["true", "false"]`, and `value_optional: true`. Renderers
 print `--flag[=<BOOL>]` when the marker is set. This is the accepted option.
@@ -74,11 +74,16 @@ existed therefore reads as a plain switch, which preserves the meaning of
 existing documents without a migration step, per
 [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
 
-`ORTHO_DOCS_IR_VERSION` becomes "1.2". The marker is additive, but the
-accompanying boolean-field changes (`takes_value`, `value_name`, and
-`possible_values`) make the 1.1 rendering of a boolean flag differ from the 1.2
-rendering, so the version bump records a real change in what the IR says about
-the generated CLI surface.
+`ORTHO_DOCS_IR_VERSION` becomes "2.0". The marker alone is additive, so on its
+own it would ride the unreleased version rather than move it, exactly as
+[ADR-012](adr-012-profile-selection-and-layering.md) records for `profiles`.
+What forces the version here is the accompanying change to *existing* fields:
+a boolean flag's `takes_value`, `value_name`, and `possible_values` all differ
+after this change, so a 1.1 reader and a 2.0 reader see different CLI surfaces
+for the same field. That is a change of shape, not an addition, and it shares
+the single "2.0" already minted for the identifier-value change rather than
+claiming a version of its own. Consumers should read
+`ORTHO_DOCS_IR_VERSION` rather than hard-code either value.
 
 `cargo-orthohelp::schema::CliMetadata` and `ORTHO_DOCS_IR_VERSION` are updated
 in step with the `ortho_config::docs` definitions. The repository's
@@ -135,8 +140,23 @@ spellings.
 The users' guide and the migration guide are the normative prose references for
 the command-line surface and for upgrading consumers of the IR.
 
+## Relation to ADR-012
+
+[ADR-012](adr-012-profile-selection-and-layering.md) records, under
+"Flag-equals-default resolution", that opted-in structs gate `push_cli` on
+clap's value-source information while "legacy derives keep the existing
+heuristic untouched". This ADR supersedes that clause for the declarative path.
+The value-source gate now applies to every derive that generates CLI parsing,
+not only to profile-opted-in structs: the heuristic it replaces compares the
+sanitized CLI object against the defaults object, which silently discards the
+CLI layer whenever an explicit value happens to equal the struct default.
+Applying the gate only to opt-in structs would leave that defect in place for
+every other derive. ADR-012's five-tier profile ordering is unaffected; its
+profile-specific gate remains in `build_profile_cli_layer_tokens`.
+
 ## References
 
+- [ADR-012: Profile selection and layering](adr-012-profile-selection-and-layering.md).
 - [Agent-native CLI assistance design](agent-native-cli-design.md) §5.
 - [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md).
 - [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).

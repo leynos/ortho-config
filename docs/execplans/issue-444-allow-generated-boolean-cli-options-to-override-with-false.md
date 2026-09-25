@@ -46,7 +46,7 @@ Observable success: a config file that sets `enabled = true` combined with
       `hello_world` suites green afterwards.
 - [x] M2 (Task 2): runtime merge/precedence verified with integration fixtures
       (10-case matrix in `clap_integration` plus the doc-example flow).
-- [x] M3 (Task 3): docs IR `value_optional` marker, ADR-008, renderers,
+- [x] M3 (Task 3): docs IR `value_optional` marker, ADR-013, renderers,
       goldens.
 - [x] M4 (Task 4): users-guide section, changelog entries, v0.10.0 migration
       guide sections (flag spellings, explicit-value precedence) with impact
@@ -64,7 +64,7 @@ Observable success: a config file that sets `enabled = true` combined with
       now joins the flag (`--flag[=<BOOL>]`, matching clap's own
       `require_equals` suffix) with a regression test proven non-vacuous; the
       406-line doc-example test file split into
-      `documentation_examples/boolean_override.rs`; ADR-008 links made
+      `documentation_examples/boolean_override.rs`; ADR-013 links made
       same-directory; the migration-guide "Before" block now shows the real
       `TooManyValues` parse failure instead of output the old code could not
       produce; and the ExecPlan itself is indexed in `docs/contents.md`.
@@ -109,6 +109,42 @@ Observable success: a config file that sets `enabled = true` combined with
 - [ ] Push; draft PR.
 
 ## Surprises & discoveries
+
+- **ADR-008 was already taken.** This branch minted
+  `docs/adr-008-optional-value-boolean-cli-metadata.md`, but `origin/main`
+  gained `docs/adr-008-agent-native-policy-configuration.md` (dated 2026-08-12)
+  via PR #416 while this branch was in flight. Two different ADRs would
+  therefore have claimed number 008 on merge, and the collision is invisible
+  from this branch alone because the branch predates that merge. Numbering
+  follows landing order, so the unpublished ADR renumbers to **ADR-009**; the
+  file, its title, `docs/contents.md`, and this plan's M3 and round-2 entries
+  all move together. Detected by probing `git merge-tree` against `origin/main`
+  before opening the pull request, not by a gate.
+
+- **Then ADR-009 was taken too.** Renumbering to 009 was correct only against
+  the `origin/main` of 2026-09-24. While the pull request waited for review,
+  `main` gained `docs/adr-009-linux-build-test-runner-placement.md` via PR #534
+  — the same collision one number higher, and equally invisible from this
+  branch. Replaying this branch during the rebase onto `main` reproduced it:
+  both sides create `docs/adr-009-*`, so the merge conflicts on the file rename
+  and on the adjacent `docs/contents.md` entries. Numbering still follows
+  landing order, so the ADR moves again, to **ADR-010**. This is the second
+  renumber for the same ADR (008 → 009 → 010); the replayed commit does both
+  edits at once, so the intermediate number never appears in the new series.
+
+- **Then ADR-010, 011, and 012 were all taken.** Renumbering to 010 was
+  correct only against the `origin/main` of 2026-09-25. The rebase onto the
+  `origin/main` of 2026-10-16 found `docs/adr-010-behavioural-metadata-attribute-surface.md`,
+  `docs/adr-011-opt-in-identifier-artefact-emission.md`, and
+  `docs/adr-012-profile-selection-and-layering.md` already landed, so 010 was
+  the third number to collide. Numbering still follows landing order and the
+  unpublished ADR takes the next free number, **ADR-013**. This is the third
+  renumber (008 → 009 → 010 → 013), and the replayed commit performs it
+  directly so no intermediate number appears in the new series. ADR-012 also
+  narrows the earlier claim that `"2.0"` belongs to the identifier change
+  alone: `profiles` rides the unreleased version rather than moving it, so
+  `value_optional` is versioned the same way. The ADR records that reasoning
+  and points at ADR-012.
 
 - **`-ffalse` is rejected.** With `require_equals(true)`, an attached short
   value is an `ArgumentConflict`; only `-f=false` works. Worth one sentence in
