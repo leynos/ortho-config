@@ -112,9 +112,12 @@ _Table 1: Comparison of optional-value boolean metadata options._
 
 ## Known risks and limitations
 
-- Renderers that ignore `value_optional` will print a bare switch. The
-  PowerShell MAML renderer, the roff renderer, and the agent-context bridge are
-  updated here; any future renderer must consult the marker.
+- A renderer that honours `takes_value` and `value_name` but ignores
+  `value_optional` will print the required-value form (`--flag BOOL`), which
+  documents the rejected space-separated spelling rather than the accepted
+  `--flag=BOOL` one. The PowerShell MAML renderer, the roff renderer, and the
+  agent-context bridge are updated here; any future renderer must consult the
+  marker.
 - Booleans now publish `possible_values: ["true", "false"]`. Consumers that
   classify a non-empty `possible_values` list as an enumeration would
   misclassify booleans as enums. The agent-context bridge guards against this

@@ -200,8 +200,10 @@ therefore discarded that layer, and a lower-precedence file or environment
 value silently won instead.
 
 The defect was invisible in most applications because any other differing field
-made the two objects unequal. It surfaced with single-field configurations, and
-generally whenever the user restated a default:
+made the two objects unequal. It surfaced whenever the command line covered
+every defaulted field with a value equal to that field's default; a
+single-field configuration reaches that state as soon as the user restates the
+one default:
 
 ```plaintext
 # ACME_PORT=9000, struct default port = 8080

@@ -325,10 +325,10 @@ fn optional_value_paragraph(cli: &CliMetadata) -> String {
         .map(|long| format!("--{long}"))
         .or_else(|| cli.short.map(|short| format!("-{short}")))
     else {
-        return String::from(
-            "The value is optional: supplying it sets `true`, and an explicit \
-             `false` clears a lower-precedence `true`.",
-        );
+        return String::from(concat!(
+            "The value is optional: supplying it sets `true`, and an explicit ",
+            "`false` clears a lower-precedence `true`."
+        ));
     };
     format!(
         concat!(

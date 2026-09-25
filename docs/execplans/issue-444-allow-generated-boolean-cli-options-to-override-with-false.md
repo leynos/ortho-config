@@ -51,10 +51,13 @@ Observable success: a config file that sets `enabled = true` combined with
 - [x] M4 (Task 4): users-guide section, changelog entries, v0.10.0 migration
       guide sections (flag spellings, explicit-value precedence) with impact
       table and upgrade checklist.
-- [x] (2026-09-24) All seven deterministic gates green at `cb0a8c65`
-      (`check-fmt`, `typecheck`, `lint-clippy`, `lint-whitaker`, `test`,
-      `markdownlint`, `nixie`). Cleared the latent violations that clippy had
-      been masking: `shadow_reuse`, `self_named_module_files`,
+- [x] (2026-09-24) All six deterministic gates green at `cb0a8c65`:
+      `check-fmt`, `typecheck`, `lint`, `test`, `markdownlint`, `nixie`. The
+      count is six because `make lint` is a single target that runs
+      `lint-clippy` and `lint-whitaker` in sequence; entries below that name
+      those two separately are enumerating the checks inside that one gate.
+      Cleared the latent violations that clippy had been masking:
+      `shadow_reuse`, `self_named_module_files`,
       `shadow_unrelated` x2, `struct_excessive_bools`, `too_many_arguments`;
       split `cli_flags.rs` and `agent_context/mod.rs` for `module-max-lines`;
       corrected six `-ise` spellings to the house `-ize` form.
@@ -78,7 +81,7 @@ Observable success: a config file that sets `enabled = true` combined with
       flag and, when neither flag exists, names no spelling instead of the
       nonsense `the flag=false`; and the `--excited --port 3000` illustration
       no longer names a `port` field the example's `Config` does not declare.
-- [x] (2026-09-25) All seven gates green at `2cfc9bb1`. The scrutineer's run
+- [x] (2026-09-25) All six gates green at `2cfc9bb1`. The scrutineer's run
       caught one blocker the previous rounds had missed:
       `clippy::too_many_arguments` (5/4) on the new MAML test, because the
       rstest function took the `minimal_doc` fixture plus four `#[case]`
@@ -123,7 +126,7 @@ Observable success: a config file that sets `enabled = true` combined with
       `agent_context__fixture.json.snap` header. All are additive on both
       sides, so every resolution keeps both. The four hand-resolved surfaces
       are named in the gate report together with the test that covers each.
-- [x] (2026-09-25) All seven gates green at `e27e35fb`, on the rebased tree:
+- [x] (2026-09-25) All six gates green at `e27e35fb`, on the rebased tree:
       76 suites, 1337 passed, 0 failed, 0 panics, 0 `FAILED` markers, pytest 87
       passed / 5 skipped, and no pending snapshots. The count is up from 1159
       because main's policy surface now merges cleanly into this tree.
@@ -142,7 +145,7 @@ Observable success: a config file that sets `enabled = true` combined with
       `option_cases.rs` gains eight cases over `OptionBoolConfig`. Writing them
       exposed two further defects; both are fixed (see `Surprises &
       discoveries`), and all ten `parses_option_*` cases are green.
-- [x] (2026-09-25) Scrutineer ran the seven gates after the round-4 and
+- [x] (2026-09-25) Scrutineer ran the six gates after the round-4 and
       `Option<bool>` work. Five passed; two failed, both regressions this plan
       itself introduced. `make check-fmt` failed because `mdtablefix` wanted to
       reflow prose in this plan and in `docs/v0-10-0-migration-guide.md`, and
@@ -298,17 +301,22 @@ Observable success: a config file that sets `enabled = true` combined with
   needs metadata carrying `value_optional: true` with neither a long nor a
   short flag. No current fixture produces that, so the goldens never exercised
   the branch — the new unit test pins it directly rather than through a golden.
-- **`typos.toml` churn is not this branch's to commit.** The spellcheck gate
-  regenerates this tracked file through `typos-config-builder`, whose pinned
-  dictionary drifts ahead of the committed copy, so every gate run leaves it
-  dirty. The entries it currently adds are unrelated to this branch: CSS
-  alignment utilities, the camel-cased `currentColor`, and one entry that is
-  itself a misspelling appear nowhere in the tree. The sole exception is a
-  `tokio::test` attribute default, which is already recorded in
-  `docs/rstest-bdd-users-guide.md` and `typos.local.toml` on `main`. Three
+- **`typos.toml` cannot be pruned by hand, only committed at its fixed
+  point.** The spellcheck gate regenerates this tracked file through
+  `typos-config-builder`, whose pinned dictionary drifts ahead of the committed
+  copy, so every gate run leaves it dirty. The added entries are unrelated to
+  this branch: CSS alignment utilities, the camel-cased `currentColor`, and one
+  entry that is itself a misspelling appear nowhere in the tree. A review
+  finding asked for those unrelated entries to be dropped so the diff carried
+  only in-scope changes. That is not achievable, and the test is decisive:
+  restoring the file to `main` and re-running `make spellcheck` rewrites it,
+  byte for byte, back to the same content, because the generator derives it
+  from data this branch cannot change. The file is committed as that fixed
+  point instead, once verified to be additive within the ignore list, to leave
+  the overlay untouched, and to be the same bytes the gate reproduces. Three
   sibling worktrees, including one on an unrelated branch, carry the same
-  churn, with two of them byte-identical to each other. The file is therefore
-  left out of the commit; the spelling gate is green with it dirty.
+  churn, with two of them byte-identical to each other, which is independent
+  evidence that it is upstream dictionary drift rather than this branch's doing.
 
 - **A merge that supplies nothing failed for every struct shape, not just this
   branch's.** The generated declarative state derives `Default`, so its
@@ -355,8 +363,8 @@ Observable success: a config file that sets `enabled = true` combined with
   passes bare `--all`. This is pre-existing and out of scope. The file arrives
   from #419, which is an ancestor of `origin/main`; the failure reproduces with
   this branch's changes stashed, so it is not caused here; and `make test` runs
-  `--all-targets`, which excludes doctests, so the seven gates never exercise
-  it. A sibling branch, `harden-cargo-external-subcommand-doctest-20260924`,
+  `--all-targets`, which excludes doctests, so the six gates never exercise it.
+  A sibling branch, `harden-cargo-external-subcommand-doctest-20260924`,
   already carries a "Fix Cargo external subcommand doctest" commit, so the
   defect is owned elsewhere and is reported here rather than duplicated.
 
