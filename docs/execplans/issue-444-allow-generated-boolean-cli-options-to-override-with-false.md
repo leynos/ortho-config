@@ -121,7 +121,12 @@ Observable success: a config file that sets `enabled = true` combined with
       76 suites, 1337 passed, 0 failed, 0 panics, 0 `FAILED` markers, pytest 87
       passed / 5 skipped, and no pending snapshots. The count is up from 1159
       because main's policy surface now merges cleanly into this tree.
-- [ ] Push; draft PR.
+- [x] (2026-09-25) Pushed to
+      `origin/issue-444-allow-generated-boolean-cli-options-to-override-with-false`
+      and opened draft PR #532. The remote branch was still at the pre-rebase
+      merge base `c144641e`, so the push was a plain fast-forward and rewrote
+      no published history. `gh pr view` reports `MERGEABLE`, base `main`.
+- [ ] CodeRabbit `--agent` review of the rebased tree.
 
 ## Surprises & discoveries
 
