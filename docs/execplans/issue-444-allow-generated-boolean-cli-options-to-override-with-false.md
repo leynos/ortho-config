@@ -211,6 +211,20 @@ Observable success: a config file that sets `enabled = true` combined with
       letting the hook run rather than reasoning about whether prose is
       compliant.
 
+- [x] (2026-09-25) CodeRabbit round 6 reviewed `c23ce151` and returned nine
+      findings, which resolve to six distinct claims because 1/9, 2/7 and 6/8
+      share a site and a subject. Five of the six were actioned, none blocking:
+      the changelog had clap's `[=<BOOL>]` help notation where the roff renderer
+      prints `[=BOOL]`, the ADR described a marker-ignoring renderer as printing
+      a bare switch (true before `takes_value` became unconditional for
+      booleans), the migration guide stated the layering trigger more broadly
+      than it holds, the PowerShell fallback now uses `concat!`, and the gate
+      count is six throughout. The sixth asked for unrelated entries to be
+      pruned from `typos.toml`; it was declined, because restoring that file to
+      `main` and re-running `make spellcheck` rewrites it byte for byte — a test
+      run directly rather than argued. `check-fmt`, `markdownlint` (including
+      `spellcheck`), and the PowerShell unit tests were green over the fixes.
+
 ## Surprises & discoveries
 
 - **ADR-008 was already taken.** This branch minted
@@ -471,12 +485,14 @@ The trace chain from requirement to evidence runs:
 
 ## Outcomes & retrospective
 
-Status: **not yet complete.** Every acceptance criterion in issue #444 is
-implemented and covered, all seven gates have been green on the rebased tree at
-`e27e35fb`, and draft PR #532 is open against `main`. What remains is a
-docs-only delta: absorbing the `mdtablefix` reflow, correcting three en-GB
-spellings, and correcting the false `make lint` claim recorded in `Progress`.
-Once those re-run green, the plan is complete.
+Status: **complete, pending review.** Every acceptance criterion in issue #444
+is implemented and covered, all six gates have been green on the rebased tree,
+and draft PR #532 is open against `main`. The latest verified tree is
+`c23ce151`, whose gate run is recorded in `Progress`; the round-6 review fixes
+in `485b4fc9` are docs-and-prose only and were re-checked with `check-fmt`,
+`markdownlint` (which includes `spellcheck`), and the PowerShell unit tests.
+Six rounds of CodeRabbit review have been actioned; what remains is a further
+`--agent` pass over `485b4fc9` and whatever it raises.
 
 What was achieved, in the order the work forced it:
 
