@@ -13,14 +13,14 @@ helper require no changes.
 
 ## Impact at a glance
 
-| Change                                  | Affects                              | Required?        |
-| --------------------------------------- | ------------------------------------ | ---------------- |
-| Optional-value boolean flags            | Commands with `bool` CLI fields      | No; additive     |
-| Explicit CLI values always win          | Single-field configuration structs   | No; a defect fix |
-| Documentation IR version `1.1` to `2.0` | Consumers pinning the IR version     | No; accept `2.0` |
-| Injected environment sources            | Tests needing hermetic environments  | No; opt-in       |
-| Parser-faithful clap string defaults    | Fields using `cli_default_as_absent` | No; opt-in       |
-| Cargo external-subcommand helper        | Hand-built Cargo subcommands         | No; additive     |
+| Change                                  | Affects                                | Required?        |
+| --------------------------------------- | -------------------------------------- | ---------------- |
+| Optional-value boolean flags            | Commands with `bool` CLI fields        | No; additive     |
+| Explicit CLI values always win          | Commands that restate a struct default | No; a defect fix |
+| Documentation IR version `1.1` to `2.0` | Consumers pinning the IR version       | No; accept `2.0` |
+| Injected environment sources            | Tests needing hermetic environments    | No; opt-in       |
+| Parser-faithful clap string defaults    | Fields using `cli_default_as_absent`   | No; opt-in       |
+| Cargo external-subcommand helper        | Hand-built Cargo subcommands           | No; additive     |
 
 ## Adopt the opt-in agent-native policy check
 
@@ -542,8 +542,9 @@ name the second as `profiles: None`. Both are described above under
 - [ ] Review generated help text that asserted a bare `--flag` spelling.
 - [ ] Add `--flag=false` to any workflow that needs to clear a configured
   `true`; leave other invocations unchanged.
-- [ ] Audit single-field configurations for command lines that restate their
-  defaults, which now take effect instead of being discarded.
+- [ ] Audit command lines that restate defaults across every defaulted field,
+  which now take effect instead of being discarded. A single-field
+  configuration reaches this state as soon as its one field is restated.
 - [ ] Adopt injected environment sources and the Cargo helper only where the
   application needs them.
 
