@@ -10,6 +10,7 @@ use ortho_config::{
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
+use test_helpers::figment as figment_helpers;
 
 #[path = "support/layer_assertions.rs"]
 mod layer_assertions;
@@ -440,7 +441,7 @@ struct SingleFieldConfig {
 /// than surfacing as a distant merge mismatch.
 #[rstest]
 fn compose_layers_keeps_cli_layer_when_value_equals_default() -> Result<()> {
-    figment::Jail::try_with(|jail| {
+    figment_helpers::with_jail(|jail| {
         jail.clear_env();
         jail.set_env("APP_EXCITED", "true");
 
@@ -448,7 +449,9 @@ fn compose_layers_keeps_cli_layer_when_value_equals_default() -> Result<()> {
         let (layers, errors) = composition.into_parts();
 
         if !errors.is_empty() {
-            return Err(figment::Error::from("expected composition without errors"));
+            return Err(figment_helpers::figment_error(
+                "expected composition without errors",
+            ));
         }
         let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
         let expected = vec![
@@ -457,14 +460,14 @@ fn compose_layers_keeps_cli_layer_when_value_equals_default() -> Result<()> {
             MergeProvenance::Cli,
         ];
         if provenances != expected {
-            return Err(figment::Error::from(
+            return Err(figment_helpers::figment_error(
                 "an explicit CLI value equal to the default must still push a CLI layer",
             ));
         }
 
         let merged = SingleFieldConfig::merge_from_layers(layers).to_figment()?;
         if merged.excited {
-            return Err(figment::Error::from(
+            return Err(figment_helpers::figment_error(
                 "explicit --excited=false should clear the environment true",
             ));
         }
@@ -478,7 +481,7 @@ fn compose_layers_keeps_cli_layer_when_value_equals_default() -> Result<()> {
 /// the fix must preserve.
 #[rstest]
 fn compose_layers_omits_cli_layer_when_no_argument_is_supplied() -> Result<()> {
-    figment::Jail::try_with(|jail| {
+    figment_helpers::with_jail(|jail| {
         jail.clear_env();
         jail.set_env("APP_EXCITED", "true");
 
@@ -486,19 +489,21 @@ fn compose_layers_omits_cli_layer_when_no_argument_is_supplied() -> Result<()> {
         let (layers, errors) = composition.into_parts();
 
         if !errors.is_empty() {
-            return Err(figment::Error::from("expected composition without errors"));
+            return Err(figment_helpers::figment_error(
+                "expected composition without errors",
+            ));
         }
         let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
         let expected = vec![MergeProvenance::Defaults, MergeProvenance::Environment];
         if provenances != expected {
-            return Err(figment::Error::from(
+            return Err(figment_helpers::figment_error(
                 "an absent flag must not push a CLI layer",
             ));
         }
 
         let merged = SingleFieldConfig::merge_from_layers(layers).to_figment()?;
         if !merged.excited {
-            return Err(figment::Error::from(
+            return Err(figment_helpers::figment_error(
                 "the environment value should survive an absent flag",
             ));
         }
