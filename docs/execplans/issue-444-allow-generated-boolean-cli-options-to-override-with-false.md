@@ -84,9 +84,14 @@ Observable success: a config file that sets `enabled = true` combined with
       rstest function took the `minimal_doc` fixture plus four `#[case]`
       parameters. Grouping the two expected phrases into a tuple brings it to
       four. `cargo test` had reported a false green on this lint, since
-      `too_many_arguments` is not raised by the `RUSTFLAGS="-D warnings"` test
-      build; `make lint` also stops at `lint-clippy` and never reaches
-      `lint-whitaker`, so whitaker was re-run separately and is green.
+      `too_many_arguments` is a Clippy-only lint and is not raised by the
+      `RUSTFLAGS="-D warnings"` test build. An earlier note in this plan
+      claimed `make lint` was complicit, on the theory that it stops at
+      `lint-clippy` and never reaches `lint-whitaker`. That claim is false:
+      `Makefile:99` defines `lint: lint-clippy lint-whitaker`, identically on
+      `origin/main`. The single false green was `cargo test`'s, and the lesson
+      is to read the Makefile's target definition before blaming the build
+      system for a gate that did not run.
 - [x] (2026-09-25) CodeRabbit round 3 returned thirteen findings (two of them
       duplicates of the same `Invocation` refactor). All actioned: five `-ise`
       spellings on branch-added lines corrected to the house `-ize` form; the
@@ -137,7 +142,28 @@ Observable success: a config file that sets `enabled = true` combined with
       `option_cases.rs` gains eight cases over `OptionBoolConfig`. Writing them
       exposed two further defects; both are fixed (see `Surprises &
       discoveries`), and all ten `parses_option_*` cases are green.
-- [ ] Re-run the seven gates and push.
+- [x] (2026-09-25) Scrutineer ran the seven gates after the round-4 and
+      `Option<bool>` work. Five passed; two failed, both regressions this plan
+      itself introduced. `make check-fmt` failed because `mdtablefix` wanted to
+      reflow prose in this plan and in `docs/v0-10-0-migration-guide.md`, and
+      `make markdownlint` failed at the spellcheck stage on three words in this
+      plan that had been written with the British `-ise` suffix where the house
+      en-GB-oxendict style requires `-ize`. Both are fixed below.
+- [x] (2026-09-25) Corrected a false claim this plan had made about the build
+      system: it asserted `make lint` stops at `lint-clippy` and never reaches
+      `lint-whitaker`. `Makefile:99` defines `lint: lint-clippy lint-whitaker`,
+      identically on `origin/main`, so both targets always run. The incorrect
+      note had been used to explain why whitaker caught something the gates
+      missed; the real explanation is that the `too_many_arguments` false green
+      belonged to `cargo test`, which builds with `--all-targets` and does not
+      raise that Clippy-only lint.
+- [x] (2026-09-25) Markdown gates re-run green over the corrected docs:
+      `check-fmt` (74 files unchanged, `cargo fmt` and `mdtablefix` clean) and
+      `markdownlint` (75 files, 0 errors, spellcheck clean). The first
+      spellcheck fix was itself instructive: describing the three bad spellings
+      inline re-tripped the same gate, because the tokenizer reads inline code
+      spans. The note now describes the fault without reproducing it.
+- [ ] Push and request CodeRabbit round 5.
 
 ## Surprises & discoveries
 
@@ -245,17 +271,17 @@ Observable success: a config file that sets `enabled = true` combined with
   branch's.** The generated declarative state derives `Default`, so its
   accumulator starts as `serde_json::Value::Null`; `merge_layer` deliberately
   skips empty maps rather than seating it; so `finish` handed `Null` to the
-  deserialiser and reported `invalid type: null, expected struct …`. Calling
+  deserializer and reported `invalid type: null, expected struct …`. Calling
   `merge_from_layers([])` reproduces it for a defaulted one-field struct, an
   all-`Option` struct, and an empty struct alike, and every file in the path —
   `generate/declarative/merge_tokens.rs`, `guards.rs`,
   `generate/declarative/mod.rs`, `src/declarative/*` — is byte-identical to
   `main`. `Null` can carry no other meaning there: a layer whose whole value is
   `null` is rejected by the non-object guard in `merge_layer`. The fix is one
-  guard in the generated `finish`: normalise a `Null` accumulator to an empty
-  object before deserialising. The negative control matters as much as the
-  fix: a struct with a required field must still report `missing field …`,
-  which the new test pins.
+  guard in the generated `finish`: normalize a `Null` accumulator to an empty
+  object before deserializing. The negative control matters as much as the fix:
+  a struct with a required field must still report `missing field …`, which the
+  new test pins.
 - **`OptionConfig` passed only by accident.** It is unprefixed, so it builds
   `CsvEnv::raw()`, whose object is non-empty whenever *any* environment
   variable is set; that non-empty layer seated the accumulator and hid the
@@ -278,6 +304,18 @@ Observable success: a config file that sets `enabled = true` combined with
   other spellings: `-f=false` and `--flag` parse, `--flag=bogus` raises
   `InvalidValue`, and `-ffalse` raises `ArgumentConflict` as this plan already
   said.
+
+- **A doctest fails, and no gate can see it.** `cargo test --doc` fails on
+  `ortho_config/src/cargo/mod.rs - cargo::external_subcommand (line 90)` with
+  `ErrorKind::InvalidValue` on `--all <all>`: the example declares
+  `.arg(clap::Arg::new("all").long("all"))`, which takes a value, and then
+  passes bare `--all`. This is pre-existing and out of scope. The file arrives
+  from #419, which is an ancestor of `origin/main`; the failure reproduces with
+  this branch's changes stashed, so it is not caused here; and `make test` runs
+  `--all-targets`, which excludes doctests, so the seven gates never exercise
+  it. A sibling branch, `harden-cargo-external-subcommand-doctest-20260924`,
+  already carries a "Fix Cargo external subcommand doctest" commit, so the
+  defect is owned elsewhere and is reported here rather than duplicated.
 
 ## Decision log
 
@@ -323,6 +361,38 @@ Observable success: a config file that sets `enabled = true` combined with
 - Downstream struct-literal consumers of `CliMetadata` face a source break
   until roadmap item 13.1.1 (constructors) lands.
 
+## Conformance basis
+
+The upstream artefact is GitHub issue #444. There is no separate Terms of
+Reference or technical design document for this work, so the issue body is the
+requirement source and its acceptance criteria are quoted verbatim in
+`Purpose / Big Picture`.
+
+Governing documents this plan conforms to:
+
+- `docs/agent-native-cli-design.md` §5 — no auto-generated `--no-x` negation
+  pairs. This is why the plan adopts a single value-taking flag rather than a
+  two-flag pair.
+- `docs/adr-003-documentation-ir-schema-ownership.md` — the documentation IR
+  and the `cargo-orthohelp` schema mirror move together; new fields need an
+  explicit default so older derives keep parsing.
+- `docs/adr-009-optional-value-boolean-cli-metadata.md` — added by this branch;
+  records the `value_optional` marker, the IR version bump, and the rejected
+  alternatives.
+- `AGENTS.md` — 400-line code files, 80-column Markdown prose, en-GB-oxendict
+  spelling.
+
+The trace chain from requirement to evidence runs:
+
+```plaintext
+#444 (bool and Option<bool>; absent/true/false/file/env/CLI-false)
+  -> EP-M1 derive macro        -> ortho_config_macros unit tests
+  -> EP-M2 runtime precedence  -> clap_integration parsing.rs + option_cases.rs
+  -> EP-M2b empty accumulator  -> declarative_merge_empty_layers.rs
+  -> EP-M3 documentation IR    -> docs_ir.rs + renderer goldens
+  -> EP-M4 prose and migration -> markdownlint + executable doc example
+```
+
 ## Verification plan
 
 - M1: `cargo test -p ortho_config_macros` — attribute assertions for both
@@ -347,3 +417,43 @@ Observable success: a config file that sets `enabled = true` combined with
 - M4: `make markdownlint` for prose and the tested-example fences; the
   executable documentation example runs under `make test`.
 - Full commit gates run through `scrutineer` before each CodeRabbit review.
+
+## Outcomes & retrospective
+
+Status: **not yet complete.** Every acceptance criterion in issue #444 is
+implemented and covered, all seven gates have been green on the rebased tree at
+`e27e35fb`, and draft PR #532 is open against `main`. What remains is a
+docs-only delta: absorbing the `mdtablefix` reflow, correcting three en-GB
+spellings, and correcting the false `make lint` claim recorded in `Progress`.
+Once those re-run green, the plan is complete.
+
+What was achieved, in the order the work forced it:
+
+The ticket asked for one thing — a generated spelling for an explicit `false` —
+and the implementation of it exposed two pre-existing defects that no gate
+could see. Both were found by trying to *use* the feature rather than by
+reading the code, and both were fixed here because the feature is unsound
+without them. The first is the layering guard: it compared whole parsed
+objects, so a command line that restated a struct default discarded its own
+layer. The second is the empty accumulator: a merge supplying no values at all
+reached the deserializer as `null`. The second is the more instructive, because
+`OptionConfig` passes it by accident — `CsvEnv::raw()` always yields a
+non-empty object, which seats the accumulator. Any prefixed, all-optional
+struct hits the failure as soon as nothing supplies a value, which is precisely
+the "absent" case this ticket names.
+
+Three lessons worth carrying forward. **A test that cannot fail is worse than
+no test**: the `Option<bool>` file rows initially passed vacuously because the
+fixture struct was `OPTL_`-prefixed and therefore read a different dotfile than
+the cases wrote; non-vacuity was established by mutation, not by assertion.
+**Verify a defect is pre-existing before disclaiming it**: the `cargo/mod.rs`
+doctest failure was shown to reproduce with this branch's changes stashed, and
+`make test` uses `--all-targets`, which is why no gate sees it. **Read the
+build system rather than assuming its behaviour**: the plan asserted
+`make lint` short-circuits before whitaker; `Makefile:99` says otherwise, and
+that claim had been used to explain a false green it did not cause.
+
+The codebase was left healthy with respect to this change: `make clippy` and
+the Whitaker suite are green, no lint or type violations remain on branch
+lines, and the two latent Clippy violations the boolean work would have masked
+(`shadow_reuse`, `too_many_arguments`) were cleared rather than suppressed.
