@@ -190,10 +190,19 @@ names is worse than no test, because it retires the question.
   and one misspelled identifier that the pattern preserves verbatim — and the
   three that do match are a CLI colour-flag pattern, `HashiCorp`, and a test
   helper name. The regeneration is deterministic and the gate passes with or
-  without it, so it is not a requirement of this change; the file was reverted
-  rather than committed as unrelated churn. The pinned builder (`v0.1.1`)
-  evidently draws on a shared base dictionary broader than this repository, and
-  the tracked copy predates that.
+  without it, so it is not a requirement of this change. The pinned builder
+  (`v0.1.1`) evidently draws on a shared base dictionary broader than this
+  repository, and the tracked copy predates that.
+
+  **Reverting it was the wrong call, and this plan recorded that wrong call.**
+  The regeneration is a fixed point (`make spellcheck` twice yields identical
+  bytes), it is additive-only, and nothing in CI drift-checks it — so a
+  committed copy is never compared against a fresh one. What settles the
+  question is the Stop hook: it runs `make markdownlint` whenever Markdown
+  changes and then blocks on the dirty tree that gate leaves behind. A revert
+  therefore regenerates on the next run and blocks again, forever. The file is
+  committed at `bc869e61`; `typos.local.toml`, the file to edit for a real
+  exception, is untouched. Main carries the same kind of commit (`60cdb15f`).
 - Quoting those patterns in this plan was itself a mistake: the misspelled
   identifier tripped `spellcheck` in prose even though it is a literal from a
   generated file. Describe such a token rather than reproducing it.
