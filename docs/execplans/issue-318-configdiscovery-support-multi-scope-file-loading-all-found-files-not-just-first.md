@@ -107,6 +107,24 @@ contributes once, at the lowest-precedence position it occupies.
       (run `36070786646`, failure), and the fix above is `ce8f4621` (run
       `36079995528`, success).
 
+- [x] Final head green on Windows. Run `36084362402` at `fd9459d1`, the head
+      the plan file's own last commit produced, all five jobs success. This run
+      covers more than the one above, because the three packaging jobs test as
+      well: 1,316 / 1,292 / 1,322 / 1,294 tests, all passing, 10, 10, 15 and 15
+      skipped, with 13, 7, 8 and 6 slow. Zero lock waits and zero cancellations
+      across all four. The 96 targeted assertions named in this plan — the 24
+      scoped, stacking and discovery-attribute tests times four lanes — all pass,
+      including `compose_layers_remains_first_wins` four times over, which is the
+      Windows assertion this work began from.
+
+      The same two `##[warning]` lines appear, and the log names the source
+      precisely enough to settle the question of whose they are: both are
+      emitted by the "Complete job" step, which is the runner's own, and the
+      action it complains about is reached only through
+      `leynos/shared-actions`' coverage actions. This repository's `ci.yml`
+      names no upload action of its own at all, so the deprecation is
+      inherited rather than owned, and cannot be fixed here.
+
 ## Implementation notes
 
 The scoped-composition code moved out of `load.rs` into
@@ -179,6 +197,12 @@ names is worse than no test, because it retires the question.
 - Quoting those patterns in this plan was itself a mistake: the misspelled
   identifier tripped `spellcheck` in prose even though it is a literal from a
   generated file. Describe such a token rather than reproducing it.
+- The same trap caught this plan a second time, from the opposite direction.
+  Naming an external action to say it is *not* used still puts its US spelling
+  in prose, and `spellcheck` reads prose, not intent: it failed on the word for
+  a build output immediately after the sentence denying any part in it. A name
+  the gate rejects cannot appear in a sentence about that name, whatever the
+  sentence claims. Say what the thing does instead.
 - The SourceCoder review's "all applicable files" reading of #318 is correct and
   is the blocking objective, not an optional enhancement.
 - No conflicts existed on the rebase because the branch's `parse/mod.rs` edit
