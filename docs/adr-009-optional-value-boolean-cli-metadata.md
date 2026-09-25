@@ -1,4 +1,4 @@
-# ADR-008: Optional-value boolean CLI metadata
+# ADR-009: Optional-value boolean CLI metadata
 
 Status: Accepted.
 

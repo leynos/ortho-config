@@ -46,7 +46,7 @@ Observable success: a config file that sets `enabled = true` combined with
       `hello_world` suites green afterwards.
 - [x] M2 (Task 2): runtime merge/precedence verified with integration fixtures
       (10-case matrix in `clap_integration` plus the doc-example flow).
-- [x] M3 (Task 3): docs IR `value_optional` marker, ADR-008, renderers,
+- [x] M3 (Task 3): docs IR `value_optional` marker, ADR-009, renderers,
       goldens.
 - [x] M4 (Task 4): users-guide section, changelog entries, v0.10.0 migration
       guide sections (flag spellings, explicit-value precedence) with impact
@@ -64,7 +64,7 @@ Observable success: a config file that sets `enabled = true` combined with
       now joins the flag (`--flag[=<BOOL>]`, matching clap's own
       `require_equals` suffix) with a regression test proven non-vacuous; the
       406-line doc-example test file split into
-      `documentation_examples/boolean_override.rs`; ADR-008 links made
+      `documentation_examples/boolean_override.rs`; ADR-009 links made
       same-directory; the migration-guide "Before" block now shows the real
       `TooManyValues` parse failure instead of output the old code could not
       produce; and the ExecPlan itself is indexed in `docs/contents.md`.
@@ -109,6 +109,17 @@ Observable success: a config file that sets `enabled = true` combined with
 - [ ] Push; draft PR.
 
 ## Surprises & discoveries
+
+- **ADR-008 was already taken.** This branch minted
+  `docs/adr-008-optional-value-boolean-cli-metadata.md`, but `origin/main`
+  gained `docs/adr-008-agent-native-policy-configuration.md` (dated 2026-08-12)
+  via PR #416 while this branch was in flight. Two different ADRs would
+  therefore have claimed number 008 on merge, and the collision is invisible
+  from this branch alone because the branch predates that merge. Numbering
+  follows landing order, so the unpublished ADR renumbers to **ADR-009**; the
+  file, its title, `docs/contents.md`, and this plan's M3 and round-2 entries
+  all move together. Detected by probing `git merge-tree` against `origin/main`
+  before opening the pull request, not by a gate.
 
 - **`-ffalse` is rejected.** With `require_equals(true)`, an attached short
   value is an `ArgumentConflict`; only `-f=false` works. Worth one sentence in
