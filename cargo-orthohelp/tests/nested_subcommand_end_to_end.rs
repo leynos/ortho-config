@@ -151,7 +151,7 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
         .ok_or("admin subcommand missing from IR")?;
     assert_app_names(
         array_field(admin, "subcommands")?,
-        &["audit", "grant-access"],
+        &["audit", "grant-access", "purge", "prune"],
     )?;
     Ok(())
 }
@@ -167,6 +167,8 @@ fn assert_man_contains_nested_pages(out_dir: &Utf8PathBuf) -> Result<(), TestErr
     ensure_contains(artefact, ".SH COMMANDS")?;
     ensure_contains(artefact, ".SS audit")?;
     ensure_contains(artefact, ".SS grant-access")?;
+    ensure_contains(artefact, ".SS purge")?;
+    ensure_contains(artefact, ".SS prune")?;
     Ok(())
 }
 

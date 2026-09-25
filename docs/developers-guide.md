@@ -142,6 +142,28 @@ identifiers, finding codes, severities, and source locations machine-stable.
 Extract the report model into `ortho_config` only after a new ADR approves
 shared ownership.
 
+The `--check-agent-native` lint runs without the bridge build and writes
+exactly one JSON `PolicyReport` document atomically to `policy-report.json` in
+the output directory, plus a one-line human-readable summary to stderr. It
+evaluates the package's policy configuration; the bridge-driven behaviour rules
+below are exported as library API because they need a compiled agent context
+that a policy-only run deliberately does not build.
+
+The behaviour rule IDs live under `agent-native.behaviour.*` and their machine
+codes are stable across runs:
+
+- `agent-native.behaviour.destructive-bypass` / `destructive_bypass_missing`;
+- `agent-native.behaviour.prompt-bypass` / `prompt_bypass_missing`;
+- `agent-native.behaviour.bypass-unknown` / `bypass_flag_unknown`;
+- `agent-native.behaviour.undeclared` / `interaction_unknown` and
+  `mutation_unknown`.
+
+`cargo_orthohelp::policy::rules::behaviour::check_behaviour(context, mode)` is
+the entry point, and it is total: `PolicyMode::Off` returns an empty report
+without evaluating any rule. Each `PolicyResult.location` is `null` because
+agent context carries no source spans; keep the `message` self-contained
+(command path plus the exact annotation to add).
+
 Use `rstest` for schema unit tests. Add `rstest-bdd` behavioural scenarios and
 end-to-end tests when a change affects observable CLI behaviour, generated
 artefacts, persisted output, integration contracts, stdout, stderr, or exit
@@ -196,6 +218,20 @@ ownership decision.
 
 Treat `AgentInput.default` as display-only. It is normalized for stable
 goldens, but it is not executable or machine-parseable.
+
+`AgentCommand` carries the declared behaviour surface populated by the bridge
+from the documentation IR `behaviour` block:
+
+- `interaction_mode` — `InteractionMode::Unknown` when undeclared;
+- `mutation_effect` — `MutationEffect::Unknown` when undeclared;
+- `bypass_flag` — `Option<String>`, explicit `null` when absent;
+- `dry_run_flag` — `Option<String>`, explicit `null` when absent.
+
+The bridge maps IR `InteractionKind`/`MutationKind` onto the agent-context
+enums, copying `bypass` and `dry_run` verbatim. It never infers these values
+from command names, verbs, or flags: absence stays `unknown`/`null` (design doc
+§8.1). The derive-side keys and grammar are recorded in
+[ADR-009](adr-009-behavioural-metadata-attribute-surface.md).
 
 Evolve the schema through the compatibility policy in
 [agent-native-cli-design.md](agent-native-cli-design.md) §8.2. Bump
@@ -989,6 +1025,8 @@ a no-source-build policy, so every release must carry prebuilt archives that
 `cargo binstall` can resolve. `.github/workflows/release.yml` publishes them
 for five targets, each built on a runner of its own architecture and operating
 system rather than cross-compiled:
+
+*Table: `cargo-orthohelp` release targets and native runners.*
 
 | Target                      | Runner             |
 | --------------------------- | ------------------ |

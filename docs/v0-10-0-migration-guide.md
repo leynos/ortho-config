@@ -3,10 +3,10 @@
 ## Who should read this
 
 Read this guide when adopting source-aware environment merging, parser-faithful
-clap string defaults, or the Cargo external-subcommand helper. Existing callers
-can upgrade without changing their loading code: process-backed behaviour
-remains the default, and applications that do not use the Cargo helper require
-no changes.
+clap string defaults, agent-native behaviour metadata, or the Cargo
+external-subcommand helper. Existing callers can upgrade without changing their
+loading code: process-backed behaviour remains the default, and applications
+that do not use the new opt-in metadata or Cargo helper require no changes.
 
 ## Adopt the opt-in agent-native policy check
 
@@ -127,6 +127,42 @@ No migration is required for fields using only typed defaults. For fields that
 duplicated a string default in both clap and `#[ortho_config(default = ...)]`,
 the duplicate can be removed after confirming that the field shape and parser
 are supported by this guide.
+
+## Declare agent-native command behaviour
+
+Add a struct-level `behaviour(...)` declaration when an agent needs explicit
+interaction, mutation, bypass, or dry-run metadata:
+
+```rust
+#[derive(ortho_config::OrthoConfig)]
+#[ortho_config(
+    prefix = "APP",
+    behaviour(
+        interaction = "interactive",
+        mutation = "delete",
+        bypass = "--force",
+        dry_run = "--dry-run"
+    )
+)]
+struct PurgeArgs {
+    // ...
+}
+```
+
+The declaration is carried into documentation IR version 1.2 and then into
+agent-context schema v1. The IR change is additive: a 1.1 reader ignores the new
+`behaviour` block, while a 1.2 reader accepts a 1.1 document with the block
+absent. `bypass_flag` and `dry_run_flag` remain nullable agent-context fields;
+when interaction or mutation is not declared, the corresponding values remain
+`unknown`. No interaction or mutation semantics are inferred from command names
+or flags.
+
+Opt into policy checking with `--check-agent-native`. The enforcement mode
+comes from `[package.metadata.ortho_config.policy]` and defaults to `off`; a
+`--policy-mode <off|warn|deny>` override applies to the report. The check writes
+`policy-report.json` atomically to the output directory and a human-readable
+summary to stderr. Warnings are non-fatal, while deny findings report a policy
+violation and exit non-zero after the report has been written.
 
 ## Adopt the Cargo external-subcommand helper
 

@@ -220,9 +220,8 @@ directly.
 
 ### 3.3 Agent-native lint policy
 
-The lint policy is the enforcement layer. It should be exposed through
-`cargo-orthohelp` and should also be reusable by tests or continuous
-integration.
+The lint policy is the enforcement layer. It is exposed through
+`cargo-orthohelp` and is reusable by tests or continuous integration.
 
 The policy-report schema is initially owned by `cargo_orthohelp::policy`,
 including `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. This keeps warnings, hard
@@ -230,22 +229,24 @@ failures, source locations, rule identifiers, machine-readable codes, and mode
 handling close to the reference CLI that emits them. A later ADR can extract a
 shared report model if downstream libraries need to construct identical reports.
 
-The planned command shape is:
+The implemented command is:
 
 ```console
-cargo orthohelp --check-agent-native
+cargo orthohelp --check-agent-native [--policy-mode <off|warn|deny>]
 ```
 
-The policy should support `off`, `warn`, and `deny` modes. Early adoption
-should default to warnings so existing users can see the work required before
-turning on hard failures.
+The enforcement mode comes from `[package.metadata.ortho_config.policy]` and
+defaults to `off`; `--policy-mode` overrides it for the report and requires the
+check flag. The check resolves the package manifest without the bridge build,
+so it also runs for a package that has no `root_type` or library target.
 
-`cargo orthohelp --check-agent-native` always emits a machine-stable policy
-report written atomically to the output directory, and prints a short human
-summary to standard error. Tests and CI should parse `rule_id` and `code` for
-deterministic handling; prose in `message` is explanatory and may improve
-without changing the machine contract.
+`cargo orthohelp --check-agent-native` always writes a machine-stable policy
+report atomically to `policy-report.json` in the output directory, and prints a
+short human summary to standard error. Tests and CI should parse `rule_id` and
+`code` for deterministic handling; prose in `message` is explanatory and may
+improve without changing the machine contract.
 
+<!-- markdownlint-disable MD013 -->
 ```json
 {
   "version": "1",
@@ -264,7 +265,7 @@ without changing the machine contract.
   ],
   "summary": {
     "off": 0,
-    "warn": 1,
+    "warn": 2,
     "deny": 0,
     "total": 1
   },
@@ -285,6 +286,7 @@ without changing the machine contract.
   }
 }
 ```
+<!-- markdownlint-enable MD013 -->
 
 Each result must contain:
 
@@ -296,11 +298,13 @@ Each result must contain:
   repository-relative or package-relative path, and whose optional `range`
   holds one-based `start`/`end` positions (matching the shipped
   `cargo_orthohelp::policy` types rather than the draft's flat `file`/`range`
-  pair).
+  pair). The behaviour lint runs over agent context, which carries no source
+  spans, so its findings use `null`.
 
 Mode handling is direct: `off` suppresses checks, `warn` emits findings without
-failing the command, and `deny` exits with a validation-class failure when any
-deny-level finding is present.
+failing the command, and `deny` exits with code 3 when any deny-level finding
+is present. Runtime errors keep exit code 1 and clap usage errors keep exit
+code 2.
 
 The configuration surface is `[package.metadata.ortho_config.policy]` in the
 target package's `Cargo.toml` (see ADR-008). The enforcement default is `off`
@@ -423,6 +427,12 @@ The preferred non-interactive flag is `--no-input`. The preferred destructive
 bypass flag is `--force`. If a project chooses a different convention, it must
 configure that convention once and expose it in agent context.
 
+This is realized in the derive attribute surface as
+`behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
+flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
+[ADR-009](adr-009-behavioural-metadata-attribute-surface.md) and the §8.1 table
+below for the defaulting and compatibility contract.
+
 ### 6.2 Structured output
 
 Data-returning commands should support `--json`. Structured data belongs on
@@ -515,6 +525,12 @@ Mutating commands should declare whether they are read-only, write, delete, or
 submit asynchronous work. Destructive commands should declare their
 confirmation bypass flag. Consequential commands should declare whether
 `--dry-run` exists.
+
+This is realized in the derive attribute surface as `behaviour(mutation = ...)`
+with the optional `behaviour(dry_run = ...)` flag, and in agent context as
+`mutation_effect` plus `dry_run_flag`. See
+[ADR-009](adr-009-behavioural-metadata-attribute-surface.md) for the attribute
+grammar and the no-inference rule.
 
 Create-like commands should prefer idempotency tokens or natural keys where the
 application domain supports them. OrthoConfig should model and lint the
@@ -635,7 +651,7 @@ table-stakes agent-native behaviours:
   policy modes;
 - stable exit classes documented in its README;
 - atomic writes for generated files;
-- agent-native lint and agent-context output once the metadata exists.
+- agent-native lint and agent-context output from the compiled metadata.
 
 This gives downstream users an executable reference rather than only a design
 document.
@@ -775,7 +791,6 @@ Schema v1 history:
 
 The design and roadmap updates must address these known gaps:
 
-- no agent-native lint command exists;
 - the improved `MissingRequiredValues` diagnostic is reconciled as proposed
   phase 7 work, but is not yet implemented;
 - `cargo-orthohelp` has no structured `--json` result mode;

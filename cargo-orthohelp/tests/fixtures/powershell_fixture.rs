@@ -1,12 +1,14 @@
 //! Shared fixture metadata for `PowerShell` golden tests.
 
 use cargo_orthohelp::ir::{LocalizedDocMetadata, LocalizedHeadings, LocalizedSectionsMetadata};
-use cargo_orthohelp::schema::{CliMetadata, DefaultValue, EnvMetadata, FileMetadata, ValueType};
+use cargo_orthohelp::schema::{
+    CliMetadata, DefaultValue, EnvMetadata, FileMetadata, ORTHO_DOCS_IR_VERSION, ValueType,
+};
 
 /// Builds minimal localized metadata used by `PowerShell` golden tests.
 pub(crate) fn minimal_doc() -> LocalizedDocMetadata {
     LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
         locale: "en-US".to_owned(),
         app_name: "fixture".to_owned(),
         bin_name: None,

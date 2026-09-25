@@ -815,6 +815,129 @@ cargo orthohelp --check-agent-native --out-dir out
 jq -e '.mode != "off"' out/policy-report.json
 ```
 
+## Declare behaviour metadata for agents
+
+Commands that prompt or mutate state should declare that behaviour so agents
+can decide whether an invocation is safe before running it. Add a struct-level
+`behaviour(...)` attribute to the command's arguments struct:
+
+<!-- tested-example: guide-behaviour-metadata -->
+```rust
+#[derive(OrthoConfig)]
+#[ortho_config(
+    prefix = "APP",
+    behaviour(
+        interaction = "interactive",
+        mutation = "delete",
+        bypass = "--force",
+        dry_run = "--dry-run"
+    )
+)]
+struct PurgeArgs {
+    /* ... */
+}
+```
+
+Supported keys and values:
+
+- `interaction = "non_interactive"` or `"interactive"` — whether the command
+  can prompt;
+- `mutation = "read_only"`, `"write"`, `"delete"`, or `"submit"` — the
+  mutation boundary;
+- `bypass = "--force"` — the confirmation/prompt bypass flag (must match
+  `--[a-z0-9]+(-[a-z0-9]+)*`);
+- `dry_run = "--dry-run"` — the dry-run flag name (must match the same
+  grammar).
+
+The declaration flows into the generated documentation IR and, through the
+`cargo-orthohelp` bridge, into agent context as `interaction_mode`,
+`mutation_effect`, `bypass_flag`, and `dry_run_flag`. Commands left unannotated
+report `"unknown"` for the two enums and `null` for the two flags; the tool
+never infers these facts from command names or flags.
+
+`interaction = "non_interactive"` combined with a `bypass` declaration is a
+compile error: a command that never prompts has nothing to bypass.
+
+## Lint the declared behaviour
+
+The 7.2.1 behaviour rules are exported by `cargo_orthohelp::policy::rules` as
+`check_behaviour(context, mode) -> PolicyReport`. They consume a compiled agent
+context rather than a package manifest, which is why they are a library API
+instead of part of the checks described above: the policy-only run deliberately
+skips the bridge build, and the behaviour rules need its output.
+
+<!-- tested-example: guide-check-command -->
+```rust
+use cargo_orthohelp::policy::PolicyMode;
+use cargo_orthohelp::policy::rules::behaviour::check_behaviour;
+
+let report = check_behaviour(&agent_context, PolicyMode::Warn);
+assert!(report.results.iter().all(|result| result.location.is_none()));
+```
+
+Each behaviour finding carries a stable `rule_id` and `code`. `location` is
+always `null` for now: agent context carries no source spans, so the `message`
+is the entire operator experience and names the command path plus the exact
+annotation to add. A report produced by the rule set looks like this:
+
+<!-- markdownlint-disable MD013 -->
+<!-- tested-example: guide-check-report -->
+```json
+{
+  "version": "1",
+  "tool": "cargo-orthohelp",
+  "mode": "warn",
+  "results": [
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "interaction_unknown",
+      "severity": "warn",
+      "message": "command `purge` has undeclared interaction behaviour; add `behaviour(interaction = \"non_interactive\")` or `behaviour(interaction = \"interactive\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "mutation_unknown",
+      "severity": "warn",
+      "message": "command `purge` has undeclared mutation boundary; add `behaviour(mutation = \"read_only\")`, `behaviour(mutation = \"write\")`, `behaviour(mutation = \"delete\")`, or `behaviour(mutation = \"submit\")` to its arguments struct",
+      "location": null
+    }
+  ],
+  "summary": { "off": 0, "warn": 2, "deny": 0, "total": 2 },
+  "exceptions": [],
+  "vocabulary": {
+    "verbs": ["get", "list", "create", "update", "delete", "jobs", "profile", "feedback"],
+    "flags": ["--json", "--no-input", "--force", "--dry-run", "--limit", "--cursor", "--wait", "--profile", "--deliver"]
+  }
+}
+```
+<!-- markdownlint-enable MD013 -->
+
+The rule set contains four rules:
+
+- `agent-native.behaviour.destructive-bypass` / `destructive_bypass_missing` —
+  a `mutation = "delete"` command that declares no bypass;
+- `agent-native.behaviour.prompt-bypass` / `prompt_bypass_missing` — an
+  `interaction = "interactive"` command that declares no bypass;
+- `agent-native.behaviour.bypass-unknown` / `bypass_flag_unknown` — a declared
+  bypass that matches no declared input, which is contradiction detection
+  between two declarations rather than name inference;
+- `agent-native.behaviour.undeclared` / `interaction_unknown` and
+  `mutation_unknown` — omitted metadata, which stays undeclared.
+
+Findings follow command-path order. A command declared `non_interactive` is
+exempt from `destructive-bypass`: it cannot prompt, so the declaration itself
+is the approved non-interactive path. `PolicyMode::Off` returns an empty report
+without evaluating any rule. Annotate incrementally, starting with destructive
+commands:
+
+1. Declare `behaviour(mutation = "delete", bypass = "--force", ...)` on each
+   destructive command's arguments struct.
+2. Add `interaction` and other `mutation` declarations as the command surface
+   stabilizes.
+3. Run the check in warning mode before enforcing it in continuous
+   integration.
+
 ## Use an aliased dependency
 
 Cargo permits dependency aliases. In v0.9.0 the derive macros can generate

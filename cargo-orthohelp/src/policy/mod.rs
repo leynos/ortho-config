@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub mod check;
 pub mod config;
 pub mod evaluate;
+pub mod rules;
 pub mod vocabulary;
 
 pub use config::{ExceptionKind, PolicyConfig, PolicyException, PolicyInputs};

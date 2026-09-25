@@ -14,6 +14,7 @@ pub(super) fn nested_metadata() -> DocMetadata {
         about_id: "root.about",
         fields: vec![string_cli_field("global", "global", None, true)],
         subcommands: vec![version_metadata(), admin_metadata(), greet_metadata()],
+        behaviour: None,
     })
 }
 
@@ -44,6 +45,7 @@ fn admin_metadata() -> DocMetadata {
                 vec![bool_cli_field("dry_run", "dry-run")],
             ),
         ],
+        behaviour: None,
     })
 }
 
@@ -74,6 +76,7 @@ fn leaf_metadata(
         about_id,
         fields,
         subcommands: Vec::new(),
+        behaviour: None,
     })
 }
 
