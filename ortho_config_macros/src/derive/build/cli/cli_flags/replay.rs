@@ -18,10 +18,14 @@ use crate::derive::parse::{ClapInferredDefault, FieldAttrs};
 /// default, so callers can splice the result into an `#[arg(...)]` attribute
 /// unconditionally.
 ///
-/// `is_bool` controls whether the default value itself is replayed. A boolean
-/// flag's optional-value form already supplies `default_missing_value`, and
-/// re-adding `default_value` alongside it would make the floor value
-/// indistinguishable from an explicit command-line value.
+/// `is_bool` controls whether the default value itself is replayed. Only a
+/// boolean flag replays `default_value`, so that clap records the floor value
+/// under [`clap::parser::ValueSource::DefaultValue`] rather than as an explicit
+/// `CommandLine` value. The generated layering guard reads exactly that per-
+/// argument source, so an omitted boolean flag still defers to the
+/// configuration file and the environment. Every other field skips this replay:
+/// its inferred default reaches the merge as part of the defaults layer, and
+/// the value is never attached to the generated argument.
 pub(super) fn clap_replay_attributes(
     attrs: &FieldAttrs,
     is_bool: bool,

@@ -374,11 +374,17 @@ fn map_value_type(value: &ValueType) -> String {
 ///
 /// The declared [`ValueType::Enum`] variants win; otherwise clap's
 /// `possible_values` are used, so a `value_parser`-constrained string field is
-/// still reported as a closed set. A field that is enumerated by neither route
-/// yields an empty vector.
+/// still reported as a closed set.
+///
+/// A boolean yields no values. It is not a choice between named variants:
+/// `value_type` already reports `bool`, and repeating the two literals as enum
+/// values would hand an agent a second, differently shaped description of the
+/// same input. A field that is enumerated by neither route likewise yields an
+/// empty vector.
 fn enum_values(field: &FieldMetadata) -> Vec<String> {
     match &field.value {
         Some(ValueType::Enum { variants }) => variants.clone(),
+        Some(ValueType::Bool) => Vec::new(),
         _ => field
             .cli
             .as_ref()

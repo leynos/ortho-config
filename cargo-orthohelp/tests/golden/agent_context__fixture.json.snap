@@ -36,10 +36,7 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": [
-            "true",
-            "false"
-          ]
+          "enum_values": []
         },
         {
           "name": "is_verbose",
@@ -47,10 +44,7 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": [
-            "true",
-            "false"
-          ]
+          "enum_values": []
         },
         {
           "name": "log_level",

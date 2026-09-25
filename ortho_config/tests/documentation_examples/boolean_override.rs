@@ -9,7 +9,7 @@
 use anyhow::Result;
 
 use crate::workspace::{EnvironmentVariable, ExampleId, ExampleWorkspace};
-use crate::{assert_run, assert_run_with_environment};
+use crate::{Invocation, assert_run, assert_run_with_environment};
 
 /// Asserts the boolean-flag spellings promised by the user's guide.
 pub(super) fn assert_boolean_override_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
@@ -35,21 +35,25 @@ pub(super) fn assert_boolean_override_flow(workspace: &mut ExampleWorkspace) -> 
     assert_run_with_environment(
         workspace,
         ExampleId("guide-boolean-override"),
-        [],
-        [EnvironmentVariable {
-            name: "ACME_EXCITED",
-            value: "true",
-        }],
+        Invocation {
+            args: [],
+            environment: [EnvironmentVariable {
+                name: "ACME_EXCITED",
+                value: "true",
+            }],
+        },
         "excited=true\n",
     )?;
     assert_run_with_environment(
         workspace,
         ExampleId("guide-boolean-override"),
-        ["--excited=false"],
-        [EnvironmentVariable {
-            name: "ACME_EXCITED",
-            value: "true",
-        }],
+        Invocation {
+            args: ["--excited=false"],
+            environment: [EnvironmentVariable {
+                name: "ACME_EXCITED",
+                value: "true",
+            }],
+        },
         "excited=false\n",
     )
 }

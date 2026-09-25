@@ -238,7 +238,7 @@ mod tests {
             .map_err(|err| anyhow!("explicit false should appear in Figment: {err}"))?;
         ensure!(
             !extracted,
-            "explicit boolean false should serialise to `false`, got {extracted}"
+            "explicit boolean false should serialize to `false`, got {extracted}"
         );
         Ok(())
     }
