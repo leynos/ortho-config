@@ -774,6 +774,31 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       the status look green is out of bounds, and read-back of the current
       decision is the honest state. Note the pre-merge table is still pinned
       to `0ea812c5` as well.
+- [x] (2026-09-25) CI green again on `f23d9fcb` (run `36080265900`): all five
+      jobs succeeded — `build-test` on ubuntu-latest and windows-latest, plus
+      the three packaging dry runs (`x86_64-unknown-linux-gnu`,
+      `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`). That run covers the
+      docs-only commit which records the previous verification, so the
+      evidence chain is now continuous from `026bf70d` (gates) through
+      `713029b5` (CI) to `f23d9fcb` (CI). Note the run took ~51 minutes,
+      almost all of it the Windows `build-test` leg; the long tail is a
+      property of the runner, not of this branch.
+- [x] (2026-09-25) State of the review loop at this revision, re-read live
+      rather than carried forward: nine threads, nine answered, eight
+      resolved. The one open thread (`PRRT_kwDOO4Fx5c6l0Dk5`, the re-filed
+      Bumpy Road biomarker on `extract.rs`) already carries the disposition
+      reply at `026bf70d`; awaiting the bot's own resolution is not an
+      outstanding action of mine. The queued request `4f999571` for #418 is
+      still pending in the shared queue, last read at 18h02m elapsed behind
+      roughly fifty other entries across several repositories.
+- [x] (2026-09-25) Read-back of the walkthrough comment: the pre-merge table
+      still reports the same three errors and two warnings pinned to
+      `0ea812c5`, and the embedded
+      `final_review_risk_coverage` metadata still names
+      `sourceCommitId = coveredCommitId = 0ea812c5`. This is the expected
+      consequence of the stale pinned review, not a new finding — the three
+      error rows were individually repaired and thread-dispositioned in the
+      earlier round. It refreshes only when CodeRabbit next reviews.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
