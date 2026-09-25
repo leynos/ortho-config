@@ -327,6 +327,39 @@ Observable success: a config file that sets `enabled = true` combined with
       assertion: `test_field_verbose` then fails for the intended reason and
       the other six pass.
 
+- [x] (2026-09-25) CodeRabbit round 13 reviewed `02fd6b1b` (53 files), the
+      first round to look at the rebased and split tree, and returned one minor
+      finding that was a genuine defect: the generated `#[arg(...)]` never set
+      `value_name`, so clap derived the help placeholder from the *field name*.
+      `--is-excited` therefore rendered as `--is-excited[=<IS_EXCITED>]` while
+      the documentation IR reported the value name `BOOL` — the two surfaces
+      this branch exists to make agree disagreed. The fix names it explicitly,
+      matching the precedent already in the tree: `config_flag.rs:65` sets
+      `value_name = "PATH"` for the config-path flag, and
+      `cargo-orthohelp/src/cli/mod.rs` hand-writes `value_name = "BOOL"` on its
+      own boolean arguments. The boolean branch was the one place that had
+      missed it.
+      Two tests pin it, at different levels. The macro unit test
+      `boolean_fields_accept_an_optional_value` now asserts the token text, and
+      a new `clap_integration/help.rs` renders the *real* command the derive
+      generates and asserts the rendered placeholder. The second level is the
+      one that matters: a token-level check passes as soon as the attribute is
+      present, but only rendering shows what a user reads. Both were proven
+      non-vacuous by deleting the six added lines — the macro test then fails
+      for the stated reason, and the rendered help reverts to
+      `--is-excited[=<IS_EXCITED>]`. A third test in that file, asserting the
+      documented `--flag` / `--flag=true` / `--flag=false` / absent round trip,
+      passes in *both* states, which is what establishes that the pair is a
+      genuine placeholder control rather than a behaviour change.
+      A structural note for anyone extending this: the derive emits its hidden
+      parser struct with private visibility, in the same module as the
+      configuration type, so a test in a sibling module cannot name it and
+      re-exporting it is rejected as a private-interface leak (E0365). The test
+      struct therefore lives in `help.rs` rather than being shared from
+      `common`. This is the same class of constraint as the `rstest` fixture
+      import in round 11: generated and test-only surfaces are visible only
+      where they are produced.
+
 ## Surprises & discoveries
 
 - **A probe with an *undefined* argument reverses its own answer.** The

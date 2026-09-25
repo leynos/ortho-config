@@ -251,11 +251,17 @@ fn process_cli_field(
         // still reaches the field it belongs to; `default_missing_value`
         // preserves the flag-only spelling. Absent flags stay `None` so lower
         // layers still win.
+        //
+        // `value_name` is set explicitly because clap otherwise derives the
+        // placeholder from the field name, so `excited` would render as
+        // `--excited[=<EXCITED>]`. Naming it `BOOL` matches the placeholder the
+        // documentation IR reports, so generated help and the IR agree.
         quote_spanned! { span =>
             #[arg(
                 long = #long_lit,
                 short = #short_lit,
                 #replay_attributes
+                value_name = "BOOL",
                 num_args = 0..=1,
                 require_equals = true,
                 default_missing_value = "true"

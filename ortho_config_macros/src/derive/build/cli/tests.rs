@@ -53,6 +53,7 @@ fn generated_attribute(ty: &str) -> Result<String> {
 fn boolean_fields_accept_an_optional_value(#[case] ty: &str) -> Result<()> {
     let field_ts = generated_attribute(ty)?;
     for expected in [
+        "value_name = \"BOOL\"",
         "num_args = 0 ..= 1",
         "require_equals = true",
         "default_missing_value = \"true\"",
