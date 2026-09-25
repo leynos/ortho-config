@@ -258,6 +258,17 @@ Observable success: a config file that sets `enabled = true` combined with
       `spellcheck`), and `nixie`. `typos.toml` held its fixed point throughout
       (`4da00df0cbdf6d3f623dc143896cda360d381b3b1f610886845ee4b010840f98`).
 
+- [x] (2026-09-25) CodeRabbit round 8 reviewed `e1beb607` (51 files) and
+      returned two findings, both minor, with no duplicates between them. Both
+      were verified and applied, and both are the kind of defect a reader
+      notices but a gate cannot: the rustdoc on `replay.rs` broke the
+      hyphenated compound `per-argument` across a line, which Markdown renders
+      as "per- argument", and ADR-009 wrote the plural possessive "users'
+      guide" where the project's own style guide and the document's title both
+      use the singular "user's guide". Notably, none of the round-7 fixes drew
+      a finding — the `--flag[=]` render fix, its three tests, and the
+      corrected `require_equals` rationale all passed review cleanly.
+
 ## Surprises & discoveries
 
 - **A probe with an *undefined* argument reverses its own answer.** The

@@ -138,7 +138,7 @@ The documents emitted by `cargo-orthohelp` and the metadata exposed through
 with an italic placeholder, and PowerShell help gains a paragraph explaining
 the two spellings.
 
-The users' guide and the migration guide are the normative prose references for
+The user's guide and the migration guide are the normative prose references for
 the command-line surface and for upgrading consumers of the IR.
 
 ## References

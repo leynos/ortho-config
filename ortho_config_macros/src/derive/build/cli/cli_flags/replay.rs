@@ -21,8 +21,8 @@ use crate::derive::parse::{ClapInferredDefault, FieldAttrs};
 /// `is_bool` controls whether the default value itself is replayed. Only a
 /// boolean flag replays `default_value`, so that clap records the floor value
 /// under [`clap::parser::ValueSource::DefaultValue`] rather than as an explicit
-/// `CommandLine` value. The generated layering guard reads exactly that per-
-/// argument source, so an omitted boolean flag still defers to the
+/// `CommandLine` value. The generated layering guard reads exactly that
+/// per-argument source, so an omitted boolean flag still defers to the
 /// configuration file and the environment. Every other field skips this replay:
 /// its inferred default reaches the merge as part of the defaults layer, and
 /// the value is never attached to the generated argument.
