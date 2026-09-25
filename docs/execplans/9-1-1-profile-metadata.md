@@ -735,6 +735,27 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       either the loop or the `if let`. Both findings in this round were fixed
       at source; the offered *Suppress* link was not used.
 
+- [x] (2026-09-25) Second fully green run, on `026bf70d`, closing the two fixes
+      above. All six gates exited 0 with the tree byte-identical before and
+      after; the `markdownlint` log now shows the `spellcheck` prerequisite
+      entering and exiting 0, and the offending SHA is still present in the
+      prose, so the gate was satisfied by allow-listing rather than by removing
+      the token. `typos.toml` was *not* rewritten by the run — it had already
+      been regenerated when the overlay pattern was added, and its hash was
+      unchanged across all six gates, so the frozen reading is sound.
+- [x] (2026-09-25) Review-thread ledger closed out: nine threads, nine
+      answered, eight resolved, none unanswered. The remaining blocker is a
+      stale `CHANGES_REQUESTED` decision from `coderabbitai` pinned to
+      `0ea812c5` (2026-09-03). Its six later reviews of newer commits were all
+      neutral `COMMENTED`, so the decision was never re-issued rather than
+      re-affirmed — it must be superseded by a fresh review, not dismissed.
+      A review request for this PR (`4f999571`) is already queued, so no
+      duplicate was enqueued.
+- [x] (2026-09-25) Noted for whoever picks this up: the pre-merge table in the
+      top-level walkthrough comment is still pinned to `0ea812c5` even after a
+      reconciliation comment was posted. Refreshing it is CodeRabbit's action,
+      driven by the queued review; do not re-post the reconciliation.
+
 Progress entries from milestone 1 onward must carry timestamps.
 
 ## Surprises & discoveries
