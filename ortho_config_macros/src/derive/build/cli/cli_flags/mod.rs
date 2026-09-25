@@ -246,9 +246,11 @@ fn process_cli_field(
         // optional `=<BOOL>` value keeps the bare flag meaning `true` while
         // making `--flag=false` reach the parser as a real `Some(false)`.
         //
-        // `require_equals` keeps `--flag false` from swallowing the next
-        // argument, and `default_missing_value` preserves the flag-only
-        // spelling. Absent flags stay `None` so lower layers still win.
+        // `require_equals` keeps `--flag false` from reading the word after the
+        // flag as its value, so a positional operand such as `--flag notes.txt`
+        // still reaches the field it belongs to; `default_missing_value`
+        // preserves the flag-only spelling. Absent flags stay `None` so lower
+        // layers still win.
         quote_spanned! { span =>
             #[arg(
                 long = #long_lit,

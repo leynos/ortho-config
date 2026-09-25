@@ -129,8 +129,9 @@ _Table 1: Comparison of optional-value boolean metadata options._
 
 Generated boolean fields accept `--flag`, `--flag=true`, and `--flag=false`,
 with the bare spelling meaning `true` and an omitted flag leaving the value
-absent. The flag must use `=` before an explicit value so that `--flag` does
-not swallow the following argument.
+absent. The flag must use `=` before an explicit value so that the token after
+`--flag` is not read as its value: without `require_equals`, `--flag notes.txt`
+would consume the positional operand as the boolean value.
 
 The documents emitted by `cargo-orthohelp` and the metadata exposed through
 `OrthoConfigDocs` both carry the new marker. Man pages render `--flag[=BOOL]`

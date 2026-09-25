@@ -225,7 +225,57 @@ Observable success: a config file that sets `enabled = true` combined with
       run directly rather than argued. `check-fmt`, `markdownlint` (including
       `spellcheck`), and the PowerShell unit tests were green over the fixes.
 
+- [x] (2026-09-25) CodeRabbit round 7 reviewed `283a2333` and returned two
+      findings, both low severity and both confirmed by measurement rather than
+      reading. The first was a real renderer defect: `value_type_placeholder`
+      returns `""` for `ValueType::Bool` and every roff call site feeds that
+      into `format_option`, so a boolean without an explicit `value_name`
+      rendered the malformed `--flag[=]`. Empty placeholders are now treated as
+      absent, with three unit tests (fallback path, explicit empty string, and
+      a negative control proving a real placeholder still wins) proven
+      non-vacuous by reverting the fix and watching the two fallback tests
+      fail. The second finding was the `require_equals` rationale, and
+      re-measuring it falsified a claim this branch had already written into
+      the user's guide, ADR-009, and the derive macro's own comment; see the
+      first entry under `Surprises & discoveries` for the full reversal.
+- [x] (2026-09-25) The round-7 fixes then exposed a gate-ordering lesson. The
+      new test lines pushed `roff/escape.rs` to 445 lines against the 400-line
+      module limit, which `lint-clippy` passes over but `lint-whitaker`
+      rejects. Because clippy failed first on an unrelated `or_fun_call` style
+      lint, `lint-whitaker` had never executed on this change set at all; it
+      only ran once the clippy error was cleared. The module is now split into
+      `roff/escape/mod.rs` plus `roff/escape/tests.rs`, matching the existing
+      `agent_context/` and `powershell/maml/` layout the workspace's
+      `self_named_module_files = "deny"` lint mandates. A second, quieter
+      lesson: the `typos` gate scans files as recorded in the git index, so
+      the deleted `escape.rs` had to be staged before `make spellcheck` could
+      pass — the failure message named the removed path, not a typo.
+- [x] (2026-09-25) All six gates green over the round-7 fixes at the
+      then-current working tree: `check-fmt` (74 files), `typecheck`, `lint`
+      (both `lint-clippy` and `lint-whitaker`), `test` (the three new
+      `roff::escape` tests present and passing, no failures anywhere in 77
+      green suites), `markdownlint` (75 files, 0 errors, including
+      `spellcheck`), and `nixie`. `typos.toml` held its fixed point throughout
+      (`4da00df0cbdf6d3f623dc143896cda360d381b3b1f610886845ee4b010840f98`).
+
 ## Surprises & discoveries
+
+- **A probe with an *undefined* argument reverses its own answer.** The
+  first measurement of the `require_equals` justification used `--other`
+  without ever defining an `--other` argument. Both configurations reported
+  `unexpected argument '--other' found`, so the probe appeared to confirm the
+  claim it was testing — but that error was firing because `--other` did not
+  exist, not because of anything `require_equals` does. Defining the argument
+  drops the masking error entirely: `--flag --other` parses identically with
+  and without `require_equals`, because clap never reads a hyphen-leading token
+  as an optional value. The hazard is positional instead. Without the rule,
+  `--flag notes.txt` silently consumes the positional operand as the boolean
+  value; with it, the operand survives. The falsified rationale had been copied
+  into the user's guide, the ADR, and the derive macro's own comment, so all
+  three were corrected to state the measured reason. The general lesson: when a
+  probe's error path is the thing being measured, confirm the error is the one
+  under test rather than a neighbouring failure that fires first for unrelated
+  reasons.
 
 - **ADR-008 was already taken.** This branch minted
   `docs/adr-008-optional-value-boolean-cli-metadata.md`, but `origin/main`
@@ -262,8 +312,13 @@ Observable success: a config file that sets `enabled = true` combined with
   `clap::error::ErrorKind::UnknownArgument`. A fixture confirms the error text
   is byte-identical to what the old presence-only flag produced — so this
   spelling is unchanged, not newly rejected, and the migration guide must not
-  claim the error became clearer. The restriction is deliberate: without it,
-  `--flag --other x` would try to consume `--other` as the flag's value.
+  claim the error became clearer. The restriction is deliberate, but not for
+  the reason first recorded here: a probe with `--other` *defined* shows that
+  `--flag --other` parses the same with or without `require_equals`, because
+  clap does not read a hyphen-leading token as an optional value. The real
+  hazard is positional — without the rule, `--flag notes.txt` silently consumes
+  `notes.txt` as the boolean value instead of leaving it for the trailing
+  positional argument.
 - **`clap_derive` would infer `ArgAction::Set` for `Option<bool>`** and add a
   `.required(...)` obligation for a bare `bool`. The generated `Option<bool>`
   field type plus *explicit* attributes is therefore required, not optional.
@@ -487,12 +542,13 @@ The trace chain from requirement to evidence runs:
 
 Status: **complete, pending review.** Every acceptance criterion in issue #444
 is implemented and covered, all six gates have been green on the rebased tree,
-and draft PR #532 is open against `main`. The latest verified tree is
-`c23ce151`, whose gate run is recorded in `Progress`; the round-6 review fixes
-in `485b4fc9` are docs-and-prose only and were re-checked with `check-fmt`,
-`markdownlint` (which includes `spellcheck`), and the PowerShell unit tests.
-Six rounds of CodeRabbit review have been actioned; what remains is a further
-`--agent` pass over `485b4fc9` and whatever it raises.
+and draft PR #532 is open against `main`. Seven rounds of CodeRabbit review
+have been actioned. The round-7 fixes are the most recent change: a real
+renderer defect that printed `--flag[=]`, a falsified `require_equals`
+rationale corrected in three documents, and a module split forced by the
+400-line limit once the new tests landed. That change set is green across all
+six gates, as recorded in `Progress`; what remains is a further `--agent` pass
+over it and whatever it raises.
 
 What was achieved, in the order the work forced it:
 

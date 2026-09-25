@@ -185,9 +185,9 @@ _Table 2: Boolean flag spellings and the resulting value._
 
 Use `=` when supplying a value. A bare `--excited` never consumes the argument
 that follows it, so another option may follow it without being swallowed. The
-space-separated form, `--excited false`, is rejected instead: without that rule,
-`--excited` would be ambiguous with a bare flag followed by a positional
-argument, and `--excited --other` would read `--other` as the flag's value.
+space-separated form, `--excited false`, is rejected instead: without that rule
+the flag would swallow the token after it, so `--excited notes.txt` would try
+to read `notes.txt` as the boolean value rather than as a positional operand.
 
 Omitting the flag is not the same as passing `--excited=false`. An omitted flag
 leaves the value absent, which lets a configuration file or environment
