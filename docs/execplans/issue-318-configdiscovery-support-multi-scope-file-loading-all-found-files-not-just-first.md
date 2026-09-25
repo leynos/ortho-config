@@ -66,8 +66,13 @@ contributes once, at the lowest-precedence position it occupies.
 - [x] Lint findings cleared: private doc link, elided lifetime, `shadow_reuse`,
       and `no_std_fs_operations` in the new fixture module.
 - [x] Local gates green: `check-fmt`, `lint`, `typecheck`, `test` (1144
-      passed, 0 failed), `markdownlint`, `nixie`.
+      passed, 0 failed), `markdownlint`, `nixie`. Verified independently on the
+      frozen tree; the run was fingerprinted before and after and nothing
+      drifted except the predicted `typos.toml` side effect, which was
+      reverted rather than committed.
 - [ ] Push; Windows CI reports full suite and coverage artefact.
+      Pushed `69aae8de` with lease bound to `2e6cfbf7`; CI run `36070786646`.
+      The failing run this replaces was `34212392891` at head `2e6cfbf7`.
 
 ## Implementation notes
 

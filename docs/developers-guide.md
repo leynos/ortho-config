@@ -1148,7 +1148,7 @@ tier two did not exist at all.
 
 | Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
 | ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10); the trybuild override is also 600 s |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
 | Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
@@ -1174,9 +1174,16 @@ callers invoke the action once.
 ### The per-test budget is a product, not a period
 
 `terminate-after` counts warning periods, so the budget a test gets is `period`
-multiplied by it. The longest override here is 120 s with a multiplier of five,
-so reading the period alone would report 120 s where the real figure is 600 s.
-The contract asserts that reading outright rather than leaving it implied.
+multiplied by it. The longest override here is 120 s with a multiplier of
+eight, so reading the period alone would report 120 s where the real figure is
+960 s. The contract asserts that reading outright rather than leaving it
+implied.
+
+Two tiers can also name the *same* product while meaning different things,
+which is worth knowing before sizing one by the other. The trybuild override
+was 120 s x 5 and the default profile is 60 s x 10, so both allowed 600 s and
+the override changed only how often the warning appeared. A binary added to the
+override for its larger-looking period therefore gained nothing at all.
 
 ### Tier one covered two binaries, and tier two did not exist
 
@@ -1208,6 +1215,39 @@ The slowest test outside the trybuild override was
 allowance is 600 s, ten warning periods of 60 s, about 1.6 times that worst
 case: enough that a legitimately slow test finishes, small enough that a hang
 is caught well inside the whole-run budget.
+
+### The trybuild allowance was raised after it killed two tests
+
+The trybuild class outgrew its 600 s. It is budgeted apart from the base
+allowance because each of these binaries spawns a child `cargo` in a separate
+target directory, so none shares cargo-llvm-cov's warmed cache and each pays a
+cold dependency build. They also share one package cache and so block on its
+lock while their neighbours build, which the logs show directly: run
+36070786646 recorded four `Blocking waiting for file lock on package cache`
+lines, and run 36068184976 recorded none.
+
+Two measurements set the new figure:
+
+| What                             | Duration | Of its budget   | Run         |
+| -------------------------------- | -------- | --------------- | ----------- |
+| `crate_path_trybuild`, passed    | 572.5 s  | 0.95 of 600 s   | 36068184976 |
+| `must_use_compile_tests`, killed | 600.2 s  | the whole of it | 36070786646 |
+
+*Table: the worst trybuild durations observed. The first passed with only 27 s
+to spare, so the old allowance was already too small rather than merely
+unlucky; the second was still cold-compiling its first dependencies
+(`proc-macro2`, `unicode-ident`) when it was stopped, so it was slow rather
+than hung.*
+
+The allowance is now 960 s, eight warning periods of 120 s, which is 1.68 times
+the 572.5 s worst observed — the same headroom the base allowance was sized
+with against its own 364.8 s. The filter names all seven trybuild binaries
+rather than the two it used to; five end in `trybuild` and `compile_fail` and
+`compile_time` do not, so no single glob covers the class and the names are
+enumerated instead.
+
+It stays below the 1,800 s whole-run budget, which the ordering contract
+asserts, so a test using its full allowance still ends inside the run.
 
 The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
 It has to fit inside the watchdog with nextest's termination procedure and a
