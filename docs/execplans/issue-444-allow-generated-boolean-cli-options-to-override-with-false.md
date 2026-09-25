@@ -196,7 +196,17 @@ Observable success: a config file that sets `enabled = true` combined with
       argument, because an empirical probe showed `format!(concat!(…))` cannot
       capture implicitly), and the ExecPlan's ADR-003 reference now names the
       file that exists.
-- [ ] Re-run the full gate suite over the round-5 fixes and push.
+- [x] (2026-09-25) All six gates green at `d211cc68` over the round-5 fixes:
+      `check-fmt`, `typecheck`, `lint` (clippy and whitaker), `test` (1348
+      passed, 0 failed, 15 ignored; pytest 87 passed, 5 skipped; no panics),
+      `markdownlint`, `nixie`. Pushed as a fast-forward. Two gate regressions
+      in this commit's own prose were caught and fixed first: the round-5
+      Progress entry used a blank line mid-bullet, which markdownlint read as
+      an indented code block (MD046), and substituting the longer ADR filename
+      pushed a line past 80 columns (MD013). Both were found by the stop hook
+      running the gates rather than by self-review, which is the argument for
+      letting the hook run rather than reasoning about whether prose is
+      compliant.
 
 ## Surprises & discoveries
 
