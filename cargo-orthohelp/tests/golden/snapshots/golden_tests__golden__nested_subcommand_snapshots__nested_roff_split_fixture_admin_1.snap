@@ -33,7 +33,7 @@ Audits fixture state.
 .PP
 OPTIONS:
 .TP
-\fB\-\-dry-run\fR \fI[=BOOL]\fR
+\fB\-\-dry-run\fR\fI[=BOOL]\fR
 Reports intended audit actions.
 .SS grant-access
 Grants access to a principal.

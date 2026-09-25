@@ -62,7 +62,7 @@ Boolean fields would generate an extra `--no-flag` argument alongside `--flag`.
 This is rejected. It breaks the one-argument-identifier-per-field model that
 the derive relies on for extraction, and it contradicts the preference against
 auto-generated `--no-x` pairs recorded in
-[Agent-native CLI assistance design](../agent-native-cli-design.md) §5.
+[Agent-native CLI assistance design](agent-native-cli-design.md) §5.
 
 ## Decision outcome
 
@@ -137,7 +137,7 @@ the command-line surface and for upgrading consumers of the IR.
 
 ## References
 
-- [Agent-native CLI assistance design](../agent-native-cli-design.md) §5.
-- [OrthoConfig IR documentation design for cargo-orthohelp](../cargo-orthohelp-design.md).
+- [Agent-native CLI assistance design](agent-native-cli-design.md) §5.
+- [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md).
 - [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).
 - [clap `Arg::num_args` documentation](https://docs.rs/clap/latest/clap/struct.Arg.html#method.num_args).

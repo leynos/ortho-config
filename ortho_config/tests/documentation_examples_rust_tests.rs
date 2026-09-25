@@ -1,5 +1,7 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
 
+#[path = "documentation_examples/boolean_override.rs"]
+mod boolean_override;
 mod documentation_examples;
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
@@ -7,6 +9,7 @@ mod process_runner;
 mod workspace;
 
 use anyhow::{Context, Result, ensure};
+use boolean_override::assert_boolean_override_flow;
 use documentation_examples::{DocumentedExample, documented_example};
 use std::path::{Path, PathBuf};
 use workspace::{DependencyAlias, EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile};
@@ -159,49 +162,6 @@ fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> 
         ExampleId("guide-localization"),
         [],
         "verbose=true\n",
-    )
-}
-
-/// Asserts the boolean-flag spellings promised by the user's guide.
-fn assert_boolean_override_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
-    assert_run(
-        workspace,
-        ExampleId("guide-boolean-override"),
-        [],
-        "excited=false\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-boolean-override"),
-        ["--excited"],
-        "excited=true\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-boolean-override"),
-        ["--excited=false"],
-        "excited=false\n",
-    )?;
-
-    assert_run_with_environment(
-        workspace,
-        ExampleId("guide-boolean-override"),
-        [],
-        [EnvironmentVariable {
-            name: "ACME_EXCITED",
-            value: "true",
-        }],
-        "excited=true\n",
-    )?;
-    assert_run_with_environment(
-        workspace,
-        ExampleId("guide-boolean-override"),
-        ["--excited=false"],
-        [EnvironmentVariable {
-            name: "ACME_EXCITED",
-            value: "true",
-        }],
-        "excited=false\n",
     )
 }
 

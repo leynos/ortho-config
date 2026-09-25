@@ -109,8 +109,10 @@ All notable changes to this project will be documented in this file.
   configuration file or environment variable. The bare `--flag` spelling still
   means `true`, and omitting the flag still leaves the field absent so lower
   layers win. The documentation IR reports the new surface through
-  `CliMetadata.value_optional` and `ORTHO_DOCS_IR_VERSION` 1.2, and the roff
-  and PowerShell renderers print the `--flag[=<BOOL>]` form (closes #444).
+  `CliMetadata.value_optional` and `ORTHO_DOCS_IR_VERSION` 1.2. The roff
+  renderer prints the `--flag[=<BOOL>]` form, joining the placeholder to the
+  flag so it cannot be misread as the invalid `--flag =BOOL` spelling, and
+  PowerShell help explains the optional value in prose (closes #444).
 
 ### Changed (design)
 
