@@ -71,7 +71,15 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: added by this branch. Pinned by value as well as ordered, because the
 #: ordering holds for a wide range of both and would not notice either
 #: drifting away from the sample it was sized against.
-REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 600.0
+#:
+#: The allowance is the largest anywhere in the file, which is the
+#: trybuild override rather than the default profile: 960 s, eight
+#: warning periods of 120 s. It was 600 s until the trybuild class
+#: outgrew it -- `crate_path_trybuild` passed at 572.5 s of that 600 s
+#: on run 36068184976, and `must_use_compile_tests` was killed at
+#: 600.224 s on run 36070786646. Raising it here as well is what makes
+#: the guide's stated figure and the configured one move together.
+REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 960.0
 REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 30 * 60.0
 
 REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {
