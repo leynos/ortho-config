@@ -276,6 +276,28 @@ escalation, not workarounds.
   `guide-check-command` now shows the actual library call, because the
   behaviour rules consume a compiled agent context that the policy-only run
   deliberately does not build.
+- [x] (2026-09-25) Post-rebase gates green on the reconciled tree. Two genuine
+  failures surfaced only once the gates ran against the rebased sources, and
+  both were fixed at source rather than suppressed: `clippy::clone_on_copy` in
+  `cargo-orthohelp/src/policy/rules/proptests.rs` (this branch's proptest
+  cloned a `PolicyMode` that gained `Copy` when it adopted `main`'s
+  `policy/mod.rs`), and a stale
+  `cargo-orthohelp/tests/golden/agent_context__policy_warn_fixture.json.snap`
+  golden that predated the new `bypass_flag` and `dry_run_flag` fields. The
+  other three agent-context goldens were regenerated when those fields were
+  added; the policy-warn fixture was missed because its fixture crate lives
+  under `tests/fixtures/` rather than beside the main fixtures. Evidence:
+  `make check-fmt`, `make typecheck`, `make lint` (rustdoc, Clippy, Whitaker),
+  and `make test` all exit 0, with 1391 Rust tests passing and 0 failing (plus
+  87 pytest cases passing, 5 skipped), and `make markdownlint` plus
+  `make nixie` green. Docstring coverage of diff-touched functions is 115/115
+  (100.00%), re-measured after the rebase deleted
+  `cargo-orthohelp/src/agent_native.rs` and `cargo-orthohelp/src/cli/tests.rs`
+  from the original 133-function population.
+- [x] (2026-09-25) Committed as `e7ed8b44` and force-pushed with lease
+  (previous remote head `0a64c595`). A fresh CodeRabbit review was requested on
+  PR #417; it is queued behind a shared backlog and had not posted at the time
+  of writing.
 
 ## Surprises & discoveries
 
