@@ -15,8 +15,8 @@ use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
 
 mod source;
 use source::{
-    LoadSourceTokens, build_load_from_iter_impl, build_load_from_iter_with_sources_impl,
-    build_source_aware_compose_layers_impl,
+    LoadSourceTokens, build_config_impl_delegates, build_load_from_iter_impl,
+    build_load_from_iter_with_sources_impl, build_source_aware_compose_layers_impl,
 };
 /// Identifiers used when generating the load implementation.
 #[expect(
@@ -274,30 +274,6 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         #cli_layer
 
         #krate::declarative::LayerComposition::new(composer.layers(), errors)
-    }
-}
-
-fn build_config_impl_delegates(
-    krate: &proc_macro2::TokenStream,
-    cli_ident: &Ident,
-    config_ident: &Ident,
-) -> proc_macro2::TokenStream {
-    quote! {
-        impl #config_ident {
-            /// Compose merge layers using the current process arguments.
-            pub fn compose_layers() -> #krate::declarative::LayerComposition {
-                #cli_ident::compose_layers()
-            }
-
-            /// Compose merge layers from an iterator of command-line arguments.
-            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #cli_ident::compose_layers_from_iter(iter)
-            }
-        }
     }
 }
 

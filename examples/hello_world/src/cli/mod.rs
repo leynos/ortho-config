@@ -19,10 +19,16 @@ mod localization;
 mod overrides;
 
 #[cfg(test)]
-pub(crate) use self::config_loading::load_config_overrides;
+pub(crate) use self::config_loading::{
+    load_config_overrides, load_config_overrides_from_discovery,
+};
 pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
 pub use context::ContextCommand;
-pub use global_config::{apply_greet_overrides, load_global_config, load_greet_defaults};
+pub use global_config::{
+    GlobalConfigSources, apply_greet_overrides, apply_greet_overrides_with_source,
+    load_global_config, load_global_config_with_sources, load_greet_defaults,
+    load_greet_defaults_with_sources,
+};
 /// Extension trait for applying localisation to a [`clap::Command`] tree.
 ///
 /// Re-exported to allow consumers to localise CLI metadata (about, help, usage)
