@@ -186,13 +186,23 @@ def _publisher_job(
     jobs = document.get("jobs")
     assert isinstance(jobs, dict), f"{name} declares no jobs mapping"
     for job in jobs.values():
-        steps = job.get("steps") if isinstance(job, dict) else None
-        if isinstance(steps, list) and any(
-            isinstance(step, dict) and CODESCENE_ACTION in str(step.get("uses", ""))
-            for step in steps
-        ):
-            return name, [step for step in steps if isinstance(step, dict)]
+        steps = _job_steps(job)
+        if any(_uploads(step) for step in steps):
+            return name, steps
     pytest.fail(f"no job in {name} invokes {CODESCENE_ACTION}")
+
+
+def _job_steps(job: object) -> list[dict[str, object]]:
+    """Return a job's mapping steps, or none for a malformed job."""
+    steps = job.get("steps") if isinstance(job, dict) else None
+    if not isinstance(steps, list):
+        return []
+    return [step for step in steps if isinstance(step, dict)]
+
+
+def _uploads(step: dict[str, object]) -> bool:
+    """Return whether a step invokes the CodeScene upload action."""
+    return CODESCENE_ACTION in str(step.get("uses", ""))
 
 
 def _token_check(steps: list[dict[str, object]]) -> tuple[int, dict[str, object]]:
