@@ -210,8 +210,9 @@ def largest_test_allowance(config_text: str) -> float:
         The longest per-test budget.
 
     A ``slow-timeout`` that names no ``terminate-after`` raises
-    :class:`UnboundedTestError` from :func:`budget_of` rather than
-    counting as one period, because such a configuration bounds nothing.
+    :class:`UnboundedTestError` from
+    :func:`nextest_allowances.budget_of` rather than counting as one
+    period, because such a configuration bounds nothing.
 
     Raises
     ------

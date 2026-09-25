@@ -73,7 +73,7 @@ contributes once, at the lowest-precedence position it occupies.
 - [x] Trybuild allowance raised to 960s and the filter widened to all seven
       binaries; `trybuild_tier.py` + `trybuild_tier_test.py` added so a new
       trybuild binary cannot land on the base allowance unnoticed.
-- [ ] Push; Windows CI reports full suite and coverage artefact.
+- [x] Push; Windows CI reports full suite and coverage artefact.
       Pushed `69aae8de` with lease bound to `2e6cfbf7`; CI run `36070786646`.
       The failing run this replaces was `34212392891` at head `2e6cfbf7`.
 
@@ -85,6 +85,27 @@ contributes once, at the lowest-precedence position it occupies.
       both are contracted against. Run `36068184976`, which finished, shows the
       old figure was already too small rather than unlucky:
       `crate_path_trybuild` passed at 572.5s of 600s.
+- [x] Suite green on Windows at `ce8f4621`. Run `36079995528`, all five jobs
+      success. Both coverage lanes ran to completion with no fail-fast: 1,316
+      passed of 1,316 (18 slow) and 1,292 of 1,292 (13 slow), 10 skipped each,
+      and zero `Cancelling due to test failure` lines. `must_use_compile_tests`
+      passed at 455.098s, inside the new 960s but well outside the 600s that
+      killed it, and its threshold cadence is now `[>120s][>240s][>360s]`,
+      which is the override's 120s period rather than the base profile's 60s:
+      the binary is provably on the raised tier. Package-cache lock waits fell
+      from four to zero, and `Cancelling due to test failure` from one to
+      none. Count either only after stripping ANSI: the log dump stores the
+      escapes as literal `^[[1m` caret sequences, so a `\x1b` pattern matches
+      nothing and the plain phrase is split mid-word inside the coloured
+      `Blocking`. A grep that reports zero for *both* runs is reporting the
+      escapes, not the lock waits. The two `##[warning]` lines in the log are
+      unchanged from the failing run and are not this repository's: a Node 20
+      deprecation notice emitted by GitHub's own "Complete job" step, and a
+      cache-reservation race between concurrent jobs.
+
+      Note the run id and head: the first push of this work was `69aae8de`
+      (run `36070786646`, failure), and the fix above is `ce8f4621` (run
+      `36079995528`, success).
 
 ## Implementation notes
 
