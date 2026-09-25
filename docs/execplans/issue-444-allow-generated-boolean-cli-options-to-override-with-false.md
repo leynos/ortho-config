@@ -384,8 +384,28 @@ Observable success: a config file that sets `enabled = true` combined with
       token generation away from that explanation would cost more than the
       convention's headroom is worth.
 
+- [x] (2026-09-25) CodeRabbit round 15 reviewed `25acc1ca` (53 files) and
+      returned **no findings**, the second consecutive clean round. The delta
+      from round 14's HEAD was docs-only, so the gate set was scoped to
+      Markdown and ran sequentially: `check-fmt` (74 files unchanged),
+      `markdownlint` (75 files, 0 errors, then `spellcheck`), and `nixie`
+      (all diagrams validated), each exiting 0 with `typos.toml` byte-identical
+      at the known fixed point and the tree left clean. Running Rust gates for
+      a single-Markdown-file delta would spend minutes to re-prove what
+      `07e6ea53` already proved, since no Rust input changed.
+
 ## Surprises & discoveries
 
+- **`coderabbit review findings` reports stale findings, not the latest
+  round.** After round 15 returned a clean result, that subcommand still
+  printed the round-13 `value_name = "BOOL"` finding at
+  `cli_flags/mod.rs:259-261`. It falls back to the most recent local review
+  *that had findings*, so a clean round is invisible to it and the stale entry
+  looks like an open defect. Acting on it would mean re-fixing code that is
+  already correct (`value_name` is present at line 264 and asserted at
+  `cli/tests.rs:56`). Trust the per-round review output and its log, and
+  cross-check any reported line number against the file before treating a
+  finding as live.
 - **The documentation IR and clap's `--help` can disagree about the same
   field.** The IR reported `value_name: Some("BOOL")` for every boolean field,
   and the derive's own comment described the `=<BOOL>` value, but the generated
