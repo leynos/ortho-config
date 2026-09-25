@@ -28,6 +28,7 @@ enum RuleSeverity {
 }
 
 impl RuleSeverity {
+    /// Projects the rule-local severity onto its report-facing counterpart.
     const fn as_policy(self) -> PolicySeverity {
         match self {
             Self::Warn => PolicySeverity::Warn,

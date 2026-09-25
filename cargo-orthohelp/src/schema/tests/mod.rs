@@ -62,6 +62,10 @@ fn sample_metadata() -> ortho_docs::DocMetadata {
     })
 }
 
+/// Supplies a fully declared behaviour block for the sample metadata fixture.
+///
+/// Every key is populated so schema assertions can observe each field rather
+/// than the undeclared nulls the fixture would otherwise carry.
 fn sample_behaviour() -> ortho_docs::BehaviourMetadata {
     ortho_docs::BehaviourMetadata {
         interaction: Some(ortho_docs::InteractionKind::Interactive),

@@ -265,6 +265,8 @@ struct DeclaredBehaviourCase {
     expected_dry_run: Option<&'static str>,
 }
 
+/// Each declared behaviour kind reaches its matching agent-context field
+/// verbatim, with no normalisation between the IR and the wire.
 #[rstest]
 #[case::interactive_destructive(DeclaredBehaviourCase {
     app_name: "purge",
@@ -317,6 +319,8 @@ fn transform_maps_declared_behaviour(#[case] case: DeclaredBehaviourCase) {
     assert_eq!(command.dry_run_flag.as_deref(), case.expected_dry_run);
 }
 
+/// An IR command with no behaviour block reports `Unknown`, never a guess:
+/// ADR-008 forbids inferring behaviour from a command's name.
 #[test]
 fn transform_keeps_behaviour_fields_unknown_when_undeclared() {
     let metadata = doc(DocSpec::child("version", "cmd.version"));
@@ -339,6 +343,8 @@ fn transform_keeps_behaviour_fields_unknown_when_undeclared() {
     assert_eq!(command.dry_run_flag, None);
 }
 
+/// Nested subcommands carry their own behaviour, read per command rather
+/// than inherited from the parent.
 #[test]
 fn transform_maps_behaviour_on_nested_subcommands() {
     let metadata = metadata_with_subcommands(vec![

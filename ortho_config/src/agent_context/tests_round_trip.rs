@@ -195,6 +195,11 @@ fn command_segment() -> impl Strategy<Value = String> {
     "[a-z][a-z0-9-]{0,12}"
 }
 
+/// Generates flag names matching the grammar pinned by ADR-008.
+///
+/// Bypass and dry-run declarations are restricted to
+/// `--[a-z0-9]+(-[a-z0-9]+)*`, so the generator mirrors that pattern to keep
+/// round-trip cases within the declared contract.
 fn flag_name() -> impl Strategy<Value = String> {
     "--[a-z0-9]+(-[a-z0-9]+)*"
 }

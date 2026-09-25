@@ -28,6 +28,7 @@ enum RootCommands {
 }
 
 impl Default for RootCommands {
+    /// Supplies a valid default variant for the test fixtures.
     fn default() -> Self {
         Self::Run(RunArgs::default())
     }
@@ -68,6 +69,7 @@ enum AdminCommands {
 }
 
 impl Default for AdminCommands {
+    /// Supplies a valid default variant for the test fixtures.
     fn default() -> Self {
         Self::Audit(AuditArgs::default())
     }
@@ -163,6 +165,7 @@ enum DelegatedCommands {
 }
 
 impl Default for DelegatedCommands {
+    /// Supplies a valid default variant for the test fixtures.
     fn default() -> Self {
         Self::Plain(PlainArgs::default())
     }
@@ -176,6 +179,10 @@ struct DelegatedRoot {
     command: DelegatedCommands,
 }
 
+/// Looks up a direct subcommand of `metadata` by its application name.
+///
+/// Only immediate children are searched; the fixtures used here are one level
+/// deep, so a nested match would indicate a fixture mistake.
 fn subcommand_by_name<'a>(metadata: &'a DocMetadata, name: &str) -> Result<&'a DocMetadata> {
     metadata
         .subcommands
@@ -184,6 +191,7 @@ fn subcommand_by_name<'a>(metadata: &'a DocMetadata, name: &str) -> Result<&'a D
         .ok_or_else(|| anyhow!("missing subcommand {name}"))
 }
 
+/// Behaviour declared on a delegated subcommand survives the delegation.
 #[rstest]
 fn test_subcommand_behaviour_flows_through_delegation() -> Result<()> {
     let metadata = DelegatedRoot::get_doc_metadata();
@@ -211,6 +219,7 @@ fn test_subcommand_behaviour_flows_through_delegation() -> Result<()> {
     Ok(())
 }
 
+/// A delegated subcommand declaring no behaviour reports `None`.
 #[rstest]
 fn test_subcommand_behaviour_is_none_when_undeclared() -> Result<()> {
     let metadata = DelegatedRoot::get_doc_metadata();
@@ -242,6 +251,7 @@ enum ReusedCommands {
 }
 
 impl Default for ReusedCommands {
+    /// Supplies a valid default variant for the test fixtures.
     fn default() -> Self {
         Self::Do(ReusedArgs::default())
     }
@@ -255,6 +265,10 @@ struct ReusedRoot {
     command: ReusedCommands,
 }
 
+/// One args type yields the same behaviour in either metadata position.
+///
+/// Reusing a type as both a root and a subcommand must not let the derivation
+/// path change the declared metadata.
 #[rstest]
 fn test_reused_args_carries_behaviour_in_root_and_subcommand_positions() -> Result<()> {
     let as_root = ReusedArgs::get_doc_metadata();

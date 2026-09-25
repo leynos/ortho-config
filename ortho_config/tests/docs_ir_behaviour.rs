@@ -53,6 +53,7 @@ fn doc_json_with_behaviour(behaviour: Value) -> Result<Value> {
     Ok(document)
 }
 
+/// A fully declared block deserializes into every matching kind.
 #[rstest]
 fn test_behaviour_block_deserializes_when_fully_declared() -> Result<()> {
     let document = doc_json_with_behaviour(json!({
@@ -91,6 +92,7 @@ fn test_behaviour_block_deserializes_when_fully_declared() -> Result<()> {
     Ok(())
 }
 
+/// An IR document predating the behaviour block still parses.
 #[rstest]
 fn test_behaviour_block_is_none_when_absent() -> Result<()> {
     let metadata: DocMetadata = serde_json::from_value(minimal_doc_json())?;
@@ -102,6 +104,7 @@ fn test_behaviour_block_is_none_when_absent() -> Result<()> {
     Ok(())
 }
 
+/// An omitted key stays undeclared, so partial blocks are legal IR.
 #[rstest]
 fn test_behaviour_block_treats_partial_declarations_as_undeclared() -> Result<()> {
     let document = doc_json_with_behaviour(json!({
@@ -129,6 +132,7 @@ fn test_behaviour_block_treats_partial_declarations_as_undeclared() -> Result<()
     Ok(())
 }
 
+/// Wire values travel as `snake_case` and undeclared keys as explicit nulls.
 #[rstest]
 fn test_behaviour_metadata_serializes_snake_case_wire_values() -> Result<()> {
     let document = doc_json_with_behaviour(json!({
@@ -213,6 +217,7 @@ struct ReadOnlyNonInteractiveConfig {
     Some(MutationKind::ReadOnly),
     (None, None)
 )]
+/// Each `#[ortho_config(behaviour(...))]` case reaches the generated IR.
 fn test_derive_emits_behaviour_block(
     #[case] metadata_producer: fn() -> DocMetadata,
     #[case] expected_interaction: Option<InteractionKind>,
@@ -253,6 +258,7 @@ fn test_derive_emits_behaviour_block(
     Ok(())
 }
 
+/// A derive without a `behaviour` group emits no block at all.
 #[rstest]
 fn test_derive_keeps_behaviour_none_when_undeclared() -> Result<()> {
     let metadata = UndeclaredBehaviourConfig::get_doc_metadata();
