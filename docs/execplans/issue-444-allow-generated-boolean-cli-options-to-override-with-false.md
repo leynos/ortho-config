@@ -281,6 +281,27 @@ Observable success: a config file that sets `enabled = true` combined with
       as preceding, and states the remaining work. None of the round-8 fixes
       themselves drew a finding.
 
+- [x] (2026-09-25) CodeRabbit round 10 reviewed `55eb3100` (51 files) and
+      returned two findings. The first was correct and is applied: PowerShell
+      help's flag-free fallback read "The value is optional: supplying it sets
+      `true`", whose pronoun binds most naturally to *the value*, making the
+      sentence circular — a value that "sets true" is not the case being
+      described. It now reads "the flag without a value means `true`", and the
+      unit test asserts that clause rather than only the explicit-false one, so
+      the reword is covered and not incidentally passing. The phrase occurs
+      once in the tree, so the one edit is exhaustive. The second finding was
+      the `Outcomes & retrospective` status paragraph, which had drifted one
+      round behind for the second consecutive time: the round-9 fix wrote
+      "Eight rounds" and round 9 itself made that stale the moment it landed.
+      That is a self-arming loop, not a defect that can be fixed by writing a
+      fresher number, so the per-round narrative is gone — the paragraph now
+      states the pattern and points here, which is the only disposition that
+      ends the recurrence. CodeRabbit's own finding named this alternative. The
+      trade accepted here is that `Outcomes` no longer summarizes the
+      individual rounds; the entries in this section are the single source of
+      truth for them, and a future round cannot desynchronize a count from a
+      list it no longer contains.
+
 ## Surprises & discoveries
 
 - **A probe with an *undefined* argument reverses its own answer.** The
@@ -565,17 +586,12 @@ The trace chain from requirement to evidence runs:
 
 Status: **complete, pending review.** Every acceptance criterion in issue #444
 is implemented and covered, all six gates have been green on the rebased tree,
-and draft PR #532 is open against `main`. Eight rounds of CodeRabbit review
-have been actioned, the latest of which raised two minor prose nits and no
-substantive objection. The round-8 fixes are the most recent change: the
-rustdoc compound "per-argument" was rejoined after a line break rendered it as
-"per- argument", and ADR-009's "users' guide" became "user's guide" to match
-the project's own style guide. Before those, the round-7 fixes corrected a real
-renderer defect that printed `--flag[=]`, replaced an empirically falsified
-`require_equals` rationale across three documents, and split the `roff/escape`
-module to satisfy the 400-line limit once the new tests landed. That change set
-is green across all six gates, as recorded in `Progress`; what remains is a
-further `--agent` pass over it and whatever it raises.
+and draft PR #532 is open against `main`. A CodeRabbit `--agent` review has
+been requested at each milestone and every finding dispositioned. The
+round-by-round log — including the two findings declined on evidence and the
+one later re-opened and applied after re-measurement — lives in `Progress` and
+is not restated here, so that a per-round count cannot drift out of step with
+the log it summarizes.
 
 What was achieved, in the order the work forced it:
 

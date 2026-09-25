@@ -173,6 +173,10 @@ fn render_help_avoids_a_nonsense_flag_name(minimal_doc: LocalizedDocMetadata) {
         "unexpected fallback in:\n{xml}"
     );
     assert!(
+        xml.contains("the flag without a value means `true`"),
+        "expected the bare-flag meaning in:\n{xml}"
+    );
+    assert!(
         xml.contains("clears a lower-precedence `true`"),
         "expected the flag-free description in:\n{xml}"
     );

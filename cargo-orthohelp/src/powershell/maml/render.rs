@@ -326,8 +326,8 @@ fn optional_value_paragraph(cli: &CliMetadata) -> String {
         .or_else(|| cli.short.map(|short| format!("-{short}")))
     else {
         return String::from(concat!(
-            "The value is optional: supplying it sets `true`, and an explicit ",
-            "`false` clears a lower-precedence `true`."
+            "The value is optional: the flag without a value means `true`, and ",
+            "an explicit `false` clears a lower-precedence `true`."
         ));
     };
     format!(
