@@ -360,7 +360,57 @@ Observable success: a config file that sets `enabled = true` combined with
       import in round 11: generated and test-only surfaces are visible only
       where they are produced.
 
+- [x] (2026-09-25) CodeRabbit round 14 reviewed `07e6ea53` (53 files) and
+      returned **no findings** — the first clean round on this branch. All six
+      gates were green on that HEAD, run sequentially by the gate-runner:
+      `check-fmt`, `typecheck`, `lint` (rustdoc + Clippy + Whitaker),
+      `test` (78 suites, 0 failed, plus 87 pytest passed and 5 skipped),
+      `markdownlint` (with `spellcheck`), and `nixie`. The round-13
+      `value_name = "BOOL"` finding was not re-raised, and neither were any of
+      round 12's three.
+      One count was checked rather than assumed. `clap_integration` reports 43
+      tests in the gate log against the 42 seen in the filtered local run; the
+      difference is the `#[cfg(feature = "yaml")]` test in `xdg.rs`, which
+      `make test`'s `--all-features` enables and a default-feature local run
+      skips. A name-by-name diff of the two runs is empty, so nothing regressed
+      and the gate is the superset.
+      Note on the 400-line rule, since it was raised as a risk for this commit:
+      `cli_flags/mod.rs` is now 381 lines, and the six added lines were checked
+      against it. The rule is not gate-enforced here (`dylint.toml` carries
+      only `[no_std_fs_operations]`, and `module_max_lines` appears nowhere in
+      the repository), so the file's 19-line headroom is a convention the gate
+      will not defend. It was left at 381 rather than split, because the added
+      doc comment explains the exact tokens it sits beside, and moving the
+      token generation away from that explanation would cost more than the
+      convention's headroom is worth.
+
 ## Surprises & discoveries
+
+- **The documentation IR and clap's `--help` can disagree about the same
+  field.** The IR reported `value_name: Some("BOOL")` for every boolean field,
+  and the derive's own comment described the `=<BOOL>` value, but the generated
+  `#[arg(...)]` never set `value_name`. Clap therefore derived a placeholder
+  from the *field name*, so real help read `--is-excited[=<IS_EXCITED>]`.
+  Nothing caught it because every test that touched the boolean surface
+  asserted either the IR or the parse result, and the two happened to agree
+  about what mattered in each. Round 13 caught it by asking what a user
+  actually reads. The general form: when one change must make two descriptions
+  of the same interface agree, at least one test has to assert the *rendered*
+  artefact, because asserting the intermediate representation only proves the
+  intermediate representation.
+- **A token-level assertion cannot see this class of defect, and neither can
+  a rendering test of a hand-built stand-in.** The macro unit test asserts the
+  emitted `#[arg(...)]` text; adding `value_name = "BOOL"` satisfies it
+  immediately. Proving the placeholder needs `render_help()` on the command the
+  derive actually builds. That in turn runs into a second constraint: the
+  hidden parser struct is emitted with private visibility in the same module as
+  the configuration type, so a test in a sibling module cannot name it and
+  re-exporting it is rejected as a private-interface leak (E0365). The test
+  struct therefore lives in the file that asserts on it. This rhymes with the
+  round-11 `rstest` fixture finding — generated and test-only surfaces are
+  reachable only where they are produced — and the reusable move is to declare
+  the test's own configuration type rather than trying to share one from a
+  helper module.
 
 - **A probe with an *undefined* argument reverses its own answer.** The
   first measurement of the `require_equals` justification used `--other`
@@ -633,9 +683,21 @@ The trace chain from requirement to evidence runs:
   empty-accumulator fix: an empty layer list yields all-`None` through both
   `merge_from_layers` and the generated `load` path, while a required field is
   still reported as `missing field` rather than silently defaulted.
-- M3: `ortho_config/tests/docs_ir.rs` asserts `takes_value == true`, the
-  `BOOL` value name, `["true", "false"]` possible values, and
-  `value_optional == true`; renderer goldens regenerate and are reviewed.
+- M3: `ortho_config/tests/docs_ir_fields.rs` asserts `takes_value == true`,
+  the `BOOL` value name, `["true", "false"]` possible values, and
+  `value_optional == true`; renderer goldens regenerate and are reviewed. The
+  file was split out of `docs_ir.rs` in round 11 to restore the 400-line limit,
+  and `support/docs_ir_config.rs` holds the shared configuration both halves
+  describe.
+- M3b: `ortho_config/tests/clap_integration/help.rs` renders the command the
+  derive generates and asserts the `--flag[=<BOOL>]` placeholder that `--help`
+  prints. This is the only check that spans both descriptions of the boolean
+  surface: the `M3` assertions cover the documentation IR, and a token-level
+  check of the generated `#[arg(...)]` passes even when clap substitutes a
+  field-derived placeholder. A companion test asserts the field-derived form is
+  absent, and a third pins the `--flag` / `=true` / `=false` / absent round
+  trip in both states so the pair reads as a placeholder control rather than a
+  behaviour change.
 - M4: `make markdownlint` for prose and the tested-example fences; the
   executable documentation example runs under `make test`.
 - Full commit gates run through `scrutineer` before each CodeRabbit review.
