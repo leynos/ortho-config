@@ -78,7 +78,16 @@ Observable success: a config file that sets `enabled = true` combined with
       flag and, when neither flag exists, names no spelling instead of the
       nonsense `the flag=false`; and the `--excited --port 3000` illustration
       no longer names a `port` field the example's `Config` does not declare.
-- [ ] Re-run gates; push; draft PR.
+- [x] (2026-09-25) All seven gates green at `2cfc9bb1`. The scrutineer's run
+      caught one blocker the previous rounds had missed:
+      `clippy::too_many_arguments` (5/4) on the new MAML test, because the
+      rstest function took the `minimal_doc` fixture plus four `#[case]`
+      parameters. Grouping the two expected phrases into a tuple brings it to
+      four. `cargo test` had reported a false green on this lint, since
+      `too_many_arguments` is not raised by the `RUSTFLAGS="-D warnings"` test
+      build; `make lint` also stops at `lint-clippy` and never reaches
+      `lint-whitaker`, so whitaker was re-run separately and is green.
+- [ ] Push; draft PR.
 
 ## Surprises & discoveries
 
