@@ -68,10 +68,11 @@ roadmap boundary:
    behaviour: `--json`, stdout/stderr separation, enumerating errors, stable
    result summaries, and atomic artefact writes.
 4. Agent-native linting is now a `cargo-orthohelp` responsibility: the
-   `--check-agent-native[=off|warn|deny]` flag runs the behaviour lint over the
-   compiled agent context, writes a JSON policy report to stdout, writes a
-   one-line summary to stderr, and exits `3` after generation when a deny-level
-   finding remains. Strict policy and future extensions are defined in
+   `--check-agent-native` flag (with the `--policy-mode <off|warn|deny>`
+   override) evaluates the package's policy configuration, writes
+   `policy-report.json` atomically to the output directory, and writes a
+   one-line summary to stderr. Strict policy, the bridge-driven behaviour
+   rules, and future extensions are defined in
    [agent-native-cli-design.md](agent-native-cli-design.md).
 5. Consumer applications such as Weaver and Netsuke depend on the same generic
    metadata for renderer policy, JSON mode contracts, exit-code classes, skill
