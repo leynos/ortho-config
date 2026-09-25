@@ -106,6 +106,21 @@ Observable success: a config file that sets `enabled = true` combined with
       `Invocation` refactor was proven by reverting to the 5-parameter
       signature with the suppression deleted and observing
       `clippy::too_many_arguments` fire.
+- [x] (2026-09-25) Rebasing onto the advanced `origin/main` (`8835347c`, PR
+      #416) found and fixed a defect no gate could catch: this branch's ADR-008
+      collided with the ADR-008 that PR #416 had already merged, so two
+      different ADRs would have claimed number 008. Our unpublished ADR
+      renumbers to 009. Four conflicts were resolved by hand — three in
+      `docs/contents.md` and one each in `docs/v0-10-0-migration-guide.md`,
+      `cargo-orthohelp/src/agent_context/mod.rs` (main moved `CANONICAL_VERBS`
+      into `policy::vocabulary` while this branch split the module), and the
+      `agent_context__fixture.json.snap` header. All are additive on both
+      sides, so every resolution keeps both. The four hand-resolved surfaces
+      are named in the gate report together with the test that covers each.
+- [x] (2026-09-25) All seven gates green at `e27e35fb`, on the rebased tree:
+      76 suites, 1337 passed, 0 failed, 0 panics, 0 `FAILED` markers, pytest 87
+      passed / 5 skipped, and no pending snapshots. The count is up from 1159
+      because main's policy surface now merges cleanly into this tree.
 - [ ] Push; draft PR.
 
 ## Surprises & discoveries
