@@ -77,14 +77,18 @@ contributes once, at the lowest-precedence position it occupies.
       Pushed `69aae8de` with lease bound to `2e6cfbf7`; CI run `36070786646`.
       The failing run this replaces was `34212392891` at head `2e6cfbf7`.
 
-      That run timed out `must_use_compile_tests` at 600.224s, which the
-      fail-fast then left with 225 tests unrun and no coverage artefact. Two
-      independent defects were behind it: the filter named two binaries of
-      seven, and the override's 120s x 5 was the same 600s product as the base
-      60s x 10, so adding a binary to it bought nothing. Both are now fixed and
-      both are contracted against. Run `36068184976`, which finished, shows the
-      old figure was already too small rather than unlucky:
-      `crate_path_trybuild` passed at 572.5s of 600s.
+      That run timed out `must_use_compile_tests` at 600.224s. The failure is
+      the Windows lane's alone: Ubuntu finished 1,322/1,322 and 1,294/1,294,
+      and all three packaging jobs succeeded. Within that lane the fail-fast
+      left 521 of 1,316 tests unrun — 795 ran plus 521 not run is exactly the
+      1,316 the green run completes — and the Windows coverage artefact went
+      unproduced, so the run uploaded two Linux lcov files where the green run
+      uploads four. Two independent defects were behind it: the filter named
+      two binaries of seven, and the override's 120s x 5 was the same 600s
+      product as the base 60s x 10, so adding a binary to it bought nothing.
+      Both are now fixed and both are contracted against. Run `36068184976`,
+      which finished, shows the old figure was already too small rather than
+      unlucky: `crate_path_trybuild` passed at 572.5s of 600s.
 - [x] Suite green on Windows at `ce8f4621`. Run `36079995528`, all five jobs
       success. Both coverage lanes ran to completion with no fail-fast: 1,316
       passed of 1,316 (18 slow) and 1,292 of 1,292 (13 slow), 10 skipped each,
