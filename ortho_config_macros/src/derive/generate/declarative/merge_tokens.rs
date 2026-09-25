@@ -52,13 +52,13 @@ pub(super) fn merge_layer_tokens(
 /// Produces tokens that destructure the state, build an overlay with collected
 /// append and map values, merge it into the final value, and deserialize.
 ///
-/// The accumulator is normalised from `Null` to an empty object first. The
+/// The accumulator is normalized from `Null` to an empty object first. The
 /// generated state derives `Default`, so `value` starts as
 /// `serde_json::Value::Null`, and `merge_layer` skips empty maps rather than
 /// seating the accumulator. A layer list that supplied no values at all —
 /// which a prefixed, all-optional struct reaches whenever no environment
 /// variable is set and no configuration file exists — therefore reached the
-/// deserialiser as `Null` and failed with `invalid type: null, expected struct
+/// deserializer as `Null` and failed with `invalid type: null, expected struct
 /// …`. `Null` cannot mean anything else here: a layer whose whole value is
 /// `null` is rejected by the non-object guard in `merge_layer`.
 pub(super) fn finish_tokens(
