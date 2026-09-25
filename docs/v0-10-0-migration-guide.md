@@ -181,13 +181,14 @@ prefer omission when the intent is to defer. The same spelling applies to
 `Option<bool>` fields, which continue to distinguish "supplied nowhere" from an
 explicit `false`.
 
-Generated man pages now print the `--flag[=<BOOL>]` form, with the placeholder
-joined to the flag so it cannot be misread as the invalid `--flag =BOOL`
-spelling. PowerShell help explains the optional value in prose instead. The
-documentation IR reports `CliMetadata.value_optional = true` alongside the
-`BOOL` value name and the `true`/`false` possible values. The IR version
-advances to `1.2`; consumers that pin the version should accept the new value.
-Older documents remain readable, because the field carries a serde default.
+Generated man pages now print the `--flag[=BOOL]` form, with the bracketed
+placeholder italicized and joined to the flag so it cannot be misread as the
+invalid `--flag =BOOL` spelling. PowerShell help explains the optional value in
+prose instead. The documentation IR reports `CliMetadata.value_optional = true`
+alongside the `BOOL` value name and the `true`/`false` possible values. The IR
+version advances to `1.2`; consumers that pin the version should accept the new
+value. Older documents remain readable, because the field carries a serde
+default.
 
 ## Expect explicit CLI values to win
 

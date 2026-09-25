@@ -331,8 +331,11 @@ fn optional_value_paragraph(cli: &CliMetadata) -> String {
         );
     };
     format!(
-        "The value is optional: `{spelling}` means `true`, and `{spelling}=false` \
-         supplies an explicit `false`."
+        concat!(
+            "The value is optional: `{spelling}` means `true`, and ",
+            "`{spelling}=false` supplies an explicit `false`."
+        ),
+        spelling = spelling
     )
 }
 

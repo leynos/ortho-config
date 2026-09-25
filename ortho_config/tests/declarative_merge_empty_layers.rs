@@ -3,7 +3,7 @@
 //! The generated declarative state seeds its accumulator with
 //! `serde_json::Value::default()`, which is `Null`, and `merge_layer` skips
 //! empty maps. A layer list that supplied nothing therefore left `finish`
-//! deserialising `Null` straight into the configuration struct, which fails
+//! deserializing `Null` straight into the configuration struct, which fails
 //! with `invalid type: null, expected struct …` rather than producing a value.
 //!
 //! This is reachable from the ordinary `load` path, not just from a synthetic

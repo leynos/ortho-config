@@ -211,7 +211,7 @@ distinction, and `cli_default_as_absent` preserves it for `clap` defaults.
 The generated documentation metadata describes the same surface. Boolean fields
 report `takes_value: true` with a `BOOL` value name, `true` and `false` as
 possible values, and `value_optional: true`. Man pages render the flag as
-`--excited[=<BOOL>]`.
+`--excited[=BOOL]`, with the bracketed placeholder italicized.
 
 ## Make discovery match the application
 

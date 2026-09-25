@@ -61,7 +61,7 @@ Observable success: a config file that sets `enabled = true` combined with
 - [x] (2026-09-25) CodeRabbit `--agent --committed --base main` reviewed the
       46-file diff and returned five distinct concerns, none re-litigating the
       accepted design. All five actioned: the roff optional-value placeholder
-      now joins the flag (`--flag[=<BOOL>]`, matching clap's own
+      now joins the flag (`--flag[=BOOL]`, matching clap's own
       `require_equals` suffix) with a regression test proven non-vacuous; the
       406-line doc-example test file split into
       `documentation_examples/boolean_override.rs`; ADR-009 links made
@@ -163,7 +163,40 @@ Observable success: a config file that sets `enabled = true` combined with
       spellcheck fix was itself instructive: describing the three bad spellings
       inline re-tripped the same gate, because the tokenizer reads inline code
       spans. The note now describes the fault without reproducing it.
-- [ ] Push and request CodeRabbit round 5.
+- [x] (2026-09-25) CodeRabbit round 5 reviewed the branch and returned six
+      findings (five `minor`, one `trivial`). Two required rulings rather than
+      mechanical edits.
+- [x] (2026-09-25) Round 5, findings 1 and 2 contradicted each other on the
+      same question. One asked to preserve the British `-ise` forms of three
+      words in a Rust doc comment; the other asked to convert one of those same
+      words to the accepted `-ize` form. Both cannot be right. `AGENTS.md:24`
+      settles it — comments must use en-GB-oxendict ("-ize" / "-yse" /
+      "-our") — and the repository's own spellcheck gate had already demanded
+      `-ize` for these exact three words when they appeared in Markdown. So the
+      `-ize` direction is correct, finding 1 is wrong, and the three words are
+      now `-ize` in the Rust comments too. The finding that was wrong is the
+      more interesting one, because acting on it would have violated the stated
+      house style while looking like a review being actioned.
+- [x] (2026-09-25) Round 5, finding 5 exposed a real documentation defect, and
+      a wider one than it named. It said the users' guide should describe the
+      man-page flag as `--excited[=BOOL]` with `BOOL` italic and no angle
+      brackets. Reading clap's own source settled the premise:
+      `stylize_arg_suffix` in `clap_builder-4.6.2/src/builder/arg.rs:4677`
+      emits `[=` plus the placeholder plus `]`, and `render_arg_val` wraps
+      every value name in angle brackets, so clap's `--help` prints
+      `[=<BOOL>]`. The roff renderer does not wrap, and its golden confirms
+      `\fI[=BOOL]\fR`. The docs had been describing *man-page* output in
+      *clap's* notation. The finding named one site; the same false claim
+      appeared in four, all fixed: the users' guide, two passages of ADR-009,
+      and the migration guide. The two IR field doc comments were left alone —
+      they say renderers bracket the placeholder without asserting a spelling,
+      which remains true.
+- [x] (2026-09-25) Round 5, findings 3, 4, and 6 were actioned: the PowerShell
+      sentence now uses `concat!` (with an explicit `spelling = spelling`
+      argument, because an empirical probe showed `format!(concat!(…))` cannot
+      capture implicitly), and the ExecPlan's ADR-003 reference now names the
+      file that exists.
+- [ ] Re-run the full gate suite over the round-5 fixes and push.
 
 ## Surprises & discoveries
 
@@ -373,9 +406,9 @@ Governing documents this plan conforms to:
 - `docs/agent-native-cli-design.md` §5 — no auto-generated `--no-x` negation
   pairs. This is why the plan adopts a single value-taking flag rather than a
   two-flag pair.
-- `docs/adr-003-documentation-ir-schema-ownership.md` — the documentation IR
-  and the `cargo-orthohelp` schema mirror move together; new fields need an
-  explicit default so older derives keep parsing.
+- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` — the
+  documentation IR and the `cargo-orthohelp` schema mirror move together; new
+  fields need an explicit default so older derives keep parsing.
 - `docs/adr-009-optional-value-boolean-cli-metadata.md` — added by this branch;
   records the `value_optional` marker, the IR version bump, and the rejected
   alternatives.

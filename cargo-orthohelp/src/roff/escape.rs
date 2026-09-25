@@ -9,9 +9,9 @@ use crate::schema::{CliMetadata, ValueType};
 
 /// Formats a CLI option, choosing the optional-value form for boolean flags.
 ///
-/// Boolean options render as `--flag[=<BOOL>]`; everything else renders as an
-/// ordinary flag with a required value, or as a bare switch when
-/// [`CliMetadata::takes_value`] is false.
+/// Boolean options render as `--flag[=BOOL]`, with the bracketed placeholder
+/// italicized; everything else renders as an ordinary flag with a required
+/// value, or as a bare switch when [`CliMetadata::takes_value`] is false.
 ///
 /// `fallback_placeholder` supplies a value name when the metadata does not
 /// carry one, derived from the field's semantic [`ValueType`].
@@ -216,7 +216,7 @@ pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_nam
     }
 }
 
-/// Formats a CLI flag whose value is optional, as in `--flag[=<BOOL>]`.
+/// Formats a CLI flag whose value is optional, as in `--flag[=BOOL]`.
 ///
 /// Boolean options accept a value but do not require one: the bare spelling
 /// means `true`, and `--flag=false` supplies an explicit `false`. Bracketing

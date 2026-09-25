@@ -53,7 +53,9 @@ placeholder.
 "1.1" to "1.2", and the mirrored schema definition changes in step. Boolean
 flags are reported with `takes_value: true`, `value_name: Some("BOOL")`,
 `possible_values: ["true", "false"]`, and `value_optional: true`. Renderers
-print `--flag[=<BOOL>]` when the marker is set. This is the accepted option.
+print the optional-value form when the marker is set: the roff renderer emits
+`--flag[=BOOL]` with an italic placeholder, following clap's `require_equals`
+suffix rather than clap's help notation. This is the accepted option.
 
 ### Option C: Generate a separate negating flag
 
@@ -128,9 +130,9 @@ absent. The flag must use `=` before an explicit value so that `--flag` does
 not swallow the following argument.
 
 The documents emitted by `cargo-orthohelp` and the metadata exposed through
-`OrthoConfigDocs` both carry the new marker. Man pages render
-`--flag[=<BOOL>]`, and PowerShell help gains a paragraph explaining the two
-spellings.
+`OrthoConfigDocs` both carry the new marker. Man pages render `--flag[=BOOL]`
+with an italic placeholder, and PowerShell help gains a paragraph explaining
+the two spellings.
 
 The users' guide and the migration guide are the normative prose references for
 the command-line surface and for upgrading consumers of the IR.
