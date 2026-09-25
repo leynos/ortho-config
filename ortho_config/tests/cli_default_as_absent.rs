@@ -47,6 +47,7 @@ struct GreetArgs {
 }
 
 impl Default for GreetArgs {
+    /// Build a `GreetArgs` holding the same values clap applies by default.
     fn default() -> Self {
         Self {
             punctuation: default_punct::default_punct(),
@@ -55,6 +56,11 @@ impl Default for GreetArgs {
     }
 }
 
+/// Write `cfg` to `.app.toml` in a fresh temp directory and change into it.
+///
+/// Returns the temp directory and a guard that restores the previous working
+/// directory when dropped, so tests can rely on relative configuration
+/// discovery without leaking state between cases.
 #[fixture]
 fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
     let dir = tempfile::tempdir().context("create temp dir")?;
@@ -191,6 +197,7 @@ struct CustomIdArgs {
 }
 
 impl Default for CustomIdArgs {
+    /// Build a `CustomIdArgs` matching clap's own default punctuation value.
     fn default() -> Self {
         Self {
             punctuation: default_punct::default_punct(),
@@ -218,6 +225,7 @@ where
     Ok(())
 }
 
+/// Test that a clap default on a custom-ID field is excluded from extraction.
 #[test]
 fn test_extract_user_provided_excludes_clap_default_with_custom_id() -> Result<()> {
     let matches = CustomIdArgs::command().get_matches_from(["custom-id"]);
@@ -234,6 +242,8 @@ fn test_extract_user_provided_excludes_clap_default_with_custom_id() -> Result<(
     Ok(())
 }
 
+/// Test that an explicit CLI value on a custom-ID argument is still extracted
+/// under the field name, not the clap argument ID.
 #[test]
 fn test_extract_user_provided_respects_custom_arg_id() -> Result<()> {
     check_extraction_key::<CustomIdArgs>(&["custom-id", "--punctuation", "?"], "punctuation")
@@ -251,6 +261,7 @@ struct RenameAllArgs {
 }
 
 impl Default for RenameAllArgs {
+    /// Build a `RenameAllArgs` matching clap's own default verbose-mode value.
     fn default() -> Self {
         Self {
             verbose_mode: default_punct::default_punct(),
@@ -258,6 +269,7 @@ impl Default for RenameAllArgs {
     }
 }
 
+/// Test that an explicit CLI value is extracted under its kebab-case serde key.
 #[test]
 fn test_extract_user_provided_respects_serde_rename_all() -> Result<()> {
     check_extraction_key::<RenameAllArgs>(&["rename-all", "--verbose-mode", "?"], "verbose-mode")

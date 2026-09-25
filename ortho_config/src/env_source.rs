@@ -115,16 +115,19 @@ pub type SharedScanEnvSource = Arc<dyn ScanEnvSource>;
 pub struct ProcessEnv;
 
 impl EnvSource for ProcessEnv {
+    /// Read `key` from the live process environment via `std::env::var_os`.
     fn get(&self, key: &str) -> Option<OsString> {
         std::env::var_os(key)
     }
 
+    /// Fall back to the platform's real home directory via `dirs::home_dir`.
     fn home_fallback(&self) -> Option<std::path::PathBuf> {
         dirs::home_dir()
     }
 }
 
 impl ScanEnvSource for ProcessEnv {
+    /// Collect every variable currently set in the process environment.
     fn scan(&self) -> Vec<(OsString, OsString)> {
         std::env::vars_os().collect()
     }
@@ -225,6 +228,7 @@ impl MapEnv {
 /// value wherever a holder is logged or unwrapped. The count is enough to
 /// distinguish "empty" from "populated" in a failure message.
 impl fmt::Debug for MapEnv {
+    /// Print only the variable count, never the captured keys or values.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MapEnv")
             .field("vars", &self.vars.len())
@@ -233,12 +237,14 @@ impl fmt::Debug for MapEnv {
 }
 
 impl EnvSource for MapEnv {
+    /// Look `key` up in the captured in-memory map, cloning the value found.
     fn get(&self, key: &str) -> Option<OsString> {
         self.vars.get(key).cloned()
     }
 }
 
 impl ScanEnvSource for MapEnv {
+    /// Return every captured variable, cloned from the in-memory map.
     fn scan(&self) -> Vec<(OsString, OsString)> {
         self.vars
             .iter()
@@ -252,6 +258,7 @@ where
     K: Into<String>,
     V: AsRef<OsStr>,
 {
+    /// Build a `MapEnv` from key/value pairs, converting each into owned storage.
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
         let vars = iter
             .into_iter()
