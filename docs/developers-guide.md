@@ -67,18 +67,20 @@ review.
 Do not remove the `max-threads = 1` constraint from either group without first
 verifying that the underlying shared-state access has been eliminated.
 
-On Windows only, one further override gives each of four binaries every nextest
-slot (`threads-required = "num-test-threads"`), so each runs alone:
-`ortho_config::crate_path_trybuild`, `ortho_config::declarative_merge_trybuild`,
-`ortho_config::compile_fail` and `cargo-orthohelp::compile_time`. Each drives
-a cold child `cargo` build through trybuild in the first coverage pass. Run
-side by side on Windows, those builds exhausted the 600 s per-test allowance:
-every Windows failure in runs 36127709137, 36127710357, 36127710423,
-36127710779 and 36127709460 was `compile_time`'s `must_use_compile_tests` at
-600 s. The 600 s ceiling stays, and Linux keeps its parallel execution.
-`windows_trybuild_isolation_test.py` holds the exact binary set, the platform,
-the reservation, the unchanged allowance, and the absence of any other slot
-reservation.
+On Windows only, a further group, **`windows_trybuild`** (`max-threads = 1`),
+holds four binaries: `ortho_config::crate_path_trybuild`,
+`ortho_config::declarative_merge_trybuild`, `ortho_config::compile_fail` and
+`cargo-orthohelp::compile_time`. Each drives a cold child `cargo` build through
+trybuild in the first coverage pass. Run side by side on Windows, those builds
+exhausted the 600 s per-test allowance: every Windows failure in runs
+36127709137, 36127710357, 36127710423, 36127710779 and 36127709460 was
+`compile_time`'s `must_use_compile_tests` at 600 s. The group keeps those
+builds from overlapping one another while the rest of the suite runs beside
+them. Reserving every nextest slot for each binary instead also cured the
+timeouts, but lengthened the Windows job by 20 minutes (run 36195916343). The
+600 s ceiling stays, and Linux keeps its parallel execution.
+`windows_trybuild_isolation_test.py` holds the group, the exact binary set, the
+platform, the unchanged allowance, and the absence of any slot reservation.
 
 ## Subcommand dispatch changes
 
