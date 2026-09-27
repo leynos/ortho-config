@@ -106,6 +106,48 @@ in that suite. The test asserts the `Project`-only case precisely because it is
 discriminating — a `User`-only request passes under either behaviour, since the
 user rung is the one that creates the entry.
 
+### The gate round that caught the tenth fix's own lint
+
+Scrutineer ran all seven gates against the tenth-finding change set and
+returned one red: `make lint` exited 2, with **three Clippy errors in the new
+`push_unique` branch** — `excessive_nesting` at `candidate_set.rs:118`,
+`shadow_reuse` at `:116`, and `indexing_slicing` at `:117`. All three are
+`deny`-level repository policy, not upstream defaults: `clippy.toml:5` sets
+`excessive-nesting-threshold = 4` (upstream leaves it off), and the workspace
+`[lints.clippy]` table sets `shadow_reuse` and `indexing_slicing` to `deny`.
+
+Because `lint-clippy` failed, make aborted and **`lint-whitaker` never ran** —
+Whitaker's verdict on this change set is that round is *unknown*, not passing.
+A green `make test` in the same run says nothing about it either: `cargo test`
+does not run Clippy lints.
+
+The three fixes are one refactor, not three suppressions. The scope-merge moved
+into `CandidateAccumulator::record_scope(index, requested)`, which:
+
+- takes the resolved index, so the body reaches the entry through
+  `self.candidates.get_mut(index)` — clearing `indexing_slicing`, and letting
+  the miss resolve to `return` rather than a panic path in a library;
+- binds the later rung's scope as `requested` and moves it into a local `scope`
+  only in the second `let ... else` — clearing `shadow_reuse`;
+- splits the two guards into flat `let ... else` statements, dropping the block
+  from nesting level 5 to level 2 — clearing `excessive_nesting`.
+
+The caller now binds `let listed = self.seen.get(&key).copied();` before
+matching, so the map borrow is over before `key` is moved into `seen` on the
+insertion path. Behaviour is unchanged and that is asserted, not assumed:
+`scope_stacking` passes 8/8 including
+`scope_stacking_keeps_a_shared_path_reachable_from_each_scope`, and both
+`cargo doc` under `RUSTDOCFLAGS="-D warnings"` and
+`cargo clippy --all-targets --all-features -- -D warnings` are clean.
+
+Scrutineer also reported `make check-fmt` red on the plan document, and
+correctly labelled it stale: it failed at 20:59, the file was rewritten at
+21:00, and `mdtablefix --check` on the current content exits 0 with "74 files
+left unchanged". Re-run confirmed green. Its other five gates — `typecheck`,
+`test` (188s, every suite `0 failed`, pytest 87 passed/5 skipped),
+`markdownlint` (0 errors over 75 files, `spellcheck` reached and passed),
+`test-workflow-contracts` (312 passed/1 skipped), `nixie` — all passed.
+
 ## Big picture
 
 PR #465 resolves issue #318 by adding scoped configuration-file discovery plus
@@ -313,11 +355,36 @@ Three facts matter, and only the first is comfortable:
 
 The deferred-refactor reading is that `trybuild_binaries` is a three-level
 comprehension-shaped walk that could be flattened into helpers, which would
-both clear the rule and read better. That is a real improvement and it is not
-being taken in this round: it is a late change to a file whose bytes a queued
-CodeRabbit review and a running CI are both inspecting, and it would cost a
-full re-gate of a head that is otherwise certified. It is recorded here as
-outstanding work rather than silently dropped.
+both clear the rule and read better. That is a real improvement and it was not
+taken in that round: it would have been a late change to a file whose bytes a
+queued CodeRabbit review and a running CI were both inspecting, and it would
+have cost a full re-gate of a head that was otherwise certified.
+
+**The deferral was superseded, and the work is now done.** Every clause of that
+basis had expired: the Clippy round described above made a full re-gate
+mandatory anyway, so the cost argument was void; `comenq hist` showed no queued
+review (the last was 3h earlier, against `15b09f3d`); GitHub Actions had
+settled; and the head was not certified after all — it had a red `make lint`.
+Deferring behind a cost that is no longer being avoided is how a recorded
+finding turns into a permanent one.
+
+**It was verified rather than assumed.** `cs check` is installed locally and
+reproduces the hosted finding exactly before the change:
+
+    warn: tests/workflow_contracts/trybuild_tier.py:91: Bumpy Road Ahead (bumps = 2)
+
+The per-crate walk moved to `_crate_trybuild_binaries(base, crate)`, whose two
+guards — the crate may have no `tests/`, and most files there carry no trybuild
+call — now sit at the depth they belong to, with the binary-name set
+comprehension replacing the loop-and-`continue`. The finding is gone and the
+file scores a clean 10.00. Behaviour is asserted, not assumed: an inline
+reimplementation of the old walk and the new function return the same
+`frozenset` on the real workspace, both naming the same seven binaries
+(`compile_fail`, `compile_time`, `crate_path_trybuild`,
+`declarative_merge_trybuild`, `env_source_trybuild`, `generated_lint_trybuild`,
+`localized_parse_trybuild`). `make test-workflow-contracts` passes 313/1
+skipped — one more than before, the new helper's doctest — so no contract
+regressed.
 
 ## Design decision: same-scope precedence
 
