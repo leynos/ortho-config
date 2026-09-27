@@ -393,10 +393,10 @@ cargo test -p ortho_config --test <target>
 
 The root README, `docs/users-guide.md`, and `docs/cargo-orthohelp-api-guide.md`
 are executable documentation. Every fenced block in those files must have a
-unique `tested-example` marker on the immediately preceding line.
-The documentation-example test support owns parsing and lookup for these
-examples. It is test infrastructure only; production code, other crates, and
-examples must not depend on it.
+unique `tested-example` marker on the immediately preceding line. The
+documentation-example test support owns parsing and lookup for these examples.
+It is test infrastructure only; production code, other crates, and examples
+must not depend on it.
 
 The loader is shared by the documentation integration-test targets. Each target
 loads and parses the documents once, then borrows examples from its cached
