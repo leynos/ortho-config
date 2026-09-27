@@ -605,10 +605,10 @@ later progressively add opinion.
     derive-emitted impls under coherence rules and cannot supply per-field
     metadata.
   - Decision: artefact emission is opt-in behind
-    `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` (ADR-008); ambient proc-macro writes are
+    `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` (ADR-009); ambient proc-macro writes are
     rejected per Cargo team guidance. Refreshing requires a forced
     recompilation, because Cargo does not fingerprint proc-macro environment
-    reads; see ADR-008 for the exact invocation.
+    reads; see ADR-009 for the exact invocation.
   - Decision: the trait is wider than the design §8.1 sketch — it carries
     every command-level suffix the runtime walker requests, and `ARG_IDS`
     entries are a named `ArgLocalizationIds` struct rather than positional
@@ -626,7 +626,7 @@ later progressively add opinion.
     `artefact_tests.rs` (including a `proptest` property).
   - Limitation: a rename within one source file leaves an unpruned fragment
     until the next forced refresh. Accepted in Decision D-11 and documented in
-    ADR-008.
+    ADR-009.
   - Follow-up: flattened fields are excluded from `ARG_IDS` for now; their
     arguments surface at runtime under the parent command. Item 11.6.2 covers
     closing that gap.

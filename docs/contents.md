@@ -51,7 +51,7 @@
 - [ADR-008: Opt-in agent-native policy configuration][adr-008]:
   review the accepted 7.1.1 policy configuration surface, the enforcement and
   advertisement defaults, the report contract, and the reserved 7.1.2 seam.
-- [ADR-008: Opt-in identifier artefact emission](adr-008-opt-in-identifier-artefact-emission.md):
+- [ADR-009: Opt-in identifier artefact emission](adr-009-opt-in-identifier-artefact-emission.md):
   review the guarded build-time export for derived CLI identifiers.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
