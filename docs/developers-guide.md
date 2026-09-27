@@ -76,10 +76,9 @@ side by side on Windows, those builds exhausted the 600 s per-test allowance:
 every Windows failure in runs 36127709137, 36127710357, 36127710423,
 36127710779 and 36127709460 was `compile_time`'s `must_use_compile_tests` at
 600 s. That entry keeps its 600 s ceiling, and Linux keeps its parallel
-execution.
-`windows_trybuild_isolation_test.py` holds the exact binary set, the platform,
-the reservation, that entry's allowance, and the absence of any other slot
-reservation.
+execution. `windows_trybuild_isolation_test.py` holds the exact binary set, the
+platform, the reservation, that entry's allowance, and the absence of any other
+slot reservation.
 
 Exclusivity and the raised allowance are two fixes for one failure, and the
 file carries both. nextest resolves each override field from the **first**
