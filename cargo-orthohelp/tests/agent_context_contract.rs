@@ -14,15 +14,9 @@ use rstest::rstest;
 use serde_json::Value;
 use std::error::Error;
 use std::process::{Command, Output};
-use std::sync::{LazyLock, Mutex, PoisonError};
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
-
-// The bridge's content-addressed workspace is shared by every fixture case.
-// Serializing subprocesses prevents concurrent cases from rewriting its
-// manifest while another case is compiling it.
-static BRIDGE_BUILD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
 #[rstest]
 #[case::simple(
@@ -46,11 +40,7 @@ fn emitted_agent_context_has_stable_contract(
     #[case] expected_summary: &str,
 ) -> TestResult {
     let out_dir = tempfile::tempdir()?;
-    let bridge_build_guard = BRIDGE_BUILD_MUTEX
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
     let output = run_agent_context(&out_dir, root_type)?;
-    drop(bridge_build_guard);
     ensure_success(&output)?;
 
     let context = read_agent_context(&out_dir)?;
@@ -69,6 +59,9 @@ fn run_agent_context(out_dir: &TempDir, root_type: Option<&str>) -> TestResult<O
     let mut command = Command::new(executable.as_str());
     command
         .current_dir(fixtures::workspace_root()?.as_std_path())
+        // Isolate Cargo metadata's bridge cache as well as the generated
+        // artefact, so parallel test processes cannot rewrite one cache key.
+        .env("CARGO_TARGET_DIR", out_dir.path().join("cargo-target"))
         .args([
             "orthohelp",
             "--out-dir",
