@@ -144,6 +144,48 @@ oversized test modules one per change (#507, #508), so this is that series in
 progress rather than a defect to fix from this branch; fixing it here would
 collide with the next such change.
 
+## Code health: the CodeScene finding this plan failed to record
+
+CodeScene reports one finding against this branch, in a file this branch adds:
+
+    ❌ New issue: Bumpy Road Ahead
+    trybuild_binaries has 2 blocks with nested conditional logic. Any nesting of
+    2 or deeper is considered. Threshold is 2 blocks per function
+    tests/workflow_contracts/trybuild_tier.py  line 122
+
+The function is `trybuild_binaries` (`trybuild_tier.py:84`), whose loop body
+carries three nested levels: `for crate` → `if not tests.is_dir(): continue` →
+`for source` → `if TRYBUILD_CALL not in ...: continue`. The tool counts the two
+loop-and-guard pairs as the two blocks. Its `# suppression` link is a CodeScene
+hosted action, not a thing to use from here.
+
+Three facts matter, and only the first is comfortable:
+
+1. **It does not block the merge.** The `main-required-checks` ruleset
+   (`18427801`) requires exactly `build-test (ubuntu-latest)` and
+   `build-test (windows-latest)`. CodeScene is absent from that list. Proof by
+   example: PR #532 sits at `mergeStateStatus: UNSTABLE` — GitHub's word for
+   "mergeable, but a *non-required* check is failing" — with this same
+   CodeScene check as its only failure.
+   `gh api repos/…/branches/main/protection` returns 404 "Branch not protected"
+   here even though merges are gated, so that endpoint proves nothing either
+   way; the ruleset is the authority.
+2. **It is genuinely ours.** `trybuild_tier.py` is added by this branch (+227
+   lines), not inherited. It is not dismissible as pre-existing.
+3. **This plan never recorded it.** The finding has been continuously valid
+   since `ce8f4621`, surviving two rebases, and no section here mentioned
+   CodeScene at all. The comment's `original_commit_id` is `ce8f4621` while its
+   `commit_id` tracks the new head, which is why the first reading looked like
+   a stale artefact — the anchor is old, the finding is current.
+
+The deferred-refactor reading is that `trybuild_binaries` is a three-level
+comprehension-shaped walk that could be flattened into helpers, which would
+both clear the rule and read better. That is a real improvement and it is not
+being taken in this round: it is a late change to a file whose bytes a queued
+CodeRabbit review and a running CI are both inspecting, and it would cost a
+full re-gate of a head that is otherwise certified. It is recorded here as
+outstanding work rather than silently dropped.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
