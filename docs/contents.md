@@ -54,7 +54,7 @@
 - [ADR-009: Place the Linux build-test leg on Ubicloud][adr-009]:
   review the accepted runner size, fork fallback, platform-based check names,
   and pre-coverage disk discard for the Linux `build-test` leg.
-- [ADR-008: Opt-in identifier artefact emission](adr-008-opt-in-identifier-artefact-emission.md):
+- [ADR-010: Opt-in identifier artefact emission](adr-010-opt-in-identifier-artefact-emission.md):
   review the guarded build-time export for derived CLI identifiers.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active

@@ -164,7 +164,7 @@ review's findings are folded into the Decision Log and milestones below.
 - Risk: a future tool mistakes the build-time JSON's standalone per-struct ids
   for mounted command-tree ids. Severity: high. Likelihood: medium. Mitigation:
   include `path_scope: "standalone"` in every entry, describe the limitation in
-  ADR-008 and the schema documentation, and require roadmap 11.5.2 to obtain
+  ADR-010 and the schema documentation, and require roadmap 11.5.2 to obtain
   mounted ids from the path-aware compiled docs IR before exposing translator
   output.
 - Risk: artefact emission interacts badly with incremental compilation —
@@ -308,9 +308,9 @@ review's findings are folded into the Decision Log and milestones below.
     input permutations.
   - Residual limitation: a rename within the same source file keeps its
     recorded path unchanged, so a stale fragment is not pruned. This is
-    accepted and documented in ADR-008.
-- [x] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
-  - ADR-008, the localization design, guides, ADR-006, changelog, and roadmap
+    accepted and documented in ADR-010.
+- [x] Milestone 6: documentation, ADR-010, roadmap completion, final gates.
+  - ADR-010, the localization design, guides, ADR-006, changelog, and roadmap
     document the path-aware IR migration and explicitly opt-in artefact flow.
     The roadmap's 11.1.3 checkboxes and validation checklist are ticked, and
     the final workspace gates plus Markdown lint pass.
@@ -327,7 +327,7 @@ review's findings are folded into the Decision Log and milestones below.
   research pass over the Cargo issue tracker and internals threads, 2026-08-06.
   Impact: the design document's §8.2 artefact bullet cannot be implemented as
   an unconditional write, and even the opt-in write needs a documented
-  forced-recompile workflow; Decisions D-3 and D-11, recorded in ADR-008.
+  forced-recompile workflow; Decisions D-3 and D-11, recorded in ADR-010.
 - Observation: the existing docs derive emits dotted identifiers
   (`{app}.about`, `{app}.fields.{field}.help`) under a `fields.` namespace,
   while `message_id_for` emits dash-joined identifiers under an `args.`
@@ -463,7 +463,7 @@ contracts, alternatives, scaling, failure modes, viability).
   model) and Cargo team guidance both reject ambient proc-macro writes; an
   env-gated write neutralizes the docs.rs, rust-analyzer, and expansion-cache
   failure modes while still honouring the design document's artefact contract.
-  Recorded as ADR-008 in Milestone 6, together with the guidance that the
+  Recorded as ADR-010 in Milestone 6, together with the guidance that the
   variable is set per-invocation and never exported in shell profiles or
   CI-wide environment blocks. Date/Author: 2026-08-06, planning session;
   revised 2026-08-17 after D-9 made mounted docs identifiers path-aware.
@@ -573,7 +573,7 @@ contracts, alternatives, scaling, failure modes, viability).
   `cargo clean -p <crate> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build`,
   which recreates `OUT_DIR` content from scratch and defeats both the
   untracked-env-var problem and the expansion cache. Residual staleness for
-  renames within one file is accepted and documented in ADR-008. Date/Author:
+  renames within one file is accepted and documented in ADR-010. Date/Author:
   2026-08-06, post-review revision.
 - Decision D-12: fields introduced through `#[clap(flatten)]` /
   `#[command(flatten)]` are excluded from `ARG_IDS` in this task, and the
@@ -660,7 +660,7 @@ derived argument identifiers.
 Relevant skills for the implementer: `leta` (code navigation), `rust-router`
 (then `rust-types-and-apis` for the trait surface and `rust-unit-testing` for
 the test work), `execplans` (this document's maintenance), `commit-message`,
-`comenq-coderabbit` (review loop), `arch-decision-records` (ADR-008),
+`comenq-coderabbit` (review loop), `arch-decision-records` (ADR-010),
 `proptest`, and `en-gb-oxendict` (prose). Relevant repository documentation:
 `docs/design.md`, `docs/cli-localization-design.md`,
 `docs/localizable-rust-libraries-with-fluent.md`,
@@ -1101,7 +1101,7 @@ Validation: full gate set; `coderabbit review --agent`. Commit.
 
 ### Milestone 6: documentation, ADR, roadmap, and closure
 
-- Write `docs/adr-008-opt-in-identifier-artefact-emission.md`
+- Write `docs/adr-010-opt-in-identifier-artefact-emission.md`
   (Y-Statement, per `arch-decision-records`): ambient proc-macro writes
   rejected; env-gated emission chosen (exact-`1` semantics, per-invocation-only
   guidance); the forced-recompile workflow and expansion-cache caveat; the
@@ -1114,7 +1114,7 @@ Validation: full gate set; `coderabbit review --agent`. Commit.
 - Amend `docs/cli-localization-design.md`: §8.1 (widened trait surface and
   named `ArgLocalizationIds` per D-7, `LOCALIZATION_BASE` per D-5, and replace
   the impossible blanket-impl sentence with the generated delegation of D-1);
-  §8.2 (artefact emission is opt-in, reference ADR-008; mark the
+  §8.2 (artefact emission is opt-in, reference ADR-010; mark the
   `localized_default` bullet deferred per D-4; specify D-9's path-aware nested
   docs generation and D-12's flatten exclusion). Update ADR-006's known-risk
   paragraph to state precisely which collisions moved to compile time (argument
@@ -1248,7 +1248,7 @@ and missing-directory cases.
 Remaining known gap, carried as future work rather than a Milestone 5
 obligation: a rename within one source file does not change the fragment's
 recorded `source_file`, so that fragment survives pruning and its stale entries
-persist until the next forced refresh. Decision D-11 accepts this and ADR-008
+persist until the next forced refresh. Decision D-11 accepts this and ADR-010
 documents it.
 
 ## Interfaces and dependencies

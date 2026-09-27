@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 008: Opt-in identifier artefact emission
+# Architectural decision record (ADR) 010: Opt-in identifier artefact emission
 
 ## Status
 
