@@ -27,9 +27,16 @@ from timeout_budgets import REPO_ROOT
 
 #: The call that identifies a trybuild test binary. Matched rather than
 #: imported because the Rust sources cannot be executed here. Every
-#: trybuild binary here writes this exact call in its test function,
-#: whether it binds `TestCases` to a variable first or not.
-TRYBUILD_CALL: typ.Final[str] = "trybuild::TestCases::new()"
+#: trybuild binary here writes this call in its test function, whether it
+#: binds `TestCases` to a variable first or not.
+#:
+#: Matched as a pattern rather than a literal because Rust accepts
+#: whitespace before the argument list, and a source written `new ()`
+#: would otherwise be read as no trybuild binary at all — dropping it
+#: from the class silently, so the coverage assertion would not ask for
+#: it. `make fmt` normalises the spelling, but the miss would be a hole
+#: in the class for exactly as long as it took to notice.
+TRYBUILD_CALL: typ.Final[re.Pattern[str]] = re.compile(r"trybuild::TestCases::new\s*\(")
 
 #: Where integration tests live, per crate. A binary's name is the test
 #: file's stem unless a `[[test]]` target renames it.
@@ -115,11 +122,50 @@ def trybuild_binaries(root: Path | None = None) -> frozenset[str]:
         manifest = (base / crate / "Cargo.toml").read_text(encoding="utf-8")
         declared = _declared_test_targets(manifest)
         for source in sorted(tests.glob("*.rs")):
-            if TRYBUILD_CALL not in source.read_text(encoding="utf-8"):
+            if TRYBUILD_CALL.search(source.read_text(encoding="utf-8")) is None:
                 continue
             relative = source.relative_to(base / crate).as_posix()
             found.add(declared.get(relative, source.stem))
     return frozenset(found)
+
+
+def declared_non_trybuild_binaries(root: Path | None = None) -> frozenset[str]:
+    """Return every declared test binary that is not a trybuild one.
+
+    A ``[[test]]`` target may live in a subdirectory, and
+    :func:`trybuild_binaries` globs only ``tests/*.rs``, so these names
+    are invisible to it in both directions. They are read here so the
+    override's filter can be checked against binaries it must *not*
+    select, which is the only way over-selection is visible: a filter
+    naming a superset of the class passes a coverage check that offers
+    it nothing but class members to match against.
+
+    Parameters
+    ----------
+    root : Path, optional
+        The repository root. Defaults to the one the other contracts use.
+
+    Returns
+    -------
+    frozenset of str
+        The declared binary names that carry no trybuild coverage.
+
+    Examples
+    --------
+    A directory with no crates contributes nothing:
+
+    >>> declared_non_trybuild_binaries(Path("/nonexistent"))
+    frozenset()
+    """
+    base = REPO_ROOT if root is None else root
+    trybuild = trybuild_binaries(base)
+    found: set[str] = set()
+    for crate in CRATE_DIRECTORIES:
+        manifest = base / crate / "Cargo.toml"
+        if not manifest.is_file():
+            continue
+        found.update(_declared_test_targets(manifest.read_text(encoding="utf-8")).values())
+    return frozenset(found - trybuild)
 
 
 def _matches_one(matcher: str, name: str) -> bool:
@@ -184,13 +230,26 @@ def _matches_one(matcher: str, name: str) -> bool:
     return fnmatch.fnmatchcase(name, pattern)
 
 
-def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) -> dict[str, bool]:
-    """Return which candidates a filterset's predicates select.
+BINARY_TERM = re.compile(r"binary\(([^)]*)\)")
 
-    Only the ``binary(...)`` predicates are read: they are the ones this
-    contract is about, and a filter naming others is a wider expression
-    whose effect on these names is decided by the `binary` terms alone when
-    they are the only terms that can match at all.
+#: What may sit between ``binary(...)`` terms for the disjunction to be
+#: read as one. Anything else — `&`, `-`, `not(...)`, or a `test(...)`
+#: term — changes the selection by narrowing it, so it is refused rather
+#: than dropped on the floor.
+BINARY_DISJUNCTION = re.compile(r"^[\s|]*$")
+
+
+def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) -> dict[str, bool]:
+    """Return which candidates a disjunction of ``binary`` terms selects.
+
+    Only a ``|``-joined list of ``binary(...)`` predicates is read. That
+    is the shape the trybuild override uses, and it is the only shape in
+    which the `binary` terms decide the answer on their own: a
+    conjunction, a difference, or a negation narrows the selection in a
+    way this reader does not evaluate — `binary(compile_fail) &
+    test(other)` selects nothing when `other` matches no test, while
+    rating the `binary` term alone would report `compile_fail` as
+    covered. Such an expression is refused rather than misread.
 
     Parameters
     ----------
@@ -207,21 +266,36 @@ def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) 
     Raises
     ------
     UnreadableMatcherError
-        If a ``binary(...)`` argument uses a matcher this contract cannot
-        evaluate.
+        If the expression is not a ``binary`` disjunction, names no
+        ``binary(...)`` predicate, or passes a ``binary(...)`` argument
+        using a matcher this contract cannot evaluate.
 
     Examples
     --------
     >>> binaries_selected_by('binary(*trybuild)', ["a_trybuild", "other"])
     {'a_trybuild': True, 'other': False}
     """
-    matchers = [arg.strip() for arg in re.findall(r"binary\(([^)]*)\)", filter_expression)]
-    if not matchers:
-        raise UnreadableMatcherError(
+    terms = BINARY_TERM.findall(filter_expression)
+    if not terms:
+        message = (
             f"the trybuild override's filter names no binary(...) predicate: "
             f"{filter_expression!r}"
         )
+        raise UnreadableMatcherError(message)
+    # Removing the terms leaves the glue between them. Checking it here,
+    # rather than scanning the whole expression, is what keeps an
+    # operator inside a matcher — a regex or glob such as `binary(/a-b/)`
+    # — from being refused as a stray operator.
+    remainder = BINARY_TERM.sub("", filter_expression)
+    if BINARY_DISJUNCTION.match(remainder) is None:
+        message = (
+            f"the trybuild override's filter combines its binary(...) terms "
+            f"with something other than `|`, which this contract does not "
+            f"evaluate; reading the terms alone would report a narrower "
+            f"expression as a wider one: {filter_expression!r}"
+        )
+        raise UnreadableMatcherError(message)
     return {
-        name: any(_matches_one(matcher, name) for matcher in matchers)
+        name: any(_matches_one(term.strip(), name) for term in terms)
         for name in candidates
     }

@@ -31,6 +31,7 @@ from trybuild_tier import (
     TRYBUILD_CALL,
     UnreadableMatcherError,
     binaries_selected_by,
+    declared_non_trybuild_binaries,
     trybuild_binaries,
 )
 
@@ -94,8 +95,11 @@ def test_every_trybuild_binary_is_covered_by_the_override(nextest_config: str) -
     seven came to run on an allowance sized for tests that do not spawn a
     child cargo.
 
-    A filter naming every binary in the workspace would pass this and mean
-    nothing, so the class is also required to be non-trivial.
+    A filter naming every binary in the workspace would pass a coverage
+    check that offers it nothing but class members to match against, so
+    the other declared binaries are offered alongside them and the two
+    sets compared for equality. The class is also required to be
+    non-trivial.
     """
     class_members = trybuild_binaries()
     assert len(class_members) > 1, (
@@ -104,13 +108,23 @@ def test_every_trybuild_binary_is_covered_by_the_override(nextest_config: str) -
         f"or the reading of them broke and would now pass vacuously"
     )
     expression = _trybuild_filter(nextest_config)
-    selected = binaries_selected_by(expression, sorted(class_members))
-    missing = sorted(name for name, covered in selected.items() if not covered)
+    others = declared_non_trybuild_binaries()
+    selected = binaries_selected_by(expression, sorted(class_members | others))
+    chosen = {name for name, covered in selected.items() if covered}
+    missing = sorted(class_members - chosen)
     assert not missing, (
         f"{missing} are trybuild binaries, so each spawns a child cargo and pays "
         f"a cold dependency build, but the override's filter does not select "
         f"them: {expression!r}. They run on the base allowance instead, "
         f"which is sized for tests that do not"
+    )
+    extra = sorted(chosen - class_members)
+    assert not extra, (
+        f"the override's filter also selects {extra}, which carry no trybuild "
+        f"coverage: {expression!r}. An over-wide filter spends the trybuild "
+        f"allowance on tests that do not need it, and can hide a class member "
+        f"being dropped from it — the coverage assertion above cannot see the "
+        f"difference if every name it asks about is matched anyway"
     )
 
 
@@ -148,11 +162,59 @@ def test_a_matcher_this_contract_cannot_read_is_refused() -> None:
 
 
 def test_the_trybuild_call_this_contract_matches_is_the_one_the_sources_use() -> None:
-    """The reading keys on a literal, so the literal is pinned.
+    """The reading keys on a pattern, so the pattern is pinned.
 
     `trybuild_binaries` finds a binary by matching `TRYBUILD_CALL` in its
     source. If trybuild's API were spelled differently in a new file, that
     file would be counted as no trybuild binary at all and the coverage
     assertion above would not ask for it.
     """
-    assert TRYBUILD_CALL == "trybuild::TestCases::new()"
+    assert TRYBUILD_CALL.search("trybuild::TestCases::new()") is not None
+    # Rust accepts whitespace before the argument list, and a source that
+    # used it would otherwise be read as no trybuild binary at all.
+    assert TRYBUILD_CALL.search("let t = trybuild::TestCases::new ();") is not None
+
+
+def test_a_filter_combining_binary_terms_is_refused() -> None:
+    """A narrower expression must not be read as a plain disjunction.
+
+    `binaries_selected_by` reads only `binary(...)` terms. A conjunction,
+    difference, or negation beside them changes which tests run — the
+    example below selects nothing when `nonexistent` matches no test —
+    so reading the terms alone would report the expression as wider than
+    it is.
+    """
+    class_members = trybuild_binaries()
+    assert class_members, "this case needs a class to test against"
+    member = sorted(class_members)[0]
+    for compound in (
+        f"binary({member}) & test(nonexistent)",
+        f"binary({member}) - binary(other)",
+        f"not(binary({member}))",
+        f"binary({member}) & !test(a)",
+    ):
+        with pytest.raises(UnreadableMatcherError):
+            binaries_selected_by(compound, sorted(class_members))
+
+
+def test_over_selection_is_refused() -> None:
+    """A filter wider than the class must fail, not pass by omission.
+
+    Offering the check only class members makes `binary(*)` look correct,
+    because every name it is asked about is matched. The non-trybuild
+    binaries are what make the difference visible.
+    """
+    others = declared_non_trybuild_binaries()
+    assert others, (
+        "this case needs at least one declared non-trybuild test binary; "
+        "without one, over-selection cannot be observed at all and this "
+        "test would pass vacuously"
+    )
+    expression = f"binary(*) | {' | '.join(f'binary({name})' for name in sorted(others))}"
+    selected = binaries_selected_by(expression, sorted(trybuild_binaries() | others))
+    chosen = {name for name, covered in selected.items() if covered}
+    assert chosen - trybuild_binaries(), (
+        "binary(*) selects every name offered, so the equality check in "
+        "test_every_trybuild_binary_is_covered_by_the_override has something "
+        "to reject"
+    )

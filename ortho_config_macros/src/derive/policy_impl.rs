@@ -2,7 +2,7 @@
 
 use quote::quote;
 
-use super::load_impl::DiscoveryTokens;
+use super::load_impl::{DiscoveryTokens, LoadSourceTokens};
 
 struct PolicyLoadingTokens {
     builder_steps: Vec<proc_macro2::TokenStream>,
@@ -24,15 +24,29 @@ fn optional_builder_step(
     })
 }
 
-fn policy_builder_steps(discovery: &DiscoveryTokens) -> Vec<proc_macro2::TokenStream> {
-    [
+fn policy_builder_steps(
+    discovery: &DiscoveryTokens,
+    source_tokens: Option<&LoadSourceTokens<'_>>,
+) -> Vec<proc_macro2::TokenStream> {
+    let mut steps: Vec<proc_macro2::TokenStream> = [
         optional_builder_step(discovery.config_file_name.as_ref(), "config_file_name"),
         optional_builder_step(discovery.dotfile_name.as_ref(), "dotfile_name"),
         optional_builder_step(discovery.project_file_name.as_ref(), "project_file_name"),
     ]
     .into_iter()
     .flatten()
-    .collect()
+    .collect();
+    // The policy path consults the environment twice over — the selector's
+    // `env` rungs and automatic discovery's own lookups — so an injected
+    // source has to reach the builder here exactly as it does on the legacy
+    // path. Without this step a `load_from_iter_with_sources` caller would
+    // have its `MapEnv` ignored and discovery would read the real process
+    // environment instead.
+    if let Some(injected_sources) = source_tokens {
+        let discovery_source = injected_sources.discovery;
+        steps.push(quote! { builder = builder.env_source(#discovery_source); });
+    }
+    steps
 }
 
 fn selector_tokens(
@@ -46,6 +60,26 @@ fn selector_tokens(
             quote! { #krate::ConfigPathSelector::env(#variable) }
         })
         .collect()
+}
+
+/// The env selector rungs a policy-enabled struct declares.
+///
+/// `env_vars` is the ordered alias chain, but `env_var` carries a materialised
+/// default (`<PREFIX>_CONFIG_PATH`, or `CONFIG_PATH` unprefixed) that the
+/// legacy emitter always installs. Opting into the policy path must not
+/// silently drop that override: a struct setting only `automatic_mode` would
+/// otherwise ignore the very variable its non-policy form honours. The two
+/// attributes are mutually exclusive, so preferring `env_vars` when it is
+/// non-empty cannot lose an explicitly written `env_var`.
+fn env_selector_tokens(
+    discovery: &DiscoveryTokens,
+    krate: &proc_macro2::TokenStream,
+) -> Vec<proc_macro2::TokenStream> {
+    if discovery.env_vars.is_empty() {
+        selector_tokens(std::slice::from_ref(&discovery.env_var), krate)
+    } else {
+        selector_tokens(&discovery.env_vars, krate)
+    }
 }
 
 fn mode_tokens(
@@ -102,18 +136,15 @@ fn scope_order_tokens(
 fn policy_tokens(
     discovery: &DiscoveryTokens,
     krate: &proc_macro2::TokenStream,
+    source_tokens: Option<&LoadSourceTokens<'_>>,
 ) -> syn::Result<PolicyLoadingTokens> {
-    let project_root = discovery.project_root_from.as_ref().map(|(field_name, is_optional)| {
+    let project_root = discovery.project_root_from.as_ref().map(|field_name| {
         let field = syn::Ident::new(field_name, proc_macro2::Span::call_site());
-        if *is_optional {
-            quote! { if let Some(ref cli) = cli { if let Some(ref root) = cli.#field { policy = policy.project_root(root.clone()); } } }
-        } else {
-            quote! { if let Some(ref cli) = cli { policy = policy.project_root(cli.#field.clone()); } }
-        }
+        quote! { if let Some(ref cli) = cli { if let Some(root) = cli.#field.clone() { policy = policy.project_root(root); } } }
     });
     Ok(PolicyLoadingTokens {
-        builder_steps: policy_builder_steps(discovery),
-        env_selectors: selector_tokens(&discovery.env_vars, krate),
+        builder_steps: policy_builder_steps(discovery, source_tokens),
+        env_selectors: env_selector_tokens(discovery, krate),
         explicit_mode: mode_tokens(discovery.explicit_mode.as_deref(), krate, true)?,
         automatic_mode: mode_tokens(discovery.automatic_mode.as_deref(), krate, false)?,
         scope_order_call: scope_order_tokens(&discovery.scope_order, krate)?,
@@ -126,8 +157,9 @@ pub(crate) fn build_policy_based_loading(
     krate: &proc_macro2::TokenStream,
     discovery: &DiscoveryTokens,
     has_config_path: bool,
+    source_tokens: Option<&LoadSourceTokens<'_>>,
 ) -> proc_macro2::TokenStream {
-    let tokens = match policy_tokens(discovery, krate) {
+    let tokens = match policy_tokens(discovery, krate, source_tokens) {
         Ok(tokens) => tokens,
         Err(error) => return error.to_compile_error(),
     };

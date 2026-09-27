@@ -106,11 +106,11 @@ def slow_timeouts(config_text: str) -> list[tuple[str, object]]:
 
 
 def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
-    """Return each override's filter and the per-test allowance it carries.
+    """Return each override's selector and the per-test allowance it carries.
 
     An override is the only way a set of tests gets an allowance other
     than the profile's own, so this is the reader that answers which
-    filter a given allowance belongs to.
+    selector a given allowance belongs to.
 
     Parameters
     ----------
@@ -130,8 +130,9 @@ def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
     Raises
     ------
     NextestConfigurationError
-        If such an override declares no ``filter``, which nextest
-        refuses, or its ``slow-timeout`` is unreadable.
+        If such an override declares neither a ``filter`` nor a
+        ``platform``, which nextest refuses, or its ``slow-timeout`` is
+        unreadable.
 
     Examples
     --------
@@ -148,12 +149,20 @@ def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
             continue
         expression = table.get("filter")
         if not isinstance(expression, str):
-            message = (
-                f"{path} declares a slow-timeout but no filter, so there is "
-                f"no set of tests that allowance applies to; nextest refuses "
-                f"such a file"
-            )
-            raise NextestConfigurationError(message)
+            # `platform` is the other selector nextest accepts, and it is
+            # gated on its own: an override carrying only a platform with a
+            # `slow-timeout` is legal and applies to every test that platform
+            # runs. Only an override with neither selector is the refusal
+            # this reports.
+            platform = table.get("platform")
+            if not isinstance(platform, str):
+                message = (
+                    f"{path} declares a slow-timeout but neither a filter nor a "
+                    f"platform, so there is no set of tests that allowance "
+                    f"applies to; nextest refuses such a file"
+                )
+                raise NextestConfigurationError(message)
+            expression = f"platform({platform})"
         found.append((path, expression, budget_of(path, table["slow-timeout"])))
     return found
 

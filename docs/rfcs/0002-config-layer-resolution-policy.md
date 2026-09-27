@@ -365,17 +365,21 @@ rule for the whole system.
 Three invariants keep scope stacking deterministic, because today's loader
 de-duplicates and detects `extends` cycles only _within_ a single chain. First,
 `extends` resolution is chain-local: each file in a scope resolves its own
-parents with its own visited set, so a parent file is expanded once per
-reference. Second, de-duplication is by canonical path _across_ scopes: when
-two scopes resolve to the same canonical file (for example, a project root that
-is a symlink into the user directory), that file contributes one layer, at its
-earliest position in application order — within a scope, the lowest-precedence
-position — rather than loading twice and silently doubling append-strategy
-vectors. Third, every candidate in a scope is attempted, so files that
-first-wins never reached are now opened; a malformed one is reported through
-the usual partitioned diagnostics rather than blocking the layers that loaded.
-A cross-scope `extends` cycle is reported with the same cyclic-extends error as
-a within-chain cycle.
+parents with its own visited set, so a cycle is detected within a chain rather
+than across chains, and two chains reach a shared parent independently. Second,
+de-duplication is by canonical path _across_ the whole composition: when the
+same canonical file is reached from two places — two scopes that alias one
+directory, or two children that extend one parent — that file contributes one
+layer, at its earliest position in application order — within a scope, the
+lowest-precedence position — rather than loading twice and silently doubling
+append-strategy vectors. A parent reached by two children therefore applies
+once, at the position its first child gave it; both children still override it,
+because both are applied later, and the parent's own keys survive beneath them.
+Third, every candidate in a scope is attempted, so files that first-wins never
+reached are now opened; a malformed one is reported through the usual
+partitioned diagnostics rather than blocking the layers that loaded. A
+cross-scope `extends` cycle is reported with the same cyclic-extends error as a
+within-chain cycle.
 
 ### Reusable file-layer resolver
 
