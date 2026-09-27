@@ -400,6 +400,69 @@ This supplies the `ACME_SERVE_CMDS_SERVE_PORT` layer while preserving the
 existing CLI precedence. Import `MapEnv` and `std::sync::Arc` when using this
 pattern.
 
+### Choose the file-discovery source
+
+The process-backed loaders are the default. Use them when the running process's
+own environment should decide which configuration files are found and which
+variables are merged: they take their named lookups from the live process
+environment and use the current directory as the local base.
+
+Use `SubcommandFileContext` with the `_with_sources_at` loaders when the search
+inputs must be supplied rather than inherited. A context pairs an explicit
+local base path with a lookup-only `EnvSource`; the source answers named
+lookups for `HOME`, `USERPROFILE` (non-Unix), `XDG_CONFIG_HOME`, and
+`XDG_CONFIG_DIRS`, and on non-Unix targets it may also supply the native
+platform configuration directory. On Unix and Redox, candidates are tried in
+the order `HOME` dotfiles, the XDG bases (the configured `XDG_CONFIG_HOME`, else
+`$HOME/.config` or the platform home fallback, then each absolute
+`XDG_CONFIG_DIRS` entry), and finally the explicit base. Only the first existing
+`config.<ext>` per extension is kept from the XDG bases. The merge source is
+separate: `SharedScanEnvSource` enumerates the environment layer, while the
+`EnvSource` inside the context only performs lookups.
+
+<!-- tested-example: guide-subcommand-sources -->
+```rust
+use clap::Parser;
+use ortho_config::{
+    MapEnv, OrthoConfig, OrthoResult, SharedScanEnvSource, SubcommandFileContext,
+    load_and_merge_subcommand_for_with_sources_at,
+};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Debug, Default, Parser, Deserialize, Serialize, OrthoConfig)]
+#[command(name = "serve")]
+#[ortho_config(prefix = "ACME_SERVE_")]
+struct ServeCli {
+    #[arg(long)]
+    port: Option<u16>,
+}
+
+fn main() -> OrthoResult<()> {
+    let cli = ServeCli::default();
+    // Naming both XDG locations keeps the search inside supplied paths:
+    // nothing outside this map and the explicit base is consulted.
+    let discovery = MapEnv::new()
+        .with_var("XDG_CONFIG_HOME", "/srv/acme/config")
+        .with_var("XDG_CONFIG_DIRS", "/srv/acme/fallback");
+    let base = std::path::Path::new("/srv/acme/local");
+    let files = SubcommandFileContext::new(base, &discovery);
+    let merge: SharedScanEnvSource =
+        Arc::new(MapEnv::new().with_var("ACME_SERVE_CMDS_SERVE_PORT", "9000"));
+
+    let config = load_and_merge_subcommand_for_with_sources_at(&cli, files, merge)?;
+    println!("port={:?}", config.port);
+    Ok(())
+}
+```
+
+The example prints `port=Some(9000)`. No process variable is read: the merge
+source supplies the `ACME_SERVE_CMDS_SERVE_PORT` layer, and file discovery
+reads only the variables the context's `EnvSource` answers. Because the map
+names both XDG variables, discovery's default `XDG_CONFIG_DIRS` of `/etc/xdg`
+is never reached. The merge layer outranks the file layer, so the printed value
+does not depend on what those directories happen to contain.
+
 Some commands only parse arguments and do not participate in configuration
 loading. Keep those arguments in a separate clap-only type:
 

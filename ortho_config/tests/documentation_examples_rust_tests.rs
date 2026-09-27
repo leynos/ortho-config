@@ -18,6 +18,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-hermetic-discovery",
     "guide-load-first-outcomes",
     "guide-subcommand",
+    "guide-subcommand-sources",
     "guide-errors",
     "guide-localization",
     "guide-tracing",
@@ -150,6 +151,12 @@ fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> 
         ExampleId("guide-subcommand"),
         ["serve", "--port", "3000"],
         "port=Some(3000)\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-subcommand-sources"),
+        [],
+        "port=Some(9000)\n",
     )?;
     assert_run(
         workspace,

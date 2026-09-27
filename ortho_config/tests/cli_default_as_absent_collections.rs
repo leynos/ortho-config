@@ -2,15 +2,18 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    CliValueExtractor, MapEnv, OrthoConfig, load_and_merge_subcommand_with_matches_with_sources,
+    CliValueExtractor, MapEnv, OrthoConfig, SubcommandCliMatches, SubcommandFileContext,
+    load_and_merge_subcommand_with_matches_with_sources,
+    load_and_merge_subcommand_with_matches_with_sources_at,
 };
 use rstest::{fixture, rstest};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
+use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
 use test_helpers::cwd;
@@ -21,18 +24,18 @@ fn prefix() -> Prefix {
 }
 
 #[fixture]
-fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
+fn config_dir(#[default("")] cfg: &str) -> Result<TempDir> {
     let dir = tempfile::tempdir().context("create temp dir")?;
     let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
     cap.write(".app.toml", cfg.as_bytes())
         .context("write config")?;
-    let guard = cwd::set_dir(dir.path())?;
-    Ok((dir, guard))
+    Ok(dir)
 }
 
 /// Merge a subcommand without and with an explicit CLI value.
 fn merge_default_and_explicit<T>(
     prefix: &Prefix,
+    file_base: &Path,
     default_args: &[&str],
     explicit_args: &[&str],
 ) -> Result<(T, T)>
@@ -41,10 +44,10 @@ where
 {
     let matches = T::command().get_matches_from(default_args.iter().copied());
     let args = T::from_arg_matches(&matches).context("parse clap defaults")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
+    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         prefix,
-        &args,
-        &matches,
+        &SubcommandCliMatches::new(&args, &matches),
+        SubcommandFileContext::new(file_base, &MapEnv::new()),
         Arc::new(MapEnv::new()),
     )
     .context("merge clap defaults")?;
@@ -52,10 +55,10 @@ where
     let explicit_matches = T::command().get_matches_from(explicit_args.iter().copied());
     let explicit_cli =
         T::from_arg_matches(&explicit_matches).context("parse explicit CLI values")?;
-    let explicit = load_and_merge_subcommand_with_matches_with_sources(
+    let explicit = load_and_merge_subcommand_with_matches_with_sources_at(
         prefix,
-        &explicit_cli,
-        &explicit_matches,
+        &SubcommandCliMatches::new(&explicit_cli, &explicit_matches),
+        SubcommandFileContext::new(file_base, &MapEnv::new()),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit CLI values")?;
@@ -120,20 +123,24 @@ impl Default for RetryArgs {
 
 /// Verifies typed and string collection defaults preserve merge precedence.
 #[rstest]
-#[serial]
 fn test_cli_default_as_absent_collection_defaults(prefix: Prefix) -> Result<()> {
     {
-        let (_temp_dir, _cwd_guard) = config_dir("[cmds.tags]\ntags = [\"file\"]\n")?;
-        let (merged, explicit) =
-            merge_default_and_explicit::<TagsArgs>(&prefix, &["tags"], &["tags", "--tags", "cli"])?;
+        let temp_dir = config_dir("[cmds.tags]\ntags = [\"file\"]\n")?;
+        let (merged, explicit) = merge_default_and_explicit::<TagsArgs>(
+            &prefix,
+            temp_dir.path(),
+            &["tags"],
+            &["tags", "--tags", "cli"],
+        )?;
         ensure!(merged.tags == vec!["file"]);
         ensure!(explicit.tags == vec!["cli"]);
     }
 
     {
-        let (_temp_dir, _cwd_guard) = config_dir("[cmds.string-tags]\ntags = [\"file\"]\n")?;
+        let temp_dir = config_dir("[cmds.string-tags]\ntags = [\"file\"]\n")?;
         let (merged, explicit) = merge_default_and_explicit::<StringTagsArgs>(
             &prefix,
+            temp_dir.path(),
             &["string-tags"],
             &["string-tags", "--tags", "cli"],
         )?;
@@ -142,9 +149,10 @@ fn test_cli_default_as_absent_collection_defaults(prefix: Prefix) -> Result<()> 
     }
 
     {
-        let (_temp_dir, _cwd_guard) = config_dir("[cmds.retry]\ncount = 5\n")?;
+        let temp_dir = config_dir("[cmds.retry]\ncount = 5\n")?;
         let (merged, explicit) = merge_default_and_explicit::<RetryArgs>(
             &prefix,
+            temp_dir.path(),
             &["retry"],
             &["retry", "--count", "9"],
         )?;
@@ -152,6 +160,49 @@ fn test_cli_default_as_absent_collection_defaults(prefix: Prefix) -> Result<()> 
         ensure!(explicit.count == 9);
     }
 
+    Ok(())
+}
+
+/// The process-backed wrapper resolves files through the process environment.
+///
+/// [`load_and_merge_subcommand_with_matches_with_sources`] delegates to its
+/// `_at` form with `ProcessEnv` and the working directory as the local base, so
+/// it must find `./.app.toml`. The environment layer must come from the
+/// supplied scan source rather than from the process.
+#[rstest]
+#[serial]
+fn process_backed_matches_wrapper_delegates_to_the_at_form(prefix: Prefix) -> Result<()> {
+    let temp_dir = config_dir("[cmds.retry]\ncount = 5\n")?;
+    let _cwd_guard = cwd::set_dir(temp_dir.path())?;
+
+    let matches = RetryArgs::command().get_matches_from(["retry"]);
+    let args = RetryArgs::from_arg_matches(&matches).context("parse clap defaults")?;
+
+    let from_file = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &args,
+        &matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge with an empty scan source")?;
+    ensure!(
+        from_file.count == 5,
+        "the wrapper must find ./.app.toml through ProcessEnv, got {}",
+        from_file.count
+    );
+
+    let injected = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &args,
+        &matches,
+        Arc::new(MapEnv::new().with_var("APP_CMDS_RETRY_COUNT", "7")),
+    )
+    .context("merge through the process-backed wrapper")?;
+    ensure!(
+        injected.count == 7,
+        "the injected scan source must supply the environment layer, got {}",
+        injected.count
+    );
     Ok(())
 }
 

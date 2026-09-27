@@ -1,17 +1,19 @@
 //! Utilities for discovering configuration file paths for subcommands.
 //!
 //! Enumerates candidate configuration files under the user's home directory,
-//! platform-specific configuration directories (e.g. XDG locations), and the
-//! current working directory.
+//! platform-specific configuration directories, and an explicit local base.
 
 use std::path::{Path, PathBuf};
+#[cfg(any(unix, target_os = "redox"))]
+use std::sync::Arc;
 
 use super::types::Prefix;
-
-#[cfg(not(any(unix, target_os = "redox")))]
-use directories::BaseDirs;
 #[cfg(any(unix, target_os = "redox"))]
-use xdg::BaseDirectories;
+use crate::OrthoError;
+use crate::{EnvSource, OrthoResult};
+
+#[path = "paths_telemetry.rs"]
+mod paths_telemetry;
 
 const EXT_GROUPS: &[&[&str]] = &[
     &["toml"],
@@ -21,6 +23,10 @@ const EXT_GROUPS: &[&[&str]] = &[
     &["yaml", "yml"],
 ];
 
+/// Append one candidate per supported extension, grouped so aliases stay adjacent.
+///
+/// `EXT_GROUPS` orders the groups, and each group's extensions keep their
+/// listed order, so `toml` always precedes the optional alternatives.
 fn push_candidates<F>(paths: &mut Vec<PathBuf>, base: &str, mut to_path: F)
 where
     F: FnMut(String) -> PathBuf,
@@ -32,163 +38,250 @@ where
     }
 }
 
+/// Render the prefix as a leading-dot file stem, or nothing when it is empty.
+///
+/// An empty prefix yields an empty string rather than a bare `"."`, so the
+/// caller's `format!` produces `config.toml` instead of `.config.toml`.
 fn dotted(prefix: &Prefix) -> String {
-    let p = prefix.as_str();
-    if p.is_empty() {
+    let prefix_name = prefix.as_str();
+    if prefix_name.is_empty() {
         String::new()
     } else {
-        format!(".{p}")
+        format!(".{prefix_name}")
     }
 }
 
 /// Adds candidate configuration file paths under `dir` using `base` as the file stem.
 ///
 /// The `base` string should include any desired prefix such as a leading dot.
-/// Supported configuration extensions are appended and each candidate is joined
-/// with `dir` before being pushed onto `paths`.
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use std::path::{Path, PathBuf};
-/// use ortho_config::subcommand::paths::push_stem_candidates;
-/// let mut candidates: Vec<PathBuf> = Vec::new();
-/// // Populate the vector with common configuration file names under `/tmp`.
-/// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
-/// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
+/// ```
+/// use std::path::Path;
+///
+/// use ortho_config::subcommand::push_stem_candidates;
+///
+/// let directory = Path::new("config");
+/// let mut candidates = Vec::new();
+/// push_stem_candidates(directory, ".myapp", &mut candidates);
+///
+/// assert!(candidates.contains(&directory.join(".myapp.toml")));
 /// ```
 pub fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
-    push_candidates(paths, base, |f| dir.join(f));
+    push_candidates(paths, base, |file| dir.join(file));
 }
 
-fn push_local_candidates(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    push_stem_candidates(Path::new("."), &dotted(prefix), paths);
+/// Append the explicit-base candidates, which always follow the home and XDG ones.
+fn push_local_candidates(prefix: &Prefix, base: &Path, paths: &mut Vec<PathBuf>) {
+    push_stem_candidates(base, &dotted(prefix), paths);
 }
 
-/// Adds XDG configuration files for the provided extensions.
+/// Resolve the ordered XDG base directories that the prefix is scoped under.
 ///
-/// Iterates over `exts`, searching `xdg_dirs` for `config.<ext>` and pushes each
-/// discovered path onto `paths`.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use std::path::PathBuf;
-/// use xdg::BaseDirectories;
-/// use ortho_config::subcommand::paths::push_xdg_candidates;
-/// let dirs = BaseDirectories::new();
-/// let mut paths: Vec<PathBuf> = Vec::new();
-/// push_xdg_candidates(&dirs, &["toml"], &mut paths);
-/// assert!(paths.iter().all(|p| p.ends_with("config.toml")));
-/// ```
+/// The configuration home leads, followed by every absolute
+/// `XDG_CONFIG_DIRS` entry in its listed order. An unusable
+/// `XDG_CONFIG_HOME` falls back to `$HOME/.config` and then to
+/// [`EnvSource::home_fallback`]; an unusable or absent `XDG_CONFIG_DIRS`
+/// falls back to `/etc/xdg`. The prefix is appended to every base, so the
+/// caller joins only the file name.
 #[cfg(any(unix, target_os = "redox"))]
-fn push_xdg_candidates(xdg_dirs: &BaseDirectories, exts: &[&str], paths: &mut Vec<PathBuf>) {
-    for ext in exts {
-        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-            paths.push(p);
+fn source_xdg_bases(prefix: &Prefix, source: &dyn EnvSource) -> Vec<PathBuf> {
+    let mut bases = Vec::new();
+    let prefix_path = Path::new(prefix.as_str());
+    let absolute_config_home = source
+        .get("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute());
+    let config_home_result = absolute_config_home
+        .inspect(|_| paths_telemetry::unix_config_home_from_named())
+        .or_else(|| {
+            source
+                .get("HOME")
+                .map(PathBuf::from)
+                .or_else(|| source.home_fallback())
+                .map(|home| home.join(".config"))
+                .inspect(|_| paths_telemetry::unix_config_home_from_fallback())
+        });
+    match config_home_result {
+        Some(config_home) => bases.push(config_home.join(prefix_path)),
+        None => paths_telemetry::unix_config_home_absent(),
+    }
+
+    let config_dirs = source
+        .get("XDG_CONFIG_DIRS")
+        .map(|dirs| {
+            std::env::split_paths(&dirs)
+                .filter(|path| path.is_absolute())
+                .collect::<Vec<_>>()
+        })
+        .filter(|dirs| !dirs.is_empty())
+        .unwrap_or_else(|| vec![PathBuf::from("/etc/xdg")]);
+    bases.extend(config_dirs.into_iter().map(|dir| dir.join(prefix_path)));
+    bases
+}
+
+/// Report whether an XDG candidate exists, keeping only `NotFound` as absence.
+///
+/// An unreadable parent directory or a permission failure says nothing about
+/// whether the candidate is present. Collapsing such an error into "absent"
+/// silently changes which configuration file loads, so it is reported against
+/// the affected path instead.
+#[cfg(any(unix, target_os = "redox"))]
+fn xdg_candidate_exists(path: &Path) -> OrthoResult<bool> {
+    match path.try_exists() {
+        Ok(exists) => Ok(exists),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(Arc::new(OrthoError::File {
+            path: path.to_path_buf(),
+            source: Box::new(error),
+        })),
+    }
+}
+
+/// Select the first existing `name` across the ordered XDG base list.
+#[cfg(any(unix, target_os = "redox"))]
+fn first_existing_xdg_candidate(bases: &[PathBuf], name: &str) -> OrthoResult<Option<PathBuf>> {
+    for (index, base) in bases.iter().enumerate() {
+        let candidate = base.join(name);
+        match xdg_candidate_exists(&candidate) {
+            Ok(true) => {
+                paths_telemetry::candidate_exists(index);
+                return Ok(Some(candidate));
+            }
+            Ok(false) => {}
+            Err(error) => {
+                paths_telemetry::candidate_probe_failed();
+                return Err(error);
+            }
         }
     }
+    paths_telemetry::candidate_absent();
+    Ok(None)
 }
 
+/// Append the first existing XDG configuration file for each supported extension.
+///
+/// # Errors
+///
+/// Returns [`crate::OrthoError::File`] when probing a candidate path fails for
+/// any reason other than the path being absent.
 #[cfg(any(unix, target_os = "redox"))]
-pub(crate) fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    let dotted = dotted(prefix);
-    if let Some(home) = std::env::var_os("HOME") {
-        push_stem_candidates(Path::new(&home), &dotted, paths);
+fn push_xdg_candidates(
+    prefix: &Prefix,
+    source: &dyn EnvSource,
+    paths: &mut Vec<PathBuf>,
+) -> OrthoResult<()> {
+    let bases = source_xdg_bases(prefix, source);
+    for group in EXT_GROUPS {
+        for ext in *group {
+            let file = format!("config.{ext}");
+            if let Some(path) = first_existing_xdg_candidate(&bases, &file)? {
+                paths.push(path);
+            }
+        }
     }
-
-    let xdg_dirs = if prefix.as_str().is_empty() {
-        BaseDirectories::new()
-    } else {
-        BaseDirectories::with_prefix(prefix.as_str())
-    };
-
-    // Only search for canonical XDG config filenames under the XDG dirs:
-    // - config.toml (always)
-    // - config.yaml and config.yml when the `yaml` feature is enabled
-    // - config.json and config.json5 when the `json5` feature is enabled
-    push_xdg_candidates(&xdg_dirs, &["toml"], paths);
-    #[cfg(feature = "json5")]
-    push_xdg_candidates(&xdg_dirs, &["json", "json5"], paths);
-    #[cfg(feature = "yaml")]
-    push_xdg_candidates(&xdg_dirs, &["yaml", "yml"], paths);
+    Ok(())
 }
 
+/// Append the Unix home candidates followed by the XDG candidates.
+///
+/// # Errors
+///
+/// Returns [`crate::OrthoError::File`] when an XDG candidate cannot be probed.
+#[cfg(any(unix, target_os = "redox"))]
+fn collect_unix_paths(
+    prefix: &Prefix,
+    source: &dyn EnvSource,
+    paths: &mut Vec<PathBuf>,
+) -> OrthoResult<()> {
+    if let Some(home) = source.get("HOME") {
+        push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
+    }
+    push_xdg_candidates(prefix, source, paths)
+}
+
+/// Append the platform candidates: the home directory, then the configuration
+/// directory.
+///
+/// The configuration directory falls back to
+/// [`EnvSource::config_dir_fallback`] when the native one is unavailable, and
+/// is scoped by the prefix only when the prefix is non-empty.
 #[cfg(not(any(unix, target_os = "redox")))]
-pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    let dotted = dotted(prefix);
-
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        push_stem_candidates(Path::new(&home), &dotted, paths);
+fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
+    let configured_home = source
+        .get("HOME")
+        .inspect(|_| paths_telemetry::windows_home_from_named())
+        .or_else(|| {
+            let from_userprofile = source.get("USERPROFILE");
+            if from_userprofile.is_some() {
+                paths_telemetry::windows_home_from_userprofile();
+            }
+            from_userprofile
+        });
+    if let Some(home) = configured_home {
+        push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
+    } else if let Some(fallback_home) = source.home_fallback() {
+        paths_telemetry::windows_home_from_fallback();
+        push_stem_candidates(&fallback_home, &dotted(prefix), paths);
+    } else {
+        paths_telemetry::windows_home_absent();
     }
 
-    if let Some(dirs) = BaseDirs::new() {
-        if std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none() {
-            push_stem_candidates(dirs.home_dir(), &dotted, paths);
-        }
-
-        let cfg_dir = if prefix.as_str().is_empty() {
-            dirs.config_dir().to_path_buf()
+    if let Some(config_dir) = source.config_dir_fallback() {
+        paths_telemetry::windows_config_dir_from_platform();
+        let scoped_config_dir = if prefix.as_str().is_empty() {
+            config_dir
         } else {
-            dirs.config_dir().join(prefix.as_str())
+            config_dir.join(prefix.as_str())
         };
-        push_stem_candidates(&cfg_dir, "config", paths);
+        push_stem_candidates(&scoped_config_dir, "config", paths);
+    } else {
+        paths_telemetry::windows_config_dir_absent();
     }
 }
 
-/// Returns candidate configuration file paths for `prefix`.
+/// Returns candidate paths for an explicit base and named environment source.
 ///
-/// Paths are yielded in the following order:
-/// 1. The user's home directory, e.g. `~/.app.toml`.
-/// 2. Platform configuration directories such as
-///    `$XDG_CONFIG_HOME/app/config.toml`.
-/// 3. The current working directory, e.g. `./.app.toml`.
+/// # Errors
 ///
-/// The [`Prefix`] normalises user input and is incorporated into file stems and
-/// directory names. When `prefix` is empty, home and working directories yield
-/// dotfiles with only an extension (e.g. `~/.toml`, `./.toml`). Platform
-/// configuration directories are searched solely for their canonical
-/// `config.<ext>` names as defined by the platform (e.g. `config.toml` under
-/// `$XDG_CONFIG_HOME`).
-#[cfg_attr(
-    feature = "json5",
-    doc = "On Unix-like platforms these may also be `config.json` and `config.json5`."
-)]
-/// This restriction applies only to platform directories; home and working
-/// directories still emit extension-only dotfiles.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use ortho_config::subcommand::{paths::candidate_paths, Prefix};
-///
-/// let paths = candidate_paths(&Prefix::new("app"));
-/// // prints something like:
-/// // ["/home/alice/.app.toml",
-/// //  "/home/alice/.config/app/config.toml",
-/// //  "./.app.toml"]
-/// println!("{paths:?}");
-/// ```
-///
-/// ```rust,ignore
-/// // Empty prefix: home/local dotfiles with no stem plus platform config.* files
-/// let paths = candidate_paths(&Prefix::new(""));
-/// // e.g. ["/home/alice/.toml", "/home/alice/.config/config.toml", "./.toml"]
-/// println!("{paths:?}");
-/// ```
-pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
+/// Returns [`crate::OrthoError::File`] when an XDG candidate cannot be probed
+/// for existence. A missing candidate is not an error: only a probe that fails
+/// for some other reason is reported, against the path that failed.
+pub(super) fn candidate_paths_at(
+    prefix: &Prefix,
+    base: &Path,
+    source: &dyn EnvSource,
+) -> OrthoResult<Vec<PathBuf>> {
+    paths_telemetry::candidates_started();
     let mut paths = Vec::new();
-
     #[cfg(any(unix, target_os = "redox"))]
-    collect_unix_paths(prefix, &mut paths);
-
+    let result = collect_unix_paths(prefix, source, &mut paths).map(|()| {
+        push_local_candidates(prefix, base, &mut paths);
+        paths
+    });
     #[cfg(not(any(unix, target_os = "redox")))]
-    collect_non_unix_paths(prefix, &mut paths);
-
-    push_local_candidates(prefix, &mut paths);
-    paths
+    let result = {
+        collect_non_unix_paths(prefix, source, &mut paths);
+        push_local_candidates(prefix, base, &mut paths);
+        Ok(paths)
+    };
+    paths_telemetry::candidates_finished(&result);
+    result
 }
+
+#[cfg(all(test, any(unix, target_os = "redox")))]
+#[path = "paths_probe_tests.rs"]
+mod probe_tests;
+
+#[cfg(all(test, any(unix, target_os = "redox")))]
+#[path = "paths_proptests.rs"]
+mod proptests;
 
 #[cfg(test)]
 #[path = "paths_tests.rs"]
 mod tests;
+
+#[cfg(all(test, any(unix, target_os = "redox")))]
+#[path = "paths_xdg_tests.rs"]
+mod xdg_tests;

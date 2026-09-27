@@ -610,6 +610,39 @@ resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and `%LOCALAPPDATA%`
 Support for `XDG_CONFIG_HOME` on Windows could be added later using
 `directories` to mimic the XDG specification.
 
+#### Subcommand file discovery
+
+Subcommand loading resolves its own candidates through
+`candidate_paths_at(prefix, base, source)`. It does not use `ConfigDiscovery`;
+instead it re-implements the XDG candidate search against an injected
+`EnvSource` rather than calling the `xdg` crate. An oracle child-process test
+pins parity with XDG-3 `find_config_file`.
+
+The inputs are a `SubcommandFileContext`: an explicit local base path and a
+lookup-only `EnvSource`. Named lookups cover `HOME`, `USERPROFILE` (non-Unix),
+`XDG_CONFIG_HOME`, and `XDG_CONFIG_DIRS`. On non-Unix targets the source's
+`config_dir_fallback()` supplies the native platform configuration directory,
+which `ProcessEnv` backs with `directories::BaseDirs`.
+
+On Unix and Redox, candidates are generated in this order: the injected `HOME`
+with `.<prefix>.<ext>` files; the XDG bases — `XDG_CONFIG_HOME` when it is
+absolute, otherwise `$HOME/.config`, otherwise the source's `home_fallback()` —
+followed by every absolute entry of `XDG_CONFIG_DIRS` (defaulting to `/etc/xdg`
+when unset, empty, or entirely relative), each joined with the prefix; and
+finally the explicit base with `.<prefix>.<ext>`. On other targets the order is
+`HOME`, else `USERPROFILE`, else `home_fallback()`, with `.<prefix>.<ext>`
+files; the source's `config_dir_fallback()` scoped by the prefix, with
+`config.<ext>` files; and then the explicit base with `.<prefix>.<ext>`.
+
+Within the XDG bases only the first existing `<base>/config.<ext>` is kept per
+extension, in base order. Existence uses metadata-only semantics, so a
+directory at a candidate path counts as existing, matching the `xdg` crate's
+`find_config_file`. The process-backed `load_and_merge_subcommand*` wrappers
+keep the historical behaviour by passing `Path::new(".")` and `ProcessEnv`.
+Absence is the only probe outcome that means "no candidate": any other failure
+is reported as an `OrthoError::File` naming the probed path and aborts the load
+before a file is selected, rather than treated as an absent candidate.
+
 ### 4.9. Comma-Separated Environment Lists
 
 Environment variables often provide simple comma-separated strings for lists.
