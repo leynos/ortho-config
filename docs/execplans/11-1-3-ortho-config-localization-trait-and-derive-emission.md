@@ -1327,3 +1327,43 @@ rename-within-one-file staleness gap is retained as an accepted, documented
 limitation rather than being closed, and the obsolete text claiming that forced
 refresh, stale-output isolation, and renderer validation remain pending is
 removed.
+
+2026-09-27: rebased onto `origin/main` (`41e54346`), replaying all 29 commits
+onto the current target. The exclusive replay boundary was `f0d2123b`, which is
+both the parent of the branch's first commit and the target merge-base, so no
+squash-landed parent work was inherited and no child commit fell outside the
+range. Two conflicts arose; both were resolved to preserve this branch's intent:
+
+- `.markdownlint-cli2.jsonc` in `29c6db55`. Main's `**/.vtcode/**` was measured
+  to be a strict superset of the branch's `.vtcode/**` (a scratch probe showed
+  1 file versus 3 linted beneath a nested `.vtcode` tree), so main's encoding
+  already achieves the exclusion the branch commit intended. The branch's
+  redundant line was dropped and the file is byte-identical to `main`. The
+  replay of that commit is therefore empty; its purpose is met by main.
+- `docs/contents.md` in `d347c9e7`. Both sides independently added an entry for
+  ADR-008, so both entries were kept and the numbering collision was resolved
+  separately (below).
+
+Two commits in the original series did not survive as distinct commits, both
+verified redundant rather than lost: `29c6db55` (above) and `0e80e6d4`, whose
+whole content was the regenerated `typos.toml`. Every line that commit added is
+already present in `main`, confirmed by comparing each added line against
+`origin/main:typos.toml`, and the file is byte-identical across `main`,
+`OLD_HEAD`, and the rebased tree.
+
+Main landed its own ADR-008 for the agent-native policy configuration while
+this branch was in flight, so two different decisions claimed number 008. The
+landed ADR keeps 008, because its number is already published in main's
+`agent-native-cli-design.md` and 7.1.1 execplan; the identifier artefact
+emission decision is renumbered to ADR-009 and its file renamed to match. Only
+this branch's references were updated; main's ADR-008 files remain
+byte-identical to `main`.
+
+The lock file took `main`'s version and was then re-resolved through
+`cargo metadata`, restoring the three manifest-driven dependencies on
+`ortho_config_macros`. The round-trip was a net no-op, which independently
+confirms the replayed lock was already correct. Re-resolving is idempotent.
+
+The rebased candidate is `0ad49462`. All four named gates pass
+(`make check-fmt`, `make typecheck`, `make lint`, `make test`), together with
+`make markdownlint` and `make nixie`.
