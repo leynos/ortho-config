@@ -46,10 +46,10 @@ by two children contribute two layers, doubling any `append`-strategy vector it
 holds — the exact harm invariant two's own rationale exists to prevent — while
 leaving scalar merges identical. So the code is the contract and the reworded
 sentence was the defect. The RFC now says a cycle is detected within a chain
-rather than across chains, and invariant two is widened from "_across_ scopes"
-to "_across_ the whole composition", naming the shared-parent case explicitly.
-The test the reviewer asked for is added, asserting three layers rather than
-four, which is what only one reading can satisfy.
+rather than across chains, and invariant two is widened from "across scopes" to
+"across the whole composition", naming the shared-parent case explicitly. The
+test the reviewer asked for is added, asserting three layers rather than four,
+which is what only one reading can satisfy.
 
 ### Coverage the macro fixes would otherwise have lacked
 
@@ -57,9 +57,9 @@ The existing policy tests drive `load_from_iter` against the real process
 environment, so nothing exercised source injection on the policy path — the
 first two repairs could have been reverted with every gate still green.
 `ortho_config/tests/policy_sources.rs` closes that gap. Reverting the injected
-`env_source` step fails both of its tests; reverting the default selector
-fails one. That file also had to satisfy Whitaker's `no_std_fs_operations`,
-which it does by reusing `support/scoped_fixtures.rs::write_config` — the
+`env_source` step fails both of its tests; reverting the default selector fails
+one. That file also had to satisfy Whitaker's `no_std_fs_operations`, which it
+does by reusing `support/scoped_fixtures.rs::write_config` — the
 capability-handle helper — rather than by adding a `dylint.toml` exemption, so
 the exemption list stays as narrow as the repository had it.
 
