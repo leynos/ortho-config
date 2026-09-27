@@ -25,6 +25,7 @@ pub(super) enum JsonField {
     Path,
     Summary,
     Inputs,
+    Required,
 }
 
 impl JsonField {
@@ -36,6 +37,7 @@ impl JsonField {
             Self::Path => "path",
             Self::Summary => "summary",
             Self::Inputs => "inputs",
+            Self::Required => "required",
         }
     }
 }
@@ -135,7 +137,24 @@ fn assert_agent_context_contract(
         .ok_or("first command missing")?;
     expect_string_array_field(command, JsonField::Path, expected_path)?;
     expect_str_field(command, JsonField::Summary, expected_summary)?;
-    expect_non_empty_array(command, JsonField::Inputs)
+    expect_non_empty_array(command, JsonField::Inputs)?;
+    expect_first_input_required_boolean(command)
+}
+
+fn expect_first_input_required_boolean(command: &Value) -> StepResult<()> {
+    let input = command
+        .get(JsonField::Inputs.as_str())
+        .and_then(Value::as_array)
+        .and_then(|inputs| inputs.first())
+        .ok_or("first command input missing")?;
+    if input
+        .get(JsonField::Required.as_str())
+        .is_some_and(Value::is_boolean)
+    {
+        Ok(())
+    } else {
+        Err("first command input required should be a boolean".into())
+    }
 }
 
 fn read_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<Value> {
