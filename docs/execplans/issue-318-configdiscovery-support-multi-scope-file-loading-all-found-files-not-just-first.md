@@ -4,48 +4,71 @@ Branch:
 `issue-318-configdiscovery-support-multi-scope-file-loading-all-found-files-not-just-first`
 PR: #465 (ready for review, not a draft)
 
-## CodeRabbit round on `75d9901d`: 9 findings, under verification
+## CodeRabbit round on `75d9901d`: 9 findings, all verified and answered
 
 CodeRabbit returned `CHANGES_REQUESTED` at 2026-09-27T16:28:18Z (review
 `5331150192`) against `75d9901d`, with nine actionable inline comments. The
 findings are archived verbatim under `/tmp/cr465-75d9901d/`, one JSON per
 comment, so this plan does not have to restate claim text that the review owns.
 
-Three groups, and none of them is accepted on the reviewer's word:
+**All nine were verified against the source before any edit** — three parallel
+read-only reconnaissance agents, one per group, none editing. Every one
+returned VERIFIED, each with a material nuance the comment did not state. The
+repairs are committed as `59b2b2ae`; each is pinned by a test whose failure on
+revert was demonstrated rather than assumed.
 
-1. **Macro emitter** (3 findings, two stated MAJOR). `load_impl/mod.rs:152`
-   claims the policy branch drops `source_tokens`, so injected `MapEnv` sources
-   are ignored and discovery reads the real environment — a repeat of the #412
-   contract. `policy_impl.rs:112` claims the non-optional `project_root_from`
-   branch passes an `Option<PathBuf>` where `impl Into<PathBuf>` is required,
-   i.e. generated code that does not compile. `policy_impl.rs:116` claims an
-   empty `env_vars` silently drops the default `<PREFIX>_CONFIG_PATH` selector
-   that the legacy emitter honours.
-2. **Discovery semantics** (2 findings, MINOR). `discovery/policy.rs:350`
-   claims `origins` is the full `scope_order` rather than the scopes that
-   contributed layers. `discovery/scoped.rs:168` claims `unique_layers`
-   de-duplicates `extends` parents globally, so two children sharing one parent
-   lose the parent on the second chain, contradicting RFC 0002's "expanded once
-   per reference".
-3. **Python workflow contracts** (4 findings, TRIVIAL). `nextest_budgets.py:156`
-   rejects an override that selects by `platform` with no `filter`;
-   `trybuild_tier_test.py:109` supposedly over-permits because it does not
-   compare against non-trybuild binaries; `trybuild_tier.py:119` matches
-   `trybuild::TestCases::new()` as an exact substring, so a spaced `new ()`
-   would be missed; `trybuild_tier.py:225` ignores `&`, `-` and `not(...)` in a
-   nextest filter and ORs the `binary(...)` terms instead.
+1. **Macro emitter** (3 findings, two stated MAJOR) — VERIFIED, and the three
+   compound. `policy_impl.rs` built its selector chain from `env_vars` alone
+   and never appended the injected discovery source, so *no* environment route
+   worked in policy mode: the selector rung was empty, and automatic discovery
+   read the real process environment. The third finding's mechanism is broader
+   than stated — the default selector is dropped for every struct that does not
+   write `env_vars`, not only in some case. The `project_root_from` finding is
+   real codegen breakage: the generated CLI struct wraps *every* field in
+   `Option` (`cli_flags.rs:33`), so a plain `PathBuf` field yields
+   `Option<PathBuf>` where the emitter passed it to `impl Into<PathBuf>`.
+2. **Discovery semantics** (2 findings, MINOR) — VERIFIED as facts.
+   `origins()` was a constant copy of `scope_order`, wrong even under
+   `FirstWins` where `compose_scoped_layers` returns before dereferencing
+   `scopes`; zero consumers and zero tests existed, which is how it stayed
+   wrong. Finding 5's *remedy* was refused — see below.
+3. **Python workflow contracts** (4 findings, TRIVIAL) — VERIFIED but
+   currently unreachable, so latent rather than live. Repaired anyway: each
+   reading was correct by luck of the current configuration shape, not by
+   construction, and the repairs are cheap.
 
-The macro claims are the load-bearing ones: two assert that generated code is
-either semantically wrong or does not compile. Both are settled by reading the
-generator, not by reasoning about intent, and a claim of "does not compile" is
-falsified the moment a test that exercises that path is shown to pass. So each
-finding gets a verdict of verified, refuted, or uncertain before any edit, and
-the two that would mean broken generated code are checked against existing
-coverage first.
+### Finding 5: the code was right and the RFC sentence was wrong
 
-Note the review is bound to `75d9901d`, which is still the remote head; the
-local commit `b9e0bd29` is deliberately unpushed so the review's anchor stays
-valid while it is being answered.
+`discovery/scoped.rs:168` asked for per-reference `extends` expansion, citing
+RFC 0002's "expanded once per reference". The reviewer quoted a sentence this
+branch itself had written. Per-reference expansion would have a parent reached
+by two children contribute two layers, doubling any `append`-strategy vector it
+holds — the exact harm invariant two's own rationale exists to prevent — while
+leaving scalar merges identical. So the code is the contract and the reworded
+sentence was the defect. The RFC now says a cycle is detected within a chain
+rather than across chains, and invariant two is widened from "_across_ scopes"
+to "_across_ the whole composition", naming the shared-parent case explicitly.
+The test the reviewer asked for is added, asserting three layers rather than
+four, which is what only one reading can satisfy.
+
+### Coverage the macro fixes would otherwise have lacked
+
+The existing policy tests drive `load_from_iter` against the real process
+environment, so nothing exercised source injection on the policy path — the
+first two repairs could have been reverted with every gate still green.
+`ortho_config/tests/policy_sources.rs` closes that gap. Reverting the injected
+`env_source` step fails both of its tests; reverting the default selector
+fails one. That file also had to satisfy Whitaker's `no_std_fs_operations`,
+which it does by reusing `support/scoped_fixtures.rs::write_config` — the
+capability-handle helper — rather than by adding a `dylint.toml` exemption, so
+the exemption list stays as narrow as the repository had it.
+
+### Where the review stands
+
+The review is bound to `75d9901d`. The answers land in `59b2b2ae`, and each of
+the nine threads still needs its individual `@coderabbitai` reply: duplicate
+reports were grouped for implementation but must be answered separately, and a
+posted reply is not a resolved thread.
 
 ## Big picture
 
