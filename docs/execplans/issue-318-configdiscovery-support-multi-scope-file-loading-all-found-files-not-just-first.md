@@ -4,12 +4,15 @@ Branch:
 `issue-318-configdiscovery-support-multi-scope-file-loading-all-found-files-not-just-first`
 PR: #465 (ready for review, not a draft)
 
-## CodeRabbit round on `75d9901d`: 9 findings, all verified and answered
+## CodeRabbit rounds on `75d9901d`: 10 findings, all verified and answered
 
 CodeRabbit returned `CHANGES_REQUESTED` at 2026-09-27T16:28:18Z (review
-`5331150192`) against `75d9901d`, with nine actionable inline comments. The
-findings are archived verbatim under `/tmp/cr465-75d9901d/`, one JSON per
-comment, so this plan does not have to restate claim text that the review owns.
+`5331150192`) against `75d9901d`, with nine actionable inline comments. An
+earlier round against the same commit had raised a tenth that the later review
+did not repeat; see the section on it below, which also records how it came to
+be missed. The findings are archived verbatim under `/tmp/cr465-75d9901d/`, one
+JSON per comment, so this plan does not have to restate claim text that the
+review owns.
 
 **All nine were verified against the source before any edit** — three parallel
 read-only reconnaissance agents, one per group, none editing. Every one
@@ -69,6 +72,39 @@ The review is bound to `75d9901d`. The answers land in `59b2b2ae`, and each of
 the nine threads still needs its individual `@coderabbitai` reply: duplicate
 reports were grouped for implementation but must be answered separately, and a
 posted reply is not a resolved thread.
+
+### The tenth finding, from an earlier round than the nine
+
+Nine was the wrong count. An earlier round — review `5331092523` at
+2026-09-27T15:54, also against `749032b3` — raised four comments, and only
+three of them reappeared in the `CHANGES_REQUESTED` round. The fourth,
+`candidate_set.rs:98`, survived unmentioned here, unanswered in its thread, and
+unduplicated by the later review. It was found by enumerating the PR's review
+threads rather than by re-reading the round the plan names, which is why it
+went unnoticed: the plan tracked a round, and the defect was in a different one.
+
+**It is real, and reachable.** Assembly de-duplicates candidates on the path
+and kept whichever *scope* tag arrived first.
+`$XDG_CONFIG_HOME/demo/config.toml` is a user candidate by construction, and a
+project root is arbitrary, so a root of `$XDG_CONFIG_HOME/demo` with the same
+file name makes the *identical* path a project candidate too. The second push
+was refused whole, so the surviving entry carried only `User`, and a
+`StackScopes` request naming `Project` alone matched nothing and loaded the
+file that is, by construction, exactly what it asked for. Demonstrated before
+the fix with a failing test: the `Project`-only request loaded zero layers.
+
+**The repair makes the scope tags additive while the entry stays single.**
+`Candidate.scope` became `scopes: Vec<DiscoveryScope>` behind an `in_scope`
+predicate, and the accumulator's `seen` set became a map from key to entry
+index so a later rung records its scope on the entry an earlier rung created
+instead of being discarded. Asking for both scopes still contributes one layer,
+which is the property that must not regress while fixing the one that must.
+
+Mutation-checked: restoring first-tag-wins fails
+`scope_stacking_keeps_a_shared_path_reachable_from_each_scope` and nothing else
+in that suite. The test asserts the `Project`-only case precisely because it is
+discriminating — a `User`-only request passes under either behaviour, since the
+user rung is the one that creates the entry.
 
 ## Big picture
 
@@ -209,6 +245,37 @@ branch, so it is inherited, not caused here. Main is already splitting
 oversized test modules one per change (#507, #508), so this is that series in
 progress rather than a defect to fix from this branch; fixing it here would
 collide with the next such change.
+
+## Fourth rebase onto f6a406fc (done, 2026-09-27)
+
+Replayed `5732adf9..38bb41f6` (21 commits) onto `f6a406fc`. No conflicts; all
+21 are `=` identical under `range-diff`, and the change set is byte-identical
+before and after (`30 files, +3442 -226`), so the series replayed verbatim.
+
+`origin/main` moved `5732adf9` → `f6a406fc`, two commits. Neither touches the
+scoped or policy API — checked with `git grep` over both new commits — so
+nothing had to be adopted, and no main-side pattern needed reconciling this
+time. The one thing worth recording is that they are *pertinent* even though
+non-overlapping: they independently validate the injected-source approach this
+branch's repairs commit to, and describe the duplication they address as "a
+correctness hazard rather than only a tidy-up". Main reaching the same
+conclusion from its own direction is corroboration, not a merge obligation.
+
+**Weave did not participate.** `git check-attr merge` reports `unspecified` for
+every sampled path and no `.gitattributes` carries a merge rule, so the driver
+is registered globally but selected by nothing. Plain `zdiff3` is therefore the
+correct rebase mode and no `-c` override was needed.
+
+Recovery refs: `refs/recovery/pre-rebase-20260927-201138` (→ `38bb41f6`) and
+`refs/recovery/target-f6a406fc`.
+
+Two gates failed on the rebased head, both in the branch-added plan document
+rather than being rebase artefacts: `check-fmt` wanted the coverage-gap
+paragraph rewrapped, and `markdownlint` raised four MD049 emphasis-style errors
+where the plan had quoted the RFC's underscore emphasis in a file whose
+convention is asterisk. Fixed in `0bf59c86`; both gates then re-ran green, and
+`markdownlint` reached its `spellcheck` sub-target again — the MD049 failure
+had been aborting before it.
 
 ## Code health: the CodeScene finding this plan failed to record
 

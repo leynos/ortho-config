@@ -183,7 +183,7 @@ impl ConfigDiscovery {
             .iter()
             .enumerate()
             .rev()
-            .filter(move |(_, candidate)| candidate.scope == Some(scope))
+            .filter(move |(_, candidate)| candidate.in_scope(scope))
     }
 
     fn unique_layers(
