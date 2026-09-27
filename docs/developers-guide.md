@@ -1577,11 +1577,23 @@ starts the sccache server. That step is guarded on
 proxy and the action fails closed. The Windows leg and the three packaging legs
 stay GitHub-hosted.
 
+`ubicloud-standard-2` leaves roughly 8 to 11 GB free on its image, and the
+first run on it died of a full disk during coverage. Before coverage starts,
+the Linux leg runs `scripts/discard_build_trees.py`, which removes the rustdoc
+and Clippy output (`target/debug`, `target/doc`) and Whitaker's
+(`target/dylint`), prints each tree's size, and reports a tree that was not
+there. It keeps the registry and sccache. Trybuild's child builds land under
+the coverage target directory, which trybuild takes from `cargo metadata`, so
+they cannot be redirected independently. Removing them between the two coverage
+passes would throw away the warm builds the second pass reuses. The leg prints
+`df -BM /` at each boundary: before lint, before and after the discard, and
+after each coverage pass.
+
 `runner_placement_test.py` holds all of this. It reads the fallback by
 position, checks each leg's runners, and checks that no fork reaches Ubicloud,
 that the names are runner-independent, and that the job has a ceiling. It also
-checks the credentials step's guard and position, and that the packaging legs
-stay hosted.
+checks the credentials step's guard and position, that the packaging legs stay
+hosted, and that the Linux leg discards the lint build trees before coverage.
 
 ## CodeScene coverage belongs to main
 

@@ -228,6 +228,10 @@ jobs:
           fi
           whitaker-installer
 
+      - name: Disk sample (before lint)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
+
       - name: Lint
         if: ${{ matrix.platform == 'linux' }}
         run: make lint
@@ -241,6 +245,22 @@ jobs:
       - name: Workflow contract tests
         if: ${{ matrix.platform == 'linux' }}
         run: make test-workflow-contracts
+
+      - name: Disk sample (before discard)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
+
+      - name: Discard lint build trees
+        # ubicloud-standard-2 leaves roughly 8 to 11 GB free, and the first
+        # run on it died of a full disk during coverage. Coverage builds its
+        # own tree, so rustdoc's and Clippy's output (debug, doc) and
+        # Whitaker's (dylint) go first. The registry and sccache are kept.
+        if: ${{ matrix.platform == 'linux' }}
+        run: python3 scripts/discard_build_trees.py target debug doc dylint
+
+      - name: Disk sample (before coverage)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
 
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
@@ -257,6 +277,10 @@ jobs:
           artefact-name-suffix: serde-saphyr
           with-ratchet: ${{ matrix.platform == 'linux' }}
 
+      - name: Disk sample (after coverage with serde_saphyr)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
+
       - name: Test and Measure Coverage (without serde_saphyr)
         uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
@@ -264,6 +288,10 @@ jobs:
           format: lcov
           features: serde_json toml json5
           artefact-name-suffix: no-serde-saphyr
+
+      - name: Disk sample (after coverage without serde_saphyr)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
 
       - name: Merge coverage results
         if: ${{ matrix.platform == 'linux' }}

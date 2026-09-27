@@ -175,3 +175,32 @@ def test_packaging_stays_hosted(ci: WorkflowDocument) -> None:
     assert not any(_is_ubicloud(runner) for runner in runners), (
         f"a packaging leg moved to Ubicloud: {runners}"
     )
+
+
+#: The discard that keeps coverage inside ``ubicloud-standard-2``'s disk.
+DISCARD_COMMAND: typ.Final[str] = "python3 scripts/discard_build_trees.py target debug doc dylint"
+LINUX_ONLY: typ.Final[str] = "${{ matrix.platform == 'linux' }}"
+
+
+def test_the_lint_trees_go_before_coverage(ci: WorkflowDocument) -> None:
+    """On Linux the lint build trees are discarded before the first coverage step.
+
+    The first run on ``ubicloud-standard-2`` died of a full disk during
+    coverage. The discard runs exactly this command, on Linux, ahead of
+    every coverage step.
+    """
+    steps = [step for step in _build_test(ci).get("steps", []) if isinstance(step, dict)]
+    discards = [
+        index for index, step in enumerate(steps)
+        if " ".join(str(step.get("run", "")).split()) == DISCARD_COMMAND
+    ]
+    assert len(discards) == 1, f"build-test runs the discard {len(discards)} times"
+    (index,) = discards
+    guard = " ".join(str(steps[index].get("if", "")).split())
+    assert guard == LINUX_ONLY, f"the discard is guarded on {guard!r}"
+    coverage = [
+        position for position, step in enumerate(steps)
+        if "/generate-coverage@" in str(step.get("uses", ""))
+    ]
+    assert coverage, "build-test runs no coverage step"
+    assert index < min(coverage), "the lint trees must go before coverage starts"
