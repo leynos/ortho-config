@@ -107,18 +107,14 @@ impl CandidateAccumulator {
             return false;
         }
         let key = ConfigDiscovery::dedup_key(&candidate);
-        if let Some(&index) = self.seen.get(&key) {
+        let listed = self.seen.get(&key).copied();
+        if let Some(index) = listed {
             // The path is already listed, so it must not be listed twice. A
             // rung that supplies a scope does add something, though: without
             // this the surviving entry would be reachable only from the rung
             // that happened to run first, and a request naming the later
             // scope would find no candidate at all.
-            if let Some(scope) = scope {
-                let scopes = &mut self.candidates[index].scopes;
-                if !scopes.contains(&scope) {
-                    scopes.push(scope);
-                }
-            }
+            self.record_scope(index, scope);
             return false;
         }
         self.seen.insert(key, self.candidates.len());
@@ -128,6 +124,30 @@ impl CandidateAccumulator {
             scopes: scope.into_iter().collect(),
         });
         true
+    }
+
+    /// Add a later rung's scope to an entry an earlier rung already listed.
+    ///
+    /// `requested` is the later rung's scope: `None` for a rung that has none,
+    /// and `Some` for one whose path is already listed under a different scope.
+    /// The entry keeps its path, its source, and its position — the candidate
+    /// list is a preference order, so re-positioning it would change which
+    /// location a scope's walk reaches first.
+    ///
+    /// `index` is one this accumulator recorded itself, and `candidates` only
+    /// ever grows, so the entry is always there. A miss does nothing rather
+    /// than panicking: one is unreachable, and the other would be a panic path
+    /// in a library.
+    fn record_scope(&mut self, index: usize, requested: Option<DiscoveryScope>) {
+        let Some(candidate) = self.candidates.get_mut(index) else {
+            return;
+        };
+        let Some(scope) = requested else {
+            return;
+        };
+        if !candidate.scopes.contains(&scope) {
+            candidate.scopes.push(scope);
+        }
     }
 }
 
