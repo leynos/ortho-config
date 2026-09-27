@@ -66,8 +66,9 @@ targets. Each directory-style suite needs its own `[[test]]` stanza in
 
 - `ortho_config/tests/subcommand/mod.rs` (target `subcommand`) contains tests
   for subcommand configuration helpers in the `basic`, `cli`, `merge`,
-  `nesting`, and `prefix` modules. It shares `../util.rs` and
-  `../support/to_anyhow.rs` through `#[path]` includes.
+  `nesting`, and `prefix` modules, plus the `fixtures` module that holds their
+  shared `isolated_root` fixture. It shares `../support/to_anyhow.rs` through a
+  `#[path]` include.
 - `ortho_config/tests/clap_integration/mod.rs` (target `clap_integration`)
   contains CLI parsing tests across configuration sources in the `common`,
   `config_path`, `error_cases`, `option_cases`, and `parsing` modules, plus
@@ -103,6 +104,11 @@ These modules provide shared integration-test infrastructure:
   `set_scalar_once`, `set_nonblank_scalar_once`, and `SlotTakeOrExt::take_or`
   helpers. Step modules under `behaviour/steps/` use them for scalar-slot
   validation and descriptive missing-slot errors.
+- `ortho_config/tests/subcommand/fixtures.rs` owns the `isolated_root` fixture
+  and the `close_discovery` constructor. They pair a temporary root with a
+  discovery source closed against the ambient environment, with the Unix
+  global rung pinned to that root. The `subcommand` target's child modules
+  reach them as `super::fixtures`; other targets keep their own setup.
 
 ## Important root files
 

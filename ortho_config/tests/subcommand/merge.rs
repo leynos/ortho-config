@@ -8,8 +8,11 @@ use ortho_config::{
     MapEnv, OrthoConfig, SubcommandFileContext, load_and_merge_subcommand_for_with_sources_at,
     load_and_merge_subcommand_with_sources_at,
 };
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+use super::fixtures::{IsolatedRoot, isolated_root};
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -29,18 +32,15 @@ struct MergeArgs {
 /// ```
 /// merge_helper_combines_defaults_and_cli();
 /// ```
-#[test]
-fn merge_helper_combines_defaults_and_cli() -> Result<()> {
-    let root = tempfile::tempdir().context("create merge helper fixture")?;
-    let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
+#[rstest]
+fn merge_helper_combines_defaults_and_cli(isolated_root: Result<IsolatedRoot>) -> Result<()> {
+    let isolated = isolated_root?;
+    let discovery = isolated.discovery();
+    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
         .context("open merge helper fixture directory")?;
     directory
         .write(".app.toml", b"[cmds.test]\nfoo = \"file\"")
         .context("write merge helper fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
     let cli = MergeArgs {
         foo: Some("cli".into()),
         bar: None,
@@ -48,7 +48,7 @@ fn merge_helper_combines_defaults_and_cli() -> Result<()> {
     let merged = load_and_merge_subcommand_with_sources_at(
         &Prefix::new("APP_"),
         &cli,
-        SubcommandFileContext::new(root.path(), &discovery),
+        SubcommandFileContext::new(isolated.path(), &discovery),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit CLI and file defaults")?;
@@ -71,22 +71,19 @@ struct MergePrefixed {
 
 /// Verifies that `MergePrefixed` respects the configuration prefix and
 /// prefers file values when the CLI field is unset.
-#[test]
-fn merge_wrapper_respects_prefix() -> Result<()> {
-    let root = tempfile::tempdir().context("create prefixed merge fixture")?;
-    let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
+#[rstest]
+fn merge_wrapper_respects_prefix(isolated_root: Result<IsolatedRoot>) -> Result<()> {
+    let isolated = isolated_root?;
+    let discovery = isolated.discovery();
+    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
         .context("open prefixed merge fixture directory")?;
     directory
         .write(".app.toml", b"[cmds.test]\nfoo = \"file\"")
         .context("write prefixed merge fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
     let cli = MergePrefixed { foo: None };
     let merged = load_and_merge_subcommand_for_with_sources_at(
         &cli,
-        SubcommandFileContext::new(root.path(), &discovery),
+        SubcommandFileContext::new(isolated.path(), &discovery),
         Arc::new(MapEnv::new()),
     )
     .context("merge prefixed explicit file defaults")?;
