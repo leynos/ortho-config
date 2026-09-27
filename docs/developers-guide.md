@@ -1566,6 +1566,16 @@ the baseline `coverage-main.yml` writes, which applies the same "do not go
 backwards" gate from this repository's own history with no token and no second
 tool.
 
+`build-test` takes the default depth-1 checkout. It used to fetch full history
+only so `cs-coverage check` could diff against the pull request's merge base,
+and that gate has gone. At the pinned revision `generate-coverage` runs no git
+command. The job's other git readers are `git ls-files` (mdtablefix `--git`,
+and lading's lockfile guard) and `git status` (lading's working-tree guard),
+and neither reads history. A future step that diffs against the merge base,
+walks the log or describes a tag has to restore `fetch-depth` for itself.
+`test_the_pull_request_lane_checks_out_shallowly` fails until that change also
+updates the contract.
+
 **The two lanes must be built the same way.** Both run two feature legs, paired
 by the report each writes. The ratchet compares this commit's report against
 that baseline, so the inputs deciding *what* is measured must agree across the

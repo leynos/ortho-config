@@ -44,6 +44,7 @@ from codescene_coverage import (
 from codescene_reach import CODESCENE_HOST, codescene_contacts, token_sites
 from workflow_reading import (
     read_workflows,
+    workflow_jobs,
     workflow_steps,
 )
 
@@ -368,4 +369,29 @@ def test_no_workflow_reads_the_retired_variable() -> None:
         f"these workflows still read {RETIRED_VARIABLE}; the uploader "
         f"rejects the input it fed and the action pins the CLI through its "
         f"own manifest now: {offenders}"
+    )
+
+
+def test_the_pull_request_lane_checks_out_shallowly(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """``build-test`` takes the default depth-1 checkout.
+
+    Full history was fetched only so ``cs-coverage check`` could diff
+    against the merge base, and that gate left the lane with CV-005. At
+    the pinned revision generate-coverage runs no git command, and the
+    job's other steps read only ``git ls-files`` and ``git status``, so a
+    full fetch would be a cost with no reader.
+    """
+    job = workflow_jobs(documents["ci.yml"])["build-test"]
+    checkouts = [
+        step
+        for step in job.get("steps", [])
+        if isinstance(step, dict) and "actions/checkout@" in str(step.get("uses", ""))
+    ]
+    assert len(checkouts) == 1, f"build-test checks out {len(checkouts)} times"
+    inputs = checkouts[0].get("with") or {}
+    assert "fetch-depth" not in inputs, (
+        f"build-test's checkout sets fetch-depth {inputs.get('fetch-depth')!r}; "
+        f"nothing in the job reads history"
     )
