@@ -256,3 +256,63 @@ fn scope_stacking_deduplicates_across_path_spellings() -> Result<()> {
         &user_home.join(".demo.toml"),
     )
 }
+
+/// One parent reached by two children contributes one layer, not two.
+///
+/// `extends` resolution is chain-local, so each child expands the parent
+/// independently and both produce a chain containing it. Canonical-path
+/// de-duplication then collapses the pair into a single layer at the earliest
+/// position, which is what stops an `append`-strategy vector in a shared parent
+/// being contributed twice. Both children still override the parent, because
+/// both are applied after it.
+///
+/// The two children are `$XDG_CONFIG_HOME/demo/config.toml` and the
+/// `$HOME/.demo.toml` dotfile, and both name the same parent from their own
+/// directory. Pointing `XDG_CONFIG_HOME` and `HOME` at one directory is what
+/// lets two distinct candidates reach one file without any path aliasing, so
+/// the case is decided by chain expansion rather than by candidate assembly.
+#[test]
+fn scope_stacking_collapses_a_parent_shared_by_two_children() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let user_home = temp.path().join("user");
+    write_body(
+        &user_home.join("demo/base.toml"),
+        "value = 1\nparent_only = 5\n",
+    )?;
+    // The dotfile is the least-preferred candidate, so it is applied first.
+    write_body(
+        &user_home.join(".demo.toml"),
+        "extends = \"demo/base.toml\"\nvalue = 3\n",
+    )?;
+    write_body(
+        &user_home.join("demo/config.toml"),
+        "extends = \"base.toml\"\nvalue = 2\n",
+    )?;
+
+    let outcome = user_scope_discovery(&user_home, &user_home)
+        .compose_scoped_layers(AutomaticMode::StackScopes, &[DiscoveryScope::User]);
+
+    // Four layers would mean the parent was contributed once per reference;
+    // two would mean one child's chain was dropped whole.
+    ensure!(
+        outcome.value.len() == 3,
+        "a parent shared by two children must contribute one layer, got {}",
+        outcome.value.len()
+    );
+    let parent = outcome
+        .value
+        .first()
+        .ok_or_else(|| anyhow!("the shared parent must come first"))?;
+    assert_layer_path(parent, &user_home.join("demo/base.toml"))?;
+
+    let merged = merge_layers(outcome.value);
+    ensure!(
+        merged.get("value") == Some(&serde_json::json!(2)),
+        "the most-preferred child must win"
+    );
+    ensure!(
+        merged.get("parent_only") == Some(&serde_json::json!(5)),
+        "the shared parent's unique key must survive beneath both children"
+    );
+    Ok(())
+}

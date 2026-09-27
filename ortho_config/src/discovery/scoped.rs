@@ -63,8 +63,29 @@ impl ConfigDiscovery {
         mode: AutomaticMode,
         scopes: &[DiscoveryScope],
     ) -> DiscoveryLayersOutcome {
+        self.compose_scoped_layers_with_origins(mode, scopes).0
+    }
+
+    /// Compose automatic layers and report which scopes actually contributed.
+    ///
+    /// The scope list a caller passes is a *request*, not a record: a scope can
+    /// contribute nothing because none of its candidates loaded, and
+    /// [`AutomaticMode::FirstWins`] ignores scopes altogether. The public
+    /// signature cannot carry that report, but
+    /// [`FileLayerOutcome::origins`](super::FileLayerOutcome::origins) is
+    /// documented as the scopes that *contributed*, so `resolve_layers` reads
+    /// it from here rather than echoing the request back to the caller.
+    pub(super) fn compose_scoped_layers_with_origins(
+        &self,
+        mode: AutomaticMode,
+        scopes: &[DiscoveryScope],
+    ) -> (DiscoveryLayersOutcome, Vec<DiscoveryScope>) {
         if matches!(mode, AutomaticMode::FirstWins) {
-            return self.compose_layers();
+            // Scope is not a concept in this mode: the flat candidate list is
+            // walked and the first success wins, so `scopes` is never
+            // dereferenced and no scope contributed anything. Echoing the
+            // request here would report scopes in a mode that has none.
+            return (self.compose_layers(), Vec::new());
         }
 
         telemetry::attempt(telemetry::OPERATION_COMPOSE_LAYERS);
@@ -72,11 +93,19 @@ impl ConfigDiscovery {
         set.decisions.emit();
         let mut errors = PartitionedErrors::default();
         let mut layers = Vec::new();
+        let mut origins = Vec::new();
         let mut loaded_paths = HashSet::new();
 
         for scope in scopes {
             let scope_layers = Self::compose_scope(*scope, &set, &mut loaded_paths);
             errors.append(scope_layers.errors);
+            // A scope is an origin only once a layer of its own survives
+            // de-duplication. Recording the request instead would name scopes
+            // that contributed nothing whenever a candidate is absent, or
+            // whenever every layer it produced was already contributed.
+            if !scope_layers.layers.is_empty() {
+                origins.push(*scope);
+            }
             layers.extend(scope_layers.layers);
         }
 
@@ -89,7 +118,7 @@ impl ConfigDiscovery {
             },
             None,
         );
-        errors.into_layers_outcome(layers)
+        (errors.into_layers_outcome(layers), origins)
     }
 
     /// Resolve one scope, least-preferred candidate first.

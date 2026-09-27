@@ -209,7 +209,16 @@ impl FileLayerOutcome {
         &self.reportable_errors
     }
 
-    /// Returns scopes that contributed automatic file layers.
+    /// Returns scopes that contributed automatic file layers, in scope order.
+    ///
+    /// A scope appears once at least one of its layers survives into the
+    /// composed layer list, so a requested scope whose candidates were all
+    /// absent — or whose every layer was already contributed by an earlier
+    /// scope — is not an origin. Under
+    /// [`AutomaticMode::FirstWins`](crate::AutomaticMode::FirstWins) this is
+    /// always empty, because that mode walks a flat candidate list and scope
+    /// has no bearing on what loads. A failed explicit selection likewise
+    /// reports none: selection is not automatic discovery.
     #[must_use]
     pub fn origins(&self) -> &[DiscoveryScope] {
         &self.origins
@@ -342,11 +351,11 @@ impl ConfigFilePolicy {
             );
         }
 
-        let mut outcome = FileLayerOutcome::from(
-            self.discovery
-                .compose_scoped_layers(self.automatic_mode, &self.scope_order),
-        );
-        outcome.origins.clone_from(&self.scope_order);
+        let (layers, origins) = self
+            .discovery
+            .compose_scoped_layers_with_origins(self.automatic_mode, &self.scope_order);
+        let mut outcome = FileLayerOutcome::from(layers);
+        outcome.origins = origins;
         outcome
     }
 }
