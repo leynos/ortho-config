@@ -729,3 +729,39 @@ names is worse than no test, because it retires the question.
   reflow that silently altered a token would fail a contract rather than the
   formatter. Also confirm the file holds no Mermaid block before reflowing, or
   a diagram `make nixie` validates could be reshaped.
+- **A rebase silently invalidates commit SHAs cited in posted review replies.**
+  Thirteen replies here named `59b2b2ae`; the rebase that followed rewrote it,
+  and GitHub answered 422 "No commit found for SHA" for the old one. The
+  replies had been accurate when posted, so nothing looked wrong — the link
+  rots underneath them. Fixing this needs the *weak* form of proof:
+  `git patch-id --stable` on both commits, which was byte-identical
+  (`90e92d58…`), establishing they are the same change and that pointing at the
+  new SHA is truthful rather than a guess. The 13 replies were then edited in
+  place, each carrying an explicit note, rather than leaving dead links or
+  adding 13 more comments. Two operational traps go with that:
+
+  - **Back up before editing, and verify the backup is real.** The first backup
+    pass wrote thirteen 108-byte files — suspiciously uniform, and they were:
+    each held a `401 Bad credentials` body. The subprocess had not been given
+    the token-unset environment that `gh` needs on this host, so every "backup"
+    was an error response. Check that the captured length varies and that the
+    content is the comment, not a JSON error.
+  - **Prefer editing a reply to stacking another.** A correction that appends
+    is one more comment for a reviewer to reconcile; the statement it corrects
+    stays on the page either way.
+- **Clearing one CodeScene finding does not clear the check, and the second
+  verdict is not a stale artefact.** After the `trybuild_tier.py` repair the
+  hosted check failed again. It was read as a delayed re-analysis of the old
+  head, and that reading was wrong: the check run recorded `head_sha` equal to
+  the *new* commit and a completion timestamp after it. CodeScene had genuinely
+  re-analysed and found a *second* instance of the same defect class in a
+  sibling file. The generalizable move is to sweep every changed file
+  `cs check` can read rather than checking only the file a finding named, and
+  to compare the check run's `head_sha` against the head being claimed about
+  before calling any verdict stale.
+- **The 400-line limit shapes where a fix can go.** `nextest_budgets.py` was
+  394 lines against the `AGENTS.md:33` cap, so the usual remedy — extract the
+  tricky part into a helper in the same module — very nearly breached a hard
+  rule to satisfy a style rule. Measure the file after the edit, not before;
+  the first draft landed at 399, one line of headroom, and only trimming the
+  helper's docstring to the module's existing one-line form brought it to 397.
