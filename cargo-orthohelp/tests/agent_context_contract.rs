@@ -9,7 +9,7 @@ mod fixtures;
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
-use ortho_config::{AGENT_CONTEXT_KIND_SUFFIX, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION};
+use ortho_config::AGENT_CONTEXT_KIND_SUFFIX;
 use rstest::rstest;
 use serde_json::Value;
 use std::error::Error;
@@ -17,6 +17,8 @@ use std::process::{Command, Output};
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
+
+const EXPECTED_SCHEMA_VERSION: &str = "1";
 
 #[rstest]
 #[case::simple(
@@ -44,11 +46,7 @@ fn emitted_agent_context_has_stable_contract(
     ensure_success(&output)?;
 
     let context = read_agent_context(&out_dir)?;
-    assert_string_field(
-        &context,
-        "schema_version",
-        ORTHO_AGENT_CONTEXT_SCHEMA_VERSION,
-    )?;
+    assert_string_field(&context, "schema_version", EXPECTED_SCHEMA_VERSION)?;
     assert_kind_suffix(&context)?;
     assert_first_command(&context, expected_path, expected_summary)?;
     Ok(())

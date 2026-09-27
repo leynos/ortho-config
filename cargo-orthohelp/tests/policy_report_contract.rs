@@ -8,7 +8,6 @@ mod fixtures;
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
-use cargo_orthohelp::policy::ORTHO_POLICY_REPORT_SCHEMA_VERSION;
 use rstest::rstest;
 use serde_json::Value;
 use std::error::Error;
@@ -17,6 +16,7 @@ use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
+const EXPECTED_SCHEMA_VERSION: &str = "1";
 const WARN_RULE_ID: &str = "agent-native.config.redundant-exception";
 const WARN_CODE: &str = "redundant_exception";
 const DENY_RULE_ID: &str = "agent-native.config.malformed-exception";
@@ -88,7 +88,7 @@ fn emitted_policy_report_has_stable_contract(#[case] case: PolicyCase) -> TestRe
 
     assert_exit_status(&output, case)?;
     let report = read_policy_report(&out_dir)?;
-    assert_string_field(&report, "version", ORTHO_POLICY_REPORT_SCHEMA_VERSION)?;
+    assert_string_field(&report, "version", EXPECTED_SCHEMA_VERSION)?;
     assert_string_field(&report, "tool", "cargo-orthohelp")?;
     assert_string_field(&report, "mode", case.mode)?;
     assert_results(&report, case.finding)?;

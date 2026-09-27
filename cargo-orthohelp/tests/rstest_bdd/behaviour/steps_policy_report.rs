@@ -7,11 +7,12 @@ use std::fmt;
 
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
-use cargo_orthohelp::policy::ORTHO_POLICY_REPORT_SCHEMA_VERSION;
 use rstest_bdd_macros::then;
 use serde_json::Value;
 
 use super::steps::{OrthoHelpContext, StepResult, get_out_dir};
+
+const EXPECTED_SCHEMA_VERSION: &str = "1";
 
 const WARN_EXPECTATION: ExpectedFinding = ExpectedFinding {
     mode: "warn",
@@ -173,11 +174,7 @@ fn policy_run(ctx: &OrthoHelpContext) -> StepResult<PolicyRun> {
 }
 
 fn assert_report_header(report: &Value, expected_mode: &str) -> StepResult<()> {
-    expect_string_field(
-        report,
-        JsonField::Version,
-        ORTHO_POLICY_REPORT_SCHEMA_VERSION,
-    )?;
+    expect_string_field(report, JsonField::Version, EXPECTED_SCHEMA_VERSION)?;
     expect_string_field(report, JsonField::Tool, "cargo-orthohelp")?;
     expect_string_field(report, JsonField::Mode, expected_mode)
 }

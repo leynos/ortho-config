@@ -9,11 +9,13 @@ use std::io::Read;
 
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
-use ortho_config::{AGENT_CONTEXT_KIND_SUFFIX, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION};
+use ortho_config::AGENT_CONTEXT_KIND_SUFFIX;
 use rstest_bdd_macros::{then, when};
 use serde_json::Value;
 
 use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
+
+const EXPECTED_SCHEMA_VERSION: &str = "1";
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum JsonField {
@@ -120,11 +122,7 @@ fn assert_agent_context_contract(
     expected_path: &[&str],
     expected_summary: &str,
 ) -> StepResult<()> {
-    expect_str_field(
-        json,
-        JsonField::SchemaVersion,
-        ORTHO_AGENT_CONTEXT_SCHEMA_VERSION,
-    )?;
+    expect_str_field(json, JsonField::SchemaVersion, EXPECTED_SCHEMA_VERSION)?;
     let kind = string_field(json, JsonField::Kind)?;
     let expected_suffix = format!(".{AGENT_CONTEXT_KIND_SUFFIX}");
     if !kind.ends_with(&expected_suffix) {
