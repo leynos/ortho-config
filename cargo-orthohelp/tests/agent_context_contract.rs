@@ -146,6 +146,9 @@ fn assert_first_command(
             return Err(format!("first command input should contain {field:?}").into());
         }
     }
+    if !input.get("required").is_some_and(Value::is_boolean) {
+        return Err("first command input required should be a boolean".into());
+    }
     Ok(())
 }
 
