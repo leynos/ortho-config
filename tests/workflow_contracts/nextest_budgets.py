@@ -14,10 +14,11 @@ runner does not use.
 
 from __future__ import annotations
 
-import tomllib
 from itertools import starmap
 
 from nextest_allowances import budget_of, is_positive_integer
+from nextest_document import budget_tables, parsed, slow_timeouts
+from nextest_document import table as _table
 from nextest_durations import seconds
 from nextest_errors import (
     NextestConfigurationError,
@@ -30,93 +31,43 @@ from timeout_budgets import (
 )
 
 #: Re-exported so every module that reads the configuration through this
-#: one keeps a single import site for the faults it reports and for the
-#: duration reading those faults come out of.
+#: one keeps a single import site for the faults it reports, the duration
+#: reading those faults come out of, and the `slow-timeout` reader the
+#: tiers below are built on.
 __all__ = [
     "NextestConfigurationError",
     "TimeoutBudgetError",
     "UnboundedTestError",
     "seconds",
+    "slow_timeouts",
 ]
 
 
-def _table(value: object) -> dict[str, object]:
-    """Return a parsed value as a table, or an empty one."""
-    # `tomllib` returns whatever the document said, so a configuration
-    # naming a scalar where a table belongs yields nothing here rather
-    # than raising several frames away, and the assertion that finds no
-    # budget reports the absence.
-    return dict(value) if isinstance(value, dict) else {}
+def _override_selector(path: str, entry: dict[str, object]) -> str | None:
+    """Return the filter an override applies its allowance through, if any.
 
+    ``None`` means the override carries no filter and is gated another way,
+    so it applies to every test nextest runs under it. That is a different
+    kind of selector from a filter and is not expressed as one.
 
-def _parsed(config_text: str) -> dict[str, object]:
-    """Return the nextest configuration as TOML, or raise."""
-    try:
-        return tomllib.loads(config_text)
-    except tomllib.TOMLDecodeError as error:
-        message = f"the nextest configuration is not valid TOML: {error}"
-        raise NextestConfigurationError(message) from error
+    ``filter`` is the only key holding a filterset. ``platform`` is a
+    *gate*, not a filter: it is a cfg expression such as ``cfg(windows)``,
+    in either a string or a ``{ host = ... }`` table, and it decides
+    whether the override applies at all. Rendering it as a filterset
+    predicate would invent a ``platform(...)`` term that nextest does not
+    accept -- the filterset ``platform`` takes ``host`` or ``target`` and
+    is a different construct -- so it is reported as the absence of a
+    filter rather than converted into one.
 
-
-def _budget_tables(config_text: str) -> list[tuple[str, dict[str, object]]]:
-    """Return every table nextest reads a per-test budget from."""
-    # Each profile's own table and each of its `[[overrides]]` entries,
-    # paired with the dotted path that names it so a failure can say
-    # which one is at fault.
-    tables: list[tuple[str, dict[str, object]]] = []
-    for name, raw in _table(_parsed(config_text).get("profile")).items():
-        profile = _table(raw)
-        tables.append((f"profile.{name}", profile))
-        overrides = profile.get("overrides")
-        entries = overrides if isinstance(overrides, list) else []
-        tables.extend(
-            (f"profile.{name}.overrides[{index}]", _table(entry))
-            for index, entry in enumerate(entries)
-        )
-    return tables
-
-
-def slow_timeouts(config_text: str) -> list[tuple[str, object]]:
-    """Return each ``slow-timeout`` with the path of the table declaring it.
-
-    The path is the dotted location nextest reads that table from, such as
-    ``profile.default`` or ``profile.default.overrides[0]``, so a caller
-    can tell a profile's own allowance from an override's.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    list of (str, object)
-        Each declared ``slow-timeout`` and the table declaring it.
-
-    Examples
-    --------
-    >>> slow_timeouts('[profile.default]\\nslow-timeout = "30s"\\n')
-    [('profile.default', '30s')]
+    No key at all is the refusal: nextest rejects an override that sets
+    no selector, and this reports that rather than reading it as
+    applying everywhere.
     """
-    return [
-        (path, table["slow-timeout"])
-        for path, table in _budget_tables(config_text)
-        if "slow-timeout" in table
-    ]
-
-
-def _override_selector(path: str, table: dict[str, object]) -> str:
-    """Return the selector expression an override's allowance applies to."""
-    # `filter` is the usual selector and `platform` the other nextest
-    # accepts, gated on its own: an override carrying only a platform with
-    # a `slow-timeout` is legal and applies to every test that platform
-    # runs. Only one with neither is the refusal this reports.
-    expression = table.get("filter")
+    expression = entry.get("filter")
     if isinstance(expression, str):
         return expression
-    platform = table.get("platform")
-    if isinstance(platform, str):
-        return f"platform({platform})"
+    if "platform" in entry:
+        return None
     message = (
         f"{path} declares a slow-timeout but neither a filter nor a "
         f"platform, so there is no set of tests that allowance applies "
@@ -125,7 +76,7 @@ def _override_selector(path: str, table: dict[str, object]) -> str:
     raise NextestConfigurationError(message)
 
 
-def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
+def override_allowances(config_text: str) -> list[tuple[str, str | None, float]]:
     """Return each override's selector and the per-test allowance it carries.
 
     An override is the only way a set of tests gets an allowance other
@@ -139,11 +90,14 @@ def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
 
     Returns
     -------
-    list of (str, str, float)
-        Each override's path, its selector expression, and its budget in
-        seconds, in file order. An override declaring no ``slow-timeout``
-        is left out: it grants no per-test budget, so there is nothing to
-        compare.
+    list of (str, str or None, float)
+        Each override's path, its filter expression, and its budget in
+        seconds, in file order. The filter is ``None`` when the override
+        carries no ``filter`` and selects through something other than a
+        filterset, such as a ``platform`` gate: such an entry applies to
+        every test nextest runs under it, which no filter expression
+        describes. An override declaring no ``slow-timeout`` is left out:
+        it grants no per-test budget, so there is nothing to compare.
 
     Raises
     ------
@@ -160,13 +114,19 @@ def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
     ...     'terminate-after = 2 }\\n'
     ... )
     [('profile.default.overrides[0]', 'binary(a)', 120.0)]
+    >>> override_allowances(
+    ...     '[profile.default]\\n[[profile.default.overrides]]\\n'
+    ...     'platform = { host = "cfg(unix)" }\\n'
+    ...     'slow-timeout = { period = "1m", terminate-after = 2 }\\n'
+    ... )
+    [('profile.default.overrides[0]', None, 120.0)]
     """
-    found: list[tuple[str, str, float]] = []
-    for path, table in _budget_tables(config_text):
-        if "overrides[" not in path or "slow-timeout" not in table:
+    found: list[tuple[str, str | None, float]] = []
+    for path, entry in budget_tables(config_text):
+        if "overrides[" not in path or "slow-timeout" not in entry:
             continue
-        selector = _override_selector(path, table)
-        found.append((path, selector, budget_of(path, table["slow-timeout"])))
+        selector = _override_selector(path, entry)
+        found.append((path, selector, budget_of(path, entry["slow-timeout"])))
     return found
 
 
@@ -273,7 +233,7 @@ def profile_allowance(config_text: str, profile: str = "default") -> float:
     ...                   'terminate-after = 10 }\\n')
     600.0
     """
-    own = _table(_table(_parsed(config_text).get("profile")).get(profile))
+    own = _table(_table(parsed(config_text).get("profile")).get(profile))
     if "slow-timeout" not in own:
         message = (
             f"profile.{profile} declares no slow-timeout of its own, so there "
@@ -314,11 +274,11 @@ def bounds_a_single_test(config_text: str, profile: str = "default") -> bool:
         True when that profile's own ``slow-timeout`` is a table whose
         ``terminate-after`` nextest would accept.
     """
-    own = _table(_table(_parsed(config_text).get("profile")).get(profile))
-    table = own.get("slow-timeout")
-    if not isinstance(table, dict):
+    own = _table(_table(parsed(config_text).get("profile")).get(profile))
+    bound = own.get("slow-timeout")
+    if not isinstance(bound, dict):
         return False
-    return is_positive_integer(table.get("terminate-after"))
+    return is_positive_integer(bound.get("terminate-after"))
 
 
 def grace_period(config_text: str) -> float:
@@ -392,6 +352,6 @@ def global_timeout(config_text: str) -> float | None:
         The whole-run budget in seconds, or None when the default
         profile declares none.
     """
-    profile = _table(_table(_parsed(config_text).get("profile")).get("default"))
+    profile = _table(_table(parsed(config_text).get("profile")).get("default"))
     budget = profile.get("global-timeout")
     return seconds(budget) if isinstance(budget, str) else None

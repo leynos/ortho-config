@@ -1418,8 +1418,11 @@ rather than the two it used to; five end in `trybuild` and `compile_fail` and
 `compile_time` do not, so no single glob covers the class and the names are
 enumerated instead.
 
-It stays below the 1,800 s whole-run budget, which the ordering contract
-asserts, so a test using its full allowance still ends inside the run.
+The 960 s allowance is lower than the 1,800 s whole-run budget, which the
+ordering contract asserts. That comparison does not by itself guarantee a test
+using its full allowance finishes before the run deadline, since a test that
+starts late spends part of the budget waiting to be scheduled; it establishes
+that the allowance cannot exhaust the run on its own.
 
 The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
 It has to fit inside the watchdog with nextest's termination procedure and a
@@ -1485,9 +1488,9 @@ a job and has to contain every watchdog inside it; counting the steps is what
 makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
 coverage-invoking job that declares no ceiling at all. The readings it rests on
-live in `nextest_budgets.py`, `nextest_durations.py`, `nextest_errors.py`,
-`timeout_budgets.py` and `coverage_lanes.py`, and are driven with controlled
-values in `timeout_reading_test.py`.
+live in `nextest_budgets.py`, `nextest_document.py`, `nextest_durations.py`,
+`nextest_errors.py`, `timeout_budgets.py` and `coverage_lanes.py`, and are
+driven with controlled values in `timeout_reading_test.py`.
 
 Run them with `make test-workflow-contracts`. The target provisions `pytest`,
 `pyyaml` and `hypothesis` through `uv run --with` rather than from the

@@ -206,17 +206,46 @@ well as a swallowed error. Removing it and keying the deduplication set on
 `layer.path()` directly would fix the error, delete a syscall per layer, and
 retire the issue in one move.
 
-**Why it is recorded rather than fixed here.** The remedy changes the
-deduplication key from "resolve whatever path the layer reports" to "trust the
-layer", and `assert_layer_path` exists precisely because the loader's
-resolution and the test's can differ in *representation* on Windows
-(`dunce::canonicalize` rewrites an otherwise identical path). Proving the two
-keys agree is a Windows-shaped question — the one platform this worktree cannot
-run. Landing it here would be a change whose evidence cannot be gathered
-locally, on a head that has just been certified green, to fix a silent-error
-path rather than a wrong answer: the fallible helper failing yields "keep the
-layer" which is the non-deduplicating answer, not a corrupt one. It needs its
-own round with Windows CI in the loop.
+**Why it was deferred, and why that reasoning did not survive.** The deferral
+argued that the change moves the deduplication key from "resolve whatever path
+the layer reports" to "trust the layer", and that proving the two keys agree is
+a Windows-shaped question because `assert_layer_path` exists precisely because
+two resolutions of one file can differ in *representation* there.
+
+That argument contains its own refutation once the call graph is traced. The
+two keys are not produced by two different resolvers:
+
+- `load_config_file_as_chain` (`loader.rs:181`) calls `with_cycle_detection`,
+  which resolves the file **once** at `loader.rs:119` and passes that
+  `canonical` into the operation it invokes.
+- `load_chain_for_file` (`loader.rs:188`) takes that same value — its parameter
+  is literally named `canonical` — and stamps it into the layer at
+  `loader.rs:198` via `to_utf8_path`.
+- Every one of the four `MergeLayer::file` construction sites
+  (`load.rs:232`, `load.rs:272`, `policy.rs:138`, `composer.rs:86`) receives
+  its path from that chain, not from a caller's spelling.
+
+So `layer.path()` *is* the loader's resolution, and the old second lookup was
+feeding the loader's own function into itself — idempotent by construction, and
+therefore incapable of disagreeing. `unique_layers` has exactly one caller,
+`scoped.rs:148`, fed directly by `chain_layers` (`scoped.rs:146`), so no other
+path reaches this filter. The representation risk is real for
+`assert_layer_path`, which compares a *fixture* path against a stored one; it
+does not exist here, where both sides are the same value.
+
+The remaining argument — that it is a silent-error path rather than a wrong
+answer — was accurate, and is exactly why it is worth fixing: the swallowed
+error is the only thing the second lookup contributes. Removing it deletes a
+syscall per layer and retires the silent fallback together, because there is no
+longer a fallible call whose error could be dropped. Fixed in this round,
+against the Windows job that now passes on this head.
+
+The generalizable lesson: *a deferral justified by "the two may differ" is
+dissolved by showing they are the same call site*, and that is a local
+question, not a platform one. It was recorded as needing Windows CI; the real
+reason it looked Windows-shaped was an unexamined assumption that the layer
+path and the lookup path came from different sources. Tracing four construction
+sites took less time than the deferral had already cost.
 
 The warnings are recorded with their dispositions rather than dismissed:
 `Docstring Coverage` (70.16% against an 80% threshold, scoped to touched
@@ -228,13 +257,24 @@ and the user/developer guides, which the plan's work items 4 and 5 partly cover.
 ## Big picture
 
 PR #465 resolves issue #318 by adding scoped configuration-file discovery plus
-an opt-in policy loader. Review established that two objectives are still unmet:
+an opt-in policy loader. Two objectives were open when the review opened, and
+**both have since been closed** — the entries are kept with their disposition
+so an early reader does not take the problem statement for current state:
 
-1. `StackScopes` composition stops at the **first** successful candidate in each
-   scope, so it does not load "all applicable files". #318 stays open.
-2. `ortho_config/tests/scoped_layers.rs::compose_layers_remains_first_wins`
+1. ~~`StackScopes` composition stops at the **first** successful candidate in
+   each scope, so it does not load "all applicable files". #318 stays open.~~
+   **Resolved.** `ScopeOutcome::scope_candidates` now walks every in-scope
+   candidate and `unique_layers` collapses only genuine repeats, so a scope
+   contributes all applicable files. `#318` is answered by this PR; see
+   `compose_scoped_layers` in `ortho_config/src/discovery/scoped.rs` and the
+   `scoped_stacking.rs` suite.
+2. ~~`ortho_config/tests/scoped_layers.rs::compose_layers_remains_first_wins`
    fails on Windows: it compares `MergeLayer::path` with the raw `TempDir`
-   path, while the loader stores the canonicalized path.
+   path, while the loader stores the canonicalized path.~~ **Resolved.** The
+   comparison moved into the shared
+   `tests/support/layer_assertions.rs::assert_layer_path`, which canonicalizes
+   both sides before comparing, so the assertion is about which file won rather
+   than how each side spelt it. The Windows job passes.
 
 ## Rebase (done)
 
@@ -503,6 +543,103 @@ Two things this round learned that the previous one did not have to consider:
   character. They also agree on the real `.config/nextest.toml`.
   `make test-workflow-contracts` passes 313 with 1 skipped.
 
+## Round 3: seven findings, four repairs
+
+CodeRabbit returned a second `CHANGES_REQUESTED` on `d43a5629` (review
+`5331986332`, 2026-09-27T20:42:06Z) with seven inline comments, all
+`🟡 Minor | ⚡ Quick win`. Each was verified against the current source before
+any edit. Four were real defects and are repaired; three are recorded below
+with their dispositions.
+
+**`nextest_budgets.py` refused a legal configuration — the significant one.**
+The `platform` key is an override **gate**, not a filter, and the previous
+round's helper (added by this branch) string-interpolated it into a
+`platform(...)` filterset term and returned that as the override's selector.
+Two things are wrong with that, and both were settled by probing the installed
+`cargo-nextest` rather than by reading its documentation:
+
+1. **It refuses a valid file.** A probe crate with
+   `platform = { host = "cfg(unix)" }` and no `filter` runs fine under nextest,
+   while `_override_selector` raised `NextestConfigurationError` — whose
+   message asserts "nextest refuses such a file", which is false for that
+   shape. The acceptance rule is in the nextest binary: *"at least one of
+   `platform` and `filter` must be specified for override"*.
+2. **`platform(...)` is not nextest's platform field.** A filterset
+   `platform(...)` takes `host` or `target`; probing `platform(unix)`,
+   `platform(/unix/)` and `platform(cfg(unix))` as `filter` values each failed
+   with *"expected `target` or `host`"*. So the old code fed nextest a
+   predicate nextest rejects, and passed it to a function that evaluates
+   `binary(...)` terms — a category error the reviewer named exactly.
+
+The repair returns `None` for a platform-gated override rather than inventing a
+filter for it: such an entry applies to every test under that platform, which
+no filterset describes. The one consumer (`trybuild_tier_test.py`) now refuses a
+`None` from the entry carrying the largest allowance instead of returning it
+as a filter expression, and a doctest pins the new shape. `platform` in
+*either* form (string or table) selects `None`, and an override with neither
+key still raises.
+
+**A deferral reversed.** The `scoped.rs` finding was previously deferred on the
+grounds that it needed Windows CI; tracing the call graph showed the premise
+was wrong, and it is repaired in this round. See *Big picture* and the
+reasoning recorded with it. Mutation-checked: restoring the old swallowed-error
+body, and separately neutering the filter, each fail the deduplication tests.
+
+**Two documentation repairs.** The guide's completion claim about the whole-run
+budget overstated what `test_a_whole_run_budget_would_sit_inside_each_watchdog`
+asserts — the test compares the global timeout against the per-test allowance
+and contains no scheduling term — so the sentence now states what is actually
+established. The plan's "Big picture" no longer presents two closed objectives
+as open, and one first-person pronoun is gone.
+
+**The trybuild inventory, and two defects the repair itself introduced.** Both
+`trybuild_tier.py` findings — nested declared test paths, and automatic
+discovery — came from one root cause: the inventory enumerated `tests/*.rs` and
+keyed each binary by its file stem, so a `[[test]]` target rooted at
+`tests/foo/mod.rs` was never visited, and a binary cargo discovers without any
+`[[test]]` entry was never named. Both are fixed by one rewrite that enumerates
+*both* kinds from a single shared reader, so the class and the negative control
+cannot disagree about which binaries exist. The negative control grew from 3
+names to 53 while the class stayed at 7 — no false positive.
+
+The two halves are now a single `_workspace_test_binaries`, and that is where
+the first self-inflicted defect appeared. Merging the per-crate inventories with
+`dict.update` is **last-write-wins over bare names**, but a nextest
+`binary(...)` name is workspace-wide: `rstest_bdd` is a declared target in
+*both* audited crates, so `cargo-orthohelp`'s plain copy overwrote
+`ortho_config`'s trybuild one and dropped the name from the class. The coverage
+assertion would then have certified `rstest_bdd` as correctly uncorrected — the
+same masking the finding names, reached through the merge rather than the walk.
+The union is now an OR (`found.get(name, False) or carries`), verified by the
+probe that exposed it: appending a trybuild call to `tests/rstest_bdd/mod.rs`
+moves the name into the class, and the clean tree still reads 7 in / 53 out.
+
+This is worth recording because the probe that found it *looked* like a broken
+test rather than a broken fix. `_carries_trybuild` returned `True` when the
+roots list was built by hand and `False` through `_workspace_test_binaries`, in
+one process, on one file state. The instinct to re-run the probe would have
+been wrong; the two calls disagreeing in the same process is the signal.
+
+The second defect was a rule breach the repair created: `trybuild_tier.py` grew
+to 424 lines and `nextest_budgets.py` to 419, both over the **400-line hard
+limit** (`AGENTS.md:33`). HEAD was clean at 334 and 397, so this branch broke
+it. Splitting to two new modules — `nextest_filterset.py` (the filterset
+language) and `nextest_document.py` (locating the tables a budget sits in) —
+brings all four to 320 / 167 / 88 / 357. The first is a seam the module already
+had: `trybuild_tier` knows which binaries are trybuild ones but not how to read
+a filter, and the matcher reader never needed to know about binaries. The split
+also deleted `GLOB_METACHARACTERS`, a constant referenced nowhere in the
+repository.
+
+`cs check` scores all five touched modules 10.00 and
+`make test-workflow-contracts` passes 316 with 1 skipped.
+
+**One finding with a disposition but no edit:**
+
+- `Docstring Coverage` remains an outstanding repository-wide policy gap this PR
+  does not meet on its own new code, as recorded in the pre-merge
+  reconciliation.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
@@ -667,7 +804,7 @@ on `scoped_stacking` — which had no exemption — while `scoped_layers` was
 already excused. That asymmetry is why the failure looked like a missing
 exemption rather than a stale one.
 
-That audit later caught a vacuous test of my own. The first version of the
+That audit later caught a vacuous test in this branch. The first version of the
 deduplication case gave both scopes byte-identical path spellings, so it was
 candidate *assembly* (which keys on the literal `OsString`) that collapsed them;
 `record_first_canonical_path` never ran, and deleting it still passed. The
@@ -765,3 +902,32 @@ names is worse than no test, because it retires the question.
   rule to satisfy a style rule. Measure the file after the edit, not before;
   the first draft landed at 399, one line of headroom, and only trimming the
   helper's docstring to the module's existing one-line form brought it to 397.
+- **A repair can reintroduce the defect class it repairs.** The trybuild
+  inventory fix unified two readers into one, and the merge that united them was
+  `dict.update` — last-write-wins over names that are workspace-wide rather
+  than per-crate. That silently dropped a class member, which is the *same*
+  masking both original findings described, reached through the new code rather
+  than the old. When a fix's whole purpose is "these two sets must not
+  disagree", the merge that unites them is the highest-risk line in the change,
+  not boilerplate.
+- **A probe that contradicts your fix may be reporting the fix, not the
+  probe.** The clobbering showed up as `_carries_trybuild` returning `True`
+  when the roots were built by hand and `False` through the workspace reader —
+  one process, one file state. The reflexive move is to distrust the probe and
+  re-run it; the informative move is that two calls in one process disagreeing
+  localizes the fault to the code between them. Re-running would have produced
+  the same output and cost a round.
+- **The last lesson was not applied to the sibling file.** The previous round
+  learned to measure a file after an edit, then this round still let two
+  modules reach 424 and 419. The lesson had been recorded and read; what it
+  lacked was a step in the routine. Splitting is now the first response to a
+  module approaching the cap rather than the remedy after a breach.
+- **Newly written British-English prose is a spellcheck hazard, and the gate
+  reads code spans too.** The verdict rule was right and the text was wrong:
+  the flagged token was a British spelling of a word whose American form the
+  rule demands, and it was one this round's prose introduced rather than
+  inherited. Two consequences. First, the American form is the correct one here
+  — the rule is a verdict, not a suggestion to silence. Second, a note
+  *describing* such a fault must not quote it, not even inside backticks,
+  because the checker reads code spans. Name the fault categorically and let
+  the reader supply the word.
