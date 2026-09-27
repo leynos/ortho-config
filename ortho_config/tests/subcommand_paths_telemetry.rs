@@ -114,14 +114,22 @@ fn candidate_search_reports_a_bounded_terminal_outcome() {
 #[cfg(unix)]
 #[test]
 fn failed_probe_records_the_probe_category() {
-    use std::os::unix::fs::PermissionsExt;
+    use cap_std::fs::{Permissions, PermissionsExt};
+    use std::path::Path;
 
     let root = tempfile::tempdir().expect("a temporary directory should be creatable");
-    let locked = root.path().join("telemetry-secret-directory");
-    std::fs::create_dir_all(locked.join("telemetry")).expect("the locked tree should be creatable");
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+    let cap =
+        Dir::open_ambient_dir(root.path(), ambient_authority()).expect("the temp dir should open");
+    // The capability handle addresses the tree relative to the directory it was
+    // opened on, while `XDG_CONFIG_HOME` must carry the absolute path a real
+    // process would set.
+    let locked_relative = Path::new("telemetry-secret-directory");
+    let locked = root.path().join(locked_relative);
+    cap.create_dir_all(locked_relative.join("telemetry"))
+        .expect("the locked tree should be creatable");
+    cap.set_permissions(locked_relative, Permissions::from_mode(0o000))
         .expect("the XDG directory should be lockable");
-    let is_privileged = std::fs::metadata(locked.join("telemetry")).is_ok();
+    let is_privileged = cap.metadata(locked_relative.join("telemetry")).is_ok();
 
     let source = MapEnv::new().with_var("XDG_CONFIG_HOME", &locked);
     let probe_events = (!is_privileged).then(|| {
@@ -134,7 +142,7 @@ fn failed_probe_records_the_probe_category() {
             assert!(result.is_err(), "a failed probe must surface as an error");
         })
     });
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))
+    cap.set_permissions(locked_relative, Permissions::from_mode(0o700))
         .expect("the XDG directory should be unlockable");
     let Some(events) = probe_events else {
         return;

@@ -115,9 +115,11 @@ satisfied by the code are recorded and skipped with a reason rather than
       position, absence, and probe failure; counters behind the `metrics`
       feature. `subcommand_paths_telemetry.rs` pins the vocabulary and checks
       no path or value is disclosed.
-- [x] (2026-09-27) Gate repairs on `053e8ba3`: the first full six-gate run came
-      back red on `check-fmt` (Markdown reflow in three docs), `lint` (three
-      Clippy errors) and `markdownlint` (one en-GB-oxydict spelling fault).
+- [x] (2026-09-27) Gate repairs on the first review commit ("Address PR #509
+      review: fallible discovery, telemetry, docs"): the first full six-gate run
+      came back red on `check-fmt` (Markdown reflow in three docs), `lint`
+      (three Clippy errors) and `markdownlint` (one en-GB-oxydict spelling
+      fault).
       `typecheck`, `test` (1415 Rust + 87 pytest) and `nixie` passed. All three
       faults are fixed in the follow-up commit; the spelling fault was repaired
       by rewording, never by quoting the offending form.
@@ -127,6 +129,15 @@ satisfied by the code are recorded and skipped with a reason rather than
       405 → 306) and the XDG base/selection cases moved to
       `subcommand/paths_xdg_tests.rs` (`paths_tests.rs` 461 → 349). Both new
       modules carry the module doc the extraction needs.
+- [x] (2026-09-27) Whitaker repair: `lint-whitaker` had never actually run
+      before, because `lint-clippy` always aborted first; once Clippy passed,
+      Whitaker surfaced six `no_std_fs_operations` errors, all in the new
+      `ortho_config/tests/subcommand_paths_telemetry.rs`. The file was
+      converted to capability handles (`Dir::create_dir_all`,
+      `Dir::set_permissions`, `cap_std::fs::Permissions::from_mode`) rather
+      than added to `dylint.toml`'s exclusions; `dylint.toml` is unchanged.
+      The suite still passes all three cases, and `is_privileged` is
+      verifiably false for euid 1000, so the lock case is not vacuous.
 - [ ] Gates: final six-gate run on the combined commit.
 - [ ] Commit, push, request CodeRabbit re-review, update PR body.
 
@@ -183,8 +194,8 @@ satisfied by the code are recorded and skipped with a reason rather than
 
 - Clippy's suggested fix for the `shadow_reuse` error at
   `paths_telemetry.rs:198` was `u32::try_from(position)`, which would have
-  self-recursed: the shadowing binding *is* the `try_from` call. The operand was
-  renamed to `base_position` instead, and the saturation is now commented
+  self-recursed: the shadowing binding *is* the `try_from` call. The operand
+  was renamed to `base_position` instead, and the saturation is now commented
   because `usize` → `u32` is genuinely lossy on 64-bit hosts.
 - The Clippy errors in `ortho_config/tests/subcommand_paths_telemetry.rs` were
   introduced by this round, not inherited. `panic_in_result_fn` fires because
@@ -196,6 +207,27 @@ satisfied by the code are recorded and skipped with a reason rather than
 - No automated gate enforces the 400-line rule, but the branch history shows it
   is treated as binding, so the extraction was done even though `make lint`
   would not have flagged either file.
+- **A `dylint.toml` exemption was drafted for the telemetry test target and then
+  rejected.** A repository-wide scan for genuine `std::fs` call sites showed
+  the new file was the *only* offender outside the three already-excluded
+  crates, and the codebase already states its convention in
+  `support/load_source.rs:21` ("Goes through a `cap_std::fs::Dir` handle for
+  the same reason"): a capability handle names the directory it may touch, so a
+  fixture cannot escape the temporary tree it was given. Adding a fourth
+  exclusion would have widened the lint's blind spot to hide a single file's
+  nonconformance, while also contradicting the comment already sitting directly
+  above `excluded_crates` for `ortho_config` — that entry covers the *lib*
+  crate, and the new file was an integration **test target**, which the existing
+  `discovery_attributes` entry demonstrates is keyed by target name.
+  Converting the file fixes the cause and leaves the lint's coverage intact.
+- The conversion carried a subtlety worth recording: `XDG_CONFIG_HOME` must be
+  an absolute path, but `cap_std::fs::Dir` addresses paths *relative to the
+  directory it was opened on*. The test therefore keeps `locked_relative` (for
+  the `Dir` handle) and `locked` (the absolute path it hands to the
+  environment) as two names for the same location. Collapsing them would have
+  made the variable unsettable, since a relative `XDG_CONFIG_HOME` is rejected
+  by `source_xdg_bases`'s `is_absolute` filter — and the telemetry event that
+  proves the code path ran would simply not have fired.
 
 ## Decision Log
 
