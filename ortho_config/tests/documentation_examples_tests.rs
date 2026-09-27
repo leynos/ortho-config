@@ -41,6 +41,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-policy-config",
     "guide-source-aware-load",
     "guide-subcommand",
+    "guide-subcommand-sources",
     "guide-tracing",
     "guide-tracing-install",
     "guide-yaml",

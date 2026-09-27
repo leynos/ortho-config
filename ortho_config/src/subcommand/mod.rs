@@ -99,6 +99,12 @@ where
 }
 
 /// Gather defaults using an explicit base and lookup-only source.
+///
+/// # Errors
+///
+/// Returns a file-discovery error when an XDG candidate path cannot be probed,
+/// or a gathering error when a selected file cannot be loaded or the environment
+/// provider fails.
 pub(super) fn load_file_and_env_defaults_at<T>(
     prefix: &Prefix,
     files: SubcommandFileContext<'_>,
@@ -108,7 +114,7 @@ where
     T: CommandFactory,
 {
     let name = CmdName::new(T::command().get_name());
-    let paths = candidate_paths_at(prefix, files.base, files.discovery);
+    let paths = candidate_paths_at(prefix, files.base, files.discovery)?;
     let mut fig = load_from_files(&paths, &name)?;
 
     let env_name = name.env_key();

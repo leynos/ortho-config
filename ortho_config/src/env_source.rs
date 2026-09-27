@@ -148,6 +148,10 @@ impl EnvSource for ProcessEnv {
         dirs::home_dir()
     }
 
+    /// Fall back to the platform's native configuration directory.
+    ///
+    /// Only reached on non-Unix target families, where subcommand discovery
+    /// consults `BaseDirs::config_dir` after the named home variables.
     #[cfg(not(any(unix, target_os = "redox")))]
     fn config_dir_fallback(&self) -> Option<std::path::PathBuf> {
         BaseDirs::new().map(|dirs| dirs.config_dir().to_path_buf())

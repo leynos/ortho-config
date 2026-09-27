@@ -714,8 +714,12 @@ variables for tests.
 - `ScanEnvSource` is owned by the merge boundary. `CsvEnv` accepts one through
   `with_source`, and the derived loader receives it through
   `OrthoConfig::load_from_iter_with_sources`.
-- The discovery candidate reader is the only production reader, and holds no
-  `std::env::var_os` call of its own.
+- The discovery candidate reader and subcommand file discovery are the only
+  production readers of `EnvSource`, and neither calls `std::env::var_os`
+  directly: both go through the `EnvSource` implementation they are handed.
+- The process-backed loaders are the legacy/default wrappers. They route their
+  lookups through `ProcessEnv`, whose `get` is the crate's only
+  `std::env::var_os` call.
 - It is **not** a general environment service. Adding readers elsewhere in the
   crate requires a decision about scope, not a call site.
 - Subcommand file loading may use `SubcommandFileContext` for named lookup of

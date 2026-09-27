@@ -2,10 +2,11 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
     CliValueExtractor, MapEnv, OrthoConfig, SubcommandCliMatches, SubcommandFileContext,
+    load_and_merge_subcommand_with_matches_with_sources,
     load_and_merge_subcommand_with_matches_with_sources_at,
 };
 use rstest::{fixture, rstest};
@@ -159,6 +160,49 @@ fn test_cli_default_as_absent_collection_defaults(prefix: Prefix) -> Result<()> 
         ensure!(explicit.count == 9);
     }
 
+    Ok(())
+}
+
+/// The process-backed wrapper resolves files through the process environment.
+///
+/// [`load_and_merge_subcommand_with_matches_with_sources`] delegates to its
+/// `_at` form with `ProcessEnv` and the working directory as the local base, so
+/// it must find `./.app.toml`. The environment layer must come from the
+/// supplied scan source rather than from the process.
+#[rstest]
+#[serial]
+fn process_backed_matches_wrapper_delegates_to_the_at_form(prefix: Prefix) -> Result<()> {
+    let temp_dir = config_dir("[cmds.retry]\ncount = 5\n")?;
+    let _cwd_guard = cwd::set_dir(temp_dir.path())?;
+
+    let matches = RetryArgs::command().get_matches_from(["retry"]);
+    let args = RetryArgs::from_arg_matches(&matches).context("parse clap defaults")?;
+
+    let from_file = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &args,
+        &matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge with an empty scan source")?;
+    ensure!(
+        from_file.count == 5,
+        "the wrapper must find ./.app.toml through ProcessEnv, got {}",
+        from_file.count
+    );
+
+    let injected = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &args,
+        &matches,
+        Arc::new(MapEnv::new().with_var("APP_CMDS_RETRY_COUNT", "7")),
+    )
+    .context("merge through the process-backed wrapper")?;
+    ensure!(
+        injected.count == 7,
+        "the injected scan source must supply the environment layer, got {}",
+        injected.count
+    );
     Ok(())
 }
 
