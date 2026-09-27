@@ -209,17 +209,20 @@ fn collect_unix_paths(
 /// is scoped by the prefix only when the prefix is non-empty.
 #[cfg(not(any(unix, target_os = "redox")))]
 fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
-    let configured_home = source.get("HOME").or_else(|| {
-        let from_userprofile = source.get("USERPROFILE");
-        if from_userprofile.is_some() {
-            paths_telemetry::windows_home_from_userprofile();
-        }
-        from_userprofile
-    });
+    let configured_home = source
+        .get("HOME")
+        .inspect(|_| paths_telemetry::windows_home_from_named())
+        .or_else(|| {
+            let from_userprofile = source.get("USERPROFILE");
+            if from_userprofile.is_some() {
+                paths_telemetry::windows_home_from_userprofile();
+            }
+            from_userprofile
+        });
     if let Some(home) = configured_home {
         push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
     } else if let Some(fallback_home) = source.home_fallback() {
-        paths_telemetry::windows_home_from_named();
+        paths_telemetry::windows_home_from_fallback();
         push_stem_candidates(&fallback_home, &dotted(prefix), paths);
     } else {
         paths_telemetry::windows_home_absent();
@@ -252,23 +255,26 @@ pub(super) fn candidate_paths_at(
 ) -> OrthoResult<Vec<PathBuf>> {
     paths_telemetry::candidates_started();
     let mut paths = Vec::new();
-    let result = (|| {
-        #[cfg(any(unix, target_os = "redox"))]
-        collect_unix_paths(prefix, source, &mut paths)?;
-        #[cfg(not(any(unix, target_os = "redox")))]
+    #[cfg(any(unix, target_os = "redox"))]
+    let result = collect_unix_paths(prefix, source, &mut paths).map(|()| {
+        push_local_candidates(prefix, base, &mut paths);
+        paths
+    });
+    #[cfg(not(any(unix, target_os = "redox")))]
+    let result = {
         collect_non_unix_paths(prefix, source, &mut paths);
         push_local_candidates(prefix, base, &mut paths);
         Ok(paths)
-    })();
+    };
     paths_telemetry::candidates_finished(&result);
     result
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(unix, target_os = "redox")))]
 #[path = "paths_probe_tests.rs"]
 mod probe_tests;
 
-#[cfg(test)]
+#[cfg(all(test, any(unix, target_os = "redox")))]
 #[path = "paths_proptests.rs"]
 mod proptests;
 

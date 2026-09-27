@@ -22,9 +22,9 @@ const STAGE_BASES: &str = "bases";
 /// The discovery stage that probed candidate files.
 const STAGE_CANDIDATES: &str = "candidates";
 
-/// An absolute named value supplied the Unix configuration home.
+/// A named value supplied the configuration home.
 const SOURCE_NAMED: &str = "named";
-/// The home fallback supplied the Unix configuration home.
+/// The home fallback supplied the configuration home.
 const SOURCE_FALLBACK: &str = "fallback";
 /// Neither a named value nor a fallback supplied a configuration home.
 const SOURCE_ABSENT: &str = "absent";
@@ -40,15 +40,19 @@ const OUTCOME_SUCCESS: &str = "success";
 /// Discovery could not produce its result.
 const OUTCOME_FAILURE: &str = "failure";
 /// A candidate was selected because the path exists.
+#[cfg(any(unix, target_os = "redox"))]
 const OUTCOME_EXISTS: &str = "exists";
 /// A candidate was absent, so the search moved to the next base.
+#[cfg(any(unix, target_os = "redox"))]
 const OUTCOME_ABSENT: &str = "absent";
 /// Probing a candidate failed for a reason other than absence.
+#[cfg(any(unix, target_os = "redox"))]
 const OUTCOME_PROBE_FAILED: &str = "probe_failed";
 
 /// No error applies to a decision or a successful discovery.
 const CATEGORY_NONE: &str = "none";
 /// A candidate probe failed for a reason other than absence.
+#[cfg(any(unix, target_os = "redox"))]
 const CATEGORY_PROBE: &str = "probe";
 /// A candidate file could not be loaded.
 const CATEGORY_FILE: &str = "file";
@@ -68,16 +72,19 @@ const CATEGORY_CYCLIC_EXTENDS: &str = "cyclic_extends";
 const CATEGORY_AGGREGATE: &str = "aggregate";
 
 /// Record that an absolute named value supplied the Unix configuration home.
+#[cfg(any(unix, target_os = "redox"))]
 pub(super) fn unix_config_home_from_named() {
     base_event(SOURCE_NAMED);
 }
 
 /// Record that the home fallback supplied the Unix configuration home.
+#[cfg(any(unix, target_os = "redox"))]
 pub(super) fn unix_config_home_from_fallback() {
     base_event(SOURCE_FALLBACK);
 }
 
 /// Record that no configuration home was available, so none was added.
+#[cfg(any(unix, target_os = "redox"))]
 pub(super) fn unix_config_home_absent() {
     base_event(SOURCE_ABSENT);
 }
@@ -98,6 +105,12 @@ pub(super) fn windows_config_dir_from_platform() {
 #[cfg(not(any(unix, target_os = "redox")))]
 pub(super) fn windows_home_from_named() {
     base_event(SOURCE_NAMED);
+}
+
+/// Record that the home fallback supplied the non-Unix home.
+#[cfg(not(any(unix, target_os = "redox")))]
+pub(super) fn windows_home_from_fallback() {
+    base_event(SOURCE_FALLBACK);
 }
 
 /// Record that no home was available for the non-Unix candidate list.
@@ -165,24 +178,28 @@ pub(super) fn candidates_finished<T>(result: &OrthoResult<T>) {
 /// for an operator to tell a shadowed candidate from a missing one without
 /// disclosing any path. Keeping the position as a separate event means the
 /// event's field set stays fixed at the macro call.
+#[cfg(any(unix, target_os = "redox"))]
 pub(super) fn candidate_exists(position: usize) {
     candidate_position_event(position, OUTCOME_EXISTS, CATEGORY_NONE);
     count_candidate(OUTCOME_EXISTS);
 }
 
 /// Record that no base held the candidate, so none was selected.
+#[cfg(any(unix, target_os = "redox"))]
 pub(super) fn candidate_absent() {
     candidate_event(OUTCOME_ABSENT, CATEGORY_NONE);
     count_candidate(OUTCOME_ABSENT);
 }
 
 /// Record a probe that failed for a reason other than absence.
+#[cfg(any(unix, target_os = "redox"))]
 pub(super) fn candidate_probe_failed() {
     candidate_event(OUTCOME_PROBE_FAILED, CATEGORY_PROBE);
     count_candidate(OUTCOME_PROBE_FAILED);
 }
 
 /// Emit one candidate event from the closed outcome and category vocabularies.
+#[cfg(any(unix, target_os = "redox"))]
 fn candidate_event(outcome: &'static str, category: &'static str) {
     tracing::debug!(
         event = "subcommand.paths.candidate",
@@ -194,6 +211,7 @@ fn candidate_event(outcome: &'static str, category: &'static str) {
 }
 
 /// Emit the selected-candidate event, naming its base position but no path.
+#[cfg(any(unix, target_os = "redox"))]
 fn candidate_position_event(position: usize, outcome: &'static str, category: &'static str) {
     // Saturate rather than truncate: `usize` to `u32` is lossy on 64-bit hosts,
     // and a wrapped position would misreport which base won.
@@ -250,7 +268,7 @@ fn count_candidates(outcome: &'static str, category: &'static str) {
 const fn count_candidates(_outcome: &'static str, _category: &'static str) {}
 
 /// Increment the optional counter for one probed candidate.
-#[cfg(feature = "metrics")]
+#[cfg(all(feature = "metrics", any(unix, target_os = "redox")))]
 fn count_candidate(outcome: &'static str) {
     metrics::counter!(
         "ortho_config.subcommand.paths.candidate",
@@ -259,5 +277,5 @@ fn count_candidate(outcome: &'static str) {
     .increment(1);
 }
 
-#[cfg(not(feature = "metrics"))]
+#[cfg(all(not(feature = "metrics"), any(unix, target_os = "redox")))]
 const fn count_candidate(_outcome: &'static str) {}

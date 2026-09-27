@@ -4,6 +4,12 @@
 //! These keep the examples in `paths_tests.rs` while covering the whole input
 //! space of `XDG_CONFIG_DIRS`: any number of absolute, relative, and empty
 //! segments, in any order.
+//!
+//! The module is Unix-only: it is compiled solely under
+//! `cfg(any(unix, target_os = "redox"))`, matching the platform that provides
+//! the XDG rules it exercises. Non-Unix discovery reads neither
+//! `XDG_CONFIG_DIRS` nor `XDG_CONFIG_HOME`, so there is nothing here to assert
+//! elsewhere.
 
 use super::*;
 use crate::MapEnv;

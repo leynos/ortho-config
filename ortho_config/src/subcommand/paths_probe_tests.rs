@@ -2,6 +2,10 @@
 //!
 //! Only a missing path counts as an absent candidate; any other probe failure
 //! must reach the caller instead of silently dropping a configuration location.
+//!
+//! The module is Unix-only: it is compiled solely under
+//! `cfg(any(unix, target_os = "redox"))`, matching the platform that provides
+//! the XDG probing rules it exercises.
 
 use super::*;
 use crate::{MapEnv, OrthoError};
