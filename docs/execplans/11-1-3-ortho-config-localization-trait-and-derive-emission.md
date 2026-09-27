@@ -1364,6 +1364,9 @@ The lock file took `main`'s version and was then re-resolved through
 `ortho_config_macros`. The round-trip was a net no-op, which independently
 confirms the replayed lock was already correct. Re-resolving is idempotent.
 
-The rebased candidate is `0ad49462`. All four named gates pass
-(`make check-fmt`, `make typecheck`, `make lint`, `make test`), together with
-`make markdownlint` and `make nixie`.
+All six gates pass on the rebased series: `make check-fmt`, `make typecheck`,
+`make lint`, and `make test` on `0ad49462` (the replay plus the ADR renumber),
+and `make markdownlint` and `make nixie` on the same commit. This revision note
+is itself the only later change, and it is Markdown-only, so the Rust gates
+remain valid for it; `make check-fmt` and `make markdownlint` were re-run after
+it. The published candidate is the tip of the branch.
