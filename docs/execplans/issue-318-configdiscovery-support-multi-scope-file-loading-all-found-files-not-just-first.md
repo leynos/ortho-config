@@ -2,7 +2,50 @@
 
 Branch:
 `issue-318-configdiscovery-support-multi-scope-file-loading-all-found-files-not-just-first`
-PR: #465 (draft)
+PR: #465 (ready for review, not a draft)
+
+## CodeRabbit round on `75d9901d`: 9 findings, under verification
+
+CodeRabbit returned `CHANGES_REQUESTED` at 2026-09-27T16:28:18Z (review
+`5331150192`) against `75d9901d`, with nine actionable inline comments. The
+findings are archived verbatim under `/tmp/cr465-75d9901d/`, one JSON per
+comment, so this plan does not have to restate claim text that the review owns.
+
+Three groups, and none of them is accepted on the reviewer's word:
+
+1. **Macro emitter** (3 findings, two stated MAJOR). `load_impl/mod.rs:152`
+   claims the policy branch drops `source_tokens`, so injected `MapEnv` sources
+   are ignored and discovery reads the real environment — a repeat of the #412
+   contract. `policy_impl.rs:112` claims the non-optional `project_root_from`
+   branch passes an `Option<PathBuf>` where `impl Into<PathBuf>` is required,
+   i.e. generated code that does not compile. `policy_impl.rs:116` claims an
+   empty `env_vars` silently drops the default `<PREFIX>_CONFIG_PATH` selector
+   that the legacy emitter honours.
+2. **Discovery semantics** (2 findings, MINOR). `discovery/policy.rs:350`
+   claims `origins` is the full `scope_order` rather than the scopes that
+   contributed layers. `discovery/scoped.rs:168` claims `unique_layers`
+   de-duplicates `extends` parents globally, so two children sharing one parent
+   lose the parent on the second chain, contradicting RFC 0002's "expanded once
+   per reference".
+3. **Python workflow contracts** (4 findings, TRIVIAL). `nextest_budgets.py:156`
+   rejects an override that selects by `platform` with no `filter`;
+   `trybuild_tier_test.py:109` supposedly over-permits because it does not
+   compare against non-trybuild binaries; `trybuild_tier.py:119` matches
+   `trybuild::TestCases::new()` as an exact substring, so a spaced `new ()`
+   would be missed; `trybuild_tier.py:225` ignores `&`, `-` and `not(...)` in a
+   nextest filter and ORs the `binary(...)` terms instead.
+
+The macro claims are the load-bearing ones: two assert that generated code is
+either semantically wrong or does not compile. Both are settled by reading the
+generator, not by reasoning about intent, and a claim of "does not compile" is
+falsified the moment a test that exercises that path is shown to pass. So each
+finding gets a verdict of verified, refuted, or uncertain before any edit, and
+the two that would mean broken generated code are checked against existing
+coverage first.
+
+Note the review is bound to `75d9901d`, which is still the remote head; the
+local commit `b9e0bd29` is deliberately unpushed so the review's anchor stays
+valid while it is being answered.
 
 ## Big picture
 
