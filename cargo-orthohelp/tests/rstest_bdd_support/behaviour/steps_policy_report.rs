@@ -1,18 +1,68 @@
-//! Policy-report JSON step definitions for `cargo-orthohelp` behavioural tests.
+//! Policy-report JSON contract assertions for `cargo-orthohelp` scenarios.
 //!
-//! The scenarios invoke the compiled binary, parse its stdout, and assert the
-//! stable policy-report contract across its enforcement modes.
+//! The shared policy steps invoke the compiled binary. These assertions read
+//! its report artefact and verify the stable schema and enforcement summary.
 
 use std::fmt;
 
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 use cargo_orthohelp::policy::ORTHO_POLICY_REPORT_SCHEMA_VERSION;
-use rstest_bdd_macros::{then, when};
+use rstest_bdd_macros::then;
 use serde_json::Value;
 
-use super::steps::{OrthoHelpContext, StepError, StepResult, run_orthohelp};
+use super::steps::{OrthoHelpContext, StepResult, get_out_dir};
 
-const CANONICAL_FLAG_RULE_ID: &str = "agent-native.vocabulary.canonical-flag";
-const NON_CANONICAL_FLAG_CODE: &str = "non_canonical_flag";
+const WARN_EXPECTATION: ExpectedFinding = ExpectedFinding {
+    mode: "warn",
+    rule_id: "agent-native.config.redundant-exception",
+    code: "redundant_exception",
+    severity: "warn",
+    should_succeed: true,
+    summary: SummaryCounts {
+        off: 0,
+        warn: 1,
+        deny: 0,
+        total: 1,
+    },
+};
+const DENY_EXPECTATION: ExpectedFinding = ExpectedFinding {
+    mode: "deny",
+    rule_id: "agent-native.config.malformed-exception",
+    code: "malformed_exception",
+    severity: "deny",
+    should_succeed: false,
+    summary: SummaryCounts {
+        off: 0,
+        warn: 0,
+        deny: 1,
+        total: 1,
+    },
+};
+const EMPTY_SUMMARY: SummaryCounts = SummaryCounts {
+    off: 0,
+    warn: 0,
+    deny: 0,
+    total: 0,
+};
+
+#[derive(Debug, Clone, Copy)]
+struct ExpectedFinding {
+    mode: &'static str,
+    rule_id: &'static str,
+    code: &'static str,
+    severity: &'static str,
+    should_succeed: bool,
+    summary: SummaryCounts,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SummaryCounts {
+    off: usize,
+    warn: usize,
+    deny: usize,
+    total: usize,
+}
 
 #[derive(Debug, Clone, Copy)]
 enum JsonField {
@@ -59,104 +109,41 @@ impl fmt::Display for JsonField {
     }
 }
 
-#[when("I run cargo-orthohelp policy check in warn mode for the simple fixture")]
-fn run_warn_policy_check_for_simple_fixture(
+#[then("the policy report has {mode} mode and no findings")]
+fn policy_report_has_empty_results(
     orthohelp_context: &mut OrthoHelpContext,
+    mode: String,
 ) -> StepResult<()> {
-    run_policy_check(
-        orthohelp_context,
-        "warn",
-        Some("orthohelp_fixture::SimpleFixtureConfig"),
-    )
-}
-
-#[when("I run cargo-orthohelp policy check in warn mode for the fixture")]
-fn run_warn_policy_check_for_fixture(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    run_policy_check(orthohelp_context, "warn", None)
-}
-
-#[when("I run cargo-orthohelp policy check in deny mode for the fixture")]
-fn run_deny_policy_check_for_fixture(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    run_policy_check(orthohelp_context, "deny", None)
-}
-
-#[when("I run cargo-orthohelp policy check in off mode for the fixture")]
-fn run_off_policy_check_for_fixture(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    run_policy_check(orthohelp_context, "off", None)
-}
-
-fn run_policy_check(
-    ctx: &mut OrthoHelpContext,
-    mode: &str,
-    root_type: Option<&str>,
-) -> StepResult<()> {
-    let mut args = vec![
-        "--package",
-        "orthohelp_fixture",
-        "--check-agent-native",
-        "--policy-mode",
-        mode,
-    ];
-    if let Some(selected_root_type) = root_type {
-        args.extend(["--root-type", selected_root_type]);
+    let run = policy_run(orthohelp_context)?;
+    if !run.is_success {
+        return Err(format!("policy check should succeed: {}", run.stderr).into());
     }
-    ctx.last_output.set(run_orthohelp(ctx, &args)?);
-    Ok(())
-}
-
-#[then("the policy report has warn mode and no findings")]
-fn policy_report_has_empty_warn_results(
-    orthohelp_context: &mut OrthoHelpContext,
-) -> StepResult<()> {
-    assert_empty_report(orthohelp_context, "warn")
-}
-
-#[then("the policy report has off mode and no findings")]
-fn policy_report_has_empty_off_results(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    assert_empty_report(orthohelp_context, "off")
+    assert_report_header(&run.report, &mode)?;
+    expect_empty_results(&run.report)?;
+    expect_summary(&run.report, EMPTY_SUMMARY)
 }
 
 #[then("the policy report has one warning finding")]
 fn policy_report_has_warning_finding(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    assert_finding_report(orthohelp_context, "warn", "warn", true)
+    assert_finding_report(orthohelp_context, WARN_EXPECTATION)
 }
 
 #[then("the policy report has one deny finding and a validation failure")]
 fn policy_report_has_deny_finding(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    assert_finding_report(orthohelp_context, "deny", "deny", false)
+    assert_finding_report(orthohelp_context, DENY_EXPECTATION)
 }
 
-fn assert_empty_report(ctx: &OrthoHelpContext, expected_mode: &str) -> StepResult<()> {
+fn assert_finding_report(ctx: &OrthoHelpContext, expected: ExpectedFinding) -> StepResult<()> {
     let run = policy_run(ctx)?;
-    if !run.is_success {
-        return Err(format!("policy check should succeed: {}", run.stderr).into());
-    }
-    assert_report_header(&run.report, expected_mode)?;
-    expect_empty_results(&run.report)?;
-    expect_summary(&run.report, (0, 0, 0, 0))
-}
-
-fn assert_finding_report(
-    ctx: &OrthoHelpContext,
-    expected_mode: &str,
-    expected_severity: &str,
-    should_succeed: bool,
-) -> StepResult<()> {
-    let run = policy_run(ctx)?;
-    if run.is_success != should_succeed {
+    if run.is_success != expected.should_succeed {
         return Err(format!("unexpected policy check status: {}", run.stderr).into());
     }
-    if !should_succeed && !run.stderr.contains("AgentNativePolicyDenied") {
+    if !expected.should_succeed && !run.stderr.contains("PolicyViolation") {
         return Err("deny policy check should report a validation failure".into());
     }
-    assert_report_header(&run.report, expected_mode)?;
-    expect_one_finding(&run.report, expected_severity)?;
-    let summary = match expected_severity {
-        "warn" => (0, 1, 0, 1),
-        "deny" => (0, 0, 1, 1),
-        _ => return Err(format!("unsupported severity {expected_severity}").into()),
-    };
-    expect_summary(&run.report, summary)
+    assert_report_header(&run.report, expected.mode)?;
+    expect_one_finding(&run.report, expected)?;
+    expect_summary(&run.report, expected.summary)
 }
 
 struct PolicyRun {
@@ -166,18 +153,23 @@ struct PolicyRun {
 }
 
 fn policy_run(ctx: &OrthoHelpContext) -> StepResult<PolicyRun> {
-    ctx.last_output
-        .with_ref(|output| -> StepResult<PolicyRun> {
-            if !output.stdout.ends_with(b"\n") {
-                return Err("policy report should have a trailing newline".into());
-            }
-            Ok(PolicyRun {
-                is_success: output.status.success(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                report: serde_json::from_slice(&output.stdout)?,
-            })
+    let (is_success, stderr) = ctx
+        .last_output
+        .with_ref(|output| {
+            (
+                output.status.success(),
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            )
         })
-        .ok_or_else(|| -> StepError { "last_output should be set".into() })?
+        .ok_or("last_output should be set")?;
+    let out_root = get_out_dir(ctx)?;
+    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
+    let serialized = dir.read_to_string("policy-report.json")?;
+    Ok(PolicyRun {
+        is_success,
+        stderr,
+        report: serde_json::from_str(&serialized)?,
+    })
 }
 
 fn assert_report_header(report: &Value, expected_mode: &str) -> StepResult<()> {
@@ -201,7 +193,7 @@ fn expect_empty_results(report: &Value) -> StepResult<()> {
     }
 }
 
-fn expect_one_finding(report: &Value, expected_severity: &str) -> StepResult<()> {
+fn expect_one_finding(report: &Value, expected: ExpectedFinding) -> StepResult<()> {
     let results = report
         .get(JsonField::Results.as_str())
         .and_then(Value::as_array)
@@ -210,9 +202,9 @@ fn expect_one_finding(report: &Value, expected_severity: &str) -> StepResult<()>
         return Err(format!("results should contain one finding, got {results:?}").into());
     }
     let result = results.first().ok_or("finding should exist")?;
-    expect_string_field(result, JsonField::RuleId, CANONICAL_FLAG_RULE_ID)?;
-    expect_string_field(result, JsonField::Code, NON_CANONICAL_FLAG_CODE)?;
-    expect_string_field(result, JsonField::Severity, expected_severity)?;
+    expect_string_field(result, JsonField::RuleId, expected.rule_id)?;
+    expect_string_field(result, JsonField::Code, expected.code)?;
+    expect_string_field(result, JsonField::Severity, expected.severity)?;
     let message = string_field(result, JsonField::Message)?;
     if message.is_empty() {
         return Err("finding message should not be empty".into());
@@ -223,23 +215,23 @@ fn expect_one_finding(report: &Value, expected_severity: &str) -> StepResult<()>
     Ok(())
 }
 
-fn expect_summary(report: &Value, expected: (usize, usize, usize, usize)) -> StepResult<()> {
+fn expect_summary(report: &Value, expected: SummaryCounts) -> StepResult<()> {
     let summary = report
         .get(JsonField::Summary.as_str())
         .ok_or("summary should be present")?;
     for (field, expected_count) in [
-        (JsonField::Off, expected.0),
-        (JsonField::Warn, expected.1),
-        (JsonField::Deny, expected.2),
-        (JsonField::Total, expected.3),
+        (JsonField::Off, expected.off),
+        (JsonField::Warn, expected.warn),
+        (JsonField::Deny, expected.deny),
+        (JsonField::Total, expected.total),
     ] {
-        let actual = summary
+        let raw_count = summary
             .get(field.as_str())
             .and_then(Value::as_u64)
             .ok_or_else(|| format!("{field} should be an unsigned number"))?;
-        let actual = usize::try_from(actual)?;
-        if actual != expected_count {
-            return Err(format!("{field} should be {expected_count}, got {actual}").into());
+        let actual_count = usize::try_from(raw_count)?;
+        if actual_count != expected_count {
+            return Err(format!("{field} should be {expected_count}, got {actual_count}").into());
         }
     }
     Ok(())
