@@ -1,6 +1,7 @@
 //! Loading behaviour tests for discovery.
 
 use std::io::Write as _;
+use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -8,10 +9,10 @@ use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use rstest::rstest;
 use serde::Deserialize;
 use tempfile::TempDir;
-use test_helpers::env::{self as test_env, EnvScope};
 
 use super::super::*;
-use super::fixtures::{config_temp_dir, env_guards, sample_config_file};
+use super::fixtures::{config_temp_dir, sample_config_file};
+use crate::MapEnv;
 
 #[derive(Debug, Deserialize)]
 struct SampleConfig {
@@ -34,14 +35,15 @@ fn write_cap_file(dir: &Utf8Dir, name: &str, contents: &str) -> Result<()> {
 
 #[rstest]
 fn load_first_reads_first_existing_file(
-    env_guards: EnvScope,
     sample_config_file: Result<(TempDir, Utf8PathBuf)>,
 ) -> Result<()> {
-    let _guards = env_guards;
     let (temp_dir, _config_path) = sample_config_file?;
-    let _xdg = test_env::set_var("XDG_CONFIG_HOME", temp_dir.path());
 
-    let discovery = ConfigDiscovery::builder("hello_world").build();
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("XDG_CONFIG_HOME", temp_dir.path()),
+        ))
+        .build();
     let figment = match discovery.load_first() {
         Ok(Some(figment)) => figment,
         Ok(None) => return Err(anyhow!("expected configuration candidate to load")),
@@ -58,11 +60,7 @@ fn load_first_reads_first_existing_file(
 }
 
 #[rstest]
-fn load_first_skips_invalid_candidates(
-    env_guards: EnvScope,
-    config_temp_dir: Result<TempDir>,
-) -> Result<()> {
-    let _guards = env_guards;
+fn load_first_skips_invalid_candidates(config_temp_dir: Result<TempDir>) -> Result<()> {
     let temp_dir = config_temp_dir?;
     let dir_path = temp_dir.path();
     let invalid = dir_path.join("broken.toml");
@@ -80,10 +78,11 @@ fn load_first_skips_invalid_candidates(
             .write_all(b"is_enabled = false")
             .context("write valid config")?;
     }
-    let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &invalid);
-
     let discovery = ConfigDiscovery::builder("hello_world")
         .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", &invalid),
+        ))
         .add_explicit_path(valid.clone())
         .build();
 
@@ -108,10 +107,8 @@ fn load_first_skips_invalid_candidates(
 
 #[rstest]
 fn load_first_with_errors_reports_preceding_failures(
-    env_guards: EnvScope,
     config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
-    let _guards = env_guards;
     let temp_dir = config_temp_dir?;
     let dir_path = temp_dir.path();
     let missing = dir_path.join("absent.toml");
@@ -120,6 +117,7 @@ fn load_first_with_errors_reports_preceding_failures(
     write_cap_file(&dir, "valid.toml", "is_enabled = true")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(MapEnv::new()))
         .add_required_path(&missing)
         .add_explicit_path(valid.clone())
         .build();
@@ -141,11 +139,7 @@ fn load_first_with_errors_reports_preceding_failures(
 }
 
 #[rstest]
-fn partitioned_errors_surface_required_failures(
-    env_guards: EnvScope,
-    config_temp_dir: Result<TempDir>,
-) -> Result<()> {
-    let _guards = env_guards;
+fn partitioned_errors_surface_required_failures(config_temp_dir: Result<TempDir>) -> Result<()> {
     let temp_dir = config_temp_dir?;
     let dir_path = temp_dir.path();
     let missing = dir_path.join("absent.toml");
@@ -154,6 +148,7 @@ fn partitioned_errors_surface_required_failures(
     write_cap_file(&dir, "valid.toml", "is_enabled = true")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(MapEnv::new()))
         .add_required_path(&missing)
         .add_explicit_path(valid.clone())
         .build();
@@ -179,15 +174,12 @@ fn partitioned_errors_surface_required_failures(
 }
 
 #[rstest]
-fn required_paths_emit_missing_errors(
-    env_guards: EnvScope,
-    config_temp_dir: Result<TempDir>,
-) -> Result<()> {
-    let _guards = env_guards;
+fn required_paths_emit_missing_errors(config_temp_dir: Result<TempDir>) -> Result<()> {
     let temp_dir = config_temp_dir?;
     let missing = temp_dir.path().join("absent.toml");
 
     let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(MapEnv::new()))
         .add_required_path(&missing)
         .build();
     let (_, errors) = discovery.load_first_with_errors();

@@ -1,55 +1,31 @@
 //! Shared fixtures for discovery integration tests.
 
 use std::io::Write as _;
+use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use rstest::fixture;
 use tempfile::TempDir;
-use test_helpers::env::{self as test_env, EnvScope};
 
 use super::super::ConfigDiscovery;
-
-fn remove_common_env_vars(env_lock: &test_env::EnvVarLock) -> Vec<test_env::EnvVarGuard> {
-    let mut guards = Vec::new();
-    for key in [
-        "HELLO_WORLD_CONFIG_PATH",
-        "XDG_CONFIG_HOME",
-        "XDG_CONFIG_DIRS",
-        "APPDATA",
-        "LOCALAPPDATA",
-        "HOME",
-        "USERPROFILE",
-    ] {
-        guards.push(env_lock.remove_var(key));
-    }
-    guards
-}
+use crate::MapEnv;
 
 #[fixture]
-pub(super) fn env_guards() -> EnvScope {
-    test_env::EnvScope::new_with(remove_common_env_vars)
-}
-
-#[fixture]
-pub(super) fn env_override_discovery() -> Result<(
-    ConfigDiscovery,
-    Utf8PathBuf,
-    EnvScope,
-    test_env::EnvVarGuard,
-)> {
-    let scope = test_env::EnvScope::new_with(remove_common_env_vars);
+pub(super) fn env_override_discovery() -> Result<(ConfigDiscovery, Utf8PathBuf)> {
     let temp_dir = std::env::temp_dir();
     let utf8_temp_dir = Utf8PathBuf::from_path_buf(temp_dir)
         .map_err(|path| anyhow!("temporary directory path is not valid UTF-8: {path:?}"))?;
     let path = utf8_temp_dir.join("explicit.toml");
-    let env_guard = test_env::set_var("HELLO_WORLD_CONFIG_PATH", path.as_std_path());
     let discovery = ConfigDiscovery::builder("hello_world")
         .env_var("HELLO_WORLD_CONFIG_PATH")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", path.as_std_path()),
+        ))
         .build();
 
-    Ok((discovery, path, scope, env_guard))
+    Ok((discovery, path))
 }
 
 #[fixture]
