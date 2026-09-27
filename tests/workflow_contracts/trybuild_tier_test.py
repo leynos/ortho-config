@@ -31,7 +31,7 @@ from trybuild_tier import (
     TRYBUILD_CALL,
     UnreadableMatcherError,
     binaries_selected_by,
-    declared_non_trybuild_binaries,
+    non_trybuild_binaries,
     trybuild_binaries,
 )
 
@@ -83,7 +83,13 @@ def _trybuild_filter(config_text: str) -> str:
         f"({largest:.0f}s); found {[path for path, _ in carrying]}. The trybuild "
         f"filter is read from that entry, so an ambiguous one is not read at all"
     )
-    return carrying[0][1]
+    path, expression = carrying[0]
+    assert expression is not None, (
+        f"{path} carries the largest per-test allowance but declares no filter, "
+        f"so it selects every test rather than the trybuild class; this contract "
+        f"reads a filterset from that entry and cannot read a platform gate as one"
+    )
+    return expression
 
 
 def test_every_trybuild_binary_is_covered_by_the_override(nextest_config: str) -> None:
@@ -97,9 +103,8 @@ def test_every_trybuild_binary_is_covered_by_the_override(nextest_config: str) -
 
     A filter naming every binary in the workspace would pass a coverage
     check that offers it nothing but class members to match against, so
-    the other declared binaries are offered alongside them and the two
-    sets compared for equality. The class is also required to be
-    non-trivial.
+    every other test binary is offered alongside them and the two sets
+    compared for equality. The class is also required to be non-trivial.
     """
     class_members = trybuild_binaries()
     assert len(class_members) > 1, (
@@ -108,7 +113,7 @@ def test_every_trybuild_binary_is_covered_by_the_override(nextest_config: str) -
         f"or the reading of them broke and would now pass vacuously"
     )
     expression = _trybuild_filter(nextest_config)
-    others = declared_non_trybuild_binaries()
+    others = non_trybuild_binaries()
     selected = binaries_selected_by(expression, sorted(class_members | others))
     chosen = {name for name, covered in selected.items() if covered}
     missing = sorted(class_members - chosen)
@@ -204,7 +209,7 @@ def test_over_selection_is_refused() -> None:
     because every name it is asked about is matched. The non-trybuild
     binaries are what make the difference visible.
     """
-    others = declared_non_trybuild_binaries()
+    others = non_trybuild_binaries()
     assert others, (
         "this case needs at least one declared non-trybuild test binary; "
         "without one, over-selection cannot be observed at all and this "

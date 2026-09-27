@@ -29,7 +29,6 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::MergeLayer;
-use crate::file::canonicalise;
 
 use super::candidate_set::{Candidate, CandidateSet};
 use super::load::{CandidateFailure, PartitionedErrors};
@@ -198,19 +197,25 @@ impl ConfigDiscovery {
 
     /// Keep the first-loaded copy of a successfully loaded file.
     ///
-    /// The loader canonicalises every chain path, so canonical identity also
-    /// collapses aliases and symlinks without changing public layer metadata.
-    /// "First" is application order — scopes in `scope_order`, and within a
-    /// scope the least-preferred candidate — which is what stops a file
-    /// reachable from two places contributing two layers and silently doubling
-    /// append-strategy vectors.
+    /// The key is the path the layer already carries, which the loader built by
+    /// resolving the file once, before reading it. Resolving it a second time
+    /// here would report the same path and could only add a way to fail: a
+    /// resolution error was previously read as "not a duplicate", so it kept the
+    /// layer and emitted nothing. Keying on the stored path removes both the
+    /// redundant lookup and that silent fallback.
+    ///
+    /// It is the *canonical* path the loader stores, not the caller's spelling,
+    /// so canonical identity still collapses aliases and symlinks without
+    /// changing public layer metadata. "First" is application order — scopes in
+    /// `scope_order`, and within a scope the least-preferred candidate — which is
+    /// what stops a file reachable from two places contributing two layers and
+    /// silently doubling append-strategy vectors.
     fn record_first_canonical_path(
         loaded_paths: &mut HashSet<PathBuf>,
         layer: &MergeLayer<'static>,
     ) -> bool {
-        layer.path().is_none_or(|path| {
-            canonicalise(path.as_std_path())
-                .map_or(true, |canonical| loaded_paths.insert(canonical))
-        })
+        layer
+            .path()
+            .is_none_or(|path| loaded_paths.insert(path.as_std_path().to_path_buf()))
     }
 }

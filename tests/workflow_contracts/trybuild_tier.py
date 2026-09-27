@@ -18,12 +18,24 @@ See "The trybuild allowance was raised after it killed two tests" in
 
 from __future__ import annotations
 
-import fnmatch
 import re
 import typing as typ
 from pathlib import Path
 
+from nextest_filterset import (
+    UnreadableMatcherError,
+    binaries_selected_by as _binaries_selected_by,
+)
 from timeout_budgets import REPO_ROOT
+
+#: Re-exported so the coverage contract keeps one import site for the
+#: class it reads here and the language it reads there.
+__all__ = [
+    "UnreadableMatcherError",
+    "binaries_selected_by",
+    "non_trybuild_binaries",
+    "trybuild_binaries",
+]
 
 #: The call that identifies a trybuild test binary. Matched rather than
 #: imported because the Rust sources cannot be executed here. Every
@@ -45,24 +57,6 @@ CRATE_DIRECTORIES: typ.Final[tuple[str, ...]] = ("ortho_config", "cargo-orthohel
 TEST_TARGET = re.compile(r"^\[\[test\]\]$", re.MULTILINE)
 TEST_TARGET_NAME = re.compile(r'^name\s*=\s*"([^"]+)"', re.MULTILINE)
 TEST_TARGET_PATH = re.compile(r'^path\s*=\s*"([^"]+)"', re.MULTILINE)
-
-#: A glob this contract can evaluate. `globset` also accepts brace
-#: alternation, which `fnmatch` does not, so a brace is refused rather than
-#: misread: a filter using one would otherwise be judged by different rules
-#: than nextest applies and could pass here while selecting something else.
-GLOB_METACHARACTERS: typ.Final[str] = "*?["
-
-
-class UnreadableMatcherError(Exception):
-    """Raised when a ``binary(...)`` argument is not a matcher this reads.
-
-    Every matcher in the nextest reference is read here, but a form added
-    later would not be. Refusing is the safe direction: a matcher read as
-    matching nothing would report the whole trybuild class as uncovered,
-    and one read as matching everything would report a broken filter as
-    sound. Neither is a guess worth making silently.
-    """
-
 
 def _declared_test_targets(manifest: str) -> dict[str, str]:
     """Return each ``[[test]]`` target's name, keyed by its source path.
@@ -88,16 +82,64 @@ def _declared_test_targets(manifest: str) -> dict[str, str]:
     return declared
 
 
-def _crate_trybuild_binaries(base: Path, crate: str) -> set[str]:
-    """Return the trybuild binary names one crate contributes.
+def _carries_trybuild(root: Path) -> bool:
+    """Report whether compiling the binary rooted at ``root`` runs trybuild.
 
-    Split from :func:`trybuild_binaries` because the walk has two guards at
-    different depths — the crate's ``tests/`` may be absent, and most files
-    under it carry no trybuild call — and both belong to the crate's turn
-    rather than to the workspace's. Keeping them together left the function
-    with two nested conditional blocks, which is a CodeScene "Bumpy Road
-    Ahead"; separating the per-crate reading is also what makes each half
-    readable on its own.
+    A declared ``mod.rs`` root compiles every source beneath it, because
+    the modules it declares pull them in, so the whole tree is scanned
+    rather than the root alone. A trybuild call in any of them is compiled
+    into that one binary, which is why the scan is over the tree and not
+    over the root: a ``mod.rs`` is usually a few ``mod`` lines, and a
+    nested declaration's trybuild call would otherwise be invisible.
+
+    The tree is an over-approximation of the module graph — it does not
+    follow ``mod`` declarations, and ``#[path]`` can pull in a source
+    outside it — but over-approximating is the correct direction here: a
+    trybuild call that is not reachable costs the filter an entry it did
+    not need, while one that is reachable and missed hides a binary that
+    runs compile tests on the base allowance.
+
+    Parameters
+    ----------
+    root : Path
+        The file a test binary is rooted at.
+
+    Returns
+    -------
+    bool
+        Whether a trybuild call is compiled into that binary.
+
+    Examples
+    --------
+    A source with no trybuild call does not carry one:
+
+    >>> _carries_trybuild(Path("/nonexistent.rs"))
+    False
+    """
+    sources = root.parent.rglob("*.rs") if root.name == "mod.rs" else [root]
+    return any(
+        source.is_file()
+        and TRYBUILD_CALL.search(source.read_text(encoding="utf-8")) is not None
+        for source in sources
+    )
+
+
+def _crate_test_binaries(base: Path, crate: str) -> dict[str, bool]:
+    """Return each of one crate's test binaries, marked by trybuild use.
+
+    A binary is either declared by a ``[[test]]`` target or discovered by
+    cargo from a top-level ``tests/*.rs`` file, and **both** kinds are
+    enumerated. An inventory holding only the declared ones offers the
+    coverage assertion a universe missing almost every binary, so a filter
+    naming the whole trybuild class plus an undiscovered test would pass
+    the equality check: over-selection is only visible against the
+    binaries the check is given.
+
+    Split from the two readers below because the walk has two guards at
+    different depths — the crate's ``tests/`` may be absent, and a binary
+    may be unreachable — and both belong to the crate's turn rather than
+    to the workspace's. Keeping them together left the function with two
+    nested conditional blocks, which is a CodeScene "Bumpy Road Ahead".
 
     Parameters
     ----------
@@ -108,25 +150,31 @@ def _crate_trybuild_binaries(base: Path, crate: str) -> set[str]:
 
     Returns
     -------
-    set of str
-        The trybuild binary names this crate contributes, possibly none.
+    dict of str to bool
+        Each binary's name, mapped to whether it carries a trybuild call.
 
     Examples
     --------
-    A crate with no ``tests/`` directory contributes nothing:
+    A crate with no ``tests/`` directory has no test binaries:
 
-    >>> _crate_trybuild_binaries(Path("/nonexistent"), "ortho_config")
-    set()
+    >>> _crate_test_binaries(Path("/nonexistent"), "ortho_config")
+    {}
     """
     tests = base / crate / "tests"
     if not tests.is_dir():
-        return set()
+        return {}
     manifest = (base / crate / "Cargo.toml").read_text(encoding="utf-8")
     declared = _declared_test_targets(manifest)
-    return {
-        declared.get(source.relative_to(base / crate).as_posix(), source.stem)
+    # A declared path is enumerated once, as its target; globbing it as well
+    # would offer the same binary under its stem and its declared name.
+    roots: list[tuple[str, Path]] = [
+        (source.stem, source)
         for source in sorted(tests.glob("*.rs"))
-        if TRYBUILD_CALL.search(source.read_text(encoding="utf-8")) is not None
+        if source.relative_to(base / crate).as_posix() not in declared
+    ]
+    roots.extend((name, base / crate / path) for path, name in sorted(declared.items()))
+    return {
+        name: _carries_trybuild(source) for name, source in roots if source.is_file()
     }
 
 
@@ -155,23 +203,65 @@ def trybuild_binaries(root: Path | None = None) -> frozenset[str]:
     >>> trybuild_binaries(Path("/nonexistent"))
     frozenset()
     """
+    return frozenset(
+        name for name, carries in _workspace_test_binaries(root).items() if carries
+    )
+
+
+def _workspace_test_binaries(root: Path | None = None) -> dict[str, bool]:
+    """Return every test binary in the audited crates, marked by trybuild use.
+
+    Read by both :func:`trybuild_binaries` and
+    :func:`non_trybuild_binaries` so the two halves of the coverage
+    assertion cannot disagree about which binaries exist: a name absent
+    from one and present in the other is how a class member came to be
+    certified as covered while running on the base allowance.
+
+    A name is **workspace-wide**, not per-crate: nextest's ``binary(...)``
+    matches it with no crate prefix, so one name built in two crates is
+    one class member the filter selects in both. The entry is therefore
+    true when *any* crate's copy carries a trybuild call. Merging the
+    per-crate readings last-write-wins let a later crate's plain copy
+    overwrite an earlier crate's trybuild one, which dropped the name
+    from the class and had the coverage assertion certify it as covered
+    while it ran on the base allowance.
+
+    Parameters
+    ----------
+    root : Path, optional
+        The repository root. Defaults to the one the other contracts use.
+
+    Returns
+    -------
+    dict of str to bool
+        Each binary's name, mapped to whether it carries a trybuild call.
+
+    Examples
+    --------
+    A directory with no crates has no test binaries:
+
+    >>> _workspace_test_binaries(Path("/nonexistent"))
+    {}
+    """
     base = REPO_ROOT if root is None else root
-    found: set[str] = set()
+    found: dict[str, bool] = {}
     for crate in CRATE_DIRECTORIES:
-        found.update(_crate_trybuild_binaries(base, crate))
-    return frozenset(found)
+        for name, carries in _crate_test_binaries(base, crate).items():
+            found[name] = found.get(name, False) or carries
+    return found
 
 
-def declared_non_trybuild_binaries(root: Path | None = None) -> frozenset[str]:
-    """Return every declared test binary that is not a trybuild one.
+def non_trybuild_binaries(root: Path | None = None) -> frozenset[str]:
+    """Return every test binary in the audited crates that is not trybuild.
 
-    A ``[[test]]`` target may live in a subdirectory, and
-    :func:`trybuild_binaries` globs only ``tests/*.rs``, so these names
-    are invisible to it in both directions. They are read here so the
-    override's filter can be checked against binaries it must *not*
-    select, which is the only way over-selection is visible: a filter
-    naming a superset of the class passes a coverage check that offers
-    it nothing but class members to match against.
+    These are the names the override's filter is checked against, and the
+    check is only as strong as this set is complete: a filter naming a
+    superset of the trybuild class passes a coverage assertion that offers
+    it nothing but class members to match against. Cargo discovers a
+    top-level ``tests/*.rs`` file as a binary without any ``[[test]]``
+    entry, so reading only the declared targets would offer three names
+    where fifty-odd exist, and an over-selection onto any of the others
+    would be invisible.
 
     Parameters
     ----------
@@ -181,108 +271,27 @@ def declared_non_trybuild_binaries(root: Path | None = None) -> frozenset[str]:
     Returns
     -------
     frozenset of str
-        The declared binary names that carry no trybuild coverage.
+        The binary names that carry no trybuild coverage.
 
     Examples
     --------
     A directory with no crates contributes nothing:
 
-    >>> declared_non_trybuild_binaries(Path("/nonexistent"))
+    >>> non_trybuild_binaries(Path("/nonexistent"))
     frozenset()
     """
-    base = REPO_ROOT if root is None else root
-    trybuild = trybuild_binaries(base)
-    found: set[str] = set()
-    for crate in CRATE_DIRECTORIES:
-        manifest = base / crate / "Cargo.toml"
-        if not manifest.is_file():
-            continue
-        found.update(_declared_test_targets(manifest.read_text(encoding="utf-8")).values())
-    return frozenset(found - trybuild)
-
-
-def _matches_one(matcher: str, name: str) -> bool:
-    """Report whether one ``binary(...)`` argument matches a binary name.
-
-    The matchers are the ones in the nextest filterset reference. A bare
-    argument, and a ``#``-prefixed one, are globs -- that is nextest's
-    default for ``binary()``, so `binary(foo)` is an exact match only
-    because `foo` holds no metacharacter.
-
-    Parameters
-    ----------
-    matcher : str
-        The argument of one ``binary(...)`` call, trimmed.
-    name : str
-        A binary name.
-
-    Raises
-    ------
-    UnreadableMatcherError
-        If the argument is not a matcher this contract reads.
-
-    Returns
-    -------
-    bool
-        Whether this argument selects that name.
-
-    Examples
-    --------
-    >>> _matches_one("compile_fail", "compile_fail")
-    True
-    >>> _matches_one("*trybuild", "crate_path_trybuild")
-    True
-    >>> _matches_one("=compile_fail", "compile_fail")
-    True
-    >>> _matches_one("~fail", "compile_fail")
-    True
-    >>> _matches_one("/^compile_/", "compile_fail")
-    True
-    """
-    match matcher[:1], matcher:
-        case ("=", _):
-            return matcher[1:] == name
-        case ("~", _):
-            return matcher[1:] in name
-        case ("/", _):
-            pattern = matcher[1:-1] if matcher.endswith("/") else None
-            if pattern is None:
-                raise UnreadableMatcherError(f"unterminated regex matcher {matcher!r}")
-            return re.search(pattern, name) is not None
-        case ("#", _):
-            pattern = matcher[1:]
-        case _:
-            pattern = matcher
-    # `globset` reads `{a,b}` alternation and `fnmatch` does not, so the
-    # difference is refused rather than left to disagree with nextest.
-    if "{" in pattern:
-        raise UnreadableMatcherError(
-            f"glob {matcher!r} uses brace alternation, which this contract "
-            f"cannot evaluate as nextest does"
-        )
-    return fnmatch.fnmatchcase(name, pattern)
-
-
-BINARY_TERM = re.compile(r"binary\(([^)]*)\)")
-
-#: What may sit between ``binary(...)`` terms for the disjunction to be
-#: read as one. Anything else — `&`, `-`, `not(...)`, or a `test(...)`
-#: term — changes the selection by narrowing it, so it is refused rather
-#: than dropped on the floor.
-BINARY_DISJUNCTION = re.compile(r"^[\s|]*$")
+    return frozenset(
+        name for name, carries in _workspace_test_binaries(root).items() if not carries
+    )
 
 
 def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) -> dict[str, bool]:
     """Return which candidates a disjunction of ``binary`` terms selects.
 
-    Only a ``|``-joined list of ``binary(...)`` predicates is read. That
-    is the shape the trybuild override uses, and it is the only shape in
-    which the `binary` terms decide the answer on their own: a
-    conjunction, a difference, or a negation narrows the selection in a
-    way this reader does not evaluate — `binary(compile_fail) &
-    test(other)` selects nothing when `other` matches no test, while
-    rating the `binary` term alone would report `compile_fail` as
-    covered. Such an expression is refused rather than misread.
+    Re-exported from :mod:`nextest_filterset`, which reads the language
+    itself. Kept importable here because the coverage contract reads the
+    class from this module and the filter from that one, and one import
+    site per module is easier to follow than two.
 
     Parameters
     ----------
@@ -308,27 +317,4 @@ def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) 
     >>> binaries_selected_by('binary(*trybuild)', ["a_trybuild", "other"])
     {'a_trybuild': True, 'other': False}
     """
-    terms = BINARY_TERM.findall(filter_expression)
-    if not terms:
-        message = (
-            f"the trybuild override's filter names no binary(...) predicate: "
-            f"{filter_expression!r}"
-        )
-        raise UnreadableMatcherError(message)
-    # Removing the terms leaves the glue between them. Checking it here,
-    # rather than scanning the whole expression, is what keeps an
-    # operator inside a matcher — a regex or glob such as `binary(/a-b/)`
-    # — from being refused as a stray operator.
-    remainder = BINARY_TERM.sub("", filter_expression)
-    if BINARY_DISJUNCTION.match(remainder) is None:
-        message = (
-            f"the trybuild override's filter combines its binary(...) terms "
-            f"with something other than `|`, which this contract does not "
-            f"evaluate; reading the terms alone would report a narrower "
-            f"expression as a wider one: {filter_expression!r}"
-        )
-        raise UnreadableMatcherError(message)
-    return {
-        name: any(_matches_one(term.strip(), name) for term in terms)
-        for name in candidates
-    }
+    return _binaries_selected_by(filter_expression, candidates)
