@@ -9,6 +9,7 @@ use std::io::Read;
 
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
+use ortho_config::{AGENT_CONTEXT_KIND_SUFFIX, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION};
 use rstest_bdd_macros::{then, when};
 use serde_json::Value;
 
@@ -119,10 +120,15 @@ fn assert_agent_context_contract(
     expected_path: &[&str],
     expected_summary: &str,
 ) -> StepResult<()> {
-    expect_str_field(json, JsonField::SchemaVersion, "1")?;
+    expect_str_field(
+        json,
+        JsonField::SchemaVersion,
+        ORTHO_AGENT_CONTEXT_SCHEMA_VERSION,
+    )?;
     let kind = string_field(json, JsonField::Kind)?;
-    if !kind.ends_with(".agent_context") {
-        return Err(format!("kind should end with .agent_context, got {kind}").into());
+    let expected_suffix = format!(".{AGENT_CONTEXT_KIND_SUFFIX}");
+    if !kind.ends_with(&expected_suffix) {
+        return Err(format!("kind should end with {expected_suffix}, got {kind}").into());
     }
     let command = json
         .get(JsonField::Commands.as_str())
