@@ -75,10 +75,24 @@ a cold child `cargo` build through trybuild in the first coverage pass. Run
 side by side on Windows, those builds exhausted the 600 s per-test allowance:
 every Windows failure in runs 36127709137, 36127710357, 36127710423,
 36127710779 and 36127709460 was `compile_time`'s `must_use_compile_tests` at
-600 s. The 600 s ceiling stays, and Linux keeps its parallel execution.
+600 s. That entry keeps its 600 s ceiling, and Linux keeps its parallel
+execution.
 `windows_trybuild_isolation_test.py` holds the exact binary set, the platform,
-the reservation, the unchanged allowance, and the absence of any other slot
+the reservation, that entry's allowance, and the absence of any other slot
 reservation.
+
+Exclusivity and the raised allowance are two fixes for one failure, and the
+file carries both. nextest resolves each override field from the **first**
+matching entry that sets it, so the Windows entry above, being first, decides
+the four binaries it names; the wider entry below is second and supplies the
+rest of the class. The four therefore keep both 600 s *and* run alone, while
+`env_source_trybuild`, `generated_lint_trybuild` and `localized_parse_trybuild`
+take the 960 s entry and Linux takes 960 s for all seven. Merging the two would
+have to choose between running alone and the larger allowance; leaving both
+keeps each measured remedy at the binaries it was measured on.
+`trybuild_tier_test.py` reads the widening and
+`windows_trybuild_isolation_test.py` the reservation, so neither remedy can be
+removed by editing the other's entry.
 
 The reservation costs Windows wall time. On run 36195916343 the job took 53.5
 min, against a 38 min median over the preceding pull-request runs, and
