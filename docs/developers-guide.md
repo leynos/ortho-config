@@ -67,6 +67,27 @@ review.
 Do not remove the `max-threads = 1` constraint from either group without first
 verifying that the underlying shared-state access has been eliminated.
 
+On Windows only, one further override gives each of four binaries every nextest
+slot (`threads-required = "num-test-threads"`), so each runs alone:
+`ortho_config::crate_path_trybuild`, `ortho_config::declarative_merge_trybuild`,
+`ortho_config::compile_fail` and `cargo-orthohelp::compile_time`. Each drives
+a cold child `cargo` build through trybuild in the first coverage pass. Run
+side by side on Windows, those builds exhausted the 600 s per-test allowance:
+every Windows failure in runs 36127709137, 36127710357, 36127710423,
+36127710779 and 36127709460 was `compile_time`'s `must_use_compile_tests` at
+600 s. The 600 s ceiling stays, and Linux keeps its parallel execution.
+`windows_trybuild_isolation_test.py` holds the exact binary set, the platform,
+the reservation, the unchanged allowance, and the absence of any other slot
+reservation.
+
+The reservation costs Windows wall time. On run 36195916343 the job took 53.5
+min, against a 38 min median over the preceding pull-request runs, and
+`must_use_compile_tests` took 158.7 s. A single-threaded test group for the
+same four binaries was measured as an alternative on run 36264533224. It saved
+no wall time (52.9 min), and `must_use_compile_tests`, still competing with the
+rest of the suite, took 523.5 s of its 600 s allowance, so the reservation was
+kept.
+
 ## Subcommand dispatch changes
 
 Cargo's external-subcommand contract is an entry-point concern, not a
