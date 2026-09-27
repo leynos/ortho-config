@@ -1544,6 +1544,45 @@ step, so it is outside this contract, and bounding it is separate work.
 
 [shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
 
+## Runner placement
+
+The Linux leg of `ci.yml`'s `build-test` runs on Ubicloud's
+`ubicloud-standard-2`. On GitHub-hosted runners, its queue wait over the ten
+runs before the move had a median of 10 min and reached 29 min, against a 27
+min median wall. That made it the worst hosted-queue case in the estate.
+`ubicloud-standard-2` is the estate's starting shape. A move to
+`ubicloud-standard-4` needs the measured wall on `-2` to exceed 1.5 times the
+hosted wall.
+
+A pull request from a fork cannot obtain an Ubicloud runner, so the leg falls
+back to `ubuntu-latest` for forks:
+
+```yaml
+runs-on: >-
+  ${{ github.event.pull_request.head.repo.fork
+  && matrix.fork-runner || matrix.runner }}
+```
+
+Each matrix entry names its `platform`, its `runner` and its `fork-runner`. The
+Windows leg names `windows-latest` for both. The job is named
+`build-test (${{ matrix.platform }})`, so the required check contexts are
+`build-test (linux)` and `build-test (windows)` whichever runner serves the
+event. A name built from the runner would exist on only one of a fork's and a
+branch's pull requests. The steps choose their platform through
+`matrix.platform`, never through a runner label.
+
+The Ubicloud leg exports the cache proxy's credentials before Setup Rust, which
+starts the sccache server. That step is guarded on
+`runner.environment == 'self-hosted'`, because on a hosted runner there is no
+proxy and the action fails closed. The Windows leg and the three packaging legs
+stay GitHub-hosted.
+
+`runner_placement_test.py` holds all of this. It reads the fallback by
+position, checks each leg's runners, and checks that no fork reaches Ubicloud,
+that the names are runner-independent, and that the job has a ceiling. It also
+checks the credentials step's guard and position, and that the packaging legs
+stay hosted.
+
 ## CodeScene coverage belongs to main
 
 `coverage-main.yml` is the only workflow in this repository that runs a
