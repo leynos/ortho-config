@@ -98,6 +98,52 @@ a tool reporting "nothing found" for *both* a known-good and a known-bad input
 is reporting its own configuration, not the data. Probe a set-difference or a
 search against a known answer before believing a zero.
 
+## Third rebase onto 5732adf9 (done, 2026-09-27)
+
+Replayed `c043980d..749032b3` (16 commits) onto `5732adf9`. No conflicts. All
+16 commits are `=` identical under `range-diff`, so the series replayed
+verbatim rather than being reconstructed.
+
+`5732adf9` (#508) splits oversized configuration test modules: `env_source.rs`
+gains a sibling `env_source_tests.rs`, and `cli_default_as_absent.rs` drops 668
+→ 347 lines by moving its parser-default material into
+`tests/support/parser_defaults.rs`.
+
+**That is this branch's own pattern, arrived at independently.** Main declares
+its new module as
+`#[path = "support/parser_defaults.rs"] mod parser_defaults;` — exactly how
+this branch splits its fixtures and assertions (`support/layer_assertions.rs`,
+`support/scoped_fixtures.rs`), and how it already declared
+`support/to_anyhow.rs` and `support/discovery_builder.rs` before the rebase.
+Both sides place shared test code in `tests/support/` and include it with
+`#[path]`, so the two efforts are the same convention and the files coexist in
+one directory with no rename or reconciliation needed. Nothing in the branch
+had to change to adopt it; no `tests/support/mod.rs` exists on either side,
+confirming the include-per-binary idiom is the repository's intent rather than
+an accident of either branch.
+
+Audit of the replay, all three checks:
+
+1. 4 target-only paths checked, 0 differ.
+2. No deletions relative to the target, and the branch-vs-target change set is
+   byte-identical before and after (`29 files, +2885 -225` both sides). The
+   name set grows 29 → 33 because the merge base moved and now includes main's
+   four files.
+3. 26 sliding-window repeats, all classified with no reconstruction artefact:
+   NumPy-style docstring scaffolding (`Parameters`/`Returns`, one more
+   docstring per added function), the `#[rstest]`/`#[expect]` attribute idiom
+   appearing once more as a suite grew, `tempfile::tempdir()` setup lines, and
+   a struct-init field pair shared by two conversion functions that return
+   different types. The window inflates each count by its own width, so these
+   are one extra genuine occurrence each rather than duplication.
+
+`ortho_config/tests/extends.rs` is 405 lines, one file over the 400-line ceiling
+`AGENTS.md` sets — but it is 405 at `origin/main` and untouched by this
+branch, so it is inherited, not caused here. Main is already splitting
+oversized test modules one per change (#507, #508), so this is that series in
+progress rather than a defect to fix from this branch; fixing it here would
+collide with the next such change.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
