@@ -1,4 +1,4 @@
-"""Contract for the Windows trybuild serialization group.
+"""Contract for the Windows trybuild exclusivity override.
 
 On Windows, the first coverage pass runs four tests that each drive a
 cold child ``cargo`` build through trybuild. Run side by side, they
@@ -7,11 +7,11 @@ exhausted the 600s per-test allowance: every Windows failure in runs
 ``cargo-orthohelp::compile_time``'s ``must_use_compile_tests`` at 600s,
 overlapping ``ortho_config::compile_fail`` and ``crate_path_trybuild``.
 
-``.config/nextest.toml`` therefore puts exactly those binaries in one
-single-threaded test group on Windows, so their child builds never
-overlap one another while the rest of the suite keeps running, and it
-leaves the ceiling and Linux alone. This module holds that shape. See
-"Nextest test-group serialization" in ``docs/developers-guide.md``.
+``.config/nextest.toml`` therefore reserves every nextest slot for each
+of those binaries on Windows, and leaves the ceiling and Linux alone.
+This module holds that shape: the exact binary set, the platform, the
+reservation, and the unchanged allowance. See "Nextest test-group
+serialization" in ``docs/developers-guide.md``.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -36,29 +36,23 @@ TRYBUILD_BINARIES: typ.Final[frozenset[str]] = frozenset({
 })
 
 WINDOWS: typ.Final[str] = "cfg(windows)"
-GROUP: typ.Final[str] = "windows_trybuild"
+EXCLUSIVE: typ.Final[str] = "num-test-threads"
 
-#: The trybuild allowance, unchanged by the grouping: 120s x 5 = 600s.
+#: The trybuild allowance, unchanged by the exclusivity: 120s x 5 = 600s.
 TRYBUILD_TIMEOUT: typ.Final[dict[str, object]] = {"period": "120s", "terminate-after": 5}
 
 
 @pytest.fixture(scope="module")
-def config() -> dict[str, object]:
-    """Return ``.config/nextest.toml``, parsed once.
+def overrides() -> list[dict[str, object]]:
+    """Return the default profile's ``[[overrides]]`` entries, parsed once.
 
     Returns
     -------
-    dict
-        The parsed document.
+    list of dict
+        The entries in declaration order.
     """
-    return tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
-
-
-def _overrides(config: dict[str, object]) -> list[dict[str, object]]:
-    """Return the default profile's ``[[overrides]]`` entries."""
-    profile = config.get("profile", {})
-    default = profile.get("default", {}) if isinstance(profile, dict) else {}
-    entries = default.get("overrides", []) if isinstance(default, dict) else []
+    document = tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
+    entries = document.get("profile", {}).get("default", {}).get("overrides", [])
     return [entry for entry in entries if isinstance(entry, dict)]
 
 
@@ -67,54 +61,57 @@ def _terms(filterset: object) -> frozenset[str]:
     return frozenset("".join(term.split()) for term in str(filterset).split("|"))
 
 
-def _group_members(config: dict[str, object]) -> list[dict[str, object]]:
-    """Return every override assigning a test to the Windows trybuild group."""
-    return [entry for entry in _overrides(config) if entry.get("test-group") == GROUP]
-
-
-def test_the_windows_trybuild_group_admits_one_test_at_a_time(
-    config: dict[str, object],
-) -> None:
-    """The group exists and runs its members one at a time."""
-    groups = config.get("test-groups", {})
-    group = groups.get(GROUP) if isinstance(groups, dict) else None
-    assert isinstance(group, dict), f"nextest.toml must declare the {GROUP} test group"
-    assert group.get("max-threads") == 1, (
-        f"{GROUP} must run one test at a time; it allows {group.get('max-threads')!r}"
+def _windows_exclusive(overrides: list[dict[str, object]]) -> dict[str, object]:
+    """Return the single Windows override that reserves every slot."""
+    found = [
+        entry
+        for entry in overrides
+        if entry.get("platform") == WINDOWS and "threads-required" in entry
+    ]
+    assert len(found) == 1, (
+        f"expected one Windows override reserving nextest slots, found {len(found)}"
     )
+    return found[0]
 
 
-def test_every_cold_trybuild_binary_joins_the_group_on_windows(
-    config: dict[str, object],
+def test_every_cold_trybuild_binary_runs_alone_on_windows(
+    overrides: list[dict[str, object]],
 ) -> None:
-    """One Windows override puts exactly the four trybuild binaries in the group.
+    """The Windows override names exactly the four trybuild binaries.
 
     Missing ``compile_time`` is the defect this guards: the first form
-    of the fix named only the two ``*_trybuild`` binaries, and the test
-    that actually timed out stayed free to overlap the others.
+    of the override named only the two ``*_trybuild`` binaries, and the
+    test that actually timed out stayed free to overlap the others.
     """
-    members = _group_members(config)
-    assert len(members) == 1, f"expected one override joining {GROUP}, found {len(members)}"
-    (entry,) = members
-    assert entry.get("platform") == WINDOWS, (
-        f"{GROUP} membership must be scoped to {WINDOWS}; it is {entry.get('platform')!r}"
-    )
+    entry = _windows_exclusive(overrides)
     assert _terms(entry.get("filter")) == TRYBUILD_BINARIES, (
-        f"{GROUP} must hold exactly {sorted(TRYBUILD_BINARIES)}; it holds "
-        f"{sorted(_terms(entry.get('filter')))}"
+        f"the Windows exclusivity must name exactly {sorted(TRYBUILD_BINARIES)}; "
+        f"it names {sorted(_terms(entry.get('filter')))}"
+    )
+    assert entry.get("threads-required") == EXCLUSIVE, (
+        f"each trybuild binary must reserve every slot ({EXCLUSIVE!r}); the "
+        f"override asks for {entry.get('threads-required')!r}"
     )
 
 
-def test_the_grouping_keeps_the_600s_ceiling(config: dict[str, object]) -> None:
-    """Running one at a time is the remedy, not a longer allowance."""
-    (entry,) = _group_members(config)
+def test_the_exclusivity_keeps_the_600s_ceiling(
+    overrides: list[dict[str, object]],
+) -> None:
+    """Running alone is the remedy, not a longer allowance."""
+    entry = _windows_exclusive(overrides)
     assert entry.get("slow-timeout") == TRYBUILD_TIMEOUT, (
         f"the Windows trybuild allowance must stay {TRYBUILD_TIMEOUT}; it is "
         f"{entry.get('slow-timeout')!r}"
     )
 
 
-def test_no_override_reserves_every_slot(config: dict[str, object]) -> None:
-    """The grouping replaced whole-run exclusivity, which cost 20 minutes."""
-    reserving = [entry for entry in _overrides(config) if "threads-required" in entry]
-    assert not reserving, f"no override may reserve nextest slots: {reserving}"
+def test_no_other_override_reserves_slots(
+    overrides: list[dict[str, object]],
+) -> None:
+    """Linux and every other platform keep their execution policy."""
+    others = [
+        entry
+        for entry in overrides
+        if "threads-required" in entry and entry.get("platform") != WINDOWS
+    ]
+    assert not others, f"only the Windows override may reserve slots: {others}"
