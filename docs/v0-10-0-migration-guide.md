@@ -77,6 +77,23 @@ This injects the subcommand environment layer while retaining the existing
 command-line precedence. A clap-only argument type that does not derive
 `OrthoConfig` remains parse-only and does not support source-aware merge APIs.
 
+## Inject a subcommand file discovery source
+
+The process-backed loaders are the default and require no migration: they take
+their named lookups from the live process environment and use the current
+directory as the local base. Use `SubcommandFileContext` with the
+`_with_sources_at` loaders when the search inputs must be supplied rather than
+inherited.
+
+A context pairs an explicit local base path with a lookup-only `EnvSource`; the
+source answers named lookups for `HOME`, `USERPROFILE` (non-Unix),
+`XDG_CONFIG_HOME`, and `XDG_CONFIG_DIRS`, and on non-Unix targets it may also
+supply the native platform configuration directory. The merge source is
+deliberately separate: `SharedScanEnvSource` enumerates the environment layer,
+while the `EnvSource` inside the context only performs lookups. See
+[Choose the file-discovery source][users-guide-discovery] in the user's guide
+for the candidate order and a complete example.
+
 ## Infer parser-faithful string defaults
 
 Enable `cli_default_as_absent` on a field whose clap default should remain
@@ -169,3 +186,4 @@ subcommand merging continue unchanged. Add the helper only when adopting the
 Cargo external-subcommand entry-point shape.
 
 [users-guide-policy]: users-guide.md#agent-native-policy-checking
+[users-guide-discovery]: users-guide.md#choose-the-file-discovery-source
