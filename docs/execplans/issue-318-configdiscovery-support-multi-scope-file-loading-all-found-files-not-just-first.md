@@ -308,3 +308,19 @@ names is worse than no test, because it retires the question.
 - No conflicts existed on the rebase because the branch's `parse/mod.rs` edit
   was a clap-import reflow that the target had independently narrowed; the
   replayed commit applied cleanly.
+- `make check-fmt` covers `mdtablefix --wrap` as well as `cargo fmt`, so a
+  hand-wrapped prose edit fails a *formatting* gate while the Rust tree is
+  untouched. Both post-rebase commits here (`cc9f302e`, `004761d1`) tripped it
+  that way — the second because the first's paragraphs were re-wrapped to a few
+  words off 80 columns. Run `make fmt` before committing prose, not after: the
+  gate reports only "+N -M" and which files, so the cause is invisible in the
+  log and has to be recovered with `mdtablefix --diff`.
+
+  The fix is verifiable rather than assertable. `mdtablefix --in-place` on a
+  *copy* first, then compare the multiset of non-whitespace tokens against the
+  original: an empty difference proves nothing but line breaks moved. That
+  check matters here because workflow contracts parse the guide's prose
+  (`sccache_wiring_test.py`, `timeout_budgets.py`, `trybuild_tier.py`), so a
+  reflow that silently altered a token would fail a contract rather than the
+  formatter. Also confirm the file holds no Mermaid block before reflowing, or
+  a diagram `make nixie` validates could be reshaped.
