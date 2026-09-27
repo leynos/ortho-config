@@ -166,6 +166,37 @@ satisfied by the code are recorded and skipped with a reason rather than
       (`52f1e259`, posting in roughly 21 minutes). Findings are triaged when the
       review lands: each is verified against the current tree before any repair,
       and only still-valid issues are fixed.
+- [x] (2026-09-27) Review round on the current branch head: CodeRabbit returned
+      `CHANGES_REQUESTED` with two inline findings. Both were verified valid
+      against the current tree before any repair.
+- [x] (2026-09-27) Finding A (dead code on Windows): reproduced rather than
+      reasoned about. `RUSTFLAGS="-D warnings" cargo check -p ortho_config
+      --all-features --target x86_64-pc-windows-msvc` returned 101 with 14
+      dead-code errors, and CI's `build-test` matrix does run `windows-latest`
+      (`ci.yml:59`) with `RUSTFLAGS: -D warnings` (`ci.yml:34`), so this was a
+      genuine CI break, not a style note. The non-Unix telemetry entry points
+      are now gated; the shared vocabulary they call stays ungated, because
+      `candidate_paths_at` and `error_category` reach it on both platforms.
+- [x] (2026-09-27) Finding B (lost/mislabelled base event): the non-Unix
+      collector's `HOME` branch emitted no event at all and its
+      `home_fallback()` branch was labelled `named`. A
+      `windows_home_from_fallback` entry point was added and each branch now
+      reports its own source.
+- [x] (2026-09-27) Two further Windows failures found by the same probe, both
+      fixed: `paths_proptests.rs` and `paths_probe_tests.rs` are XDG-only
+      branch-introduced suites that called Unix-gated helpers ungated, and are
+      now compiled only under `cfg(any(unix, target_os = "redox"))`, matching
+      the sibling `paths_xdg_tests.rs`; and `candidate_paths_at`'s
+      immediately-called closure lost its only `?` under the Windows cfg,
+      tripping `redundant_closure_call`, so each platform now owns its own
+      `result` binding and the closure is gone.
+- [x] (2026-09-27) Windows verified clean in CI's exact mode —
+      `cargo clippy --target x86_64-pc-windows-msvc --all-targets
+      --all-features -- -D warnings` (which is what `CLIPPY_FLAGS` expands to,
+      and what the Windows lane runs) — with the matching Linux clippy clean
+      and the focused `subcommand::paths` suite at 21 passed / 0 failed.
+      `paths_proptests.rs`'s four properties all ran on Linux, so the new gates
+      preserved their coverage rather than excluding it.
 
 ## Surprises & Discoveries
 
@@ -269,6 +300,27 @@ satisfied by the code are recorded and skipped with a reason rather than
   names move. Then reset the local branch to the remote truth rather than
   force-pushing the old commits back over the rewritten branch.
 
+- **A Linux-only gate certificate cannot see a Windows-cfg defect.** The branch
+  was certified green by six gates, yet still carried a break that CI would hit
+  on its very next Windows run. The reason is structural, not a slip: every
+  local gate compiles the Unix cfg, and the defect lived entirely inside the
+  cfg the Unix build never expands. Gating a helper
+  `#[cfg(not(any(unix, target_os = "redox")))]` and leaving its only caller on
+  the Unix path is invisible to `cargo check`, Clippy, and the test suite on
+  Linux, all of which simply never parse the dead branch. The lesson is to run
+  the cross-compilation probe whenever a diff touches a platform cfg, because
+  it is cheap and the alternative is discovering the break from CI after
+  pushing. The same divergence produced three separate failures here — dead
+  code, a closure lint that only fires once the `?` is cfg'd out, and two
+  XDG-only test modules — so one probe run repaid itself three times.
+- **Clippy's platform-dependent lints are part of the cfg contract.** The
+  closure in `candidate_paths_at` was fine on Linux and rejected on Windows,
+  not because the code differed but because the *post-cfg* item tree did. A
+  lint that fires on only one platform cannot be found by any amount of local
+  Linux gating. Making each platform own its own `result` binding removed the
+  divergence and the lint together, which is the better repair: it deletes the
+  construct the lint objects to rather than silencing it.
+
 ## Decision Log
 
 - Decision: not fix at the third `try_exists()` site with a `.map_err(...)?`
@@ -318,3 +370,37 @@ its open directory while `XDG_CONFIG_HOME` demands an absolute one, so the test
 needs two bindings for one location. A final process lesson: a commit landing
 mid-gate-run invalidates the run's attribution even when every gate is green,
 so HEAD must be frozen before a certificate is claimed.
+
+### Second review round (Windows findings)
+
+The re-review returned `CHANGES_REQUESTED` with two findings, both valid and
+both repaired. Finding A was the more instructive one: it was a real CI break
+that the six-gate certificate had passed over. CI compiles Windows with
+`RUSTFLAGS: -D warnings`, so the non-Unix telemetry helpers — which no Unix
+build ever calls, and no Unix build ever parses — became fourteen dead-code
+errors. The finding was confirmed by reproducing it
+(`cargo check --target x86_64-pc-windows-msvc`, exit 101), and the fix gates
+each non-Unix entry point while leaving the shared vocabulary ungated, since
+`candidate_paths_at` and `error_category` reach that vocabulary on both
+platforms; gating it too would have traded one dead-code error for another.
+Finding B was a genuine observability defect: the `HOME` branch produced no
+base event and the fallback branch was mislabelled `named`, so an operator
+could not tell which lookup won.
+
+Chasing those two through the Windows cfg surfaced two more failures of the
+same family, both fixed: the two XDG-only test modules added by this round
+called Unix-gated helpers without a gate of their own, and the closure in
+`candidate_paths_at` lost the `?` that kept `redundant_closure_call` quiet. The
+closure was removed rather than allowed, because each platform owning its own
+`result` binding is clearer than a lint exception. Verification is a clean
+Windows clippy over the whole workspace in the exact mode CI runs (the
+`CLIPPY_FLAGS` default of `--all-targets --all-features -- -D warnings`), plus
+a clean Linux clippy and the focused `subcommand::paths` suite at 21 passed / 0
+failed.
+
+The round's lesson is recorded in full under `Surprises`: **the six-gate
+certificate is a Linux certificate, and a defect confined to a non-Unix cfg is
+structurally invisible to it**. The remedy is a cross-compilation probe
+whenever a diff touches a platform cfg. That probe cost seconds here and would
+have caught all three Windows failures before the review request was ever
+queued.
