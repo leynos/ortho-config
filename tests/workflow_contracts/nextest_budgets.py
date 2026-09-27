@@ -105,6 +105,26 @@ def slow_timeouts(config_text: str) -> list[tuple[str, object]]:
     ]
 
 
+def _override_selector(path: str, table: dict[str, object]) -> str:
+    """Return the selector expression an override's allowance applies to."""
+    # `filter` is the usual selector and `platform` the other nextest
+    # accepts, gated on its own: an override carrying only a platform with
+    # a `slow-timeout` is legal and applies to every test that platform
+    # runs. Only one with neither is the refusal this reports.
+    expression = table.get("filter")
+    if isinstance(expression, str):
+        return expression
+    platform = table.get("platform")
+    if isinstance(platform, str):
+        return f"platform({platform})"
+    message = (
+        f"{path} declares a slow-timeout but neither a filter nor a "
+        f"platform, so there is no set of tests that allowance applies "
+        f"to; nextest refuses such a file"
+    )
+    raise NextestConfigurationError(message)
+
+
 def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
     """Return each override's selector and the per-test allowance it carries.
 
@@ -120,12 +140,10 @@ def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
     Returns
     -------
     list of (str, str, float)
-        Each override's path, its ``filter`` expression, and its budget
-        in seconds, in file order.
-
-    An override declaring no ``slow-timeout`` is left out rather than
-    reported with no allowance: it grants no per-test budget, so there
-    is nothing to compare.
+        Each override's path, its selector expression, and its budget in
+        seconds, in file order. An override declaring no ``slow-timeout``
+        is left out: it grants no per-test budget, so there is nothing to
+        compare.
 
     Raises
     ------
@@ -147,23 +165,8 @@ def override_allowances(config_text: str) -> list[tuple[str, str, float]]:
     for path, table in _budget_tables(config_text):
         if "overrides[" not in path or "slow-timeout" not in table:
             continue
-        expression = table.get("filter")
-        if not isinstance(expression, str):
-            # `platform` is the other selector nextest accepts, and it is
-            # gated on its own: an override carrying only a platform with a
-            # `slow-timeout` is legal and applies to every test that platform
-            # runs. Only an override with neither selector is the refusal
-            # this reports.
-            platform = table.get("platform")
-            if not isinstance(platform, str):
-                message = (
-                    f"{path} declares a slow-timeout but neither a filter nor a "
-                    f"platform, so there is no set of tests that allowance "
-                    f"applies to; nextest refuses such a file"
-                )
-                raise NextestConfigurationError(message)
-            expression = f"platform({platform})"
-        found.append((path, expression, budget_of(path, table["slow-timeout"])))
+        selector = _override_selector(path, table)
+        found.append((path, selector, budget_of(path, table["slow-timeout"])))
     return found
 
 
