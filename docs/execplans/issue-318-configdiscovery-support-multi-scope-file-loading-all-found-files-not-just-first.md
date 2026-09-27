@@ -24,6 +24,81 @@ on top of the merge-base `f803dea9`; no conflicts. Audited:
 - All 106 target-only paths byte-identical to `TARGET`.
 - `diff TARGET..NEW_HEAD` is exactly the branch-owned 18-file change set.
 
+## Second rebase onto `c043980d` (done, 2026-09-27)
+
+Replayed `c144641e..90f1a359` (13 commits) onto `c043980d`. One conflict, in
+`.config/nextest.toml`, and one commit dropped.
+
+**The conflict is two fixes for one failure.** Main had independently found
+the same Windows trybuild timeouts and fixed them a different way: a
+Windows-gated override reserving every nextest slot for four binaries
+(`crate_path_trybuild`, `declarative_merge_trybuild`, `compile_fail`,
+`compile_time`) and keeping 600 s, because their cold child `cargo` builds
+were competing with the rest of the suite. This branch's commit `b3ea1e5a`
+widened the filter from two binaries to all seven and raised the allowance
+600 s to 960 s. Both are measured remedies, so neither was discarded.
+
+**Resolution: keep both entries, main's first.** nextest resolves each
+override field from the *first* matching entry that sets it — established
+here by probe, not by assumption (`cargo nextest show-config test-groups`
+against two entries with identical filters: the first matched, the second
+received nothing; two entries setting *disjoint* fields both applied). So
+the four named binaries keep 600 s *and* run alone, the other three
+(`env_source_trybuild`, `generated_lint_trybuild`, `localized_parse_trybuild`)
+take 960 s, and Linux takes 960 s for all seven. Merging into one entry would
+have had to pick one remedy for all seven binaries; keeping both applies each
+where it was measured.
+
+Both sides' contracts are satisfied simultaneously:
+`windows_trybuild_isolation_test.py` (main's, added by the rebase) reads the
+first entry and `trybuild_tier_test.py` (this branch's) reads the entry at the
+largest allowance, which is uniquely the second. The independence claim is
+mutation-checked both ways: widening the filter leaves the isolation contract
+green while the tier contract fails and names the uncovered binary.
+
+**`bc869e61` became empty and was skipped.** Main's `41e54346` had produced
+the *byte-identical* `typos.toml` (`bfdda131` on both sides), so the commit
+that "committed the regenerated fixed point" had nothing left to add. This is
+the earlier fixed-point conclusion corroborated from the other direction: the
+regeneration is deterministic enough that an unrelated branch arrived at the
+same bytes. Confirmed before skipping — the commit's 13 added lines are all
+present in the rebased tree, and `git hash-object typos.toml` equals
+`origin/main:typos.toml`.
+
+**Audit of the replay** (all three checks):
+
+1. 84 target-only paths checked, 0 differ — no main-side work was lost.
+2. Every deletion hunk against `TARGET` lies in a branch-owned file, and each
+   deleted symbol was relocated by a branch commit rather than dropped
+   (`budget_of`, `is_positive_integer`, `terminate_after` and `TypeGuard`
+   moved to `nextest_allowances.py`; `DiscoveryAttrs`, `MergeStrategy` and
+   `parse_prefix` to `discovery_attrs.rs`; `discard_unknown` is still present
+   and only changed visibility).
+3. No newly-repeated multi-line blocks; the two candidates are a
+   `tempfile::tempdir()` idiom and a docstring boilerplate heading.
+
+One post-rebase commit, `cc9f302e`, reconciles the guide: the automated merge
+had kept both sides' prose, leaving main's "The 600 s ceiling stays" reading
+as a claim about the whole file when it is now about one entry.
+
+`range-diff` after the replay: 11 of 12 commits identical, `b3ea1e5a` shown
+only as the intended conflict resolution, `bc869e61` as the dropped no-op.
+
+### A false PASS in the audit tooling
+
+The first run of audit 1 reported **zero target-only paths**, which is
+impossible: main changed 87 files and the branch touched 30. Cause:
+`comm -z -13` exited 0 and printed nothing. The manifests had been sorted
+*without* `LC_ALL=C` but compared *under* it, so `sort` and `comm` disagreed
+on collation and `comm` silently produced an empty set. Rebuilt with
+`LC_ALL=C` pinned across both steps and cross-checked with a known-answer
+probe (`grep -Fxv -f`) before trusting it: 84 paths, 0 differ.
+
+This is the same shape as the ANSI-in-logs trap already recorded in this
+plan: a tool reporting "nothing found" for *both* a known-good and a
+known-bad input is reporting its own configuration, not the data. Probe a
+set-difference or a search against a known answer before believing a zero.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
