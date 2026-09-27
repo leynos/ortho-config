@@ -148,6 +148,83 @@ left unchanged". Re-run confirmed green. Its other five gates — `typecheck`,
 `markdownlint` (0 errors over 75 files, `spellcheck` reached and passed),
 `test-workflow-contracts` (312 passed/1 skipped), `nixie` — all passed.
 
+### The re-gate at `8536622b`: all seven green, and Whitaker finally ran
+
+The three repairs were committed as `5e406f7d` (Clippy), `037d2676` (CodeScene)
+and `8536622b` (this document), and scrutineer re-ran every gate on the frozen,
+clean head. **All seven passed, with no retries and no skips, and HEAD did not
+move during the run** — the certificate is valid for `8536622b` without re-run.
+
+The result that matters is Whitaker. `lint-clippy` exited 0 this time, so make
+did not abort and `lint-whitaker` **executed for the very first time against
+this change set**, completing in 5.02s under `nightly-2026-05-28` with **zero
+dylint findings** of any severity. Its invocation is recorded verbatim in the
+lint log, so "it ran" is a read fact rather than an inference from a green
+`make`. The previous round's three Clippy errors are confirmed repaired by
+`5e406f7d`, and the `excluded_crates` concern recorded in memory did not
+surface. Totals: `test` 1347 passed / 0 failed / 15 ignored across 80 suites
+plus pytest 87 passed / 5 skipped; `test-workflow-contracts` 313 passed / 1
+skipped — one more than the previous round, which is the new helper's doctest.
+
+## The pre-merge table: a review surface this plan never reconciled
+
+The subclass matters because it was found late. CodeRabbit's pre-merge table is
+a *separate surface* from the inline findings — it lives in the top-level
+walkthrough comment (`5398461696`), is edited in place rather than posted, and
+carries **2 errors and 7 warnings** that no section here had recorded. The
+inline threads were checked and answered; this was not looked at at all. It is
+the `comenq-coderabbit` workflow's step 7, and skipping it left two error rows
+unexamined.
+
+The table is bound to `75d9901d` and predates every repair: `59b2b2ae` is
+**after** that commit, so three of its rows describe defects this branch has
+already fixed — `Domain Architecture` is the `source_tokens` finding,
+`Observability` is the origins finding, and `Testing (Overall)` is partly the
+`upload`/`origins` gaps the new suites close. Those rows are stale in the
+ordinary sense and need a follow-up rather than code changes.
+
+**`Unit Architecture` is not stale, and that is the finding worth keeping.** It
+is an *error* row, and it points at code that is still exactly as described at
+`8536622b`. The row is reproduced in substance rather than word for word: it
+names the helper directly, and that identifier is one this repository's
+spellcheck gate rejects wherever it appears in Markdown.
+
+    `record_first_canonical_path` resolves each layer path through the
+    fallible helper in `file/path.rs` (which returns `OrthoResult<PathBuf>`)
+    and converts any error to `true` with `map_or(true, ...)`
+
+That is `scoped.rs:211-213` — a fallible path resolution feeding
+`map_or(true, ...)` on the same expression, so a filesystem error is silently
+reported as "not a duplicate" and the layer is kept. The row's own diagnosis is
+right: a failed resolution is swallowed rather than surfaced.
+
+Its proposed remedy is right too, and better than it looks. `MergeLayer::file`
+stores the path the loader built from `canonical` (`loader.rs:188,198`), and
+`to_utf8_path` is `Utf8PathBuf::from_path_buf(canonical)`, so **the layer
+already carries a canonical path** and the second lookup is redundant work as
+well as a swallowed error. Removing it and keying the deduplication set on
+`layer.path()` directly would fix the error, delete a syscall per layer, and
+retire the issue in one move.
+
+**Why it is recorded rather than fixed here.** The remedy changes the
+deduplication key from "resolve whatever path the layer reports" to "trust the
+layer", and `assert_layer_path` exists precisely because the loader's
+resolution and the test's can differ in *representation* on Windows
+(`dunce::canonicalize` rewrites an otherwise identical path). Proving the two
+keys agree is a Windows-shaped question — the one platform this worktree cannot
+run. Landing it here would be a change whose evidence cannot be gathered
+locally, on a head that has just been certified green, to fix a silent-error
+path rather than a wrong answer: the fallible helper failing yields "keep the
+layer" which is the non-deduplicating answer, not a corrupt one. It needs its
+own round with Windows CI in the loop.
+
+The warnings are recorded with their dispositions rather than dismissed:
+`Docstring Coverage` (70.16% against an 80% threshold, scoped to touched
+functions) and `Testing (Property / Proof)` are genuine gaps this plan already
+names as outstanding work; `Testing (Compile-Time / Ui)` and the two
+documentation warnings concern coverage of the policy API by trybuild fixtures
+and the user/developer guides, which the plan's work items 4 and 5 partly cover.
+
 ## Big picture
 
 PR #465 resolves issue #318 by adding scoped configuration-file discovery plus
