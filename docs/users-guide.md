@@ -949,8 +949,11 @@ sections. A typical progression is:
 6. generate human and agent documentation once the command surface stabilizes.
 
 The [Hello World application](../examples/hello_world/) demonstrates these
-pieces in a larger layout. The
-[v0.9.0 migration guide](v0-9-0-migration-guide.md) explains compatibility
-changes for existing v0.8.0 users, and the
+pieces in a larger layout. Its public greeting command is `greet`: file
+settings use `[cmds.greet]`, and environment settings use
+`HELLO_WORLD_CMDS_GREET_<FIELD>`. `[cmds.hello_world]` and
+`HELLO_WORLD_CMDS_HELLO_WORLD_<FIELD>` no longer configure the greeting
+command. The [v0.9.0 migration guide](v0-9-0-migration-guide.md) explains
+compatibility changes for existing v0.8.0 users, and the
 [API documentation](https://docs.rs/ortho_config) is the source for complete
 type and method signatures.
