@@ -489,21 +489,20 @@ centralizes the repeated "take the slot's value or fail with a descriptive
 error" shape. Both are scoped to behavioural step modules; step modules must
 use these helpers rather than re-implementing slot-guard boilerplate.
 
-The subcommand fixture module,
-`ortho_config/tests/subcommand/fixtures.rs`, owns the `isolated_root` fixture
-and the `close_discovery` constructor. The fixture returns a temporary root
-paired with a discovery source closed against the ambient environment, and
-`close_discovery` pins the Unix global rung to that root so the search cannot
-walk out into the developer's own `XDG_CONFIG_DIRS`. It is owned by the
-`subcommand` integration target, whose child modules reach it as
-`super::fixtures`; suites in that target must take their discovery source from
-here rather than repeating the `#[cfg]`-guarded construction inline, because a
-hand-rolled copy that omits one platform branch silently reads the ambient
-environment on that platform instead of failing. File contents and
-merge-source values stay with their tests — those are the behaviour under test.
-Other integration targets keep their own setup: in particular,
-`basic.rs` retains a private `write_config` because its cases need nested
-fixture paths with parents created first, and the discovery suites use
+The subcommand fixture module, `ortho_config/tests/subcommand/fixtures.rs`,
+owns the `isolated_root` fixture and the `close_discovery` constructor. The
+fixture returns a temporary root paired with a discovery source closed against
+the ambient environment, and `close_discovery` pins the Unix global rung to
+that root so the search cannot walk out into the developer's own
+`XDG_CONFIG_DIRS`. It is owned by the `subcommand` integration target, whose
+child modules reach it as `super::fixtures`; suites in that target must take
+their discovery source from here rather than repeating the `#[cfg]`-guarded
+construction inline, because a hand-rolled copy that omits one platform branch
+silently reads the ambient environment on that platform instead of failing.
+File contents and merge-source values stay with their tests — those are the
+behaviour under test. Other integration targets keep their own setup: in
+particular, `basic.rs` retains a private `write_config` because its cases need
+nested fixture paths with parents created first, and the discovery suites use
 `discovery_with`, which owns no temporary root.
 
 ## Snapshot tests

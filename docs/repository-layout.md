@@ -106,9 +106,9 @@ These modules provide shared integration-test infrastructure:
   validation and descriptive missing-slot errors.
 - `ortho_config/tests/subcommand/fixtures.rs` owns the `isolated_root` fixture
   and the `close_discovery` constructor. They pair a temporary root with a
-  discovery source closed against the ambient environment, with the Unix
-  global rung pinned to that root. The `subcommand` target's child modules
-  reach them as `super::fixtures`; other targets keep their own setup.
+  discovery source closed against the ambient environment, with the Unix global
+  rung pinned to that root. The `subcommand` target's child modules reach them
+  as `super::fixtures`; other targets keep their own setup.
 
 ## Important root files
 
