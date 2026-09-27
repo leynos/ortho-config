@@ -94,23 +94,14 @@ fn source_xdg_bases(prefix: &Prefix, source: &dyn EnvSource) -> Vec<PathBuf> {
         .map(PathBuf::from)
         .filter(|path| path.is_absolute());
     let config_home_result = absolute_config_home
-        .map(|config_home| {
-            paths_telemetry::unix_config_home_from_named();
-            config_home
-        })
+        .inspect(|_| paths_telemetry::unix_config_home_from_named())
         .or_else(|| {
-            let named_home = source.get("HOME").map(PathBuf::from);
-            let resolved = named_home
-                .clone()
+            source
+                .get("HOME")
+                .map(PathBuf::from)
                 .or_else(|| source.home_fallback())
-                .map(|home| home.join(".config"));
-            match resolved {
-                Some(home) => {
-                    paths_telemetry::unix_config_home_from_fallback();
-                    Some(home)
-                }
-                None => None,
-            }
+                .map(|home| home.join(".config"))
+                .inspect(|_| paths_telemetry::unix_config_home_from_fallback())
         });
     match config_home_result {
         Some(config_home) => bases.push(config_home.join(prefix_path)),
@@ -284,3 +275,7 @@ mod proptests;
 #[cfg(test)]
 #[path = "paths_tests.rs"]
 mod tests;
+
+#[cfg(all(test, any(unix, target_os = "redox")))]
+#[path = "paths_xdg_tests.rs"]
+mod xdg_tests;

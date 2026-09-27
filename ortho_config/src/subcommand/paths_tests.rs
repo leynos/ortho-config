@@ -1,4 +1,8 @@
 //! Unit tests for injected subcommand configuration path resolution.
+//!
+//! Covers end-to-end candidate ordering and the injected home/platform
+//! fallbacks. Cases that assert XDG base resolution and first-existing selection
+//! in isolation live in the sibling `xdg_tests` module.
 
 #[cfg(any(unix, target_os = "redox"))]
 use super::*;
@@ -223,47 +227,6 @@ fn xdg_home_uses_injected_home_when_value_is_unusable(
     Ok(())
 }
 
-/// A closed map never inherits the host's XDG configuration home.
-#[cfg(any(unix, target_os = "redox"))]
-#[test]
-fn closed_map_omits_host_xdg_home() {
-    let bases = source_xdg_bases(&Prefix::new("app"), &MapEnv::new());
-    assert_eq!(bases, vec![PathBuf::from("/etc/xdg/app")]);
-}
-
-/// An empty or wholly relative `XDG_CONFIG_DIRS` falls back to `/etc/xdg`.
-#[cfg(any(unix, target_os = "redox"))]
-#[rstest::rstest]
-#[case::empty("")]
-#[case::relative("relative")]
-fn unusable_xdg_dirs_use_platform_default(#[case] dirs: &str) {
-    let bases = source_xdg_bases(
-        &Prefix::new("app"),
-        &MapEnv::new().with_var("XDG_CONFIG_DIRS", dirs),
-    );
-    assert_eq!(bases, vec![PathBuf::from("/etc/xdg/app")]);
-}
-
-/// Absolute entries keep their listed order; interleaved relative ones drop out.
-#[cfg(any(unix, target_os = "redox"))]
-#[test]
-fn xdg_dirs_keep_absolute_entries_in_order() -> Result<()> {
-    let root = TempDir::new().context("create root")?;
-    let first = root.path().join("first");
-    let second = root.path().join("second");
-    let dirs = std::env::join_paths([first.as_path(), Path::new("relative"), second.as_path()])
-        .context("join XDG configuration directories")?;
-    let bases = source_xdg_bases(
-        &Prefix::new("app"),
-        &MapEnv::new().with_var("XDG_CONFIG_DIRS", dirs),
-    );
-    ensure!(
-        bases == [first.join("app"), second.join("app")],
-        "absolute XDG directories changed order: {bases:?}"
-    );
-    Ok(())
-}
-
 /// Within one extension, the first base holding the file wins.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
@@ -291,81 +254,6 @@ fn xdg_extension_search_uses_first_existing_path() -> Result<()> {
     ensure!(
         paths.get(1) == Some(&dirs.join("app/config.json")),
         "json first-existing differs"
-    );
-    Ok(())
-}
-
-/// The first XDG directory containing `config.toml` wins even when a later
-/// directory also has one.
-#[cfg(any(unix, target_os = "redox"))]
-#[test]
-fn xdg_dirs_search_prefers_first_directory_with_config() -> Result<()> {
-    let root = TempDir::new().context("create root")?;
-    let first = root.path().join("first");
-    let second = root.path().join("second");
-    fs::create_dir_all(first.join("app")).context("create first XDG directory")?;
-    fs::create_dir_all(second.join("app")).context("create second XDG directory")?;
-    fs::write(first.join("app/config.toml"), "").context("write first config")?;
-    fs::write(second.join("app/config.toml"), "").context("write second config")?;
-
-    let joined = std::env::join_paths([first.as_path(), Path::new("relative"), second.as_path()])
-        .context("join XDG configuration directories")?;
-    let source = MapEnv::new().with_var("XDG_CONFIG_DIRS", joined);
-    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &source)?;
-
-    let config_candidates: Vec<&PathBuf> = paths
-        .iter()
-        .filter(|path| path.file_name().is_some_and(|name| name == "config.toml"))
-        .collect();
-    ensure!(
-        config_candidates == vec![&first.join("app/config.toml")],
-        "expected exactly the first XDG directory's config.toml, got {config_candidates:?}"
-    );
-    Ok(())
-}
-
-/// A directory without a match is skipped in favour of a later one that has it.
-#[cfg(any(unix, target_os = "redox"))]
-#[test]
-fn xdg_dirs_search_falls_through_to_later_directory() -> Result<()> {
-    let root = TempDir::new().context("create root")?;
-    let first = root.path().join("first");
-    let second = root.path().join("second");
-    fs::create_dir_all(first.join("app")).context("create first XDG directory")?;
-    fs::create_dir_all(second.join("app")).context("create second XDG directory")?;
-    fs::write(second.join("app/config.toml"), "").context("write second config")?;
-
-    let joined = std::env::join_paths([first.as_path(), second.as_path()])
-        .context("join XDG configuration directories")?;
-    let source = MapEnv::new().with_var("XDG_CONFIG_DIRS", joined);
-    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &source)?;
-
-    let config_candidates: Vec<&PathBuf> = paths
-        .iter()
-        .filter(|path| path.file_name().is_some_and(|name| name == "config.toml"))
-        .collect();
-    ensure!(
-        config_candidates == vec![&second.join("app/config.toml")],
-        "expected the later XDG directory's config.toml, got {config_candidates:?}"
-    );
-    Ok(())
-}
-
-/// Any path with metadata counts as existing, matching `xdg` 3's probe.
-///
-/// The candidate here is a *directory* called `config.toml`; it still counts,
-/// because the probe is deliberately metadata-only and not a file test.
-#[cfg(any(unix, target_os = "redox"))]
-#[test]
-fn xdg_search_keeps_metadata_existence_contract() -> Result<()> {
-    let root = TempDir::new().context("create root")?;
-    let config = root.path().join("app/config.toml");
-    fs::create_dir_all(&config).context("create directory at config path")?;
-    let source = MapEnv::new().with_var("XDG_CONFIG_HOME", root.path());
-    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &source)?;
-    ensure!(
-        paths.contains(&config),
-        "XDG 3 treats any path with metadata as an existing candidate"
     );
     Ok(())
 }

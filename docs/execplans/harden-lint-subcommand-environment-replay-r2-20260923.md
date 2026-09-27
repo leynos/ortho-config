@@ -19,35 +19,37 @@ Coverage, User-Facing Documentation, Developer Documentation, Testing (Property
 This plan covers addressing that review feedback only. Each finding is verified
 against the current head before any change is made; findings that are already
 satisfied by the code are recorded and skipped with a reason rather than
-"fixed" by inventing work. The branch is `harden-lint-subcommand-environment-replay-r2-20260923`,
-whose PR head is `7029f0b7c5fc022af40d1b2c1ff56afd4cac6401`.
+"fixed" by inventing work. The branch is
+`harden-lint-subcommand-environment-replay-r2-20260923`, whose PR head is
+`7029f0b7c5fc022af40d1b2c1ff56afd4cac6401`.
 
 ## Constraints
 
-- All changes stay within the subcommand file-discovery layer plus documentation;
-  the PR deliberately does not resolve the native `ProcessEnv` enumeration policy
-  conflict or complete issue #452.
+- All changes stay within the subcommand file-discovery layer plus
+  documentation; the PR deliberately does not resolve the native `ProcessEnv`
+  enumeration policy conflict or complete issue #452.
 - Every functional change that introduces an error path must be tested: the
-  repository's gates include mutation-style expectations, and new match arms add
-  coverage obligations.
-- `OrthoError` is `#[non_exhaustive]` and `merge_telemetry::error_category` matches
-  it exhaustively, so any new variant needs a telemetry category.
-- Rust files must stay under the repository's 400-line module limit, and Markdown
-  prose must pass the `typos` en-GB-oxendict gate (never quote a misspelling
-  verbatim in prose or inline code spans).
-- `make check-fmt`, `make lint`, `make typecheck`, `make test`, `make markdownlint`
-  must all pass, run sequentially (never in parallel), each captured with `tee`.
-- The `docs/users-guide.md` and `README.md` Rust fences are compiled and executed
-  by `ortho_config/tests/documentation_examples_rust_tests.rs`; new example
-  identifiers must also be added to `EXPECTED_EXAMPLE_IDS`.
+  repository's gates include mutation-style expectations, and new match arms
+  add coverage obligations.
+- `OrthoError` is `#[non_exhaustive]` and `merge_telemetry::error_category`
+  matches it exhaustively, so any new variant needs a telemetry category.
+- Rust files must stay under the repository's 400-line module limit, and
+  Markdown prose must pass the `typos` en-GB-oxendict gate (never quote a
+  misspelling verbatim in prose or inline code spans).
+- `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+  `make markdownlint` must all pass, run sequentially (never in parallel), each
+  captured with `tee`.
+- The `docs/users-guide.md` and `README.md` Rust fences are compiled and
+  executed by `ortho_config/tests/documentation_examples_rust_tests.rs`; new
+  example identifiers must also be added to `EXPECTED_EXAMPLE_IDS`.
 
 ## Tolerances
 
 - Escalate if a finding can only be satisfied by changing public API behaviour
   beyond the discovery layer, or if a property test cannot be expressed without
   mutating the process environment.
-- Escalate if the docstring threshold cannot be met without editing files outside
-  the PR's diff scope.
+- Escalate if the docstring threshold cannot be met without editing files
+  outside the PR's diff scope.
 
 ## Progress
 
@@ -64,20 +66,24 @@ whose PR head is `7029f0b7c5fc022af40d1b2c1ff56afd4cac6401`.
       candidate reader and subcommand file discovery as the only production
       `EnvSource` readers, neither calling `std::env::var_os` directly, and
       describes the process-backed loaders as routing through `ProcessEnv`.
-- [x] (2026-09-27) Finding 2: `load_and_merge_subcommand_with_matches_with_sources`
+- [x] (2026-09-27) Finding 2:
+      `load_and_merge_subcommand_with_matches_with_sources`
       now delegates to the `..._at` form with `ProcessEnv` and a `"."` base,
       matching `load_and_merge_subcommand_with_sources`; the
       `load_file_and_env_defaults` import is gone. `# Usage` documents that
       file discovery stays process-backed.
-- [x] (2026-09-27) Finding 2 regression coverage: `process_backed_matches_wrapper_delegates_to_the_at_form`
+- [x] (2026-09-27) Finding 2 regression coverage:
+      `process_backed_matches_wrapper_delegates_to_the_at_form`
       in `cli_default_as_absent_collections.rs` pins both halves of the
       delegation — the `./.app.toml` file layer (via `ProcessEnv` plus the `"."`
       base) and the injected `SharedScanEnvSource` environment layer. No
       coverage existed for the wrapper before, only for the `_at` form.
-- [x] (2026-09-27) Testing (Overall): `xdg_dirs_search_prefers_first_directory_with_config`
+- [x] (2026-09-27) Testing (Overall):
+      `xdg_dirs_search_prefers_first_directory_with_config`
       (two absolute `XDG_CONFIG_DIRS` entries, both holding `config.toml`, first
       wins) and `xdg_dirs_search_falls_through_to_later_directory`.
-- [x] (2026-09-27) Unit Architecture: `candidate_paths_at`, `push_xdg_candidates`,
+- [x] (2026-09-27) Unit Architecture: `candidate_paths_at`,
+      `push_xdg_candidates`,
       and `collect_unix_paths` are fallible; `xdg_candidate_exists` treats only
       `NotFound` as absence and wraps every other probe error as
       `OrthoError::File { path, source }`. `subcommand/mod.rs` propagates with
@@ -89,11 +95,12 @@ whose PR head is `7029f0b7c5fc022af40d1b2c1ff56afd4cac6401`.
       "Choose the file-discovery source" with a compiled-and-run example
       (`guide-subcommand-sources`), registered in `EXPECTED_EXAMPLE_IDS` and
       `STANDARD_RUST_EXAMPLES`. The scribe's draft was corrected before
-      registration: `&MapEnv::new()` in a `let` initialiser is a temporary that
-      dies at the end of the statement, so the context would have borrowed a
-      dropped value; and with `XDG_CONFIG_DIRS` unset the search reaches the
-      real `/etc/xdg`, which contradicted the hermeticity claim. The fence now
-      binds the map to a named local and names both XDG variables.
+      registration: `&MapEnv::new()` bound inside a `let` statement is a
+      temporary that dies at the end of that statement, so the context would
+      have borrowed a dropped value; and with `XDG_CONFIG_DIRS` unset the
+      search reaches the real `/etc/xdg`, which contradicted the hermeticity
+      claim. The fence now binds the map to a named local and names both XDG
+      variables.
 - [x] (2026-09-27) Developer Documentation: `docs/design.md` gained
       "Subcommand file discovery" under §4.8, covering the injected-source
       candidate search, base ordering, metadata-only existence, the
@@ -108,7 +115,19 @@ whose PR head is `7029f0b7c5fc022af40d1b2c1ff56afd4cac6401`.
       position, absence, and probe failure; counters behind the `metrics`
       feature. `subcommand_paths_telemetry.rs` pins the vocabulary and checks
       no path or value is disclosed.
-- [ ] Gates: fmt, lint, typecheck, test, markdownlint.
+- [x] (2026-09-27) Gate repairs on `053e8ba3`: the first full six-gate run came
+      back red on `check-fmt` (Markdown reflow in three docs), `lint` (three
+      Clippy errors) and `markdownlint` (one en-GB-oxydict spelling fault).
+      `typecheck`, `test` (1415 Rust + 87 pytest) and `nixie` passed. All three
+      faults are fixed in the follow-up commit; the spelling fault was repaired
+      by rewording, never by quoting the offending form.
+- [x] (2026-09-27) Module-size repair: the two files this round pushed past the
+      400-line cap are back under it by extraction, not by trimming coverage.
+      `SubcmdConfigMerge` moved to `subcommand/config_merge.rs` (`mod.rs`
+      405 → 306) and the XDG base/selection cases moved to
+      `subcommand/paths_xdg_tests.rs` (`paths_tests.rs` 461 → 349). Both new
+      modules carry the module doc the extraction needs.
+- [ ] Gates: final six-gate run on the combined commit.
 - [ ] Commit, push, request CodeRabbit re-review, update PR body.
 
 ## Surprises & Discoveries
@@ -130,37 +149,70 @@ whose PR head is `7029f0b7c5fc022af40d1b2c1ff56afd4cac6401`.
   `xdg_search_keeps_metadata_existence_contract` test and the XDG-3 oracle
   child-process test pin that parity.
 - `merge_telemetry::error_category` (src/merge_telemetry.rs:159) matches
-  `OrthoError` exhaustively; a new error variant breaks it at compile time.
-  The same applies to `paths_telemetry::error_category`, which mirrors it.
+  `OrthoError` exhaustively; a new error variant breaks it at compile time. The
+  same applies to `paths_telemetry::error_category`, which mirrors it.
 - The "Docstring Coverage" warning is not reproducible from anything in the
   repository: there is no docstring gate in the `Makefile`, `lading.toml`, the
   workflows, or `codecov.yml`, so the percentage comes from the review tool's
   own diff-scoped analysis. Measured locally over every symbol kind in the
   files this branch changes, the branch sits well below 80%; the largest and
-  most fixable concentrations are the test helpers and test cases the PR
-  itself adds (`paths_tests.rs` was 14.3% before this round). Adding docs
-  there is both the honest fix and the one that moves the number most.
+  most fixable concentrations are the test helpers and test cases the PR itself
+  adds (`paths_tests.rs` was 14.3% before this round). Adding docs there is
+  both the honest fix and the one that moves the number most.
 - The reference revision's docstring "fix" deleted existing doc comments in
   `env_source.rs` and `cli_default_as_absent.rs`. That raises a ratio by
-  removing the documented items from the numerator and denominator at once,
-  and is precisely the suppression this task forbids. Rejected.
+  removing the documented items from the numerator and denominator at once, and
+  is precisely the suppression this task forbids. Rejected.
+- **This round pushed two code files past the 400-line cap that `AGENTS.md`
+  mandates** ("No single code file may be longer than 400 lines"). Measured
+  against the PR head `7029f0b7`: `ortho_config/src/subcommand/mod.rs` 399 →
+  405 lines (the `?` change plus the new `# Errors` section on
+  `load_file_and_env_defaults_at`) and
+  `ortho_config/src/subcommand/paths_tests.rs` 371 → 461 lines (the two new
+  XDG-directory cases, the doc comments added for coverage, and the
+  fallible-call-site rewrites). `ortho_config/tests/extends.rs` is also 405
+  lines, but it is untouched by this diff and was already over at base, so it
+  is not ours to fix here. There is no automated gate for this rule
+  (`make lint` does not check it), but the branch's own history shows it is
+  treated as binding:
+  `1dec114f Split oversized configuration test modules (#452)` and
+  `f5b7972c Extract subcommand path tests (#452)` are this exact remedy for
+  these exact files, and the parent branch is literally named
+  `harden-lint-module-size-prerequisites`. Fix by extracting, not by trimming
+  coverage: the added cases and their docs are the review's requested work.
+
+- Clippy's suggested fix for the `shadow_reuse` error at
+  `paths_telemetry.rs:198` was `u32::try_from(position)`, which would have
+  self-recursed: the shadowing binding *is* the `try_from` call. The operand was
+  renamed to `base_position` instead, and the saturation is now commented
+  because `usize` → `u32` is genuinely lossy on 64-bit hosts.
+- The Clippy errors in `ortho_config/tests/subcommand_paths_telemetry.rs` were
+  introduced by this round, not inherited. `panic_in_result_fn` fires because
+  the sibling telemetry suites (`merge_telemetry.rs`, `discovery_telemetry.rs`)
+  return `()` while this one returned `Result<()>`; a `Result`-returning test
+  may not `assert!`. The fix aligns with the siblings and the fallible setup is
+  unwrapped with `expect`, which `clippy.toml` already permits in tests
+  (`allow-expect-in-tests = true`). No assertion was weakened.
+- No automated gate enforces the 400-line rule, but the branch history shows it
+  is treated as binding, so the extraction was done even though `make lint`
+  would not have flagged either file.
 
 ## Decision Log
 
 - Decision: not fix at the third `try_exists()` site with a `.map_err(...)?`
   rewrite, because splitting error handling from candidate selection inside the
   `find` closure would make the code harder to read and the site is on the
-  single named base path where `NotFound` is the common case.
-  Rationale: convert the matching `Err` into a `NotFound` file error, keeping
-  the selection predicate total, and let the caller's existing error handling
+  single named base path where `NotFound` is the common case. Rationale:
+  convert the matching `Err` into a `NotFound` file error, keeping the
+  selection predicate total, and let the caller's existing error handling
   surface it. Recorded here because the reviewer's suggested shape (return
   `Result` and propagate) is otherwise followed.
 - Decision: represent the new failure as `OrthoError::File { path, source }`
   with an `std::io::Error` source rather than a new `OrthoError` variant.
   Rationale: `File` already means "error originating from a configuration path"
-  and carries the affected path; the `downcast_ref::<std::io::Error>()` idiom is
-  already used by `file/path.rs:151`. This keeps the `non_exhaustive` enum and
-  its exhaustive telemetry match untouched.
+  and carries the affected path; the `downcast_ref::<std::io::Error>()` idiom
+  is already used by `file/path.rs:151`. This keeps the `non_exhaustive` enum
+  and its exhaustive telemetry match untouched.
 
 ## Outcomes & Retrospective
 

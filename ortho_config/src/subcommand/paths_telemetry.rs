@@ -195,11 +195,13 @@ fn candidate_event(outcome: &'static str, category: &'static str) {
 
 /// Emit the selected-candidate event, naming its base position but no path.
 fn candidate_position_event(position: usize, outcome: &'static str, category: &'static str) {
-    let position = u32::try_from(position).unwrap_or(u32::MAX);
+    // Saturate rather than truncate: `usize` to `u32` is lossy on 64-bit hosts,
+    // and a wrapped position would misreport which base won.
+    let base_position = u32::try_from(position).unwrap_or(u32::MAX);
     tracing::debug!(
         event = "subcommand.paths.candidate",
         stage = STAGE_CANDIDATES,
-        position,
+        position = base_position,
         outcome,
         category,
         "subcommand configuration candidate selected"

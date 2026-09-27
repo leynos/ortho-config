@@ -4,7 +4,6 @@
 //! state, none of which may reach an event. These cases pin the closed
 //! vocabulary and check that no candidate path or variable value is recorded.
 
-use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use ortho_config::{
@@ -72,11 +71,12 @@ fn assert_bounded_and_redacted(events: &[Captured]) {
 
 /// A successful load reports a started and a finished candidate search.
 #[test]
-fn candidate_search_reports_a_bounded_terminal_outcome() -> Result<()> {
-    let root = tempfile::tempdir().context("create temp dir")?;
-    let cap = Dir::open_ambient_dir(root.path(), ambient_authority()).context("open temp dir")?;
+fn candidate_search_reports_a_bounded_terminal_outcome() {
+    let root = tempfile::tempdir().expect("a temporary directory should be creatable");
+    let cap =
+        Dir::open_ambient_dir(root.path(), ambient_authority()).expect("the temp dir should open");
     cap.write("telemetry.toml", b"jobs = 3\n")
-        .context("write config")?;
+        .expect("the fixture should be written");
 
     let events = capture(|| {
         let merge_source = Arc::new(MapEnv::new());
@@ -104,7 +104,6 @@ fn candidate_search_reports_a_bounded_terminal_outcome() -> Result<()> {
     );
 
     assert_bounded_and_redacted(&events);
-    Ok(())
 }
 
 /// A candidate that cannot be probed records the closed probe category.
@@ -114,18 +113,18 @@ fn candidate_search_reports_a_bounded_terminal_outcome() -> Result<()> {
 /// negative.
 #[cfg(unix)]
 #[test]
-fn failed_probe_records_the_probe_category() -> Result<()> {
+fn failed_probe_records_the_probe_category() {
     use std::os::unix::fs::PermissionsExt;
 
-    let root = tempfile::tempdir().context("create temp dir")?;
+    let root = tempfile::tempdir().expect("a temporary directory should be creatable");
     let locked = root.path().join("telemetry-secret-directory");
-    std::fs::create_dir_all(locked.join("telemetry")).context("create locked XDG tree")?;
+    std::fs::create_dir_all(locked.join("telemetry")).expect("the locked tree should be creatable");
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
-        .context("lock XDG directory")?;
+        .expect("the XDG directory should be lockable");
     let is_privileged = std::fs::metadata(locked.join("telemetry")).is_ok();
 
     let source = MapEnv::new().with_var("XDG_CONFIG_HOME", &locked);
-    let events = (!is_privileged).then(|| {
+    let probe_events = (!is_privileged).then(|| {
         capture(|| {
             let result = load_and_merge_subcommand_for_with_sources_at(
                 &TelemetrySubcommand::default(),
@@ -136,28 +135,28 @@ fn failed_probe_records_the_probe_category() -> Result<()> {
         })
     });
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))
-        .context("unlock XDG directory")?;
-    let Some(events) = events else {
-        return Ok(());
+        .expect("the XDG directory should be unlockable");
+    let Some(events) = probe_events else {
+        return;
     };
 
     let probe_failure = discovery_events(&events)
         .find(|event| event.field("outcome") == "probe_failed")
-        .context("a failed probe must be recorded")?;
+        .expect("a failed probe must be recorded");
     assert_eq!(probe_failure.field("category"), "probe");
 
     assert_bounded_and_redacted(&events);
-    Ok(())
 }
 
 /// The recorded events never disclose a candidate path.
 #[test]
-fn discovery_events_disclose_no_paths() -> Result<()> {
-    let root = tempfile::tempdir().context("create temp dir")?;
+fn discovery_events_disclose_no_paths() {
+    let root = tempfile::tempdir().expect("a temporary directory should be creatable");
     let base = root.path().join("telemetry-secret-base");
-    let cap = Dir::open_ambient_dir(root.path(), ambient_authority()).context("open temp dir")?;
+    let cap =
+        Dir::open_ambient_dir(root.path(), ambient_authority()).expect("the temp dir should open");
     cap.write("telemetry.toml", b"jobs = 3\n")
-        .context("write config")?;
+        .expect("the fixture should be written");
 
     let events = capture(|| {
         let result = load_and_merge_subcommand_for_with_sources_at(
@@ -185,5 +184,4 @@ fn discovery_events_disclose_no_paths() -> Result<()> {
             );
         }
     }
-    Ok(())
 }

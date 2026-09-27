@@ -635,8 +635,8 @@ files; the source's `config_dir_fallback()` scoped by the prefix, with
 `config.<ext>` files; and then the explicit base with `.<prefix>.<ext>`.
 
 Within the XDG bases only the first existing `<base>/config.<ext>` is kept per
-extension, in base order. Existence uses metadata-only semantics, so a directory
-at a candidate path counts as existing, matching the `xdg` crate's
+extension, in base order. Existence uses metadata-only semantics, so a
+directory at a candidate path counts as existing, matching the `xdg` crate's
 `find_config_file`. The process-backed `load_and_merge_subcommand*` wrappers
 keep the historical behaviour by passing `Path::new(".")` and `ProcessEnv`.
 Absence is the only probe outcome that means "no candidate": any other failure
