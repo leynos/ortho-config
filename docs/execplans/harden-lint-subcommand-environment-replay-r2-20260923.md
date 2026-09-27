@@ -138,6 +138,14 @@ satisfied by the code are recorded and skipped with a reason rather than
       than added to `dylint.toml`'s exclusions; `dylint.toml` is unchanged.
       The suite still passes all three cases, and `is_privileged` is
       verifiably false for euid 1000, so the lock case is not vacuous.
+- [x] (2026-09-27) Restack of the review branch: the base was force-updated a
+      second time, adding "Run every cold trybuild binary alone on Windows"
+      (#533). The three review commits were replayed onto the new tip with
+      `git rebase --onto`, which skipped the two stale pre-restack ancestors
+      that a plain rebase tried to replay (and which caused an add/add conflict
+      in `paths_tests.rs`). `git range-diff` confirms all three patches are
+      unchanged; the only delta from the previous tip is upstream's three
+      files.
 - [ ] Gates: final six-gate run on the combined commit.
 - [ ] Commit, push, request CodeRabbit re-review, update PR body.
 
