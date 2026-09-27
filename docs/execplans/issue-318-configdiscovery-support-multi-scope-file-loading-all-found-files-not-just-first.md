@@ -463,6 +463,46 @@ reimplementation of the old walk and the new function return the same
 skipped — one more than before, the new helper's doctest — so no contract
 regressed.
 
+### The same defect was waiting in a sibling file
+
+Fixing the one finding did not clear the check. CodeScene re-analysed the
+pushed head `8c8234d1` at 19:48Z and failed it again, so the second reading was
+not a stale verdict — the tool had looked at the new commit and found something
+else. A local sweep of every changed file `cs check` can read found it:
+`tests/workflow_contracts/nextest_budgets.py:108`, the same **Bumpy Road Ahead
+(bumps = 2)**, scoring 9.84.
+
+That function is `override_allowances`, added by this branch in the same shape
+as the one just repaired — a loop body carrying a guard (`continue` on a table
+that is not an override, or that declares no `slow-timeout`) and, beneath it, a
+nested conditional that falls back from `filter` to `platform` and raises when
+neither is present. Two blocks with nested conditional logic, exactly the rule.
+
+**`main` is clean, which is what makes it ours.** `cs check` on
+`git show origin/main:tests/workflow_contracts/nextest_budgets.py` scores
+10.00, so the finding is introduced by this branch rather than inherited, and
+the plan's earlier "it is genuinely ours" reasoning applies here too.
+
+The fallback moved to `_override_selector(path, table)`, which answers a
+question worth naming — which selector does this allowance apply to? — and the
+loop body is now a guard, one call, and one append. The finding is gone and the
+file scores 10.00.
+
+Two things this round learned that the previous one did not have to consider:
+
+- **The 400-line cap is live here.** `nextest_budgets.py` was 394 lines against
+  the `AGENTS.md:33` limit, so an inline helper would have breached a hard rule
+  to satisfy a style rule. The first draft of the helper moved it to 399, which
+  is why its docstring was trimmed to the one-line form the module's other
+  private helpers (`_table`, `_parsed`, `_budget_tables`) already use, with the
+  rationale kept as a comment. That is 397 lines with room to edit.
+- **Behaviour was proved, not assumed.** An inline reimplementation of the old
+  body and the new function agree on all seven shapes that matter: `filter`,
+  `platform`, both together, neither, no `slow-timeout`, no overrides at all,
+  and multiple overrides — including the raised message text, character for
+  character. They also agree on the real `.config/nextest.toml`.
+  `make test-workflow-contracts` passes 313 with 1 skipped.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
