@@ -88,6 +88,48 @@ def _declared_test_targets(manifest: str) -> dict[str, str]:
     return declared
 
 
+def _crate_trybuild_binaries(base: Path, crate: str) -> set[str]:
+    """Return the trybuild binary names one crate contributes.
+
+    Split from :func:`trybuild_binaries` because the walk has two guards at
+    different depths — the crate's ``tests/`` may be absent, and most files
+    under it carry no trybuild call — and both belong to the crate's turn
+    rather than to the workspace's. Keeping them together left the function
+    with two nested conditional blocks, which is a CodeScene "Bumpy Road
+    Ahead"; separating the per-crate reading is also what makes each half
+    readable on its own.
+
+    Parameters
+    ----------
+    base : Path
+        The repository root.
+    crate : str
+        The crate's directory name within the workspace.
+
+    Returns
+    -------
+    set of str
+        The trybuild binary names this crate contributes, possibly none.
+
+    Examples
+    --------
+    A crate with no ``tests/`` directory contributes nothing:
+
+    >>> _crate_trybuild_binaries(Path("/nonexistent"), "ortho_config")
+    set()
+    """
+    tests = base / crate / "tests"
+    if not tests.is_dir():
+        return set()
+    manifest = (base / crate / "Cargo.toml").read_text(encoding="utf-8")
+    declared = _declared_test_targets(manifest)
+    return {
+        declared.get(source.relative_to(base / crate).as_posix(), source.stem)
+        for source in sorted(tests.glob("*.rs"))
+        if TRYBUILD_CALL.search(source.read_text(encoding="utf-8")) is not None
+    }
+
+
 def trybuild_binaries(root: Path | None = None) -> frozenset[str]:
     """Return the name of every trybuild test binary in the workspace.
 
@@ -116,16 +158,7 @@ def trybuild_binaries(root: Path | None = None) -> frozenset[str]:
     base = REPO_ROOT if root is None else root
     found: set[str] = set()
     for crate in CRATE_DIRECTORIES:
-        tests = base / crate / "tests"
-        if not tests.is_dir():
-            continue
-        manifest = (base / crate / "Cargo.toml").read_text(encoding="utf-8")
-        declared = _declared_test_targets(manifest)
-        for source in sorted(tests.glob("*.rs")):
-            if TRYBUILD_CALL.search(source.read_text(encoding="utf-8")) is None:
-                continue
-            relative = source.relative_to(base / crate).as_posix()
-            found.add(declared.get(relative, source.stem))
+        found.update(_crate_trybuild_binaries(base, crate))
     return frozenset(found)
 
 
