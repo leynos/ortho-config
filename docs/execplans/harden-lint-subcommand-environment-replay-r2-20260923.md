@@ -255,6 +255,20 @@ satisfied by the code are recorded and skipped with a reason rather than
   by `source_xdg_bases`'s `is_absolute` filter — and the telemetry event that
   proves the code path ran would simply not have fired.
 
+## Surprises & Discoveries (continued)
+
+- **Third restack, after the review request was queued.** The base was
+  force-updated again, rewriting all six branch commits: every commit kept its
+  subject line but received a new object name. A queued CodeRabbit request does
+  not pin the revision it will inspect, and this request had already been
+  posted when the rewrite was noticed, so it will review whatever head is
+  current when it runs. Recovery: fetch, confirm the rewrite with
+  `git range-diff` (all six commits `=`), and — decisively — compare
+  `git rev-parse <commit>^{tree}` for each old/new pair. Every tree matched, so
+  the whole gate certificate transfers and no re-run is needed; only the object
+  names move. Then reset the local branch to the remote truth rather than
+  force-pushing the old commits back over the rewritten branch.
+
 ## Decision Log
 
 - Decision: not fix at the third `try_exists()` site with a `.map_err(...)?`
