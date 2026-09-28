@@ -518,7 +518,7 @@ Three facts matter, and only the first is comfortable:
    `gh api repos/…/branches/main/protection` returns 404 "Branch not protected"
    here even though merges are gated, so that endpoint proves nothing either
    way; the ruleset is the authority.
-2. **It is genuinely ours.** `trybuild_tier.py` is added by this branch (+227
+2. **It is introduced by this branch.** `trybuild_tier.py` is added here (+227
    lines), not inherited. It is not dismissible as pre-existing.
 3. **This plan never recorded it.** The finding has been continuously valid
    since `ce8f4621`, surviving two rebases, and no section here mentioned
@@ -574,10 +574,10 @@ that is not an override, or that declares no `slow-timeout`) and, beneath it, a
 nested conditional that falls back from `filter` to `platform` and raises when
 neither is present. Two blocks with nested conditional logic, exactly the rule.
 
-**`main` is clean, which is what makes it ours.** `cs check` on
+**`main` is clean, which is what makes it this branch's.** `cs check` on
 `git show origin/main:tests/workflow_contracts/nextest_budgets.py` scores
 10.00, so the finding is introduced by this branch rather than inherited, and
-the plan's earlier "it is genuinely ours" reasoning applies here too.
+the plan's earlier "introduced by this branch" reasoning applies here too.
 
 The fallback moved to `_override_selector(path, table)`, which answers a
 question worth naming — which selector does this allowance apply to? — and the
@@ -905,17 +905,18 @@ walkthrough text, and two of them are **already satisfied** on this head:
   genuinely open piece and is handled in the reconciliation below.
 
 The scribe then found a defect **in the brief it was given**, which is worth
-recording because the brief was mine. It was told to add `policy_resolve` to
-`discovery.load`'s `operation` list, and did; but it pointed out that naming
-`policy_resolve` there makes the row's `outcome` list wrong. The legacy path
-reaches `load_outcome` with only `success` or `not_found` — a failed candidate
-is reported through `discovery.candidate` instead — whereas the policy path has
-no candidate event at all and so carries all four terminals itself: `success`
-(`policy.rs:149`), `not_found` (`163`), `required_failure` (`170`, `178`), and
-`optional_failure` (`186`). Both documents therefore under-described the
-operation. The `outcome` list in `docs/design.md` and the `outcome` cell in
-`docs/developers-guide.md` were widened to say so, and the reason is stated
-inline rather than left as unexplained vocabulary.
+recording because the delegation had originated here. It was told to add
+`policy_resolve` to `discovery.load`'s `operation` list, and did; but it
+pointed out that naming `policy_resolve` there makes the row's `outcome` list
+wrong. The legacy path reaches `load_outcome` with only `success` or
+`not_found` — a failed candidate is reported through `discovery.candidate`
+instead — whereas the policy path has no candidate event at all and so carries
+all four terminals itself: `success` (`policy.rs:149`), `not_found` (`163`),
+`required_failure` (`170`, `178`), and `optional_failure` (`186`). Both
+documents therefore under-described the operation. The `outcome` list in
+`docs/design.md` and the `outcome` cell in `docs/developers-guide.md` were
+widened to say so, and the reason is stated inline rather than left as
+unexplained vocabulary.
 
 Applying the guide edit pushed its telemetry row past the table's existing
 column width, so `mdtablefix --in-place` re-padded all twelve rows to a uniform
@@ -1046,15 +1047,15 @@ here; the fourth is resolved.
    and the sentence reworded to match; the prose forms were corrected too.
    Renaming defeated the point of the previous round's decision: the sibling
    `-ised` identifier at `clap_attrs.rs:300` is **pre-existing on `origin/main`
-   ** and is not ours to rename, so the precedent we now follow is the one the
+   ** and is not this branch's to rename, so the precedent now followed is that
    overlay already uses for quoted identifiers. The gate scans prose and inline
    code spans and does **not** flag `.rs` files — proven, not assumed: the same
    spelling at `clap_attrs.rs:300` is tracked and unflagged, while the
    plain-text rewrite of it in the plan had failed the gate minutes earlier.
-3. **My own new paragraph tripped `check-fmt`.** `mdtablefix --wrap` wanted a
-   line joined at 80 columns. Fixed with `make fmt` (the tool the gate runs)
-   rather than by hand-wrapping, which is what produced the discrepancy in the
-   first place: `mdtablefix` reflows with its own fragment model, so a
+3. **A newly written paragraph tripped `check-fmt`.** `mdtablefix --wrap`
+   wanted a line joined at 80 columns. Fixed with `make fmt` (the tool the gate
+   runs) rather than by hand-wrapping, which is what produced the discrepancy
+   in the first place: `mdtablefix` reflows with its own fragment model, so a
    hand-wrapped paragraph is only accidentally its fixed point.
 4. **The migration-guide anchor, reinstated a second time.** See item 2 of
    Round 8 above; the parent heading is the right target and the brief was
@@ -1067,16 +1068,17 @@ exclusive flock held by PID 1832225 — a foreign `cargo test` in the podbot
 worktree, parked ~4.5 hours at 4 seconds of CPU — with 67 queued readers. The
 holder is blocked in `do_wait` on its own descendant, and that descendant is
 itself queued for the lock the holder owns. **No amount of waiting clears it,
-and the constraint is explicit: other agents' processes are not ours to kill.**
-The earlier reading of this same process as merely slow was wrong; it is
-self-deadlocked and needs its owner. Recorded so the next attempt escalates
-against a diagnosis instead of re-deriving it.
+and the constraint is explicit: other agents' processes are not this branch's
+to kill.** The earlier reading of this same process as merely slow was wrong;
+it is self-deadlocked and needs its owner. Recorded so the next attempt
+escalates against a diagnosis instead of re-deriving it.
 
-Both mistakes this round were mine and both were the same shape: a delegation
-brief asserting a fact I had not checked — a script that does not exist, and an
-anchor that was one of two candidates. Confirmed after the fact by reading
-`AGENTS.md:138` (`make check-fmt`, `make lint`, `make test`, then commit; there
-is no gated-commit wrapper) and by reading the heading levels.
+Both mistakes this round belonged to the delegating side, and both were the
+same shape: a brief asserting a fact that had not been checked — a script that
+does not exist, and an anchor that was one of two candidates. Confirmed after
+the fact by reading `AGENTS.md:138` (`make check-fmt`, `make lint`,
+`make test`, then commit; there is no gated-commit wrapper) and by reading the
+heading levels.
 
 ### Round 10: the commit carried a compile error CI found and the local gate could not
 
@@ -1141,7 +1143,7 @@ CI's `-D warnings` promotes the warning to an error. A grep for an `allow`/
 reading — "the repo suppresses this somewhere" — is wrong; the suppression is
 per-includer and there was none on this one.
 
-**The attribution is exact, and it is again mine.** `git log` on
+**The attribution is exact, and it points here again.** `git log` on
 `scoped_stacking_proptest.rs` shows a single commit, `905f55f1`, the rebased
 form of `51e2e974`. The suite did not exist at `9e9ecc37`, which is precisely
 why that head ran green: this defect arrived with the same oversized commit as
@@ -2228,8 +2230,8 @@ five rather than as the two that were observed to land.
 ### Round 22: the gate run, and the one word it rejected
 
 The tree was committed and handed to `scrutineer` for all seven gateways. Six
-passed on the first candidate and one failed, and the failure was mine rather
-than the code's.
+passed on the first candidate and one failed, and the failure lay in the
+documentation rather than in the code.
 
 **Six green, one red.** `check-fmt` (2s), `typecheck` (20s), `lint` (29s),
 `test` (282s: 1392 passed, 0 failed, 15 ignored, plus 87 pytest passed, 5
