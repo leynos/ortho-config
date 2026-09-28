@@ -1,0 +1,7 @@
+error: unknown precedence source 'bogus'; expected defaults, file, profile, env, or cli
+ --> tests/ui/invalid_precedence_source.rs:6:23
+  |
+6 | #[derive(Deserialize, OrthoConfig)]
+  |                       ^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `OrthoConfig` (in Nightly builds, run with -Z macro-backtrace for more info)

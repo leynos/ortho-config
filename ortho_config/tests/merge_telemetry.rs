@@ -4,6 +4,7 @@
 //! These cases pin its small, closed telemetry vocabulary and exercise every
 //! source-aware entry point that makes a terminal loading decision.
 
+use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use figment::{Jail, Provider};
 use ortho_config::{
@@ -289,6 +290,66 @@ fn injected_profile_load_reports_the_injected_source() {
     });
     let success = find_event(&events, "profile_load", "injected", "success");
     assert_eq!(success.field("category"), "none");
+    assert_bounded_and_redacted(&events);
+}
+
+/// A command-line parse failure is not a profile-selection failure, so it must
+/// reduce to the command-line category rather than the profile one.
+///
+/// This is a separate case because `find_event` requires exactly one match: the
+/// unknown-profile cases above emit a `profile_load`/`process`/`failure` event
+/// of their own, and two in one capture would make that helper panic.
+#[test]
+fn ordinary_profile_enabled_load_reports_a_parse_failure() {
+    let events = capture(|| {
+        let result =
+            <ProfileTelemetryConfig as OrthoConfig>::load_from_iter(["telemetry", "--bogus"]);
+        assert!(
+            result.is_err(),
+            "an unknown argument must fail the ordinary load"
+        );
+    });
+
+    let failure = find_event(&events, "profile_load", "process", "failure");
+    assert_eq!(failure.field("category"), "cli");
+    assert_bounded_and_redacted(&events);
+}
+
+/// A reserved key inside a profile body is a profile-extraction failure, so it
+/// must reduce to the profile category on the injected boundary.
+///
+/// `cmds` is rejected by `validate_profile_body` (decision D11) because
+/// subcommand loading ignores profiles, so no configuration is silently dead.
+#[test]
+fn injected_profile_load_reports_a_forbidden_key_failure() {
+    let fixture_dir = tempfile::tempdir().expect("create forbidden-key fixture directory");
+    let cap = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .expect("open forbidden-key fixture directory");
+    cap.write("forbidden.toml", b"[profile.ci]\ncmds = {}\n")
+        .expect("write forbidden-key fixture");
+    let config_path = fixture_dir.path().join("forbidden.toml");
+
+    let events = capture(|| {
+        let source = Arc::new(
+            MapEnv::new()
+                .with_var("MERGE_TELEMETRY_CONFIG_PATH", &config_path)
+                .with_var("MERGE_TELEMETRY_PROFILE", "ci"),
+        );
+        let discovery: SharedEnvSource = source.clone();
+        let merge: SharedScanEnvSource = source;
+        let result = ProfileTelemetryConfig::load_with_profile_from_iter_with_sources(
+            ["telemetry"],
+            discovery,
+            merge,
+        );
+        assert!(
+            result.is_err(),
+            "a reserved profile-body key must fail the injected load"
+        );
+    });
+
+    let failure = find_event(&events, "profile_load", "injected", "failure");
+    assert_eq!(failure.field("category"), "profile");
     assert_bounded_and_redacted(&events);
 }
 
