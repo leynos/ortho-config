@@ -81,6 +81,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Remove the remaining fixture `#[path]` attributes by moving the
+  `cargo-orthohelp` PowerShell fixture under `tests/golden/` and restructuring
+  the BDD support modules around top-level integration-test entry points (closes
+  [#292](https://github.com/leynos/ortho-config/issues/292)).
 - Adopt `sha2` 0.11 in `cargo-orthohelp` and render cache digests through a new
   crate-internal lowercase hexadecimal encoder, because `sha2` 0.11 returns
   `hybrid_array::Array<u8, _>` from `finalize`, which no longer implements
