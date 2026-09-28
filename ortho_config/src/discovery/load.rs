@@ -34,20 +34,26 @@ pub(super) struct PartitionedErrors {
 /// four-argument ceiling and keeps the telemetry decision in one place: the
 /// error's category is derived from the error itself at the recording site,
 /// so the emitted event and the stored error cannot disagree.
+///
+/// `scope` is the scope whose walk met the candidate. The flat first-wins walk
+/// has no scope concept and passes `None`, so the field is omitted from its
+/// events rather than rendered empty.
 pub(super) struct CandidateFailure {
     pub(super) operation: &'static str,
     pub(super) required: bool,
     pub(super) source: &'static str,
+    pub(super) scope: Option<&'static str>,
 }
 
 impl PartitionedErrors {
     pub(super) fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
-        telemetry::candidate_failure(
-            failure.operation,
-            failure.required,
-            failure.source,
-            telemetry::error_category(&err),
-        );
+        telemetry::candidate_failure(&telemetry::CandidateFailureFields {
+            operation: failure.operation,
+            required: failure.required,
+            source: failure.source,
+            category: telemetry::error_category(&err),
+            scope: failure.scope,
+        });
         if failure.required {
             self.required.push(err);
         } else {
@@ -129,6 +135,7 @@ impl ConfigDiscovery {
                         operation,
                         telemetry::OUTCOME_SUCCESS,
                         Some(candidate.source),
+                        None,
                     );
                     return (Some(value), errors);
                 }
@@ -138,12 +145,13 @@ impl ConfigDiscovery {
                         operation,
                         required,
                         source: candidate.source,
+                        scope: None,
                     },
                     err,
                 ),
             }
         }
-        telemetry::load_outcome(operation, telemetry::OUTCOME_NOT_FOUND, None);
+        telemetry::load_outcome(operation, telemetry::OUTCOME_NOT_FOUND, None, None);
         (None, errors)
     }
 
