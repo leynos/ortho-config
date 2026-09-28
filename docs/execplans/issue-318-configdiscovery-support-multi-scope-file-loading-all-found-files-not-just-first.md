@@ -1540,3 +1540,30 @@ test was corrected to the implementation, and the implementation was not bent
 to the test. The plan's `policy_telemetry.rs:107` reference was also updated —
 the split moved that assertion to `:146` — because a stale line anchor in a
 living plan is the same class of defect as a stale expectation in a test.
+
+**Evidence and limits.** Four of the seven gates ran green locally before the
+push — `check-fmt`, `markdownlint`, `test-workflow-contracts` (319 passed, 1
+skipped) and `nixie`. The three that would typecheck or execute Rust —
+`typecheck`, `lint`, `test` — could not run: the package-cache lock was still
+held (holder `1832225`, 6h40m, `do_wait`, ~95 waiters) and `flock -n` confirmed
+it. So **the new test's compilation and both its cases remain unverified
+locally**, and the malformed fixture is the one genuinely new mechanism this
+round introduces. Its unparseability is not assumed: `value = ???` is the same
+content two existing tests already prove fails to parse (`scoped_layers.rs:267`,
+`discovery_attributes.rs:383`), so the fixture is known-good rather than
+novel. The push is `399627d8`, from `453a01d8`, with the lease bound to that
+observed remote head, and CI run `36392314109` is the first execution of the
+corrected expectation.
+
+A note on what this round cost and why. Three consecutive CI rounds were
+consumed by defects that only a compiler could see — `E0597`, then the dead
+`write_config`, now a wrong expected string — each hidden behind the one before
+it, because fail-fast stops the suite at the first failure and the local gates
+were lock-blocked for all three. The pattern is worth naming: **when the
+compiler-driven gates are unavailable, CI stops being a confirmation step and
+becomes the primary feedback loop, at ~28 minutes per iteration.** Nothing in
+this round changes that; it is an environment fact (the foreign lock) plus a
+workflow fact (fail-fast), and the only cheap mitigation available was the one
+taken — checking the new expectation against the code, the existing tests, the
+RFC table and the enum doc before spending a round on it, rather than pushing
+the obvious edit and seeing what CI said.
