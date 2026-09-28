@@ -10,6 +10,7 @@ use crate::{MergeComposer, MergeLayer, OrthoError, OrthoResult, load_config_file
 
 use super::{
     AutomaticMode, ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryScope,
+    telemetry,
 };
 
 /// An ordered explicit configuration-path selector.
@@ -20,6 +21,10 @@ pub struct ConfigPathSelector {
     environment_variable: Option<String>,
     label: String,
     legacy: bool,
+    /// The constructor family this selector came from, for telemetry: a
+    /// `&'static str` from the closed `SELECTOR_CLASS_*` set, never the
+    /// caller-supplied [`label`](Self::label) or variable name.
+    class: &'static str,
 }
 
 impl ConfigPathSelector {
@@ -31,6 +36,7 @@ impl ConfigPathSelector {
             environment_variable: None,
             label: String::from("cli"),
             legacy: false,
+            class: telemetry::SELECTOR_CLASS_CLI,
         }
     }
 
@@ -43,6 +49,7 @@ impl ConfigPathSelector {
             environment_variable: Some(environment_variable.clone()),
             label: environment_variable,
             legacy: false,
+            class: telemetry::SELECTOR_CLASS_ENVIRONMENT,
         }
     }
 
@@ -127,40 +134,65 @@ pub struct FileLayerOutcome {
 }
 
 impl FileLayerOutcome {
+    /// Load the selected path as a replayable layer chain.
+    ///
+    /// Each arm yields its terminal outcome alongside the value it builds, so
+    /// the emitted event and the returned diagnostics are decided once and
+    /// cannot disagree. The outcome is drawn from the existing `OUTCOME_*`
+    /// vocabulary — selection adds no second outcome set — and `mode` only
+    /// decides what a failure means: `optional_failure` under
+    /// [`ExplicitMode::Optional`], `required_failure` otherwise.
     fn selected(selection: ResolvedSelection, mode: ExplicitMode) -> Self {
         let selected_path = selection.path.clone();
-        match load_config_file_as_chain(&selected_path) {
-            Ok(Some(chain)) => Self {
-                layers: chain
-                    .values
-                    .into_iter()
-                    .map(|(file_value, layer_path)| {
-                        MergeLayer::file(Cow::Owned(file_value), Some(layer_path))
-                    })
-                    .collect(),
-                selection: Some(selection),
-                ..Self::default()
-            },
-            Ok(None) if matches!(mode, ExplicitMode::Optional) => Self {
-                selection: Some(selection),
-                ..Self::default()
-            },
-            Ok(None) => Self {
-                selection: Some(selection),
-                selected_error: Some(ConfigDiscovery::missing_required_error(&selected_path)),
-                ..Self::default()
-            },
-            Err(err) if matches!(mode, ExplicitMode::RequiredExclusive) => Self {
-                selection: Some(selection),
-                selected_error: Some(err),
-                ..Self::default()
-            },
-            Err(err) => Self {
-                selection: Some(selection),
-                reportable_errors: vec![err],
-                ..Self::default()
-            },
-        }
+        let (outcome, this) = match load_config_file_as_chain(&selected_path) {
+            Ok(Some(chain)) => (
+                telemetry::OUTCOME_SUCCESS,
+                Self {
+                    layers: chain
+                        .values
+                        .into_iter()
+                        .map(|(file_value, layer_path)| {
+                            MergeLayer::file(Cow::Owned(file_value), Some(layer_path))
+                        })
+                        .collect(),
+                    selection: Some(selection),
+                    ..Self::default()
+                },
+            ),
+            Ok(None) if matches!(mode, ExplicitMode::Optional) => (
+                telemetry::OUTCOME_NOT_FOUND,
+                Self {
+                    selection: Some(selection),
+                    ..Self::default()
+                },
+            ),
+            Ok(None) => (
+                telemetry::OUTCOME_REQUIRED_FAILURE,
+                Self {
+                    selection: Some(selection),
+                    selected_error: Some(ConfigDiscovery::missing_required_error(&selected_path)),
+                    ..Self::default()
+                },
+            ),
+            Err(err) if matches!(mode, ExplicitMode::RequiredExclusive) => (
+                telemetry::OUTCOME_REQUIRED_FAILURE,
+                Self {
+                    selection: Some(selection),
+                    selected_error: Some(err),
+                    ..Self::default()
+                },
+            ),
+            Err(err) => (
+                telemetry::OUTCOME_OPTIONAL_FAILURE,
+                Self {
+                    selection: Some(selection),
+                    reportable_errors: vec![err],
+                    ..Self::default()
+                },
+            ),
+        };
+        telemetry::load_outcome(telemetry::OPERATION_POLICY_RESOLVE, outcome, None);
+        this
     }
 
     /// Build a scalar-only early-preview object from loaded file layers.
@@ -335,12 +367,18 @@ impl ConfigFilePolicy {
     }
 
     /// Resolve selector and discovery layers without discarding diagnostics.
+    ///
+    /// A policy bypasses the candidate machinery, so it emits none of the
+    /// per-candidate events discovery otherwise would. The two
+    /// `discovery.policy` resolutions below are therefore the whole of this
+    /// path's visibility: which selector class won, or that none did.
     pub fn resolve_layers(&self) -> FileLayerOutcome {
         if let Some((selector, path)) = self.selectors.iter().find_map(|selector| {
             selector
                 .resolve(&self.discovery)
                 .map(|path| (selector, path))
         }) {
+            telemetry::policy_resolution(Some(selector.class));
             return FileLayerOutcome::selected(
                 ResolvedSelection {
                     label: selector.label.clone(),
@@ -351,6 +389,7 @@ impl ConfigFilePolicy {
             );
         }
 
+        telemetry::policy_resolution(None);
         let (layers, origins) = self
             .discovery
             .compose_scoped_layers_with_origins(self.automatic_mode, &self.scope_order);

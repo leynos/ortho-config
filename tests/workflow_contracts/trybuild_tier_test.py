@@ -20,6 +20,9 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
+import os
+import pathlib
+
 import pytest
 from nextest_budgets import (
     largest_test_allowance,
@@ -29,6 +32,7 @@ from nextest_budgets import (
 from timeout_budgets import NEXTEST_CONFIG
 from trybuild_tier import (
     TRYBUILD_CALL,
+    ScanError,
     UnreadableMatcherError,
     binaries_selected_by,
     non_trybuild_binaries,
@@ -223,3 +227,103 @@ def test_over_selection_is_refused() -> None:
         "test_every_trybuild_binary_is_covered_by_the_override has something "
         "to reject"
     )
+
+
+#: A directory whose mode denies a listing only denies one to a non-root
+#: user, so a refusal cannot be observed when the suite runs as root.
+ROOT_IS_NOT_DENIED = hasattr(os, "geteuid") and os.geteuid() == 0
+
+
+def _nested_trybuild_tree(tmp_path: pathlib.Path) -> pathlib.Path:
+    """Build a workspace whose trybuild call sits behind a nested ``mod.rs``.
+
+    Only a ``[[test]]`` target declaring a ``mod.rs`` path makes a tree be
+    walked rather than one file read, so the root is declared that way. The
+    call is two levels down, which is the shape an unreadable directory in
+    the middle would hide.
+
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        The empty directory to build in.
+
+    Returns
+    -------
+    pathlib.Path
+        The repository root, with the crate beneath it.
+    """
+    crate = tmp_path / "ortho_config"
+    crate.mkdir()
+    (crate / "Cargo.toml").write_text(
+        '[package]\nname = "ortho_config"\n\n'
+        '[[test]]\nname = "nested_root"\npath = "tests/nested/mod.rs"\n',
+        encoding="utf-8",
+    )
+    nested = crate / "tests" / "nested"
+    nested.mkdir(parents=True)
+    (nested / "mod.rs").write_text("mod inner;\n", encoding="utf-8")
+    (nested / "inner").mkdir()
+    (nested / "inner" / "mod.rs").write_text(
+        "fn c() { trybuild::TestCases::new(); }\n", encoding="utf-8"
+    )
+    (tmp_path / "cargo-orthohelp").mkdir()
+    return tmp_path
+
+
+def test_a_nested_trybuild_call_is_still_found_through_the_walk(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The walk still reads the tree, and still finds what it found before.
+
+    The nested source carries the only trybuild call, so a walk that
+    stopped at the root, or that read the tree in some other way, would
+    drop the name from the class here rather than in production.
+    """
+    root = _nested_trybuild_tree(tmp_path)
+    assert trybuild_binaries(root) == frozenset({"nested_root"})
+    assert non_trybuild_binaries(root) == frozenset()
+
+
+@pytest.mark.skipif(ROOT_IS_NOT_DENIED, reason="root is not denied a listing")
+def test_an_unreadable_nested_directory_is_refused_not_skipped(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A tree the walk cannot finish reading is a fault, not a short read.
+
+    ``rglob`` passes an unlistable subdirectory over in silence, so the
+    binary rooted above it left the trybuild class and the coverage
+    assertion never asked for it. The fault has to name the directory it
+    could not read, because that is the whole difference between this and
+    the silence it replaces.
+    """
+    root = _nested_trybuild_tree(tmp_path)
+    hidden = root / "ortho_config" / "tests" / "nested" / "inner"
+    os.chmod(hidden, 0o000)
+    try:
+        with pytest.raises(ScanError) as raised:
+            trybuild_binaries(root)
+    finally:
+        os.chmod(hidden, 0o755)
+    assert str(hidden) in str(raised.value), raised.value
+    assert isinstance(raised.value.__cause__, OSError), raised.value.__cause__
+
+
+@pytest.mark.skipif(ROOT_IS_NOT_DENIED, reason="root is not denied a listing")
+def test_an_unreadable_crate_root_is_refused_not_read_as_empty(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A crate that cannot be read is not a crate with no binaries.
+
+    Answering ``{}`` for a ``tests/`` directory that exists and cannot be
+    opened would report the crate as having no test binaries at all, which
+    is the reading most likely to be mistaken for compliance.
+    """
+    root = _nested_trybuild_tree(tmp_path)
+    hidden = root / "ortho_config" / "tests"
+    os.chmod(hidden, 0o000)
+    try:
+        with pytest.raises(ScanError) as raised:
+            trybuild_binaries(root)
+    finally:
+        os.chmod(hidden, 0o755)
+    assert str(hidden) in str(raised.value), raised.value

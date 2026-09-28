@@ -419,10 +419,17 @@ vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
   `file`, `cyclic_extends`, `gathering`, `validation`, or `other`.
 - `discovery.project_root` — `state = "cwd_unavailable"`, emitted only when
   the default project-root resolver fails.
-- `discovery.load` — `operation`; `outcome`: `success` or `not_found`; on
-  success only, `source`: `required_explicit`, `explicit`, `selector`, `xdg`,
-  `windows`, `home`, or `project`, naming the rung that produced the winning
-  candidate.
+- `discovery.load` — `operation`: `discover_first`, `compose_layers`, or
+  `policy_resolve`; `outcome`: `success` or `not_found`, plus
+  `required_failure` or `optional_failure` under `policy_resolve`, which has no
+  `discovery.candidate` event to report a failed selected file and so carries
+  the terminal outcome here; on success only, `source`: `required_explicit`,
+  `explicit`, `selector`, `xdg`, `windows`, `home`, or `project`, naming the
+  rung that produced the winning candidate, and omitted for `policy_resolve`,
+  which consults no candidate list.
+- `discovery.policy` — `operation`: `policy_resolve`; `selector_class`: `cli` or
+  `environment`, omitted when no selector matched and the supplied scopes
+  produced the layers.
 
 Behind the optional `metrics` feature, discovery also increments three counter
 families using the same bounded labels:

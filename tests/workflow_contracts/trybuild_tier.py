@@ -18,6 +18,7 @@ See "The trybuild allowance was raised after it killed two tests" in
 
 from __future__ import annotations
 
+import os
 import re
 import typing as typ
 from pathlib import Path
@@ -31,6 +32,7 @@ from timeout_budgets import REPO_ROOT
 #: Re-exported so the coverage contract keeps one import site for the
 #: class it reads here and the language it reads there.
 __all__ = [
+    "ScanError",
     "UnreadableMatcherError",
     "binaries_selected_by",
     "non_trybuild_binaries",
@@ -57,6 +59,106 @@ CRATE_DIRECTORIES: typ.Final[tuple[str, ...]] = ("ortho_config", "cargo-orthohel
 TEST_TARGET = re.compile(r"^\[\[test\]\]$", re.MULTILINE)
 TEST_TARGET_NAME = re.compile(r'^name\s*=\s*"([^"]+)"', re.MULTILINE)
 TEST_TARGET_PATH = re.compile(r'^path\s*=\s*"([^"]+)"', re.MULTILINE)
+
+
+class ScanError(OSError):
+    """Raised when a source this module reads cannot be read.
+
+    The message names the path that could not be read, and the original
+    failure is kept as ``__cause__``. Raised rather than passed over,
+    because a source that is not read is a binary that may leave the
+    class unasked for, and the assertion is only as strong as this reading.
+    """
+
+
+def _sources_under(directory: Path) -> typ.Iterator[Path]:
+    """Yield every ``*.rs`` file at or beneath ``directory``, refusing a miss.
+
+    A directory the walk cannot open is refused rather than skipped.
+    ``rglob`` reaches ``os.walk`` with no ``on_error`` and ``Path.walk``
+    delegates to it the same way, so an unreadable subdirectory used to be
+    passed over in silence, and the binary rooted there left the class
+    unasked for. The walk stays lazy, so a match short-circuits the caller.
+
+    Parameters
+    ----------
+    directory : Path
+        The directory to walk.
+
+    Yields
+    ------
+    Path
+        Each ``*.rs`` file beneath it, refusing an unlistable one.
+    """
+
+    def refuse(error: OSError) -> typ.NoReturn:
+        """Refuse a walk directory that could not be listed, naming it."""
+        at = Path(error.filename or directory)
+        raise ScanError(f"{at} could not be read: {error}") from error
+
+    for at, _directories, filenames in os.walk(directory, onerror=refuse):
+        yield from (Path(at, name) for name in filenames if name.endswith(".rs"))
+
+
+def _scan(
+    path: Path, read: typ.Callable[..., typ.Any], *args: typ.Any, **kwargs: typ.Any
+) -> typ.Any:
+    """Call one ``Path`` read, refusing a failure that names no path.
+
+    Every filesystem read here goes through this: ``path`` is the path
+    the call is over and the one a failure names, and ``read`` is the
+    call to make -- a bound ``Path`` method such as ``Path.read_text``,
+    or a deferred callable such as :func:`_listing`. ``is_file`` and
+    ``is_dir`` answer ``False`` for a path that is merely absent, and
+    ``False`` is an answer rather than a refusal; any other failure is a
+    :class:`ScanError` naming ``path``, the original as ``__cause__``.
+
+    The callable form is not a convenience. ``read(*args)`` evaluates its
+    arguments *before* the ``try`` below, and ``Path.iterdir`` starts its
+    ``os.scandir`` at a different moment depending on the interpreter:
+    lazily from a generator body on 3.12, eagerly on 3.14. Passing
+    ``list`` and ``tests.iterdir()`` therefore guarded the read on one
+    interpreter and left the raise uncaught on the other. Deferring the
+    whole read -- enumerate and materialize together, as :func:`_listing`
+    does -- is version-independent; testing it on one interpreter is not.
+
+    Returns
+    -------
+    object
+        Whatever that call returns.
+    """
+    try:
+        return read(*args, **kwargs)
+    except OSError as error:
+        raise ScanError(f"{path} could not be read: {error}") from error
+
+
+def _listing(directory: Path) -> typ.Callable[[], list[Path]]:
+    """Defer a whole directory listing so a raise lands inside a guard.
+
+    ``Path.iterdir`` starts its ``os.scandir`` at a different moment
+    depending on the interpreter: lazily from a generator body on 3.12,
+    eagerly on 3.14. Enumerating *and* materializing in one deferred call
+    puts both behind :func:`_scan`'s guard on either version. Pass the
+    result to ``_scan(directory, ...)``.
+
+    Parameters
+    ----------
+    directory : Path
+        The directory to enumerate when the returned callable is called.
+
+    Returns
+    -------
+    callable
+        A zero-argument callable returning the sorted listing.
+    """
+
+    def listing() -> list[Path]:
+        """Enumerate ``directory``, raising inside the caller's guard."""
+        return sorted(directory.iterdir())
+
+    return listing
+
 
 def _declared_test_targets(manifest: str) -> dict[str, str]:
     """Return each ``[[test]]`` target's name, keyed by its source path.
@@ -116,10 +218,11 @@ def _carries_trybuild(root: Path) -> bool:
     >>> _carries_trybuild(Path("/nonexistent.rs"))
     False
     """
-    sources = root.parent.rglob("*.rs") if root.name == "mod.rs" else [root]
+    sources = _sources_under(root.parent) if root.name == "mod.rs" else [root]
     return any(
-        source.is_file()
-        and TRYBUILD_CALL.search(source.read_text(encoding="utf-8")) is not None
+        _scan(source, source.is_file)
+        and TRYBUILD_CALL.search(_scan(source, source.read_text, encoding="utf-8"))
+        is not None
         for source in sources
     )
 
@@ -161,20 +264,29 @@ def _crate_test_binaries(base: Path, crate: str) -> dict[str, bool]:
     {}
     """
     tests = base / crate / "tests"
-    if not tests.is_dir():
+    if not _scan(tests, tests.is_dir):
         return {}
-    manifest = (base / crate / "Cargo.toml").read_text(encoding="utf-8")
+    manifest = _scan(
+        base / crate / "Cargo.toml",
+        (base / crate / "Cargo.toml").read_text,
+        encoding="utf-8",
+    )
     declared = _declared_test_targets(manifest)
-    # A declared path is enumerated once, as its target; globbing it as well
-    # would offer the same binary under its stem and its declared name.
+    # A declared path is enumerated once, as its target; listing it as well
+    # would offer the same binary under its stem and its declared name. It
+    # is listed rather than globbed because `glob` passes over a directory
+    # it cannot open in silence, the very miss this module now refuses.
     roots: list[tuple[str, Path]] = [
         (source.stem, source)
-        for source in sorted(tests.glob("*.rs"))
-        if source.relative_to(base / crate).as_posix() not in declared
+        for source in _scan(tests, _listing(tests))
+        if source.name.endswith(".rs")
+        and source.relative_to(base / crate).as_posix() not in declared
     ]
     roots.extend((name, base / crate / path) for path, name in sorted(declared.items()))
     return {
-        name: _carries_trybuild(source) for name, source in roots if source.is_file()
+        name: _carries_trybuild(source)
+        for name, source in roots
+        if _scan(source, source.is_file)
     }
 
 
