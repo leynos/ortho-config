@@ -98,10 +98,18 @@ struct PolicyRootConfig {
 }
 
 /// Load `args` through both injected capabilities, with no selector variable set.
-fn load_root_from_map(
+///
+/// The item type mirrors `load_from_iter_with_sources`'s own bound rather than
+/// narrowing it to `&'static str`. `--project-root` takes a path the caller
+/// builds at run time, so a `'static` bound forces that borrowed `&str` to
+/// outlive its `TempDir` and the test stops compiling.
+fn load_root_from_map<S>(
     source: Arc<MapEnv>,
-    args: impl IntoIterator<Item = &'static str>,
-) -> Result<PolicyRootConfig> {
+    args: impl IntoIterator<Item = S>,
+) -> Result<PolicyRootConfig>
+where
+    S: Into<std::ffi::OsString> + Clone,
+{
     let discovery: SharedEnvSource = source.clone();
     let merge: SharedScanEnvSource = source;
     PolicyRootConfig::load_from_iter_with_sources(args, discovery, merge)
