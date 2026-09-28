@@ -12,7 +12,7 @@
 //! keep each file inside the repository's 400-line limit, and it mirrors the
 //! neighbouring `load_source` module.
 
-use super::capture_support::{capture, only, write_fixture};
+use super::capture_support::{capture, only, write_fixture, write_fixture_with};
 use ortho_config::{ConfigDiscovery, ConfigFilePolicy, ConfigPathSelector, ExplicitMode, MapEnv};
 use rstest::rstest;
 use std::path::PathBuf;
@@ -66,22 +66,59 @@ fn resolve_layers_reports_the_winning_selector_class(
     assert_eq!(policy_event.field("selector_class"), expected);
 }
 
-/// A failing selected file reports the closed terminal outcome for the mode.
+/// An *absent* selected file reports the outcome the mode gives it.
 ///
 /// This is the case the review found completely silent. The legacy
 /// `compose_layers()` path yields an attempt, a candidate, and a load outcome;
 /// a policy yields nothing, so before this the only evidence an operator had
 /// was the error itself. `mode` decides what an absent file *means*, and both
 /// answers are drawn from the vocabulary the legacy path already uses.
+///
+/// Absence is not failure, which is why the optional case reads `not_found`
+/// rather than `optional_failure`: the loader answers `Ok(None)` for a path
+/// that is not there, and only the `required` arm turns that into an error.
+/// RFC 0002's table gives `Optional` + "rung wins, missing" as "no layers,
+/// stop" against `RequiredExclusive`'s "error on that path, stop", so a
+/// tolerated absence and a reported one are distinct outcomes, not one outcome
+/// relabelled. `optional_failure` is reserved for a path that was *found and
+/// could not be read*, which the malformed case below pins.
 #[rstest]
 #[case::required(ExplicitMode::RequiredExclusive, "required_failure")]
-#[case::optional(ExplicitMode::Optional, "optional_failure")]
-fn a_failing_selected_file_reports_the_mode_outcome(
+#[case::optional(ExplicitMode::Optional, "not_found")]
+fn an_absent_selected_file_reports_the_mode_outcome(
     #[case] mode: ExplicitMode,
     #[case] expected: &str,
 ) {
     let policy = policy_with(MapEnv::new())
         .selectors([ConfigPathSelector::cli(Some(PathBuf::from("missing.toml")))])
+        .explicit_mode(mode);
+
+    let events = capture(|| policy.resolve_layers());
+    let load = only(&events, "discovery.load");
+    assert_eq!(load.field("operation"), "policy_resolve");
+    assert_eq!(load.field("outcome"), expected);
+}
+
+/// A selected file that *cannot be read* is the case that reports a failure.
+///
+/// This is the arm of the policy path that no test pinned: `optional_failure`
+/// is emitted only when the loader returns `Err`, so a fixture that is simply
+/// absent could never reach it. The contrast with the case above is the whole
+/// point — the two modes agree about a malformed file and disagree about a
+/// missing one, and an operator reading the event stream has to be able to tell
+/// a tolerable absence from a real defect.
+#[rstest]
+#[case::required(ExplicitMode::RequiredExclusive, "required_failure")]
+#[case::optional(ExplicitMode::Optional, "optional_failure")]
+fn an_unreadable_selected_file_reports_the_mode_outcome(
+    #[case] mode: ExplicitMode,
+    #[case] expected: &str,
+) {
+    let dir = tempfile::tempdir().expect("a temporary directory should be creatable");
+    let malformed = write_fixture_with(dir.path(), "malformed.toml", "value = ???\n")
+        .expect("fixture should be written");
+    let policy = policy_with(MapEnv::new())
+        .selectors([ConfigPathSelector::cli(Some(malformed))])
         .explicit_mode(mode);
 
     let events = capture(|| policy.resolve_layers());

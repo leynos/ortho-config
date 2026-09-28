@@ -817,7 +817,9 @@ made earlier in this plan.
   mistaken for a class. The test support helper renders a missing field as the
   empty string, so the assertion at `policy_telemetry.rs:107` reads
   `.field("selector_class") == ""` — which is the helper's convention for
-  "absent", not a claim that the event carries an empty value.
+  "absent", not a claim that the event carries an empty value. The assertion
+  has since moved to `policy_telemetry.rs:146`, when Round 12 split the
+  mode-outcome case in two.
 
 **A second, unrelated blocker surfaced.** The new proptest file
 `ortho_config/tests/scoped_stacking_proptest.rs` had grown to **414 lines**
@@ -1470,3 +1472,71 @@ names is worse than no test, because it retires the question.
   input to the write rather than a checkpoint on it. A rule that must be
   remembered at the moment of writing is weaker than a command that can be run
   over the result.
+
+### Round 12: a round-5 test that had never run, and asserted the wrong answer
+
+The `#[expect]` cleared the dead-code error and CI advanced past `Lint` for the
+first time — into `Test and Measure Coverage (with serde_saphyr)`, where it
+failed on **both** legs on one test:
+
+    policy_telemetry::a_failing_selected_file_reports_the_mode_outcome::case_2_optional
+    left: "not_found"
+    right: "optional_failure"
+
+Identical failures on `ubuntu-latest` and `windows-latest` rule out flake and
+platform asymmetry, and the sibling `case_1_required` passed. **The test's
+expectation was wrong, not the implementation.** Five independent authorities
+agree, and the layer the test contradicts is the loader:
+
+- **The fixture is absent, and absence is `Ok(None)`.** The case selects
+  `missing.toml`, which nothing writes. `file_exists_and_is_regular` returns
+  `Ok(None)` for a path that is not there (`loader.rs:50`, `:59`), and only an
+  `Err` reaches the arm that emits `optional_failure`.
+- **The repo already asserted the correct mapping.** `scoped_layers.rs:96-103`
+  is `optional_selected_path_does_not_report_a_missing_file`, and its sibling
+  comment states outright that a missing file "takes the `Ok(None)` arm" while
+  the malformed file takes the `Err` arm.
+- **RFC 0002's Table 1 is explicit.** `Optional` + "rung wins, missing" is "no
+  layers, stop"; `Optional` + "rung wins, malformed" is "error, stop". Two
+  different rows, so two different outcomes are the faithful encoding.
+- **The enum's own doc says absence is ignored.** `policy.rs:90`: "A missing
+  selected path is ignored". A tolerated absence labelled a failure would put
+  the event stream at odds with the contract it reports on.
+- **The plan had already enumerated the arms.** Round 5's own note lists
+  `not_found` (`policy.rs:163`) among the four terminals this path carries. The
+  `#[case::optional]` expectation reads as a drafting slip against that list.
+
+The honest framing is that the test was *never executed* before this run. Every
+earlier CI attempt died at `Lint` — first on `E0597`, then on the dead code —
+so the suite stopped before reaching it, and the local gate could not run at
+all behind the package-cache lock. A green-looking `check-fmt` parses the file
+without typechecking it, so no local signal could have caught a wrong expected
+string. **The defect was found by the first run that got far enough to try
+it**, which is the argument for treating "CI never reached this step" as
+unverified rather than as passing.
+
+Fixing only the expectation would have left the review's actual concern
+uncovered. The row that prompted this suite was a policy run that was *silent*
+where the legacy path reports; `optional_failure` is emitted from exactly one
+arm, and that arm needs a file that exists and cannot be read. So the single
+`#[rstest]` was split in two:
+
+- `an_absent_selected_file_reports_the_mode_outcome` — `required_failure` and
+  now `not_found`, the corrected expectation, with the reasoning in the doc
+  comment so the next reader does not "fix" it back;
+- `an_unreadable_selected_file_reports_the_mode_outcome` — a malformed fixture
+  through `write_fixture_with`, giving `required_failure` and
+  `optional_failure`. This is the arm no test in the tree pinned.
+
+The pair now reads as the design intends: the two modes **agree** about a
+malformed file and **disagree** about a missing one, which is the distinction
+an operator needs from the event stream. The file is 196 lines, well inside the
+cap, so the addition needed no splitting.
+
+One gesture was checked and rejected rather than assumed. Widening
+`ExplicitMode::Optional` to report `optional_failure` for absence would have
+made the original assertion pass, and it is wrong on all five counts above; the
+test was corrected to the implementation, and the implementation was not bent
+to the test. The plan's `policy_telemetry.rs:107` reference was also updated —
+the split moved that assertion to `:146` — because a stale line anchor in a
+living plan is the same class of defect as a stale expectation in a test.
