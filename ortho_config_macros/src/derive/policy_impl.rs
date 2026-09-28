@@ -221,7 +221,27 @@ pub(crate) fn build_policy_based_loading(
         scope_order_call,
         project_root,
     } = tokens;
-    quote! {{ let mut builder = #krate::ConfigDiscovery::builder(#app_name); #(#builder_steps)* let mut selectors = Vec::new(); #cli_selector #( selectors.push(#env_selectors); )* let mut policy = #krate::ConfigFilePolicy::from_builder(builder).selectors(selectors).explicit_mode(#explicit_mode).automatic_mode(#automatic_mode) #scope_order_call; #project_root let outcome = policy.resolve_layers(); outcome.into_layers_and_errors(&mut errors) }}
+    quote! {{
+        let mut builder = #krate::ConfigDiscovery::builder(#app_name);
+        #(#builder_steps)*
+        let mut selectors = Vec::new();
+        #cli_selector
+        #( selectors.push(#env_selectors); )*
+        let mut policy = #krate::ConfigFilePolicy::from_builder(builder).selectors(selectors)
+            .explicit_mode(#explicit_mode).automatic_mode(#automatic_mode) #scope_order_call;
+        #project_root
+        let outcome = policy.resolve_layers();
+        // Collect into a scratch vector so the discovery-failure flag can be
+        // read before the errors join the shared collection. Profile extraction
+        // asks whether discovery recorded any error only when no layer loaded,
+        // and the visibility rule appends every recorded error in that case, so
+        // the scratch contents answer that question exactly.
+        let mut discovery_errors = Vec::new();
+        let layers = outcome.into_layers_and_errors(&mut discovery_errors);
+        let discovery_failed = !discovery_errors.is_empty();
+        errors.append(&mut discovery_errors);
+        (layers, discovery_failed)
+    }}
 }
 
 #[cfg(test)]

@@ -175,8 +175,9 @@ fn build_profile_file_layers(
     file_discovery: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     quote! {
-        let file_layers = #file_discovery;
-        match #krate::profile::extract_profile_layers(file_layers, selected.as_ref()) {
+        let (file_layers, discovery_failed) = #file_discovery;
+        match #krate::profile::extract_profile_layers(file_layers, selected.as_ref(), discovery_failed)
+        {
             Ok(outcome) => {
                 for layer in outcome.file_layers {
                     composer.push_layer(layer);

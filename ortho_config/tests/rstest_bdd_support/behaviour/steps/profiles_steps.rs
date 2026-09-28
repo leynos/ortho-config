@@ -7,7 +7,7 @@
 //! derived CLI. Assertion steps live in the sibling
 //! `profiles_steps_assertions` module.
 
-use crate::scenario_state::{ProfilesConfig, ProfilesContext};
+use crate::rstest_bdd_support::scenario_state::{ProfilesConfig, ProfilesContext};
 use anyhow::{Result, ensure};
 use ortho_config::{OrthoError, OrthoResult};
 use rstest_bdd_macros::{given, when};

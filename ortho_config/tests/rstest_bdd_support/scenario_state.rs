@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
 pub use super::nested_docs_fixture::*;
-use crate::rstest_bdd_support::cli_default_mode::CliDefaultMode;
 
 #[path = "scenario_state_cli_default.rs"]
 mod scenario_state_cli_default;

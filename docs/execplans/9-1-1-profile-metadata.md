@@ -799,11 +799,80 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       consequence of the stale pinned review, not a new finding — the three
       error rows were individually repaired and thread-dispositioned in the
       earlier round. It refreshes only when CodeRabbit next reviews.
+- [x] (2026-09-28) Rebased a third time onto `origin/main` and reopened the
+      delivery lane as PR #537. The rebase itself replayed cleanly with zero
+      conflicts, but it exposed two *clean-merge-but-broken-compile* defects
+      that git could not see: the target had added code that structurally
+      depends on this branch's changes while sharing none of its text. Both
+      were integration breaks caused by `main` advancing, not by a bad merge,
+      and both are recorded under Surprises & discoveries.
+- [x] (2026-09-28) Repaired the first: `main`'s new
+      `ortho_config/src/subcommand/paths_telemetry.rs` matched `OrthoError`
+      exhaustively with eight arms, and this branch adds four profile
+      variants — the merged tree failed with `E0004`. Fixed by mirroring the
+      branch's own precedent in `merge_telemetry.rs` (a `CATEGORY_PROFILE`
+      constant and a four-variant arm) rather than widening to a catch-all, so
+      the telemetry vocabulary stays closed. Decision D11 is recorded in the
+      constant's rustdoc: subcommand loading ignores profiles, so the category
+      should not arise on the discovery path, but it must still be named.
+- [x] (2026-09-28) Repaired the second: `main`'s `24698d0a` added
+      `ortho_config/tests/trybuild/public_api_contracts.rs`, which builds
+      `DocMetadata` with an exhaustive struct literal and no `..` rest
+      pattern; this branch adds `DocMetadata.profiles`, so the trybuild `.pass`
+      fixture failed with `E0063`. Fixed by adding `profiles: None,` in the
+      same trailing position `main` itself uses in
+      `cargo-orthohelp/src/schema/tests/mod.rs`. Recorded deliberately: the
+      fixture is `main`'s file and this branch is what broke it, so the field
+      belongs here rather than in a `non_exhaustive` change to `DocMetadata`.
+
+- [x] (2026-09-28) Closed the bare-`#[arg(env)]` hole in decision D6's
+      compile-time check. `clap_field_env` only recognized `env = "NAME"`,
+      because its guard required `=`; a bare `env` fell through to
+      `consume_unknown_meta` and was silently dropped, so
+      `#[arg(long, env)] app_profile: Option<String>` on a `prefix = "APP_"`
+      opt-in struct bound `APP_PROFILE` with no error. Verified against the
+      vendored `clap_derive` 4.6.1 source that a bare `env` infers from the
+      argument's *identifier* under `ScreamingSnake` — and, for
+      `#[arg(id = "X", env)]`, from the *assigned id*, not the field ident — so
+      the fix resolves the name through `clap_arg_id` before casing it. Added
+      the trybuild fixture `profile_env_binding_bare_collision.rs` with its
+      compiler-emitted `.stderr`; the `env = "NAME"` form keeps its existing
+      fixture.
+- [x] (2026-09-28) Fixed the spurious "no configuration files were found"
+      sub-error (the P2 finding). With `--profile` against a file that exists
+      but fails to parse, discovery returns an empty layer chain, and
+      `extract_profile_layers` read that emptiness as "no candidate existed",
+      so the operator was told no files were found for a file that
+      demonstrably exists. Extraction now takes a `discovery_failed` flag; the
+      block in `load_impl/mod.rs` reads the partitioned error vectors *before*
+      `append` drains them and returns `(layers, discovery_failed)`, which the
+      legacy path discards as `_discovery_failed` (it never reports an unknown
+      profile). The parse error itself was already retained and ordered first,
+      so this finding is narrower than "the parse error is masked": the fault
+      was the false second sub-error. Regression test
+      `discovery_failure_with_an_empty_chain_does_not_claim_no_files_exist`
+      covers it at the unit level.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
 ## Surprises & discoveries
 
+- Observation: a long-lived branch can merge *cleanly* and still fail to
+  compile, because the target may add code whose structure depends on a change
+  the branch makes while sharing none of its text. Evidence: two independent
+  instances, both found by gates rather than by git. (a) `main`'s new
+  `ortho_config/src/subcommand/paths_telemetry.rs` matched `OrthoError`
+  exhaustively with eight arms; this branch adds four profile variants, so the
+  merged tree failed with `E0004` — git saw no conflict because the file does
+  not exist on the branch. (b) `main`'s `24698d0a` added
+  `ortho_config/tests/trybuild/public_api_contracts.rs`, which builds
+  `DocMetadata` exhaustively; this branch adds `DocMetadata.profiles`, so the
+  `.pass` fixture failed with `E0063`. Impact: neither `git merge` nor a
+  conflict-free replay is evidence of integration. Read the target's *newly
+  added* files for exhaustive matches and exhaustive struct literals over
+  types this branch changes. `cargo check` alone is not sufficient coverage:
+  trybuild fixtures are compiled as nested crates at test runtime and are
+  invisible to `--all-targets`.
 - Observation: `googletest` and `pretty_assertions` are named in the task
   brief and several ExecPlans but are not yet dependencies of any workspace
   crate. Evidence: no matches in any `Cargo.toml` at planning time. Impact:

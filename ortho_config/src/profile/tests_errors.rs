@@ -32,6 +32,7 @@ fn forbidden_key_error_display_names_profile_and_key() {
     let err = extract_profile_layers(
         layers,
         Some(&selection("ci", ProfileSource::Flag).expect("valid test name")),
+        false,
     )
     .expect_err("cmds is forbidden");
     let message = err.to_string();
@@ -65,6 +66,7 @@ fn unknown_profile_display_names_flag_source() {
     let err = extract_profile_layers(
         layers,
         Some(&selection("staging", ProfileSource::Flag).expect("valid test name")),
+        false,
     )
     .expect_err("unknown profile must error");
     let message = err.to_string();
@@ -79,6 +81,7 @@ fn unknown_profile_display_names_environment_source() {
     let err = extract_profile_layers(
         layers,
         Some(&selection("staging", ProfileSource::Environment).expect("valid test name")),
+        false,
     )
     .expect_err("unknown profile must error");
     assert_that!(

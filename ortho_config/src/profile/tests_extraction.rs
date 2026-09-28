@@ -31,7 +31,7 @@ fn assert_profile_body_key_is_forbidden(expected_key: &str, body: Value) -> Orth
     profiles.insert("ci".to_owned(), body);
     let layers = vec![file_layer(json!({ "profile": profiles }), "app.toml")];
     let selected = selection("ci")?;
-    let Some(err) = extract_profile_layers(layers, Some(&selected)).err() else {
+    let Some(err) = extract_profile_layers(layers, Some(&selected), false).err() else {
         return Err(std::sync::Arc::new(OrthoError::Validation {
             key: "profile".to_owned(),
             message: "profile body key unexpectedly succeeded".to_owned(),
@@ -64,7 +64,7 @@ fn extracts_one_profile_layer_per_file_in_chain_order() {
             "app.toml",
         ),
     ];
-    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")), false)
         .expect("extraction succeeds");
     assert_eq!(outcome.profile_layers.len(), 2);
     let provenances: Vec<MergeProvenance> = outcome
@@ -100,7 +100,7 @@ fn strips_profile_key_from_file_layers_even_without_selection() {
         json!({ "retries": 3, "profile": { "ci": { "retries": 7 } } }),
         "app.toml",
     )];
-    let outcome = extract_profile_layers(layers, None).expect("stripping succeeds");
+    let outcome = extract_profile_layers(layers, None, false).expect("stripping succeeds");
     assert_eq!(outcome.profile_layers.len(), 0);
     let stripped = outcome.file_layers.first().expect("one file layer");
     assert_eq!(stripped.value(), &json!({ "retries": 3 }));
@@ -113,7 +113,7 @@ fn defining_default_profile_is_an_error() {
         json!({ "profile": { "default": { "retries": 7 } } }),
         "app.toml",
     )];
-    let err = extract_profile_layers(layers, None).expect_err("reserved name must error");
+    let err = extract_profile_layers(layers, None, false).expect_err("reserved name must error");
     assert!(matches!(*err, OrthoError::ReservedProfileName { .. }));
 }
 
@@ -143,7 +143,7 @@ fn invalid_name_is_rejected_regardless_of_selection(#[case] selected: Option<&st
         "app.toml",
     )];
     let resolved = selected.map(|name| selection(name).expect("valid test name"));
-    let err = extract_profile_layers(layers, resolved.as_ref())
+    let err = extract_profile_layers(layers, resolved.as_ref(), false)
         .expect_err("an invalid name must be rejected regardless of the selection");
     match *err {
         OrthoError::InvalidProfileName { ref name } => assert_eq!(name, "ci!"),
@@ -163,7 +163,7 @@ fn forbidden_key_in_a_non_selected_profile_table_is_rejected() {
         }),
         "app.toml",
     )];
-    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")), false)
         .expect_err("a forbidden key must be rejected in a non-selected table too");
     match *err {
         OrthoError::ProfileForbiddenKey {
@@ -187,6 +187,7 @@ fn unknown_profile_reports_structured_payload() {
     let err = extract_profile_layers(
         layers,
         Some(&selection("staging").expect("valid test name")),
+        false,
     )
     .expect_err("unknown profile must error");
     match *err {
@@ -206,7 +207,7 @@ fn unknown_profile_reports_structured_payload() {
 
 #[test]
 fn no_files_discovered_reports_clear_error() {
-    let err = extract_profile_layers(Vec::new(), Some(&selection("ci").expect("valid test name")))
+    let err = extract_profile_layers(Vec::new(), Some(&selection("ci").expect("valid test name")), false)
         .expect_err("unknown profile with no files must error");
     let message = err.to_string();
     assert_that!(message, contains_substring("ci"));
@@ -217,12 +218,25 @@ fn no_files_discovered_reports_clear_error() {
 }
 
 #[test]
+fn discovery_failure_with_an_empty_chain_does_not_claim_no_files_exist() {
+    let err = extract_profile_layers(Vec::new(), Some(&selection("ci").expect("valid test name")), true)
+        .expect_err("unknown profile must error");
+    let message = err.to_string();
+    assert_that!(message, contains_substring("ci"));
+    assert_that!(message, contains_substring("no profiles were found"));
+    assert_that!(
+        message,
+        not(contains_substring("no configuration files were found"))
+    );
+}
+
+#[test]
 fn chain_without_profile_tables_reports_no_profiles_found() {
     let layers = vec![
         file_layer(json!({ "retries": 3 }), "base.toml"),
         file_layer(json!({ "retries": 4 }), "app.toml"),
     ];
-    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")), false)
         .expect_err("unknown profile against a real file chain must error");
     let message = err.to_string();
     assert_that!(message, contains_substring("ci"));
@@ -239,7 +253,7 @@ fn chain_with_an_unrelated_profile_names_that_profile() {
         json!({ "retries": 3, "profile": { "local": { "retries": 9 } } }),
         "app.toml",
     )];
-    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")), false)
         .expect_err("unknown profile with an unrelated profile defined must error");
     let message = err.to_string();
     // The chain defines a profile, so the message names it instead of
@@ -257,7 +271,7 @@ fn unknown_profile_body_keys_flow_through_to_merge() {
         }),
         "app.toml",
     )];
-    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")), false)
         .expect("extraction succeeds");
     let profile_value = outcome
         .profile_layers
@@ -276,7 +290,7 @@ fn empty_profile_table_is_a_valid_noop() {
         json!({ "retries": 3, "profile": { "ci": {} } }),
         "app.toml",
     )];
-    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")), false)
         .expect("extraction succeeds");
     let profile_value = outcome
         .profile_layers
@@ -296,6 +310,7 @@ fn available_list_display_caps_at_sixteen() {
     let err = extract_profile_layers(
         layers,
         Some(&selection("staging").expect("valid test name")),
+        false,
     )
     .expect_err("unknown profile must error");
     let OrthoError::UnknownProfile { ref available, .. } = *err else {
@@ -327,6 +342,7 @@ fn available_list_deduplicates_before_capping() {
     let err = extract_profile_layers(
         layers,
         Some(&selection("staging").expect("valid test name")),
+        false,
     )
     .expect_err("unknown profile must error");
     let OrthoError::UnknownProfile { ref available, .. } = *err else {

@@ -95,9 +95,10 @@ impl<'a> MergeLayer<'a> {
     /// Borrows the JSON value carried by the layer.
     ///
     /// Unlike [`MergeLayer::into_value`], this does not consume the layer, so
-    /// extraction helpers can read a layer's value and still push the layer
-    /// itself. Profile-table extraction (roadmap 9.1.1) uses this to derive
-    /// profile layers from file layers without cloning the file value.
+    /// the value can be inspected while the layer stays owned. It is currently
+    /// used only by tests asserting on composed layers; profile-table
+    /// extraction consumes layers with [`MergeLayer::into_value`] instead,
+    /// because it must rewrite each file layer's value before pushing it back.
     #[must_use]
     pub fn value(&self) -> &Value {
         &self.value
