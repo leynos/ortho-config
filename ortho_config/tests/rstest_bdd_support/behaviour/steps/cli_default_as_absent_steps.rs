@@ -5,8 +5,10 @@
 //! environment configuration to take precedence.
 
 use super::value_parsing::normalize_scalar;
-use crate::cli_default_mode::CliDefaultMode;
-use crate::scenario_state::{CliDefaultArgs, CliDefaultContext, CliDefaultSources};
+use crate::rstest_bdd_support::cli_default_mode::CliDefaultMode;
+use crate::rstest_bdd_support::scenario_state::{
+    CliDefaultArgs, CliDefaultContext, CliDefaultSources,
+};
 use anyhow::{Result, anyhow, ensure};
 use clap::{CommandFactory, FromArgMatches};
 use ortho_config::subcommand::Prefix;

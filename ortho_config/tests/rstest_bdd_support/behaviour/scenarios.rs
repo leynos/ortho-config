@@ -1,7 +1,7 @@
 //! Binds the `ortho_config` behavioural feature files to the step registry.
 
 use super::steps::cargo_steps::{CargoContext, cargo_context};
-use crate::scenario_state::{
+use crate::rstest_bdd_support::scenario_state::{
     CliDefaultContext, CollectionContext, ComposerContext, DocsContext, ErrorContext,
     ExtendsContext, FlattenContext, LocalizerContext, MergeErrorContext, NestedDocsContext,
     RulesContext, SubcommandContext, binary_name, cli_default_context, collection_context,

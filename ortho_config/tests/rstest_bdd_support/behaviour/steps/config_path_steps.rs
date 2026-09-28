@@ -2,7 +2,7 @@
 
 use super::common::{SlotTakeOrExt, set_nonblank_scalar_once};
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
-use crate::scenario_state::{RulesConfig, RulesContext};
+use crate::rstest_bdd_support::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};

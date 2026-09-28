@@ -10,15 +10,15 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use crate::cli_default_mode::CliDefaultMode;
+pub use super::nested_docs_fixture::*;
+use crate::rstest_bdd_support::cli_default_mode::CliDefaultMode;
 #[cfg(test)]
 #[path = "scenario_state_tests.rs"]
 mod scenario_state_tests;
 
 /// Re-exported so BDD merge-error steps can reference the sample config
 /// struct without reaching into the shared fixtures module directly.
-pub use super::fixtures::merge_fixtures::MergeErrorSample;
-pub use super::nested_docs_fixture::*;
+pub use crate::fixtures::merge_fixtures::MergeErrorSample;
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
 pub struct RulesContext {

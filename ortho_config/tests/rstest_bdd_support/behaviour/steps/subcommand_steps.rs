@@ -5,7 +5,7 @@
 
 use super::common::SlotTakeOrExt;
 use super::value_parsing::normalize_scalar;
-use crate::scenario_state::{PrArgs, SubcommandContext, SubcommandSources};
+use crate::rstest_bdd_support::scenario_state::{PrArgs, SubcommandContext, SubcommandSources};
 use anyhow::{Result, ensure};
 use clap::Parser;
 use ortho_config::SubcmdConfigMerge;

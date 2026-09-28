@@ -1,7 +1,7 @@
 //! `rstest-bdd` scaffolding for `ortho_config`.
 //!
-//! The modules defined alongside this entrypoint register reusable fixtures,
-//! the primary behavioural steps, and a canary scenario so that the
+//! The modules defined alongside this entrypoint register the primary
+//! behavioural steps and a canary scenario so that the
 //! `rstest-bdd` macros execute under `cargo test` without needing to disable
 //! the harness.
 
@@ -27,10 +27,6 @@
     reason = "the BDD harness was dormant before this target was enabled; \
               cleanup belongs in a focused follow-up"
 )]
-
-/// Shared test fixtures for integration tests.
-#[path = "../fixtures/mod.rs"]
-pub mod fixtures;
 
 mod behaviour;
 mod canary;

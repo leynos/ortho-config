@@ -1,7 +1,7 @@
 //! Steps that validate the merge composer builder output.
 
 use super::value_parsing::{normalize_scalar, parse_csv_values};
-use crate::scenario_state::{ComposerContext, RulesConfig, RulesContext};
+use crate::rstest_bdd_support::scenario_state::{ComposerContext, RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{MergeProvenance, OrthoError};
 use rstest_bdd_macros::{then, when};
