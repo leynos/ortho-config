@@ -1092,6 +1092,17 @@ on this branch was never evidence that the Rust tree compiled, and the plan is
 the place that says so: **a gate that cannot run is not a gate that passed, and
 the three that could not run were the only three that would have caught this.**
 
+**Both CI legs failed on this one error, and it is worth saying so
+explicitly.** Reading only the ubuntu leg invites the guess that Windows failed
+for a platform-specific reason of its own. It did not.
+`build-test (windows-latest)` stopped at step 20, `Lint (Clippy only)`, on the
+same `error[E0597]` and the same `policy_sources.rs:130:28`; the logs of the
+two legs are the same failure on two runners. The branch's net diff touches no
+`#[cfg]`-gated code, so one bound widening answers both. The run's Markdown
+lint and spelling steps passed on Windows as well, which is a second
+confirmation of the earlier reading of the spelling gate: it inspects Markdown
+and inline code spans, not `.rs` sources.
+
 The deeper cause is the commit's own shape. `51e2e974` swept up a large body of
 previously-uncommitted work along with the round-4 repairs — 16 files, ~1900
 insertions — so the compile error arrived in a commit whose message described
