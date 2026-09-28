@@ -3,16 +3,14 @@
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-#[cfg(test)]
-use ortho_config::ConfigDiscovery;
-use ortho_config::{MergeLayer, SharedEnvSource};
+use ortho_config::{ConfigDiscovery, MergeLayer, SharedEnvSource};
 
 use crate::error::HelloWorldError;
 
-#[cfg(test)]
-use super::discovery::discover_config_layer_from;
 use super::{
-    discovery::{discover_config_layer, discover_config_layer_with_source},
+    discovery::{
+        discover_config_layer, discover_config_layer_from, discover_config_layer_with_source,
+    },
     overrides::FileOverrides,
 };
 
@@ -36,6 +34,10 @@ pub(crate) fn load_config_overrides()
     load_config_overrides_with_layer(layer)
 }
 
+/// Load file overrides using an injected source and the default candidate roots.
+///
+/// For example, standalone greeting override loading can use a test map for
+/// `HELLO_WORLD_CONFIG_PATH` while retaining ordinary candidate discovery.
 pub(crate) fn load_config_overrides_with_source(
     discovery: SharedEnvSource,
 ) -> Result<Option<(FileOverrides, Option<Utf8PathBuf>)>, HelloWorldError> {
@@ -43,7 +45,10 @@ pub(crate) fn load_config_overrides_with_source(
     load_config_overrides_with_layer(layer)
 }
 
-#[cfg(test)]
+/// Load file overrides from an already configured discovery context.
+///
+/// For example, callers can provide explicit fixture roots to keep discovery
+/// independent of the process working directory.
 pub(crate) fn load_config_overrides_from_discovery(
     discovery: &ConfigDiscovery,
 ) -> Result<Option<(FileOverrides, Option<Utf8PathBuf>)>, HelloWorldError> {

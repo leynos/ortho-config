@@ -17,6 +17,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-discovery",
     "guide-hermetic-discovery",
     "guide-load-first-outcomes",
+    "guide-compose-layers-with-sources",
     "guide-subcommand",
     "guide-subcommand-sources",
     "guide-errors",
@@ -113,6 +114,7 @@ fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result
     Ok(())
 }
 
+/// Run each standard guide example and check its documented output.
 fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> {
     assert_run(
         workspace,
@@ -145,6 +147,12 @@ fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> 
         ExampleId("guide-load-first-outcomes"),
         [],
         "discovery=absent\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-compose-layers-with-sources"),
+        [],
+        "composition=ready\n",
     )?;
     assert_run(
         workspace,

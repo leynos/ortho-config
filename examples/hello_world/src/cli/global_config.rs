@@ -128,6 +128,10 @@ pub fn load_global_config_with_sources(
     })
 }
 
+/// Compose global layers with the selected process-backed or injected loader.
+///
+/// For example, both public global loaders pass the same CLI arguments here
+/// while selecting different composition functions.
 fn load_global_config_with_composition(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
@@ -138,6 +142,10 @@ fn load_global_config_with_composition(
     resolve_global_composition(globals, compose_layers(args))
 }
 
+/// Apply application-level CLI overrides and validate the resolved globals.
+///
+/// For example, a parsed recipient override is layered after file and
+/// environment values before validation.
 fn resolve_global_composition(
     globals: &GlobalArgs,
     composition: ortho_config::declarative::LayerComposition,
@@ -154,6 +162,10 @@ fn resolve_global_composition(
     Ok(resolved)
 }
 
+/// Build the argument vector used to select config files and CLI layers.
+///
+/// For example, an explicit path adds `--config <path>` after the program
+/// name, while `None` leaves only the program name.
 fn build_composition_args(
     program_name: &std::ffi::OsStr,
     config_override: Option<&Path>,
@@ -169,6 +181,10 @@ fn build_composition_args(
     args
 }
 
+/// Append meaningful global argument values as the highest-precedence layer.
+///
+/// For example, blank salutations are omitted, while a non-empty recipient is
+/// included in the CLI layer.
 fn push_cli_overrides(
     globals: &GlobalArgs,
     layers: &mut Vec<MergeLayer<'static>>,
@@ -251,7 +267,9 @@ pub fn load_greet_defaults_with_sources(
         files,
         sources.merge,
     )?;
-    apply_greet_overrides_with_source(&mut command, sources.discovery)?;
+    let discovery = super::discovery::discovery_with_source_at(sources.discovery, file_base);
+    let overrides = config_loading::load_config_overrides_from_discovery(&discovery)?;
+    apply_file_greet_overrides(&mut command, overrides);
     Ok(command)
 }
 
@@ -295,6 +313,10 @@ pub fn apply_greet_overrides_with_source(
     Ok(())
 }
 
+/// Apply any greeting fields present in the loaded file overrides.
+///
+/// For example, absent file fields leave their existing command defaults
+/// unchanged.
 fn apply_file_greet_overrides(
     command: &mut GreetCommand,
     loaded: Option<(super::overrides::FileOverrides, Option<camino::Utf8PathBuf>)>,

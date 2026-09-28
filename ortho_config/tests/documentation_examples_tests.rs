@@ -23,6 +23,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-cargo-external-subcommand",
     "guide-clap-only-parse",
     "guide-collection-file",
+    "guide-compose-layers-with-sources",
     "guide-csv-env-with-source",
     "guide-discovery",
     "guide-errors",

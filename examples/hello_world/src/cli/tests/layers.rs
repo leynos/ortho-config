@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::helpers::parse_command_line;
+use super::helpers::{figment_error, parse_command_line, with_jail};
 use crate::cli::{
     GlobalArgs, GlobalConfigSources, HelloWorldCli, load_config_overrides_from_discovery,
     load_global_config_with_sources, load_greet_defaults_with_sources,
@@ -28,12 +28,14 @@ struct LayerFixture {
 }
 
 impl LayerFixture {
+    /// Create an isolated directory for configuration-layer test files.
     fn new() -> Result<Self> {
         Ok(Self {
             root: tempfile::tempdir().context("create global configuration fixture")?,
         })
     }
 
+    /// Write one fixture file and return its path.
     fn write(&self, name: &str, contents: &str) -> Result<PathBuf> {
         let directory = Dir::open_ambient_dir(self.root.path(), ambient_authority())
             .context("open global configuration fixture directory")?;
@@ -77,6 +79,7 @@ fn assert_selector_is_first(selected: &Path, discovery: &MapEnv) -> Result<()> {
     Ok(())
 }
 
+/// Convert an optional `KEY=value` assignment into a closed environment map.
 fn environment_from_assignment(assignment: Option<&str>) -> Result<MapEnv> {
     match assignment {
         Some(raw_assignment) => {
@@ -89,6 +92,7 @@ fn environment_from_assignment(assignment: Option<&str>) -> Result<MapEnv> {
     }
 }
 
+/// An explicit empty project root yields no discovered override.
 #[test]
 fn injected_discovery_has_no_file_in_an_explicit_empty_root() -> Result<()> {
     let fixture = LayerFixture::new()?;
@@ -108,6 +112,7 @@ fn injected_discovery_has_no_file_in_an_explicit_empty_root() -> Result<()> {
     Ok(())
 }
 
+/// Greeting defaults combine file values with values from the merge source.
 #[test]
 fn injected_greeting_defaults_use_file_and_merge_sources() -> Result<()> {
     let fixture = LayerFixture::new()?;
@@ -118,8 +123,11 @@ fn injected_greeting_defaults_use_file_and_merge_sources() -> Result<()> {
             .with_var("HELLO_WORLD_CONFIG_PATH", &selected)
             .with_var("XDG_CONFIG_DIRS", fixture.root.path()),
     );
-    let merge: SharedScanEnvSource =
-        Arc::new(MapEnv::new().with_var("HELLO_WORLD_CMDS_GREET_PREAMBLE", "From merge"));
+    let merge: SharedScanEnvSource = Arc::new(
+        MapEnv::new()
+            .with_var("HELLO_WORLD_CMDS_GREET_PREAMBLE", "From merge")
+            .with_var("HELLO_WORLD_CMDS_GREET_PUNCTUATION", "From merge"),
+    );
 
     let command = load_greet_defaults_with_sources(
         fixture.root.path(),
@@ -130,13 +138,42 @@ fn injected_greeting_defaults_use_file_and_merge_sources() -> Result<()> {
         "file greeting override should apply after the merge layer"
     );
     ensure!(
-        command.punctuation == "??",
-        "punctuation from the explicit file base: expected ??, got {:?}",
+        command.punctuation == "From merge",
+        "merge-only punctuation: expected From merge, got {:?}",
         command.punctuation
     );
     Ok(())
 }
 
+/// Explicit greeting discovery ignores a competing process working directory.
+#[test]
+fn injected_greeting_defaults_ignore_working_directory_overrides() -> Result<()> {
+    let fixture = LayerFixture::new()?;
+    fixture.write(
+        ".hello_world.toml",
+        "[cmds.greet]\npreamble = \"From file base\"\n",
+    )?;
+    let command = with_jail(|jail| {
+        jail.clear_env();
+        jail.create_file(
+            ".hello_world.toml",
+            "[cmds.greet]\npreamble = \"From working directory\"\n",
+        )?;
+        load_greet_defaults_with_sources(
+            fixture.root.path(),
+            GlobalConfigSources::new(Arc::new(MapEnv::new()), Arc::new(MapEnv::new())),
+        )
+        .map_err(figment_error)
+    })?;
+
+    ensure!(
+        command.preamble.as_deref() == Some("From file base"),
+        "file_base override should win over a working-directory override"
+    );
+    Ok(())
+}
+
+/// CLI, environment, and file salutations follow the intended merge order.
 #[rstest]
 #[case::file_env_cli(
     &["-s", "CliSalutation", "greet"],
@@ -180,6 +217,7 @@ fn load_global_config_accumulates_salutations(
     Ok(())
 }
 
+/// Leading and trailing whitespace is removed from CLI salutations.
 #[rstest]
 fn load_global_config_trims_cli_salutations() -> Result<()> {
     let cli = parse_command_line(&["-s", "  Hello  ", "greet"])?;
@@ -194,6 +232,7 @@ fn load_global_config_trims_cli_salutations() -> Result<()> {
     Ok(())
 }
 
+/// A configured override path takes precedence over the discovered path.
 #[rstest]
 fn load_global_config_respects_explicit_override() -> Result<()> {
     let cli = GlobalArgs::default();
