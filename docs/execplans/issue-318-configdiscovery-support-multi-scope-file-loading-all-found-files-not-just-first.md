@@ -184,7 +184,7 @@ Each row, with the evidence for its disposition:
 
 | Row                            | Sev     | Disposition                                                                                                                                                                               | Evidence                                                                                                                                        |
 | ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Testing (Overall)              | Error   | **Partially addressed** — closed for `selected_error`, `reportable_errors`, `merged_file_value`, `push_into`; the "CLI/environment selector precedence" ask is closed by the Round 6 fold | Each of the four named items has assertions at `scoped_layers.rs:271`, `:305`, `:348`, `:359`; ordered precedence at `:121`                     |
+| Testing (Overall)              | Error   | **Partially addressed** — closed for `selected_error`, `reportable_errors`, `merged_file_value`, `push_into`; the "CLI/environment selector precedence" ask is closed by the Round 6 fold | Each of the four named items has assertions at `scoped_layers.rs:271`, `:305`, `:348`, `:359`; ordered precedence at `:187`                     |
 | Testing (Unit And Behavioural) | Error   | **Partially addressed** — both bracketed and parenthesized list forms now tested, plus all four `project_root_from` failures                                                              | `discovery_validation.rs` (6 tests); valid `Option<PathBuf>` at `policy_sources.rs:90`                                                          |
 | Unit Architecture              | Error   | **Repaired**                                                                                                                                                                              | `ScanError(OSError)` at `trybuild_tier.py:64`; `os.walk(..., onerror=refuse)` at `:99`; all six named functions exist and route through `_scan` |
 | Docstring Coverage             | Warning | **Partially addressed by constraint** — see Round 7                                                                                                                                       | Delta private items 100% except two files at the 400-line cap                                                                                   |
@@ -1588,3 +1588,75 @@ construct. Two further suites in the same workspace
 (`selected_subcommand_merge.rs`, `clap_integration/error_cases.rs`) carry the
 same shape, so this is an established pattern here, not an accident. The
 remaining exposure is therefore compilation alone, not lint.
+
+### Round 13: every pre-merge row re-verified against the current tree
+
+The section above reconciled the pre-merge table against `75d9901d` and five
+repairs ago. The table has since been re-rated — it now reports **3 errors and
+6 warnings**, bound to `9e9ecc37`, and its "reviews paused" banner means
+CodeRabbit is no longer re-rating automatically. Each row was therefore checked
+against the *current* tree rather than trusted, and the dispositions below
+replace the earlier estimates with evidence.
+
+The three error rows all resolve to *already repaired*:
+
+- **Unit Architecture** was exactly right when written. At `9e9ecc37` the file
+  is 320 lines using `root.parent.rglob`, `tests.glob("*.rs")`, bare `is_dir` /
+  `is_file` / `read_text`, and no `ScanError` at all — every named function
+  returning a silent boolean. Commit `905f55f1` ("Repair round-4 findings: scan
+  guard") replaced them with `os.walk(onerror=refuse)` and the `_scan` funnel
+  (`trybuild_tier.py:99`, `:103-133`), and `grep` now finds no `rglob` or
+  `.glob(` outside the docstring that narrates the old defect. **Repaired.**
+- **Testing (Overall)** was closed for its four named items
+  (`selected_error`, `reportable_errors`, `merged_file_value`, `push_into`, all
+  with real assertions) plus ordered selector precedence at
+  `scoped_layers.rs:187`. The plan's own evidence line cited `:121` for that —
+  which is the *deduplication* test, not the precedence one — and has been
+  corrected to `:187`.
+- **Testing (Unit And Behavioural)** is largely closed: both bracketed and
+  parenthesized list spellings, the `env_var`/`env_vars` conflict, invalid mode
+  and scope values, and all three `project_root_from` failures are asserted in
+  `discovery_validation.rs`. What genuinely remains is **runtime coverage of
+  `env_vars`**: no test under `ortho_config/tests` references it, and no derive
+  in the repo uses it, so `env_selector_tokens`'s non-empty branch
+  (`policy_impl.rs:94-98`) — the alias-chain path that exists *for* the policy
+  loader — is exercised only as a macro-parse unit.
+
+The warnings separate cleanly. **Observability, User-Facing Documentation and
+Developer Documentation are all already addressed**: policy telemetry emits
+both a resolution event and a terminal outcome with a fixed `cli`/`environment`
+class (`policy.rs:194`, `:381`, `:392`; `telemetry.rs:186-201`, `:274-296`),
+and all five documentation sub-points for the users-guide and the
+developers-guide section exist at the cited lines. **Testing (Property /
+Proof)** is partly addressed: `scoped_stacking_proptest.rs` is a genuine
+reference-model suite over generated candidate sets, scope orders and canonical
+aliases, but it does not cover ordered *selector* chains or `extends` ordering,
+neither of which appears in any property test in the workspace. **Testing
+(Compile-Time / Ui)** stays declined on the reasoning already recorded above;
+the row is accurate that no `tests/ui/` case covers the discovery vocabulary,
+but the `ui/` pairs are all intact (9 `.rs` + 9 committed `.stderr`, no
+orphans), so the failure mode that matters — an unpaired `compile_fail` — does
+not exist here.
+
+Two side-gaps neither row names were found while checking the above, and both
+are documentation rather than behaviour:
+
+1. `docs/design.md` documents `ConfigFilePolicy` selectors and both explicit
+   modes (§4.5, `:353-358`) but does not state policy-level project-root
+   rooting via `ConfigFilePolicy::project_root` / the `project_root_from`
+   attribute, which the users-guide does cover (`users-guide.md:559-569`). The
+   design doc is organized around the resolver boundary here, so this is a gap
+   by omission rather than contradiction.
+2. `docs/rfcs/0002-config-layer-resolution-policy.md:998-1001` still carries a
+   #411-era note that scope partitioning and that rewire "edit the same code and
+   should not be built independently". Both changes have long since landed, so
+   the note now reads as a live constraint on work already complete.
+
+Neither is load-bearing for #318, and this round does not change them: they are
+recorded so the next reader does not rediscover them, and so a maintainer who
+wants them closed can do so deliberately rather than by accident.
+
+The shape worth keeping: **four of the nine rows were stale in the "already
+fixed, table not yet re-rated" sense, and one was stale in the opposite sense —
+an evidence anchor pointing at the wrong test.** Both directions cost the same
+to check and only one of them is visible from the row's own severity.
