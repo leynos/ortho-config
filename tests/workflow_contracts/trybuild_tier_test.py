@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import sys
 
 import pytest
 from nextest_budgets import (
@@ -230,8 +231,15 @@ def test_over_selection_is_refused() -> None:
 
 
 #: A directory whose mode denies a listing only denies one to a non-root
-#: user, so a refusal cannot be observed when the suite runs as root.
-ROOT_IS_NOT_DENIED = hasattr(os, "geteuid") and os.geteuid() == 0
+#: user, so a refusal cannot be observed when the suite runs as root. Nor
+#: can it be observed on Windows, where `os.chmod` changes only the
+#: read-only flag: no mode makes a directory unopenable there, so the
+#: refusal the two tests below assert would simply be absent. The Make
+#: target is documented and runnable anywhere, even though CI invokes it
+#: on the Ubuntu leg only.
+DENIED_LISTING_IS_UNOBSERVABLE = (hasattr(os, "geteuid") and os.geteuid() == 0) or (
+    sys.platform == "win32"
+)
 
 
 def _nested_trybuild_tree(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -284,7 +292,10 @@ def test_a_nested_trybuild_call_is_still_found_through_the_walk(
     assert non_trybuild_binaries(root) == frozenset()
 
 
-@pytest.mark.skipif(ROOT_IS_NOT_DENIED, reason="root is not denied a listing")
+@pytest.mark.skipif(
+    DENIED_LISTING_IS_UNOBSERVABLE,
+    reason="a directory mode denies a listing on neither Windows nor as root",
+)
 def test_an_unreadable_nested_directory_is_refused_not_skipped(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -308,7 +319,10 @@ def test_an_unreadable_nested_directory_is_refused_not_skipped(
     assert isinstance(raised.value.__cause__, OSError), raised.value.__cause__
 
 
-@pytest.mark.skipif(ROOT_IS_NOT_DENIED, reason="root is not denied a listing")
+@pytest.mark.skipif(
+    DENIED_LISTING_IS_UNOBSERVABLE,
+    reason="a directory mode denies a listing on neither Windows nor as root",
+)
 def test_an_unreadable_crate_root_is_refused_not_read_as_empty(
     tmp_path: pathlib.Path,
 ) -> None:
