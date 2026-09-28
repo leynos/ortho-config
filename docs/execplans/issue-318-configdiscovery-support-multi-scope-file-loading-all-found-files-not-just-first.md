@@ -1068,6 +1068,37 @@ anchor that was one of two candidates. Confirmed after the fact by reading
 `AGENTS.md:138` (`make check-fmt`, `make lint`, `make test`, then commit; there
 is no gated-commit wrapper) and by reading the heading levels.
 
+### Round 10: the commit carried a compile error CI found and the local gate could not
+
+The commit above was pushed with three Rust gates unproven — the deadlock left
+them unrunnable — and CI went red on it. The hosted `Lint` step reported
+`error[E0597]`, a borrowed value that does not live long enough, at
+`ortho_config/tests/policy_sources.rs:130:28`.
+
+`load_root_from_map` was declared
+`args: impl IntoIterator<Item = &'static str>`, but the test feeds it
+`--project-root` with a path built from a `TempDir` at run time, so the borrowed
+`&str` cannot satisfy `'static`. The helper has no reason to narrow the bound:
+the trait method it forwards to already accepts
+`Item = T where T: Into<OsString> + Clone`, and a generic `S` with that same
+bound passes the argument through untouched.
+
+**None of the seven local gates would have caught this, and that is the point.**
+`check-fmt` runs `cargo fmt`, which parses but does not typecheck.
+`markdownlint`, `test-workflow-contracts`, and `nixie` do not read Rust.
+`make typecheck`, `make lint`, and `make test` are the three that would, and
+those are exactly the three the foreign deadlock blocked. A green local board
+on this branch was never evidence that the Rust tree compiled, and the plan is
+the place that says so: **a gate that cannot run is not a gate that passed, and
+the three that could not run were the only three that would have caught this.**
+
+The deeper cause is the commit's own shape. `51e2e974` swept up a large body of
+previously-uncommitted work along with the round-4 repairs — 16 files, ~1900
+insertions — so the compile error arrived in a commit whose message described
+only the scan guard, the spellings, and the anchor. Small, focused commits are
+what `AGENTS.md:65` asks for and what makes a failure like this attributable to
+one change rather than to sixteen.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
