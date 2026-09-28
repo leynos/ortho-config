@@ -113,6 +113,9 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
 /// - `builder_steps`: Sequence of builder method calls (for example
 ///   `env_var`, `dotfile_name`).
 /// - `cli_chain`: Tokens adding CLI-provided required paths to the builder.
+///
+/// The block evaluates to `(layers, discovery_failed)`. Callers that only need
+/// the layers bind the flag with a leading underscore so it stays warning-free.
 fn build_discovery_loading_block(
     krate: &proc_macro2::TokenStream,
     builder_init: &proc_macro2::TokenStream,
@@ -129,11 +132,15 @@ fn build_discovery_loading_block(
             mut required_errors,
             mut optional_errors,
         } = discovery.compose_layers();
+        // Read before `append` drains the vectors. An empty chain means either
+        // that no candidate existed or that every candidate failed to load;
+        // profile extraction needs the distinction to report the right cause.
+        let discovery_failed = !required_errors.is_empty() || !optional_errors.is_empty();
         errors.append(&mut required_errors);
         if layers.is_empty() {
             errors.append(&mut optional_errors);
         }
-        layers
+        (layers, discovery_failed)
     }}
 }
 
@@ -245,7 +252,9 @@ fn build_legacy_defaults(
 
 fn build_legacy_file_layers(file_discovery: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     quote! {
-        let file_layers = #file_discovery;
+        // The legacy path merges every file layer directly and never reports an
+        // unknown profile, so the discovery-failure flag has no consumer here.
+        let (file_layers, _discovery_failed) = #file_discovery;
         for layer in file_layers {
             composer.push_layer(layer);
         }

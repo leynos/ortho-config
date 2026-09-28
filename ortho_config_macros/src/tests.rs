@@ -329,7 +329,7 @@ fn legacy_load_impl_has_no_profile_surface() -> Result<()> {
         "extract_profile_layers",
         "SelectedProfile",
         "value_source",
-        "ComposeLayersWithSelection",
+        "compose_layers_with_selection_from_iter",
         "load_with_profile",
     ] {
         ensure!(

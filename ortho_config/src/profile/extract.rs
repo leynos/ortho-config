@@ -38,6 +38,17 @@ pub struct ExtractionOutcome {
 /// profile is selected but no file defines it, loading fails with
 /// [`OrthoError::UnknownProfile`] carrying the sorted available names.
 ///
+/// # Parameters
+///
+/// - `layers`: the resolved file layers, in precedence order.
+/// - `selected`: the winning selection, if any.
+/// - `discovery_failed`: whether file discovery recorded an error for the
+///   chain that produced `layers`. An empty chain means either that no
+///   configuration file exists or that every candidate failed to load, and
+///   the two call for different [`AvailableProfileNames`] wording. Without
+///   this signal the error would claim "no configuration files were found"
+///   for a file that demonstrably exists.
+///
 /// # Errors
 ///
 /// Returns [`OrthoError::ReservedProfileName`] for `[profile.default]`,
@@ -48,8 +59,9 @@ pub struct ExtractionOutcome {
 pub fn extract_profile_layers(
     layers: Vec<MergeLayer<'static>>,
     selected: Option<&SelectedProfile>,
+    discovery_failed: bool,
 ) -> OrthoResult<ExtractionOutcome> {
-    let chain_is_empty = layers.is_empty();
+    let no_files_discovered = layers.is_empty() && !discovery_failed;
     let mut file_layers = Vec::with_capacity(layers.len());
     let mut profile_layers = Vec::new();
     let mut available = Vec::new();
@@ -71,7 +83,7 @@ pub fn extract_profile_layers(
     if let Some(selected_profile) = selected.filter(|_| !selected_found) {
         return Err(unknown_profile_error(
             selected_profile,
-            chain_is_empty,
+            no_files_discovered,
             available,
         ));
     }
@@ -91,10 +103,10 @@ pub fn extract_profile_layers(
 /// present.
 fn unknown_profile_error(
     selected: &SelectedProfile,
-    chain_is_empty: bool,
+    no_files_discovered: bool,
     available: Vec<String>,
 ) -> Arc<OrthoError> {
-    let reported = if chain_is_empty {
+    let reported = if no_files_discovered {
         AvailableProfileNames::no_files_discovered()
     } else {
         AvailableProfileNames::new(available)

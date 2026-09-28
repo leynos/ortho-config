@@ -148,9 +148,14 @@ Profile support (roadmap 9.1.1) adds two agent-context fields with an
 omitted-when-absent rule: `ProfilesDeclaration.selection` and
 `ProfilesDeclaration.list_command` are `Option` fields that serialize only when
 present, so the unsupported `{ "supported": false }` case stays byte-identical
-to the pre-profile schema. New optional fields must follow that rule and the
-`ProfilesDeclaration::unsupported()`/`supported()` constructor convention so
-struct-literal construction keeps working. The derive emits the matching IR
+to the pre-profile schema. New optional fields must follow that rule and
+provide a `ProfilesDeclaration::unsupported()`/`supported()` constructor, so
+downstream construction of the declaration itself survives later field
+additions. Retyping `AgentContext.profiles` is nonetheless a break for callers
+that build `AgentContext` with a struct literal: they must either update the
+literal's `profiles` value or construct it with one of those two constructors.
+The constructors keep future *field* additions non-breaking, not this field's
+retype. The derive emits the matching IR
 `DocMetadata.profiles` only for opted-in structs; the `cargo-orthohelp` bridge
 maps it into the declaration. The runtime "which profile is active" concern is
 `SelectedProfile`/`ProfileLoadOutcome`, deliberately separate from the static

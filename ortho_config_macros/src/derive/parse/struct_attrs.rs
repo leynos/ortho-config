@@ -101,7 +101,8 @@ fn assign_bool(target: &mut Option<bool>, nested: &ParseNestedMeta, key: &str) -
 
 /// Extracts `#[ortho_config(...)]` metadata applied to a struct.
 ///
-/// Only the `prefix` key is currently recognised. Unknown keys are
+/// Recognizes `prefix`, `discovery`, `post_merge_hook`, `profiles`, `crate`,
+/// and the struct-level documentation keys. Unknown keys are
 /// ignored so callers keep compiling when new attributes appear. This
 /// improves forwards compatibility at the cost of allowing silent typos.
 /// If stricter validation is desired, a custom `compile_error!` guard can

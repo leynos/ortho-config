@@ -430,9 +430,12 @@ helpers, while downstream applications own domain behaviour.
   - [x] Document the precedence
     `built-in defaults < config files < selected profile < environment <
     flags`.
-  - [x] Expose profile support, profile listing commands, and selected-profile
-    semantics in agent context. The `list_command` contract field ships in
-    9.1.1; populating it waits on the 9.1.3 store helpers.
+  - [x] Expose profile support, the selection mechanism (flag and environment
+    variable names), and the profile listing command in agent context. The
+    `list_command` contract field ships in 9.1.1; populating it waits on the
+    9.1.3 store helpers. Active selection is *not* agent-context metadata:
+    `ProfileLoadOutcome` reports the selected profile at runtime, keeping the
+    static contract free of per-invocation state.
 
 - [ ] 9.1.2. Add profile redaction metadata.
   - Requires 9.1.1.
