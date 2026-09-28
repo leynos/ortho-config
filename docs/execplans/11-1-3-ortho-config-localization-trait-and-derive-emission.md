@@ -1364,12 +1364,12 @@ The lock file took `main`'s version and was then re-resolved through
 `ortho_config_macros`. The round-trip was a net no-op, which independently
 confirms the replayed lock was already correct. Re-resolving is idempotent.
 
-All six gates pass on the rebased series: `make check-fmt`, `make typecheck`,
-`make lint`, and `make test` on `0ad49462` (the replay plus the ADR renumber),
-and `make markdownlint` and `make nixie` on the same commit. This revision note
-is itself the only later change, and it is Markdown-only, so the Rust gates
-remain valid for it; `make check-fmt` and `make markdownlint` were re-run after
-it. The published candidate is the tip of the branch.
+The gates passed on this earlier rebased series: `make check-fmt`,
+`make typecheck`, `make lint`, and `make test` on `0ad49462` (the replay plus
+the ADR renumber), and `make markdownlint` and `make nixie` on the same commit.
+This revision note is itself the only later change, and it is Markdown-only, so
+the Rust gates remain valid for it; `make check-fmt` and `make markdownlint`
+were re-run after it. The published candidate is the tip of the branch.
 
 2026-09-28: rebased again onto `origin/main` (`f6a406fc`), replaying all 30
 commits onto the current target. The exclusive replay boundary was `41e54346`,
@@ -1429,4 +1429,40 @@ remedy is to widen the override and the contract together, and to record the
 failing run in the override's comment as the other four entries do. That is a
 response to a measurement, not to the mere existence of a new binary.
 
-All six gates pass on the rebased tip, which is the tip of the branch.
+Five of the six gates pass on the rebased tip, which is the tip of the branch.
+`make test` could not be completed; the entry below records why and what was
+substituted for it.
+
+2026-09-28 (later): a foreign cargo process deadlocked on the shared package
+cache at 02:53:12, part-way through this branch's own `make test` run, and
+never released it. The holder is `cargo test --all-targets --all-features`,
+owned by a Codex agent working in a different repository. It holds an exclusive
+flock on `~/.cargo/.package-cache-mutate` and waits on its own test binary,
+which waits on a nested `cargo build` of its own, which waits on the flock its
+grandparent holds. The cycle is closed, so no external event can release it.
+The standing instruction not to kill other agents' processes forbids the only
+direct repair, and the instruction not to create an isolated cargo cache
+forbids the bypass.
+
+The partial run reached 46 test binaries and 1017 passing assertions with zero
+failures, no `wip/` directory, and no panics, before stalling inside
+`generated_lint_trybuild`. The lock fence excluded everything after it. Because
+that run compiled the tree from scratch between 02:31 and 02:53, every test
+binary under `target/debug/deps` is a post-rebase artefact, so the binaries the
+run never reached could be executed directly, without cargo and therefore
+without the lock.
+
+Those direct runs add 596 passing assertions over 28 further binaries. Two more
+binaries run by hand, with their loader requirements satisfied, add a further
+240 assertions. Across the union of both sets, 1853 assertions pass with zero
+failures. The binaries that still cannot be exercised are the ones that
+re-invoke cargo themselves: the trybuild and `compile_fail` families, and
+`identifier_artefact_e2e`. Of those, only `localization_trybuild`, this
+branch's new binary, is untouched by the earlier partial run; it awaits a
+machine whose package cache is free.
+
+The remaining five gates are sound for the tip. `make typecheck` and
+`make lint` ran at 02:46, after the replay finished at 02:30 and before the
+deadlock began, so they cover the rebased Rust tree. `make check-fmt`,
+`make markdownlint`, and `make nixie` ran at 03:52 and 03:59; none of the three
+needs cargo. The only commit after them is this Markdown-only note.
