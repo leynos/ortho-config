@@ -263,7 +263,7 @@ so an early reader does not take the problem statement for current state:
 
 1. ~~`StackScopes` composition stops at the **first** successful candidate in
    each scope, so it does not load "all applicable files". #318 stays open.~~
-   **Resolved.** `ScopeOutcome::scope_candidates` now walks every in-scope
+   **Resolved.** `ConfigDiscovery::scope_candidates` now walks every in-scope
    candidate and `unique_layers` collapses only genuine repeats, so a scope
    contributes all applicable files. `#318` is answered by this PR; see
    `compose_scoped_layers` in `ortho_config/src/discovery/scoped.rs` and the
@@ -640,6 +640,75 @@ repository.
   does not meet on its own new code, as recorded in the pre-merge
   reconciliation.
 
+## Round 4: the pre-merge table re-read on the current head, and one row that is a real defect
+
+The window validation closed the question the previous round left open, and the
+re-read of the table on `9e9ecc37` found a different table from the one the
+earlier reconciliation examined. That round's rows were bound to `75d9901d`;
+these are bound to the current head, so nothing here is stale by construction.
+**3 errors and 6 warnings**, and four independent read-only verifications were
+run against the code before any edit was authorized.
+
+**The window question is closed.** `build-test (windows-latest)` is green on
+`9e9ecc37` — run `36353886506`, all five jobs green, `head=9e9ecc37`. Both legs
+passed with zero failures: 1326 tests (9 slow) and 1302 (5 slow), 10 skipped in
+each, coverage 85.59%, artefact archived. The specific test the platform
+requirement names,
+`ortho_config::scoped_layers::compose_layers_remains_first_wins`, **passes in
+both legs**. The earlier fail-fast run that left 225 tests unrun is superseded,
+and the `4ca6483e` evidence — green, but not an ancestor of this head — is
+retired rather than reused.
+
+**Three of the nine rows are unambiguously real and were already known.** Both
+documentation warnings are confirmed by direct count: `ConfigFilePolicy`,
+`ConfigPathSelector`, `StackScopes`, and `scope_order` each occur **zero**
+times in `docs/users-guide.md` and zero times in `docs/developers-guide.md`.
+The compile-time warning is confirmed the same way: `project_root_from` occurs
+in zero test files, fixtures, or `.stderr` files, and `env_vars` occurs in no
+test input. The property-test warning is cheap to satisfy because
+`proptest = "1.11.0"` is already a dependency.
+
+**Verification sharpened the remaining rows rather than accepting them.**
+
+- *`Unit Architecture`* named five functions that supposedly swallow
+  filesystem errors. They do not swallow: the module contains **no** `try`/
+  `except`/`suppress` at all — the `try` grep hits are substrings of "trybuild"
+  — and stdlib `pathlib` re-raises `PermissionError` because `_IGNORED_ERRNOS`
+  excludes `EACCES`. One genuinely silent path exists: `rglob` delegates to
+  `Path.walk`, which does `except OSError: continue` with no `on_error`
+  supplied, so an unreadable **sub**directory beneath a `mod.rs` root is
+  skipped silently and the binary leaves the trybuild class unseen by the
+  coverage assertion. The narrow fix is taken; the requested injectable
+  filesystem interface is not, because its severity premise is false. Ownership
+  was settled by direct `git` inspection, which the reconnaissance could not
+  run: `git cat-file -e origin/main:tests/workflow_contracts/trybuild_tier.py`
+  fails, so the file is branch-added and in scope.
+- *`Observability`* is **larger** than the row states and is the round's real
+  defect. The row describes a partial gap; the explicit-selection branch
+  actually emits **nothing at all**. `policy.rs` contains zero `telemetry::`
+  calls, so an operator running a policy-enabled struct with a bad explicit
+  `--config bad.toml` sees no attempt, no candidate failure, and no terminal
+  outcome, where the same failure through the legacy path yields
+  `discovery.attempt`, `discovery.candidate`, and
+  `discovery.load{outcome=not_found}`. Nothing in `docs/design.md:353-358` or
+  RFC 0002 exempts the policy path from the contract, and no test pins its
+  silence, so this reads as ungoverned rather than deliberately out of scope.
+- *`Docstring Coverage`* measures something narrower than it appears to.
+  `missing_docs = "deny"` is enforced workspace-wide (`Cargo.toml:99`), so
+  every genuine public item is already documented; the 74.65% counts private
+  helpers and test functions. That makes the row a real but low-value gap
+  rather than the API-documentation hole the number suggests.
+
+Two constraints decided how the compile-time tests are written, and both were
+established before any code was committed. First, a `compile_fail` case needs a
+**committed `.stderr`** that only the compiler can emit, so no unreviewed
+fixture is added under `ortho_config/tests/ui/`. Second, the mode and scope
+errors are raised in token generation (`mode_tokens`, `scope_order_tokens`),
+not in parsing — which makes them **pure functions** testable directly in a
+`#[cfg(test)]` module, a cheaper and stronger instrument than a UI case. The
+parse-stage errors do have an established test idiom in
+`parse/tests/ortho_attrs.rs`.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
@@ -910,7 +979,7 @@ names is worse than no test, because it retires the question.
   than the old. When a fix's whole purpose is "these two sets must not
   disagree", the merge that unites them is the highest-risk line in the change,
   not boilerplate.
-- **A probe that contradicts your fix may be reporting the fix, not the
+- **A probe that contradicts the fix may be reporting the fix, not the
   probe.** The clobbering showed up as `_carries_trybuild` returning `True`
   when the roots were built by hand and `False` through the workspace reader —
   one process, one file state. The reflexive move is to distrust the probe and
@@ -931,3 +1000,14 @@ names is worse than no test, because it retires the question.
   *describing* such a fault must not quote it, not even inside backticks,
   because the checker reads code spans. Name the fault categorically and let
   the reader supply the word.
+- **And it fired again in round 4, in text written while quoting that lesson.**
+  Two tokens were flagged: one in a delegated agent's new prose, and one in
+  this plan's own new section — in the sentence recording that the
+  verifications ran before any edit was approved, written minutes after the
+  lesson above was read. Knowing the rule did not prevent the fault, because
+  the fault is produced by fluent British prose, not by ignorance. The step
+  that would have caught it is mechanical and cheap: run `make markdownlint`
+  *before* committing new prose, not after, and treat its verdict as a required
+  input to the write rather than a checkpoint on it. A rule that must be
+  remembered at the moment of writing is weaker than a command that can be run
+  over the result.

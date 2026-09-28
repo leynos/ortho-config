@@ -738,6 +738,250 @@ silently lose events. `pin_global_max_level` in that test file holds one
 dispatcher for the lifetime of the binary. This was an observed intermittent
 failure, not a precaution.
 
+## Scoped and policy-based configuration discovery
+
+Automatic discovery historically resolved one file: the candidate list was
+scanned most-preferred first and the scan stopped at the first success. The
+build tool that motivated the change needed an ordered, fail-closed explicit
+selector chain and a stack of every file that exists, with project keys
+overriding user keys while user-only keys survive. The resulting runtime types
+live in `ortho_config/src/discovery/`, and RFC 0002
+(`docs/rfcs/0002-config-layer-resolution-policy.md`) is their design record: it
+fixes the semantics tables, the suppression gate, the drain precedence, and the
+stability surface that must settle before the first release shipping them. Read
+it before changing any behaviour here.
+
+This section is about file-layer *resolution*. The agent-native,
+`cargo-orthohelp` policy configuration described in
+[Policy configuration test layout](#policy-configuration-test-layout) is a
+different feature that shares only the word "policy".
+
+### Type roles and how they compose
+
+Four layers of responsibility, each thin enough to test on its own:
+
+- `ConfigDiscovery` and `ConfigDiscoveryBuilder` own the candidate search space:
+  the file names, the project roots, and the injected `EnvSource`. See
+  [Environment access boundary](#environment-access-boundary).
+- `ConfigFilePolicy` sits above that builder and adds the explicit selector
+  chain, the two mode enums, and the scope order. `from_builder` is the
+  constructor; the builder methods are chainable.
+- `FileLayerOutcome` is the replayable result of `resolve_layers`. It is a
+  struct rather than an enum because a successful chain can coexist with an
+  earlier ignorable probe, and because a fatal selected-file failure must still
+  carry the winning selector.
+- `ResolvedSelection` records which selector won and where it pointed, on both
+  the success and the failure path, so an error can name the selector that
+  chose the offending file.
+
+`resolve_layers` reads the environment once, at resolve time, and never returns
+`Err`; failures are carried in the outcome's classified error buckets and
+realized only when it is drained. Two exhaustive lists in RFC 0002 describe the
+surface and are worth checking against any change: the "Reusable file-layer
+resolver" section for the accessors, and "File-layer error policy" for the
+four-case mapping. That document also records what has deliberately not changed:
+`compose_layers`, `compose_layer`, `load_first*`, `DiscoveryLayersOutcome`,
+`LayerComposition`, `MergeComposer`, and `MergeLayer` keep their signatures and
+behaviour, because the new types are additive.
+
+### First-wins and scope stacking are two code paths
+
+`AutomaticMode` decides what automatic discovery does once it runs, and the two
+variants do not share a traversal.
+
+- `AutomaticMode::FirstWins` is the default. `compose_scoped_layers` preserves
+  `ConfigDiscovery::compose_layers` exactly, by calling it directly and
+  returning no origins. `compose_layers` walks the flat candidate list that
+  interleaves explicit, environment, and platform entries, and stops at the
+  first candidate whose `extends` chain loads.
+- `AutomaticMode::StackScopes` resolves every requested scope in `scope_order`
+  and appends the layers of every applicable candidate that loads, so a project
+  file layers over a user file instead of replacing it.
+
+Scope is not a concept under `FirstWins`, so a scope request is never
+dereferenced there and no scope can be an origin. Within `StackScopes`, every
+candidate in a scope is attempted rather than only the first that loads: that
+is the mode, and it is also what makes the diagnostics complete, since a
+candidate's defect is only discoverable by opening it. A failed lower-preferred
+candidate therefore does not prevent the layers that did load from being
+returned.
+
+The legacy `compose_layers` is retained unchanged and the scoped engine groups
+the platform generators only; explicit and environment selection belong to the
+selector chain. They are two tested code paths, not one path wearing two
+signatures, so a fix to one is not automatically a fix to the other.
+
+### Selector precedence, and why it suppresses
+
+`ConfigFilePolicy::selectors` takes an ordered chain. `resolve_layers` walks it
+with `find_map` and the first selector that resolves a path wins. Resolution
+reads a CLI-supplied `PathBuf` directly, and for `ConfigPathSelector::env`
+reads the named variable through the discovery `EnvSource`, treating an unset
+or empty value as "no selection".
+
+A winning selector suppresses every later selector and all automatic probing.
+That is the property `add_required_path` cannot deliver: the gate lives at
+candidate generation, so a required path can no longer mechanically coexist
+with later discovered layers. `ExplicitMode` decides what happens once a rung
+wins:
+
+- `ExplicitMode::RequiredExclusive` is the default. A missing or malformed
+  selected file produces a single terminal `selected_error` carrying the winning
+  `ResolvedSelection`; automatic discovery never runs, and there is no
+  fallback.
+- `ExplicitMode::Optional` is exclusive but tolerant. An absent selected path
+  yields no file layers while still suppressing automatic discovery; a
+  malformed file is still an error.
+
+Draining follows a fixed precedence, and the change is worth knowing because it
+alters which failures surface: a `selected_error`, when present, is the sole
+surfaced error and the layers are empty; otherwise `reportable_errors` always
+surface, and `ignorable_errors` surface only when no layer loaded. The
+reportable bucket is the genuinely new expressiveness. Previously a malformed
+*automatic* file landed in `optional_errors` and was dropped whenever a later
+candidate succeeded, so a broken project file could vanish behind a valid user
+file.
+
+### Scope order, and the two opposite orderings
+
+Two orderings meet in `discovery/scoped.rs` and they run in opposite directions.
+`docs/design.md` states the point authoritatively and should be read in full;
+the short form is:
+
+- The candidate list is a **preference** order, most-preferred first, because
+  index 0 is the location the historic first-wins scan selects.
+- A composed layer list is a **precedence** order, because a `MergeComposer`
+  applies layers in the order given and the last one wins.
+
+A scope therefore walks its candidates in reverse preference order, applying
+the least-preferred location first and the most-preferred last, so the historic
+winner still wins while every lower-preferred location contributes a base layer
+for the keys it alone sets. This keeps "later applied wins" as the single rule
+for the whole system. Emitting candidates in preference order instead would let
+a fallback such as `~/.demo.toml` silently override
+`$XDG_CONFIG_HOME/demo/config.toml`, inverting established behaviour the moment
+a second location starts loading.
+
+The reversal happens in one named place, `ConfigDiscovery::scope_candidates`,
+so that no call site has to hold two opposite orderings in mind: everything
+downstream of it merely appends in application order. A maintainer changing the
+traversal should keep that property — a second reversal, or a call site that
+"fixes up" the order it receives, would restore the inversion this design
+exists to prevent.
+
+`scope_order` is a *request*, not a record. The default is
+`[System, User, Project]`, and later scopes override earlier ones, so project
+layers naturally override user layers. A scope contributes nothing when none of
+its candidates loads, or when every layer it produced was already contributed
+by an earlier scope.
+
+Two invariants make that stacking deterministic, because the loader
+de-duplicates and detects `extends` cycles only within a single chain:
+
+- De-duplication is by **canonical** path across the whole composition, keeping
+  the earliest position in application order, which within a scope is the
+  lowest-precedence one. Keying on the canonical path the loader already stored
+  collapses aliases and symlinks without changing public layer metadata, and it
+  stops a file reachable from two places from contributing two layers and
+  silently doubling append-strategy vectors. A parent reached by two children
+  applies once, at the position its first child gave it; both children still
+  override it.
+- The `extends` chain of each file remains parent-first, so a parent is still
+  applied before the child that overrides it. `extends` resolution is
+  chain-local, with each file resolving its own parents against its own visited
+  set, and a cross-scope cycle is reported with the same cyclic-extends error
+  as a within-chain cycle.
+
+### Inspecting and replaying a `FileLayerOutcome`
+
+The load-bearing requirement is that the layers are resolved once and reused:
+the same outcome is peeked for an early scalar read, then replayed into the
+merge. The accessors split by purpose rather than by field.
+
+- Early inspection, before any merge runs. `selection()` returns the winning
+  `ResolvedSelection`; `selected_error()` returns the fatal selected-file error;
+  `reportable_errors()` returns the non-fatal errors that should always be
+  reported; and `merged_file_value()` folds the loaded layers into one JSON
+  object for a scalar-only peek, such as a diagnostics flag that governs how
+  later errors are rendered.
+- Provenance for an operator-facing "what loaded" trace. `origins()` returns the
+  scopes that actually contributed, and it does **not** echo `scope_order`: a
+  requested scope whose candidates were all absent, or whose every layer was
+  already contributed by an earlier scope, is not an origin. Under `FirstWins`
+  it is always empty, and a failed explicit selection reports none either,
+  because selection is not automatic discovery. That is why the report is
+  computed inside the scoped engine rather than reconstructed by the policy.
+- Replay, which reads no files because the layers are already resolved.
+  `push_into` drains the layers into an existing `MergeComposer`;
+  `into_layers_and_errors` drains them plus the classified errors into a
+  caller-owned buffer, which is the shape the generated loader already feeds to
+  `LayerComposition::new`; and `into_result` is the convenience form that
+  aggregates into an `OrthoResult` instead. Both drains call one private
+  helper, so the order above has a single source of truth rather than two
+  restatements.
+
+`merged_file_value` is deliberately narrow. The fold covers scalar keys only: a
+collection-typed key reflects last-file-wins rather than the field's append or
+keyed-merge strategy, so only scalars should be read from it. Widening it later
+would be safe; broadening the claim and then narrowing it would not.
+
+### The derive attribute plumbing
+
+A struct opts into this path by setting any policy key alongside the existing
+discovery keys:
+
+```rust
+#[ortho_config(discovery(
+    app_name = "demo",
+    env_vars = ["DEMO_CONFIG"],
+    explicit_mode = "required_exclusive",
+    automatic_mode = "stack_scopes",
+    scope_order = ["user", "project"],
+    project_file_name = "demo.toml",
+    project_root_from = "directory",
+))]
+struct DemoConfig { /* ... */ }
+```
+
+`ortho_config_macros/src/derive/parse/discovery_attrs.rs` parses the keys, and
+`uses_policy` is what selects the emitter: a struct setting only the
+pre-existing keys keeps generating the legacy loader verbatim, while an opt-in
+struct routes through `build_policy_based_loading` in
+`ortho_config_macros/src/derive/policy_impl.rs`, which assembles a
+`ConfigFilePolicy`, calls `resolve_layers`, and drains it with
+`into_layers_and_errors`.
+
+- `env_vars` is an ordered alias chain, resolved into `ConfigPathSelector::env`
+  rungs in the order written. It is mutually exclusive with the single
+  `env_var`, which is a compile error because the combined precedence would be
+  ambiguous. A struct that sets only `automatic_mode` still honours `env_var`;
+  the emitter prefers `env_vars` when it is non-empty, so opting into the
+  policy path cannot silently drop the override a non-policy struct already
+  honours.
+- `explicit_mode` and `automatic_mode` accept the string forms of the runtime
+  enum variants and are validated at compile time. Their defaults reproduce the
+  existing behaviour: `first_wins` for automatic mode, and `required_exclusive`
+  for explicit mode. An unrecognized string is a compile error naming the
+  accepted set.
+- `scope_order` lists scopes by name — `system`, `user`, or `project` — and is
+  validated at compile time.
+- `project_root_from` names a CLI field to read at run time, which is the part
+  static attributes cannot otherwise reach: the generated code checks the
+  parsed CLI value and calls `project_root` when it is present. The macro
+  rejects the attribute unless the field exists, is not `skip_cli`, and is a
+  `PathBuf` or `Option<PathBuf>`. The value is the Rust field identifier, not
+  the serde rename, because the wiring is code-level.
+- An injected environment source still reaches the builder on this path, so a
+  `load_from_iter_with_sources` caller's `MapEnv` is honoured for both the
+  selector rungs and automatic discovery. Without that step, discovery would
+  read the real process environment instead.
+
+The derive grammar and the runtime enum strings become a public grammar once
+shipped, which is why RFC 0002 stages the derive extension last. The static
+grammar also cannot express every policy — a root derived from two fields, or
+conditional scopes — so the runtime `ConfigFilePolicy` remains the escape hatch
+for an application that builds one by hand and bypasses the derive.
+
 ## Environment access boundary
 
 `EnvSource` is the crate's injectable environment. `ProcessEnv` is the default
