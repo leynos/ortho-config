@@ -9,7 +9,7 @@
 #[cfg(all(feature = "yaml", not(feature = "serde_json")))]
 compile_error!("The `serde_json` feature must be enabled when `yaml` support is active.");
 
-pub use ortho_config_macros::{OrthoConfig, OrthoConfigSubcommandDocs};
+pub use ortho_config_macros::{OrthoConfig, OrthoConfigSubcommandDocs, SelectedSubcommandMerge};
 
 /// Re-export used by derive-generated code (`ortho_config::figment::...`).
 ///

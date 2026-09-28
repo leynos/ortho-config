@@ -426,6 +426,65 @@ variable. The derive infers `default_value`, `default_value_t`, and
 supported; nested wrappers and map fields require an explicit
 `#[ortho_config(default = ...)]` instead.
 
+When both file discovery and environment scanning must use explicit sources,
+call `load_globals_and_merge_selected_subcommand_with_sources`. Its file
+context performs named discovery lookups, while the shared scanning source
+supplies the environment layer. The selected command's CLI values retain their
+normal precedence. For example, this injects `APP_CMDS_RUN_LEVEL` without
+reading the process environment:
+
+<!-- tested-example: guide-selected-subcommand-sources -->
+```rust
+use std::{path::Path, sync::Arc};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use ortho_config::{
+    MapEnv, OrthoConfig, SelectedSubcommandSources, SharedScanEnvSource,
+    SubcommandFileContext, load_globals_and_merge_selected_subcommand_with_sources,
+};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, Subcommand, ortho_config::SelectedSubcommandMerge)]
+enum Commands {
+    Run(RunArgs),
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, Parser, OrthoConfig)]
+#[command(name = "run")]
+#[ortho_config(prefix = "APP_")]
+struct RunArgs {
+    #[arg(long)]
+    level: Option<u8>,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let matches = Cli::command().try_get_matches_from(["app", "run"])?;
+    let cli = Cli::from_arg_matches(&matches)?;
+    let environment = Arc::new(MapEnv::new().with_var("APP_CMDS_RUN_LEVEL", "3"));
+    let files = SubcommandFileContext::new(Path::new("."), environment.as_ref());
+    let merge_source: SharedScanEnvSource = environment.clone();
+    let sources = SelectedSubcommandSources::new(files, merge_source);
+    let (_globals, command) = load_globals_and_merge_selected_subcommand_with_sources(
+        &matches,
+        cli.command,
+        sources,
+        || Ok::<_, std::io::Error>(()),
+    )?;
+    assert_eq!(match command { Commands::Run(config) => config.level }, Some(3));
+    Ok(())
+}
+```
+
+The existing `load_globals_and_merge_selected_subcommand` helper remains
+available when process-backed file discovery and environment access are
+appropriate. The per-command `load_and_merge_with_sources` method is useful
+when handling a selected command directly rather than merging an enum.
+
 When a subcommand needs the same hermetic merge boundary, pass a
 `SharedScanEnvSource` to `load_and_merge_with_sources` instead of using the
 process-backed `load_and_merge`. For the `ServeConfig` above, the call is:

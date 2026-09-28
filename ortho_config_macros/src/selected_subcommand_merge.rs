@@ -89,6 +89,7 @@ fn merge_expr(has_matches: bool, selected_label: &syn::LitStr, krate: &TokenStre
     }
 }
 
+/// Builds the generated expression for merging a variant with injected sources.
 fn merge_with_sources_expr(
     has_matches: bool,
     selected_label: &syn::LitStr,

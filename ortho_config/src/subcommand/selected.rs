@@ -67,7 +67,7 @@ pub enum SelectedSubcommandMergeError {
 ///     command: Commands,
 /// }
 ///
-/// #[derive(Debug, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
+/// #[derive(Debug, Subcommand, ortho_config::SelectedSubcommandMerge)]
 /// enum Commands {
 ///     Run(RunArgs),
 /// }
@@ -280,6 +280,7 @@ mod tests {
         }
     }
 
+    /// Ensures a manual implementation rejects injection without process fallback.
     #[test]
     fn manual_implementation_rejects_injected_sources_without_process_fallback() {
         let legacy_called = Cell::new(false);
