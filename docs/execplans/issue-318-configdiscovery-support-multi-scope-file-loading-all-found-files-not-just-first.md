@@ -1928,3 +1928,57 @@ list now carries a paragraph saying which and at which commits.
 line count. It was not gated on a Rust build, because the change touches no
 Rust file, and the last full gate pass predates it. The next full pass on this
 head is the certificate for it.
+
+### Round 17: a false mode spelling in RFC 0002, and its delivery plan
+
+This round answers the `Developer Documentation` pre-merge row — **the same row
+Round 13 recorded as already addressed**, which the review still holds open
+against RFC 0002.
+
+**The falsehood.** `docs/rfcs/0002-config-layer-resolution-policy.md` named
+`fallthrough` as the default `explicit_mode`, at two sites: the attribute
+bullet in the "Proposed design" section and the stability-surface grammar list.
+No such mode exists. Verified three ways at this head:
+
+1. The macro default is `required_exclusive`, not `fallthrough` —
+   `ortho_config_macros/src/derive/policy_impl.rs:116-119` reads
+   `mode.unwrap_or(if explicit { "required_exclusive" } else { "first_wins" })`.
+2. `fallthrough` is not an accepted value at all. `policy_impl.rs:122-128`
+   matches exactly `required_exclusive` and `optional` for explicit mode, and
+   the reject arm at `:128` is literally
+   `"explicit_mode must be required_exclusive or optional"`.
+3. The runtime agrees: `ortho_config/src/discovery/policy.rs:88-89` carries
+   `#[default]` on `RequiredExclusive`.
+
+So the sentence's premise had expired. It argued the macro default needed a
+name distinct from the runtime `ExplicitMode::Optional` to avoid contradicting
+it; the macro default and the runtime default are in fact the same variant.
+
+**What changed.** The attribute bullet now states `required_exclusive` as the
+default and keeps `first_wins` for automatic mode, and describes `optional` as
+the distinct mode it is — `RequiredExclusive` requires a selected path and
+suppresses automatic discovery, while `Optional` ignores a missing selected
+path while still suppressing automatic discovery, per `policy.rs:83-92`. The
+rename rationale is removed rather than replaced, since it no longer applies.
+The stability-surface list now reads `optional` where it read `fallthrough`, so
+the grammar matches what the derive accepts.
+
+**The delivery plan is annotated, not rewritten.** Each of the five steps now
+carries its disposition in place, in the RFC's annotate-don't-remove style.
+Steps 1, 2, 3 and 5 are delivered with #318. Step 4 is delivered *except*
+`policy_hook`, which is left named as the one outstanding deliverable:
+`grep -rn "policy_hook" --include=*.rs .` returns no hits, so it appears only
+in the RFC.
+
+One caveat, recorded rather than smoothed over. Step 5's acceptance lists a
+legacy alias "emitting the default deprecation signal", and the RFC promises at
+its `legacy_alias` entry that a legacy rung winning is never silent. What the
+tree has is the *metadata*: `ResolvedSelection::legacy()` (`policy.rs:118-120`)
+carries the flag and tests assert it (`scoped_layers.rs:206`, `:220`). No
+non-test caller reads `legacy()`, and no `warn` or deprecation event exists on
+this path, so the emission itself is not visible to this read. The step is
+annotated as delivered on the strength of the test matrix; the signal's
+emission is **not** claimed.
+
+**No gate has been run since this edit.** It is documentation only, touching no
+`.rs` file, so the next full pass on this head is its certificate.

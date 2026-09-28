@@ -691,11 +691,12 @@ behaviours, while preserving the existing defaults exactly.
   compile error, because the combined precedence would be ambiguous; `env_var`
   remains the single-variable shorthand.
 - `explicit_mode` and `automatic_mode` accept the string forms of the runtime
-  enum variants. Their defaults reproduce the current behaviour, but the
-  default explicit mode is named `fallthrough` (today's
-  required-but-non-suppressing path), not `optional`, so the macro string never
-  contradicts the runtime `ExplicitMode::Optional`, which is
-  suppress-but-tolerant. The default automatic mode is `first_wins`.
+  enum variants. Their defaults reproduce the current behaviour and name the
+  variants the runtime defaults to: `required_exclusive` for explicit mode and
+  `first_wins` for automatic mode. `optional` is a distinct mode rather than
+  another spelling of the default: `RequiredExclusive` requires a selected path
+  and suppresses automatic discovery, while `Optional` ignores a missing
+  selected path while still suppressing automatic discovery.
 - `scope_order` lists scopes by name and is validated at compile time.
 - `project_root_from = "field"` is the key that reaches a runtime-parsed value.
   The generated loader already reads `cli.config_path` off the parsed CLI
@@ -815,7 +816,7 @@ settled before that release:
   private fields, accessor methods, and `#[non_exhaustive]`, so fields can be
   added later; this must be in place before the first minor, because public
   fields are a one-way door.
-- The derive attribute strings (`required_exclusive`, `fallthrough`,
+- The derive attribute strings (`required_exclusive`, `optional`,
   `stack_scopes`, `first_wins`, `system`/`user`/`project`) become a public
   grammar that can only change through a deprecation cycle once shipped, which
   is why the derive extension is staged last.
@@ -937,25 +938,34 @@ roadmap entry. Each step is additive and individually mergeable.
    `into_layers_and_errors` and `into_result` drains. Acceptance: the four-case
    mapping in Table 2 is unit-tested, and a golden fixture in this step proves
    the lift reproduces the current loader fold exactly — the safety net lands
-   with the change, not at the end.
+   with the change, not at the end. **Delivered**, with
+   [ortho-config#318][oc-318].
 2. **Add scoped resolution.** Add `compose_scoped_layers` and the
    `ConfigFilePolicy` resolver with the suppression gate and environment
    snapshotting. Acceptance: a `RequiredExclusive` win probes no automatic
    candidate (verified against a filesystem spy); `compose_layers` remains
    unchanged and green; and a test mutating the environment between a peek and
-   a replay of one outcome asserts identical file provenance.
+   a replay of one outcome asserts identical file provenance. **Delivered**,
+   with [ortho-config#318][oc-318].
 3. **Add the explicit selector chain.** Add the ordered selector resolution and
    the `--config` then `NETSUKE_CONFIG` shape, named only by the caller, with a
    third legacy rung exercised by a synthetic case rather than by Netsuke.
    Acceptance: first present selector wins and suppresses the rest; a legacy
    alias emits its deprecation signal; and Netsuke's own migration adds no
    second environment selector, so its
-   `legacy_config_path_variable_is_not_a_selector` test still passes unmodified.
+   `legacy_config_path_variable_is_not_a_selector` test still passes
+   unmodified. **Delivered except the deprecation signal**, with
+   [ortho-config#318][oc-318]: ordered resolution and the synthetic third rung
+   are built, but a winning legacy rung records its flag on `ResolvedSelection`
+   and nothing emits a signal for it.
 4. **Add derive attributes.** Once the runtime API has settled, surface
    `env_vars`, `explicit_mode`, `automatic_mode`, `scope_order`,
    `project_root_from`, and `policy_hook`, with the compile-time validations.
    Acceptance: default structs generate the current loader verbatim; opt-in
-   structs route through the new resolver.
+   structs route through the new resolver. **Delivered except `policy_hook`**,
+   with [ortho-config#318][oc-318]: the other five attributes are surfaced and
+   compile-time validated, and `policy_hook` remains the one named deliverable
+   not yet built.
 5. **Add the test matrix and migration validation.** Cover selected-file
    fail-closed (missing and malformed) with the selector named in the error, no
    automatic probe under suppression, optional probe absent with a later
@@ -967,7 +977,10 @@ roadmap entry. Each step is additive and individually mergeable.
    alias winning and emitting the default deprecation signal, the operator
    `origins` trace, project root from a CLI field, the aggregation collapse,
    and the SemVer additivity guard. (The back-compat lift fixture lands in step
-   1.)
+   1.) **Delivered except the deprecation signal**, with
+   [ortho-config#318][oc-318]: the matrix is in place, but a legacy alias
+   winning records its flag without emitting the signal, so the case that
+   asserts the emission is absent.
 
 ______________________________________________________________________
 
@@ -1016,9 +1029,45 @@ ______________________________________________________________________
   generators, so not to be built independently. Scoped resolution landed with
   [ortho-config#318][oc-318], so the constraint is historical and the note is
   annotated rather than removed.
-- **This changes no design decision.** The status, the proposed design, and the
-  requirements are all as they were; only the record of what remains to be done
-  moves.
+- **The status moved from `Proposed` to `Implemented`.** The design and the
+  requirements are no longer as they were: the `StackScopes` requirement, the
+  `extends` resolution rule, and the invariants all changed with this landing.
+  An earlier reading of this landing held that only the record of what remains
+  to be done moved; that reading understated the change.
+
+  `StackScopes` no longer runs a first-wins search inside each scope and
+  appends one winning chain. It resolves every requested scope in `scope_order`
+  then appends the layers of every applicable candidate that loads, so the
+  result stacks all the files that exist rather than only the highest-priority
+  one. The design section now separates the two orderings: a scope's candidates
+  are a preference order, most-preferred first, whereas a composed layer list
+  is a precedence order, where last applied wins, so a scope walks its
+  candidates in reverse and the historic winner still wins. It also records that
+  `extends` resolution is chain-local rather than scope-local, that
+  canonical-path de-duplication covers the whole composition rather than only
+  repeats across scopes, and that every candidate in a scope is attempted, so a
+  malformed file is reported through the partitioned diagnostics instead of
+  blocking the layers that loaded.
+
+### 2026-09-28 — the delivery plan annotated; a false attribute name corrected
+
+- **The delivery plan is annotated, not rewritten.** Steps 1 and 2 are
+  delivered with [ortho-config#318][oc-318]; steps 3, 4 and 5 are delivered
+  except for one named acceptance criterion each — the deprecation signal for a
+  winning legacy rung, `policy_hook`, and the test asserting that signal. A
+  winning legacy alias records its flag on `ResolvedSelection` and is otherwise
+  silent, so the promise above that such a win "is never silent" is not yet
+  met. Each step states its disposition in place, so the plan reads as a record
+  of what landed and what remains.
+- **A false attribute name is corrected in two places.** The `explicit_mode`
+  notes and the stability surface both named `fallthrough` as the default
+  explicit mode. The derive accepts no such spelling: `explicit_mode` is either
+  `required_exclusive` or `optional`, defaulting to `required_exclusive`, which
+  is also the runtime `#[default]`. Both sites now name the shipped default and
+  describe `optional` as the distinct mode it is.
+- **This changes no design decision.** The correction is to the record of the
+  shipped grammar, not to the grammar itself. The status, the proposed design,
+  and the requirements are all as they were.
 
 [netsuke-427]: https://github.com/leynos/netsuke/pull/427
 
