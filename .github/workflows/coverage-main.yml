@@ -28,9 +28,12 @@ on:
 # request ratchets against, so two runs racing would decide it by which
 # finished last. A cancelled run abandons both its upload and its
 # baseline write; a queued one publishes later, and the later push's
-# baseline still wins because it runs last.
+# baseline still wins because it runs last. The group is keyed on the
+# ref alone, so a dispatch aimed at another branch, if one is ever
+# allowed, gets its own group and cannot displace a pending main run,
+# while main keeps one group and its runs never overlap.
 concurrency:
-  group: coverage-main
+  group: coverage-main-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -114,9 +117,15 @@ jobs:
         # write the merged result via stdout.
         run: bun x lcov-result-merger 'lcov-*.info' > lcov.info
 
+      # Whether the token is set, as a plain output. The expression is
+      # evaluated before the shell runs, so this step binds nothing and
+      # the token is in no step's env: the upload action is composite and
+      # passes its step env to its nested upload-artifact and cache steps.
+      - name: Check CodeScene token
+        id: codescene-token
+        run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
       - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         # The ref as well as the token. This workflow declares no
         # `workflow_dispatch` today, so `github.ref` is always main and
         # the guard changes nothing now; it is here because a dispatch
@@ -124,7 +133,9 @@ jobs:
         # adding one later would otherwise let a run from a feature
         # branch publish that branch's coverage as the trunk's, with
         # nothing reporting it.
-        if: env.CS_ACCESS_TOKEN != '' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.codescene-token.outputs.available == 'true'
+          && github.ref == 'refs/heads/main'
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           format: lcov
@@ -132,7 +143,7 @@ jobs:
           # is the one workflow allowed to upload and a reader of these
           # lines should not have to look the default up to know that.
           mode: upload
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          access-token: ${{ secrets.CS_ACCESS_TOKEN }}
           # No checksum input. `installer-checksum` is rejected outright
           # when non-empty from this pin, and `archive-checksum` is not a
           # rename of it: it digests the action's CLI manifest archive,

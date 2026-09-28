@@ -1566,6 +1566,16 @@ the baseline `coverage-main.yml` writes, which applies the same "do not go
 backwards" gate from this repository's own history with no token and no second
 tool.
 
+`build-test` takes the default depth-1 checkout. It used to fetch full history
+only so `cs-coverage check` could diff against the pull request's merge base,
+and that gate has gone. At the pinned revision `generate-coverage` runs no git
+command. The job's other git readers are `git ls-files` (mdtablefix `--git`,
+and lading's lockfile guard) and `git status` (lading's working-tree guard),
+and neither reads history. A future step that diffs against the merge base,
+walks the log or describes a tag has to restore `fetch-depth` for itself.
+`test_the_pull_request_lane_checks_out_shallowly` fails until that change also
+updates the contract.
+
 **The two lanes must be built the same way.** Both run two feature legs, paired
 by the report each writes. The ratchet compares this commit's report against
 that baseline, so the inputs deciding *what* is measured must agree across the
@@ -1590,7 +1600,25 @@ guard as one `&&` term and refuses any `||`, because a substring match passes
 concurrency group queues a superseded run rather than cancelling it: two runs
 racing would decide the baseline by which finished last, and a cancelled run
 abandons both its upload and its baseline write, while a queued one publishes
-later and the later push still wins.
+later and the later push still wins. The group is exactly
+`coverage-main-${{ github.ref }}`, keyed on the ref alone. A static group would
+let a dispatch aimed at another branch, if one were ever allowed, displace a
+pending main run and then skip its upload on the ref guard. A group keyed on
+the event as well would let an older run upload after a newer one.
+
+**The token reaches the upload as an input, and no environment holds it.** A
+`codescene-token` step with no `if:` and no `env` runs exactly
+`echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`.
+The expression is evaluated before the shell starts, so the step writes `true`
+or `false` and no process ever holds the token. The upload is guarded on
+exactly that output and the main ref, and passes the secret directly as
+`access-token`. The upload action is composite and hands its step `env` to its
+nested artefact-upload and cache steps, so the contract refuses the token in
+every `env` block of the publisher. The old guard, `env.CS_ACCESS_TOKEN != ''`
+on a step-level binding, also passed with the binding deleted, after which the
+upload would skip forever. The contract therefore asserts the check step and
+its command positively, and names each of those failures in
+`codescene_publisher_test.py`.
 
 **No checksum input.** `installer-checksum` is rejected outright when non-empty
 from the pinned uploader, and `archive-checksum` is not a rename of it: it

@@ -59,12 +59,7 @@ jobs:
           - os: windows-latest
     steps:
       - name: Checkout
-        # fetch-depth: 0 makes the pull request's merge base reachable so the
-        # CodeScene changed-line coverage gate (cs-coverage check) can diff
-        # against it.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          fetch-depth: 0
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
