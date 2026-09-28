@@ -104,9 +104,11 @@ pub(crate) fn source_aware_derived_load_finished<T>(result: &OrthoResult<T>) {
 
 /// Record the start of a profile-aware generated load.
 ///
-/// The profile-aware entry points take no injected source: they read the
-/// selector and the environment layer from the live process, so this boundary
-/// is labelled [`SOURCE_PROCESS`] rather than [`SOURCE_INJECTED`].
+/// The process-backed profile entry points take no injected source: they read
+/// the selector and the environment layer from the live process, so this
+/// boundary is labelled [`SOURCE_PROCESS`] rather than [`SOURCE_INJECTED`].
+/// Their injected counterparts are labelled by
+/// [`profile_load_injected_started`] and [`profile_load_injected_finished`].
 pub(crate) fn profile_load_started() {
     attempt(OPERATION_PROFILE_LOAD, SOURCE_PROCESS);
 }
@@ -114,6 +116,16 @@ pub(crate) fn profile_load_started() {
 /// Record the terminal outcome of a profile-aware generated load.
 pub(crate) fn profile_load_finished<T>(result: &OrthoResult<T>) {
     result_outcome(OPERATION_PROFILE_LOAD, SOURCE_PROCESS, result);
+}
+
+/// Record the start of a profile-aware generated load from injected sources.
+pub(crate) fn profile_load_injected_started() {
+    attempt(OPERATION_PROFILE_LOAD, SOURCE_INJECTED);
+}
+
+/// Record the terminal outcome of an injected profile-aware generated load.
+pub(crate) fn profile_load_injected_finished<T>(result: &OrthoResult<T>) {
+    result_outcome(OPERATION_PROFILE_LOAD, SOURCE_INJECTED, result);
 }
 
 /// Record the start of a source-aware subcommand load.

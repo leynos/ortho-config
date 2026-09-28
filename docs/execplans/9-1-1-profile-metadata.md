@@ -1142,6 +1142,39 @@ Progress entries from milestone 1 onward must carry timestamps.
       keeps both generators and both cases rather than choosing a side; the
       profile case additionally had to adopt `main`'s new leading
       `package_name` parameter.
+- Observation (2026-09-28, review round): the four pre-merge findings on
+      PR #537 divide into three coverage gaps and one contract gap, and the
+      ordering matters. Evidence: findings 1 and 3 are unasserted renderer and
+      precedence paths; finding 2 is the profile-aware load reporting a
+      selection it never returns; finding 4 is the opted-in `load_from_iter`
+      resolving a profile without emitting the `profile_load` telemetry
+      boundary. Impact: findings 2 and 4 were implemented first so the source
+      label and the re-derived metrics counts were settled once rather than
+      twice — finding 4's new entry point adds an injected `profile_load`
+      boundary and an injected `csv_env` boundary, both of which the metrics
+      table and the `find_event` single-match helper observe. The new
+      `profile_load_injected_*` hooks reuse the existing `SOURCE_INJECTED`
+      constant, so the closed telemetry vocabulary gained no new label.
+- Observation (2026-09-28, verification): the new
+      `source_aware_profile_load_reports_the_injected_selection` test was
+      proven decisive by mutation rather than assumed. Evidence: reverting the
+      selection thread to the `.0` projection produced a compile-time E0308
+      (the discard is unrepresentable given the tuple return type), so a
+      second, type-correct mutation — destructuring the pair and returning
+      `Vec::new()` — was applied instead; it failed only the new test, with
+      `expected exactly one selected profile, got []`, while the other three
+      cases in the file stayed green. Impact: the selection assertion is an
+      oracle, not a tautology, and the tuple return type already prevents the
+      original defect from recurring in its exact shape.
+- Observation (2026-09-28, environment): a pre-existing doctest failure
+      sits in `ortho_config/src/cargo/mod.rs` at the `cargo::external_subcommand`
+      example (`line 90`), untouched by this branch. Evidence:
+      `git diff origin/main HEAD -- ortho_config/src/cargo/mod.rs` is empty and
+      `origin/main` carries the identical defect; the doctest's `Arg` lacks an
+      `ArgAction`, so the example's flag assertion cannot hold. Impact: none
+      for this PR's gates — `make test` drives `cargo test --all-targets`,
+      which excludes doctests, so no commit gateway covers it. Recorded as an
+      environment finding; the fix belongs to a separate change.
 
 ## Decision log
 

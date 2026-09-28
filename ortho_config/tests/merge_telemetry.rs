@@ -234,6 +234,64 @@ fn profile_load_reports_success_and_failure() {
     assert_bounded_and_redacted(&failure_events);
 }
 
+/// An opted-in struct resolves a profile on the ordinary `load_from_iter`
+/// boundary too, so that boundary must report the same bounded events.
+///
+/// This is a separate case because `find_event` requires exactly one match: a
+/// second `profile_load`/`process`/`success` event in the capture above would
+/// make that helper panic rather than assert.
+#[test]
+fn ordinary_profile_enabled_load_reports_the_profile_operation() {
+    let success_events = capture(|| {
+        let result = <ProfileTelemetryConfig as OrthoConfig>::load_from_iter(["telemetry"]);
+        assert!(
+            result.is_ok(),
+            "ordinary profile-enabled load should succeed: {result:?}"
+        );
+    });
+    let success = find_event(&success_events, "profile_load", "process", "success");
+    assert_eq!(success.field("category"), "none");
+    assert_bounded_and_redacted(&success_events);
+
+    // An unknown profile fails selection on the ordinary boundary as well.
+    let failure_events = capture(|| {
+        let result = <ProfileTelemetryConfig as OrthoConfig>::load_from_iter([
+            "telemetry",
+            "--profile",
+            "nope",
+        ]);
+        assert!(
+            result.is_err(),
+            "an unknown profile must fail the ordinary load"
+        );
+    });
+    let failure = find_event(&failure_events, "profile_load", "process", "failure");
+    assert_eq!(failure.field("category"), "profile");
+    assert_bounded_and_redacted(&failure_events);
+}
+
+/// The injected profile entry point reports its own source label, and reports
+/// the selection it read from the injected source rather than the process.
+#[test]
+fn injected_profile_load_reports_the_injected_source() {
+    let events = capture(|| {
+        let source = Arc::new(MapEnv::new().with_var("MERGE_TELEMETRY_JOBS", "7"));
+        let discovery: SharedEnvSource = source.clone();
+        let merge: SharedScanEnvSource = source;
+        let result = ProfileTelemetryConfig::load_with_profile_from_iter_with_sources(
+            ["telemetry"],
+            discovery,
+            merge,
+        );
+        let outcome = result.expect("injected profile load should succeed");
+        assert!(outcome.selection().is_empty(), "no profile was selected");
+        assert_eq!(outcome.config().jobs, 7, "the injected value must win");
+    });
+    let success = find_event(&events, "profile_load", "injected", "success");
+    assert_eq!(success.field("category"), "none");
+    assert_bounded_and_redacted(&events);
+}
+
 #[test]
 fn source_aware_subcommand_load_reports_success_and_failure() {
     let success_events = capture(|| {
@@ -338,6 +396,21 @@ mod metrics_tests {
                 "telemetry",
             ]));
 
+            // The ordinary boundary resolves a profile too, so it counts
+            // separately from the reporting entry point above.
+            drop(ProfileTelemetryConfig::load_from_iter(["telemetry"]));
+
+            let profile_source = Arc::new(MapEnv::new().with_var("MERGE_TELEMETRY_JOBS", "7"));
+            let profile_discovery: SharedEnvSource = profile_source.clone();
+            let profile_merge: SharedScanEnvSource = profile_source;
+            drop(
+                ProfileTelemetryConfig::load_with_profile_from_iter_with_sources(
+                    ["telemetry"],
+                    profile_discovery,
+                    profile_merge,
+                ),
+            );
+
             let subcommand_source =
                 Arc::new(MapEnv::new().with_var("MERGE_CMDS_TELEMETRY_JOBS", "7"));
             drop(load_and_merge_subcommand_with_sources(
@@ -418,18 +491,24 @@ mod metrics_tests {
     #[test]
     fn merge_operations_emit_bounded_counters() {
         let entries = recorded_merge_counters();
+        // The injected profile load builds its environment provider from the
+        // injected merge source, so it adds one successful `csv_env` boundary
+        // on top of the three explicit `CsvEnv` calls below.
         assert_operation_counters(
             &entries,
             "injected",
             &[
-                ("csv_env", 3, 4),
+                ("csv_env", 4, 5),
                 ("derived_load", 1, 1),
+                ("profile_load", 1, 1),
                 ("subcommand_load", 1, 1),
             ],
         );
-        // The profile-aware entry points take no injected source, so their
-        // boundary is labelled `process` rather than `injected`.
-        assert_operation_counters(&entries, "process", &[("profile_load", 1, 1)]);
+        // The process-backed profile entry points take no injected source, so
+        // their boundary is labelled `process` rather than `injected`. Both
+        // the reporting entry point and the ordinary load resolve a profile,
+        // so each counts one attempt and one success here.
+        assert_operation_counters(&entries, "process", &[("profile_load", 2, 2)]);
         assert_opaque_transform_failure(&entries);
     }
 }
