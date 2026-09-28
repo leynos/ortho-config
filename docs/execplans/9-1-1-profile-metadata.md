@@ -906,6 +906,54 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       its complement. That both removes the redundancy and brings the module to
       391 lines. Confirmed by running Whitaker directly (exit 0) before
       re-gating.
+- [x] (2026-09-28) Re-gated `795c5810` and published it. The four gates ran
+      sequentially against a frozen HEAD with a clean tree:
+      `make check-fmt` exit 0 (both halves — `cargo fmt` and `mdtablefix`);
+      `make test` exit 0 (1416 passed, 0 failed, 15 ignored, plus 87 Python
+      passed / 5 skipped); `make typecheck` exit 0; `make lint` exit 0 with
+      **both** `lint-clippy` and `lint-whitaker` executing. This is the first
+      run on this branch in which the gate was not short-circuited before
+      Whitaker, so it is also the first independent confirmation that the
+      module-cap repair holds at the gated revision. The new parameterized
+      cases report as `selected_body_flows_through_to_merge_unfiltered` with
+      case suffixes `case_1_unknown_key_is_preserved` and
+      `case_2_empty_body_is_a_noop`, both `ok`; the two functions they replaced
+      are absent. The total is unchanged at 1416, which is exact rather than
+      coincidental: two `#[test]` functions left and one `#[rstest]` function
+      carrying two cases entered, so the net delta is zero.
+      `tests_extraction.rs` is 374 lines. The push to
+      `9-1-1-profile-metadata-fresh` landed as a
+      **fast-forward** (`a2ec36c5..795c5810`, two dots, no `+`): the lease was
+      bound to the live `a2ec36c5` after verifying with `git ls-remote` that it
+      was still the remote head, and `795c5810` is its direct child, so no
+      forced update was required. PR #537 now reports `headRefOid` `795c5810`.
+      Replied to the CodeScene Code Duplication comment (4121760153) as
+      `leynos` (reply 4121885142).
+- [x] (2026-09-28) Grounded all four pre-merge findings against live code
+      rather than the walkthrough's paraphrase. All four **confirm**:
+      (1) *Testing (Overall)* — `cargo-orthohelp/src/powershell/about.rs` has
+      no test module at all, so the `SourceKind::Profile => "Profile"` arm at
+      :86 is unasserted; `roff/sections_tests.rs:62-83` is the precedent to
+      mirror. The explicit `precedence(order = [...])` spellings `profile` and
+      `profiles` (mapped at `sections.rs:213`) are likewise unexercised —
+      `docs_ir.rs:24` is the only explicit order and carries no profile tier.
+      (2) *Unit Architecture* — no source-aware profile load exists;
+      `build_source_aware_compose_layers_impl` already builds the
+      `(composition, selection)` tuple and then discards the selection with a
+      `.0` projection (`source.rs:50`), and `build_profile_selection` already
+      accepts an injected source, so the injection boundary is half-built
+      rather than absent. (3) *Developer Documentation* —
+      `docs/developers-guide.md` has no profile implementation section; all 15
+      `profile` hits concern agent-context schema, test scoping, or telemetry
+      vocabulary. (4) *Observability* — the ordinary profile-enabled
+      `load_from_iter` calls `compose_layers_with_selection_from_iter` and
+      discards the selection with no telemetry, so a profile failure through
+      the ordinary API emits no `profile_load` event.
+      Ordering constraint recorded: findings 2 and 4 share the same boundaries
+      and telemetry vocabulary, and the metrics test asserts
+      `("profile_load", 1, 1)` under `process` (`merge_telemetry.rs:444`).
+      Implementing 2 first means the source label and the re-derived counts are
+      settled once, rather than twice.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
