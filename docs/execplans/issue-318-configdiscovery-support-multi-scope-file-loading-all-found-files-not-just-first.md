@@ -709,6 +709,27 @@ not in parsing — which makes them **pure functions** testable directly in a
 parse-stage errors do have an established test idiom in
 `parse/tests/ortho_attrs.rs`.
 
+### The two documentation findings, verified and repaired
+
+Both are real, both are on this plan rather than on code, and both are
+confirmed against the file rather than against the comment's own anchor.
+
+- **The method's owner (line 266).** The claim is true and the repair is the
+  proposed one. The name it replaces, `ScopeOutcome`, exists **nowhere in the
+  repository** — `git grep` over all tracked files returns nothing, so the plan
+  cited a type that was never written. The method is defined at
+  `ortho_config/src/discovery/scoped.rs:177`, inside `impl ConfigDiscovery`
+  (`scoped.rs:44`), so the reviewer's proposed owner is the correct one and the
+  line now reads `ConfigDiscovery::scope_candidates`.
+- **The second-person pronoun (line 913).** Also true, and also verbatim. The
+  sentence was a probe-guidance bullet reading "A probe that contradicts *your
+  fix* may be reporting the fix…"; it now reads "the fix". The bullet's meaning
+  is unchanged, which is the test that the repair is minimal rather than a
+  rewrite.
+
+Neither finding needed a code change, and neither contradicts anything else in
+the plan, so both were applied as stated.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
