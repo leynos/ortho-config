@@ -292,6 +292,43 @@ def test_a_nested_trybuild_call_is_still_found_through_the_walk(
     assert non_trybuild_binaries(root) == frozenset()
 
 
+def test_a_declared_target_outside_tests_is_read_without_a_tests_directory(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The declared-target read is not gated on the directory cargo scans.
+
+    A ``[[test]]`` target carries its own ``path``, which cargo permits
+    anywhere in the crate, so a crate with no ``tests/`` directory at all
+    can still declare a binary. Gating the manifest read on that directory
+    — as the walk below it is gated — dropped such a target from the
+    inventory in silence, and a binary absent from the inventory is one
+    the coverage assertion never asks about. That is the false negative
+    the class exists to catch, so the two guards are separated here: the
+    directory gates discovery, and only discovery.
+
+    The binary carries a trybuild call, so the assertion is about the
+    class rather than the inventory: a reading that found the target but
+    dropped it from the class would satisfy neither set.
+    """
+    crate = tmp_path / "ortho_config"
+    crate.mkdir()
+    source = crate / "spec" / "outside.rs"
+    source.parent.mkdir()
+    source.write_text("fn c() { trybuild::TestCases::new(); }\n", encoding="utf-8")
+    (crate / "Cargo.toml").write_text(
+        '[package]\nname = "ortho_config"\n\n'
+        '[[test]]\nname = "outside_the_directory"\npath = "spec/outside.rs"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "cargo-orthohelp").mkdir()
+    assert not (crate / "tests").exists(), (
+        "this case is about the directory being absent, and would pass "
+        "through the walk if it were there"
+    )
+    assert trybuild_binaries(tmp_path) == frozenset({"outside_the_directory"})
+    assert non_trybuild_binaries(tmp_path) == frozenset()
+
+
 @pytest.mark.skipif(
     DENIED_LISTING_IS_UNOBSERVABLE,
     reason="a directory mode denies a listing on neither Windows nor as root",

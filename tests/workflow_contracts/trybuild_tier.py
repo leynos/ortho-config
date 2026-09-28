@@ -125,6 +125,13 @@ def _crate_test_binaries(base: Path, crate: str) -> dict[str, bool]:
     the equality check: over-selection is only visible against the
     binaries the check is given.
 
+    The crate's ``tests/`` directory gates the walk that discovers
+    undeclared binaries, not the reading of declared ones. Cargo scans
+    that directory to find a top-level ``tests/*.rs`` file, but a
+    ``[[test]]`` target carries its own ``path``, which may sit anywhere
+    in the crate; guarding both on the directory dropped a declared
+    target from the inventory whenever the directory was absent.
+
     Split from the two readers below because the walk has two guards at
     different depths — the crate's ``tests/`` may be absent, and a binary
     may be unreachable — and both belong to the crate's turn rather than
@@ -145,30 +152,43 @@ def _crate_test_binaries(base: Path, crate: str) -> dict[str, bool]:
 
     Examples
     --------
-    A crate with no ``tests/`` directory has no test binaries:
+    A crate that is not there has no test binaries:
 
     >>> _crate_test_binaries(Path("/nonexistent"), "ortho_config")
     {}
     """
-    tests = base / crate / "tests"
-    if not scan(tests, tests.is_dir):
-        return {}
-    manifest = scan(
-        base / crate / "Cargo.toml",
-        (base / crate / "Cargo.toml").read_text,
-        encoding="utf-8",
+    # The manifest is read whether or not the crate has a ``tests/``
+    # directory, because that directory governs cargo's *directory scan*
+    # and nothing else: a ``[[test]]`` target may name a path anywhere in
+    # the crate, so a crate with no ``tests/`` at all can still declare
+    # one. Guarding this read on that directory dropped such a target from
+    # the inventory, and a binary missing from the inventory is one the
+    # coverage assertion never asks about. A manifest that is merely
+    # absent is an answer -- the crate declares no targets -- while every
+    # other failure is still a refusal naming the path.
+    manifest_path = base / crate / "Cargo.toml"
+    declared = (
+        declared_test_targets(
+            scan(manifest_path, manifest_path.read_text, encoding="utf-8")
+        )
+        if scan(manifest_path, manifest_path.is_file)
+        else {}
     )
-    declared = declared_test_targets(manifest)
     # A declared path is enumerated once, as its target; listing it as well
     # would offer the same binary under its stem and its declared name. It
     # is listed rather than globbed because `glob` passes over a directory
     # it cannot open in silence, the very miss this module now refuses.
-    roots: list[tuple[str, Path]] = [
-        (source.stem, source)
-        for source in scan(tests, listing(tests))
-        if source.name.endswith(".rs")
-        and source.relative_to(base / crate).as_posix() not in declared
-    ]
+    tests = base / crate / "tests"
+    roots: list[tuple[str, Path]] = (
+        [
+            (source.stem, source)
+            for source in scan(tests, listing(tests))
+            if source.name.endswith(".rs")
+            and source.relative_to(base / crate).as_posix() not in declared
+        ]
+        if scan(tests, tests.is_dir)
+        else []
+    )
     roots.extend((name, base / crate / path) for path, name in sorted(declared.items()))
     return {
         name: _carries_trybuild(source)
