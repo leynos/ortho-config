@@ -1110,6 +1110,64 @@ only the scan guard, the spellings, and the anchor. Small, focused commits are
 what `AGENTS.md:65` asks for and what makes a failure like this attributable to
 one change rather than to sixteen.
 
+### Round 11: the fix cleared one CI error and exposed the one behind it
+
+The bound widening worked, and CI went red on a *different* error that the
+first had been hiding. `build-test` failed on both legs at the `Lint` step with
+`function write_config is never used` at
+`ortho_config/tests/support/scoped_fixtures.rs:56`, reported against the
+`scoped_stacking_proptest` binary. Reading only the failing step's first error
+would have suggested the fix had not worked; the two errors are unrelated and
+the second could not surface until the first was gone.
+
+**The cause is `#[path]` inclusion, not a stray definition.** Four test
+binaries include `support/scoped_fixtures.rs` through `#[path]`, and each
+compiles it as its own module. `write_config` is called by `scoped_layers`,
+`scoped_stacking` and `policy_sources`, but not by `scoped_stacking_proptest` —
+which writes bodies carrying an extra unique key, so it needs `write_body` and
+cannot use `write_config` at all. In that one binary the function is dead, and
+CI's `-D warnings` promotes the warning to an error. A grep for an `allow`/
+`expect` on any support module returns nothing, which is why the obvious
+reading — "the repo suppresses this somewhere" — is wrong; the suppression is
+per-includer and there was none on this one.
+
+**The attribution is exact, and it is again mine.** `git log` on
+`scoped_stacking_proptest.rs` shows a single commit, `905f55f1`, the rebased
+form of `51e2e974`. The suite did not exist at `9e9ecc37`, which is precisely
+why that head ran green: this defect arrived with the same oversized commit as
+the E0597, and one error masked the other. Two defects, one commit, and the
+commit's message named neither.
+
+**The repair follows a precedent already on `main`.** `merge_telemetry.rs` and
+`subcommand_paths_telemetry.rs` both carry `#[expect(dead_code, reason = ...)]`
+over their include of `tracing_capture.rs`, whose `write_fixture` helpers are
+unused by two of that module's three includers — the same shape exactly. The
+attribute goes on the includer that does not use everything, never on the
+shared file: on the shared file it would be unfulfilled in the other three
+binaries, and an unfulfilled `#[expect]` is itself an error. `#[expect]` rather
+than `#[allow]` for the same reason — it fails loudly if the last user goes
+away.
+
+Two mechanical constraints shaped the final form, and both were measured rather
+than guessed. rustfmt's `fn_call_width` of 60 governs the attribute's
+*arguments*, so a reason long enough to read well is reflowed onto four lines;
+the four-line form took the file to 401 against `AGENTS.md:33`'s 400-line cap.
+The accepted reason is short enough to stay on one line, which lands the file at
+
+1. My first three attempts — a 97-character reason, a shorter one, and then
+one short enough to fit the arguments — each failed `cargo fmt --check` until
+the width that actually applied was identified.
+
+**Nothing here was locally proven, and that is stated rather than glossed.**
+The package-cache lock was still held by the foreign process throughout (74
+queued readers, up from 69), and even an offline
+`cargo check --offline --locked` of the single test binary blocked on the same
+lock, so no local compiler ever saw this change. CI is the gate of record for
+it, and the reasoning for the fix is static: `scoped_fixtures.rs` exposes
+exactly two public functions, the suite imports one and references the other
+nowhere but the `reason` string, so the `#[expect]` is fulfilled by exactly one
+diagnostic.
+
 ## Design decision: same-scope precedence
 
 The candidate list within a scope is a **preference order**: index 0 is what
