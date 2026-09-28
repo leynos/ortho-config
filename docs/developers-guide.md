@@ -1606,7 +1606,7 @@ let a dispatch aimed at another branch, if one were ever allowed, displace a
 pending main run and then skip its upload on the ref guard. A group keyed on
 the event as well would let an older run upload after a newer one.
 
-**The token reaches the upload as an input, and no environment holds it.** A
+**The token reaches the upload as an input, and no `env` block holds it.** A
 `codescene-token` step with no `if:` and no `env` runs exactly
 `echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`.
 The expression is evaluated before the shell starts, so the step writes `true`
@@ -1619,6 +1619,24 @@ on a step-level binding, also passed with the binding deleted, after which the
 upload would skip forever. The contract therefore asserts the check step and
 its command positively, and names each of those failures in
 `codescene_publisher_test.py`.
+
+**The upload job runs in the `codescene` environment.** `coverage-upload`
+declares `environment: codescene`, whose deployment policy admits `main` alone.
+The token belongs there, but moving it is a pending owner step: until it moves,
+`CS_ACCESS_TOKEN` is a repository secret, and the pull-request clauses above,
+not the environment, keep it out of what a pull request can start. Once it
+moves, branch code cannot be given the token whatever a workflow says. The
+publisher declares no `workflow_dispatch`, so no dispatch is refused today; one
+added later and aimed at a branch would be refused for the whole job.
+`codescene_environment_test.py` holds the placement through
+`codescene_environment.py`: every job invoking the uploader declares the
+environment, no other job does, and no job a pull request can reach does. Names
+are compared without case, as GitHub compares them, and a name computed by an
+expression is refused because its placement cannot be proved. The pull-request
+surface there is wider than the closure below: it also seeds from review and
+comment events, the merge queue, `workflow_run` chains and pushes not confined
+to `main` or to tags, and it follows `$/` calls as well as `./`, because an
+environment declaration is safe only where no branch can start the job.
 
 **No checksum input.** `installer-checksum` is rejected outright when non-empty
 from the pinned uploader, and `archive-checksum` is not a rename of it: it
