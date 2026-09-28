@@ -1162,11 +1162,12 @@ Two mechanical constraints shaped the final form, and both were measured rather
 than guessed. rustfmt's `fn_call_width` of 60 governs the attribute's
 *arguments*, so a reason long enough to read well is reflowed onto four lines;
 the four-line form took the file to 401 against `AGENTS.md:33`'s 400-line cap.
-The accepted reason is short enough to stay on one line, which lands the file at
-
-1. My first three attempts — a 97-character reason, a shorter one, and then
-one short enough to fit the arguments — each failed `cargo fmt --check` until
-the width that actually applied was identified.
+The accepted reason is short enough to stay on one line, which lands
+`scoped_stacking_proptest.rs` at 398 lines — the count verified by `wc -l` on
+the current tree. Three attempts at the attribute came first — a 97-character
+reason, a shorter one, and then one short enough to fit the arguments — and
+each failed `cargo fmt --check` until the width that actually applied was
+identified.
 
 **Nothing here was locally proven, and that is stated rather than glossed.**
 The package-cache lock was still held by the foreign process throughout (74
