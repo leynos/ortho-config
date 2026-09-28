@@ -61,6 +61,15 @@ impl Harness {
                     result.stdout
                 );
             }
+            Expect::StdoutDoesNotContain(unexpected) => {
+                let stdout = strip_isolates(&result.stdout);
+                let unexpected_text = strip_isolates(unexpected);
+                ensure!(
+                    !stdout.contains(&unexpected_text),
+                    "stdout unexpectedly contained {unexpected_text:?}; {context}; stdout was: {:?}",
+                    result.stdout
+                );
+            }
             Expect::StderrContains(expected) => {
                 let stderr = strip_isolates(&result.stderr);
                 let expected_text = strip_isolates(expected);
@@ -88,6 +97,14 @@ impl Harness {
     {
         let expected_ref = expected.as_ref();
         self.assert_outcome(Expect::StdoutContains(expected_ref))
+    }
+
+    pub(crate) fn assert_stdout_does_not_contain<S>(&mut self, unexpected: S) -> Result<()>
+    where
+        S: AsRef<str>,
+    {
+        let unexpected_ref = unexpected.as_ref();
+        self.assert_outcome(Expect::StdoutDoesNotContain(unexpected_ref))
     }
 
     pub(crate) fn assert_stderr_contains<S>(&mut self, expected: S) -> Result<()>

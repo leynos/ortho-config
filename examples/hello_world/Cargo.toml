@@ -45,3 +45,7 @@ serde_json = ["ortho_config/serde_json"]
 json5 = ["ortho_config/json5"]
 yaml = ["ortho_config/yaml"]
 toml = ["ortho_config/toml"]
+
+[[test]]
+name = "rstest_bdd"
+path = "tests/rstest_bdd/mod.rs"

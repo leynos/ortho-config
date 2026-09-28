@@ -25,8 +25,9 @@ impl Harness {
     }
 
     pub(crate) fn write_xdg_config_home(&mut self, contents: &str) -> Result<()> {
-        let base_path = self.workdir.path().join("xdg-config");
-        let work_dir = Dir::open_ambient_dir(self.workdir.path(), ambient_authority())
+        let scenario_path = self.workdir()?.path().to_path_buf();
+        let base_path = scenario_path.join("xdg-config");
+        let work_dir = Dir::open_ambient_dir(&scenario_path, ambient_authority())
             .context("open hello_world workdir for XDG setup")?;
         work_dir
             .create_dir_all("xdg-config/hello_world")

@@ -13,7 +13,7 @@ mod process;
 mod samples;
 
 #[cfg(test)]
-mod tests;
+mod sample_tests;
 
 pub(crate) use super::config;
 pub(crate) use super::config::SampleConfigError;
@@ -24,17 +24,18 @@ use camino::Utf8PathBuf;
 use cap_std::fs::Dir;
 use hello_world::cli::GlobalArgs;
 use std::borrow::Cow;
+use std::cell::{Ref, RefCell};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tempfile::TempDir;
 
 /// Shared state threaded through behavioural steps.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Harness {
     /// Result captured after invoking the binary.
     result: Option<CommandResult>,
     /// Temporary working directory isolated per scenario.
-    workdir: TempDir,
+    workdir: RefCell<Option<TempDir>>,
     /// Environment variables to inject when running the binary.
     env: BTreeMap<String, String>,
     /// Declaratively composed globals used by behavioural tests.
@@ -50,20 +51,15 @@ pub(crate) enum Expect<'a> {
     Success,
     Failure,
     StdoutContains(&'a str),
+    StdoutDoesNotContain(&'a str),
     StderrContains(&'a str),
 }
 
 impl Harness {
     pub(crate) fn new() -> Result<Self> {
-        let workdir = TempDir::new().context("create hello_world workdir")?;
-        Ok(Self {
-            result: None,
-            workdir,
-            env: BTreeMap::new(),
-            declarative_globals: None,
-            binary_override: None,
-            timeout_override: None,
-        })
+        let harness = Self::default();
+        harness.workdir()?;
+        Ok(harness)
     }
 
     #[cfg(test)]
@@ -72,7 +68,17 @@ impl Harness {
     }
 
     fn scenario_dir(&self) -> std::io::Result<Dir> {
-        Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
+        let workdir = self.workdir().map_err(std::io::Error::other)?;
+        Dir::open_ambient_dir(workdir.path(), cap_std::ambient_authority())
+    }
+
+    fn workdir(&self) -> Result<Ref<'_, TempDir>> {
+        if self.workdir.borrow().is_none() {
+            let workdir = TempDir::new().context("create hello_world workdir")?;
+            *self.workdir.borrow_mut() = Some(workdir);
+        }
+        Ref::filter_map(self.workdir.borrow(), Option::as_ref)
+            .map_err(|_| anyhow::anyhow!("hello_world workdir was not initialized"))
     }
 
     pub(crate) fn binary(&self) -> Utf8PathBuf {

@@ -114,6 +114,8 @@ fn extract_string_value(value: &toml::Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Covers configuration fixture parsing and filename validation.
+
     #[test]
     fn parse_extends_single_string() {
         let out = super::parse_extends(r#"extends = "base.toml""#);
