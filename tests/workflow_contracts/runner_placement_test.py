@@ -1,6 +1,6 @@
 """Contract for where ``ci.yml``'s jobs run.
 
-The Linux ``build-test`` leg runs on Ubicloud's ``ubicloud-standard-2``:
+The Linux ``build-test`` leg runs on Ubicloud's ``ubicloud-standard-4``:
 on GitHub-hosted runners its queue wait reached 29 minutes against a
 27-minute wall. A fork's pull request cannot obtain an Ubicloud runner,
 so that leg falls back to ``ubuntu-latest`` for forks. The Windows leg
@@ -37,8 +37,15 @@ FORK_ARM: typ.Final[str] = "matrix.fork-runner"
 OWNED_ARM: typ.Final[str] = "matrix.runner"
 
 #: Each build-test leg, exactly: its runner and its fork's runner.
+#: The Linux size is a measured decision, sized for disk rather than wall
+#: time. On ``ubicloud-standard-2`` the leg ran out of disk in both runs
+#: (36308332712 and 36354295154); the second fell to 791 MB free during the
+#: first coverage pass. Naming the label here means a change of size has to
+#: change this contract, not just the workflow.
+LINUX_RUNNER: typ.Final[str] = "ubicloud-standard-4"
+
 BUILD_TEST_LEGS: typ.Final[dict[str, dict[str, str]]] = {
-    "linux": {"runner": "ubicloud-standard-2", "fork-runner": "ubuntu-latest"},
+    "linux": {"runner": LINUX_RUNNER, "fork-runner": "ubuntu-latest"},
     "windows": {"runner": "windows-latest", "fork-runner": "windows-latest"},
 }
 
@@ -100,7 +107,7 @@ def test_the_fork_fallback_is_read_by_position(ci: WorkflowDocument) -> None:
 
 
 def test_each_build_test_leg_runs_where_it_was_measured(ci: WorkflowDocument) -> None:
-    """Linux on standard-2 with a hosted fork arm; Windows hosted on both arms."""
+    """Linux on standard-4 with a hosted fork arm; Windows hosted on both arms."""
     legs = _legs(_build_test(ci))
     assert set(legs) == set(BUILD_TEST_LEGS), f"build-test's legs are {sorted(legs)}"
     for platform, expected in BUILD_TEST_LEGS.items():
@@ -177,7 +184,7 @@ def test_packaging_stays_hosted(ci: WorkflowDocument) -> None:
     )
 
 
-#: The discard that keeps coverage inside ``ubicloud-standard-2``'s disk.
+#: The discard that clears the lint trees before coverage on Linux.
 DISCARD_COMMAND: typ.Final[str] = "python3 scripts/discard_build_trees.py target debug doc dylint"
 LINUX_ONLY: typ.Final[str] = "${{ matrix.platform == 'linux' }}"
 

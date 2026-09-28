@@ -24,6 +24,10 @@ jobs:
     # 29 min (median 10 min) over the last ten runs, against a 27 min
     # median wall. A fork's pull request cannot obtain an Ubicloud runner,
     # so it falls back to the hosted label. Windows stays hosted.
+    # The Linux leg is sized for disk, not for wall time: on
+    # ubicloud-standard-2 it ran out of disk in both runs (36308332712 and
+    # 36354295154). The second run started lint with 6,869 MB free and fell
+    # to 791 MB during the first coverage pass, even after the discard below.
     # `>-` rather than `>`: a folded scalar keeps a trailing line break
     # inside the expression otherwise.
     runs-on: >-
@@ -69,7 +73,7 @@ jobs:
       matrix:
         include:
           - platform: linux
-            runner: ubicloud-standard-2
+            runner: ubicloud-standard-4
             fork-runner: ubuntu-latest
           - platform: windows
             runner: windows-latest
@@ -251,10 +255,10 @@ jobs:
         run: df -BM /
 
       - name: Discard lint build trees
-        # ubicloud-standard-2 leaves roughly 8 to 11 GB free, and the first
-        # run on it died of a full disk during coverage. Coverage builds its
-        # own tree, so rustdoc's and Clippy's output (debug, doc) and
-        # Whitaker's (dylint) go first. The registry and sccache are kept.
+        # Coverage builds its own tree, so rustdoc's and Clippy's output
+        # (debug, doc) and Whitaker's (dylint) go first, about 1 GB on run
+        # 36354295154. The registry and sccache are kept. The disk samples
+        # around it show the headroom the runner size leaves.
         if: ${{ matrix.platform == 'linux' }}
         run: python3 scripts/discard_build_trees.py target debug doc dylint
 

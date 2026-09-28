@@ -1547,12 +1547,16 @@ step, so it is outside this contract, and bounding it is separate work.
 ## Runner placement
 
 The Linux leg of `ci.yml`'s `build-test` runs on Ubicloud's
-`ubicloud-standard-2`. On GitHub-hosted runners, its queue wait over the ten
+`ubicloud-standard-4`. On GitHub-hosted runners, its queue wait over the ten
 runs before the move had a median of 10 min and reached 29 min, against a 27
 min median wall. That made it the worst hosted-queue case in the estate.
-`ubicloud-standard-2` is the estate's starting shape. A move to
-`ubicloud-standard-4` needs the measured wall on `-2` to exceed 1.5 times the
-hosted wall.
+
+The size is set for disk, not for wall time. `ubicloud-standard-2` is the
+estate's starting shape, but on it this leg ran out of disk in both measured
+runs (36308332712 and 36354295154). The second run began lint with 6,869 MB
+free. After lint 5,297 MB remained, and the discard below freed about 1 GB. The
+first coverage pass then took it down to 791 MB and failed with "No space left
+on device". `ubicloud-standard-4` offers 150 GB, against 75 GB on `-2`.
 
 A pull request from a fork cannot obtain an Ubicloud runner, so the leg falls
 back to `ubuntu-latest` for forks:
@@ -1577,17 +1581,15 @@ starts the sccache server. That step is guarded on
 proxy and the action fails closed. The Windows leg and the three packaging legs
 stay GitHub-hosted.
 
-`ubicloud-standard-2` leaves roughly 8 to 11 GB free on its image, and the
-first run on it died of a full disk during coverage. Before coverage starts,
-the Linux leg runs `scripts/discard_build_trees.py`, which removes the rustdoc
-and Clippy output (`target/debug`, `target/doc`) and Whitaker's
-(`target/dylint`), prints each tree's size, and reports a tree that was not
-there. It keeps the registry and sccache. Trybuild's child builds land under
-the coverage target directory, which trybuild takes from `cargo metadata`, so
-they cannot be redirected independently. Removing them between the two coverage
-passes would throw away the warm builds the second pass reuses. The leg prints
-`df -BM /` at each boundary: before lint, before and after the discard, and
-after each coverage pass.
+Before coverage starts, the Linux leg runs `scripts/discard_build_trees.py`,
+which removes the rustdoc and Clippy output (`target/debug`, `target/doc`) and
+Whitaker's (`target/dylint`), prints each tree's size, and reports a tree that
+was not there. It keeps the registry and sccache. Trybuild's child builds land
+under the coverage target directory, which trybuild takes from
+`cargo metadata`, so they cannot be redirected independently. Removing them
+between the two coverage passes would throw away the warm builds the second
+pass reuses. The leg prints `df -BM /` at each boundary: before lint, before
+and after the discard, and after each coverage pass.
 
 `runner_placement_test.py` holds all of this. It reads the fallback by
 position, checks each leg's runners, and checks that no fork reaches Ubicloud,
