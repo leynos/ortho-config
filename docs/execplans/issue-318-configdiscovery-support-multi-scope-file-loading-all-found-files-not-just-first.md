@@ -2317,3 +2317,110 @@ gate pass, for the reason given above: that pass is the last action taken
 against the frozen commit, and its evidence is the gate logs and the PR check
 rollup rather than any sentence here. A reader wanting the current verdict
 should read those, not this.
+
+### Round 23: three findings repaired, two rows argued, and the generator run twice
+
+A review bound to `ce16468d` raised three inline findings. All three were
+verified against the tree before any repair, and all three were valid — no
+skips this round. One turned out to be the most consequential finding of the
+whole PR, and it is worth stating why: it was reported as a Minor on a file
+already under repair, and it was silently discarding binaries from the trybuild
+coverage class on the only interpreter that ever ran the gate.
+
+**The Python 3.14 asymmetry, falsified by probe rather than by changelog.**
+`scan` was handed bound `Path.is_file`/`Path.is_dir` predicates. Since 3.14
+those answer `False` for *any* `OSError`, not only for a path that is missing.
+A probe confirmed the asymmetry directly: with a `chmod 000` parent, 3.12 raises
+`PermissionError` from `child.is_file()` and 3.14 returns `False`. The gate
+runs `uv`'s 3.14, so a `[[test]]` target behind an unsearchable directory read
+as absent and its binary left the class in silence — the exact false negative
+that `source_scan` exists to refuse, written into the module whose docstring
+claimed to prevent it. The module's own stated contract was false on the
+interpreter the gate uses, and had been since it was written.
+
+**The remedy differed from the suggestion in two ways, and both mattered.**
+Placement: the suggested helpers belonged in `trybuild_tier.py`, but the
+predicates are the guard *for* `scan`, which lives in `source_scan.py`, so the
+explanation belongs beside the contract it protects — otherwise the next caller
+is free to reintroduce the bug. Shape: a module-level `_is_file(path)` cannot
+be passed to `scan` at all, because `read(*args)` runs before the `try` block
+and a bare function name fails with a missing-argument `TypeError`; the first
+attempt did exactly that and all twelve callers failed. `bool` also has no
+channel to distinguish "returned `False`" from "raised", so `exists(path)` is a
+**factory** returning a zero-argument callable, mirroring the existing
+`listing(directory)` pattern.
+
+**Non-vacuity was proven, not assumed.** The new regression test was checked by
+reverting the four predicates to bare `is_file`/`is_dir`: it then failed with
+`DID NOT RAISE ScanError`. The files were backed up with `cp` before the
+mutation probe and restored by `diff` against that copy — never by
+`git checkout --`, which reverts to the index and would have destroyed the
+unstaged repair.
+
+**The typing finding was taken on its merits, not because it was gated.** The
+finding quoted Ruff ANN401 warnings as support. There is no `ruff.toml`, no
+`[tool.ruff]` in `pyproject.toml`, and no ruff target in the `Makefile`, so
+ANN401 cannot fail CI — confirmed rather than asserted, and CodeRabbit now
+records the same as a learning. The change was still made: `scan` erased its
+read's type to `Any`, and its four reads return three different types, so the
+contract was discarded at exactly the boundary the module polices. A
+`ParamSpec` /`TypeVar` pair now preserves both ends. `basedpyright` under the
+Makefile's pinned deviation introduced no new diagnostics.
+
+**A reply was corrected within minutes of being posted.** The first version of
+the doc-style reply asserted that `make check-fmt` and `make markdownlint` were
+both green. `make fmt` does run markdownlint-cli2, but not the fail-fast
+`spellcheck` half, which was still running under the gate pass. The reply was
+patched to claim only the three things actually verified and to say the fourth
+was pending. Re-reading an outbound claim before it is relied upon is cheap;
+the alternative is a public record that overstates its evidence.
+
+**Both open pre-merge rows were argued rather than re-filed.**
+`Unit Architecture` was refuted on its premise by reading the *base* tree
+directly: at `0c498068` the `compose_layers(&self)` method already called
+`walk_candidates(…, Self::chain_layers)`, which reaches `read_file_to_string` at
+`file/loader.rs:192`, and neither `policy.rs` nor `scoped.rs` existed there.
+The row's evidence is fact; its conclusion — that this PR introduces a
+query-like API with hidden side effects — does not follow. The requested
+"narrow injectable file-loading dependency" has no seam to attach to: all 18
+traits declared in the crate were enumerated and none is a file loader, and the
+nearest candidate is an internal dispatch helper rather than a caller-supplied
+dependency. The purity half is a genuine design question and is recorded as
+one, with the alternative on the record if the maintainer prefers it.
+
+`Testing (Compile-Time / Ui)` was **half right, and the half that was wrong
+mattered.** The row claimed the PR "adds no trybuild or equivalent downstream
+compilation tests". It does: `discovery_attributes.rs:38-68` derives
+`OrthoConfig` with valid `automatic_mode`/`scope_order` and `explicit_mode`
+blocks, and `policy_sources.rs:47,88` add more. What is genuinely missing is a
+`.stderr` snapshot pinning the rendered form of the derive-time discovery
+diagnostics — the five rejection unit tests call the validators *directly* and
+assert message text with `==`, so none exercises the `to_compile_error()` hop.
+That is a snapshot of text already asserted, not an untested mechanism, and it
+is declined for this commit with the reasoning recorded rather than the ask
+dismissed. If it is wanted later, `compile_fail.rs:11` globs `tests/ui/*.rs`,
+so new fixtures are self-registering — but a fixture without a committed
+`.stderr` does not skip, it fails and writes a `wip/` directory, so the
+snapshot must be emitted by the compiler itself.
+
+**The generator was run twice before it was committed.** `make markdownlint`
+regenerates the tracked `typos.toml` from the shared dictionary, leaving the
+tree dirty and the trunk unsettled. The gate had already done this once for
+this branch, and a prior session had *reverted* it three times on the authority
+of a plan that recorded reverting as the decision. Reverting loops: the next
+gate run rewrites it. The memory's rule was followed instead — confirm the
+regeneration is a fixed point (`make spellcheck` twice, identical
+`git hash-object` both times), confirm the delta is a pattern swap and nothing
+dropped, and commit that exact revision. That makes the gate's own input
+stable: the re-run on the new head reports `current: typos.toml` rather than
+`refreshed:`, which is what "fixed point" looks like from outside.
+
+**A gate certificate was re-bound to the new head rather than carried over.**
+`fa7f5b57` was certified green on four gates with the candidate unmoved across
+every reading. Committing `typos.toml` after that moved HEAD, so the
+certificate was re-established rather than transferred: the delta reaches only
+`spellcheck`, which reads the file directly, so `make markdownlint` was run
+again on `cf84c96f` and passed with the tree clean before and after.
+`cargo fmt`, `mdtablefix --check` and the contracts suite do not read
+`typos.toml`, so their results transfer on content identity — stated as a
+transfer, with the empty diff as evidence, rather than implied as a fresh pass.
