@@ -1722,3 +1722,41 @@ as tested when it is not. Wiring it in looks cheap — one added identifier to
 local Cargo gates have been unable to run since 2026-09-28 01:00Z. It is
 recorded here as the concrete way to close the `env_vars` gap, not claimed as
 done.
+
+### CI run `36399549939` on `bd745cfd`: all five jobs green on both legs
+
+This is the current head's certificate. The push that created it also
+**cancelled** the previous run on `2cb3470a`, whose Windows leg was mid-flight
+— so that head has no Windows result, and the green `2cb3470a` evidence cited
+elsewhere in this plan is superseded rather than reused.
+
+| Job                                   | Conclusion |
+| ------------------------------------- | ---------- |
+| `build-test (ubuntu-latest)`          | success    |
+| `build-test (windows-latest)`         | success    |
+| Packaging dry run (all three targets) | success    |
+
+The four nextest invocations all passed with **no fail-fast truncation**:
+1381/1381 and 1356/1356 on Linux, 1360/1360 and 1336/1336 on Windows, each with
+15/15/10/10 skipped. Coverage 86.55% and 86.54% on Windows, against an 86.18%
+baseline. The summaries are the clean `N tests run` form, not the
+`896/1358 tests run` truncation signature Round 12 left behind.
+
+`Lint` ran on ubuntu and `Lint (Clippy only)` on Windows; both succeeded.
+`make lint` has two prerequisites, so the ubuntu `Lint` step covers
+`cargo doc --workspace --no-deps`, the full clippy run, *and* Whitaker — the
+step's log shows `whitaker --all -- --all-targets --all-features` at line 400
+of its region and then exits success, with no dylint finding emitted before it.
+(The step's tail is the compiler's `Finished` line, so the verdict is read from
+the step's conclusion rather than from a Whitaker summary line — there is no
+such line to quote.)
+
+The round-12 repair is confirmed against this head rather than the older one:
+the obsolete `a_failing_selected_file_reports_the_mode_outcome` appears
+**zero** times in the logs, and its replacement's two cases each PASS on all
+four leg/config combinations — eight PASS records, two cases across two legs
+and two `serde_saphyr` configurations.
+
+Read the certificate with its scope: it covers `bd745cfd`, whose diff against
+the previously reviewed code is **documentation only**. It therefore
+re-validates the code and says nothing new about it.
