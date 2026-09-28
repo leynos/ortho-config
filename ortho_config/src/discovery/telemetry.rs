@@ -83,6 +83,13 @@ pub(super) const CATEGORY_OTHER: &str = "other";
 pub(super) const OPERATION_DISCOVER_FIRST: &str = "discover_first";
 /// The `compose_layers` extends-chain family.
 pub(super) const OPERATION_COMPOSE_LAYERS: &str = "compose_layers";
+/// The `ConfigFilePolicy` selector-chain family.
+pub(super) const OPERATION_POLICY_RESOLVE: &str = "policy_resolve";
+
+/// A `ConfigPathSelector` built by [`crate::ConfigPathSelector::cli`].
+pub(super) const SELECTOR_CLASS_CLI: &str = "cli";
+/// A `ConfigPathSelector` built by [`crate::ConfigPathSelector::env`].
+pub(super) const SELECTOR_CLASS_ENVIRONMENT: &str = "environment";
 
 /// A candidate loaded and the operation returned it.
 pub(super) const OUTCOME_SUCCESS: &str = "success";
@@ -156,6 +163,41 @@ pub(super) fn attempt(operation: &'static str) {
         "configuration discovery started"
     );
     count_attempt(operation);
+}
+
+/// Record which rung of a policy's selector chain resolved the file layers.
+///
+/// A policy turns on the explicit selector chain and, deliberately, bypasses
+/// the candidate machinery: no candidate list is assembled, so none of the
+/// decision events that machinery emits would otherwise fire. This event is
+/// what keeps such a run observable at all — without it, an operator who
+/// supplied an explicit path gets no evidence that discovery ran.
+///
+/// `selector_class` is drawn from the closed `SELECTOR_CLASS_*` set, and is
+/// `None` for the automatic branch, where no selector matched and the scopes
+/// supplied the layers. The field is then omitted rather than rendered empty —
+/// an absent field cannot be mistaken for a class. That omission *is* the
+/// explicit/automatic distinction, so no second field encodes the same bit.
+///
+/// The selector's own `label` and its environment variable name are both
+/// caller-supplied text, so neither can become an event field; the class is
+/// carried on the selector as a private field instead of being derived from
+/// either.
+pub(super) fn policy_resolution(selector_class: Option<&'static str>) {
+    if let Some(class) = selector_class {
+        tracing::debug!(
+            event = "discovery.policy",
+            operation = OPERATION_POLICY_RESOLVE,
+            selector_class = class,
+            "configuration file policy resolved its layers"
+        );
+    } else {
+        tracing::debug!(
+            event = "discovery.policy",
+            operation = OPERATION_POLICY_RESOLVE,
+            "configuration file policy resolved its layers"
+        );
+    }
 }
 
 /// Classify an error into the closed `CATEGORY_*` vocabulary.
@@ -253,14 +295,17 @@ pub(super) fn load_outcome(
     count_outcome(operation, outcome);
 }
 
+/// Counts one discovery attempt, labelled by `operation`.
 #[cfg(feature = "metrics")]
 fn count_attempt(operation: &'static str) {
     metrics::counter!("ortho_config.discovery.attempts", "operation" => operation).increment(1);
 }
 
+/// No-op arm of [`count_attempt`] when the `metrics` feature is off.
 #[cfg(not(feature = "metrics"))]
 const fn count_attempt(_operation: &'static str) {}
 
+/// Counts one terminal outcome, labelled by `operation` and `outcome`.
 #[cfg(feature = "metrics")]
 fn count_outcome(operation: &'static str, outcome: &'static str) {
     metrics::counter!(
@@ -271,9 +316,11 @@ fn count_outcome(operation: &'static str, outcome: &'static str) {
     .increment(1);
 }
 
+/// No-op arm of [`count_outcome`] when the `metrics` feature is off.
 #[cfg(not(feature = "metrics"))]
 const fn count_outcome(_operation: &'static str, _outcome: &'static str) {}
 
+/// Counts one rejected candidate, labelled by `operation` and failure kind.
 #[cfg(feature = "metrics")]
 fn count_candidate_failure(operation: &'static str, source: &'static str, category: &'static str) {
     metrics::counter!(
@@ -285,6 +332,7 @@ fn count_candidate_failure(operation: &'static str, source: &'static str, catego
     .increment(1);
 }
 
+/// No-op arm of [`count_candidate_failure`] when `metrics` is off.
 #[cfg(not(feature = "metrics"))]
 const fn count_candidate_failure(
     _operation: &'static str,
@@ -340,6 +388,8 @@ mod tests {
         assert_eq!(error_category(&other), CATEGORY_OTHER);
     }
 
+    /// `Captured::field` returns an empty string for a missing field, so
+    /// absence and emptiness are only distinguishable by the helper's report.
     #[test]
     fn presence_distinguishes_absent_empty_and_present() {
         assert_eq!(presence(None), PRESENCE_ABSENT);

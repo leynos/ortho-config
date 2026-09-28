@@ -166,6 +166,62 @@ surface. Totals: `test` 1347 passed / 0 failed / 15 ignored across 80 suites
 plus pytest 87 passed / 5 skipped; `test-workflow-contracts` 313 passed / 1
 skipped — one more than the previous round, which is the new helper's doctest.
 
+## The pre-merge table, re-read on `9e9ecc37`: nine rows, every one adjudicated
+
+The table was re-read live rather than from this plan. `5398461696` was last
+edited **2026-09-28T00:20:45Z** and is still bound to `9e9ecc37`, so it is the
+current surface. The heading now reads **"3 errors, 6 warnings"** — it has
+grown an error row since the earlier reading, and this section replaces the
+stale count rather than repeating it.
+
+**Why the count moved is itself the finding.** `Testing (Unit And Behavioural)`
+was a warning and is now an error. Nothing regressed: the PR only gained tests
+between the two readings. A growing severity on an unchanged-code row means the
+row is a *judgement about coverage breadth*, not a defect report, and it is
+re-evaluated against the diff each time the walkthrough is regenerated.
+
+Each row, with the evidence for its disposition:
+
+| Row                            | Sev     | Disposition                                                                                                                                                                               | Evidence                                                                                                                                        |
+| ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Testing (Overall)              | Error   | **Partially addressed** — closed for `selected_error`, `reportable_errors`, `merged_file_value`, `push_into`; the "CLI/environment selector precedence" ask is closed by the Round 6 fold | Each of the four named items has assertions at `scoped_layers.rs:271`, `:305`, `:348`, `:359`; ordered precedence at `:121`                     |
+| Testing (Unit And Behavioural) | Error   | **Partially addressed** — both bracketed and parenthesized list forms now tested, plus all four `project_root_from` failures                                                              | `discovery_validation.rs` (6 tests); valid `Option<PathBuf>` at `policy_sources.rs:90`                                                          |
+| Unit Architecture              | Error   | **Repaired**                                                                                                                                                                              | `ScanError(OSError)` at `trybuild_tier.py:64`; `os.walk(..., onerror=refuse)` at `:99`; all six named functions exist and route through `_scan` |
+| Docstring Coverage             | Warning | **Partially addressed by constraint** — see Round 7                                                                                                                                       | Delta private items 100% except two files at the 400-line cap                                                                                   |
+| User-Facing Documentation      | Warning | **Addressed** — the guide work landed at `e8adc959`; the migration-guide half is Round 8                                                                                                  | `developers-guide.md:732`; `documentation_examples_tests.rs:42`                                                                                 |
+| Developer Documentation        | Warning | **Already satisfied on this head; the walkthrough text is stale**                                                                                                                         | `developers-guide.md:732`, `:750`, `:778`, `:836` name every type the row lists                                                                 |
+| Testing (Property / Proof)     | Warning | **Addressed**                                                                                                                                                                             | `scoped_stacking_proptest.rs` is a reference-model property suite over generated candidate sets, scope orders, and canonical aliases            |
+| Testing (Compile-Time / Ui)    | Warning | **Declined, with a reason**                                                                                                                                                               | See below                                                                                                                                       |
+| Observability                  | Warning | **Addressed**                                                                                                                                                                             | `load_outcome` ends in `count_outcome` (`telemetry.rs:295`); `discovery.policy` event added; both documented                                    |
+
+### The compile-time row is the one row this branch declines
+
+The row asks for trybuild cases in the discovery-attribute vocabulary. A
+trybuild harness **does** exist — `ortho_config/tests/ui/` carries nine cases
+with committed `.stderr` fixtures, driven by six `*_trybuild.rs` suites — but
+those nine cover CLI flags and merge strategies, not discovery attributes.
+
+The ask was declined for a reason that was established before the code was
+written, and it is not a preference: **the errors this row wants to see are
+raised during token generation, not during parsing.** `mode_tokens` and
+`scope_order_tokens` are pure functions, so their rejections are tested
+directly and exhaustively in `policy_impl.rs`'s `#[cfg(test)]` module — six
+cases covering both defaults, all four legal spellings, both unknown-value
+errors, and all three scope errors. A trybuild case for any of those would
+compile the identical error message through a second, slower, more fragile
+instrument and assert strictly less: a UI fixture pins one message, while the
+unit test pins the message *and* the variant it maps to.
+
+The parse-stage errors are a different matter and a fair ask. They live in
+`discovery_validation.rs`, which is ten lines cheaper than a UI fixture for the
+same guarantee and runs without a compiler subprocess. Adding `.stderr`
+fixtures would also mean committing files that only the compiler can emit — the
+`trybuild` constraint this plan already records above.
+
+If the maintainer prefers the UI spelling for contract stability, the four
+parse cases convert directly; the token-generation cases do not, and should
+stay as unit tests.
+
 ## The pre-merge table: a review surface this plan never reconciled
 
 The subclass matters because it was found late. CodeRabbit's pre-merge table is
@@ -490,7 +546,7 @@ reproduces the hosted finding exactly before the change:
 
     warn: tests/workflow_contracts/trybuild_tier.py:91: Bumpy Road Ahead (bumps = 2)
 
-The per-crate walk moved to `_crate_trybuild_binaries(base, crate)`, whose two
+The per-crate walk moved to `_crate_test_binaries(base, crate)`, whose two
 guards — the crate may have no `tests/`, and most files there carry no trybuild
 call — now sit at the depth they belong to, with the binary-name set
 comprehension replacing the loop-and-`continue`. The finding is gone and the
@@ -729,6 +785,288 @@ confirmed against the file rather than against the comment's own anchor.
 
 Neither finding needed a code change, and neither contradicts anything else in
 the plan, so both were applied as stated.
+
+### Round 5: the `Observability` repair, and a plan note that was wrong
+
+The `Observability` row from the table above was taken as the round's real
+defect, and its repair is now in the working tree. `policy.rs` went from zero
+`telemetry::` calls to ten, `telemetry.rs` gained `OPERATION_POLICY_RESOLVE`
+(`policy_resolve`), the closed `SELECTOR_CLASS_{CLI,ENVIRONMENT}` pair, and
+`policy_resolution`, and a new support module
+`ortho_config/tests/support/policy_telemetry.rs` pins the emitted vocabulary.
+
+Three details of that repair are worth recording, because each corrects a claim
+made earlier in this plan.
+
+- **The `discovery.attempt` vocabulary is unchanged.** An earlier note in this
+  plan proposed adding `policy_resolve` to the `operation` list that
+  `docs/design.md:415` documents. That note was **wrong**: `telemetry::attempt`
+  has exactly two call sites, `load.rs:120` and `scoped.rs:90`, and neither is
+  on the policy path. Adding the value there would have documented a value the
+  event can never carry. The row as written was already correct and is left
+  alone.
+- **`discovery.load` is the event that actually gained a value.** `policy.rs`
+  calls the existing `load_outcome` with `operation = policy_resolve` and
+  `source = None`, because the policy path deliberately bypasses the candidate
+  machinery and so has no winning rung to name. Both `design.md`'s
+  `discovery.load` bullet and the developers-guide's `discovery.load` row
+  therefore needed `policy_resolve` added, and its "emitted from" cell widened
+  to name `policy`.
+- **`selector_class` is omitted, not empty.** The automatic branch emits
+  `discovery.policy` without the field at all, so an absent field cannot be
+  mistaken for a class. The test support helper renders a missing field as the
+  empty string, so the assertion at `policy_telemetry.rs:107` reads
+  `.field("selector_class") == ""` — which is the helper's convention for
+  "absent", not a claim that the event carries an empty value.
+
+**A second, unrelated blocker surfaced.** The new proptest file
+`ortho_config/tests/scoped_stacking_proptest.rs` had grown to **414 lines**
+against `AGENTS.md:33`'s hard 400-line cap. Its five-row `VOCABULARY` table had
+been written as struct literals plus a `const fn candidate(...)` constructor,
+and `rustfmt` expands each struct literal to seven lines. The fix replaces the
+`Candidate` struct and its constructor with a five-field **tuple type alias**
+`Rung = (usize, usize, i32, &'static str, bool)`, which `rustfmt` leaves on one
+line per row. Every doc comment on the old struct was moved onto the alias, so
+no documentation was dropped, and the rename also removes a collision with the
+unrelated production type `discovery::candidate_set::Candidate`. A small
+`is_alias(Rung)` helper replaced the one predicate that had read a named field;
+it takes the rung **by value**, since `trivially_copy_pass_by_ref` is a
+pedantic lint and clippy runs with `-D warnings`. The file is now 397 lines and
+`rustfmt --check` clean.
+
+### Round 6: two test gaps a wyvern adjudication turned up
+
+A read-only wyvern was given the three testing rows and the two architecture
+rows and asked to verify each claim against the current tree rather than the
+comment anchors. Its verdict on the testing rows was that almost every named
+behaviour is already covered — ordered selector precedence, the selection
+metadata (`label`, `legacy`, `path`), required and optional malformed files,
+`selected_error`, `reportable_errors`, `merged_file_value`, `push_into`, and
+`into_layers_and_errors` all have assertions — and it named **two** genuinely
+thin spots, which were then confirmed by reading the source directly:
+
+- **A list attribute's parenthesized spelling had no test.**
+  `assign_string_list` (`ortho_config_macros/src/derive/parse/mod.rs:169`)
+  reads a list two ways: the `= [...]` array, and a bare `( ... )` form with no
+  `=`. Only the array branch was exercised anywhere in the tree. The missing
+  form is now pinned by `parses_parenthesized_env_vars_and_scope_order`, and
+  the two forms really are distinct — `peek(Token![=])` is what selects the
+  branch, so writing the parenthesized list *with* an `=` would take the array
+  branch and fail to parse a `(...)` as a `syn::ExprArray`. The first draft of
+  this test had exactly that bug and was corrected before commit.
+- **A populated CLI rung had no policy-path test.** `three_rung_policy` builds
+  `ConfigPathSelector::cli(None)` and never populates it, so no test proved
+  that a CLI rung carrying a path outranks a populated environment rung on the
+  `ConfigFilePolicy` path; the equivalent assertion exists only on the legacy
+  path (`clap_integration/config_path.rs`, `#[case::cli_overrides_env]`). A
+  third scenario now sets both rungs and asserts the CLI one wins. It required a
+  `three_rung_policy_with(source, cli)` spelling, because the original
+  helper's hard-coded `None` would have made the new scenario vacuous — it
+  would have passed whether or not the chain were ordered at all.
+
+The same file-size cap bit again: adding the scenario took
+`ortho_config/tests/scoped_layers.rs` from 372 to **410** lines. Rather than
+trim assertions, the scenario was folded into the existing precedence test and
+the helper was parameterized, leaving the file at exactly **400**.
+
+The other rows were adjudicated from the source rather than from the
+walkthrough text, and two of them are **already satisfied** on this head:
+
+- **Developer Documentation** asks for a developer-guide section covering the
+  new public types, the two automatic modes, scope ordering and precedence,
+  canonical-path deduplication, `extends` ordering, replay through
+  `FileLayerOutcome`, `project_root_from`, and the derive keys. That section
+  exists: `docs/developers-guide.md:732` "Scoped and policy-based configuration
+  discovery", with `### Type roles and how they compose`,
+  `### First-wins and scope stacking are two code paths`, and
+  `### Scope order, and the two opposite orderings`, pointing at RFC 0002 for
+  the semantics tables. Every type the row names appears in the file —
+  `ConfigFilePolicy` (×4), `FileLayerOutcome` (×2), `ConfigPathSelector` (×2),
+  `AutomaticMode` (×3), `ExplicitMode` (×3), `StackScopes` (×2), `FirstWins`
+  (×3), `env_vars` (×3), `project_root_from` (×2). Only `DiscoveryScope` is
+  absent by name. The row's "searches find no …" describes an older head.
+- **User-Facing Documentation** asks for a user's-guide section with working
+  examples plus a migration-guide signpost. The guide work landed at `e8adc959`:
+  `### Select a file explicitly`, `### Root the project scope`, and
+  `### Configure the policy from the derive`, with a
+  `<!-- tested-example: guide-scoped-discovery -->` example that
+  `ortho_config/tests/documentation_examples_tests.rs:42` actually compiles and
+  runs. The migration-guide half is the one genuinely open piece and is handled
+  in the reconciliation below.
+
+The scribe then found a defect **in the brief it was given**, which is worth
+recording because the brief was mine. It was told to add `policy_resolve` to
+`discovery.load`'s `operation` list, and did; but it pointed out that naming
+`policy_resolve` there makes the row's `outcome` list wrong. The legacy path
+reaches `load_outcome` with only `success` or `not_found` — a failed candidate
+is reported through `discovery.candidate` instead — whereas the policy path has
+no candidate event at all and so carries all four terminals itself: `success`
+(`policy.rs:149`), `not_found` (`163`), `required_failure` (`170`, `178`), and
+`optional_failure` (`186`). Both documents therefore under-described the
+operation. The `outcome` list in `docs/design.md` and the `outcome` cell in
+`docs/developers-guide.md` were widened to say so, and the reason is stated
+inline rather than left as unexplained vocabulary.
+
+Applying the guide edit pushed its telemetry row past the table's existing
+column width, so `mdtablefix --in-place` re-padded all twelve rows to a uniform
+343 columns. That is the tool `make check-fmt` runs, so the reformat is what
+the gate would have demanded anyway; doing it here rather than discovering it
+in the gate keeps the gate run clean.
+
+### Round 7: the Docstring Coverage row, closed as far as the cap allows
+
+The architecture wyvern put this row's largest single contributor at
+`policy_impl.rs` (12 of 14 items undocumented) and confirmed by arithmetic that
+the 74.65% figure counts **private helpers and `#[test]` functions**, not
+public API — the same reading Round 4 reached, now independently reproduced.
+
+The figure was reproduced locally rather than taken on trust: a scanner over
+the **418 tracked `.rs` files** reports 998 of 2899 functions documented,
+**34.4%**, against the published 74.65%. The two are not in conflict, and the
+gap between them is the useful part — a broad scanner counts `#[cfg(test)]`
+modules, macro bodies, and trait-impl methods that the hosted metric evidently
+excludes or weights differently. So the hosted percentage is **not**
+reproducible by local inspection, and no local run can be used to claim the row
+is closed. What local inspection *can* do is establish that the delta's own
+private items are documented, which is the part this PR owns.
+
+That was done, on the ten files in the delta:
+
+| File                                             | Before | After           |
+| ------------------------------------------------ | ------ | --------------- |
+| `ortho_config_macros/src/derive/policy_impl.rs`  | 8/14   | 14/14           |
+| `.../derive/parse/tests/discovery_validation.rs` | 1/6    | 6/6             |
+| `ortho_config/src/discovery/telemetry.rs`        | 12/19  | 19/19           |
+| `ortho_config/tests/discovery_telemetry.rs`      | 8/16   | 16/16           |
+| `ortho_config/tests/support/policy_telemetry.rs` | 4/5    | 5/5             |
+| `ortho_config/src/discovery/policy.rs`           | 23/27  | 23/27 (no room) |
+| `ortho_config/tests/scoped_layers.rs`            | 6/14   | 6/14 (no room)  |
+
+The last two are at **exactly 400 lines** — AGENTS.md's hard cap — so neither
+can accept another doc line without splitting the file, and splitting a test
+suite to satisfy a percentage is the tail wagging the dog. Both are recorded as
+**partially addressed by constraint**, which is a disposition rather than a
+silence. The row therefore stays open against the hosted threshold, and the
+plan's Round 4 reasoning for why that is acceptable (every genuine public item
+is already documented under `missing_docs = "deny"`) stands unchanged.
+
+One self-inflicted defect is worth recording, because it would have been a hard
+compile error and it was caught only by re-reading the diff: a scripted edit
+inserted the `count_attempt` doc comment **above the existing function** as
+well as the new one, leaving two `#[cfg(feature = "metrics")] fn count_attempt`
+at the same scope. `make typecheck` builds `--all-features`, so this is E0428,
+a duplicate definition, not a warning. The duplicate was removed and the file
+re-checked. The lesson is the one this plan keeps relearning: scripted edits
+need the resulting diff read, not just the tool's success message.
+
+### Round 8: the migration guide gets its signpost
+
+The User-Facing Documentation row's last open sub-ask was a v0.10.0 migration
+signpost, and it was the one item the guide work did not cover. The migration
+guide is the right home: `Cargo.toml:17` still reads `version = "0.9.0"`, the
+newest tag is `v0.9.1`, so v0.10.0 is the release this lands in and the guide
+for it is the one a user upgrades through. A new
+`## Load files from more than one scope` section sits between the policy-check
+and default-behaviour sections, states that nothing changes by default, names
+both opt-in spellings, and links to the guide section that documents them.
+
+**The delegated draft needed three corrections, and each is a lesson.**
+
+1. A grammar slip — a missing infinitive marker in "Two ways opt in" — which
+   the agent did not flag and which only reading the diff caught. Delegation
+   moves the typing, not the proofreading.
+2. A wrong anchor. The draft linked
+   `users-guide.md#configure-the-policy-from-the-derive` (`:571`), which is the
+   derive-attribute subsection. The right target is the parent section,
+   `users-guide.md#control-which-configuration-files-become-layers` (`:492`),
+   whose opening paragraph *is* the `FirstWins`/`StackScopes` distinction. A
+   subsection anchor would have worked; the parent is better and the agent had
+   no way to know which the brief meant.
+
+   **The wrong anchor came back.** A later delegation, handed a brief that
+   specified the derive-attribute anchor, found the definition already pointing
+   at the parent, and — correctly refusing to overrule its brief silently —
+   restored the anchor it had been given and flagged the disagreement. It was
+   reinstated again, and the hierarchy is what settles it: the section names
+   **two** opt-in routes, the derive key and
+   `ConfigFilePolicy::from_builder(...).automatic_mode(...)` on a hand-built
+   policy, and only the parent heading contains both. The derive heading is a
+   `###` beneath it, and the hand-built API is documented above it at `:527` and
+   `:564`. Both anchors resolve, so no amount of static checking would have
+   caught this; the heading levels had to be read. A brief that names one of
+   two targets is the defect to fix, not the edit that follows the brief.
+3. **A line the gate would have failed, that does not fail this gate.** The
+   reference definition was 84 columns. `.markdownlint-cli2.jsonc` sets MD013 to
+   `line_length: 80` with only `tables` and `headings` exempt, so a reference
+   definition looks exposed — but running `markdownlint-cli2` on the file
+   reports **0 issues**, because MD013 does not apply to link-reference
+   definitions at all. The fix was therefore unnecessary and was **reverted**
+   rather than kept: the descriptive label `users-guide-scoped-discovery` is 94
+   columns and stays, because the gate that would object does not.
+
+   The lesson is the sharper one: the constraint this plan has been applying
+   all along — "wrap prose at 80" — is a `mdtablefix` and MD013 rule about
+   *prose*, and inferring its scope from the config file rather than from the
+   tool's behaviour invented a problem. Running the actual linter took ten
+   seconds and settled it. **Read the config to know the rules; run the tool to
+   know the verdict.**
+
+### Round 9: the round-4 findings, and a lock nobody owns
+
+Three of the four findings scrutineer returned were still live and are repaired
+here; the fourth is resolved.
+
+1. **The Python scan guard, which is a version difference rather than a bug in
+   the change.** `test_an_unreadable_crate_root_is_refused_not_read_as_empty`
+   failed on the gate's interpreter and passed on the local one. The cause is
+   `Path.iterdir`: on 3.12 it is a generator, so the `PermissionError` surfaced
+   inside `list()` and inside `_scan`'s guard; on 3.14 it is a plain function
+   calling `os.scandir`, so `_scan(tests, list, tests.iterdir())` evaluated its
+   argument *outside* the `try` and the raise escaped. A new `_listing` helper
+   defers the whole read — enumerate and materialize together — so both sit
+   behind the guard on either version. **The first draft of the helper returned
+   `directory.iterdir` itself, which is still a lazy generator on 3.12 and
+   would have deferred the raise past `sorted()` instead, breaking the other
+   interpreter.** A fix for a version difference that is only tested on one
+   version is not tested. Confirmed on 3.14.4, the exact interpreter that
+   failed: 319 passed, 1 skipped, 0 failed.
+2. **Five spellings in the execplan, three of them in an inline code span.** The
+   house rule is en-GB-oxendict (`AGENTS.md:24`), so the `-ised` forms are
+   genuinely faults. The test the plan named was renamed to the `-ize` spelling
+   and the sentence reworded to match; the prose forms were corrected too.
+   Renaming defeated the point of the previous round's decision: the sibling
+   `-ised` identifier at `clap_attrs.rs:300` is **pre-existing on `origin/main`
+   ** and is not ours to rename, so the precedent we now follow is the one the
+   overlay already uses for quoted identifiers. The gate scans prose and inline
+   code spans and does **not** flag `.rs` files — proven, not assumed: the same
+   spelling at `clap_attrs.rs:300` is tracked and unflagged, while the
+   plain-text rewrite of it in the plan had failed the gate minutes earlier.
+3. **My own new paragraph tripped `check-fmt`.** `mdtablefix --wrap` wanted a
+   line joined at 80 columns. Fixed with `make fmt` (the tool the gate runs)
+   rather than by hand-wrapping, which is what produced the discrepancy in the
+   first place: `mdtablefix` reflows with its own fragment model, so a
+   hand-wrapped paragraph is only accidentally its fixed point.
+4. **The migration-guide anchor, reinstated a second time.** See item 2 of
+   Round 8 above; the parent heading is the right target and the brief was
+   wrong.
+
+**The three Rust gates have no verdict, and this time the cause is named: a
+closed lock cycle, not load.** `make typecheck`, `make lint`, and `make test`
+all blocked on the machine-wide Cargo package cache. `/proc/locks` shows one
+exclusive flock held by PID 1832225 — a foreign `cargo test` in the podbot
+worktree, parked ~4.5 hours at 4 seconds of CPU — with 67 queued readers. The
+holder is blocked in `do_wait` on its own descendant, and that descendant is
+itself queued for the lock the holder owns. **No amount of waiting clears it,
+and the constraint is explicit: other agents' processes are not ours to kill.**
+The earlier reading of this same process as merely slow was wrong; it is
+self-deadlocked and needs its owner. Recorded so the next attempt escalates
+against a diagnosis instead of re-deriving it.
+
+Both mistakes this round were mine and both were the same shape: a delegation
+brief asserting a fact I had not checked — a script that does not exist, and an
+anchor that was one of two candidates. Confirmed after the fact by reading
+`AGENTS.md:138` (`make check-fmt`, `make lint`, `make test`, then commit; there
+is no gated-commit wrapper) and by reading the heading levels.
 
 ## Design decision: same-scope precedence
 
