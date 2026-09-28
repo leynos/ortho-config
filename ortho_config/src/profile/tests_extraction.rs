@@ -284,13 +284,19 @@ fn chain_with_an_unrelated_profile_names_that_profile() {
     assert_that!(message, not(contains_substring("no profiles were found")));
 }
 
-#[test]
-fn unknown_profile_body_keys_flow_through_to_merge() {
+/// The selected body is carried through verbatim, whatever it holds.
+///
+/// The two rows are the two ends of the same contract: profile bodies are not
+/// filtered against the struct's fields, so an unrecognized key is preserved
+/// for the merge rather than rejected here, and an empty body is a valid no-op
+/// rather than an error. Both would be silently broken by validating the
+/// body's keys against anything.
+#[rstest]
+#[case::unknown_key_is_preserved(json!({ "retries": 7, "custom_key": "kept" }))]
+#[case::empty_body_is_a_noop(json!({}))]
+fn selected_body_flows_through_to_merge_unfiltered(#[case] body: Value) {
     let layers = vec![file_layer(
-        json!({
-            "retries": 3,
-            "profile": { "ci": { "retries": 7, "custom_key": "kept" } }
-        }),
+        json!({ "retries": 3, "profile": { "ci": body.clone() } }),
         "app.toml",
     )];
     let outcome = extract_profile_layers(
@@ -304,30 +310,7 @@ fn unknown_profile_body_keys_flow_through_to_merge() {
         .first()
         .expect("one profile layer")
         .value();
-    assert_eq!(
-        profile_value,
-        &json!({ "retries": 7, "custom_key": "kept" })
-    );
-}
-
-#[test]
-fn empty_profile_table_is_a_valid_noop() {
-    let layers = vec![file_layer(
-        json!({ "retries": 3, "profile": { "ci": {} } }),
-        "app.toml",
-    )];
-    let outcome = extract_profile_layers(
-        layers,
-        Some(&selection("ci").expect("valid test name")),
-        false,
-    )
-    .expect("extraction succeeds");
-    let profile_value = outcome
-        .profile_layers
-        .first()
-        .expect("one profile layer")
-        .value();
-    assert_eq!(profile_value, &json!({}));
+    assert_eq!(profile_value, &body);
 }
 
 #[test]

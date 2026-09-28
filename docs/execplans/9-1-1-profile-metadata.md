@@ -870,9 +870,30 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       UNKNOWN, not green. Repaired in `1f276773`; a fresh four-gate run on that
       candidate is required before the push, since a new commit invalidates the
       `355dc457` evidence.
-- [ ] (2026-09-28) **Pending:** force-push with lease to
-      `origin/9-1-1-profile-metadata-fresh`, bound to the previously recorded
-      remote head `a94c8050`. Do not refresh the lease blindly on failure.
+- [x] (2026-09-28) Force-pushed with lease to
+      `origin/9-1-1-profile-metadata-fresh`. The lease was bound to the
+      `a94c8050` recorded before the rewrite (verified still live via
+      `git ls-remote` immediately before the push, so the lease was neither
+      stale nor blindly refreshed) and the push reported
+      `+ a94c8050...a2ec36c5 (forced update)`. The pushed candidate `a2ec36c5`
+      carries a complete four-gate certificate: `check-fmt` PASS (both halves —
+      the `mdtablefix` half executed for the first time on this branch, 75 files
+      unchanged), `test` PASS (1416 passed / 0 failed / 15 ignored, 78/78
+      `test result:` lines `ok`, completing exit), `typecheck` PASS, and
+      `lint` PASS with **both** `lint-clippy` and `lint-whitaker` executing —
+      the first clean Whitaker run in this session.
+- [x] (2026-09-28) Posted dispositions to all 12 review threads (8 CodeRabbit,
+      1 Codex P2, 3 CodeScene) via the thread-reply route; all 12 returned
+      created comment IDs and all appear as `leynos` replies.
+- [x] (2026-09-28) Fixed a CodeScene Code Duplication finding raised against
+      the pushed `a2ec36c5`: `empty_profile_table_is_a_valid_noop` and
+      `unknown_profile_body_keys_flow_through_to_merge` had been normalized
+      into the same shape by the formatter, so both read as one function twice.
+      Merged into a single `#[rstest]` table, `selected_body_flows_through_to_merge_unfiltered`,
+      with the unknown-key and empty-body cases as rows. The two rows are the
+      two ends of one contract — profile bodies are never filtered against the
+      struct's fields — so the table states the invariant more clearly than two
+      near-identical bodies did. Module is now 374 lines.
 - [x] (2026-09-28) Repaired a second lint fault that only became visible once
       Clippy stopped short-circuiting the gate: with `lint-clippy` clean,
       `lint-whitaker` finally executed and reported `Module tests_extraction
