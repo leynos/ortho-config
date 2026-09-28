@@ -1656,9 +1656,14 @@ exactly and adds three delta files that audit did not cover —
 `candidate_set.rs` (1). The deficit is dominated by two files:
 `scoped_layers.rs` (8) and `discovery_attributes.rs` (8) account for 16 of
 roughly 25, and the Python side contributes none — every `def` and `class` under
-`tests/workflow_contracts/` carries a docstring. The two worst files are each
-at the 400-line cap, so neither can take another doc line without splitting
-first.
+`tests/workflow_contracts/` carries a docstring. Of the two worst files,
+`scoped_layers.rs` is at the cap at exactly 400 lines and cannot take another
+doc line without being split first; `discovery_attributes.rs` was previously
+described here as also being at the cap, and that was **wrong** — a Round 15
+re-count puts it at 397, so three lines of headroom existed. The correction
+matters because it was the stated reason for not documenting that file's eight
+private helpers, and this plan has already been caught once using an unverified
+count to justify an exemption.
 
 Two side-gaps neither row names were found while checking the above, and both
 are documentation rather than behaviour:
@@ -1768,3 +1773,80 @@ and two `serde_saphyr` configurations.
 Read the certificate with its scope: it covers `bd745cfd`, whose diff against
 the previously reviewed code is **documentation only**. It therefore
 re-validates the code and says nothing new about it.
+
+### Round 15: two gaps closed with tests, two of this plan's claims corrected
+
+The six items CodeRabbit held open were re-verified against the current tree
+rather than against their comment anchors. Two of them had a concrete address
+and are now closed; three were already adequately covered or correctly
+declined; and three claims in this plan did not survive the audit.
+
+**`env_vars` runtime coverage — CLOSED.** This was CodeRabbit's first numbered
+instruction and the one item the plan explicitly did not claim closed. The
+cause was found in Round 14 and was a defect in this plan rather than in the
+code: `guide-scoped-discovery` was registered in `EXPECTED_EXAMPLE_IDS`
+(`documentation_examples_tests.rs:42`) but absent from
+`STANDARD_RUST_EXAMPLES`, so the only derive in the tree writing `env_vars` was
+never compiled. It is now in both, and `assert_env_alias_chain`
+(`documentation_examples/env_alias_chain.rs`) asserts the three behaviours the
+attribute promises: the first declared variable wins when both are set, a later
+one is reached when the earlier is unset or blank, and a populated alias
+suppresses automatic discovery rather than merging with it. The third is the
+one that distinguishes an explicit selection from the stacked scopes beneath
+it, so the fixture stages a file the automatic scopes *would* find and gives it
+a third value (`3333` against `1111`/`2222`): a fall-through is then
+unmistakable rather than coincidentally matching.
+
+The blank case is deliberate, not incidental. `ConfigPathSelector::resolve`
+filters `!value.is_empty()`, and the empty string resolves to an empty
+`PathBuf`, which is a *relative* path rather than an absent one — the exact
+hazard the candidate generators guard against elsewhere. The middle case
+therefore leaves `ACME_CONFIG_PATH` set to the empty string and asserts the
+later alias wins. Selector values are absolute paths under the workspace root,
+via a new `ExampleWorkspace::path_in_root`; a bare filename would have happened
+to work, because the child's working directory is its run directory, and
+relying on that coincidence is precisely what the rest of discovery refuses to
+do.
+
+**Ordered selector chains — CLOSED.** `scoped_stacking_proptest.rs` (398 lines)
+is a genuine reference-model suite, but it never imports `ConfigPathSelector`,
+and its one three-rung example chain (`scoped_layers.rs:176-178`) only ever
+populates the *first two* rungs. `ConfigPathSelector::resolve` decides
+precedence with a `find_map` over a filtered iterator, so a reordering there
+would have been invisible to every existing test. `selector_chain_proptest.rs`
+adds two properties over generated three-rung chains — a length at which a wrong
+`rev()`, a wrong sort, or an off-by-one bound changes the answer in more than
+one way — and pins both the winning value and the layer count, because a
+value-only assertion cannot distinguish "first rung wins" from "every readable
+rung contributes".
+
+**`extends` ordering — NOT closed, and honestly so.** The same audit confirms
+no property test generates a parent/child/grandparent `extends` graph and
+asserts parent-first layer order. Three example tests pin it
+(`compose_layers.rs:61-87`, a two-file chain; `extends.rs:118-161`, three files;
+`scoped_stacking.rs:160-209`), which is real coverage, but mutation of a
+`rev()` or a sort in `resolve_base_path` could survive it. Recorded as a
+bounded gap rather than claimed closed.
+
+**Compile-time UI coverage — declined, unchanged.** Re-verified: all nine
+`ortho_config/tests/ui/` pairs are intact, 9 `.rs` against 9 `.stderr`. The one
+apparent orphan elsewhere (`cargo-orthohelp/tests/ui/policy_public_api.rs` with
+no `.stderr`) is not one — `compile_time.rs:11` declares it `t.pass(...)`. The
+failure mode the row names does not exist.
+
+**Corrections to this plan.** Three claims did not survive re-verification, and
+all three were load-bearing for an exemption this plan had granted itself:
+
+1. The Round 5 claim that `documentation_examples_tests.rs:42` "actually
+   compiles and runs" the `guide-scoped-discovery` fence was **false**. That
+   line is only the id registry. Corrected in place above, and the sentence is
+   now true rather than deleted, because Round 15 is what makes it true.
+2. `discovery_attributes.rs` was described as being at the 400-line cap; a
+   re-count puts it at **397**. Corrected in place. The stated reason for not
+   documenting its eight private helpers therefore did not hold, and the
+   exemption now rests on the narrower ground that those helpers are private.
+3. `docs/design.md` was said not to document policy-level project-root rooting.
+   That was true at the head the audit read, and the scribe's edit for this
+   round is what closes it — so the finding was valid when made. Noting the
+   ordering here because a later reader comparing the finding against the
+   current file would otherwise conclude the finding was wrong.

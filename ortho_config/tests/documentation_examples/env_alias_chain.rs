@@ -56,13 +56,13 @@ pub(super) fn assert_env_alias_chain(workspace: &mut ExampleWorkspace) -> Result
 
     let first_path = workspace.path_in_root(&format!("run-{ALIAS_EXAMPLE}/{first}"))?;
     let second_path = workspace.path_in_root(&format!("run-{ALIAS_EXAMPLE}/{second}"))?;
-    let first = first_path.to_str().context("selector path is UTF-8")?;
-    let second = second_path.to_str().context("selector path is UTF-8")?;
+    let first_selector = first_path.to_str().context("selector path is UTF-8")?;
+    let second_selector = second_path.to_str().context("selector path is UTF-8")?;
 
     let cases: [(&str, &str, &str); 3] = [
-        (first, second, "port=1111\n"),
-        ("", second, "port=2222\n"),
-        (first, first, "port=1111\n"),
+        (first_selector, second_selector, "port=1111\n"),
+        ("", second_selector, "port=2222\n"),
+        (first_selector, first_selector, "port=1111\n"),
     ];
     for (first_value, second_value, expected) in cases {
         let output = workspace.run_with_environment(
