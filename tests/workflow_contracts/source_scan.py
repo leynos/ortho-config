@@ -15,16 +15,9 @@ carry a trybuild call is another.
 from __future__ import annotations
 
 import os
-import re
+import tomllib
 import typing as typ
 from pathlib import Path
-
-#: The header that opens a ``[[test]]`` target block.
-TEST_TARGET = re.compile(r"^\[\[test\]\]$", re.MULTILINE)
-#: The ``name`` key of a ``[[test]]`` target block.
-TEST_TARGET_NAME = re.compile(r'^name\s*=\s*"([^"]+)"', re.MULTILINE)
-#: The ``path`` key of a ``[[test]]`` target block.
-TEST_TARGET_PATH = re.compile(r'^path\s*=\s*"([^"]+)"', re.MULTILINE)
 
 
 class ScanError(OSError):
@@ -126,8 +119,37 @@ def listing(directory: Path) -> typ.Callable[[], list[Path]]:
     return enumerate_once
 
 
+def _manifest_tables(manifest: str) -> list[dict[str, object]]:
+    """Return each ``[[test]]`` table a manifest declares, in order."""
+    declared = tomllib.loads(manifest).get("test", [])
+    # ``[[test]]`` yields a list of tables. A value of any other type was
+    # not declared in the form cargo accepts -- a singular ``[test]``
+    # table, say -- so it names no target to read.
+    if not isinstance(declared, list):
+        return []
+    return [dict(entry) for entry in declared if isinstance(entry, dict)]
+
+
 def declared_test_targets(manifest: str) -> dict[str, str]:
     """Return each ``[[test]]`` target's name, keyed by its source path.
+
+    The manifest is parsed as TOML rather than matched as text. Text
+    patterns miss a declared target in silence: they accept only the
+    double-quoted spelling of a value, so a single-quoted ``path`` or
+    ``name`` reads as absent, ``[[test]]`` whitespace is not tolerated,
+    and a block whose keys sit in another block was paired with that
+    block's, because a regular expression cannot see where a table ends.
+    A declared binary that goes unread is a binary the coverage
+    assertion never asks for, which is the false negative the class
+    exists to catch.
+
+    ``path`` is optional to cargo, so a table without one is read as the
+    source cargo defaults it to, ``tests/{name}.rs``. A manifest this
+    reader cannot parse, and a table that declares no usable ``name``,
+    yield no entry rather than raising: the caller asserts that a
+    declared binary is asked for, and a manifest at odds with itself
+    should leave that assertion reporting the binary, not the reader
+    failing several frames from the cause.
 
     Parameters
     ----------
@@ -137,14 +159,19 @@ def declared_test_targets(manifest: str) -> dict[str, str]:
     Returns
     -------
     dict of str to str
-        The declared binary name for each declared source path.
+        The declared binary name for each declared source path, the
+        path relative to the crate directory.
     """
+    try:
+        tables = _manifest_tables(manifest)
+    except tomllib.TOMLDecodeError:
+        return {}
     declared: dict[str, str] = {}
-    # Split on the header so each block is read alone; a name in one block
-    # and a path in another must not be paired.
-    for block in TEST_TARGET.split(manifest)[1:]:
-        name = TEST_TARGET_NAME.search(block)
-        path = TEST_TARGET_PATH.search(block)
-        if name is not None and path is not None:
-            declared[path.group(1)] = name.group(1)
+    for table in tables:
+        name = table.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        path = table.get("path", f"tests/{name}.rs")
+        if isinstance(path, str):
+            declared[path] = name
     return declared
