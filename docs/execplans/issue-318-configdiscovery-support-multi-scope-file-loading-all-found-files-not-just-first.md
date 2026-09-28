@@ -1638,6 +1638,20 @@ but the `ui/` pairs are all intact (9 `.rs` + 9 committed `.stderr`, no
 orphans), so the failure mode that matters — an unpaired `compile_fail` — does
 not exist here.
 
+**Docstring Coverage** is re-confirmed still valid, and still bounded in the
+way Round 7 described. The metric counts private helpers and `#[test]` bodies,
+not public API: `missing_docs = "deny"` (`Cargo.toml:98`) means every genuine
+public item is already documented, so the 74.65% figure is not an
+API-documentation hole. Re-measuring at this head reproduces Round 7's table
+exactly and adds three delta files that audit did not cover —
+`discovery_attributes.rs` (8 undocumented helpers, all private), `load.rs` (4),
+`candidate_set.rs` (1). The deficit is dominated by two files:
+`scoped_layers.rs` (8) and `discovery_attributes.rs` (8) account for 16 of
+roughly 25, and the Python side contributes none — every `def` and `class` under
+`tests/workflow_contracts/` carries a docstring. The two worst files are each
+at the 400-line cap, so neither can take another doc line without splitting
+first.
+
 Two side-gaps neither row names were found while checking the above, and both
 are documentation rather than behaviour:
 
