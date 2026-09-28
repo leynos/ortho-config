@@ -40,6 +40,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-policy-check",
     "guide-policy-ci",
     "guide-policy-config",
+    "guide-scoped-discovery",
     "guide-selected-subcommand-sources",
     "guide-source-aware-load",
     "guide-subcommand",
