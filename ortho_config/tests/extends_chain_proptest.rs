@@ -122,11 +122,8 @@ fn a_shared_parent_is_not_a_cycle() -> Result<()> {
     let root = temp.path();
     write_body(&root.join("shared.toml"), "value = 0\n").context("write shared parent")?;
     for leaf in ["first.toml", "second.toml"] {
-        write_body(
-            &root.join(leaf),
-            &format!("value = 1\nextends = \"shared.toml\"\n"),
-        )
-        .with_context(|| format!("write leaf {leaf}"))?;
+        write_body(&root.join(leaf), "value = 1\nextends = \"shared.toml\"\n")
+            .with_context(|| format!("write leaf {leaf}"))?;
     }
 
     for leaf in ["first.toml", "second.toml"] {
@@ -138,10 +135,13 @@ fn a_shared_parent_is_not_a_cycle() -> Result<()> {
             "leaf {leaf} should carry two layers (parent and itself), got {}",
             chain.values.len()
         );
+        let (_, parent) = chain
+            .values
+            .first()
+            .with_context(|| format!("leaf {leaf} should record a parent layer"))?;
         ensure!(
-            chain.values[0].1.as_str().ends_with("shared.toml"),
-            "leaf {leaf} should record the shared parent first, got {}",
-            chain.values[0].1
+            parent.as_str().ends_with("shared.toml"),
+            "leaf {leaf} should record the shared parent first, got {parent}"
         );
     }
     Ok(())
