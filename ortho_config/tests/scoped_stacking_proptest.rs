@@ -25,6 +25,7 @@ use serde_json::{Value, json};
 #[path = "support/layer_assertions.rs"]
 mod layer_assertions;
 #[path = "support/scoped_fixtures.rs"]
+#[expect(dead_code, reason = "write_config serves sibling suites")]
 mod scoped_fixtures;
 
 use layer_assertions::{assert_layer_path, merge_layers};
