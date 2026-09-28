@@ -190,6 +190,16 @@ pub mod __private {
     pub fn profile_load_finished<T>(result: &crate::OrthoResult<T>) {
         crate::merge_telemetry::profile_load_finished(result);
     }
+
+    /// Record the start of an injected profile-aware derived load.
+    pub fn profile_load_injected_started() {
+        crate::merge_telemetry::profile_load_injected_started();
+    }
+
+    /// Record an injected profile-aware result using its bounded category.
+    pub fn profile_load_injected_finished<T>(result: &crate::OrthoResult<T>) {
+        crate::merge_telemetry::profile_load_injected_finished(result);
+    }
 }
 
 /// Trait implemented for structs that represent application configuration.

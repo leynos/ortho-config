@@ -234,6 +234,33 @@ pub(crate) fn build_config_profile_delegates(
             pub fn load_with_profile() -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<Self>> {
                 #cli_ident::load_with_profile()
             }
+
+            /// Load configuration from injected sources and report the
+            /// selected profile.
+            pub fn load_with_profile_from_iter_with_sources<I, T>(
+                iter: I,
+                discovery_source: #krate::SharedEnvSource,
+                merge_source: #krate::SharedScanEnvSource,
+            ) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<Self>>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #cli_ident::load_with_profile_from_iter_with_sources(
+                    iter,
+                    discovery_source,
+                    merge_source,
+                )
+            }
+
+            /// Load configuration using the current process arguments and
+            /// report the selected profile.
+            pub fn load_with_profile_with_sources(
+                discovery_source: #krate::SharedEnvSource,
+                merge_source: #krate::SharedScanEnvSource,
+            ) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<Self>> {
+                #cli_ident::load_with_profile_with_sources(discovery_source, merge_source)
+            }
         }
     }
 }

@@ -12,10 +12,12 @@ pub(crate) struct LoadSourceTokens<'a> {
     pub merge: &'a proc_macro2::TokenStream,
 }
 
-/// Build the composition body for a generated source-aware loading method.
-pub(crate) fn build_source_aware_compose_layers_impl(
-    args: &LoadImplArgs<'_>,
-) -> proc_macro2::TokenStream {
+/// Build the compose body with both injected runtime names bound.
+///
+/// The two injected names are in scope for the whole method body, so the
+/// discovery and merge fragments can refer to `discovery_source` and
+/// `merge_source` directly.
+fn build_source_aware_compose_layers(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let discovery_source = quote! { discovery_source };
     let merge_source = quote! { merge_source };
     let source_aware_args = LoadImplArgs {
@@ -42,7 +44,14 @@ pub(crate) fn build_source_aware_compose_layers_impl(
         profile_env_var: args.profile_env_var.clone(),
         cli_arg_ids: args.cli_arg_ids.clone(),
     };
-    let composition = build_compose_layers_impl(&source_aware_args);
+    build_compose_layers_impl(&source_aware_args)
+}
+
+/// Build the composition body for a generated source-aware loading method.
+pub(crate) fn build_source_aware_compose_layers_impl(
+    args: &LoadImplArgs<'_>,
+) -> proc_macro2::TokenStream {
+    let composition = build_source_aware_compose_layers(args);
     if args.profiles {
         // The profile compose body opens with `use` items, which only a block
         // can contain, so the tuple's composition half is projected via a
@@ -51,6 +60,19 @@ pub(crate) fn build_source_aware_compose_layers_impl(
     } else {
         composition
     }
+}
+
+/// Build the `(composition, selection)` body for the source-aware profile path.
+///
+/// Only opted-in structs reach this builder, matching the way the profile
+/// compose body itself is gated: the body's tail expression is already the
+/// tuple, so a braced block yields it unchanged. A legacy struct has no
+/// selection, so no placeholder is invented for it.
+pub(crate) fn build_source_aware_compose_layers_with_selection_impl(
+    args: &LoadImplArgs<'_>,
+) -> proc_macro2::TokenStream {
+    let composition = build_source_aware_compose_layers(args);
+    quote! {{ #composition }}
 }
 
 /// Build a generated load method that forwards both injected source types.

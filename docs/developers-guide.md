@@ -347,6 +347,50 @@ routing, build graph behaviour, and application-specific persistence. If
 OrthoConfig executes downstream commands or owns downstream side effects, stop
 and revisit the boundary in the agent-native design.
 
+## Profile layering (roadmap 9.1.1)
+
+Profile support is opt-in at the struct level through the derive attribute
+`#[ortho_config(profiles)]`. A struct that does not opt in keeps the four-tier
+merge order, gains no `--profile` flag, and treats a `[profile.*]` table in a
+shared file as an ordinary key rather than extracting it. The accepted design is
+[ADR-009](adr-009-profile-selection-and-layering.md); the user-facing view is
+the [Profiles section](users-guide.md#profiles) of the users' guide.
+
+Opted-in structs merge five tiers, lowest to highest: built-in defaults,
+configuration files, the selected profile, environment variables, and CLI
+flags. An explicit flag beats the profile even when the flag value equals the
+built-in default, so the generated CLI push consults clap's value-source
+information rather than relying on a value comparison alone.
+
+Extraction runs over the *resolved file chain* — the first successful discovery
+candidate plus its `extends` chain — not over every candidate the discovery
+walk considered. Every file layer in that chain has its reserved `profile` root
+key stripped, and one profile layer is produced for each file that defines the
+selected profile, in chain order (base first). The environment layer has the
+selector stripped too, and the generated flag is excluded from the serialized
+CLI layer, so the selector never merges as an ordinary configuration value.
+Subcommand loading uses a separate pipeline and ignores profiles; a `cmds` key
+inside a profile body is rejected rather than silently ignored.
+
+The merge API and the post-load surface divide as follows:
+
+- `MergeProvenance::Profile` tags a profile layer's provenance;
+- `MergeLayer::profile(value, path)` constructs one, and
+  `MergeComposer::push_profile` pushes it after the file layers and before the
+  environment layer;
+- `extract_profile_layers` is the extraction and validation entry point,
+  returning an `ExtractionOutcome` with `file_layers` and `profile_layers`;
+- `ProfileLoadOutcome` is the post-load runtime type that reports the active
+  selection, with `config()`, `into_config()`, and `selection()` accessors; and
+- the generated `load_with_profile_from_iter` and `load_with_profile` methods
+  return a `ProfileLoadOutcome`.
+
+Keep the [ADR-007](adr-007-downstream-context-command-naming.md) static/runtime
+split: profile *support* is agent-context metadata and is static, while the
+*active selection* is runtime-only and reported by `ProfileLoadOutcome`.
+Selected-profile output is deliberately not part of the static agent-context
+contract, which documents the mechanism rather than the moment.
+
 ## Behavioural test layout
 
 Behavioural suites live in crate-local integration test targets. The repository

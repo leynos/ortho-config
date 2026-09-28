@@ -7,7 +7,7 @@
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use figment::Jail;
-use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
+use ortho_config::{MapEnv, OrthoConfig, ProfileSource, SharedEnvSource, SharedScanEnvSource};
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
@@ -108,6 +108,62 @@ fn profiled_loading_reads_the_selector_from_the_injected_source() -> Result<()> 
         config.retries == 7,
         "expected the injected selector to select profile `ci`, got {}",
         config.retries
+    );
+    Ok(())
+}
+
+/// The reporting entry point must honour the injected selector as well, and
+/// must report that selection rather than discarding it.
+///
+/// This is the hermetic counterpart of the jail-backed BDD scenario: it needs
+/// no process-environment mutation, so it keeps running concurrently with the
+/// rest of this file. The reported selection is what distinguishes this case
+/// from `profiled_loading_reads_the_selector_from_the_injected_source`, which
+/// observes only the merged value.
+#[test]
+fn source_aware_profile_load_reports_the_injected_selection() -> Result<()> {
+    let fixture_dir = tempfile::tempdir().context("create profiled loading fixture")?;
+    let config_path = write_profiled_fixture(fixture_dir.path())?;
+    ensure!(
+        std::env::var_os("PROFILED_CONFIG_PROFILE").is_none(),
+        "the process must not already define the selector this test injects"
+    );
+    let source = Arc::new(
+        MapEnv::new()
+            .with_var("PROFILED_CONFIG_CONFIG_PATH", &config_path)
+            .with_var("PROFILED_CONFIG_PROFILE", "ci"),
+    );
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+
+    let outcome = ProfiledConfig::load_with_profile_from_iter_with_sources(
+        ["profiled-config"],
+        discovery,
+        merge,
+    )
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("load a profile-selected outcome from an injected source")?;
+
+    let [selection] = outcome.selection() else {
+        return Err(anyhow::anyhow!(
+            "expected exactly one selected profile, got {:?}",
+            outcome.selection()
+        ));
+    };
+    ensure!(
+        selection.name.as_str() == "ci",
+        "expected the injected selector to report profile `ci`, got {:?}",
+        selection.name
+    );
+    ensure!(
+        selection.source == ProfileSource::Environment,
+        "the injected selector is an environment source, got {:?}",
+        selection.source
+    );
+    ensure!(
+        outcome.config().retries == 7,
+        "expected profile `ci` to supply 7, got {}",
+        outcome.config().retries
     );
     Ok(())
 }
