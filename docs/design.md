@@ -357,6 +357,14 @@ falling back; `Optional` accepts an absent selected path. The policy returns a
 replayable `FileLayerOutcome`, allowing callers to inspect scalar file values
 early and then add the same layers to a `MergeComposer`.
 
+The project scope is rooted at the working directory by default. A policy that
+needs it elsewhere replaces every automatic project root with one
+caller-selected directory, either by calling `ConfigFilePolicy::project_root`
+on a hand-built policy or by naming a CLI field through the derive attribute
+`project_root_from`. The named field must be a non-skipped `PathBuf` or
+`Option<PathBuf>`, and the derive rejects any other field at compile time; a
+`None` value leaves the default root in place.
+
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can
 load successfully. When every candidate fails, the helper now returns `Err`

@@ -1,6 +1,8 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
 
 mod documentation_examples;
+#[path = "documentation_examples/env_alias_chain.rs"]
+mod env_alias_chain;
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
 #[path = "documentation_examples/workspace.rs"]
@@ -8,6 +10,7 @@ mod workspace;
 
 use anyhow::{Context, Result, ensure};
 use documentation_examples::{DocumentedExample, documented_example};
+use env_alias_chain::assert_env_alias_chain;
 use std::path::{Path, PathBuf};
 use workspace::{DependencyAlias, EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile};
 
@@ -24,6 +27,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-localization",
     "guide-tracing",
     "guide-orthohelp-metadata",
+    "guide-scoped-discovery",
 ];
 
 #[test]
@@ -36,6 +40,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
     workspace.build()?;
 
     assert_standard_example_runs(&mut workspace)?;
+    assert_env_alias_chain(&mut workspace)?;
     assert_tracing_flow(&mut workspace)?;
     assert_run(
         &mut workspace,

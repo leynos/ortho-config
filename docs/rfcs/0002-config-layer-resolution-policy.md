@@ -998,13 +998,27 @@ ______________________________________________________________________
 - **Note on scope partitioning.** `DiscoveryScope` partitions the same candidate
   generators that #411 rewired. The two changes are compatible — ordering and
   membership are untouched — but they edit the same code and should not be
-  built independently.
+  built independently. **Both changes have since landed** — scope partitioning
+  landed with [ortho-config#318][oc-318] — so the sequencing constraint is
+  historical, recorded here rather than live.
 
 - **`ScanEnvSource` completes merge-layer injection.**
   [ortho-config#412][oc-412] keeps `EnvSource` lookup-only and gives `CsvEnv` a
   separate scanning capability. Derived loading and subcommand helpers now
   accept that source, removing the compatibility substrate's serial-guard
   caveat.
+
+### 2026-09-28 — scoped stacking landed; the #411 sequencing note retired
+
+- **The scope-partitioning work has landed.** The 2026-08-01 entry's note
+  recorded a sequencing constraint between `DiscoveryScope` and the candidate
+  rewiring of [ortho-config#411][oc-411]: compatible, but editing the same
+  generators, so not to be built independently. Scoped resolution landed with
+  [ortho-config#318][oc-318], so the constraint is historical and the note is
+  annotated rather than removed.
+- **This changes no design decision.** The status, the proposed design, and the
+  requirements are all as they were; only the record of what remains to be done
+  moves.
 
 [netsuke-427]: https://github.com/leynos/netsuke/pull/427
 
@@ -1013,3 +1027,5 @@ ______________________________________________________________________
 [oc-411]: https://github.com/leynos/ortho-config/pull/411
 
 [oc-412]: https://github.com/leynos/ortho-config/issues/412
+
+[oc-318]: https://github.com/leynos/ortho-config/issues/318
