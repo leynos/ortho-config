@@ -59,18 +59,76 @@ def sources_under(directory: Path) -> typ.Iterator[Path]:
         yield from (Path(at, name) for name in filenames if name.endswith(".rs"))
 
 
+def exists(path: Path) -> typ.Callable[[], bool]:
+    """Defer a presence check so a failure to tell lands inside a guard.
+
+    ``Path.is_file`` and ``Path.is_dir`` are **not** usable as absence
+    tests here. Since 3.14 they answer ``False`` for any ``OSError`` the
+    operating system raises, not only for a path that is missing: on a
+    directory this process cannot search, ``is_file`` returns ``False``
+    instead of raising, where 3.12 raised ``PermissionError``. The gate
+    runs 3.14, so a source behind an unsearchable directory read as
+    absent and left the class silently -- the precise false negative this
+    module exists to refuse.
+
+    Only ``FileNotFoundError`` is an answer. Every other failure
+    propagates as a :class:`ScanError` naming ``path``. Pass the result
+    to :func:`scan` -- ``scan(path, exists(path))`` -- rather than a
+    bound ``Path`` predicate, for the same reason :func:`listing` is a
+    factory: the deferred call puts the check behind ``scan``'s guard.
+
+    Parameters
+    ----------
+    path : Path
+        The path to check for presence when the callable is called.
+
+    Returns
+    -------
+    callable
+        A zero-argument callable returning whether that path is there.
+    """
+
+    def present() -> bool:
+        """Answer whether ``path`` is there, raising on a check that cannot tell."""
+        try:
+            path.stat()
+        except FileNotFoundError:
+            return False
+        return True
+
+    return present
+
+
+#: A read's own parameter list, so :func:`scan` forwards it rather than
+#: erasing it to ``Any``. The reads here return three different types --
+#: ``bool`` from :func:`exists`, ``str`` from ``Path.read_text``,
+#: ``list[Path]`` from :func:`listing` -- and a caller that receives ``Any``
+#: gives up the contract at every call site, which is exactly where a wrong
+#: type goes unnoticed.
+_P = typ.ParamSpec("_P")
+
+#: What the forwarded read returns, preserved as ``scan``'s own result.
+_R = typ.TypeVar("_R")
+
+
 def scan(
-    path: Path, read: typ.Callable[..., typ.Any], *args: typ.Any, **kwargs: typ.Any
-) -> typ.Any:
+    path: Path,
+    read: typ.Callable[_P, _R],
+    *args: _P.args,
+    **kwargs: _P.kwargs,
+) -> _R:
     """Call one ``Path`` read, refusing a failure that names no path.
 
     Every filesystem read here goes through this: ``path`` is the path
     the call is over and the one a failure names, and ``read`` is the
     call to make -- a bound ``Path`` method such as ``Path.read_text``,
-    or a deferred callable such as :func:`listing`. ``is_file`` and
-    ``is_dir`` answer ``False`` for a path that is merely absent, and
-    ``False`` is an answer rather than a refusal; any other failure is a
-    :class:`ScanError` naming ``path``, the original as ``__cause__``.
+    or a deferred callable such as :func:`listing`. A path that is merely
+    absent is an answer, so :func:`exists` answers ``False`` for it
+    rather than raising; any other failure is a :class:`ScanError` naming
+    ``path``, the original as ``__cause__``. Do not pass a bound
+    ``Path.is_file`` or ``Path.is_dir`` here: since 3.14 those swallow
+    every ``OSError``, which turns an inaccessible path into a silent
+    absence. See :func:`exists`.
 
     The callable form is not a convenience. ``read(*args)`` evaluates its
     arguments *before* the ``try`` below, and ``Path.iterdir`` starts its
@@ -83,8 +141,8 @@ def scan(
 
     Returns
     -------
-    object
-        Whatever that call returns.
+    _R
+        Whatever that call returns, at its own type rather than ``Any``.
     """
     try:
         return read(*args, **kwargs)

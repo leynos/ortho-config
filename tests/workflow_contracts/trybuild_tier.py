@@ -33,6 +33,7 @@ from nextest_filterset import (
 from source_scan import (
     ScanError,
     declared_test_targets,
+    exists,
     listing,
     scan,
     sources_under,
@@ -107,7 +108,7 @@ def _carries_trybuild(root: Path) -> bool:
     """
     sources = sources_under(root.parent) if root.name == "mod.rs" else [root]
     return any(
-        scan(source, source.is_file)
+        scan(source, exists(source))
         and TRYBUILD_CALL.search(scan(source, source.read_text, encoding="utf-8"))
         is not None
         for source in sources
@@ -165,13 +166,15 @@ def _crate_test_binaries(base: Path, crate: str) -> dict[str, bool]:
     # the inventory, and a binary missing from the inventory is one the
     # coverage assertion never asks about. A manifest that is merely
     # absent is an answer -- the crate declares no targets -- while every
-    # other failure is still a refusal naming the path.
+    # other failure is still a refusal naming the path. The presence test
+    # is `exists` rather than `Path.is_file`, which since 3.14 reports an
+    # inaccessible path as absent; see `source_scan.exists`.
     manifest_path = base / crate / "Cargo.toml"
     declared = (
         declared_test_targets(
             scan(manifest_path, manifest_path.read_text, encoding="utf-8")
         )
-        if scan(manifest_path, manifest_path.is_file)
+        if scan(manifest_path, exists(manifest_path))
         else {}
     )
     # A declared path is enumerated once, as its target; listing it as well
@@ -186,14 +189,14 @@ def _crate_test_binaries(base: Path, crate: str) -> dict[str, bool]:
             if source.name.endswith(".rs")
             and source.relative_to(base / crate).as_posix() not in declared
         ]
-        if scan(tests, tests.is_dir)
+        if scan(tests, exists(tests))
         else []
     )
     roots.extend((name, base / crate / path) for path, name in sorted(declared.items()))
     return {
         name: _carries_trybuild(source)
         for name, source in roots
-        if scan(source, source.is_file)
+        if scan(source, exists(source))
     }
 
 

@@ -378,3 +378,51 @@ def test_an_unreadable_crate_root_is_refused_not_read_as_empty(
     finally:
         os.chmod(hidden, 0o755)
     assert str(hidden) in str(raised.value), raised.value
+
+
+@pytest.mark.skipif(
+    DENIED_LISTING_IS_UNOBSERVABLE,
+    reason="a directory mode denies a search on neither Windows nor as root",
+)
+def test_a_declared_target_behind_an_unsearchable_directory_is_refused(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A path the process cannot search is not a path that is absent.
+
+    Since 3.14, ``Path.is_file`` answers ``False`` for *any* ``OSError``
+    the operating system raises rather than only for a path that is
+    missing. On a directory this process may not search, it therefore
+    reported a declared target as absent and dropped the binary from the
+    class in silence -- the false negative this module exists to refuse,
+    and one the gate could not see, because 3.12 raises where 3.14
+    returns ``False`` and only 3.14 runs the gate.
+
+    The check is on a *declared* target rather than a discovered one
+    because the two reads are gated differently: this one is answered
+    from the manifest, so it is reached without the walk, and a reading
+    that treated the unsearchable source as absent yields an empty
+    inventory rather than an error. Only ``FileNotFoundError`` is an
+    answer; every other failure must name the path it could not read.
+    """
+    crate = tmp_path / "ortho_config"
+    crate.mkdir()
+    source = crate / "spec" / "outside.rs"
+    source.parent.mkdir()
+    source.write_text("fn c() { trybuild::TestCases::new(); }\n", encoding="utf-8")
+    (crate / "Cargo.toml").write_text(
+        '[package]\nname = "ortho_config"\n\n'
+        '[[test]]\nname = "outside_the_directory"\npath = "spec/outside.rs"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "cargo-orthohelp").mkdir()
+    # Deny the search that resolves ``spec/outside.rs``, not the listing
+    # of the crate. The manifest stays readable, so the inventory is
+    # reached and the target is found; only its source cannot be checked.
+    os.chmod(source.parent, 0o000)
+    try:
+        with pytest.raises(ScanError) as raised:
+            trybuild_binaries(tmp_path)
+    finally:
+        os.chmod(source.parent, 0o755)
+    assert str(source) in str(raised.value), raised.value
+    assert isinstance(raised.value.__cause__, OSError), raised.value.__cause__
