@@ -298,6 +298,39 @@ escalation, not workarounds.
   (previous remote head `0a64c595`). A fresh CodeRabbit review was requested on
   PR #417; it is queued behind a shared backlog and had not posted at the time
   of writing.
+- [x] (2026-09-28) Rebased a second time, onto `main` at `f6a406fc` (PR #510)
+  from boundary `8835347c` (the PR #416 squash). Replayed 37 commits; the
+  rebase completed with **zero conflicts**, because the branch and `main`
+  overlapped in only five files and the three Rust/doc overlaps were additive
+  on both sides. Audit: 40 `main`-only paths byte-identical at the new head;
+  all 133 lines `main` added to the five overlapping files still present; no
+  deletions, no conflict markers; `range-diff` shows 35 commits identical, one
+  rescaled, and one dropped (below).
+- [x] (2026-09-28) Dropped the commit "Refresh the generated spelling
+  configuration from the current dictionary" as redundant. It became empty
+  during the replay: `main` had independently added the same 13 lines of
+  dictionary churn, and commit `6155e938` already carried this branch's three
+  overlay-derived entries. Verified before skipping rather than assumed — the
+  commit's own patch reverse-applies cleanly, and the resulting `typos.toml`
+  blob `0a34c246` is byte-identical to the fixed point the 2026-09-25 gate run
+  had verified. Its rationale is preserved in the Progress entry above.
+- [x] (2026-09-28) Post-rebase gates green on the new head `6b817120`, with the
+  tree clean and the head frozen across the whole run: `make check-fmt`,
+  `make typecheck`, `make lint` (rustdoc, Clippy, Whitaker) and `make test` all
+  exit 0.
+- [ ] (2026-09-28) Test count rose to **1412 Rust tests, 0 failing** (plus 87
+  pytest passing and 5 skipped), up from the 1391 recorded above. This is
+  inherited growth, not new branch coverage: the +21 net decomposes as +33
+  added and 12 renamed, and both suites involved arrive from `main`. The rebase
+  pulled in `f303aa11` ("Inject subcommand file discovery sources (#452)
+  (#509)") and `c043980d` ("Extract subcommand path tests (#452) (#507)"),
+  which split `subcommand::paths` into `probe_tests`, `proptests`, and
+  `xdg_tests` modules (hence the 12 renames), and added
+  `ortho_config/src/env_source_tests.rs`, with
+  `ortho_config/tests/support/parser_defaults.rs` supplying the rest. `main`
+  added roughly 2313 lines of test code across the seven commits it
+  contributed. Both named commits were confirmed ancestors of the target before
+  this claim was recorded.
 
 ## Surprises & discoveries
 
@@ -1420,3 +1453,20 @@ Revised after the rebase reconciliation with the shipped 7.1.1 framework:
 - Realigned the guide, design-doc, and migration-guide prose with the shipped
   grammar and report channel, and added the CHANGELOG entry the branch had
   never carried.
+
+### Revision 5 (2026-09-28)
+
+Second rebase, onto `main` at `f6a406fc`. No design change was needed: the
+branch had already adopted the shipped 7.1.1 framework in Revision 4, and the
+seven commits `main` contributed since then are test refactors under roadmap
+item `#452` (`subcommand` path discovery and `parser_defaults`) that touch no
+policy, schema, or CLI surface this branch depends on. The replay therefore
+resolved itself, and the revision records evidence rather than decisions:
+
+- The 2026-09-25 entry above states the pre-rebase test count of 1391. After the
+  replay the count is 1412; the Progress entry records the decomposition and
+  attribution. The earlier entry is left as written, since it describes the
+  tree as it stood then.
+- The tree verified during the 2026-09-25 run was `e7ed8b44`/`0f153e88`. Those
+  identities and their gate results remain historical evidence for the previous
+  candidate; the binding candidate is now `6b817120`.
