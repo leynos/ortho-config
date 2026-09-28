@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -404,3 +404,112 @@ structurally invisible to it**. The remedy is a cross-compilation probe
 whenever a diff touches a platform cfg. That probe cost seconds here and would
 have caught all three Windows failures before the review request was ever
 queued.
+
+### Third round (pre-merge row dispositions)
+
+The same review left a pre-merge table with two errors and four warnings. Each
+row was re-verified against the current head rather than taken at face value,
+and the rows did not resolve uniformly — two were already repaired by the
+second round's commits, three needed new work, and one was wrong.
+
+Two rows were **already satisfied** and needed only evidence. Observability was
+the pre-merge restatement of Finding B, so the `windows_home_from_fallback`
+repair answers it; the row was left open only because the table had not been
+recomputed. User-Facing Documentation overlapped the guide edit made in the
+second round.
+
+Three rows were **valid and needed new work**: Testing (Overall), for the three
+`SubcmdConfigMerge` methods that no test reached; Testing (Compile-Time / Ui),
+for the absence of any trybuild coverage of the newly public discovery
+contracts; and Developer Documentation, which correctly noticed that the plan
+still declared `IN PROGRESS` while its own Outcomes section asserted the work
+was finished.
+
+The Testing (Overall) row deserves a provenance correction, because its
+attribution is easy to get wrong and was wrong in the first draft of this
+record. The three methods are *not* new. `git grep` at the live base `5732adf9`
+finds all three defined on `pub trait SubcmdConfigMerge` in
+`ortho_config/src/subcommand/mod.rs:330,348,362`, with the trait re-exported
+from `lib.rs:63`; what this PR contributes is richer coverage, not the API.
+`git log -S` traces them to `056ccfa5` (#412). A first-pass check appended
+`-- ortho_config/src/subcommand/config_merge.rs` and read the resulting zero,
+but that file does not exist at base — the trait was extracted into it by this
+branch — so the empty result measured the extraction, not the API. The
+corrected statement is stronger for the review, not weaker: the methods are
+pre-existing public surface that shipped untested, and the Base-layer evidence
+below is what establishes the difference.
+
+Only the discovery surface is genuinely new at the base:
+`SubcommandFileContext`, `SubcommandCliMatches`, `candidate_paths_at`, and
+`paths_telemetry` all return zero hits at `5732adf9`, and those are the
+contracts the trybuild fixtures pin.
+
+One row was **rebutted with base-layer evidence**. Unit Architecture asked for
+`candidate_paths_at` to be made side-effect free, arguing that this PR
+introduced telemetry into a query. The premise is wrong on both counts. The
+started/finished pattern already existed at the PR base: `csv_env/mod.rs`'s
+`data()` — a Figment provider method on the read path — calls
+`merge_telemetry::csv_env_injected_started()` and its siblings inside the same
+function that collects entries, and `merge_telemetry` is a base-layer module,
+declared at `lib.rs:57` in the base tree. The row's supporting detail is also
+factually wrong: `grep -n 'tracing::\|metrics::' paths.rs` returns nothing,
+because every emission goes through the `paths_telemetry` façade. That façade
+accepts no caller-controlled text — `candidate_exists` takes only a `usize`
+position, and the remaining entry points take no arguments at all — so paths,
+environment values, and host state never become event fields. Routing telemetry
+through the façade is the design under review, not an oversight in it.
+
+The Developer Documentation row is closed by the status line at the top of this
+plan, which now declares `COMPLETE` and matches the checked `Progress` list.
+
+### Third-round repairs and the evidence for them
+
+The three valid rows were repaired in the commits that followed `a3ec6c82` and
+each repair was confirmed by execution rather than by inspection, because every
+one of them added code that had never been compiled.
+
+Those repairs did not land with PR #509. They were still uncommitted when #509
+merged as `f303aa11`, and the branch that carried them was deleted by that
+merge, so the rows recorded here were repaired *after* the review that raised
+them had already closed. This plan is retained rather than rewritten because
+the dispositions above are the evidence for the row-by-row reasoning; the code
+they describe is delivered separately, in the pull request that carries this
+revision of the file.
+
+- Testing (Overall) — `ortho_config/tests/subcommand_merge_methods.rs`, seven
+  cases across the three methods. Each sentinel is distinct per layer
+  (`file_ref`/`injected_ref`/`cli_ref` and `4`/`5`/`7`/`9`/clap's `2`), so no
+  case can pass by coincidence, and each stages its own temp directory through
+  `test_helpers::cwd::set_dir` rather than relying on the ambient one.
+  `cargo test -p ortho_config --test subcommand_merge_methods` → 7 passed, 0
+  failed.
+- Testing (Compile-Time / Ui) — `ortho_config/tests/subcommand_trybuild.rs`
+  with a pass fixture and a compile-fail fixture. The first confirmation run
+  came back **red**, and the failure was instructive: the pass fixture compiled
+  and ran (`[should pass] ... ok`), while the compile-fail fixture failed for
+  exactly the intended reason but had no accepted `.stderr`, so trybuild wrote
+  `wip/subcommand_merge_requires_extractor.stderr` and failed the test.
+  trybuild requires the committed file; it does not accept the snapshot for
+  you. The captured diagnostic names `CliValueExtractor` four times across two
+  `E0277` blocks, one per withheld method, so it pins the intended bound rather
+  than some incidental error. After accepting it byte-exact the suite is
+  `1 passed; 0 failed`, and no `wip/` is regenerated. Note where trybuild
+  writes: `ortho_config/wip/`, not beside the fixture, and it drops its own
+  `.gitignore` containing `*` there — so the snapshot is invisible to
+  `git status` and to `git add -A` until it is copied out deliberately.
+- User-Facing Documentation and Developer Documentation — the migration-guide
+  section, the `COMPLETE` status line, and the `docs/contents.md` index entry,
+  all checked for the 80-column fill and the en-GB-oxendict vocabulary.
+
+The `.config/nextest.toml` Windows override was deliberately **not** extended
+to name the new binary. The override exists because cold trybuild child builds
+exhausted the 600s per-test allowance on Windows, and it names exactly the four
+binaries whose tests had done so — a contract test asserts that set exactly.
+`subcommand_trybuild` has no such history, and three existing trybuild
+binaries, including `localized_parse_trybuild` with its own `compile_fail`
+fixture, are likewise unnamed. Naming it without evidence would widen a
+contract test and its documentation on speculation. If the Windows leg does
+time out on it, the remedy is to add the binary to the override *and* update
+`TRYBUILD_BINARIES` in
+`tests/workflow_contracts/windows_trybuild_isolation_test.py` in the same
+change.

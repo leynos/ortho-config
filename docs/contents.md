@@ -164,6 +164,9 @@
     plan for the public guides and executable documentation-example contract.
   - [Cargo helper for hand-built clap commands](execplans/8-3-1-ortho-config-cargo-helper-for-hand-built-clap-commands.md):
     plan and implementation record for the Cargo external-subcommand helper.
+  - [Address review findings on PR #509](execplans/harden-lint-subcommand-environment-replay-r2-20260923.md):
+    plan and review record for the injected subcommand file-discovery sources
+    and their documentation.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
 

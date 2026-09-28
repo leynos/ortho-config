@@ -1,0 +1,29 @@
+error[E0277]: the trait bound `NoExtractorArgs: CliValueExtractor` is not satisfied
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:36:17
+   |
+36 |     let _ = cli.load_and_merge_with_matches(&matches);
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+   |
+note: required by a bound in `load_and_merge_with_matches`
+  --> src/subcommand/config_merge.rs
+   |
+   |     fn load_and_merge_with_matches(&self, matches: &ArgMatches) -> OrthoResult<Self>
+   |        --------------------------- required by a bound in this associated function
+   |     where
+   |         Self: serde::Serialize + Default + CliValueExtractor,
+   |                                            ^^^^^^^^^^^^^^^^^ required by this bound in `SubcmdConfigMerge::load_and_merge_with_matches`
+
+error[E0277]: the trait bound `NoExtractorArgs: CliValueExtractor` is not satisfied
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:37:17
+   |
+37 |     let _ = cli.load_and_merge_with_matches_with_sources(&matches, source);
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+   |
+note: required by a bound in `load_and_merge_with_matches_with_sources`
+  --> src/subcommand/config_merge.rs
+   |
+   |     fn load_and_merge_with_matches_with_sources(
+   |        ---------------------------------------- required by a bound in this associated function
+...
+   |         Self: serde::Serialize + Default + CliValueExtractor,
+   |                                            ^^^^^^^^^^^^^^^^^ required by this bound in `SubcmdConfigMerge::load_and_merge_with_matches_with_sources`
