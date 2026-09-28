@@ -1259,7 +1259,8 @@ Progress entries from milestone 1 onward must carry timestamps.
       is deliberately left untouched.
 
 - Observation (2026-09-28, environment): `ortho_config/tests/merge_telemetry.rs`
-      is 575 lines and `ortho_config/tests/extends.rs` 542, both well past the
+      is 622 lines (575 before the Observability repair added one case) and
+      `ortho_config/tests/extends.rs` 542, both well past the
       400-line cap `AGENTS.md` states, yet the gate stays green. Evidence:
       Whitaker's `module_max_lines` reports `Module tests_extraction spans 404
       lines` for a `mod`-declared file, and `extends.rs` was already 405 lines
@@ -1269,6 +1270,37 @@ Progress entries from milestone 1 onward must carry timestamps.
       file-size debt (this branch pushed `merge_telemetry.rs` from 376 to 575)
       rather than as licence to keep growing it. A future change should split
       the suite along the same seams the sweep already used.
+
+- Observation (2026-09-28, verification): the six-gate certificate for
+      `1a257f2d` is complete and head-bound. Evidence: `make check-fmt`, `make
+      test` (1425 passed / 0 failed over 78 `test result:` lines), `make
+      typecheck`, `make lint` (Whitaker's recipe confirmed present at lint-log
+      line 7 and finishing clean, not skipped by a Clippy abort), `make
+      markdownlint` (0 errors / 76 files, plus the spellcheck gate) and `make
+      nixie` (all diagrams validated) each exited 0, and every gate has a
+      `/tmp/<gate>-…out.status` sidecar recording `head_at_run=1a257f2d…`. HEAD
+      was re-verified unchanged with a clean tree after the last gate.
+
+- Observation (2026-09-28, process): the Markdown pair was initially missed.
+      The scrutineer scoped itself to the four gates it was given and said so
+      explicitly, flagging that `docs/execplans/9-1-1-profile-metadata.md` is a
+      `.md` change its assignment did not score. It was right, and the gap was
+      closed by running the two Markdown gates afterwards. Lesson: a
+      gate-scoping brief should be derived from the changed *file classes*, not
+      from habit — a `.md` edit in an otherwise Rust-only change still needs
+      the Markdown lane.
+
+- Observation (2026-09-28, state): the Observability repair is published and
+      awaiting review. `1a257f2d` was pushed as a fast-forward from `c3fb59a6`
+      (no force needed, local == remote), the reconciliation is posted at
+      `https://github.com/leynos/ortho-config/pull/537#issuecomment-5871925359`,
+      and a fresh CodeRabbit pass was queued through `comenq` as `496651ab`
+      (ETA ~21 min; the queue was empty and CodeRabbit had not auto-reviewed
+      the new head, so this is not a duplicate request). The prior `c3fb59a6`
+      gate certificate was preserved under `/tmp/gate-evidence-c3fb59a6/`
+      before the re-run reused the shared log paths.
+      `CHANGES_REQUESTED` still stands from stale `a94c8050` and must be
+      superseded by a fresh review, never cleared by hand.
 
 ## Decision log
 
