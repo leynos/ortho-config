@@ -20,6 +20,7 @@ mod policy;
 mod scope;
 mod scoped;
 mod telemetry;
+mod telemetry_counters;
 
 pub use builder::ConfigDiscoveryBuilder;
 pub use policy::{
@@ -128,6 +129,8 @@ impl ConfigDiscovery {
 
 #[cfg(test)]
 mod telemetry_test_support;
+#[cfg(test)]
+mod telemetry_tests;
 #[cfg(test)]
 mod tests;
 

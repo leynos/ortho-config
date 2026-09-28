@@ -2055,3 +2055,263 @@ disposition of all three rows is to be posted as a focused walkthrough
 reconciliation rather than a full re-request, and the follow-up work the
 `Observability` row implies — a bounded `scope` label on the scoped failure and
 terminal events — is named here as outstanding rather than silently dropped.
+
+### Round 19: the `Observability` row is repaired, not deferred
+
+**Round 18 named the work outstanding; this round does it.** The row asked for
+a bounded scope on the scoped path's failure and terminal events. Both halves
+are now emitted, and the scope vocabulary is a closed three-value set (`system`,
+`user`, `project`) declared in `telemetry.rs`, so the module's
+no-values-in-events property — every field a `&'static str` from a closed set,
+or a `bool` — still holds. No path, variable value, or file content reaches an
+event.
+
+**The fix was smaller than the row implied, because the data was already
+there.** `Candidate.scopes: Vec<DiscoveryScope>` has existed on the candidate
+entry (`candidate_set.rs:80`) since the stacking work, and `compose_scope`
+already had the `DiscoveryScope` in hand as a parameter. What was missing was
+only the emission path: `CandidateFailure` carried no field to put a scope in,
+and the terminal event passed `None`. So this is a label plumbing change, not a
+change to which events fire or when.
+
+**Why the same `source` label needed it.** `xdg` is reachable from both the
+machine-wide `XDG_CONFIG_DIRS` walk and the per-user `XDG_CONFIG_HOME` walk, so
+before this change the two failure events were byte-identical and an operator
+could not tell which walk produced one. That is a defect the stacking mode
+introduced, which is why the row is in scope for this PR rather than a
+follow-up.
+
+**One half of the row is argued rather than implemented: `scope` as a *metric*
+label.** The row also asks for the scope on metric labels. `telemetry.rs`
+documents the opposite decision: "the label set is part of the contract a
+consumer's dashboards are built against", and `count_outcome` keeps its
+`operation`/`outcome` pair deliberately. Adding a third label multiplies every
+outcome series by scope to record a fact the event already carries, and the
+event is where a per-walk fact belongs. The same reasoning already excludes
+`source` from that label set. So this half is declined on a recorded contract,
+not on effort.
+
+**The counters the row also names are a metrics programme, not a repair.** It
+asks for counters and histograms over candidates, layers, and latency. Nothing
+in this PR's own change needs them, no existing issue covers them (#484, #476
+and #413 are each adjacent and none is this), and inventing a label-and-metric
+surface here would freeze a contract before its consumer exists. This is named
+as a separate proposal rather than done, and the row's disposition says so.
+
+**Where the new test lives, and why.** Five cases pin the field in
+`ortho_config/tests/scoped_telemetry.rs`. It is a top-level test file rather
+than a module of `scoped_stacking` for the reason `discovery_telemetry` already
+records: the capture harness is shared, and a second suite including it would
+compile a second copy. It declines dead-code warnings on that module
+explicitly, in the same form `merge_telemetry.rs:15-19` uses.
+
+**The suite was proved to have teeth rather than assumed to.** `scope_label`
+was mutated to return a constant `system` and the suite re-run: four of the
+five cases failed and one passed. The survivor is
+`a_system_scope_failure_reports_the_system_scope` — precisely the case a
+constant label satisfies, which is why the other four exist. The mutation was
+reverted and the suite re-run green. Without this check the suite would have
+been a set of assertions that could not distinguish the field from a literal.
+
+**Fixture staging goes through capability handles.** Each case needs a
+*directory* where a configuration file is expected, since the loader refuses
+one with "configuration path is not a regular file" and that is what produces a
+failure inside the walk. `std::fs::create_dir_all` would trip the repository's
+`no_std_fs_operations` lint (`scoped_stacking` is not in `dylint.toml`'s
+`excluded_crates`), so the directory is created through a `cap_std::fs::Dir`
+opened on the caller's temporary directory.
+
+**What is not claimed.** No gate has yet been run against this round's tree.
+
+### Round 20: the row's fourth clause, which Round 19 never disposed
+
+**Round 19 answered three of the `Observability` row's four asks and left one
+untouched.** The row's resolution names four things: the `scope` on the scoped
+events, the same context on metric labels, counters/histograms for volume and
+latency, and — separately, and easily lost between the other three — "Emit a
+consistent policy attempt/outcome metric for explicit and automatic policy
+paths". The first is done, the second and third are argued or deferred, and the
+fourth had no disposition at all until now. This round is that clause.
+
+**It is a real defect, and it was verified twice.** A wyvern reconnaissance
+confirmed the claim against the current tree, and the same reading was then
+repeated by hand. `ConfigFilePolicy::resolve_layers` has two branches. The
+automatic branch delegates to `compose_scoped_layers_with_origins`, which
+reaches `telemetry::attempt` by one of two routes — `scoped.rs:90` for the
+stacking mode, or `load.rs:126` through the `FirstWins` early return. The
+explicit branch reached none: it called `policy_resolution` (which counts
+nothing) and then `FileLayerOutcome::selected`, whose `load_outcome` ends in
+`count_outcome`. So a policy that resolved an explicit path incremented
+`ortho_config.discovery.outcomes` with `operation = policy_resolve` while
+incrementing `ortho_config.discovery.attempts` not at all. The outcome counter
+could climb while the attempt counter stayed flat.
+
+**The fix is one line, and the line budget decided its shape.** The explicit
+branch now calls `telemetry::attempt(telemetry::OPERATION_POLICY_RESOLVE)`
+before `policy_resolution`. `policy.rs` sits at the 400-line cap exactly, so
+the accompanying doc change had to pay for the new line rather than add one:
+the paragraph that read "The two `discovery.policy` resolutions below are
+therefore the whole of this path's visibility" was both now false *and* the
+obvious place to recover the line, since an attempt, a resolution and an
+outcome are now this path's visibility. The file is back at exactly 400.
+
+**Two tests pin it, in the two channels the row named.** A `tracing`-channel
+case in `support/policy_telemetry.rs` asserts the attempt's operation is
+`policy_resolve` and that the terminal outcome names the same operation. A
+counter-channel case in `discovery_metrics.rs` asserts the `attempts` and
+`outcomes` counters for `policy_resolve` are both exactly 1 — that suite
+previously drove no policy at all, so the metric half of this path was
+unpinned. Each was proved non-vacuous by deleting the new line: the first fails
+with "expected exactly one `discovery.attempt` event, got []", the second at its
+`attempts` assertion. Restoring the line turns both green.
+
+**What the automatic branch does, and why it is not a second defect.** The
+automatic branch reports under the legacy `compose_layers` operation label
+rather than a third one of its own, because it delegates the whole walk to the
+legacy path; the row asks for *consistency* between the branches, not for one
+label. In `StackScopes` a single call still yields one attempt against one
+outcome per scope that found a winner plus a terminal one, which is the
+recorded multiplicity that mode is built on. Neither is changed here.
+
+**What is not claimed.** No repository gate has been run against this round's
+tree either. The focused suites are green — `discovery_telemetry` 39/39,
+`discovery_metrics` 3/3, and the scoped and proptest suites unchanged and
+passing — but the commit gateways are still owed.
+
+### Round 21: the documentation edits, and the formatter's opinion of them
+
+The `scope` field reached the source and the tests in Round 19; it reached the
+documentation only here. That was a real gap rather than a cosmetic one: both
+event tables are the published vocabulary, and a field an operator cannot look
+up is a field they will not read out of a log.
+
+**Five edits, in two files.** `docs/design.md` gains `policy_resolve` on the
+`discovery.attempt` bullet and a qualified `scope` on both the
+`discovery.candidate` and `discovery.load` bullets. `docs/developers-guide.md`
+gains `policy_resolve` in the `discovery.attempt` row's `operation` cell,
+widens that row's "emitted from" cell to `load`, `policy` (the explicit branch
+emits the attempt from `policy.rs:380`), and adds a qualified `scope` cell to
+the `discovery.candidate` row.
+
+**The qualification is "scoped walks only", and it is load-bearing.** The field
+is structurally optional (`scope: Option<&'static str>`) and the module's
+convention is that an absent field is omitted rather than rendered empty, so
+the tables must say *when* it appears, not merely that it can. Verified against
+the call sites rather than assumed: `load_outcome` has five, and `scope` is
+`Some` at exactly one — `scoped.rs:169`, the per-scope terminal event of a
+successful scoped walk. `scoped.rs:115` (the whole composition's terminal
+event), `load.rs:134` and `load.rs:154` (the flat walk), and `policy.rs:194` (a
+policy) all pass `None`. The `discovery.candidate` field is `Some` only from
+`scoped.rs:161`. So the `discovery.load` `source` field is *not* scoped-only:
+the flat walk sets it at `load.rs:137` and a policy omits it. An earlier draft
+of the guide's `candidate` row over-claimed by leaving the scope cell
+unqualified, which is why that cell now reads `scope` (scoped walks only) in
+the same form as its `load` neighbour.
+
+**The table is column-padded, which decides the edit order.** The guide's
+telemetry table is padded to a uniform cell width, so lengthening one cell
+takes every row in the table out of alignment with it — and `make check-fmt`
+runs `mdtablefix` over it (`--wrap --renumber --breaks --ellipsis --fences`),
+which would immediately fail a hand-padded attempt. Content was therefore
+edited first and `mdtablefix --in-place` run after; the follow-up `--check`
+reports 74 files unchanged, so the table is at a fixed point of the
+repository's own formatter rather than at one hand-matched to it.
+
+**The scribe stalled and was stopped.** The documentation was delegated, but
+the agent applied only two of the five edits and then went silent — its
+transcript output file's mtime stood 49 minutes behind the wall clock with the
+last entry being the delivery of a correction message rather than a reply. It
+was stopped before it could wake and edit the same lines; the remaining three
+edits were applied directly, which is also why the count above is stated as
+five rather than as the two that were observed to land.
+
+### Round 22: the gate run, and the one word it rejected
+
+The tree was committed and handed to `scrutineer` for all seven gateways. Six
+passed on the first candidate and one failed, and the failure was mine rather
+than the code's.
+
+**Six green, one red.** `check-fmt` (2s), `typecheck` (20s), `lint` (29s),
+`test` (282s: 1392 passed, 0 failed, 15 ignored, plus 87 pytest passed, 5
+skipped), `test-workflow-contracts` (320 passed, 1 skipped), and `nixie` (all
+diagrams validated). All three halves of `lint` ran — `cargo doc`,
+`cargo clippy -D warnings`, and whitaker — so the sibling-prerequisite hazard
+of clippy aborting `make` before whitaker runs did not bite. `policy.rs` was
+confirmed at exactly 400 lines. No gate log contained a warning line; the only
+textual matches for "warning" were the `-D warnings` flag in the echoed
+commands and one test name. The candidate was re-read after every gate and
+never moved.
+
+**The failure: `make markdownlint`, in its `spellcheck` half.** The
+`markdownlint-cli2` half was clean (75 files, 0 errors). The `spellcheck` half
+rejected one word written into this very document: a verb whose suffix was the
+non-Oxford variant, used in the preceding version of this section to describe
+what lengthening one table cell does to every other row's alignment. The house
+style is en-GB-oxendict, which takes the `-ize` suffix, and the rejected
+variant is not in the generated `typos.toml` allowlist.
+
+The fault is named categorically here rather than quoted, and the reason is
+worth recording as a rule for anyone editing this document: **a description of
+a misspelling re-trips the same gate.** The gate reads inline code spans too,
+so writing the offending form into the prose that explains the failure fails
+`spellcheck` a second time. The repair therefore avoided the word entirely,
+rewriting the sentence as "takes every row in the table out of alignment with
+it"; the same rule is why the offending form appears nowhere in this document,
+and an earlier draft of this very paragraph was itself rejected for violating
+it.
+
+The two `-ised` forms that *do* survive, at lines 1044 and 1048, are quoted
+deliberately as the thing the house style forbids, and they pass — the gate
+reaches a later line only after passing them, so they are demonstrably
+acceptable. Do not "correct" them.
+
+**Fail-fast, so one error proves one error and no more.** `spellcheck` stops at
+the first offender, so the failing log establishes exactly one bad line and
+cannot establish that no others exist. The correction was therefore re-gated
+rather than assumed sufficient: the candidate was amended (the commit had never
+been pushed, so no red commit is left in history) and `make markdownlint`
+re-run against the new tree to answer the question the first run could not.
+
+**Two runs raced an edit, and both results were void.** The first re-gate was
+started against a candidate and this document was then edited while it ran, so
+its `make markdownlint` pass and its `make check-fmt` failure were both
+unbound: the pass described a tree that no longer existed, and the failure —
+`mdtablefix --check` reporting the execplan needed reformatting,
+`1 file would be reformatted, 73 files left unchanged` — was merely the
+difference between this document as that gate read it and as it had since
+become. The second re-gate was stopped for the same reason, the section being
+written here having again been edited underneath it.
+
+The lesson is the one the freshness rule already states, sharpened by the
+specific way it bit twice: **freeze the tree before summoning a gate-runner,
+and edit nothing while a gate holds the candidate.** What makes this document
+unusual is that its subject *is* the gate run. **The record of a run is itself
+prose that must be reformatted and re-gated**, so it cannot be written
+concurrently with the run it describes — the narrative and the certificate
+compete for the same bytes. The resolution is structural rather than a matter
+of care: the prose is finished, formatted and frozen **first**, and the gates
+are run against that frozen commit as the last action. Nothing is written back
+afterwards.
+
+**Where the certificate lives.** Because of that ordering, this document does
+not and cannot record its own final gate results: writing them here would edit
+the very bytes the gates had just approved, invalidating the run. The result of
+the last gate pass is therefore held in its own artefacts — the `tee` logs under
+`/tmp`, named in the hand-off — and in the pull request's check rollup, not in
+this prose. Treat a claim about gate results found in this document as a claim
+about the *earlier* candidate it names, never about the current tree.
+
+**Re-gating was narrowed deliberately.** The only delta between the first gated
+candidate and the frozen one is prose in this file, verified with
+`git diff --name-only <first>..<final>` rather than assumed, so the Rust and
+workflow gates were not re-run against it: a delta is re-gated only for the
+file classes it reaches, and their six green results stand for the unchanged
+tree.
+
+**What is not claimed here.** This section names the six gates that passed, the
+one that failed, and the exact cause of the failure, because those are facts
+about candidates now superseded. It does not assert the outcome of the final
+gate pass, for the reason given above: that pass is the last action taken
+against the frozen commit, and its evidence is the gate logs and the PR check
+rollup rather than any sentence here. A reader wanting the current verdict
+should read those, not this.

@@ -108,6 +108,10 @@ impl ConfigDiscovery {
             layers.extend(scope_layers.layers);
         }
 
+        // No scope here: this is the whole composition's terminal event, and a
+        // composition covers every requested scope. The per-scope events that
+        // `compose_scope` emits carry the scope, which is where it is a fact
+        // about one walk rather than about the run.
         telemetry::load_outcome(
             telemetry::OPERATION_COMPOSE_LAYERS,
             if layers.is_empty() {
@@ -115,6 +119,7 @@ impl ConfigDiscovery {
             } else {
                 telemetry::OUTCOME_SUCCESS
             },
+            None,
             None,
         );
         (errors.into_layers_outcome(layers), origins)
@@ -153,6 +158,7 @@ impl ConfigDiscovery {
                         operation: telemetry::OPERATION_COMPOSE_LAYERS,
                         required,
                         source: candidate.source,
+                        scope: Some(telemetry::scope_label(scope)),
                     },
                     error,
                 ),
@@ -164,6 +170,7 @@ impl ConfigDiscovery {
                 telemetry::OPERATION_COMPOSE_LAYERS,
                 telemetry::OUTCOME_SUCCESS,
                 Some(source),
+                Some(telemetry::scope_label(scope)),
             );
         }
         ScopeLayers { layers, errors }

@@ -191,7 +191,7 @@ impl FileLayerOutcome {
                 },
             ),
         };
-        telemetry::load_outcome(telemetry::OPERATION_POLICY_RESOLVE, outcome, None);
+        telemetry::load_outcome(telemetry::OPERATION_POLICY_RESOLVE, outcome, None, None);
         this
     }
 
@@ -368,16 +368,16 @@ impl ConfigFilePolicy {
 
     /// Resolve selector and discovery layers without discarding diagnostics.
     ///
-    /// A policy bypasses the candidate machinery, so it emits none of the
-    /// per-candidate events discovery otherwise would. The two
-    /// `discovery.policy` resolutions below are therefore the whole of this
-    /// path's visibility: which selector class won, or that none did.
+    /// A policy bypasses the candidate machinery and emits none of the
+    /// per-candidate events discovery otherwise would: the attempt, the
+    /// resolution and the outcome below are this path's whole visibility.
     pub fn resolve_layers(&self) -> FileLayerOutcome {
         if let Some((selector, path)) = self.selectors.iter().find_map(|selector| {
             selector
                 .resolve(&self.discovery)
                 .map(|path| (selector, path))
         }) {
+            telemetry::attempt(telemetry::OPERATION_POLICY_RESOLVE);
             telemetry::policy_resolution(Some(selector.class));
             return FileLayerOutcome::selected(
                 ResolvedSelection {

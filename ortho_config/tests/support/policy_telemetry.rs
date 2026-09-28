@@ -154,6 +154,32 @@ fn resolve_layers_reports_no_class_when_no_selector_wins() {
     );
 }
 
+/// A winning selector reports its own operation, and an attempt precedes it.
+///
+/// The two branches of [`resolve_layers`] must agree that an attempt is
+/// recorded, and here the explicit branch reports under the policy's own
+/// operation label rather than adopting the legacy `compose_layers` one above:
+/// it performs the resolution itself instead of delegating to the legacy walk.
+/// An outcome with no attempt before it would leave a consumer's attempt and
+/// outcome counters permanently disagreeing about how many resolutions ran.
+#[test]
+fn a_winning_selector_reports_its_own_attempt() {
+    let dir = tempfile::tempdir().expect("a temporary directory should be creatable");
+    let selected = write_fixture(dir.path(), "present.toml").expect("fixture should be written");
+    let policy = policy_with(MapEnv::new()).selectors([ConfigPathSelector::cli(Some(selected))]);
+
+    let events = capture(|| policy.resolve_layers());
+    assert_eq!(
+        only(&events, "discovery.attempt").field("operation"),
+        "policy_resolve"
+    );
+    assert_eq!(
+        only(&events, "discovery.load").field("operation"),
+        "policy_resolve",
+        "the terminal outcome must name the same operation as its attempt"
+    );
+}
+
 /// A selector's class, label, path, and variable name stay out of every field.
 ///
 /// The shared redaction check in the parent suite drives the legacy operations

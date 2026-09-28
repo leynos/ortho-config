@@ -420,11 +420,14 @@ vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
 - `discovery.xdg` — `config_home` and `dirs`: `absent`, `empty`, or `present`;
   `resolution`: `default` or `list`.
 - `discovery.home` — `source`: `home`, `userprofile`, `fallback`, or `none`.
-- `discovery.attempt` — `operation`: `discover_first` or `compose_layers`.
+- `discovery.attempt` — `operation`: `discover_first`, `compose_layers`, or
+  `policy_resolve`.
 - `discovery.candidate` — `operation`; `outcome`: `required_failure` or
   `optional_failure`; `required`: `bool`; `source`: `required_explicit`,
   `explicit`, `selector`, `xdg`, `windows`, `home`, or `project`; `category`:
-  `file`, `cyclic_extends`, `gathering`, `validation`, or `other`.
+  `file`, `cyclic_extends`, `gathering`, `validation`, or `other`; `scope`:
+  `system`, `user`, or `project`, present only when a scoped walk met the
+  candidate and omitted on the flat first-wins walk.
 - `discovery.project_root` — `state = "cwd_unavailable"`, emitted only when
   the default project-root resolver fails.
 - `discovery.load` — `operation`: `discover_first`, `compose_layers`, or
@@ -434,7 +437,9 @@ vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
   the terminal outcome here; on success only, `source`: `required_explicit`,
   `explicit`, `selector`, `xdg`, `windows`, `home`, or `project`, naming the
   rung that produced the winning candidate, and omitted for `policy_resolve`,
-  which consults no candidate list.
+  which consults no candidate list; `scope`: `system`, `user`, or `project`,
+  present only as the per-scope terminal event of a scoped walk, and omitted
+  for the flat first-wins walk even when it reports a `source`.
 - `discovery.policy` — `operation`: `policy_resolve`; `selector_class`: `cli` or
   `environment`, omitted when no selector matched and the supplied scopes
   produced the layers.
