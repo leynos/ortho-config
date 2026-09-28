@@ -105,6 +105,29 @@ pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<sy
     Ok(name)
 }
 
+/// Record one nested meta item for [`clap_field_env`].
+///
+/// An `env` key either carries a literal name or is bare; every other key is
+/// consumed without inspection. Kept out of the caller's `parse_nested_meta`
+/// closure so the `if`/`else` sits at the depth of its own function body rather
+/// than nesting inside two loops.
+fn consume_env_meta(
+    meta: &syn::meta::ParseNestedMeta<'_>,
+    env: &mut Option<syn::LitStr>,
+    bare_env: &mut bool,
+) -> syn::Result<()> {
+    if !meta.path.is_ident("env") {
+        return consume_unknown_meta(meta);
+    }
+    if meta.input.peek(syn::Token![=]) {
+        let value = meta.value()?;
+        *env = Some(value.parse()?);
+    } else {
+        *bare_env = true;
+    }
+    Ok(())
+}
+
 /// Read the environment variable name a clap field binds, if any.
 ///
 /// Two forms reach `clap`:
@@ -128,18 +151,7 @@ pub(crate) fn clap_field_env(field: &syn::Field) -> syn::Result<Option<String>> 
         let syn::Meta::List(list) = &attr.meta else {
             continue;
         };
-        list.parse_nested_meta(|meta| {
-            if meta.path.is_ident("env") {
-                if meta.input.peek(syn::Token![=]) {
-                    let value = meta.value()?;
-                    env = Some(value.parse()?);
-                } else {
-                    bare_env = true;
-                }
-                return Ok(());
-            }
-            consume_unknown_meta(&meta)
-        })?;
+        list.parse_nested_meta(|meta| consume_env_meta(&meta, &mut env, &mut bare_env))?;
     }
     if let Some(lit) = env {
         return Ok(Some(lit.value()));
@@ -150,10 +162,10 @@ pub(crate) fn clap_field_env(field: &syn::Field) -> syn::Result<Option<String>> 
     // A bare `env` takes its name from the argument's identifier: the assigned
     // `id` when present, otherwise the field ident. Both use the same casing
     // rule as `clap_derive`'s `ScreamingSnake` default.
-    let source = match clap_arg_id(field)? {
-        Some(id) => Some(id),
-        None => field.ident.as_ref().map(|ident| ident.unraw().to_string()),
-    };
+    let source = clap_arg_id(field)?.map_or_else(
+        || field.ident.as_ref().map(|ident| ident.unraw().to_string()),
+        Some,
+    );
     Ok(source.map(|name| heck::ToShoutySnakeCase::to_shouty_snake_case(name.as_str())))
 }
 

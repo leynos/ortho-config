@@ -173,14 +173,14 @@ name. There is no persisted "current profile" state in 9.1.1.
 ### Unknown profiles are structured hard errors
 
 Selecting a profile for which no `[profile.<name>]` table exists fails with
-`OrthoError::UnknownProfile { selected, selection_source, available }`. The `available`
-list is sorted and capped at 16 names, with the error display appending "and N
-more" beyond the cap. The error records whether the selection came from the
-flag or the environment variable, so a leaked `<PREFIX>PROFILE` is
-distinguishable from a typo on the command line. When no configuration file was
-discovered at all, the error says so explicitly instead of reporting an empty
-available list. File parse errors take precedence over unknown-profile errors
-so the root cause is never masked.
+`OrthoError::UnknownProfile { selected, selection_source, available }`. The
+`available` list is sorted and capped at 16 names, with the error display
+appending "and N more" beyond the cap. The error records whether the selection
+came from the flag or the environment variable, so a leaked `<PREFIX>PROFILE`
+is distinguishable from a typo on the command line. When no configuration file
+was discovered at all, the error says so explicitly instead of reporting an
+empty available list. File parse errors take precedence over unknown-profile
+errors so the root cause is never masked.
 
 ### Name grammar and reserved names
 

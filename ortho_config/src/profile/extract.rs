@@ -44,10 +44,10 @@ pub struct ExtractionOutcome {
 /// - `selected`: the winning selection, if any.
 /// - `discovery_failed`: whether file discovery recorded an error for the
 ///   chain that produced `layers`. An empty chain means either that no
-///   configuration file exists or that every candidate failed to load, and
-///   the two call for different [`AvailableProfileNames`] wording. Without
-///   this signal the error would claim "no configuration files were found"
-///   for a file that demonstrably exists.
+///   configuration file exists or that every candidate failed to load. In the
+///   second case the profile tables could never be inspected, so the selection
+///   is reported as unknown only in the first: a file parse error is the root
+///   cause and must not be joined by a false selection error (ADR-009).
 ///
 /// # Errors
 ///
@@ -55,13 +55,14 @@ pub struct ExtractionOutcome {
 /// [`OrthoError::InvalidProfileName`] for names outside the grammar,
 /// [`OrthoError::ProfileForbiddenKey`] for `cmds` or `inherits` inside a
 /// profile body, and [`OrthoError::UnknownProfile`] when the selected profile
-/// is not defined by any file.
+/// is not defined by any file — except when `discovery_failed` is set, in
+/// which case the selection is not reported as unknown.
 pub fn extract_profile_layers(
     layers: Vec<MergeLayer<'static>>,
     selected: Option<&SelectedProfile>,
     discovery_failed: bool,
 ) -> OrthoResult<ExtractionOutcome> {
-    let no_files_discovered = layers.is_empty() && !discovery_failed;
+    let layers_are_empty = layers.is_empty();
     let mut file_layers = Vec::with_capacity(layers.len());
     let mut profile_layers = Vec::new();
     let mut available = Vec::new();
@@ -80,10 +81,17 @@ pub fn extract_profile_layers(
         profile_layers.extend(profile_layer);
     }
 
-    if let Some(selected_profile) = selected.filter(|_| !selected_found) {
+    // A selection error is only meaningful when the profile tables could
+    // actually be inspected. When discovery already failed, the chain is empty
+    // because the only candidate could not be parsed, so it says nothing about
+    // whether the profile exists; reporting it as unknown would falsely
+    // diagnose the selection while a file parse error is the real root cause
+    // (ADR-009: parse errors take precedence over unknown-profile errors).
+    let unmatched = selected.filter(|_| !selected_found && !discovery_failed);
+    if let Some(selected_profile) = unmatched {
         return Err(unknown_profile_error(
             selected_profile,
-            no_files_discovered,
+            layers_are_empty,
             available,
         ));
     }

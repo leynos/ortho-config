@@ -155,11 +155,11 @@ additions. Retyping `AgentContext.profiles` is nonetheless a break for callers
 that build `AgentContext` with a struct literal: they must either update the
 literal's `profiles` value or construct it with one of those two constructors.
 The constructors keep future *field* additions non-breaking, not this field's
-retype. The derive emits the matching IR
-`DocMetadata.profiles` only for opted-in structs; the `cargo-orthohelp` bridge
-maps it into the declaration. The runtime "which profile is active" concern is
-`SelectedProfile`/`ProfileLoadOutcome`, deliberately separate from the static
-agent-context contract.
+retype. The derive emits the matching IR `DocMetadata.profiles` only for
+opted-in structs; the `cargo-orthohelp` bridge maps it into the declaration.
+The runtime "which profile is active" concern is `SelectedProfile`/
+`ProfileLoadOutcome`, deliberately separate from the static agent-context
+contract.
 
 `localizer::identifier::normalize_segment` is the single source of truth for
 strict runtime and derive-time Fluent identifier segments. Reuse it from

@@ -838,20 +838,25 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       the trybuild fixture `profile_env_binding_bare_collision.rs` with its
       compiler-emitted `.stderr`; the `env = "NAME"` form keeps its existing
       fixture.
-- [x] (2026-09-28) Fixed the spurious "no configuration files were found"
-      sub-error (the P2 finding). With `--profile` against a file that exists
-      but fails to parse, discovery returns an empty layer chain, and
-      `extract_profile_layers` read that emptiness as "no candidate existed",
-      so the operator was told no files were found for a file that
-      demonstrably exists. Extraction now takes a `discovery_failed` flag; the
-      block in `load_impl/mod.rs` reads the partitioned error vectors *before*
-      `append` drains them and returns `(layers, discovery_failed)`, which the
-      legacy path discards as `_discovery_failed` (it never reports an unknown
-      profile). The parse error itself was already retained and ordered first,
-      so this finding is narrower than "the parse error is masked": the fault
-      was the false second sub-error. Regression test
-      `discovery_failure_with_an_empty_chain_does_not_claim_no_files_exist`
-      covers it at the unit level.
+- [x] (2026-09-28) Fixed the spurious unknown-profile error (the P2 finding).
+      With `--profile` against a file that exists but fails to parse, discovery
+      returns an empty layer chain, and `extract_profile_layers` read that
+      emptiness as "no candidate existed" and appended an `UnknownProfile`
+      sub-error. Extraction now takes a `discovery_failed` flag and skips the
+      selection error entirely when it is set: the profile tables were never
+      inspected, so no claim about whether the profile exists can be made.
+      The first repair attempt only reworded the message ("no profiles were
+      found" rather than "no configuration files were found"); that was
+      rejected on review as insufficient, correctly, because it still asserts
+      an unverifiable negative. The flag is read from the partitioned error
+      vectors *before* `append` drains them in `load_impl/mod.rs`, and returned
+      alongside the layers; the legacy path discards it as `_discovery_failed`
+      because it never reports an unknown profile. The only scenario that
+      requires a parse error and an unknown-profile error to coexist is the
+      malformed *flag* case, which has a valid config file and is unaffected,
+      so ADR-009's "parse errors take precedence" rule still holds. Regression
+      tests `discovery_failure_suppresses_the_unknown_profile_error` and
+      `no_discovery_failure_still_reports_the_unknown_profile` pin both sides.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
@@ -869,10 +874,10 @@ Progress entries from milestone 1 onward must carry timestamps.
   `DocMetadata` exhaustively; this branch adds `DocMetadata.profiles`, so the
   `.pass` fixture failed with `E0063`. Impact: neither `git merge` nor a
   conflict-free replay is evidence of integration. Read the target's *newly
-  added* files for exhaustive matches and exhaustive struct literals over
-  types this branch changes. `cargo check` alone is not sufficient coverage:
-  trybuild fixtures are compiled as nested crates at test runtime and are
-  invisible to `--all-targets`.
+  added* files for exhaustive matches and exhaustive struct literals over types
+  this branch changes. `cargo check` alone is not sufficient coverage: trybuild
+  fixtures are compiled as nested crates at test runtime and are invisible to
+  `--all-targets`.
 - Observation: `googletest` and `pretty_assertions` are named in the task
   brief and several ExecPlans but are not yet dependencies of any workspace
   crate. Evidence: no matches in any `Cargo.toml` at planning time. Impact:
