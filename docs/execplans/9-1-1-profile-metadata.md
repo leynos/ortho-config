@@ -857,6 +857,34 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       so ADR-009's "parse errors take precedence" rule still holds. Regression
       tests `discovery_failure_suppresses_the_unknown_profile_error` and
       `no_discovery_failure_still_reports_the_unknown_profile` pin both sides.
+- [x] (2026-09-28) Rebased onto `origin/main` (`0c498068`) as instructed, then
+      validated the result before force-pushing. The replay replayed with zero
+      conflicts; `Cargo.lock` was taken from `main` and rebuilt, per the
+      lock-file rule. `origin/main` is confirmed an ancestor of `HEAD`.
+      Gate run on `355dc457` returned `make test` PASS (1416 passed / 0 failed
+      / 15 ignored, 78 targets, completing exit) and `make typecheck` PASS, but
+      `make lint` FAIL and `make check-fmt` FAIL. The lint failure was in this
+      branch's own new code (three Clippy errors in `clap_field_env`), not a
+      rebase artefact, and because `lint-clippy` and `lint-whitaker` are sibling
+      recipe lines it meant **Whitaker never executed at all** — its status was
+      UNKNOWN, not green. Repaired in `1f276773`; a fresh four-gate run on that
+      candidate is required before the push, since a new commit invalidates the
+      `355dc457` evidence.
+- [ ] (2026-09-28) **Pending:** force-push with lease to
+      `origin/9-1-1-profile-metadata-fresh`, bound to the previously recorded
+      remote head `a94c8050`. Do not refresh the lease blindly on failure.
+- [x] (2026-09-28) Repaired a second lint fault that only became visible once
+      Clippy stopped short-circuiting the gate: with `lint-clippy` clean,
+      `lint-whitaker` finally executed and reported `Module tests_extraction
+      spans 404 lines, exceeding the allowed 400`. The two regression tests
+      added for the P2 repair had pushed the module over Whitaker's cap. The
+      second of the two was an exact duplicate of the pre-existing
+      `no_files_discovered_reports_clear_error` — same `false` argument, same
+      empty chain, same two asserted substrings — so it was deleted rather than
+      relocated, and the surviving test now carries a rustdoc note pointing at
+      its complement. That both removes the redundancy and brings the module to
+      391 lines. Confirmed by running Whitaker directly (exit 0) before
+      re-gating.
 
 Progress entries from milestone 1 onward must carry timestamps.
 

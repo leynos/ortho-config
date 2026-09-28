@@ -229,32 +229,19 @@ fn no_files_discovered_reports_clear_error() {
     );
 }
 
+/// A discovery failure suppresses the unknown-profile error (the P2 repair).
+///
+/// The chain is empty because the only candidate failed to parse, so the
+/// profile tables were never inspected and no claim about the selection is
+/// supportable. The complement — that an empty chain with no discovery failure
+/// still reports the unknown profile — is pinned by
+/// `no_files_discovered_reports_clear_error` above.
 #[test]
 fn discovery_failure_suppresses_the_unknown_profile_error() {
-    let outcome = extract_profile_layers(
-        Vec::new(),
-        Some(&selection("ci").expect("valid test name")),
-        true,
-    )
-    .expect("a file parse error must not be joined by a false selection error");
-    assert!(outcome.file_layers.is_empty());
-    assert!(outcome.profile_layers.is_empty());
-}
-
-#[test]
-fn no_discovery_failure_still_reports_the_unknown_profile() {
-    let err = extract_profile_layers(
-        Vec::new(),
-        Some(&selection("ci").expect("valid test name")),
-        false,
-    )
-    .expect_err("an unknown profile against a real empty chain must error");
-    let message = err.to_string();
-    assert_that!(message, contains_substring("ci"));
-    assert_that!(
-        message,
-        contains_substring("no configuration files were found")
-    );
+    let selected = selection("ci").expect("valid test name");
+    let outcome = extract_profile_layers(Vec::new(), Some(&selected), true)
+        .expect("a parse error must not be joined by a false selection error");
+    assert!(outcome.file_layers.is_empty() && outcome.profile_layers.is_empty());
 }
 
 #[test]
