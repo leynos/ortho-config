@@ -2,7 +2,8 @@
 //!
 //! Split from `scoped_layers.rs` so each suite stays within the repository's
 //! 400-line code file ceiling. Each test binary compiles its own copy of this
-//! module, so every helper here must be one both suites use.
+//! module, so a helper used by only one of them needs an `expect(dead_code)`
+//! at the module declaration in the binaries that do not.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};

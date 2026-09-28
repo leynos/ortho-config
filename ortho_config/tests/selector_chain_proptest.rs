@@ -34,7 +34,7 @@ use scoped_fixtures::write_config;
 ///
 /// Three is the smallest length at which a wrong `rev()`, a wrong sort, or an
 /// off-by-one bound changes the answer in more than one way, and it matches the
-/// hand-written chain in `scoped_layers.rs`.
+/// chain written by hand in `scoped_layers.rs`.
 const RUNGS: usize = 3;
 
 /// The value automatic discovery would contribute if it were not suppressed.
@@ -100,8 +100,8 @@ fn staged(plan: &Plan) -> Result<(tempfile::TempDir, PathBuf), TestCaseError> {
         if *blank {
             continue;
         }
-        if let Some(value) = value {
-            write_config(&root.join(format!("rung-{index}.toml")), *value)
+        if let Some(selected) = value {
+            write_config(&root.join(format!("rung-{index}.toml")), *selected)
                 .map_err(fail("write selector fixture"))?;
         }
     }
