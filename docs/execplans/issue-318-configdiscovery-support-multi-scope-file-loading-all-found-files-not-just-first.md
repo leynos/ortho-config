@@ -1982,3 +1982,76 @@ emission is **not** claimed.
 
 **No gate has been run since this edit.** It is documentation only, touching no
 `.rs` file, so the next full pass on this head is its certificate.
+
+### Round 18: the walkthrough re-bound, and the three rows it then produced
+
+**The walkthrough moved its binding, so the rows below are fresh rather than
+stale.** Round 13 recorded `change_assessment_commit = 2cb3470a` and seven
+commits of drift. It now reads `69be5cbeed71884a693f72922eb4155b82b1161f` at
+`:85`, written `2026-09-28T12:31:19Z` — so the queued review `0f7aa908` did
+run, and its three open rows (1 error, 2 warnings) describe a head only two
+commits back. That matters for this head: `git diff --name-only 69be5cbe..HEAD`
+lists five paths and **no `.rs` file**, and the three files the rows cite
+(`discovery/policy.rs`, `discovery/scoped.rs`, `derive/policy_impl.rs`) hash
+identically at both commits. Rust is byte-identical to what was reviewed, so
+each row describes the current code and none can be dismissed as a stale anchor.
+
+**`Unit Architecture` — refuted, and the plan had already half-said so.** The
+row claims `ConfigFilePolicy::resolve_layers(&self)` is "a read operation"
+whose telemetry "the PR introduces". Verified against `origin/main`
+(`0c498068`) this round: `resolve_layers` and `ConfigFilePolicy` appear in
+**zero** `.rs` files there, so the policy API is indeed new; but
+`compose_layers(&self)` at `load.rs:235` already emits `telemetry::attempt` and
+`telemetry::load_outcome` through the same global counters, and
+`candidate_set.rs:101-106` already documents the boundary — "Assembly records
+its decisions instead of emitting them so that `candidates` stays a silent
+query; discovery operations call `CandidateDecisions::emit` at their own
+boundary". The PR adds one more caller of an established pattern; it does not
+introduce telemetry from a resolution path. The row also calls the function a
+read, and it is not: it performs filesystem I/O on both branches
+(`load_config_file_as_chain`, `loader.rs:181`; `chain_layers`, `load.rs:262`),
+which is the irreversible side effect the complaint is about, and the crate
+reads *resolution* as its operation boundary. One clause is worth keeping as an
+observation rather than a defect: the `outcome` value is computed at
+`policy.rs:149-186` and emitted, but is not among the returned fields, so a
+caller cannot publish it itself. Nothing in `AGENTS.md:295-317` requires the
+change — it instructs the opposite — so this is a design suggestion, not a
+repair task.
+
+**`Testing (Compile-Time / Ui)` — declined again, on the same reason, now with
+the code read rather than asserted.** The row asks for trybuild fixtures in the
+discovery-attribute vocabulary. Confirmed this round: nine fixtures under
+`ortho_config/tests/ui/`, driven by five `*_trybuild.rs` harnesses, and
+`grep -rln 'scope_order\|explicit_mode\|automatic_mode\|project_root_from\|env_vars'`
+over that directory returns **no** file. So the gap the row names is real. It
+stays declined because the errors are raised by pure token-generation
+functions, and a UI fixture would compile the identical message through a
+slower, more fragile instrument while pinning strictly less: it pins one
+message, where the unit test pins the message *and* the variant it maps to.
+
+**A counting error in this plan, corrected while citing it.** Round 13 wrote
+that `mode_tokens` and `scope_order_tokens` are covered by "six cases". The
+module at `policy_impl.rs:227-345` holds **six test functions** — five
+`#[test]` and one `#[rstest]` — and the `#[rstest]` carries six `#[case]` rows,
+so eleven cases execute. The distinction is not pedantry: the row asks for
+fixtures covering "valid policy discovery", and the honest count of what
+already covers it is what decides whether a fixture would add anything. The
+substantive claim survives — both defaults, all four legal spellings, both
+unknown-value errors and all three scope behaviours are each asserted — but the
+number now matches the file.
+
+**`Observability` — valid, unrepaired, and larger than the row states.** The
+row is accurate on both counts it makes, verified at this head: the failure
+record at `scoped.rs:151-158` passes `candidate.source` only, while `scope` is
+in hand in `compose_scope`'s signature, and `CandidateFailure`
+(`load.rs:37-41`) has no field to carry it; and the terminal event at
+`scoped.rs:111-119` passes `None` for the winner. Round 5's disposition claimed
+this row "Addressed" on the strength of `load_outcome` ending in
+`count_outcome` — which is true of the *mechanism* and does not touch the
+scoped context the row asks for. **No repair is attempted in this round.**
+
+**What is not claimed.** No gate has been run since this record. The
+disposition of all three rows is to be posted as a focused walkthrough
+reconciliation rather than a full re-request, and the follow-up work the
+`Observability` row implies — a bounded `scope` label on the scoped failure and
+terminal events — is named here as outstanding rather than silently dropped.
