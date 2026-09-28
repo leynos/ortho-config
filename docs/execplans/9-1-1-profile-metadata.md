@@ -1176,6 +1176,44 @@ Progress entries from milestone 1 onward must carry timestamps.
       which excludes doctests, so no commit gateway covers it. Recorded as an
       environment finding; the fix belongs to a separate change.
 
+- Observation (2026-09-28, verification): the Clippy failure the scrutineer
+      reported at `5bc39560` was `too-many-lines` on `build_profile_cli_impl`
+      (96/70) — the three source-aware entry points pushed the `quote!` body
+      over the crate's 70-line threshold. Resolved by extracting two private
+      builders, `build_profile_injected_methods` (the injected reporting pair)
+      and `build_profile_compose_methods` (the compose-layer trio), leaving
+      `build_profile_cli_impl` at 69 lines. The extraction is proven
+      behaviour-preserving rather than assumed: the multiset of `pub fn` names
+      emitted from the file hashes identically before and after
+      (`758d15cf…`), and the only name-set difference is the two new *private*
+      helpers. Lesson: a `quote!`-heavy builder is a live Clippy hazard because
+      its line count grows with emitted content, not with logic.
+
+- Observation (2026-09-28, verification): both remaining pre-merge items are
+      now implemented and mutation-proven. Item A (Testing): the compile-fail
+      fixture `ortho_config/tests/ui/invalid_precedence_source.rs` with a
+      compiler-emitted `.stderr` pinning the new five-spelling diagnostic;
+      `--test compile_fail` passes with it live. Item B (Observability):
+      `ordinary_profile_enabled_load_reports_a_parse_failure` (`category =
+      cli`) and `injected_profile_load_reports_a_forbidden_key_failure`
+      (`category = profile`, via a `cmds` key in a profile body) in
+      `ortho_config/tests/merge_telemetry.rs`. Both were mutation-probed by
+      asserting the wrong category and confirming the test fails (exit 101),
+      so neither passes vacuously. The `metrics` feature mode is unaffected
+      (10/10) because the new cases are not added to
+      `recorded_merge_counters()`.
+
+- Observation (2026-09-28, incident): a mutation probe destroyed uncommitted
+      work. To revert a one-line probe I used `git checkout -- <file>` on a
+      file whose two new tests and `cap_std` import were *unstaged*, so it
+      restored from the index (i.e. from HEAD) and discarded them. Recovery
+      via `git fsck` dangling blobs was impossible — the content had never
+      been staged, so no blob existed. The tests were rewritten from the plan
+      document. Lesson: back up a file with `cp` before a mutation probe, or
+      stage it first; `git checkout --` is a revert-to-index, not a revert of
+      the probe. A parallel `git stash` entry from another session was present
+      and must not be touched.
+
 ## Decision log
 
 - Decision: plan drafted with decisions D1–D10; profile-as-overlay design

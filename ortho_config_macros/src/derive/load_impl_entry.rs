@@ -114,6 +114,102 @@ fn build_source_aware_methods(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
     }
 }
 
+/// Build the injected profile-aware reporting entry points.
+///
+/// These take caller-supplied environment sources instead of reading the
+/// process, so they are the hermetic counterpart of the process-backed
+/// reporting entry point. The injected hooks label their telemetry by the
+/// actual source, and `load_with_profile_from_iter` is deliberately not
+/// routed through them because it resolves the process environment directly.
+fn build_profile_injected_methods(
+    krate: &proc_macro2::TokenStream,
+    config_ident: &Ident,
+) -> proc_macro2::TokenStream {
+    quote! {
+        /// Load configuration from injected sources and report the
+        /// selected profile.
+        ///
+        /// The generated implementation records only bounded merge
+        /// telemetry: it never serializes source values, keys, paths, or
+        /// raw errors.
+        #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+        pub fn load_with_profile_from_iter_with_sources<I, T>(
+            iter: I,
+            discovery_source: #krate::SharedEnvSource,
+            merge_source: #krate::SharedScanEnvSource,
+        ) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>>
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<std::ffi::OsString> + Clone,
+        {
+            #krate::__private::profile_load_injected_started();
+            let (composition, selection) =
+                Self::compose_layers_with_selection_from_iter_with_sources(
+                    iter,
+                    discovery_source,
+                    merge_source,
+                );
+            let result = composition
+                .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+                .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection));
+            #krate::__private::profile_load_injected_finished(&result);
+            result
+        }
+
+        /// Load configuration using the current process arguments and
+        /// report the selected profile.
+        #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+        pub fn load_with_profile_with_sources(
+            discovery_source: #krate::SharedEnvSource,
+            merge_source: #krate::SharedScanEnvSource,
+        ) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>> {
+            Self::load_with_profile_from_iter_with_sources(
+                std::env::args_os(),
+                discovery_source,
+                merge_source,
+            )
+        }
+    }
+}
+
+/// Build the compose-layer methods emitted on a profile-enabled CLI impl.
+///
+/// The pair-destroying projection lives here rather than at the call site so
+/// the tuple-returning form stays the primitive: a caller that wants only the
+/// composition still expresses that where the pair is produced.
+fn build_profile_compose_methods(
+    krate: &proc_macro2::TokenStream,
+    compose_layers_impl: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        /// Compose layers and the resolved selection in one pass.
+        fn compose_layers_with_selection_from_iter<I, T>(iter: I) -> (
+            #krate::declarative::LayerComposition,
+            Vec<#krate::SelectedProfile>,
+        )
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<std::ffi::OsString> + Clone,
+        {
+            #compose_layers_impl
+        }
+
+        #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+        pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<std::ffi::OsString> + Clone,
+        {
+            Self::compose_layers_with_selection_from_iter(iter).0
+        }
+
+        #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+        pub fn compose_layers() -> #krate::declarative::LayerComposition {
+            Self::compose_layers_from_iter(std::env::args_os())
+        }
+    }
+}
+
 fn build_profile_cli_impl(
     args: &LoadImplArgs<'_>,
     compose_layers_impl: &proc_macro2::TokenStream,
@@ -126,36 +222,14 @@ fn build_profile_cli_impl(
         config_ident,
         ..
     } = idents;
+    let compose_methods = build_profile_compose_methods(krate, compose_layers_impl);
     let source_aware_methods = build_source_aware_methods(args);
+    let injected_methods = build_profile_injected_methods(krate, config_ident);
     quote! {
         impl #cli_ident {
-            /// Compose layers and the resolved selection in one pass.
-            fn compose_layers_with_selection_from_iter<I, T>(iter: I) -> (
-                #krate::declarative::LayerComposition,
-                Vec<#krate::SelectedProfile>,
-            )
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #compose_layers_impl
-            }
-
-            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                Self::compose_layers_with_selection_from_iter(iter).0
-            }
+            #compose_methods
 
             #source_aware_methods
-
-            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers() -> #krate::declarative::LayerComposition {
-                Self::compose_layers_from_iter(std::env::args_os())
-            }
 
             /// Load configuration from process arguments.
             ///
@@ -195,55 +269,13 @@ fn build_profile_cli_impl(
                 result
             }
 
-            /// Load configuration from injected sources and report the
-            /// selected profile.
-            ///
-            /// The generated implementation records only bounded merge
-            /// telemetry: it never serializes source values, keys, paths, or
-            /// raw errors.
-            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn load_with_profile_from_iter_with_sources<I, T>(
-                iter: I,
-                discovery_source: #krate::SharedEnvSource,
-                merge_source: #krate::SharedScanEnvSource,
-            ) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>>
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #krate::__private::profile_load_injected_started();
-                let (composition, selection) =
-                    Self::compose_layers_with_selection_from_iter_with_sources(
-                        iter,
-                        discovery_source,
-                        merge_source,
-                    );
-                let result = composition
-                    .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
-                    .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection));
-                #krate::__private::profile_load_injected_finished(&result);
-                result
-            }
-
             /// Load configuration using the current process arguments and
             /// report the selected profile.
             pub fn load_with_profile() -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>> {
                 Self::load_with_profile_from_iter(std::env::args_os())
             }
 
-            /// Load configuration using the current process arguments and
-            /// report the selected profile.
-            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn load_with_profile_with_sources(
-                discovery_source: #krate::SharedEnvSource,
-                merge_source: #krate::SharedScanEnvSource,
-            ) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>> {
-                Self::load_with_profile_from_iter_with_sources(
-                    std::env::args_os(),
-                    discovery_source,
-                    merge_source,
-                )
-            }
+            #injected_methods
         }
     }
 }
