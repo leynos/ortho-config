@@ -48,7 +48,8 @@ fn build_source_aware_methods(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
     let LoadImplIdents { config_ident, .. } = &args.idents;
     let krate = args.tokens.krate;
     let compose_layers_impl = build_source_aware_compose_layers_impl(args);
-    let load_from_iter_impl = build_load_from_iter_with_sources_impl(config_ident, krate);
+    let load_from_iter_impl =
+        build_load_from_iter_with_sources_impl(config_ident, krate, args.profiles);
     let selection_compose_layers_impl = args.profiles.then(|| {
         let selection_compose_impl = build_source_aware_compose_layers_with_selection_impl(args);
         quote! {

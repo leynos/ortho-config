@@ -76,19 +76,38 @@ pub(crate) fn build_source_aware_compose_layers_with_selection_impl(
 }
 
 /// Build a generated load method that forwards both injected source types.
+///
+/// The emitted telemetry depends on the struct: an opted-in struct resolves a
+/// profile selection on this boundary, while a legacy struct does not. Both
+/// are injected, so only the operation label differs. Reporting the legacy
+/// operation for a profile-enabled struct would misattribute the load, because
+/// the process-backed twin of this entry point reports `profile_load`.
 pub(crate) fn build_load_from_iter_with_sources_impl(
     config_ident: &Ident,
     krate: &proc_macro2::TokenStream,
+    profiles: bool,
 ) -> proc_macro2::TokenStream {
+    let (started, finished) = if profiles {
+        (
+            quote! { #krate::__private::profile_load_injected_started(); },
+            quote! { #krate::__private::profile_load_injected_finished(&result); },
+        )
+    } else {
+        (
+            quote! { #krate::__private::source_aware_derived_load_started(); },
+            quote! { #krate::__private::source_aware_derived_load_finished(&result); },
+        )
+    };
+
     quote! {
-        #krate::__private::source_aware_derived_load_started();
+        #started
         let composition = Self::compose_layers_from_iter_with_sources(
             iter,
             discovery_source,
             merge_source,
         );
         let result = composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers));
-        #krate::__private::source_aware_derived_load_finished(&result);
+        #finished
         result
     }
 }

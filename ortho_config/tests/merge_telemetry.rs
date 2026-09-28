@@ -353,6 +353,53 @@ fn injected_profile_load_reports_a_forbidden_key_failure() {
     assert_bounded_and_redacted(&events);
 }
 
+/// The ordinary injected boundary reports the profile operation on an opted-in
+/// struct.
+///
+/// `load_from_iter_with_sources` serves both kinds of struct: a legacy one
+/// merely loads, while an opted-in one resolves a profile selection first. So
+/// an opted-in struct must report `profile_load` here rather than the legacy
+/// `derived_load` label, which would misattribute the load and contradict the
+/// same struct's process-backed twin.
+#[test]
+fn ordinary_injected_profile_load_reports_the_profile_operation() {
+    let success_events = capture(|| {
+        let source = Arc::new(MapEnv::new().with_var("MERGE_TELEMETRY_JOBS", "7"));
+        let discovery: SharedEnvSource = source.clone();
+        let merge: SharedScanEnvSource = source;
+        let result = <ProfileTelemetryConfig as OrthoConfig>::load_from_iter_with_sources(
+            ["telemetry"],
+            discovery,
+            merge,
+        );
+        let config = result.expect("ordinary injected load should succeed");
+        assert_eq!(config.jobs, 7, "the injected value must win");
+    });
+    let success = find_event(&success_events, "profile_load", "injected", "success");
+    assert_eq!(success.field("category"), "none");
+    assert_bounded_and_redacted(&success_events);
+
+    // An unknown profile fails selection on this boundary as well, and the
+    // injected selector is what selects it.
+    let failure_events = capture(|| {
+        let source = Arc::new(MapEnv::new().with_var("MERGE_TELEMETRY_PROFILE", "nope"));
+        let discovery: SharedEnvSource = source.clone();
+        let merge: SharedScanEnvSource = source;
+        let result = <ProfileTelemetryConfig as OrthoConfig>::load_from_iter_with_sources(
+            ["telemetry"],
+            discovery,
+            merge,
+        );
+        assert!(
+            result.is_err(),
+            "an unknown profile must fail the ordinary injected load"
+        );
+    });
+    let failure = find_event(&failure_events, "profile_load", "injected", "failure");
+    assert_eq!(failure.field("category"), "profile");
+    assert_bounded_and_redacted(&failure_events);
+}
+
 #[test]
 fn source_aware_subcommand_load_reports_success_and_failure() {
     let success_events = capture(|| {
