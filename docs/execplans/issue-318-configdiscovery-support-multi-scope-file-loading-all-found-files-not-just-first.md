@@ -182,17 +182,17 @@ re-evaluated against the diff each time the walkthrough is regenerated.
 
 Each row, with the evidence for its disposition:
 
-| Row                            | Sev     | Disposition                                                                                                                                                                               | Evidence                                                                                                                                        |
-| ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Testing (Overall)              | Error   | **Partially addressed** — closed for `selected_error`, `reportable_errors`, `merged_file_value`, `push_into`; the "CLI/environment selector precedence" ask is closed by the Round 6 fold | Each of the four named items has assertions at `scoped_layers.rs:271`, `:305`, `:348`, `:359`; ordered precedence at `:187`                     |
-| Testing (Unit And Behavioural) | Error   | **Partially addressed** — both bracketed and parenthesized list forms now tested, plus all four `project_root_from` failures                                                              | `discovery_validation.rs` (6 tests); valid `Option<PathBuf>` at `policy_sources.rs:90`                                                          |
-| Unit Architecture              | Error   | **Repaired**                                                                                                                                                                              | `ScanError(OSError)` at `trybuild_tier.py:64`; `os.walk(..., onerror=refuse)` at `:99`; all six named functions exist and route through `_scan` |
-| Docstring Coverage             | Warning | **Partially addressed by constraint** — see Round 7                                                                                                                                       | Delta private items 100% except two files at the 400-line cap                                                                                   |
-| User-Facing Documentation      | Warning | **Addressed** — the guide work landed at `e8adc959`; the migration-guide half is Round 8                                                                                                  | `developers-guide.md:732`; `documentation_examples_tests.rs:42`                                                                                 |
-| Developer Documentation        | Warning | **Already satisfied on this head; the walkthrough text is stale**                                                                                                                         | `developers-guide.md:732`, `:750`, `:778`, `:836` name every type the row lists                                                                 |
-| Testing (Property / Proof)     | Warning | **Addressed**                                                                                                                                                                             | `scoped_stacking_proptest.rs` is a reference-model property suite over generated candidate sets, scope orders, and canonical aliases            |
-| Testing (Compile-Time / Ui)    | Warning | **Declined, with a reason**                                                                                                                                                               | See below                                                                                                                                       |
-| Observability                  | Warning | **Addressed**                                                                                                                                                                             | `load_outcome` ends in `count_outcome` (`telemetry.rs:295`); `discovery.policy` event added; both documented                                    |
+| Row                            | Sev     | Disposition                                                                                                                                                                               | Evidence                                                                                                                                     |
+| ------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Testing (Overall)              | Error   | **Partially addressed** — closed for `selected_error`, `reportable_errors`, `merged_file_value`, `push_into`; the "CLI/environment selector precedence" ask is closed by the Round 6 fold | Each of the four named items has assertions at `scoped_layers.rs:271`, `:305`, `:348`, `:359`; ordered precedence at `:187`                  |
+| Testing (Unit And Behavioural) | Error   | **Partially addressed** — both bracketed and parenthesized list forms now tested, plus all four `project_root_from` failures                                                              | `discovery_validation.rs` (6 tests); valid `Option<PathBuf>` at `policy_sources.rs:90`                                                       |
+| Unit Architecture              | Error   | **Repaired**                                                                                                                                                                              | `ScanError(OSError)` at `source_scan.py:30`; `os.walk(..., onerror=refuse)` at `:65`; all six named functions exist and route through `scan` |
+| Docstring Coverage             | Warning | **Partially addressed by constraint** — see Round 7                                                                                                                                       | Delta private items 100% except two files at the 400-line cap                                                                                |
+| User-Facing Documentation      | Warning | **Addressed** — the guide work landed at `e8adc959`; the migration-guide half is Round 8                                                                                                  | `developers-guide.md:732`; `documentation_examples_tests.rs:42`                                                                              |
+| Developer Documentation        | Warning | **Already satisfied on this head; the walkthrough text is stale**                                                                                                                         | `developers-guide.md:732`, `:750`, `:778`, `:836` name every type the row lists                                                              |
+| Testing (Property / Proof)     | Warning | **Addressed**                                                                                                                                                                             | `scoped_stacking_proptest.rs` is a reference-model property suite over generated candidate sets, scope orders, and canonical aliases         |
+| Testing (Compile-Time / Ui)    | Warning | **Declined, with a reason**                                                                                                                                                               | See below                                                                                                                                    |
+| Observability                  | Warning | **Addressed**                                                                                                                                                                             | `load_outcome` ends in `count_outcome` (`telemetry.rs:295`); `discovery.policy` event added; both documented                                 |
 
 ### The compile-time row is the one row this branch declines
 
@@ -1706,6 +1706,15 @@ declined rather than closed:
 - `trybuild_tier.py` at 432 lines.
 - `docs/design.md` root-policy prose, and the RFC 0002 #411 note.
 
+**How that list resolved.** Written as the Round 14 record, it was the set of
+items this plan declined rather than closed. Four of the six were subsequently
+closed by construction rather than by argument — runtime validation at
+`e83be802`, the two property gaps across `e83be802` and `e136fcc7`, the
+`design.md` prose and the #411 note at `e83be802`, and the file size in Round
+16 — so a reader who stops at this list will understate the head. It is left as
+written because it is the accurate record of the disposition *at that point*,
+which is what the round it belongs to was reconciling.
+
 It also stated plainly that the Linux and Windows `build-test` checks were
 **still running** at the time it queried, so its reply is not evidence about
 them. Two of its own claims need care: "the nine existing UI fixture pairs are
@@ -1820,13 +1829,18 @@ one way — and pins both the winning value and the layer count, because a
 value-only assertion cannot distinguish "first rung wins" from "every readable
 rung contributes".
 
-**`extends` ordering — NOT closed, and honestly so.** The same audit confirms
-no property test generates a parent/child/grandparent `extends` graph and
-asserts parent-first layer order. Three example tests pin it
+**`extends` ordering — CLOSED in the round after this one.** This audit found
+no property test generating a parent/child/grandparent `extends` graph and
+asserting parent-first layer order, and recorded it as a bounded gap. That
+reading was correct when written and was closed at `e136fcc7`:
+`extends_chain_proptest.rs` generates chains of two to six files whose values
+encode their own position, so a reordering shows up as a *value* mismatch
+rather than only a path mismatch. Three example tests pin the order too
 (`compose_layers.rs:61-87`, a two-file chain; `extends.rs:118-161`, three files;
-`scoped_stacking.rs:160-209`), which is real coverage, but mutation of a
-`rev()` or a sort in `resolve_base_path` could survive it. Recorded as a
-bounded gap rather than claimed closed.
+`scoped_stacking.rs:160-209`), and the new suite was verified to have teeth —
+reversing the assembled chain in `load_chain_for_file` fails it with "layer 0
+should come from file-0.toml, got …/file-1.toml", and the loader was restored
+byte-identical afterwards.
 
 **Compile-time UI coverage — declined, unchanged.** Re-verified: all nine
 `ortho_config/tests/ui/` pairs are intact, 9 `.rs` against 9 `.stderr`. The one
@@ -1850,3 +1864,66 @@ all three were load-bearing for an exemption this plan had granted itself:
    round is what closes it — so the finding was valid when made. Noting the
    ordering here because a later reader comparing the finding against the
    current file would otherwise conclude the finding was wrong.
+
+### Round 16: the file-size item, and three stale claims it dislodged
+
+CodeRabbit's last open item with a concrete address was the file size:
+`tests/workflow_contracts/trybuild_tier.py` at 432 lines against
+`AGENTS.md:33`'s 400-line cap. It is now **319 lines**, and the split it needed
+is `source_scan.py` at 150.
+
+**It is this branch's own file.**
+`git diff --stat origin/main…HEAD -- tests/workflow_contracts/trybuild_tier.py`
+shows 432 insertions and the path absent from `origin/main`, so the cap breach
+is not inherited debt.
+
+**The split is along a module boundary that already existed.** The file held
+two concerns: reading Rust sources and manifests safely, and computing which
+test binaries carry a trybuild call. The first moves wholesale — the three
+`[[test]]` target regexes, `ScanError`, `sources_under`, `scan`, `listing` and
+`declared_test_targets` — and the second keeps everything that names a binary.
+`listing`'s inner function is renamed `enumerate_once` so it neither shadows
+its name nor collides with the module-level `scan`.
+
+**Two mechanical constraints shaped where the cut goes, and both were
+measured.** The pytest invocation runs `--doctest-modules` against the
+directory with no `conftest.py` and no module enumeration, so *every* doctest
+is collected and renaming one changes the count. All six functions carrying
+doctests therefore stay in `trybuild_tier.py`, and only the un-doctested
+primitives move. The `__all__` re-exports `ScanError` because
+`trybuild_tier_test.py` imports it from here and reads it at two
+`pytest.raises` sites; the split is a move, not a rename of the public surface.
+Re-exported rather than repointed so that contract keeps one import site. Count
+after: **319 passed, 1 skipped** — the baseline exactly.
+
+**Ruff findings were declined, with reason.** `ruff check` and
+`ruff format --check` both report on the split file, but ruff is not a
+repository gate: it appears nowhere in the Makefile, `AGENTS.md`, `docs/`, or
+`.github/`, and there is no configuration file in this directory or any parent
+of it. The one ruff complaint that is *not* cosmetic — an import-merge report —
+is equally present in the file at `HEAD`, so it is pre-existing style rather
+than a regression this split introduced. Fixing it would put this branch's
+formatting at odds with every sibling module in the directory.
+
+**Two stale claims were dislodged by the audit, and both are corrected in place
+rather than deleted.** This is the same class of error Round 15 caught three
+times, so the corrections carry their evidence:
+
+1. The `Unit Architecture` row's evidence anchor pointed at
+   `trybuild_tier.py:64` and `:99` for `ScanError` and the `onerror` walk. The
+   split moves both. Now `source_scan.py:30` and `:65`.
+2. Round 15's `extends`-ordering disposition says **"NOT closed, and
+   honestly so"** — and `e136fcc7`, committed *after* that text was written, is
+   the commit that closes it. The paragraph now says so, keeps the original
+   finding as the record of what was true when written, and names the mutation
+   that proves the new suite has teeth.
+
+One further note, recorded because it will otherwise be rediscovered: the Round
+14 declined list reads as a live task list and is not one. Four of its six
+entries were closed by construction in the two rounds that followed, so the
+list now carries a paragraph saying which and at which commits.
+
+**What is not claimed.** The suite is a Python move validated by pytest and by
+line count. It was not gated on a Rust build, because the change touches no
+Rust file, and the last full gate pass predates it. The next full pass on this
+head is the certificate for it.
