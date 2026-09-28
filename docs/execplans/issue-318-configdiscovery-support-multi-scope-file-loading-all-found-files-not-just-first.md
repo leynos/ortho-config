@@ -1674,3 +1674,51 @@ The shape worth keeping: **four of the nine rows were stale in the "already
 fixed, table not yet re-rated" sense, and one was stale in the opposite sense —
 an evidence anchor pointing at the wrong test.** Both directions cost the same
 to check and only one of them is visible from the row's own severity.
+
+### Round 14: the reconciliation, and a claim in this plan that was false
+
+The Round 13 dispositions were local-only, so a reconciliation comment was
+posted to the walkthrough (comment `5866262487`, 2026-09-28 08:25Z). CodeRabbit
+answered it at 08:27Z (`5866290750`) and **accepted most of it**: it agrees the
+silent-filesystem-error defect in `trybuild_tier.py` is closed, that the named
+parser-validation gaps are covered, and that the policy tests and documentation
+address much of the table. It holds six items open, and its reading matches
+Round 13's on every one where the two overlap — including the two the plan
+declined rather than closed:
+
+- Runtime validation of `env_vars` (no test asserts generated-loader behaviour).
+- Property coverage of ordered selector chains and `extends` ordering.
+- Compile-time UI coverage for the policy attributes.
+- Docstring coverage below 80%, with `scoped_layers.rs` already at the cap.
+- `trybuild_tier.py` at 432 lines.
+- `docs/design.md` root-policy prose, and the RFC 0002 #411 note.
+
+It also stated plainly that the Linux and Windows `build-test` checks were
+**still running** at the time it queried, so its reply is not evidence about
+them. Two of its own claims need care: "the nine existing UI fixture pairs are
+intact" agrees with Round 13's check, but its `Domain Architecture`-style
+reasoning about what the fixtures cover is the same reading this plan already
+recorded and declined.
+
+**A claim in this plan was false, and Round 14 found it.** Round 5 asserted
+that the `<!-- tested-example: guide-scoped-discovery -->` fence in
+`docs/users-guide.md` is one that
+`ortho_config/tests/documentation_examples_tests.rs:42` "actually compiles and
+runs". That line is only the **id registry** (`EXPECTED_EXAMPLE_IDS`); it
+proves the fence exists and has a unique identifier. The fence is absent from
+`STANDARD_RUST_EXAMPLES`
+(`ortho_config/tests/documentation_examples_rust_tests.rs:14-26`), which is the
+only list fed to `workspace.add_binary` (`:31-32`), so it is never compiled or
+run. The Round 13 text at `:1619-1623` — "no test under `ortho_config/tests`
+references it" — was the accurate one, and the two sections contradicted each
+other within this same document.
+
+That matters more than a single example: the fence is the *only* place in the
+repository that writes `env_vars = [...]` in a derive, so the exact code path
+the runtime-coverage gap describes is sitting in published documentation marked
+as tested when it is not. Wiring it in looks cheap — one added identifier to
+`STANDARD_RUST_EXAMPLES` plus one `assert_run`, the pattern every sibling
+`guide-*` example already follows — but it needs `make test` to verify, and the
+local Cargo gates have been unable to run since 2026-09-28 01:00Z. It is
+recorded here as the concrete way to close the `env_vars` gap, not claimed as
+done.
