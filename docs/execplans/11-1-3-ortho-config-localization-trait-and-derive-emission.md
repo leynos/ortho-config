@@ -1370,3 +1370,63 @@ and `make markdownlint` and `make nixie` on the same commit. This revision note
 is itself the only later change, and it is Markdown-only, so the Rust gates
 remain valid for it; `make check-fmt` and `make markdownlint` were re-run after
 it. The published candidate is the tip of the branch.
+
+2026-09-28: rebased again onto `origin/main` (`f6a406fc`), replaying all 30
+commits onto the current target. The exclusive replay boundary was `41e54346`,
+which is the parent of the branch's first commit, the target merge-base, and
+the start of a merge-free range, so the boundary evidence is of the same kind
+as the previous rebase. The replay was conflict-free: `git merge-tree` on the
+final states was already clean, and Git reported no conflict for any of the 30
+commits. A `range-diff` of the old and new series reports all 30 entries as
+identical (`=`), so no commit changed content in the replay.
+
+Only three paths were touched by both sides, and each merged as a disjoint
+union rather than a contested hunk:
+
+- `ortho_config/src/lib.rs`. Main added the `SubcommandCliMatches`,
+  `SubcommandFileContext`, and `_with_sources_at` re-exports to the
+  `subcommand` block; this branch added `ArgLocalizationIds` and
+  `OrthoConfigLocalization` to the `localizer` block. Both sets are present in
+  the result.
+- `docs/developers-guide.md`. Main's nextest-exclusivity and subcommand-fixture
+  prose is retained alongside this branch's derive-emission and artefact prose.
+- `docs/users-guide.md`. Main's new "Choose the file discovery source" section
+  is retained alongside this branch's artefact section.
+
+`Cargo.lock` did not need main's version this time: main's advance did not
+touch it, and the lock's three manifest-driven `ortho_config_macros`
+dependencies survived the replay unchanged.
+
+Main's advance also carried a pertinent new pattern, and the decision on it
+follows. Commit `e6c0e668` ("Run every cold trybuild binary alone on Windows",
+PR #533) added a Windows-only nextest override reserving every nextest slot for
+four cold-trybuild binaries, together with
+`tests/workflow_contracts/windows_trybuild_isolation_test.py`, a contract that
+asserts the override names *exactly* those four. This branch adds a fifth
+trybuild binary, `ortho_config/tests/localization_trybuild.rs`, so the question
+is whether it joins that set.
+
+Decision: leave both the override and its contract untouched; do not widen the
+set. Three pieces of evidence support this.
+
+1. The override's binary set is evidence-bound, not a classification. Its own
+   comment names the failing runs and the binary that failed in each
+   (`compile_time`'s `must_use_compile_tests` at 600s). There is no recorded
+   `localization_trybuild` timeout for the entry to answer.
+2. Windows CI already passed with this binary present and unreserved. Run
+   `36286311257` on the pre-rebase head `cc8b0805`, which contains
+   `localization_trybuild.rs`, reported `build-test (windows-latest)` success
+   at 2026-09-27T01:43:59Z. The override landed later, at 08:53 UTC in
+   `e6c0e668`, so that success is not attributable to it.
+3. The four-entry set is demonstrably not "all cold-trybuild binaries":
+   `env_source_trybuild`, `generated_lint_trybuild`, and
+   `localized_parse_trybuild` are binaries of the same shape and are also
+   unreserved. Widening the set on this branch would contradict the contract's
+   own premise and break its exact-match assertion.
+
+Should `localization_trybuild` later be observed to time out on Windows, the
+remedy is to widen the override and the contract together, and to record the
+failing run in the override's comment as the other four entries do. That is a
+response to a measurement, not to the mere existence of a new binary.
+
+All six gates pass on the rebased tip, which is the tip of the branch.
