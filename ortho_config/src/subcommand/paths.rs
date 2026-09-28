@@ -96,6 +96,36 @@ fn source_xdg_bases(prefix: &Prefix, source: &dyn EnvSource) -> Vec<PathBuf> {
     bases
 }
 
+/// Returns the first existing XDG candidate across ordered configuration bases.
+///
+/// For bases `/opt/app` and `/etc/xdg/app`, a `config.toml` in the first base
+/// wins; if it is missing, lookup continues to the second base.
+///
+/// # Errors
+///
+/// Returns an I/O error for a candidate when its existence cannot be
+/// determined for a reason other than the candidate being absent.
+#[cfg(any(unix, target_os = "redox"))]
+fn first_existing_xdg_candidate(bases: &[PathBuf], file: &str) -> OrthoResult<Option<PathBuf>> {
+    for base in bases {
+        let path = base.join(file);
+        let exists = match path.try_exists() {
+            Ok(exists) => exists,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(io_error) => {
+                return Err(Arc::new(OrthoError::File {
+                    path,
+                    source: Box::new(io_error),
+                }));
+            }
+        };
+        if exists {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
 /// Adds the first existing XDG configuration candidate for each file type.
 ///
 /// Missing candidates are skipped, while other metadata lookup failures are
@@ -114,25 +144,7 @@ fn push_xdg_candidates(
     let bases = source_xdg_bases(prefix, source);
     for ext in EXT_GROUPS.iter().flat_map(|group| *group) {
         let file = format!("config.{ext}");
-        let mut existing_path = None;
-        for base in &bases {
-            let path = base.join(&file);
-            let exists = match path.try_exists() {
-                Ok(exists) => exists,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-                Err(io_error) => {
-                    return Err(Arc::new(OrthoError::File {
-                        path,
-                        source: Box::new(io_error),
-                    }));
-                }
-            };
-            if exists {
-                existing_path = Some(path);
-                break;
-            }
-        }
-        if let Some(path) = existing_path {
+        if let Some(path) = first_existing_xdg_candidate(&bases, &file)? {
             paths.push(path);
         }
     }

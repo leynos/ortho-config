@@ -735,6 +735,10 @@ variables for tests.
   fixture root; on other platforms it returns a closed `MapEnv`. Use it at
   subcommand test call sites that must not discover host configuration, and
   keep the helper scoped to that test support boundary.
+- `first_existing_xdg_candidate` belongs to subcommand path discovery and is
+  called only by `push_xdg_candidates` to scan one extension across ordered XDG
+  bases. It treats `NotFound` as absence and propagates other metadata errors.
+  Keep it private to this discovery flow; it is not a general path API.
 - The discovery candidate reader is the only production reader, and holds no
   `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the
