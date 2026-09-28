@@ -400,6 +400,37 @@ This supplies the `ACME_SERVE_CMDS_SERVE_PORT` layer while preserving the
 existing CLI precedence. Import `MapEnv` and `std::sync::Arc` when using this
 pattern.
 
+### Choose subcommand file and environment sources
+
+The source-aware subcommand loaders let an application control file lookup and
+environment merging independently. Use a `_at` loader with
+`SubcommandFileContext::new(base, discovery)` to give file discovery an
+explicit local base and a named-lookup `EnvSource`. The base is used for local
+configuration candidates; on Unix and Redox, discovery can also consult the
+configured home and XDG locations (with `/etc/xdg` as the default XDG
+directory). On other platforms, it can consult a native configuration directory
+supplied by the source. `ProcessEnv` preserves the platform lookup, while
+`MapEnv` has no native-directory fallback unless one is provided by a custom
+source.
+
+Pass the merge environment separately as a `SharedScanEnvSource`. This source
+provides the prefixed environment layer and may enumerate variables for that
+purpose; the discovery source only looks up named keys such as `HOME` and XDG
+settings. Keeping these capabilities separate lets file discovery stay closed
+over its inputs while retaining the environment merge behaviour.
+
+The `_at` API includes explicit-prefix and configured-prefix loaders, with and
+without clap match metadata: `load_and_merge_subcommand_with_sources_at`,
+`load_and_merge_subcommand_for_with_sources_at`, and the corresponding
+`*_with_matches_with_sources_at` functions. Use
+`SubcommandCliMatches::new(&cli, &matches)` with a match-aware loader when a
+field uses `#[ortho_config(cli_default_as_absent)]`. The loader uses clap's
+match metadata to distinguish an explicit command-line value from a parser
+default, so file and environment values can override that default while an
+explicitly supplied CLI value keeps the highest precedence. The corresponding
+loader without match metadata treats the values in the parsed struct as CLI
+input.
+
 Some commands only parse arguments and do not participate in configuration
 loading. Keep those arguments in a separate clap-only type:
 

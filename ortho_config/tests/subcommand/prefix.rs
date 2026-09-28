@@ -1,5 +1,6 @@
 //! Prefix-handling tests for subcommand wrappers.
 
+use super::isolated_discovery::isolated_discovery;
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
@@ -24,10 +25,7 @@ fn wrapper_uses_struct_prefix() -> Result<()> {
     directory
         .write(".app.toml", b"[cmds.test]\nfoo = \"val\"")
         .context("write prefixed wrapper fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let cfg = load_and_merge_subcommand_for_with_sources_at(
         &PrefixedCfg::default(),
         SubcommandFileContext::new(root.path(), &discovery),

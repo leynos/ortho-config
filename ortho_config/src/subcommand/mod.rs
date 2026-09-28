@@ -108,7 +108,7 @@ where
     T: CommandFactory,
 {
     let name = CmdName::new(T::command().get_name());
-    let paths = candidate_paths_at(prefix, files.base, files.discovery);
+    let paths = candidate_paths_at(prefix, files.base, files.discovery)?;
     let mut fig = load_from_files(&paths, &name)?;
 
     let env_name = name.env_key();

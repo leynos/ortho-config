@@ -1,5 +1,6 @@
 //! Baseline loading behaviour for subcommand configuration.
 
+use super::isolated_discovery::isolated_discovery;
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
@@ -40,18 +41,6 @@ fn write_config(root: &Path, relative: &Path, contents: &str) -> Result<()> {
         .write(relative, contents.as_bytes())
         .context("write basic subcommand fixture")?;
     Ok(())
-}
-
-/// Return a closed discovery source with the Unix global rung pinned to `root`.
-#[cfg(any(unix, target_os = "redox"))]
-fn isolated_discovery(root: &Path) -> MapEnv {
-    MapEnv::new().with_var("XDG_CONFIG_DIRS", root)
-}
-
-/// Return a closed discovery source on non-Unix and non-Redox targets.
-#[cfg(not(any(unix, target_os = "redox")))]
-fn isolated_discovery(_root: &Path) -> MapEnv {
-    MapEnv::new()
 }
 
 #[test]

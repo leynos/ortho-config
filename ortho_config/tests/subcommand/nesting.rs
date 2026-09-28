@@ -1,5 +1,6 @@
 //! Nested environment-key mapping tests for subcommand loading.
 
+use super::isolated_discovery::isolated_discovery;
 use anyhow::{Context as _, Result, ensure};
 use clap::Parser;
 use ortho_config::subcommand::Prefix;
@@ -58,10 +59,7 @@ fn env_values_support_nesting_cases(
 ) -> Result<()> {
     let root = tempfile::tempdir().context("create nested environment fixture")?;
     let merge: MapEnv = host_kv.into_iter().chain(port_kv).collect();
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let cfg = load_and_merge_subcommand_with_sources_at(
         &Prefix::new("APP_"),
         &NestedCfg::default(),
@@ -104,10 +102,7 @@ fn env_values_support_deeper_nesting(
 ) -> Result<()> {
     let root = tempfile::tempdir().context("create deep nested environment fixture")?;
     let merge: MapEnv = kv.into_iter().collect();
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let cfg = load_and_merge_subcommand_with_sources_at(
         &Prefix::new("APP_"),
         &DeepNestedCfg::default(),

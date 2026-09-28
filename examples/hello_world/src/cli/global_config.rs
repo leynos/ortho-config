@@ -283,7 +283,7 @@ pub fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorl
 ///
 /// # Errors
 ///
-/// Returns a [`HelloWorldError`] when file discovery or deserialisation fails.
+/// Returns a [`HelloWorldError`] when file discovery or deserialization fails.
 pub fn apply_greet_overrides_with_source(
     command: &mut GreetCommand,
     discovery: SharedEnvSource,

@@ -1,8 +1,12 @@
 //! Coverage for typed collection defaults with `cli_default_as_absent`.
 
+#[path = "support/isolated_discovery.rs"]
+mod isolated_discovery;
+
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
+use isolated_discovery::isolated_discovery;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
     CliValueExtractor, MapEnv, OrthoConfig, SubcommandCliMatches, SubcommandFileContext,
@@ -43,10 +47,11 @@ where
 {
     let matches = T::command().get_matches_from(default_args.iter().copied());
     let args = T::from_arg_matches(&matches).context("parse clap defaults")?;
+    let discovery = isolated_discovery(file_base);
     let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         prefix,
         &SubcommandCliMatches::new(&args, &matches),
-        SubcommandFileContext::new(file_base, &MapEnv::new()),
+        SubcommandFileContext::new(file_base, &discovery),
         Arc::new(MapEnv::new()),
     )
     .context("merge clap defaults")?;
@@ -57,7 +62,7 @@ where
     let explicit = load_and_merge_subcommand_with_matches_with_sources_at(
         prefix,
         &SubcommandCliMatches::new(&explicit_cli, &explicit_matches),
-        SubcommandFileContext::new(file_base, &MapEnv::new()),
+        SubcommandFileContext::new(file_base, &discovery),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit CLI values")?;

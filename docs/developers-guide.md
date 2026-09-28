@@ -730,6 +730,11 @@ variables for tests.
   candidates must configure the discovery builder and set `XDG_CONFIG_DIRS` to
   a fixture directory when applicable, since an unset value selects the
   platform's system fallback.
+- Injected subcommand tests use the shared `isolated_discovery(root)` helper
+  for discovery sources. On Unix and Redox it pins `XDG_CONFIG_DIRS` to the
+  fixture root; on other platforms it returns a closed `MapEnv`. Use it at
+  subcommand test call sites that must not discover host configuration, and
+  keep the helper scoped to that test support boundary.
 - The discovery candidate reader is the only production reader, and holds no
   `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the

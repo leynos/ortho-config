@@ -1,5 +1,6 @@
 //! Tests for merge helpers in subcommand flows.
 
+use super::isolated_discovery::isolated_discovery;
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
@@ -37,10 +38,7 @@ fn merge_helper_combines_defaults_and_cli() -> Result<()> {
     directory
         .write(".app.toml", b"[cmds.test]\nfoo = \"file\"")
         .context("write merge helper fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let cli = MergeArgs {
         foo: Some("cli".into()),
         bar: None,
@@ -79,10 +77,7 @@ fn merge_wrapper_respects_prefix() -> Result<()> {
     directory
         .write(".app.toml", b"[cmds.test]\nfoo = \"file\"")
         .context("write prefixed merge fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let cli = MergePrefixed { foo: None };
     let merged = load_and_merge_subcommand_for_with_sources_at(
         &cli,

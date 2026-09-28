@@ -4,9 +4,12 @@
 //! platform-specific configuration directories, and an explicit local base.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use super::types::Prefix;
-use crate::EnvSource;
+#[cfg(any(unix, target_os = "redox"))]
+use crate::OrthoError;
+use crate::{EnvSource, OrthoResult};
 
 const EXT_GROUPS: &[&[&str]] = &[
     &["toml"],
@@ -93,29 +96,65 @@ fn source_xdg_bases(prefix: &Prefix, source: &dyn EnvSource) -> Vec<PathBuf> {
     bases
 }
 
+/// Adds the first existing XDG configuration candidate for each file type.
+///
+/// Missing candidates are skipped, while other metadata lookup failures are
+/// returned so an inaccessible XDG location cannot silently change discovery.
+///
+/// # Errors
+///
+/// Returns an I/O error for an XDG candidate when its existence cannot be
+/// determined for a reason other than the candidate being absent.
 #[cfg(any(unix, target_os = "redox"))]
-fn push_xdg_candidates(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
+fn push_xdg_candidates(
+    prefix: &Prefix,
+    source: &dyn EnvSource,
+    paths: &mut Vec<PathBuf>,
+) -> OrthoResult<()> {
     let bases = source_xdg_bases(prefix, source);
-    for group in EXT_GROUPS {
-        for ext in *group {
-            let file = format!("config.{ext}");
-            if let Some(path) = bases
-                .iter()
-                .map(|base| base.join(&file))
-                .find(|path| path.try_exists().unwrap_or(false))
-            {
-                paths.push(path);
+    for ext in EXT_GROUPS.iter().flat_map(|group| *group) {
+        let file = format!("config.{ext}");
+        let mut existing_path = None;
+        for base in &bases {
+            let path = base.join(&file);
+            let exists = match path.try_exists() {
+                Ok(exists) => exists,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(io_error) => {
+                    return Err(Arc::new(OrthoError::File {
+                        path,
+                        source: Box::new(io_error),
+                    }));
+                }
+            };
+            if exists {
+                existing_path = Some(path);
+                break;
             }
         }
+        if let Some(path) = existing_path {
+            paths.push(path);
+        }
     }
+    Ok(())
 }
 
+/// Adds home and XDG candidates to the subcommand search path.
+///
+/// # Errors
+///
+/// Returns metadata lookup failures from checking XDG candidates, preserving
+/// the path that could not be inspected.
 #[cfg(any(unix, target_os = "redox"))]
-fn collect_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
+fn collect_unix_paths(
+    prefix: &Prefix,
+    source: &dyn EnvSource,
+    paths: &mut Vec<PathBuf>,
+) -> OrthoResult<()> {
     if let Some(home) = source.get("HOME") {
         push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
     }
-    push_xdg_candidates(prefix, source, paths);
+    push_xdg_candidates(prefix, source, paths)
 }
 
 #[cfg(not(any(unix, target_os = "redox")))]
@@ -138,18 +177,27 @@ fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut V
 }
 
 /// Returns candidate paths for an explicit base and named environment source.
+///
+/// On Unix and Redox, this may inspect XDG candidates while constructing the
+/// path list. An explicitly supplied `base` is always added as the local
+/// candidate root.
+///
+/// # Errors
+///
+/// On Unix and Redox, returns an I/O error if an XDG candidate cannot be
+/// inspected. A missing candidate is not an error.
 pub(super) fn candidate_paths_at(
     prefix: &Prefix,
     base: &Path,
     source: &dyn EnvSource,
-) -> Vec<PathBuf> {
+) -> OrthoResult<Vec<PathBuf>> {
     let mut paths = Vec::new();
     #[cfg(any(unix, target_os = "redox"))]
-    collect_unix_paths(prefix, source, &mut paths);
+    collect_unix_paths(prefix, source, &mut paths)?;
     #[cfg(not(any(unix, target_os = "redox")))]
     collect_non_unix_paths(prefix, source, &mut paths);
     push_local_candidates(prefix, base, &mut paths);
-    paths
+    Ok(paths)
 }
 
 #[cfg(test)]

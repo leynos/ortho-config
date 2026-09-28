@@ -1,5 +1,6 @@
 //! CLI precedence and required-value behaviour tests.
 
+use super::isolated_discovery::isolated_discovery;
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
@@ -34,10 +35,7 @@ fn cli_ref_id() -> RequiredCli {
 #[rstest]
 fn cli_only_values_are_accepted(cli_ref_id: RequiredCli) -> Result<()> {
     let root = tempfile::tempdir().context("create CLI-only fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let merged = load_and_merge_subcommand_with_sources_at(
         &Prefix::new("APP_"),
         &cli_ref_id,
@@ -70,10 +68,7 @@ fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()
     directory
         .write(".app.toml", b"[cmds.test]\nref_id = \"config\"")
         .context("write conflicting-values fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let merged = load_and_merge_subcommand_with_sources_at(
         &Prefix::new("APP_"),
         &cli_ref_id,
@@ -92,10 +87,7 @@ fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()
 #[test]
 fn env_value_used_when_cli_missing() -> Result<()> {
     let root = tempfile::tempdir().context("create environment-only fixture")?;
-    #[cfg(any(unix, target_os = "redox"))]
-    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
-    #[cfg(not(any(unix, target_os = "redox")))]
-    let discovery = MapEnv::new();
+    let discovery = isolated_discovery(root.path());
     let cli = OptionalCli { ref_id: None };
     let merged = load_and_merge_subcommand_with_sources_at(
         &Prefix::new("APP_"),

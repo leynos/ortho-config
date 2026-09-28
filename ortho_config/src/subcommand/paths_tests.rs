@@ -15,6 +15,9 @@ use std::path::PathBuf;
 #[cfg(any(unix, target_os = "redox"))]
 use tempfile::TempDir;
 
+#[path = "path_error_tests.rs"]
+mod path_error_tests;
+
 #[cfg(not(any(unix, target_os = "redox")))]
 use super::*;
 #[cfg(not(any(unix, target_os = "redox")))]
@@ -82,7 +85,7 @@ fn injected_platform_config_root_preserves_candidate_order() -> Result<()> {
         config_dir: Some(config_root.clone()),
     };
     let prefix = Prefix::new("app");
-    let paths = candidate_paths_at(&prefix, &base, &source);
+    let paths = candidate_paths_at(&prefix, &base, &source)?;
     let mut expected = extension_paths(&home, ".app");
     expected.extend(extension_paths(&config_root.join("app"), "config"));
     expected.extend(extension_paths(&base, ".app"));
@@ -98,7 +101,8 @@ fn injected_platform_config_root_preserves_candidate_order() -> Result<()> {
 #[test]
 fn map_env_omits_ambient_platform_config_root() {
     let base = PathBuf::from("C:/injected/base");
-    let paths = candidate_paths_at(&Prefix::new("app"), &base, &MapEnv::new());
+    let paths = candidate_paths_at(&Prefix::new("app"), &base, &MapEnv::new())
+        .expect("closed map candidate discovery succeeds");
     assert_eq!(paths, extension_paths(&base, ".app"));
 }
 
@@ -118,7 +122,7 @@ fn injected_candidates_preserve_home_xdg_and_base_order() -> Result<()> {
         &MapEnv::new()
             .with_var("HOME", &home)
             .with_var("XDG_CONFIG_HOME", &xdg),
-    );
+    )?;
     ensure!(
         paths.first() == Some(&home.join(".app.toml")),
         "home must be first"
@@ -173,7 +177,7 @@ fn relative_xdg_home_uses_injected_fallback() -> Result<()> {
         vars: MapEnv::new().with_var("XDG_CONFIG_HOME", "relative"),
         home: home.clone(),
     };
-    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &env);
+    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &env)?;
     ensure!(
         paths.contains(&home.join(".config/app/config.toml")),
         "fallback config missing"
@@ -199,7 +203,7 @@ fn xdg_home_uses_injected_home_when_value_is_unusable(
         source = source.with_var("XDG_CONFIG_HOME", value);
     }
 
-    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &source);
+    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &source)?;
     ensure!(paths.contains(&config), "injected HOME config missing");
     Ok(())
 }
@@ -259,7 +263,7 @@ fn xdg_extension_search_uses_first_existing_path() -> Result<()> {
             .with_var("XDG_CONFIG_DIRS", &dirs),
         home,
     };
-    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &env);
+    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &env)?;
     ensure!(
         paths.first() == Some(&env.home.join("app/config.toml")),
         "toml order differs"
@@ -279,7 +283,7 @@ fn xdg_search_keeps_metadata_existence_contract() -> Result<()> {
     let config = root.path().join("app/config.toml");
     fs::create_dir_all(&config).context("create directory at config path")?;
     let source = MapEnv::new().with_var("XDG_CONFIG_HOME", root.path());
-    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &source);
+    let paths = candidate_paths_at(&Prefix::new("app"), root.path(), &source)?;
     ensure!(
         paths.contains(&config),
         "XDG 3 treats any path with metadata as an existing candidate"
@@ -356,7 +360,7 @@ fn injected_xdg_resolution_matches_xdg_3_child_oracle() -> Result<()> {
         vars: MapEnv::new().with_var("XDG_CONFIG_HOME", "relative"),
         home: home.clone(),
     };
-    let injected: Vec<PathBuf> = candidate_paths_at(&Prefix::new("oracle"), root.path(), &source)
+    let injected: Vec<PathBuf> = candidate_paths_at(&Prefix::new("oracle"), root.path(), &source)?
         .into_iter()
         .filter(|path| {
             path.file_name()
