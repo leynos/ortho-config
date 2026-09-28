@@ -891,10 +891,18 @@ walkthrough text, and two of them are **already satisfied** on this head:
   examples plus a migration-guide signpost. The guide work landed at `e8adc959`:
   `### Select a file explicitly`, `### Root the project scope`, and
   `### Configure the policy from the derive`, with a
-  `<!-- tested-example: guide-scoped-discovery -->` example that
-  `ortho_config/tests/documentation_examples_tests.rs:42` actually compiles and
-  runs. The migration-guide half is the one genuinely open piece and is handled
-  in the reconciliation below.
+  `<!-- tested-example: guide-scoped-discovery -->` example. **Correction
+  (Round 14, and acted on in Round 15):** the claim originally written here —
+  that `ortho_config/tests/documentation_examples_tests.rs:42` "actually
+  compiles and runs" the fence — was **false**. That line is only the
+  `EXPECTED_EXAMPLE_IDS` registry, which proves the fence exists and has a
+  unique identifier and nothing more. The fence was absent from
+  `STANDARD_RUST_EXAMPLES`, so it was never built. Round 15 added it to that
+  list and to `assert_env_alias_chain`
+  (`documentation_examples/env_alias_chain.rs`), which is what makes the
+  sentence true; before that commit the only honest statement was that the
+  fence was registered, not executed. The migration-guide half is the one
+  genuinely open piece and is handled in the reconciliation below.
 
 The scribe then found a defect **in the brief it was given**, which is worth
 recording because the brief was mine. It was told to add `policy_resolve` to
