@@ -17,6 +17,7 @@ struct PrefixedCfg {
     foo: Option<String>,
 }
 
+/// Confirms the configured struct prefix is used by the wrapper loader.
 #[test]
 fn wrapper_uses_struct_prefix() -> Result<()> {
     let root = tempfile::tempdir().context("create prefixed wrapper fixture")?;

@@ -7,6 +7,7 @@ use anyhow::{Context as _, Result, ensure};
 #[cfg(any(unix, target_os = "redox"))]
 use std::fs;
 
+/// Confirms non-`NotFound` XDG metadata failures are returned with their path.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn xdg_candidate_metadata_errors_are_returned() -> Result<()> {

@@ -57,6 +57,7 @@ struct IssuePrecedenceCase {
     expected_reference: Option<&'static str>,
 }
 
+/// Confirms pull-request precedence across CLI, environment, file, and defaults.
 #[rstest]
 #[case::env_over_file(
     PrPrecedenceCase {
@@ -111,6 +112,7 @@ fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
     Ok(())
 }
 
+/// Confirms issue precedence across CLI, environment, file, and defaults.
 #[rstest]
 #[case::env_over_file(
     IssuePrecedenceCase {

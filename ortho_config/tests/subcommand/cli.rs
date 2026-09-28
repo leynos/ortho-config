@@ -32,6 +32,8 @@ fn cli_ref_id() -> RequiredCli {
         ref_id: Some("cli".into()),
     }
 }
+
+/// Confirms parsed CLI values merge when no file or environment value exists.
 #[rstest]
 fn cli_only_values_are_accepted(cli_ref_id: RequiredCli) -> Result<()> {
     let root = tempfile::tempdir().context("create CLI-only fixture")?;
@@ -60,6 +62,7 @@ fn error_when_required_cli_value_missing() {
     );
 }
 
+/// Confirms an explicit CLI value takes precedence over file and environment.
 #[rstest]
 fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()> {
     let root = tempfile::tempdir().context("create conflicting-values fixture")?;
@@ -84,6 +87,7 @@ fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()
     Ok(())
 }
 
+/// Confirms an injected environment value fills a missing optional CLI value.
 #[test]
 fn env_value_used_when_cli_missing() -> Result<()> {
     let root = tempfile::tempdir().context("create environment-only fixture")?;

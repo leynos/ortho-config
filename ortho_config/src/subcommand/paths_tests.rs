@@ -106,6 +106,7 @@ fn map_env_omits_ambient_platform_config_root() {
     assert_eq!(paths, extension_paths(&base, ".app"));
 }
 
+/// Confirms injected home, XDG, and local candidates retain their search order.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn injected_candidates_preserve_home_xdg_and_base_order() -> Result<()> {
@@ -166,6 +167,7 @@ fn injected_candidates_preserve_home_xdg_and_base_order() -> Result<()> {
     Ok(())
 }
 
+/// Confirms a relative XDG home falls back to the injected home directory.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn relative_xdg_home_uses_injected_fallback() -> Result<()> {
@@ -185,6 +187,7 @@ fn relative_xdg_home_uses_injected_fallback() -> Result<()> {
     Ok(())
 }
 
+/// Confirms an absent or relative XDG home uses the injected home directory.
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest::rstest]
 #[case::unset(None)]
@@ -246,6 +249,7 @@ fn xdg_dirs_keep_absolute_entries_in_order() -> Result<()> {
     Ok(())
 }
 
+/// Confirms each extension uses its first existing path across XDG bases.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn xdg_extension_search_uses_first_existing_path() -> Result<()> {
@@ -276,6 +280,7 @@ fn xdg_extension_search_uses_first_existing_path() -> Result<()> {
     Ok(())
 }
 
+/// Confirms XDG candidate discovery preserves metadata-based existence checks.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn xdg_search_keeps_metadata_existence_contract() -> Result<()> {
@@ -318,6 +323,7 @@ fn xdg_3_oracle_child() -> Result<()> {
     Ok(())
 }
 
+/// Compares injected XDG resolution with the `xdg` crate under the same inputs.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn injected_xdg_resolution_matches_xdg_3_child_oracle() -> Result<()> {
