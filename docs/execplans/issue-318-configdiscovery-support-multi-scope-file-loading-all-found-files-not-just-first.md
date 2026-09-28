@@ -1567,3 +1567,23 @@ workflow fact (fail-fast), and the only cheap mitigation available was the one
 taken — checking the new expectation against the code, the existing tests, the
 RFC table and the enum doc before spending a round on it, rather than pushing
 the obvious edit and seeing what CI said.
+
+**One Rust gate did run, and the record misread it.** The three lock-blocked
+gates were reported as wholly unverified above. That was too pessimistic about
+`lint`, and the correction is worth stating because it retired the last
+locally-checkable risk in the round. The new test adds two `.expect()` calls
+into an `#[rstest]`-generated function, and the workspace denies `expect_used`;
+`clippy.toml` sets `allow-expect-in-tests = true`, but whether that exemption
+reaches a macro-expanded test body was unproven. It does, and this is observable
+rather than inferred. `ortho_config/tests/localized_parse.rs:231-250` is an
+`#[rstest]` whose body calls `.expect("translated fixture args should parse")`.
+`make lint-clippy` runs `cargo clippy --all-targets --all-features -- -D
+warnings` (Makefile:8,103), so integration tests under `ortho_config/tests/` are
+linted with warnings denied. And in run `36387995236` — the round whose *tests*
+failed — the `build-test` job passed its `Lint` step and only failed later, at
+the coverage step: `ci.yml:208` (`make lint`) precedes `ci.yml:222` (the test
+step) in the same job, so reaching the test step *is* evidence that clippy
+accepted the construct. Two further suites in the same workspace
+(`selected_subcommand_merge.rs`, `clap_integration/error_cases.rs`) carry the
+same shape, so this is an established pattern here, not an accident. The
+remaining exposure is therefore compilation alone, not lint.
