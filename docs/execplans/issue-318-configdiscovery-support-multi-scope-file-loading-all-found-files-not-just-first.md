@@ -1045,13 +1045,14 @@ here; the fourth is resolved.
    house rule is en-GB-oxendict (`AGENTS.md:24`), so the `-ised` forms are
    genuinely faults. The test the plan named was renamed to the `-ize` spelling
    and the sentence reworded to match; the prose forms were corrected too.
-   Renaming defeated the point of the previous round's decision: the sibling
-   `-ised` identifier at `clap_attrs.rs:300` is **pre-existing on `origin/main`
-   ** and is not this branch's to rename, so the precedent now followed is that
-   overlay already uses for quoted identifiers. The gate scans prose and inline
-   code spans and does **not** flag `.rs` files — proven, not assumed: the same
-   spelling at `clap_attrs.rs:300` is tracked and unflagged, while the
-   plain-text rewrite of it in the plan had failed the gate minutes earlier.
+   Renaming defeated the point of the previous round's decision. The sibling
+   `-ised` identifier at `clap_attrs.rs:300` predates this branch on
+   `origin/main`, so it is not this branch's to rename; the precedent now
+   followed is that the overlay already uses for quoted identifiers. The gate
+   scans prose and inline code spans and does **not** flag `.rs` files —
+   proven, not assumed: the same spelling at `clap_attrs.rs:300` is tracked and
+   unflagged, while the plain-text rewrite of it in the plan had failed the
+   gate minutes earlier.
 3. **A newly written paragraph tripped `check-fmt`.** `mdtablefix --wrap`
    wanted a line joined at 80 columns. Fixed with `make fmt` (the tool the gate
    runs) rather than by hand-wrapping, which is what produced the discrepancy

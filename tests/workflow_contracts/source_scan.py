@@ -139,10 +139,32 @@ def scan(
     whole read -- enumerate and materialize together, as :func:`listing`
     does -- is version-independent; testing it on one interpreter is not.
 
+    Parameters
+    ----------
+    path : Path
+        The path the read is over, and the one a failure names. A merely
+        absent path is forwarded to ``read`` rather than judged here, so
+        the choice of whether absence is an answer stays with the caller.
+    read : callable
+        The read to make: a bound ``Path`` method such as
+        ``Path.read_text``, or a deferred callable such as
+        :func:`listing` or :func:`exists`. Its remaining parameters are
+        declared by ``*args`` and ``**kwargs`` below.
+    *args : object
+        Positional arguments forwarded to ``read`` when it is called.
+    **kwargs : object
+        Keyword arguments forwarded to ``read`` when it is called.
+
     Returns
     -------
     _R
         Whatever that call returns, at its own type rather than ``Any``.
+
+    Raises
+    ------
+    ScanError
+        If the read raises ``OSError`` other than ``FileNotFoundError``,
+        naming ``path`` and keeping the original as ``__cause__``.
     """
     try:
         return read(*args, **kwargs)
