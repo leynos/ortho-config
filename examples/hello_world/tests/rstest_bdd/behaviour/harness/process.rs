@@ -18,8 +18,9 @@ impl Harness {
 
     pub(crate) fn run_example(&mut self, args: Vec<String>) -> Result<()> {
         let binary = self.binary();
+        let workdir = self.workdir()?.path().to_path_buf();
         let mut command = Command::new(binary.as_std_path());
-        command.current_dir(self.workdir.path());
+        command.current_dir(workdir);
         command.args(&args);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -43,7 +44,13 @@ impl Harness {
         let status = match wait_with_timeout(&mut child, self.command_timeout()) {
             Ok(status) => status,
             Err(err) => {
-                cleanup_child_and_readers(&mut child, stdout_reader, stderr_reader);
+                if let Err(cleanup_error) =
+                    cleanup_child_and_readers(&mut child, stdout_reader, stderr_reader)
+                {
+                    return Err(err.context(format!(
+                        "hello_world command timed out and process cleanup also failed: {cleanup_error:#}"
+                    )));
+                }
                 return Err(err);
             }
         };
@@ -105,11 +112,17 @@ fn cleanup_child_and_readers(
     child: &mut Child,
     stdout_reader: thread::JoinHandle<Result<Vec<u8>>>,
     stderr_reader: thread::JoinHandle<Result<Vec<u8>>>,
-) {
-    let _ = child.kill();
-    let _ = child.wait();
-    let _ = join_reader(stdout_reader, "hello_world stdout");
-    let _ = join_reader(stderr_reader, "hello_world stderr");
+) -> Result<()> {
+    let kill_result = child.kill().context("kill timed-out hello_world process");
+    let wait_result = child.wait().context("reap timed-out hello_world process");
+    let stdout_result = join_reader(stdout_reader, "hello_world stdout");
+    let stderr_result = join_reader(stderr_reader, "hello_world stderr");
+
+    kill_result?;
+    wait_result?;
+    stdout_result?;
+    stderr_result?;
+    Ok(())
 }
 
 fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus> {
@@ -200,7 +213,9 @@ mod tests {
             .unwrap_or(false)
     }
 
-    fn ensure_rustc_available() -> bool { rustc_available() }
+    fn ensure_rustc_available() -> bool {
+        rustc_available()
+    }
 
     #[test]
     fn run_example_times_out() -> Result<()> {

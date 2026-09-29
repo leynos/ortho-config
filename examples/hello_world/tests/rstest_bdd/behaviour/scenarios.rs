@@ -5,6 +5,8 @@ use crate::fixtures::hello_world_harness;
 use rstest_bdd_macros::scenarios;
 
 mod non_yaml {
+    //! Binds scenarios that do not require YAML support.
+
     use super::*;
 
     scenarios!(
@@ -16,6 +18,8 @@ mod non_yaml {
 
 #[cfg(feature = "yaml")]
 mod yaml {
+    //! Binds scenarios that require YAML support.
+
     use super::*;
 
     scenarios!(
