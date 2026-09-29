@@ -123,30 +123,44 @@ def discard(root: Path, names: list[str]) -> list[Removal]:
         failure stay removed; none after it are touched.
     """
     base = root.resolve()
-    removals = []
-    for name in names:
-        tree = base / name
-        resolved = tree.resolve()
-        if resolved == base:
-            message = f"{name!r} names the target directory {base} itself"
-            raise ValueError(message)
-        if not resolved.is_relative_to(base):
-            message = f"{name!r} resolves outside {base}"
-            raise ValueError(message)
-        if resolved != tree:
-            message = f"{name!r} is an alias for {resolved}, not a plain path under {base}"
-            raise ValueError(message)
-        if not tree.exists():
-            removals.append(Removal(name, None))
-            continue
-        size = tree_size(tree)
-        try:
-            shutil.rmtree(tree)
-        except OSError as error:
-            message = f"cannot remove {tree}: {error}"
-            raise DiscardError(message) from error
-        removals.append(Removal(name, size))
-    return removals
+    return [_discard_one(base, name) for name in names]
+
+
+def _plain_tree_path(base: Path, name: str) -> Path:
+    """Return ``base / name`` once it is proven a plain path under ``base``.
+
+    Raises
+    ------
+    ValueError
+        If the name is the target itself, escapes it, or reaches its tree
+        through a symlink or ``..`` component.
+    """
+    tree = base / name
+    resolved = tree.resolve()
+    if resolved == base:
+        message = f"{name!r} names the target directory {base} itself"
+        raise ValueError(message)
+    if not resolved.is_relative_to(base):
+        message = f"{name!r} resolves outside {base}"
+        raise ValueError(message)
+    if resolved != tree:
+        message = f"{name!r} is an alias for {resolved}, not a plain path under {base}"
+        raise ValueError(message)
+    return tree
+
+
+def _discard_one(base: Path, name: str) -> Removal:
+    """Remove the tree ``name`` under ``base`` and report its size, or ``None``."""
+    tree = _plain_tree_path(base, name)
+    if not tree.exists():
+        return Removal(name, None)
+    size = tree_size(tree)
+    try:
+        shutil.rmtree(tree)
+    except OSError as error:
+        message = f"cannot remove {tree}: {error}"
+        raise DiscardError(message) from error
+    return Removal(name, size)
 
 
 def main(argv: list[str]) -> int:
