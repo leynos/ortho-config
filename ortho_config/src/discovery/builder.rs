@@ -44,15 +44,25 @@ type ProjectRootResolver = Arc<dyn Fn() -> std::io::Result<PathBuf> + Send + Syn
 /// ```
 #[derive(Clone)]
 pub struct ConfigDiscoveryBuilder {
+    /// Optional environment variable whose value names an explicit config path.
     env_var: Option<String>,
+    /// Application name appended beneath platform configuration directories.
     app_name: String,
+    /// Canonical filename searched beneath nested platform directories.
     config_file_name: String,
+    /// Caller-supplied dotfile name, taking precedence over the derived name.
     custom_dotfile_name: Option<String>,
+    /// Caller-supplied filename searched beneath project roots.
     custom_project_file_name: Option<String>,
+    /// Project roots in the order they will be searched.
     project_roots: Vec<PathBuf>,
+    /// Optional explicit candidates searched after required paths.
     explicit_paths: Vec<PathBuf>,
+    /// Explicit candidates that must exist before discovery may succeed.
     required_explicit_paths: Vec<PathBuf>,
+    /// Injected source, or `None` to use the live process environment.
     env_source: Option<SharedEnvSource>,
+    /// Deferred current-directory lookup, skipped when roots were supplied.
     project_root_resolver: ProjectRootResolver,
 }
 
@@ -225,6 +235,10 @@ impl ConfigDiscoveryBuilder {
         self
     }
 
+    /// Derives the default hidden filename from the app name and config extension.
+    ///
+    /// A blank app name yields `.toml` (or `.config` without an extension);
+    /// otherwise the trimmed app name and available extension form the stem.
     fn default_dotfile(&self) -> String {
         let stem = self.app_name.trim();
         let extension = Path::new(&self.config_file_name)

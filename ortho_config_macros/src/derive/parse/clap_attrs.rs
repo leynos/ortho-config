@@ -50,6 +50,8 @@ pub(crate) fn parse_id_from_meta(
     Ok(())
 }
 
+/// Merge an `id` override from one `arg` or `clap` attribute into the field's
+/// accumulated identifier, rejecting malformed nested metadata.
 pub(crate) fn clap_arg_id_from_attribute(
     attr: &syn::Attribute,
     existing_id: &mut Option<syn::LitStr>,
@@ -96,6 +98,8 @@ pub(crate) fn clap_arg_id_or_field_name(field: &syn::Field) -> syn::Result<Strin
     Ok(ident.unraw().to_string())
 }
 
+/// Consume the value or parenthesized tokens of an unrelated clap key so the
+/// nested-meta parser can continue without interpreting clap's full grammar.
 fn consume_unknown_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
     if meta.input.peek(syn::Token![=]) {
         let value = meta.value()?;

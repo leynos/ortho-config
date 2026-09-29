@@ -25,6 +25,7 @@ use super::{ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome, Disc
 #[derive(Debug, Default)]
 pub(super) struct PartitionedErrors {
     required: Vec<Arc<OrthoError>>,
+    /// Failures from optional candidates, kept separate for caller policy.
     optional: Vec<Arc<OrthoError>>,
 }
 
@@ -61,6 +62,7 @@ impl PartitionedErrors {
         }
     }
 
+    /// Transfers both error partitions into the generic single-value result.
     fn into_outcome<T>(self, value: Option<T>) -> DiscoveryOutcome<T> {
         DiscoveryOutcome {
             value,
@@ -155,6 +157,10 @@ impl ConfigDiscovery {
         (None, errors)
     }
 
+    /// Runs the shared first-success traversal and maps its value and errors.
+    ///
+    /// The builder runs only for a parsed candidate. Required failures remain
+    /// in the outcome even when a later optional candidate produces a value.
     fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
     where
         F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,

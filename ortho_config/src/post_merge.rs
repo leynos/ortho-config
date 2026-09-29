@@ -86,8 +86,11 @@ pub trait PostMergeHook: Sized {
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct PostMergeContext {
+    /// Prefix associated with the configuration type that was merged.
     prefix: String,
+    /// File layers successfully loaded before the post-merge hook ran.
     loaded_files: Vec<Utf8PathBuf>,
+    /// Whether the CLI layer contributed explicit user input.
     has_cli_input: bool,
 }
 

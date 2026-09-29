@@ -235,6 +235,10 @@ pub fn select_policy_package<'a>(
     )
 }
 
+/// Finds an exact Cargo package-name match and borrows it from the metadata graph.
+///
+/// The borrow keeps selection tied to the metadata value's lifetime; a missing name
+/// returns `PackageNotFound` with the requested spelling for a useful CLI diagnostic.
 fn find_package<'a>(metadata: &'a Metadata, name: &str) -> Result<&'a Package, OrthohelpError> {
     metadata
         .packages
@@ -243,6 +247,9 @@ fn find_package<'a>(metadata: &'a Metadata, name: &str) -> Result<&'a Package, O
         .ok_or_else(|| OrthohelpError::PackageNotFound(name.to_owned()))
 }
 
+/// Deserializes the package's `ortho_config` table, using empty defaults when it is absent.
+///
+/// Malformed values are returned as metadata JSON errors rather than silently ignored.
 fn parse_ortho_config_metadata(package: &Package) -> Result<OrthoConfigMetadata, OrthohelpError> {
     let Some(value) = package.metadata.get("ortho_config") else {
         return Ok(OrthoConfigMetadata::default());
@@ -251,6 +258,7 @@ fn parse_ortho_config_metadata(package: &Package) -> Result<OrthoConfigMetadata,
     serde_json::from_value(value.clone()).map_err(OrthohelpError::MetadataJson)
 }
 
+/// Requires a library target because the bridge resolves configuration metadata from it.
 fn ensure_library_target(package: &Package) -> Result<(), OrthohelpError> {
     let has_lib = package
         .targets
@@ -263,6 +271,7 @@ fn ensure_library_target(package: &Package) -> Result<(), OrthohelpError> {
     }
 }
 
+/// Confirms an explicitly selected binary name identifies a binary target in the package.
 fn ensure_bin_target(package: &Package, bin: &str) -> Result<(), OrthohelpError> {
     let has_bin = package
         .targets
@@ -278,6 +287,10 @@ fn ensure_bin_target(package: &Package, bin: &str) -> Result<(), OrthohelpError>
     })
 }
 
+/// Returns the selected package's dependency requirement and optional local path override.
+///
+/// A missing dependency is an error because generated docs depend on the bridge crate's
+/// version and location when preparing the build configuration.
 fn find_ortho_config_dependency(
     package: &Package,
 ) -> Result<OrthoConfigDependency, OrthohelpError> {
@@ -293,6 +306,10 @@ fn find_ortho_config_dependency(
     })
 }
 
+/// Qualifies a root type with the package crate name while preserving explicit paths.
+///
+/// `crate::Type` is made suitable for the generated bridge crate, already qualified paths
+/// pass through, and a bare type name receives the package path as its prefix.
 fn normalize_root_type(raw: &str, crate_ident: &str) -> String {
     if let Some(stripped) = raw.strip_prefix("crate::") {
         return format!("{crate_ident}::{stripped}");

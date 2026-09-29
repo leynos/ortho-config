@@ -12,10 +12,15 @@ use crate::hex::to_lower_hex;
 /// Cache key inputs for the bridge IR.
 #[derive(Debug, Clone)]
 pub struct CacheKey {
+    /// SHA-256 fingerprint of package files that can affect the generated IR.
     pub(crate) fingerprint: String,
+    /// Root input kind, separating package and workspace entries in the cache.
     pub(crate) root_type: String,
+    /// Generator version, invalidating entries when the producing tool changes.
     pub(crate) tool_version: String,
+    /// IR schema version, invalidating entries after serialized shape changes.
     pub(crate) ir_version: String,
+    /// Optional workspace lockfile digest, distinct from absence in the hash.
     pub(crate) lockfile_hash: Option<String>,
 }
 
@@ -93,6 +98,11 @@ pub fn fingerprint_package(package_root: &Utf8Path) -> Result<String, OrthohelpE
     Ok(to_lower_hex(&hasher.finalize()))
 }
 
+/// Add an existing file's relative name and contents to the package digest.
+///
+/// A missing input contributes nothing, while open or read failures are
+/// reported with `hash_path` for diagnostics. The directory handle and hasher
+/// remain borrowed; the opened file and its read buffer are owned locally.
 fn hash_file_if_present(
     dir: &Dir,
     open_path: &Utf8Path,
@@ -122,6 +132,10 @@ fn hash_file_if_present(
     Ok(())
 }
 
+/// Hash a directory tree when its root exists, treating absence as no input.
+///
+/// The opened subdirectory is owned for the recursive walk and dropped on
+/// return; filesystem errors propagate with the affected relative path.
 fn hash_directory_if_present(
     dir: &Dir,
     path: &Utf8Path,
@@ -133,6 +147,12 @@ fn hash_directory_if_present(
     Ok(())
 }
 
+/// Hash regular files under a directory in deterministic relative-path order.
+///
+/// Entries are sorted before traversal so filesystem enumeration order cannot
+/// change the cache key. Directory entries recurse, regular files contribute
+/// their relative path and bytes, and other entry kinds are skipped. Any read
+/// or metadata failure aborts fingerprinting with the corresponding path.
 fn hash_directory_recursive(
     dir: &Dir,
     base: &Utf8Path,
@@ -177,6 +197,10 @@ fn hash_directory_recursive(
     Ok(())
 }
 
+/// Open a directory relative to `dir`, distinguishing absence from I/O failure.
+///
+/// The returned handle owns the opened directory capability. A missing path
+/// becomes `None`; other failures retain the requested path in the error.
 fn try_open_dir(dir: &Dir, path: &Utf8Path) -> Result<Option<Dir>, OrthohelpError> {
     match dir.open_dir(path) {
         Ok(subdir) => Ok(Some(subdir)),

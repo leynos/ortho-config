@@ -54,7 +54,9 @@ impl LocalizeCmd for Command {
 /// Carrier returned by [`LocalizeCmd::with_base`].
 #[must_use]
 pub struct WithBase<C> {
+    /// Command tree retained until the wrapper applies the requested localizer.
     command: C,
+    /// Root identifier segments established by `with_base` and extended per subcommand.
     base: Vec<String>,
 }
 
@@ -87,10 +89,12 @@ impl WithBase<Command> {
     }
 }
 
+/// Splits a dotted caller-supplied base into the path segments expected by `message_id_for`.
 fn split_base(base: impl Into<String>) -> Vec<String> {
     base.into().split('.').map(str::to_owned).collect()
 }
 
+/// Uses `clap`'s binary name when set, falling back to the command name as the root ID segment.
 fn default_base_for(command: &Command) -> Vec<String> {
     vec![
         command
@@ -100,6 +104,10 @@ fn default_base_for(command: &Command) -> Vec<String> {
     ]
 }
 
+/// Applies command and argument translations, then optionally repeats for each child command.
+///
+/// Missing translations leave Clap's existing metadata intact. The current path is kept
+/// as separate segments so nested commands map to distinct `Fluent` IDs.
 fn localize_command(
     mut command: Command,
     localizer: &dyn Localizer,
@@ -129,6 +137,7 @@ fn localize_command(
     command
 }
 
+/// Extends the parent ID path with the child command's `clap` name.
 fn child_path(path: &[String], child_name: &str) -> Vec<String> {
     let mut child_path = Vec::with_capacity(path.len() + 1);
     child_path.extend_from_slice(path);
@@ -136,6 +145,10 @@ fn child_path(path: &[String], child_name: &str) -> Vec<String> {
     child_path
 }
 
+/// Replaces available command text while preserving `clap` values for missing translations.
+///
+/// Long-form metadata receives the `binary` interpolation argument; the short `about`
+/// tagline intentionally has no arguments.
 fn apply_command_metadata(
     mut command: Command,
     localizer: &dyn Localizer,
@@ -169,12 +182,16 @@ fn apply_command_metadata(
     command
 }
 
+/// Provides the command name under the `binary` key used by bundled `Fluent` patterns.
 fn localization_args_for(command: &Command) -> LocalizationArgs<'static> {
     let mut args = HashMap::new();
     args.insert("binary", FluentValue::from(command.get_name().to_owned()));
     args
 }
 
+/// Localizes each argument using a stable snapshot of IDs and value-taking behavior.
+///
+/// The snapshot avoids borrowing arguments while `clap`'s consuming-style mutators replace them.
 fn apply_arg_metadata(mut command: Command, localizer: &dyn Localizer, path: &[String]) -> Command {
     assert_unique_arg_ids(&command, path);
     let arg_metadata = command
@@ -195,17 +212,24 @@ fn apply_arg_metadata(mut command: Command, localizer: &dyn Localizer, path: &[S
     command
 }
 
+/// Identifies `clap` actions that accept input values and therefore support a localized value name.
 fn arg_takes_value(arg: &Arg) -> bool {
     matches!(arg.get_action(), ArgAction::Set | ArgAction::Append)
 }
 
+/// Snapshot of the argument properties needed to resolve localized Clap text.
 struct ArgLocalizationContext<'context> {
+    /// Lookup backend shared for all fields of this argument.
     localizer: &'context dyn Localizer,
+    /// Command path used to scope the argument's `Fluent` IDs.
     path: &'context [String],
+    /// `clap` argument identifier used in the `args.<id>.<field>` message contract.
     arg_id: &'context str,
+    /// Gates `value_name` localization to actions that accept values.
     takes_value: bool,
 }
 
+/// Applies help, long-help, and value-name messages while retaining `clap` defaults on misses.
 fn localize_arg(mut arg: Arg, context: &ArgLocalizationContext<'_>) -> Arg {
     let help_id = message_id_for(context.path, &format!("args.{}.help", context.arg_id));
     if let Some(value) = context.localizer.lookup(&help_id, None) {
@@ -228,6 +252,7 @@ fn localize_arg(mut arg: Arg, context: &ArgLocalizationContext<'_>) -> Arg {
     arg
 }
 
+/// Rejects child names that normalize to the same localized command identifier.
 fn assert_unique_subcommand_ids(command: &Command, path: &[String]) {
     let mut ids = HashSet::new();
     for child in command.get_subcommands() {
@@ -241,6 +266,7 @@ fn assert_unique_subcommand_ids(command: &Command, path: &[String]) {
     }
 }
 
+/// Rejects argument IDs that normalize to colliding help-message identifiers.
 fn assert_unique_arg_ids(command: &Command, path: &[String]) {
     let mut ids = HashSet::new();
     for arg in command.get_arguments() {

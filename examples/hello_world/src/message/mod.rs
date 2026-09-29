@@ -6,8 +6,11 @@ use std::io::{self, Write};
 /// Computed greeting ready for display.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GreetingPlan {
+    /// Fully formatted greeting after mode-specific punctuation and casing.
     message: String,
+    /// Validated delivery mode retained for test inspection.
     mode: DeliveryMode,
+    /// Whitespace-trimmed preamble retained when non-empty.
     preamble: Option<String>,
 }
 
@@ -35,7 +38,9 @@ impl GreetingPlan {
 /// Computed farewell including the greeting sequence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TakeLeavePlan {
+    /// Greeting produced from the farewell command's greeting overrides.
     greeting: GreetingPlan,
+    /// Formatted farewell sentence, including any requested follow-up details.
     farewell: String,
 }
 
@@ -192,6 +197,10 @@ fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, H
     Ok(greeting_defaults)
 }
 
+/// Builds optional farewell details in a stable wave, gift, channel, reminder order.
+///
+/// Absent options contribute no fragment, allowing the formatter to choose
+/// clean punctuation for both empty and populated detail lists.
 fn build_farewell_fragments(command: &TakeLeaveCommand) -> Vec<String> {
     let mut fragments = Vec::new();
     if command.wave {
@@ -210,6 +219,10 @@ fn build_farewell_fragments(command: &TakeLeaveCommand) -> Vec<String> {
     fragments
 }
 
+/// Formats the parting phrase, recipient, and optional follow-up fragments.
+///
+/// With no details the sentence receives one final period; otherwise fragments
+/// are joined as a grammatical list and enclosed by sentence punctuation.
 fn format_farewell_message(config: &HelloWorldCli, command: &TakeLeaveCommand) -> String {
     let mut farewell = format!("{}, {}", command.parting.trim(), config.recipient);
     let fragments = build_farewell_fragments(command);
@@ -223,6 +236,9 @@ fn format_farewell_message(config: &HelloWorldCli, command: &TakeLeaveCommand) -
     farewell
 }
 
+/// Writes a greeting preamble, when present, followed by one newline-terminated message.
+///
+/// Each write is fallible and stops the sequence on the first `io::Error`.
 fn write_plan_to<W: Write>(writer: &mut W, plan: &GreetingPlan) -> io::Result<()> {
     if let Some(preamble) = plan.preamble() {
         writer.write_all(preamble.as_bytes())?;
@@ -232,6 +248,7 @@ fn write_plan_to<W: Write>(writer: &mut W, plan: &GreetingPlan) -> io::Result<()
     writer.write_all(b"\n")
 }
 
+/// Writes the embedded greeting first, then the newline-terminated farewell.
 fn write_take_leave_to<W: Write>(writer: &mut W, plan: &TakeLeavePlan) -> io::Result<()> {
     write_plan_to(writer, plan.greeting())?;
     writer.write_all(plan.farewell().as_bytes())?;
@@ -294,6 +311,10 @@ pub fn print_take_leave(plan: &TakeLeavePlan) -> io::Result<()> {
     write_take_leave_to(&mut stdout, plan)
 }
 
+/// Joins detail fragments with natural conjunction and Oxford-comma handling.
+///
+/// Zero parts produce an empty string, one is unchanged, two use `and`, and
+/// longer lists use commas followed by `and` before the final part.
 fn join_fragments(parts: &[String]) -> String {
     match parts {
         [] => String::new(),

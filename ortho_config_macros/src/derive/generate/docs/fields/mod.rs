@@ -31,6 +31,12 @@ use tokens::{build_possible_values, default_tokens, deprecated_tokens};
 use validation::{ensure_unique, validate_env_name, validate_file_key};
 use value_types::{is_multi_value, value_type_tokens};
 
+/// Builds one generated documentation record per non-subcommand field.
+///
+/// The source fields and parsed attributes must have identical lengths because
+/// they are paired by position. Duplicate environment names and file-key paths
+/// are rejected while records are built so the generated metadata is
+/// unambiguous.
 pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<TokenStream>> {
     if args.fields.len() != args.field_attrs.len() {
         return Err(syn::Error::new(
@@ -100,6 +106,11 @@ struct FieldMetaBuilder<'a> {
 }
 
 impl<'a> FieldMetaBuilder<'a> {
+    /// Resolves a field's identity and value type before assembling its metadata.
+    ///
+    /// Tuple fields are rejected because generated documentation identifies
+    /// fields by name. CLI metadata must already exist for every field that is
+    /// not marked `skip_cli`.
     fn build_field(
         &mut self,
         field: &'a syn::Field,
@@ -187,6 +198,11 @@ impl<'a> FieldMetaBuilder<'a> {
         string_tokens(&default_field_id(self.app_name, field_name, segment))
     }
 
+    /// Emits CLI metadata, preserving `None` for fields excluded from the CLI.
+    ///
+    /// The value name and help visibility come from documentation attributes;
+    /// option spelling, multiplicity, and value-taking behaviour come from the
+    /// already-resolved CLI metadata and Rust field type.
     fn build_cli_tokens(&self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         if context.attrs.skip_cli {
             return Ok(quote! { None });
@@ -240,6 +256,11 @@ impl<'a> FieldMetaBuilder<'a> {
         })
     }
 
+    /// Resolves and validates the field's environment name before tokenizing it.
+    ///
+    /// An explicit documentation override takes precedence over the generated
+    /// prefix-and-field name. Duplicate names are errors, with spans retained
+    /// so diagnostics can point back to the source fields.
     fn build_env_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         let env_name = context
             .attrs
@@ -258,6 +279,11 @@ impl<'a> FieldMetaBuilder<'a> {
         })
     }
 
+    /// Resolves and validates the file key path before tokenizing it.
+    ///
+    /// An explicit documentation key takes precedence over Serde's serialized
+    /// field key, including the struct-level rename rule. Duplicate resolved
+    /// paths are rejected to keep file-source metadata unambiguous.
     fn build_file_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         let key_path = if let Some(key) = context.attrs.doc.file_key_path.clone() {
             key
@@ -288,6 +314,7 @@ fn render_meta_parts(attrs: &FieldAttrs, krate: &proc_macro2::TokenStream) -> Me
 }
 
 impl FieldIdentity<'_> {
+    /// Converts resolved source strings to literals at the macro call site.
     fn into_tokens(self) -> FieldIdentityTokens {
         FieldIdentityTokens {
             field_name: syn::LitStr::new(self.field_name, proc_macro2::Span::call_site()),
@@ -297,6 +324,7 @@ impl FieldIdentity<'_> {
     }
 }
 
+/// Emits the public `FieldMetadata` initializer consumed by generated code.
 fn render_field_metadata(
     components: FieldMetadataComponents,
     krate: &proc_macro2::TokenStream,
@@ -323,6 +351,7 @@ fn render_field_metadata(
     }
 }
 
+/// Emits the field name and help identifiers with owned `String` values.
 fn render_identity_tokens(identity: FieldIdentityTokens) -> TokenStream {
     let field_name = identity.field_name;
     let help_id = identity.help_id;
@@ -334,6 +363,7 @@ fn render_identity_tokens(identity: FieldIdentityTokens) -> TokenStream {
     }
 }
 
+/// Emits the optional type description and requiredness flag.
 fn render_value_tokens(value: ValueContext) -> TokenStream {
     let value_tokens = value.value_tokens;
     let required = value.required;
@@ -343,6 +373,7 @@ fn render_value_tokens(value: ValueContext) -> TokenStream {
     }
 }
 
+/// Emits input-source metadata while preserving the optional CLI distinction.
 fn render_io_block(io: IoTokens) -> TokenStream {
     let cli = io.cli;
     let env = io.env;
@@ -354,6 +385,7 @@ fn render_io_block(io: IoTokens) -> TokenStream {
     }
 }
 
+/// Emits defaults, deprecation state, and all supplementary annotations.
 fn render_meta_block(meta: MetaParts) -> TokenStream {
     let default = meta.default_tokens;
     let deprecated = meta.deprecated_tokens;
@@ -369,6 +401,7 @@ fn render_meta_block(meta: MetaParts) -> TokenStream {
     }
 }
 
+/// Emits a named vector initializer while retaining the input item order.
 fn render_vec_field(field_name: &str, items: &[TokenStream]) -> TokenStream {
     let ident = syn::Ident::new(field_name, proc_macro2::Span::call_site());
     quote! { #ident: vec![ #( #items ),* ], }

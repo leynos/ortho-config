@@ -16,9 +16,14 @@ use super::{
     FormattingIssueReporter,
 };
 
+/// Keeps each Fluent bundle paired with the locale and source needed for
+/// localized lookup and diagnostics.
 pub(super) struct BundleWithLocale {
+    /// Locale used to construct the bundle and reported with formatting issues.
     pub(super) locale: LanguageIdentifier,
+    /// Shared parsed resources, retained behind `Arc` for `Fluent`'s concurrent bundle API.
     pub(super) bundle: FluentBundle<Arc<FluentResource>>,
+    /// Origin tag used to distinguish consumer catalogues from embedded defaults.
     pub(super) kind: FluentBundleSource,
 }
 
@@ -32,12 +37,17 @@ impl fmt::Debug for BundleWithLocale {
     }
 }
 
+/// Embedded English catalogue used for any requested locale whose language is English.
 const EN_US_CATALOGUE: &str = include_str!("../../locales/en-US/messages.ftl");
+/// Embedded Japanese catalogue used for any requested locale whose language is Japanese.
 const JA_CATALOGUE: &str = include_str!("../../locales/ja/messages.ftl");
 
+/// Resource slice for the embedded English catalogue, kept static for bundle construction.
 static EN_US_RESOURCES: [&str; 1] = [EN_US_CATALOGUE];
+/// Resource slice for the embedded Japanese catalogue, kept static for bundle construction.
 static JA_RESOURCES: [&str; 1] = [JA_CATALOGUE];
 
+/// Selects an embedded catalogue by language subtag; unsupported languages have no default.
 pub(super) fn default_resources(locale: &LanguageIdentifier) -> Option<&'static [&'static str]> {
     match locale.language.as_str() {
         "en" => Some(&EN_US_RESOURCES),
@@ -46,6 +56,10 @@ pub(super) fn default_resources(locale: &LanguageIdentifier) -> Option<&'static 
     }
 }
 
+/// Parses, normalizes, and registers one resource set while preserving its origin for errors.
+///
+/// Parsing or duplicate-ID registration failures are returned with the requested locale
+/// and catalogue source so callers can distinguish consumer failures from crate defaults.
 pub(super) fn bundle_from_resources(
     locale: &LanguageIdentifier,
     resources: &[&'static str],
@@ -79,6 +93,9 @@ pub(super) fn bundle_from_resources(
     })
 }
 
+/// Converts runtime dotted message paths to `Fluent`'s hyphen-separated identifier spelling.
+///
+/// IDs without dots are borrowed unchanged, avoiding allocation on the common lookup path.
 pub(super) fn normalize_identifier(id: &str) -> Cow<'_, str> {
     if id.contains('.') {
         Cow::Owned(id.replace('.', "-"))
@@ -87,6 +104,7 @@ pub(super) fn normalize_identifier(id: &str) -> Cow<'_, str> {
     }
 }
 
+/// Normalizes top-level catalogue IDs while retaining message bodies and line boundaries.
 pub(super) fn normalize_resource_ids(resource: &str) -> String {
     resource
         .lines()
@@ -114,6 +132,7 @@ fn is_valid_load_time_identifier(id: &str) -> bool {
     first.is_alphabetic() && chars.all(is_valid_load_time_id_char)
 }
 
+/// Rewrites only a valid, unindented assignment key; comments and Fluent body lines pass through.
 fn normalize_id_line(line: &str) -> String {
     let trimmed = line.trim_start();
     if trimmed.is_empty() || trimmed.starts_with('#') {

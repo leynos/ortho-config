@@ -11,6 +11,7 @@ use super::discovery::build_discovery_metadata;
 use super::types::AppName;
 use super::{example_tokens, link_tokens, note_tokens, option_string_tokens};
 
+/// Supplies the stable translation keys used when no heading override is present.
 fn default_headings() -> HeadingOverrides {
     HeadingOverrides {
         name: Some(String::from("ortho.headings.name")),
@@ -71,6 +72,10 @@ pub(super) fn synopsis_id_tokens(doc: &DocStructAttrs, krate: &TokenStream) -> T
     clippy::cognitive_complexity,
     reason = "`quote!` expansion inflates the complexity score; keep this wrapper minimal."
 )]
+/// Combines parsed section attributes into the runtime metadata struct construction.
+///
+/// The returned tokens refer to the selected runtime crate path so derive expansion
+/// remains valid when the dependency is renamed by the consuming package.
 pub(super) fn build_sections_metadata(
     app_name: &AppName,
     struct_attrs: &StructAttrs,
@@ -95,6 +100,10 @@ pub(super) fn build_sections_metadata(
     })
 }
 
+/// Emits Windows help metadata only when the derive input declares Windows settings.
+///
+/// Unspecified flags retain the generator's compatibility defaults: common
+/// parameters are included and subcommands remain in the parent help function.
 pub(super) fn build_windows_metadata(
     struct_attrs: &StructAttrs,
     krate: &TokenStream,
@@ -127,6 +136,7 @@ pub(super) fn build_windows_metadata(
     }
 }
 
+/// Resolves heading keys against defaults and emits the runtime `HeadingIds` value.
 fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> TokenStream {
     let headings = merge_headings(overrides);
 
@@ -166,11 +176,13 @@ fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> Toke
 }
 
 /// Emits one string literal as an owned `String` expression.
-pub(super) fn string_tokens(value: &str) -> TokenStream {
+pub(super) /// Quotes a string as an owned literal for insertion into generated code.
+fn string_tokens(value: &str) -> TokenStream {
     let lit = syn::LitStr::new(value, proc_macro2::Span::call_site());
     quote! { String::from(#lit) }
 }
 
+/// Fills missing heading keys while preserving every explicit override.
 fn merge_headings(overrides: &HeadingOverrides) -> HeadingOverrides {
     let defaults = default_headings();
     HeadingOverrides {
@@ -234,6 +246,7 @@ fn build_precedence_metadata(
     })
 }
 
+/// Normalizes supported source aliases to the runtime enum's variant names.
 fn is_source_kind(value: &str) -> Option<&'static str> {
     match value.trim().to_ascii_lowercase().as_str() {
         "default" | "defaults" => Some("Defaults"),

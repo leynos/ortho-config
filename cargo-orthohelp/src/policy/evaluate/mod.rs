@@ -160,6 +160,7 @@ fn exception_result(
     }
 }
 
+/// Copies the canonical constants into owned lists for a self-contained policy report.
 fn canonical_vocabulary() -> Vocabulary {
     Vocabulary::canonical()
 }

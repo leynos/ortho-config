@@ -15,6 +15,7 @@ use crate::{EnvSource, OrthoResult};
 #[path = "paths_telemetry.rs"]
 mod paths_telemetry;
 
+/// Supported suffixes in precedence order; aliases for each optional format stay adjacent.
 const EXT_GROUPS: &[&[&str]] = &[
     &["toml"],
     #[cfg(feature = "json5")]

@@ -31,6 +31,7 @@ fn windows_normalized_key(path: &Path) -> Vec<u16> {
 }
 
 impl ConfigDiscovery {
+    /// Builds a native deduplication key without converting paths to UTF-8.
     pub(super) fn dedup_key(path: &Path) -> DedupKey {
         #[cfg(windows)]
         {
@@ -46,6 +47,7 @@ impl ConfigDiscovery {
         }
     }
 
+    /// Exposes the production Windows key normalization to platform tests.
     #[cfg(all(test, windows))]
     pub(super) fn normalized_key(path: &Path) -> DedupKey {
         Self::dedup_key(path)
@@ -59,6 +61,10 @@ impl ConfigDiscovery {
 /// paths that are not valid Unicode, so no two distinct paths share a key.
 #[cfg(windows)]
 pub(super) type DedupKey = Vec<u16>;
+/// Native path representation used to distinguish non-UTF-8 paths off Windows.
+///
+/// Unlike a lossy `String`, an `OsString` keeps distinct native byte sequences
+/// distinct during candidate deduplication.
 #[cfg(not(windows))]
 pub(super) type DedupKey = std::ffi::OsString;
 
@@ -162,6 +168,7 @@ pub(super) struct CandidateDecisions {
     pub(super) xdg_config_home: &'static str,
     pub(super) xdg_dirs: &'static str,
     pub(super) xdg_resolution: &'static str,
+    /// Which source, if any, supplied the home directory.
     pub(super) home: &'static str,
 }
 
@@ -178,5 +185,6 @@ impl CandidateDecisions {
 pub(super) struct CandidateSet {
     pub(super) candidates: Vec<Candidate>,
     pub(super) required_bound: usize,
+    /// Decisions retained for emission by the load operation boundary.
     pub(super) decisions: CandidateDecisions,
 }

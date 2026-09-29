@@ -22,6 +22,7 @@ pub(crate) struct CliStructTokens {
     pub fields: Vec<proc_macro2::TokenStream>,
     pub used_shorts: HashSet<char>,
     pub used_longs: HashSet<String>,
+    /// Every named source field, including fields omitted from the CLI, for reserved-name checks.
     pub field_names: HashSet<String>,
 }
 
@@ -30,9 +31,11 @@ pub(crate) struct CliFieldMetadata {
     pub field_name: String,
     pub long: String,
     pub short: char,
+    /// Whether the field accepts boolean switch semantics rather than a value.
     pub is_bool: bool,
 }
 
+/// Wraps a field type in `Option` while avoiding a nested option for existing optional types.
 pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     option_inner(ty).map_or_else(|| quote! { Option<#ty> }, |inner| quote! { Option<#inner> })
 }
@@ -42,7 +45,8 @@ pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 /// Exposed to the derive's CLI-info builder so the bool-ness recorded there is
 /// the same predicate that decides `ArgAction::SetTrue` when the CLI struct is
 /// emitted. Deriving it twice from the type would let the two disagree.
-pub(crate) fn is_bool_type(ty: &Type) -> bool {
+pub(crate) /// Recognizes plain and optional `bool` fields for clap's switch-style argument handling.
+fn is_bool_type(ty: &Type) -> bool {
     let inner = option_inner(ty).unwrap_or(ty);
     matches!(
         inner,
@@ -50,18 +54,22 @@ pub(crate) fn is_bool_type(ty: &Type) -> bool {
     )
 }
 
+/// Reports the empty spelling separately so callers can return its specific diagnostic.
 const fn is_empty_long(long: &str) -> bool {
     long.is_empty()
 }
 
+/// Long names omit leading dashes and underscores because clap supplies the prefix.
 fn has_invalid_prefix(long: &str) -> bool {
     long.starts_with(['-', '_'])
 }
 
+/// Restricts long names to the ASCII spelling accepted by this derive's CLI contract.
 fn has_invalid_chars(long: &str) -> bool {
     !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
+/// Returns the targeted diagnostic for a forbidden leading dash or underscore.
 fn invalid_prefix_message(long: &str) -> Option<String> {
     if !has_invalid_prefix(long) {
         return None;
@@ -72,6 +80,7 @@ fn invalid_prefix_message(long: &str) -> Option<String> {
     ))
 }
 
+/// Produces the first applicable syntax error for a long flag spelling.
 fn long_validation_error(long: &str) -> Option<String> {
     if is_empty_long(long) {
         Some(format!("invalid `cli_long` '{long}': must be non-empty"))
@@ -126,6 +135,10 @@ pub(super) fn validate_user_cli_short(
     Ok(user)
 }
 
+/// Chooses an explicit short flag or the first available letter from the field name.
+///
+/// Explicit and derived values are inserted into `used_shorts` only after validation,
+/// so later fields observe a complete reservation set and duplicate flags fail early.
 pub(super) fn resolve_short_flag(
     name: &Ident,
     attrs: &FieldAttrs,
@@ -153,6 +166,7 @@ pub(super) fn resolve_short_flag(
     Ok(derived)
 }
 
+/// Rejects malformed long names, including clap's reserved global help and version flags.
 pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     if let Some(message) = long_validation_error(long) {
         return Err(syn::Error::new_spanned(name, message));
@@ -170,10 +184,12 @@ pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
 struct CliFieldContext {
     used_shorts: HashSet<char>,
     used_longs: HashSet<String>,
+    /// Source field names reserved even when their fields opt out of CLI generation.
     field_names: HashSet<String>,
 }
 
 impl CliFieldContext {
+    /// Creates empty reservations and preallocates field-name sets for the input size.
     fn with_capacity(capacity: usize) -> Self {
         Self {
             used_shorts: HashSet::new(),
@@ -189,6 +205,7 @@ struct ResolvedCliField {
     field_name: String,
     long: String,
     short: char,
+    /// Determines whether generation uses a switch action and omits serde's `None` filter.
     is_bool: bool,
 }
 
@@ -236,6 +253,7 @@ fn resolve_cli_field(
     })
 }
 
+/// Emits one public generated CLI field with clap parsing and serde omission behavior.
 fn process_cli_field(
     field: &syn::Field,
     attrs: &FieldAttrs,
@@ -299,6 +317,7 @@ fn process_cli_field(
     })
 }
 
+/// Captures the resolved field spellings used by generated documentation sections.
 fn process_cli_metadata(
     field: &syn::Field,
     attrs: &FieldAttrs,
@@ -314,6 +333,10 @@ fn process_cli_metadata(
     })
 }
 
+/// Builds generated fields and returns reservations needed by later shared-flag generation.
+///
+/// `field_attrs` must align one-for-one with `fields`; mismatched slices are rejected to
+/// prevent attributes from silently being applied to the wrong source field.
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -362,6 +385,10 @@ pub(crate) fn build_cli_struct_fields(
     })
 }
 
+/// Resolves CLI names for fields without generating code, preserving field declaration order.
+///
+/// The returned entries omit subcommands and fields marked `skip_cli`, matching the
+/// actual CLI surface used by the generated documentation.
 pub(crate) fn build_cli_field_metadata(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],

@@ -76,6 +76,7 @@ pub(crate) struct StructAttrs {
     /// `--profile` flag, the `<PREFIX>PROFILE` selector, the profile merge
     /// layer, and `profiles.supported = true` in agent context.
     pub profiles: bool,
+    /// Documentation metadata copied into generated API documentation.
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.
     ///

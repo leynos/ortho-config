@@ -21,12 +21,19 @@ use crate::derive::parse::{
     DocExampleAttr, DocLinkAttr, DocNoteAttr, FieldAttrs, SerdeRenameAll, StructAttrs,
 };
 
+/// Borrowed derive inputs needed to emit the downstream documentation trait.
 pub(crate) struct DocsArgs<'a> {
+    /// Configuration type whose documentation metadata is being generated.
     pub ident: &'a Ident,
+    /// Source fields, kept in declaration order for stable help output.
     pub fields: &'a [syn::Field],
+    /// Parsed field attributes aligned with `fields` by index.
     pub field_attrs: &'a [FieldAttrs],
+    /// Container settings that supply names, headings, and platform metadata.
     pub struct_attrs: &'a StructAttrs,
+    /// Serde naming policy used to identify serialized configuration keys.
     pub serde_rename_all: Option<SerdeRenameAll>,
+    /// CLI details used to keep generated help metadata in sync with parsing.
     pub cli_fields: &'a [CliFieldMetadata],
     /// Localisation identifiers determine which field defaults follow the
     /// mounted command path. Fields absent from this model retain docs-only
@@ -36,6 +43,8 @@ pub(crate) struct DocsArgs<'a> {
     pub krate: &'a TokenStream,
 }
 
+/// Emits an `OrthoConfigDocs` implementation whose IR combines parsed
+/// attributes with the same CLI and Serde names used by runtime loading.
 pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
     let krate = args.krate;
     let app_name = sections::resolve_app_name(args.struct_attrs, args.ident);
@@ -94,6 +103,8 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
     })
 }
 
+/// Emits nested command metadata only when one supported subcommand field is
+/// present; multiple selectors are rejected consistently with clap.
 fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
     let subcommand_fields = args
         .fields
@@ -122,6 +133,9 @@ fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
 
 /// Unwrap `Option<T>` and `Vec<T>` to the inner type `T`, falling back to
 /// the original type for unrecognized wrappers.
+///
+/// This shallow projection keeps documentation generation independent of
+/// arbitrary user-defined container semantics.
 fn unwrap_known_wrapper(ty: &syn::Type) -> &syn::Type {
     let syn::Type::Path(type_path) = ty else {
         return ty;
@@ -142,6 +156,8 @@ fn unwrap_known_wrapper(ty: &syn::Type) -> &syn::Type {
     inner
 }
 
+/// Turns an optional string into tokens for `Option<String>` without parsing
+/// generated text back into Rust syntax.
 pub(super) fn option_string_tokens(value: Option<&str>) -> TokenStream {
     value.map_or_else(
         || quote! { None },
@@ -152,6 +168,8 @@ pub(super) fn option_string_tokens(value: Option<&str>) -> TokenStream {
     )
 }
 
+/// Turns an optional character into tokens for `Option<char>` while preserving
+/// literal escaping through `syn`.
 pub(super) fn option_char_tokens(value: Option<char>) -> TokenStream {
     value.map_or_else(
         || quote! { None },
@@ -162,6 +180,7 @@ pub(super) fn option_char_tokens(value: Option<char>) -> TokenStream {
     )
 }
 
+/// Converts parsed examples into owned IR values in their source order.
 pub(super) fn example_tokens(examples: &[DocExampleAttr], krate: &TokenStream) -> Vec<TokenStream> {
     examples
         .iter()
@@ -180,6 +199,7 @@ pub(super) fn example_tokens(examples: &[DocExampleAttr], krate: &TokenStream) -
         .collect()
 }
 
+/// Converts parsed links into IR tokens, retaining optional localized labels.
 pub(super) fn link_tokens(links: &[DocLinkAttr], krate: &TokenStream) -> Vec<TokenStream> {
     links
         .iter()
@@ -196,6 +216,7 @@ pub(super) fn link_tokens(links: &[DocLinkAttr], krate: &TokenStream) -> Vec<Tok
         .collect()
 }
 
+/// Converts note identifiers into owned IR values for the generated metadata.
 pub(super) fn note_tokens(notes: &[DocNoteAttr], krate: &TokenStream) -> Vec<TokenStream> {
     notes
         .iter()

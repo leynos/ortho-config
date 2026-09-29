@@ -10,17 +10,23 @@ use serde_saphyr::Options;
 
 use super::helpers::open_parent_dir_and_name;
 
+/// Deferred source selected by a YAML provider when it is queried.
 #[derive(Debug, Clone)]
 enum YamlInput {
+    /// Read the YAML document from the configured path when the provider runs.
     File,
+    /// Use owned YAML text supplied at construction time.
     Inline(String),
 }
 
 /// Figment provider that reads YAML using `serde-saphyr`.
 #[derive(Debug, Clone)]
 pub struct SaphyrYaml {
+    /// Path used for provider identity and file-backed reads.
     path: Utf8PathBuf,
+    /// Selects deferred file I/O or the stored inline document.
     input: YamlInput,
+    /// Optional Figment profile receiving the parsed mapping.
     profile: Option<Profile>,
 }
 

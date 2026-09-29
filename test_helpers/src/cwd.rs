@@ -19,12 +19,15 @@ use camino::Utf8PathBuf;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
 
+/// Serializes process-wide working-directory changes across parallel tests.
 static CWD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
 /// RAII guard that restores the working directory on drop.
 #[must_use = "dropping restores the prior working directory"]
 pub struct CwdGuard {
+    /// Directory restored explicitly or on drop.
     original: Utf8PathBuf,
+    /// Held until restoration completes so another test cannot race the cwd.
     _lock: parking_lot::MutexGuard<'static, ()>,
 }
 

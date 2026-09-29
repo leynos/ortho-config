@@ -61,6 +61,10 @@ fn discovery_builder(source: SharedEnvSource) -> ortho_config::discovery::Config
         .env_source(source)
 }
 
+/// Returns UTF-8 candidates for tests that assert the example's search order.
+///
+/// Paths that cannot be represented as UTF-8 are omitted by the library's
+/// `utf8_candidates` view; production discovery keeps native paths instead.
 #[cfg(all(test, unix))]
 pub(super) fn collect_config_candidates() -> Vec<Utf8PathBuf> {
     discovery().utf8_candidates()

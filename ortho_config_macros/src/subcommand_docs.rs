@@ -10,6 +10,8 @@ use syn::DeriveInput;
 
 use crate::derive::parse::clap_variant_name;
 
+/// Resolves an optional downstream crate override and rejects duplicate or
+/// unsupported enum-level derive settings.
 fn parse_crate_path(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Path>> {
     let mut crate_path = None;
     for attr in attrs {
@@ -30,6 +32,10 @@ fn parse_crate_path(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Path>> 
     Ok(crate_path)
 }
 
+/// Returns the payload type for a supported one-field tuple variant.
+///
+/// Unit and named-field variants are rejected because generated metadata
+/// delegates to the wrapped argument type's `OrthoConfigDocs` implementation.
 fn single_tuple_field<'a>(
     variant_ident: &syn::Ident,
     fields: &'a syn::Fields,
@@ -47,6 +53,8 @@ fn single_tuple_field<'a>(
     }
 }
 
+/// Enforces exactly one tuple field and returns its type for metadata
+/// delegation.
 fn single_unnamed_type<'a>(
     variant_ident: &syn::Ident,
     unnamed_fields: &'a syn::FieldsUnnamed,
@@ -67,6 +75,8 @@ fn single_unnamed_type<'a>(
     Ok(&field.ty)
 }
 
+/// Uses Clap's explicit command name when present, otherwise kebab-cases the
+/// Rust variant identifier to match command-line parsing.
 fn command_label(variant: &syn::Variant) -> syn::Result<syn::LitStr> {
     Ok(clap_variant_name(variant)?.unwrap_or_else(|| {
         syn::LitStr::new(
@@ -76,6 +86,8 @@ fn command_label(variant: &syn::Variant) -> syn::Result<syn::LitStr> {
     }))
 }
 
+/// Emits the wrapped argument metadata with application and about identifiers
+/// adjusted to the selected command label.
 fn metadata_expr(variant: &syn::Variant, krate: &TokenStream) -> syn::Result<TokenStream> {
     let args_ty = single_tuple_field(&variant.ident, &variant.fields)?;
     let label = command_label(variant)?;
