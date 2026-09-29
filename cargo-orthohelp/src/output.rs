@@ -262,8 +262,9 @@ fn replace_json_file(
         })
 }
 
+/// Persists a rename by syncing its containing directory after replacement.
+/// Directory-open and sync failures are returned to the caller.
 #[cfg(unix)]
-/// Persists the rename on Unix by syncing the containing directory after replacement.
 fn sync_parent_dir(dir: &Dir, path: &Utf8Path) -> Result<(), OrthohelpError> {
     let dir_file = dir.open(".").map_err(|io_err| OrthohelpError::Io {
         path: path.to_path_buf(),
@@ -275,6 +276,8 @@ fn sync_parent_dir(dir: &Dir, path: &Utf8Path) -> Result<(), OrthohelpError> {
     })
 }
 
+/// Skips directory syncing where the platform cannot use this descriptor path.
+/// The common write flow receives success with weaker directory durability.
 #[expect(
     clippy::unnecessary_wraps,
     reason = "non-Unix stub mirrors the Unix fn signature so call sites \
