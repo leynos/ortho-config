@@ -16,6 +16,10 @@ use std::sync::Arc;
 
 use crate::error::HelloWorldError;
 
+/// Creates the example's shared search policy for configuration files.
+///
+/// The CLI selector, app name, and filenames are fixed here so loading
+/// subcommand overrides and global composition use the same candidate rules.
 fn discovery() -> ortho_config::ConfigDiscovery {
     ortho_config::ConfigDiscovery::builder("hello_world")
         .env_var("HELLO_WORLD_CONFIG_PATH")
@@ -25,11 +29,24 @@ fn discovery() -> ortho_config::ConfigDiscovery {
         .build()
 }
 
+/// Returns UTF-8 candidates for tests that assert the example's search order.
+///
+/// Paths that cannot be represented as UTF-8 are omitted by the library's
+/// `utf8_candidates` view; production discovery keeps native paths instead.
 #[cfg(all(test, unix))]
 pub(super) fn collect_config_candidates() -> Vec<Utf8PathBuf> {
     discovery().utf8_candidates()
 }
 
+/// Loads the first discovered file as a merge layer, aggregating misses on exhaustion.
+///
+/// If no layer is found, required and optional candidate errors are combined
+/// for the CLI's configuration error. A successful layer is returned directly.
+///
+/// # Errors
+///
+/// Returns a configuration error when candidate loading fails and no layer
+/// succeeds.
 pub(super) fn discover_config_layer()
 -> Result<Option<ortho_config::MergeLayer<'static>>, HelloWorldError> {
     let mut outcome = discovery().compose_layer();

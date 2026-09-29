@@ -19,17 +19,26 @@ use syn::{Attribute, Field, LitStr, Token};
 /// compute the same JSON field names that serde uses during serialization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SerdeRenameAll {
+    /// Lowercases every character in the field name.
     Lower,
+    /// Uppercases every character in the field name.
     Upper,
+    /// Capitalizes each word and removes separators.
     Pascal,
+    /// Preserves the first word's lower case and capitalizes later words.
     Camel,
+    /// Separates words with underscores in lower case.
     Snake,
+    /// Separates words with underscores in upper case.
     ScreamingSnake,
+    /// Separates words with hyphens in lower case.
     Kebab,
+    /// Separates words with hyphens in upper case.
     ScreamingKebab,
 }
 
 impl SerdeRenameAll {
+    /// Parses one of the supported Serde struct-field naming conventions.
     fn parse(value: &LitStr) -> syn::Result<Self> {
         match value.value().as_str() {
             "lowercase" => Ok(Self::Lower),
@@ -51,6 +60,7 @@ impl SerdeRenameAll {
         }
     }
 
+    /// Applies this naming convention to a Rust field identifier.
     fn apply(self, field_name: &str) -> String {
         match self {
             Self::Lower => field_name.to_ascii_lowercase(),
@@ -65,7 +75,10 @@ impl SerdeRenameAll {
     }
 }
 
-/// Parse `#[serde(rename_all = "...")]` from struct attributes.
+/// Parses `#[serde(rename_all = "...")]` from struct attributes.
+///
+/// Only the serialization-side struct rule is relevant because generated CLI
+/// extraction looks up keys in the serialized configuration object.
 pub(crate) fn serde_rename_all(attrs: &[Attribute]) -> syn::Result<Option<SerdeRenameAll>> {
     let mut out = None;
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
@@ -82,7 +95,11 @@ pub(crate) fn serde_rename_all(attrs: &[Attribute]) -> syn::Result<Option<SerdeR
     Ok(out)
 }
 
-/// Parse `#[serde(rename = "...")]` (and `rename(serialize = "...")`) from field attributes.
+/// Parses `#[serde(rename = "...")]` and `rename(serialize = "...")` from
+/// field attributes.
+///
+/// The explicit field key takes precedence over a container `rename_all`
+/// rule, and a deserialize-only name does not change the serialized key.
 pub(crate) fn serde_field_rename(attrs: &[Attribute]) -> syn::Result<Option<String>> {
     let mut out = None;
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
@@ -109,6 +126,10 @@ pub(crate) fn serde_field_rename(attrs: &[Attribute]) -> syn::Result<Option<Stri
     Ok(out)
 }
 
+/// Records only the serialization name from Serde's directional rename form.
+///
+/// Deserialization aliases do not affect the JSON key used to extract CLI
+/// values after serializing the configuration struct.
 fn parse_serde_rename_serialize(
     nested: &ParseNestedMeta,
     rename: &mut Option<String>,
@@ -123,7 +144,11 @@ fn parse_serde_rename_serialize(
     Ok(())
 }
 
-/// Compute the JSON key serde uses for `field` given an optional container-level rename rule.
+/// Computes the JSON key Serde uses for `field` given an optional
+/// container-level rename rule.
+///
+/// An explicit serialization name wins; otherwise the container rule is
+/// applied, with the Rust identifier as the final fallback.
 pub(crate) fn serde_serialized_field_key(
     field: &Field,
     rename_all: Option<SerdeRenameAll>,
@@ -157,6 +182,8 @@ pub(crate) fn serde_has_default(attrs: &[Attribute]) -> syn::Result<bool> {
     Ok(has_default)
 }
 
+/// Recognizes `default`, consuming an optional expression so nested parsing
+/// remains positioned at the next Serde attribute.
 fn parse_default_meta(meta: &ParseNestedMeta) -> syn::Result<bool> {
     if !meta.path.is_ident("default") {
         super::discard_unknown(meta)?;

@@ -60,14 +60,17 @@ pub fn render_manifest(config: &ManifestConfig<'_>) -> String {
     output
 }
 
+/// Format manifest string values with `PowerShell` single-quoted escaping.
 fn format_string_array(values: &[String]) -> String {
     format_array(values.iter().map(String::as_str))
 }
 
+/// Borrow aliases as strings and apply the manifest's common quoting rules.
 fn format_alias_array(values: &[ExportAlias]) -> String {
     format_array(values.iter().map(AsRef::as_ref))
 }
 
+/// Render a `PowerShell` array, using `@()` for the empty case.
 fn format_array<'a>(values: impl Iterator<Item = &'a str>) -> String {
     let quoted = values.map(quote_single).collect::<Vec<_>>();
     if quoted.is_empty() {

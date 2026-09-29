@@ -9,6 +9,10 @@ use syn::Ident;
 
 use crate::derive::parse::StructAttrs;
 
+/// Builds the CSV environment provider used by generated loading code.
+///
+/// Both prefixed and unprefixed forms uppercase keys and split nested names on
+/// `__`, matching the library's environment hierarchy convention.
 pub(crate) fn build_env_provider(
     struct_attrs: &StructAttrs,
     krate: &proc_macro2::TokenStream,
@@ -19,6 +23,8 @@ pub(crate) fn build_env_provider(
     )
 }
 
+/// Selects the config-path environment key, preserving the prefix spelling
+/// while falling back to `CONFIG_PATH` when no prefix is configured.
 pub(crate) fn compute_config_env_var(struct_attrs: &StructAttrs) -> String {
     struct_attrs.prefix.as_deref().map_or_else(
         || String::from("CONFIG_PATH"),
@@ -26,11 +32,15 @@ pub(crate) fn compute_config_env_var(struct_attrs: &StructAttrs) -> String {
     )
 }
 
+/// Converts the resolved config-path key into a literal expression for the
+/// generated load implementation.
 pub(crate) fn build_config_env_var(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
     let var = compute_config_env_var(struct_attrs);
     quote! { #var }
 }
 
+/// Derives the default dotfile name from the prefix after removing trailing
+/// separators and normalizing its case.
 pub(crate) fn compute_dotfile_name(struct_attrs: &StructAttrs) -> String {
     struct_attrs.prefix.as_ref().map_or_else(
         || String::from(".config.toml"),
@@ -41,6 +51,8 @@ pub(crate) fn compute_dotfile_name(struct_attrs: &StructAttrs) -> String {
     )
 }
 
+/// Uses the normalized prefix as the discovery application name, falling back
+/// to the configuration type's snake-case name when the prefix is empty.
 pub(crate) fn default_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> String {
     if let Some(prefix) = &struct_attrs.prefix {
         let normalised = prefix.trim_end_matches('_').to_ascii_lowercase();

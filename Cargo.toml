@@ -32,6 +32,7 @@ rstest-bdd-macros = "0.5.0"
 # `cargo clippy` lints configuration
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
+missing_docs_in_private_items = "deny"
 
 # 1. hygiene
 allow_attributes                    = "deny"

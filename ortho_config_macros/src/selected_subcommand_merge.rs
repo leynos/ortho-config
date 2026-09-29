@@ -9,6 +9,8 @@ use syn::DeriveInput;
 
 use crate::derive::parse::clap_variant_name;
 
+/// Detects whether a variant requests the parsed Clap matches required to
+/// distinguish user input from parser defaults.
 fn variant_has_matches(variant: &syn::Variant) -> syn::Result<bool> {
     let mut has_matches = false;
     for attr in &variant.attrs {
@@ -26,6 +28,7 @@ fn variant_has_matches(variant: &syn::Variant) -> syn::Result<bool> {
     Ok(has_matches)
 }
 
+/// Enforces the single tuple payload shape consumed by generated merge arms.
 fn validate_tuple_variant(variant_ident: &syn::Ident, fields: &syn::Fields) -> syn::Result<()> {
     match fields {
         syn::Fields::Unnamed(unnamed_fields) if unnamed_fields.unnamed.len() == 1 => Ok(()),
@@ -65,6 +68,8 @@ fn parse_crate_path(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Path>> 
     Ok(crate_path)
 }
 
+/// Builds a merge expression that either uses nested `ArgMatches` or applies
+/// the subcommand's ordinary configuration merge path.
 fn merge_expr(has_matches: bool, selected_label: &syn::LitStr, krate: &TokenStream) -> TokenStream {
     if has_matches {
         quote! {
@@ -89,6 +94,8 @@ fn merge_expr(has_matches: bool, selected_label: &syn::LitStr, krate: &TokenStre
     }
 }
 
+/// Emits one match arm that replaces the selected variant payload with its
+/// merged configuration value.
 fn build_arm(variant_ident: &syn::Ident, merge_expr: &TokenStream) -> TokenStream {
     quote! {
         Self::#variant_ident(args) => {

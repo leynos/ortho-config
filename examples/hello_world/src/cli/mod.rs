@@ -57,6 +57,10 @@ pub struct CommandLine {
     pub command: Commands,
 }
 
+/// Predicate used by Serde to omit disabled switches from CLI override layers.
+///
+/// False is absence for layering purposes; serializing it would mask a true
+/// value supplied by a lower-priority configuration source.
 #[expect(
     clippy::trivially_copy_pass_by_ref,
     reason = "serde skip hooks receive references to field values"
@@ -208,6 +212,10 @@ pub enum DeliveryMode {
 }
 
 impl HelloWorldCli {
+    /// Detects the one pair of mutually exclusive global delivery switches.
+    ///
+    /// Validation calls this before `delivery_mode`, whose match assumes the
+    /// configuration is valid.
     #[inline]
     const fn has_conflicting_modes(&self) -> bool {
         self.is_excited && self.is_quiet
@@ -275,10 +283,12 @@ impl HelloWorldCli {
     }
 }
 
+/// Returns the friendly recipient used when no source supplies one.
 fn default_recipient() -> String {
     String::from("World")
 }
 
+/// Returns the initial greeting word used when no source supplies a list.
 fn default_salutations() -> Vec<String> {
     vec![String::from("Hello")]
 }

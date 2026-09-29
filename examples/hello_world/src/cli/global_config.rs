@@ -51,6 +51,10 @@ pub fn load_global_config(
     Ok(resolved)
 }
 
+/// Builds the argv slice used by `OrthoConfig`'s merge-layer parser.
+///
+/// The program name occupies `argv[0]`; an explicit config path is forwarded
+/// as an `OsString` so non-UTF-8 paths are not lost during argument assembly.
 fn build_composition_args(
     program_name: &std::ffi::OsStr,
     config_override: Option<&Path>,
@@ -66,6 +70,13 @@ fn build_composition_args(
     args
 }
 
+/// Adds only explicitly supplied global CLI values above file and default layers.
+///
+/// False switches are omitted by `Overrides` so they cannot erase lower-layer
+/// values. A non-empty salutation list first clears inherited entries because
+/// collection merging may otherwise append the CLI values to file values.
+/// Serialization failures are kept with the composition errors for normal
+/// aggregation at the merge boundary.
 fn push_cli_overrides(
     globals: &GlobalArgs,
     layers: &mut Vec<MergeLayer<'static>>,

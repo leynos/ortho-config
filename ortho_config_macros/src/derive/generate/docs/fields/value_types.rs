@@ -6,24 +6,65 @@ use syn::Type;
 
 use crate::derive::parse::{btree_map_inner, hash_map_inner, option_inner, vec_inner};
 
+/// Internal description of a field value for generated documentation metadata.
+///
+/// Container variants retain their inner value model, so nested lists and maps
+/// preserve type information rather than flattening it to a display name.
 #[derive(Clone)]
 pub(super) enum ValueTypeModel {
+    /// Text accepted as a string value.
     String,
-    Integer { bits: u8, signed: bool },
-    Float { bits: u8 },
+    /// Fixed-width integer with explicit signedness.
+    Integer {
+        /// Number of bits in the integer representation.
+        bits: u8,
+        /// Whether the integer representation includes a sign bit.
+        signed: bool,
+    },
+    /// Floating-point value whose representation width is recorded.
+    Float {
+        /// Number of bits in the floating-point representation.
+        bits: u8,
+    },
+    /// Boolean value.
     Bool,
+    /// Time span value.
     Duration,
+    /// Filesystem path value.
     Path,
+    /// IP address value; concrete IPv4 and IPv6 types share this category.
     IpAddr,
+    /// Hostname value.
     Hostname,
+    /// URL value.
     Url,
-    Enum { variants: Vec<String> },
-    List { of: Box<Self> },
-    Map { of: Box<Self> },
-    Custom { name: String },
+    /// Enumerated value with the accepted spellings in source order.
+    Enum {
+        /// Accepted spellings used both for display and CLI possible values.
+        variants: Vec<String>,
+    },
+    /// Repeated values whose element type is described recursively.
+    List {
+        /// Model for each list element.
+        of: Box<Self>,
+    },
+    /// Mapping values whose value type is described recursively.
+    Map {
+        /// Model for each mapped value; keys are not exposed by this metadata.
+        of: Box<Self>,
+    },
+    /// Type outside the built-in vocabulary, retained by its display name.
+    Custom {
+        /// Identifier preserved for consumers to display as the value type.
+        name: String,
+    },
 }
 
 impl ValueTypeModel {
+    /// Emits tokens that construct the corresponding public documentation type.
+    ///
+    /// `krate` is the resolved path to the consuming crate, which keeps macro
+    /// expansion valid when that crate is renamed in its dependency manifest.
     fn tokens(&self, krate: &TokenStream) -> TokenStream {
         match self {
             Self::String => quote! { #krate::docs::ValueType::String },
@@ -73,6 +114,7 @@ impl ValueTypeModel {
     }
 }
 
+/// Emits `None` for unknown types and `Some` with the recursively mapped type otherwise.
 pub(super) fn value_type_tokens(value: Option<ValueTypeModel>, krate: &TokenStream) -> TokenStream {
     value.map_or_else(
         || quote! { None },
@@ -83,6 +125,7 @@ pub(super) fn value_type_tokens(value: Option<ValueTypeModel>, krate: &TokenStre
     )
 }
 
+/// Finds enum choices through list wrappers for CLI possible-value generation.
 pub(super) fn enum_variants(value_type: &ValueTypeModel) -> Option<&Vec<String>> {
     match value_type {
         ValueTypeModel::Enum { variants } => Some(variants),
@@ -91,6 +134,11 @@ pub(super) fn enum_variants(value_type: &ValueTypeModel) -> Option<&Vec<String>>
     }
 }
 
+/// Parses the user override vocabulary into the model used by metadata generation.
+///
+/// Wrapper forms (`list`, `map`, and `enum`) are parsed before scalar aliases;
+/// unrecognized names remain custom types so an override is never silently
+/// discarded. Numeric names use the shared width and signedness table.
 pub(super) fn parse_value_type_override(raw: &str) -> ValueTypeModel {
     let trimmed = raw.trim();
     if let Some(inner) = parse_wrapped(trimmed, "list") {
@@ -164,6 +212,7 @@ const fn numeric_entry_to_model(bits: u8, signed: Option<bool>) -> ValueTypeMode
     }
 }
 
+/// Looks up a normalized numeric spelling in the single source of width data.
 fn parse_numeric_override(raw: &str) -> Option<ValueTypeModel> {
     NUMERIC_TYPE_MAP
         .iter()
@@ -171,6 +220,7 @@ fn parse_numeric_override(raw: &str) -> Option<ValueTypeModel> {
         .map(|(_, bits, signed)| numeric_entry_to_model(*bits, *signed))
 }
 
+/// Extracts the inner text from a wrapper written with parentheses, colon, or angle brackets.
 fn parse_wrapped<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
     if let Some(after_prefix) = value.strip_prefix(prefix) {
         let trimmed = after_prefix.trim_start();
@@ -187,6 +237,7 @@ fn parse_wrapped<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
     None
 }
 
+/// Splits comma-separated enum spellings, trimming and dropping empty entries.
 fn split_list(value: &str) -> Vec<String> {
     value
         .split(',')
@@ -196,6 +247,12 @@ fn split_list(value: &str) -> Vec<String> {
         .collect()
 }
 
+/// Infers documentation metadata from a Rust type when no explicit override exists.
+///
+/// `Option` does not change the documented value type; vectors and maps preserve
+/// their nested value model, falling back to a named custom type for unknown
+/// elements. Unsupported scalar syntax returns `None` to represent no inferred
+/// type information.
 pub(super) fn infer_value_type(ty: &Type) -> Option<ValueTypeModel> {
     let base_type = unwrap_reference(ty);
 
@@ -221,11 +278,16 @@ pub(super) fn infer_value_type(ty: &Type) -> Option<ValueTypeModel> {
     infer_scalar_type(base_type)
 }
 
+/// Reports whether a CLI field accepts multiple values through `Vec<T>`.
+///
+/// An optional vector is still multi-valued, while maps and nested wrappers do
+/// not receive that CLI flag here.
 pub(super) fn is_multi_value(ty: &Type) -> bool {
     let inner = option_inner(ty).unwrap_or(ty);
     vec_inner(inner).is_some()
 }
 
+/// Classifies a scalar path using built-in categories before custom fallback.
 fn infer_scalar_type(ty: &Type) -> Option<ValueTypeModel> {
     let Type::Path(type_path) = ty else {
         return None;
@@ -250,11 +312,13 @@ fn infer_scalar_type(ty: &Type) -> Option<ValueTypeModel> {
     }
 }
 
+/// Preserves an unknown element type's final identifier for documentation.
 fn custom_type(ty: &Type) -> ValueTypeModel {
     let name = type_ident_name(ty).unwrap_or_else(|| String::from("value"));
     ValueTypeModel::Custom { name }
 }
 
+/// Extracts the final path identifier, recursively looking through references.
 fn type_ident_name(ty: &Type) -> Option<String> {
     match ty {
         Type::Path(type_path) => type_path
@@ -267,6 +331,7 @@ fn type_ident_name(ty: &Type) -> Option<String> {
     }
 }
 
+/// Removes one reference layer before recognizing the value's Rust type.
 fn unwrap_reference(ty: &Type) -> &Type {
     if let Type::Reference(reference) = ty {
         reference.elem.as_ref()

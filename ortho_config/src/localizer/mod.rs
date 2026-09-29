@@ -114,17 +114,25 @@ pub type FormattingIssueReporter = Arc<dyn Fn(&FormattingIssue) + Send + Sync>;
 
 /// Fluent-powered localiser that layers consumer bundles over embedded defaults.
 pub struct FluentLocalizer {
+    /// Consumer catalogue checked first so applications can override embedded messages.
     consumer: Option<BundleWithLocale>,
+    /// Embedded catalogue consulted only when the consumer catalogue misses or fails formatting.
     defaults: Option<BundleWithLocale>,
+    /// Receives formatting issues before lookup continues to the next bundle.
     report_issue: FormattingIssueReporter,
 }
 
 /// Builds a [`FluentLocalizer`].
 pub struct FluentLocalizerBuilder {
+    /// Locale shared by embedded and consumer catalogues built from this configuration.
     locale: LanguageIdentifier,
+    /// Consumer `Fluent` sources parsed during `try_build`, in caller-provided order.
     consumer_resources: Vec<&'static str>,
+    /// Already registered consumer bundle, which takes precedence over resource strings.
     consumer_bundle: Option<BundleWithLocale>,
+    /// Callback retained by the built localizer to report pattern-formatting failures.
     report_issue: FormattingIssueReporter,
+    /// Controls whether a built-in language catalogue is required and loaded.
     use_defaults: bool,
 }
 
@@ -290,6 +298,7 @@ impl fmt::Debug for FluentLocalizer {
     }
 }
 
+/// Creates the default warning reporter used when `Fluent` cannot format a matched pattern.
 #[must_use]
 fn default_reporter() -> FormattingIssueReporter {
     Arc::new(|issue: &FormattingIssue| {
@@ -303,6 +312,7 @@ fn default_reporter() -> FormattingIssueReporter {
     })
 }
 
+/// Copies lookup arguments into `Fluent`'s formatter-owned argument collection.
 fn fluent_args_from<'a>(args: &'a LocalizationArgs<'a>) -> FluentArgs<'a> {
     let mut fluent_args = FluentArgs::with_capacity(args.len());
     for (key, value) in args {

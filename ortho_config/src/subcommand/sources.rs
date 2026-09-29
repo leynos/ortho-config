@@ -22,7 +22,10 @@ use serde::de::DeserializeOwned;
 /// general environment service.
 #[derive(Debug, Clone, Copy)]
 pub struct SubcommandFileContext<'a> {
+    /// Base directory used to resolve file candidates.
     pub(super) base: &'a Path,
+    /// Named lookups for discovery values; this capability does not enumerate
+    /// environment keys.
     pub(super) discovery: &'a dyn EnvSource,
 }
 
@@ -37,7 +40,9 @@ impl<'a> SubcommandFileContext<'a> {
 /// Parsed CLI values paired with their clap match metadata.
 #[derive(Debug, Clone, Copy)]
 pub struct SubcommandCliMatches<'a, T> {
+    /// Parsed values merged after defaults and selected file layers.
     pub(super) cli: &'a T,
+    /// Clap's match tree, used to distinguish explicit values from defaults.
     pub(super) matches: &'a ArgMatches,
 }
 

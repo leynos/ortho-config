@@ -23,14 +23,23 @@ pub use builder::ConfigDiscoveryBuilder;
 /// Cross-platform configuration discovery helper mirroring the `hello_world` example.
 #[derive(Clone)]
 pub struct ConfigDiscovery {
+    /// Optional selector variable consulted before platform locations.
     env_var: Option<String>,
+    /// Optional caller paths searched after required paths.
     explicit_paths: Vec<PathBuf>,
+    /// Paths that define the leading required prefix of the search order.
     required_explicit_paths: Vec<PathBuf>,
+    /// App identity nested below platform configuration directories.
     app_name: String,
+    /// Canonical filename searched beneath each nested configuration directory.
     config_file_name: String,
+    /// Hidden filename used in user and local directories.
     dotfile_name: String,
+    /// Filename searched within project roots.
     project_file_name: String,
+    /// Project roots searched last, in configured order.
     project_roots: Vec<PathBuf>,
+    /// Source for selector and platform-directory values.
     env_source: SharedEnvSource,
 }
 

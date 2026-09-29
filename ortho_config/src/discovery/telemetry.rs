@@ -253,14 +253,23 @@ pub(super) fn load_outcome(
     count_outcome(operation, outcome);
 }
 
+/// Increments the discovery-attempt counter when metric recording is enabled.
+///
+/// Without the feature this is a no-op, keeping telemetry call sites identical
+/// in every build configuration.
 #[cfg(feature = "metrics")]
 fn count_attempt(operation: &'static str) {
     metrics::counter!("ortho_config.discovery.attempts", "operation" => operation).increment(1);
 }
 
+/// No-op counterpart that keeps attempt call sites available without metrics.
 #[cfg(not(feature = "metrics"))]
 const fn count_attempt(_operation: &'static str) {}
 
+/// Increments the terminal-outcome counter using only bounded labels.
+///
+/// Without the feature this is a no-op, keeping telemetry call sites identical
+/// in every build configuration.
 #[cfg(feature = "metrics")]
 fn count_outcome(operation: &'static str, outcome: &'static str) {
     metrics::counter!(
@@ -271,9 +280,15 @@ fn count_outcome(operation: &'static str, outcome: &'static str) {
     .increment(1);
 }
 
+/// No-op counterpart that keeps outcome call sites available without metrics.
 #[cfg(not(feature = "metrics"))]
 const fn count_outcome(_operation: &'static str, _outcome: &'static str) {}
 
+/// Counts candidate failures by operation, source rung, and error category.
+///
+/// These labels come from closed vocabularies so one metric series cannot be
+/// created for each path or raw error value. Without the feature this is a
+/// no-op, keeping telemetry call sites identical in every build configuration.
 #[cfg(feature = "metrics")]
 fn count_candidate_failure(operation: &'static str, source: &'static str, category: &'static str) {
     metrics::counter!(
@@ -285,6 +300,7 @@ fn count_candidate_failure(operation: &'static str, source: &'static str, catego
     .increment(1);
 }
 
+/// No-op counterpart that keeps failure call sites available without metrics.
 #[cfg(not(feature = "metrics"))]
 const fn count_candidate_failure(
     _operation: &'static str,

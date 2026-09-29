@@ -135,6 +135,10 @@ fn command_path(meta: &DocMetadata, parent_path: &[String]) -> Vec<String> {
     path
 }
 
+/// Uses only a real, non-empty about translation as the concise agent command summary.
+///
+/// Missing localizers, missing IDs, blank text, and the IR's missing-value marker all
+/// produce `None`, preventing diagnostic placeholders from leaking into agent metadata.
 fn resolve_summary(meta: &DocMetadata, localizer: Option<&dyn Localizer>) -> Option<String> {
     let resolved = localizer?.lookup(&meta.about_id, None)?;
     let trimmed = resolved.trim();
@@ -145,6 +149,7 @@ fn resolve_summary(meta: &DocMetadata, localizer: Option<&dyn Localizer>) -> Opt
     }
 }
 
+/// Retains the final command segment only when it belongs to the canonical verb vocabulary.
 fn canonical_verb_for(last_segment: &str) -> Option<String> {
     CANONICAL_VERBS
         .contains(&last_segment)
@@ -194,6 +199,7 @@ const fn should_skip_non_flag_input(field: &FieldMetadata) -> bool {
     cli.long.is_none() && cli.short.is_none() && !cli.takes_value
 }
 
+/// Prefers enum semantics from schema or CLI choices before mapping the declared type.
 fn map_input_value_type(field: &FieldMetadata) -> Option<String> {
     if matches!(&field.value, Some(ValueType::Enum { .. })) {
         return Some("enum".to_owned());
@@ -208,6 +214,7 @@ fn map_input_value_type(field: &FieldMetadata) -> Option<String> {
     field.value.as_ref().map(map_value_type)
 }
 
+/// Converts schema value kinds to the stable string vocabulary used by agent inputs.
 fn map_value_type(value: &ValueType) -> String {
     match value {
         ValueType::String => "string".to_owned(),
@@ -226,6 +233,7 @@ fn map_value_type(value: &ValueType) -> String {
     }
 }
 
+/// Uses declared enum variants first, then CLI possible values, with an empty list otherwise.
 fn enum_values(field: &FieldMetadata) -> Vec<String> {
     match &field.value {
         Some(ValueType::Enum { variants }) => variants.clone(),
@@ -264,9 +272,13 @@ fn normalize_default_display(display: &str) -> String {
 }
 
 #[derive(Default)]
+/// Tracks Rust literal boundaries so path normalization leaves literal contents untouched.
 struct LiteralState {
+    /// Active string or character delimiter; absent while scanning ordinary source text.
     quote: Option<char>,
+    /// Whether the previous character escaped the next character inside a quoted literal.
     is_escaped: bool,
+    /// Closing-hash count for a raw string, absent outside raw-string contents.
     raw_hashes: Option<usize>,
 }
 

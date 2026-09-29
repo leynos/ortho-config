@@ -17,6 +17,7 @@ pub(super) fn file_error(
     })
 }
 
+/// Records a path-specific `InvalidInput` failure for malformed file requests.
 pub(super) fn invalid_input(path: &Path, msg: impl Into<String>) -> Arc<OrthoError> {
     file_error(
         path,
@@ -24,6 +25,8 @@ pub(super) fn invalid_input(path: &Path, msg: impl Into<String>) -> Arc<OrthoErr
     )
 }
 
+/// Records a path-specific `InvalidData` failure when file contents violate
+/// the selected format's contract.
 pub(super) fn invalid_data(path: &Path, msg: impl Into<String>) -> Arc<OrthoError> {
     file_error(
         path,
@@ -31,6 +34,8 @@ pub(super) fn invalid_data(path: &Path, msg: impl Into<String>) -> Arc<OrthoErro
     )
 }
 
+/// Records a path-specific `NotFound` failure when a required referenced file
+/// is absent.
 pub(super) fn not_found(path: &Path, msg: impl Into<String>) -> Arc<OrthoError> {
     file_error(
         path,

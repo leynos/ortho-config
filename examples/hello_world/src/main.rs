@@ -23,10 +23,15 @@ fn main() -> color_eyre::Result<()> {
     run().map_err(color_eyre::eyre::Report::from)
 }
 
+/// Keeps typed CLI values beside `clap`'s matches for explicit-input precedence.
 struct ParsedCommandLine {
+    /// Parsed values used for dispatch and global configuration loading.
     cli: CommandLine,
+    /// Original match tree used to distinguish explicit subcommands from defaults.
     matches: clap::ArgMatches,
 }
+
+/// Parses, handles the context shortcut, merges configuration, and dispatches the command.
 fn run() -> Result<()> {
     let ParsedCommandLine { cli, matches } = parse_command_line()?;
     if let Commands::Context(context) = &cli.command {
@@ -51,6 +56,10 @@ fn run() -> Result<()> {
     execute_command(&globals, command)
 }
 
+/// Writes the agent-context representation requested by the context command.
+///
+/// JSON serialization and stdout writes are mapped to the example's error
+/// type, with structured diagnostics emitted before the error is returned.
 fn print_context(context: &ContextCommand) -> Result<()> {
     let output = if context.json {
         render_agent_context_json().map_err(|err| {
@@ -96,6 +105,10 @@ fn run_take_leave(globals: &HelloWorldCli, merged: &TakeLeaveCommand) -> Result<
     Ok(())
 }
 
+/// Localizes the generated Clap command and parses process arguments without UTF-8 conversion.
+///
+/// Display requests such as help exit through Clap after parsing; other parse
+/// failures are converted to `HelloWorldError` for the application boundary.
 fn parse_command_line() -> Result<ParsedCommandLine> {
     let localizer = DemoLocalizer::default();
     let command = CommandLine::command()
@@ -113,6 +126,7 @@ fn parse_command_line() -> Result<ParsedCommandLine> {
     }
 }
 
+/// Preserves global and selected-subcommand errors while wrapping unexpected structural errors.
 fn map_load_error(
     load_err: LoadGlobalsAndSelectedSubcommandError<HelloWorldError>,
 ) -> HelloWorldError {
@@ -125,6 +139,7 @@ fn map_load_error(
     }
 }
 
+/// Converts known selected-subcommand failures into domain errors for the CLI boundary.
 fn map_selected_subcommand_error(error: SelectedSubcommandMergeError) -> HelloWorldError {
     match error {
         SelectedSubcommandMergeError::MissingSubcommandMatches { selected } => {

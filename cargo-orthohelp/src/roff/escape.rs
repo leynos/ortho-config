@@ -43,6 +43,7 @@ pub fn escape_text(text: &str) -> String {
     result
 }
 
+/// Escapes one line, treating its first character specially to prevent roff macro execution.
 fn escape_line(line: &str, result: &mut String) {
     let mut chars = line.chars();
 
@@ -59,6 +60,7 @@ fn escape_line(line: &str, result: &mut String) {
     }
 }
 
+/// Writes a roff-safe form for a special first character and reports whether it handled it.
 fn push_escaped_leading_char(ch: char, result: &mut String) -> bool {
     match ch {
         '-' => {
@@ -77,6 +79,7 @@ fn push_escaped_leading_char(ch: char, result: &mut String) -> bool {
     }
 }
 
+/// Escapes backslashes wherever they occur so input cannot introduce roff escapes.
 fn push_escaped_char(ch: char, result: &mut String) {
     match ch {
         '\\' => result.push_str("\\\\"),

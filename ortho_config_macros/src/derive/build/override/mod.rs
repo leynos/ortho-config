@@ -19,10 +19,16 @@ use crate::derive::parse::{FieldAttrs, MergeStrategy, btree_map_inner, vec_inner
 /// Collection strategy metadata gathered from struct fields.
 #[derive(Default)]
 pub(crate) struct CollectionStrategies {
+    /// Vector fields accumulated across layers using append semantics.
     pub append: Vec<(Ident, Type)>,
+    /// Map fields whose most recent supplied value replaces earlier maps.
     pub map_replace: Vec<(Ident, Type)>,
 }
 
+/// Applies the default or explicit strategy for a vector field.
+///
+/// Vector fields append by default; keyed merging is rejected because it has no
+/// defined element key for this collection type.
 fn process_vec_field(
     field: &syn::Field,
     name: Ident,
@@ -40,6 +46,10 @@ fn process_vec_field(
     }
 }
 
+/// Applies the default or explicit strategy for a `BTreeMap` field.
+///
+/// Keyed merging remains the default; replacement opts into whole-map
+/// precedence, while append is rejected as ambiguous for map entries.
 fn process_btree_map_field(
     field: &syn::Field,
     name: Ident,
@@ -57,6 +67,8 @@ fn process_btree_map_field(
     }
 }
 
+/// Rejects merge strategy attributes on fields whose type has no supported
+/// collection merge semantics.
 fn validate_non_collection_field(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<()> {
     if attrs.merge_strategy.is_some() {
         return Err(syn::Error::new_spanned(

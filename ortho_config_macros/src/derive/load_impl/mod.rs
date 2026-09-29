@@ -24,17 +24,26 @@ use source::{
     reason = "Field names mirror their purpose for clarity"
 )]
 pub(crate) struct LoadImplIdents<'a> {
+    /// Generated clap-facing type that owns argument parsing and composition.
     pub cli_ident: &'a Ident,
+    /// User configuration type receiving the generated loading methods.
     pub config_ident: &'a Ident,
+    /// Internal type used to materialize field defaults before merging.
     pub defaults_ident: &'a Ident,
 }
 /// Token collections used by the load implementation helpers.
 pub(crate) struct LoadImplTokens<'a> {
+    /// Tokens constructing the provider that reads the configured environment prefix.
     pub env_provider: &'a proc_macro2::TokenStream,
+    /// Field resolutions and initializer expressions for the generated defaults value.
     pub default_struct_init: &'a DefaultStructInit,
+    /// Legacy environment variable name used when discovery settings are absent.
     pub config_env_var: &'a proc_macro2::TokenStream,
+    /// Legacy dotfile name used when discovery settings are absent.
     pub dotfile_name: &'a syn::LitStr,
+    /// Legacy application name used to derive standard discovery locations.
     pub legacy_app_name: String,
+    /// Explicit discovery settings, when the derive input supplied them.
     pub discovery: Option<&'a DiscoveryTokens>,
     /// Runtime source tokens for the source-aware generated entry points.
     pub sources: Option<LoadSourceTokens<'a>>,
@@ -42,32 +51,36 @@ pub(crate) struct LoadImplTokens<'a> {
     pub krate: &'a proc_macro2::TokenStream,
 }
 
+/// Resolved discovery settings embedded into generated `ConfigDiscovery` setup.
 pub(crate) struct DiscoveryTokens {
+    /// Application identity used to select standard platform locations.
     pub app_name: String,
+    /// Environment variable that may point to an explicit configuration file.
     pub env_var: String,
+    /// Optional named configuration file to include in the search.
     pub config_file_name: Option<String>,
+    /// Optional per-user dotfile to include in the search.
     pub dotfile_name: Option<String>,
+    /// Optional project-level file to include in the search.
     pub project_file_name: Option<String>,
 }
 
 /// Convenience wrapper for passing identifiers and tokens together.
 pub(crate) struct LoadImplArgs<'a> {
+    /// Identifiers for generated config, CLI, and defaults types.
     pub idents: LoadImplIdents<'a>,
+    /// Runtime configuration and resolved paths referenced by generated tokens.
     pub tokens: LoadImplTokens<'a>,
+    /// Whether generated CLI parsing exposes an explicit config-path option.
     pub has_config_path: bool,
 }
 
-/// CLI parsing is performed outside the generated method.
-///
-/// Generate the file discovery logic section.
-///
-/// Configuration files are searched in multiple locations as described in the
-/// "Configuration File Discovery" section of the design document. This mirrors
-/// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
+/// Convert an optional configured name into a literal embedded in generated Rust.
 fn to_lit_str(value: Option<&String>) -> Option<syn::LitStr> {
     value.map(|contents| syn::LitStr::new(contents, proc_macro2::Span::call_site()))
 }
 
+/// Emit a builder assignment for a configured discovery name, omitting absent names.
 fn build_optional_stmt(
     lit: Option<syn::LitStr>,
     method_name: &str,
@@ -78,6 +91,9 @@ fn build_optional_stmt(
     })
 }
 
+/// Emit the generated branch that adds a user-selected path as a required source.
+///
+/// Without the option, no CLI-specific discovery step is generated.
 fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
     if has_config_path {
         quote! {
@@ -134,6 +150,10 @@ fn build_discovery_loading_block(
     }}
 }
 
+/// Generate discovery setup using the explicit application and file names.
+///
+/// The optional CLI path remains required, while optional search failures are
+/// retained only if no configuration layer was found.
 fn build_discovery_based_loading(
     krate: &proc_macro2::TokenStream,
     discovery: &DiscoveryTokens,
@@ -171,6 +191,12 @@ fn build_discovery_based_loading(
     build_discovery_loading_block(krate, &builder_init, &builder_steps, &cli_chain)
 }
 
+/// Generate file discovery from explicit names or the legacy application defaults.
+///
+/// Explicit discovery settings select their own environment variable and optional
+/// filenames; otherwise the legacy environment variable and dotfile are used.
+/// Source-aware entry points pass their lookup-only source into discovery while
+/// reserving the separately supplied scan source for environment merging.
 pub(crate) fn build_file_discovery(
     tokens: &LoadImplTokens<'_>,
     has_config_path: bool,
@@ -218,6 +244,11 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
+/// Generate the composition body shared by iterator-based loading methods.
+///
+/// The emitted order is defaults, discovered file layers, environment, then
+/// CLI, so later sources retain their documented higher precedence. Errors
+/// from each conversion are accumulated with the composition result.
 fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplArgs {
         idents,
@@ -277,6 +308,7 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     }
 }
 
+/// Generate config methods that forward composition calls to the clap-facing type.
 fn build_config_impl_delegates(
     krate: &proc_macro2::TokenStream,
     cli_ident: &Ident,

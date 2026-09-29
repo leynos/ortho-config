@@ -24,7 +24,9 @@ use super::{ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome, Disc
 /// reported error disagreeing.
 #[derive(Debug, Default)]
 struct PartitionedErrors {
+    /// Failures from the required leading candidate prefix.
     required: Vec<Arc<OrthoError>>,
+    /// Failures from optional candidates, kept separate for caller policy.
     optional: Vec<Arc<OrthoError>>,
 }
 
@@ -35,12 +37,20 @@ struct PartitionedErrors {
 /// error's category is derived from the error itself at the recording site,
 /// so the emitted event and the stored error cannot disagree.
 struct CandidateFailure {
+    /// Bounded name of the load or composition operation being performed.
     operation: &'static str,
+    /// Whether this path belongs to the required prefix of the candidate list.
     required: bool,
+    /// Bounded candidate-source label; filesystem paths are never telemetry labels.
     source: &'static str,
 }
 
 impl PartitionedErrors {
+    /// Records one failure in telemetry and in its requiredness partition.
+    ///
+    /// Keeping both decisions here ensures the event category and the stored
+    /// error refer to the same failure, and that required errors survive a
+    /// later successful fallback.
     fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
         telemetry::candidate_failure(
             failure.operation,
@@ -55,6 +65,7 @@ impl PartitionedErrors {
         }
     }
 
+    /// Transfers both error partitions into the generic single-value result.
     fn into_outcome<T>(self, value: Option<T>) -> DiscoveryOutcome<T> {
         DiscoveryOutcome {
             value,
@@ -63,6 +74,7 @@ impl PartitionedErrors {
         }
     }
 
+    /// Transfers both error partitions into the multi-layer result.
     fn into_layers_outcome(self, value: Vec<MergeLayer<'static>>) -> DiscoveryLayersOutcome {
         DiscoveryLayersOutcome {
             value,
@@ -134,6 +146,10 @@ impl ConfigDiscovery {
         (None, errors)
     }
 
+    /// Runs the shared first-success traversal and maps its value and errors.
+    ///
+    /// The builder runs only for a parsed candidate. Required failures remain
+    /// in the outcome even when a later optional candidate produces a value.
     fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
     where
         F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
@@ -270,6 +286,11 @@ impl ConfigDiscovery {
         (figment, required_errors)
     }
 
+    /// Creates the file error used when a required candidate is absent.
+    ///
+    /// Optional absence is an ordinary miss; required absence is promoted to
+    /// an error so callers can distinguish an unmet explicit request from an
+    /// exhausted fallback search.
     fn missing_required_error(path: &Path) -> Arc<OrthoError> {
         Arc::new(OrthoError::File {
             path: path.to_path_buf(),

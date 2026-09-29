@@ -31,6 +31,7 @@ fn windows_normalized_key(path: &Path) -> Vec<u16> {
 }
 
 impl ConfigDiscovery {
+    /// Builds a native deduplication key without converting paths to UTF-8.
     pub(super) fn dedup_key(path: &Path) -> DedupKey {
         #[cfg(windows)]
         {
@@ -46,6 +47,7 @@ impl ConfigDiscovery {
         }
     }
 
+    /// Exposes the production Windows key normalization to platform tests.
     #[cfg(all(test, windows))]
     pub(super) fn normalized_key(path: &Path) -> DedupKey {
         Self::dedup_key(path)
@@ -59,6 +61,10 @@ impl ConfigDiscovery {
 /// paths that are not valid Unicode, so no two distinct paths share a key.
 #[cfg(windows)]
 pub(super) type DedupKey = Vec<u16>;
+/// Native path representation used to distinguish non-UTF-8 paths off Windows.
+///
+/// Unlike a lossy `String`, an `OsString` keeps distinct native byte sequences
+/// distinct during candidate deduplication.
 #[cfg(not(windows))]
 pub(super) type DedupKey = std::ffi::OsString;
 
@@ -68,18 +74,27 @@ pub(super) type DedupKey = std::ffi::OsString;
 /// from the closed `CANDIDATE_*` set in [`telemetry`], never a path, so the
 /// module's no-values-in-events property survives the extra field.
 pub(super) struct Candidate {
+    /// Filesystem location attempted at this position in discovery order.
     pub(super) path: PathBuf,
+    /// Bounded source label used to classify failures without exposing the path.
     pub(super) source: &'static str,
 }
 
 /// Accumulates candidates while deduplicating per the platform's path rules.
 #[derive(Default)]
 pub(super) struct CandidateAccumulator {
+    /// Accepted paths in first-seen order; later duplicates never replace them.
     pub(super) candidates: Vec<Candidate>,
+    /// Platform-native keys used to reject duplicate paths without lossy conversion.
     seen: HashSet<DedupKey>,
 }
 
 impl CandidateAccumulator {
+    /// Appends a non-empty path only if its platform-specific key is new.
+    ///
+    /// Returning `false` for empty and duplicate paths keeps both candidate
+    /// order and the required-prefix count aligned with paths that can actually
+    /// be attempted.
     pub(super) fn push_unique(&mut self, candidate: PathBuf, source: &'static str) -> bool {
         if candidate.as_os_str().is_empty() {
             return false;
@@ -104,10 +119,15 @@ impl CandidateAccumulator {
 /// call [`CandidateDecisions::emit`] at their own boundary, which is where a
 /// side effect belongs.
 pub(super) struct CandidateDecisions {
+    /// Resolution state for the optional configuration-path selector.
     pub(super) selector: &'static str,
+    /// Whether `XDG_CONFIG_HOME` was absent, empty, or usable.
     pub(super) xdg_config_home: &'static str,
+    /// Whether `XDG_CONFIG_DIRS` was absent, empty, or usable.
     pub(super) xdg_dirs: &'static str,
+    /// Whether the default XDG base or the configured list supplied candidates.
     pub(super) xdg_resolution: &'static str,
+    /// Which source, if any, supplied the home directory.
     pub(super) home: &'static str,
 }
 
@@ -122,7 +142,10 @@ impl CandidateDecisions {
 
 /// The assembled candidate list, its required prefix, and the decisions taken.
 pub(super) struct CandidateSet {
+    /// Deduplicated paths in precedence order, with required paths first.
     pub(super) candidates: Vec<Candidate>,
+    /// Length of the leading required-candidate prefix in `candidates`.
     pub(super) required_bound: usize,
+    /// Decisions retained for emission by the load operation boundary.
     pub(super) decisions: CandidateDecisions,
 }

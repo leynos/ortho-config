@@ -51,11 +51,17 @@ const _: fn(&syn::Field) -> syn::Result<bool> = clap_field_is_subcommand;
 const _: fn(&syn::Variant) -> syn::Result<Option<LitStr>> = clap_variant_name;
 const _: fn(&[Attribute]) -> syn::Result<Option<String>> = serde_field_rename;
 
+/// Parsed options attached to the configuration type; these drive generated
+/// discovery and loading while keeping documentation metadata alongside them.
 #[derive(Default, Clone)]
 pub(crate) struct StructAttrs {
+    /// Prefix applied to environment variable names, normalized with a trailing underscore.
     pub prefix: Option<String>,
+    /// Optional names and switches that configure platform-aware file discovery.
     pub discovery: Option<DiscoveryAttrs>,
+    /// Whether generated loading invokes the post-merge hook after composition.
     pub post_merge_hook: bool,
+    /// Documentation metadata copied into generated API documentation.
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.
     ///
@@ -83,37 +89,60 @@ pub(crate) struct StructAttrs {
 ///   active and no explicit `#[ortho_config(default = ...)]` is provided.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
+    /// Explicit long option name, used instead of the name inferred by clap.
     pub cli_long: Option<String>,
+    /// Explicit short option name, used instead of the name inferred by clap.
     pub cli_short: Option<char>,
+    /// User expression supplying the field value when no source configures it.
     pub default: Option<Expr>,
+    /// Clap-derived default retained when a CLI default must be treated as absent.
     pub inferred_clap_default: Option<ClapInferredDefault>,
+    /// Collection merge behaviour to use when composing configuration layers.
     pub merge_strategy: Option<MergeStrategy>,
+    /// Whether the field is omitted from CLI generation while remaining mergeable.
     pub skip_cli: bool,
+    /// Whether a clap-provided default is omitted from the CLI merge layer.
     pub cli_default_as_absent: bool,
+    /// Whether clap owns the field as a subcommand selector rather than config data.
     pub is_subcommand: bool,
+    /// Documentation metadata emitted for the generated field API.
     pub doc: DocFieldAttrs,
 }
 
+/// Parsed names and switches for locating configuration files before merging.
 #[derive(Default, Clone)]
 pub(crate) struct DiscoveryAttrs {
+    /// Application identity used to derive standard discovery locations.
     pub app_name: Option<String>,
+    /// Environment variable whose value can name a configuration file.
     pub env_var: Option<String>,
+    /// Explicit configuration filename searched by the discovery builder.
     pub config_file_name: Option<String>,
+    /// Explicit per-user dotfile name used by discovery.
     pub dotfile_name: Option<String>,
+    /// Explicit project-level filename used by discovery.
     pub project_file_name: Option<String>,
+    /// Long CLI option that selects an explicit configuration path.
     pub config_cli_long: Option<String>,
+    /// Short CLI option that selects an explicit configuration path.
     pub config_cli_short: Option<char>,
+    /// Whether the generated config-path option is shown in CLI help.
     pub config_cli_visible: Option<bool>,
 }
 
+/// Collection merge policy selected by a field's `merge_strategy` attribute.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum MergeStrategy {
+    /// Add sequence values from each higher-precedence layer to the prior values.
     Append,
+    /// Replace the prior value with the value from the higher-precedence layer.
     Replace,
+    /// Merge map entries by key, retaining unaffected entries from lower layers.
     Keyed,
 }
 
 impl MergeStrategy {
+    /// Parse the accepted attribute spelling, reporting unknown values at their source span.
     pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
         match s {
             "append" => Ok(Self::Append),
@@ -152,6 +181,7 @@ fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     Ok(())
 }
 
+/// Parse a string prefix and normalize non-empty values for environment names.
 fn parse_prefix(meta: &ParseNestedMeta) -> syn::Result<String> {
     let lit = meta.value()?.parse::<Lit>()?;
     match lit {
@@ -166,10 +196,12 @@ fn parse_prefix(meta: &ParseNestedMeta) -> syn::Result<String> {
     }
 }
 
+/// Parse the nested keys in `discovery(...)` into the accumulated discovery settings.
 fn parse_discovery_meta(meta: &ParseNestedMeta, discovery: &mut DiscoveryAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| handle_discovery_nested(&nested, discovery))
 }
 
+/// Apply one recognized discovery key, consuming unknown keys for forward compatibility.
 fn handle_discovery_nested(
     nested: &ParseNestedMeta,
     discovery: &mut DiscoveryAttrs,
@@ -203,18 +235,21 @@ fn handle_discovery_nested(
     }
 }
 
+/// Parse a string-valued nested key and replace its destination value.
 fn assign_str(target: &mut Option<String>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
     let value = lit_str(nested, key)?.value();
     *target = Some(value);
     Ok(())
 }
 
+/// Parse a character-valued nested key and replace its destination value.
 fn assign_char(target: &mut Option<char>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
     let value = lit_char(nested, key)?;
     *target = Some(value);
     Ok(())
 }
 
+/// Parse a boolean-valued nested key and replace its destination value.
 fn assign_bool(target: &mut Option<bool>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
     let value = lit_bool(nested, key)?;
     *target = Some(value);
@@ -277,7 +312,10 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
     Ok(out)
 }
 
-/// Applies a recognised field attribute, returning `true` if handled.
+/// Applies one recognized field option, returning `false` for unknown keys.
+///
+/// Parsing errors are returned at the attribute site; successful assignments
+/// replace the corresponding slot in `out` before the next nested key is read.
 ///
 /// # Examples
 ///
@@ -303,6 +341,11 @@ fn parse_cli_default_as_absent(meta: &syn::meta::ParseNestedMeta) -> Result<bool
     }
 }
 
+/// Applies one core `ortho_config` field option or routes it to the
+/// documentation parser.
+///
+/// Returns `false` only when no parser recognizes the key, allowing the caller
+/// to preserve the established unknown-attribute behavior.
 fn apply_field_attr(
     meta: &syn::meta::ParseNestedMeta,
     out: &mut FieldAttrs,

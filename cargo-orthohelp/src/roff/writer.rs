@@ -95,6 +95,7 @@ pub fn write_man_page(
     Ok(file_path)
 }
 
+/// Opens the output directory, creating it only when missing and retaining I/O path context.
 fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
     match Dir::open_ambient_dir(path, ambient_authority()) {
         Ok(dir) => Ok(dir),

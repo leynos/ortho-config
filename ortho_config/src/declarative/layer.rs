@@ -22,8 +22,11 @@ pub enum MergeProvenance {
 /// Representation of a configuration layer.
 #[derive(Clone, Debug)]
 pub struct MergeLayer<'a> {
+    /// Identifies the source for diagnostics and source-sensitive merging.
     provenance: MergeProvenance,
+    /// Layer data may be borrowed until a consumer explicitly needs ownership.
     value: Cow<'a, Value>,
+    /// Present for file layers so errors and hooks can report their origin.
     path: Option<Utf8PathBuf>,
 }
 

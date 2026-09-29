@@ -14,6 +14,7 @@
 
 use std::process::Command;
 
+/// Cargo's unit-separator delimiter between arguments in `CARGO_ENCODED_RUSTFLAGS`.
 const ENCODED_RUSTFLAGS_SEPARATOR: char = '\x1f';
 
 /// Applies sanitized Rust compiler flags to `command`.

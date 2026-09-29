@@ -16,7 +16,9 @@ use crate::normalize_prefix;
 /// ```
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Prefix {
+    /// Caller-provided spelling retained for environment-variable names.
     raw: String,
+    /// Lowercase form used to construct file lookup candidates.
     normalized: String,
 }
 
