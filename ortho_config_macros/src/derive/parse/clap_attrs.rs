@@ -3,6 +3,7 @@
 //! These helpers extract metadata from `#[arg(...)]` and `#[clap(...)]`
 //! attributes without taking a dependency on clap itself.
 
+use syn::ext::IdentExt as _;
 use syn::{Expr, Type};
 
 use super::type_utils::{ClapDefaultValueShape, clap_default_value_type};
@@ -102,6 +103,70 @@ pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<sy
         })?;
     }
     Ok(name)
+}
+
+/// Record one nested meta item for [`clap_field_env`].
+///
+/// An `env` key either carries a literal name or is bare; every other key is
+/// consumed without inspection. Kept out of the caller's `parse_nested_meta`
+/// closure so the `if`/`else` sits at the depth of its own function body rather
+/// than nesting inside two loops.
+fn consume_env_meta(
+    meta: &syn::meta::ParseNestedMeta<'_>,
+    env: &mut Option<syn::LitStr>,
+    bare_env: &mut bool,
+) -> syn::Result<()> {
+    if !meta.path.is_ident("env") {
+        return consume_unknown_meta(meta);
+    }
+    if meta.input.peek(syn::Token![=]) {
+        let value = meta.value()?;
+        *env = Some(value.parse()?);
+    } else {
+        *bare_env = true;
+    }
+    Ok(())
+}
+
+/// Read the environment variable name a clap field binds, if any.
+///
+/// Two forms reach `clap`:
+///
+/// - `#[arg(env = "NAME")]` binds `NAME` directly.
+/// - A bare `#[arg(env)]` takes the name from the argument's identifier, which
+///   `clap_derive` renders with `ToShoutySnakeCase` (`item.rs`'s
+///   `DEFAULT_ENV_CASING` is `ScreamingSnake`, applied to `self.name`). A
+///   packed field binding
+///   `#[arg(id = "custom", env)]` uses the *assigned* id instead of the field
+///   ident, so the inferred name follows whichever of the two clap will use.
+///
+/// Used by the profile flag collision check (decision D6): a user field that
+/// claims the generated `<PREFIX>PROFILE` binding is a compile-time error on an
+/// opted-in struct. Returning `None` for a form whose name cannot be resolved
+/// locally keeps that check from rejecting a name it cannot prove.
+pub(crate) fn clap_field_env(field: &syn::Field) -> syn::Result<Option<String>> {
+    let mut env: Option<syn::LitStr> = None;
+    let mut bare_env = false;
+    for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
+        let syn::Meta::List(list) = &attr.meta else {
+            continue;
+        };
+        list.parse_nested_meta(|meta| consume_env_meta(&meta, &mut env, &mut bare_env))?;
+    }
+    if let Some(lit) = env {
+        return Ok(Some(lit.value()));
+    }
+    if !bare_env {
+        return Ok(None);
+    }
+    // A bare `env` takes its name from the argument's identifier: the assigned
+    // `id` when present, otherwise the field ident. Both use the same casing
+    // rule as `clap_derive`'s `ScreamingSnake` default.
+    let source = clap_arg_id(field)?.map_or_else(
+        || field.ident.as_ref().map(|ident| ident.unraw().to_string()),
+        Some,
+    );
+    Ok(source.map(|name| heck::ToShoutySnakeCase::to_shouty_snake_case(name.as_str())))
 }
 
 /// Detect whether a struct field is a clap subcommand selector.

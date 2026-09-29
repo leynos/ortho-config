@@ -12,6 +12,19 @@ use crate::derive::parse::StructAttrs;
 
 use super::cli::{validate_cli_long, validate_user_cli_short};
 
+/// Resolve the long option the generated config flag will actually carry.
+///
+/// Callers that must reserve this name before the flag itself is built (such
+/// as the profile-collision check) share this helper so the resolved name can
+/// never drift from the one emitted in `#[arg(long = ...)]`.
+pub(crate) fn effective_config_cli_long(struct_attrs: &StructAttrs) -> String {
+    struct_attrs
+        .discovery
+        .as_ref()
+        .and_then(|attrs| attrs.config_cli_long.clone())
+        .unwrap_or_else(|| String::from("config-path"))
+}
+
 /// Builds the generated `--config-path` field after validating its CLI metadata.
 ///
 /// For empty discovery metadata and no conflicting field or flags, the emitted
@@ -39,9 +52,7 @@ pub(crate) fn build_config_flag_field(
         ));
     }
     let discovery = struct_attrs.discovery.as_ref();
-    let long = discovery
-        .and_then(|attrs| attrs.config_cli_long.clone())
-        .unwrap_or_else(|| String::from("config-path"));
+    let long = effective_config_cli_long(struct_attrs);
     validate_cli_long(&name, &long)?;
     if used_longs.contains(&long) {
         return Err(syn::Error::new_spanned(

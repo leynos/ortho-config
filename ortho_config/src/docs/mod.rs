@@ -7,8 +7,8 @@ mod ir;
 
 pub use ir::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
-    EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note, PathPattern,
-    PrecedenceMeta, SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
+    DocProfilesMeta, EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note,
+    PathPattern, PrecedenceMeta, SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
 };
 
 /// Current IR schema version.

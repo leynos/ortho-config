@@ -18,6 +18,7 @@ pub(super) fn generate_non_object_guard(
         let provenance_label = match provenance {
             #krate::MergeProvenance::Defaults => "defaults",
             #krate::MergeProvenance::File => "file",
+            #krate::MergeProvenance::Profile => "profile",
             #krate::MergeProvenance::Environment => "environment",
             #krate::MergeProvenance::Cli => "CLI",
             _ => "unknown",

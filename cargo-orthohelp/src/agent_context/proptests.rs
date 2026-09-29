@@ -145,6 +145,7 @@ fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) ->
         fields: Vec::new(),
         subcommands,
         windows: None,
+        profiles: None,
     }
 }
 

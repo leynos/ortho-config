@@ -32,6 +32,10 @@ pub fn agent_context_kind(package: &str) -> String {
     format!("{package}.{AGENT_CONTEXT_KIND_SUFFIX}")
 }
 
+mod profiles;
+
+pub use profiles::{ProfileSelectionContract, ProfilesDeclaration};
+
 /// Top-level agent-context document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentContext {
@@ -45,7 +49,7 @@ pub struct AgentContext {
     pub commands: Vec<AgentCommand>,
     /// Profile support declared by the application.
     #[serde(default)]
-    pub profiles: SupportDeclaration,
+    pub profiles: ProfilesDeclaration,
     /// Feedback support declared by the application.
     #[serde(default)]
     pub feedback: SupportDeclaration,
@@ -84,7 +88,7 @@ impl AgentContext {
             kind: agent_context_kind(&package_name),
             package: package_name,
             commands: Vec::new(),
-            profiles: SupportDeclaration::default(),
+            profiles: ProfilesDeclaration::unsupported(),
             feedback: SupportDeclaration::default(),
             policy: AgentPolicy::default(),
             skill_manifests: Vec::new(),

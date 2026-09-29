@@ -49,6 +49,17 @@ file or environment value overrides the inferred default, while an explicit CLI
 value still wins. Run the standard quality gates before requesting a CodeRabbit
 review.
 
+### Scoped use of `googletest` and `pretty_assertions`
+
+The `googletest` and `pretty_assertions` dev dependencies (decision D9 of
+[execplan 9-1-1](execplans/9-1-1-profile-metadata.md)) are scoped to the
+profile test modules and the profile-layer tests only. New tests elsewhere
+should keep using the existing `assert_eq!`/`ensure!` conventions; do not
+migrate existing tests to these crates. When a new assertion needs richer
+matcher output, prefer `googletest::assert_that!` with matchers for shape
+inspection and `pretty_assertions::assert_eq!` for scalar equality, and keep
+the use local to the module that needs it.
+
 ### Nextest test-group serialization
 
 `.config/nextest.toml` assigns two test binaries to single-threaded groups:
@@ -132,6 +143,23 @@ Skill manifest descriptors are part of this agent-context contract: keep
 `SkillManifest`, `SkillCommandRef`, and `AgentContext.skill_manifests` in
 `ortho_config::agent_context`, and keep downstream manifest prose
 application-owned.
+
+Profile support (roadmap 9.1.1) adds two agent-context fields with an
+omitted-when-absent rule: `ProfilesDeclaration.selection` and
+`ProfilesDeclaration.list_command` are `Option` fields that serialize only when
+present, so the unsupported `{ "supported": false }` case stays byte-identical
+to the pre-profile schema. New optional fields must follow that rule and
+provide a `ProfilesDeclaration::unsupported()`/`supported()` constructor, so
+downstream construction of the declaration itself survives later field
+additions. Retyping `AgentContext.profiles` is nonetheless a break for callers
+that build `AgentContext` with a struct literal: they must either update the
+literal's `profiles` value or construct it with one of those two constructors.
+The constructors keep future *field* additions non-breaking, not this field's
+retype. The derive emits the matching IR `DocMetadata.profiles` only for
+opted-in structs; the `cargo-orthohelp` bridge maps it into the declaration.
+The runtime "which profile is active" concern is `SelectedProfile`/
+`ProfileLoadOutcome`, deliberately separate from the static agent-context
+contract.
 
 `localizer::identifier::normalize_segment` is the single source of truth for
 strict runtime and derive-time Fluent identifier segments. Reuse it from
@@ -318,6 +346,50 @@ side effects, sandboxing, safety policy, long-running job semantics, provider
 routing, build graph behaviour, and application-specific persistence. If
 OrthoConfig executes downstream commands or owns downstream side effects, stop
 and revisit the boundary in the agent-native design.
+
+## Profile layering (roadmap 9.1.1)
+
+Profile support is opt-in at the struct level through the derive attribute
+`#[ortho_config(profiles)]`. A struct that does not opt in keeps the four-tier
+merge order, gains no `--profile` flag, and treats a `[profile.*]` table in a
+shared file as an ordinary key rather than extracting it. The accepted design is
+[ADR-009](adr-009-profile-selection-and-layering.md); the user-facing view is
+the [Profiles section](users-guide.md#profiles) of the users' guide.
+
+Opted-in structs merge five tiers, lowest to highest: built-in defaults,
+configuration files, the selected profile, environment variables, and CLI
+flags. An explicit flag beats the profile even when the flag value equals the
+built-in default, so the generated CLI push consults clap's value-source
+information rather than relying on a value comparison alone.
+
+Extraction runs over the *resolved file chain* — the first successful discovery
+candidate plus its `extends` chain — not over every candidate the discovery
+walk considered. Every file layer in that chain has its reserved `profile` root
+key stripped, and one profile layer is produced for each file that defines the
+selected profile, in chain order (base first). The environment layer has the
+selector stripped too, and the generated flag is excluded from the serialized
+CLI layer, so the selector never merges as an ordinary configuration value.
+Subcommand loading uses a separate pipeline and ignores profiles; a `cmds` key
+inside a profile body is rejected rather than silently ignored.
+
+The merge API and the post-load surface divide as follows:
+
+- `MergeProvenance::Profile` tags a profile layer's provenance;
+- `MergeLayer::profile(value, path)` constructs one, and
+  `MergeComposer::push_profile` pushes it after the file layers and before the
+  environment layer;
+- `extract_profile_layers` is the extraction and validation entry point,
+  returning an `ExtractionOutcome` with `file_layers` and `profile_layers`;
+- `ProfileLoadOutcome` is the post-load runtime type that reports the active
+  selection, with `config()`, `into_config()`, and `selection()` accessors; and
+- the generated `load_with_profile_from_iter` and `load_with_profile` methods
+  return a `ProfileLoadOutcome`.
+
+Keep the [ADR-007](adr-007-downstream-context-command-naming.md) static/runtime
+split: profile *support* is agent-context metadata and is static, while the
+*active selection* is runtime-only and reported by `ProfileLoadOutcome`.
+Selected-profile output is deliberately not part of the static agent-context
+contract, which documents the mechanism rather than the moment.
 
 ## Behavioural test layout
 
@@ -598,21 +670,25 @@ contract stays discoverable.
 ### Environment merge telemetry
 
 The environment merge boundary emits a `merge.layer` tracing event at the
-decision and terminal points of source-aware work. Events use only these
-bounded fields:
+decision and terminal points of source-aware and profile-aware work. Events use
+only these bounded fields:
 
-- `operation`: `csv_env`, `derived_load`, or `subcommand_load`;
+- `operation`: `csv_env`, `derived_load`, `profile_load`, or `subcommand_load`;
 - `source`: `process` or `injected`;
 - `outcome`: `attempt`, `success`, or `failure`; and
 - `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
-  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or `aggregate`.
+  `default_value_conversion`, `file`, `cyclic_extends`, `gathering`, `merge`,
+  `validation`, `profile`, or `aggregate`.
 
-`CsvEnv` emits process-backed and injected events. Derive-generated loads and
-subcommand loads emit events when their source-aware entry points are used. The
-events never contain environment values, keys, paths, configuration data,
-caller-supplied prefixes, or raw error text. Error categories are reduced to
-the closed vocabulary before emission so subscribers can aggregate failures
-without receiving sensitive input.
+`CsvEnv` emits process-backed events, or injected events when `with_source`
+supplies a scanning source. Derive-generated and subcommand source-aware loads
+(`*_with_sources`) take injected sources and emit `source = injected`; the
+profile-aware entry points (`load_with_profile_from_iter` and
+`load_with_profile`) accept no injected source and read the live process, so
+they emit `source = process`. The events never contain environment values,
+keys, paths, configuration data, caller-supplied prefixes, or raw error text.
+Error categories are reduced to the closed vocabulary before emission so
+subscribers can aggregate failures without receiving sensitive input.
 
 Capture tests must cover successful and failing paths for each emitting
 operation. They assert the operation, source, outcome, and category fields, and

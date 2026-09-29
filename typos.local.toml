@@ -35,6 +35,11 @@ ignore = [
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",
+  # Short commit abbreviations whose final hex pair happens to spell a word
+  # ("59a52ba8" segments as 59a52 + "ba" + 8). Bound to a complete code span
+  # so the exception cannot mask prose, and open-ended in length so it covers
+  # every abbreviation rather than one SHA at a time.
+  "`[0-9a-f]{7,40}`",
 ]
 
 [files]

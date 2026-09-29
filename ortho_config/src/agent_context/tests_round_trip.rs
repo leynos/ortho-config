@@ -19,14 +19,15 @@ fn any_agent_context() -> impl Strategy<Value = AgentContext> {
     (
         package_name(),
         vec(any_agent_command(), 0..4),
+        profiles_declaration(),
         vec(any_policy_exception(), 0..3),
     )
-        .prop_map(|(package, commands, exceptions)| AgentContext {
+        .prop_map(|(package, commands, profiles, exceptions)| AgentContext {
             schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
             kind: crate::agent_context_kind(&package),
             package,
             commands,
-            profiles: SupportDeclaration { supported: false },
+            profiles,
             feedback: SupportDeclaration { supported: false },
             policy: AgentPolicy {
                 agent_native: PolicyMode::Warn,
@@ -34,6 +35,21 @@ fn any_agent_context() -> impl Strategy<Value = AgentContext> {
             },
             skill_manifests: Vec::new(),
         })
+}
+
+/// Generates unsupported and supported profile declarations so the round-trip
+/// property covers the omitted-when-absent optional fields too.
+fn profiles_declaration() -> impl Strategy<Value = ProfilesDeclaration> {
+    prop_oneof![
+        Just(ProfilesDeclaration::unsupported()),
+        (
+            Just(String::from("profile")),
+            Just(String::from("PROFILE_FIXTURE")),
+        )
+            .prop_map(|(flag, env_var)| ProfilesDeclaration::supported(
+                ProfileSelectionContract { flag, env_var }
+            )),
+    ]
 }
 
 fn any_policy_exception() -> impl Strategy<Value = PolicyException> {
