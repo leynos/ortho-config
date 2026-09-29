@@ -7,6 +7,8 @@ use super::{ConfigDiscovery, DiscoveryScope};
 
 use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
 
+mod variants;
+
 /// A configured selector's value, classified.
 enum SelectorValue {
     /// The variable is configured but unset in the environment.
@@ -273,32 +275,6 @@ impl ConfigDiscovery {
                 Some(DiscoveryScope::Project),
             );
         }
-    }
-
-    /// Appends one nested filename for each extension in the supplied order.
-    #[cfg(any(feature = "json5", feature = "yaml"))]
-    fn push_variants_for_extensions(
-        candidates: &mut Vec<PathBuf>,
-        nested: &Path,
-        stem: &str,
-        extensions: &[&str],
-    ) {
-        for ext in extensions {
-            let filename = format!("{stem}.{ext}");
-            candidates.push(nested.join(&filename));
-        }
-    }
-
-    /// Adds JSON and JSON5 alternatives after the canonical filename.
-    #[cfg(feature = "json5")]
-    fn push_json_variant_candidates(candidates: &mut Vec<PathBuf>, nested: &Path, stem: &str) {
-        Self::push_variants_for_extensions(candidates, nested, stem, &["json", "json5"]);
-    }
-
-    /// Adds YAML and YML alternatives after the canonical filename.
-    #[cfg(feature = "yaml")]
-    fn push_yaml_variant_candidates(candidates: &mut Vec<PathBuf>, nested: &Path, stem: &str) {
-        Self::push_variants_for_extensions(candidates, nested, stem, &["yaml", "yml"]);
     }
 
     /// Adds the Unix-family XDG default base when no usable list is supplied.
