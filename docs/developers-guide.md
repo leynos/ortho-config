@@ -1548,8 +1548,8 @@ step, so it is outside this contract, and bounding it is separate work.
 
 The Linux leg of `ci.yml`'s `build-test` runs on Ubicloud's
 `ubicloud-standard-4`. On GitHub-hosted runners, its queue wait over the ten
-runs before the move had a median of 10 min and reached 29 min, against a 27
-min median wall. That made it the worst hosted-queue case in the estate.
+runs before the move had a 10-min median and reached 29 min, against a 27-min
+median wall. That made it the worst hosted-queue case in the estate.
 
 The size is set for disk, not for wall time. `ubicloud-standard-2` is the
 estate's starting shape, but on it this leg ran out of disk in both measured
@@ -1577,7 +1577,7 @@ branch's pull requests. The steps choose their platform through
 
 The Ubicloud leg exports the cache proxy's credentials before Setup Rust, which
 starts the sccache server. That step is guarded on
-`runner.environment == 'self-hosted'`, because on a hosted runner there is no
+`runner.environment == 'self-hosted'` because on a hosted runner there is no
 proxy and the action fails closed. The Windows leg and the three packaging legs
 stay GitHub-hosted.
 

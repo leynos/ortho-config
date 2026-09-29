@@ -16,6 +16,16 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 from discard_build_trees import DiscardError, Removal, discard, main, tree_size  # noqa: E402
 
 
+def fail_removal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make every ``shutil.rmtree`` call raise ``OSError``."""
+
+    def refuse(_path: Path) -> None:
+        message = "simulated removal failure"
+        raise OSError(message)
+
+    monkeypatch.setattr("discard_build_trees.shutil.rmtree", refuse)
+
+
 def _tree(root: Path, name: str, size: int) -> None:
     """Create ``root/name`` holding one sparse file of ``size`` logical bytes."""
     (root / name / "deps").mkdir(parents=True)
@@ -80,14 +90,14 @@ def test_the_command_prints_one_line_per_name(
 def test_an_unreadable_file_raises_a_typed_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A ``stat`` failure surfaces as ``DiscardError``, not a bare ``OSError``."""
+    """An ``lstat`` failure surfaces as ``DiscardError``, not a bare ``OSError``."""
     _tree(tmp_path, "debug", 1)
 
-    def refuse(self: Path, **_: object) -> object:
+    def refuse(_self: Path, **_: object) -> object:
         message = "simulated stat failure"
         raise PermissionError(message)
 
-    monkeypatch.setattr(Path, "stat", refuse)
+    monkeypatch.setattr(Path, "lstat", refuse)
     with pytest.raises(DiscardError, match="cannot measure") as raised:
         tree_size(tmp_path / "debug")
     assert isinstance(raised.value.__cause__, PermissionError), "the cause must be kept"
@@ -99,11 +109,7 @@ def test_a_failed_removal_raises_a_typed_error(
     """An ``rmtree`` failure surfaces as ``DiscardError`` naming the tree."""
     _tree(tmp_path, "debug", 1)
 
-    def refuse(path: Path) -> None:
-        message = "simulated removal failure"
-        raise OSError(message)
-
-    monkeypatch.setattr("discard_build_trees.shutil.rmtree", refuse)
+    fail_removal(monkeypatch)
     with pytest.raises(DiscardError, match="cannot remove"):
         discard(tmp_path, ["debug"])
 
@@ -129,10 +135,29 @@ def test_the_command_reports_a_filesystem_failure_and_fails(
     """A failed removal gives one diagnostic line and status 1."""
     _tree(tmp_path, "debug", 1)
 
-    def refuse(path: Path) -> None:
-        message = "simulated removal failure"
-        raise OSError(message)
-
-    monkeypatch.setattr("discard_build_trees.shutil.rmtree", refuse)
+    fail_removal(monkeypatch)
     assert main([str(tmp_path), "debug"]) == 1, "a failure must fail the step"
     assert "cannot remove" in capsys.readouterr().err, "the diagnostic must name the action"
+
+
+def test_the_command_without_a_target_prints_usage(capsys: pytest.CaptureFixture[str]) -> None:
+    """An empty command line is a usage error, not an unpacking traceback."""
+    assert main([]) == 2, "a missing target directory must fail the step"
+    assert capsys.readouterr().err.startswith("usage: "), "the usage line goes to stderr"
+
+
+def test_a_name_that_is_the_target_itself_is_refused(tmp_path: Path) -> None:
+    """``.`` would remove the whole target directory, so it is refused."""
+    with pytest.raises(ValueError, match="target directory"):
+        discard(tmp_path, ["."])
+    assert tmp_path.exists(), "the target directory must survive"
+
+
+def test_a_symlink_inside_a_tree_is_not_counted(tmp_path: Path) -> None:
+    """A link counts for nothing, so the size matches what ``rmtree`` frees."""
+    _tree(tmp_path, "debug", 5)
+    outside = tmp_path / "outside"
+    with outside.open("wb") as blob:
+        blob.truncate(1000)
+    (tmp_path / "debug" / "link").symlink_to(outside)
+    assert tree_size(tmp_path / "debug") == 5, "only the tree's own file counts"

@@ -145,9 +145,8 @@ def test_the_moved_leg_has_a_ceiling(ci: WorkflowDocument) -> None:
     """An Ubicloud runner is billed until the job ends, so the job is bounded."""
     # The workflow reader keeps scalars as written, so the ceiling is text.
     ceiling = str(_build_test(ci).get("timeout-minutes", ""))
-    assert ceiling.isdigit() and int(ceiling) > 0, (
-        f"build-test must declare timeout-minutes; it declares {ceiling!r}"
-    )
+    assert ceiling.isdigit(), f"build-test's timeout-minutes must be a number; it is {ceiling!r}"
+    assert int(ceiling) > 0, f"build-test's timeout-minutes must be positive; it is {ceiling!r}"
 
 
 def test_only_ubicloud_runners_export_the_cache_credentials(ci: WorkflowDocument) -> None:

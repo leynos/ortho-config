@@ -64,6 +64,8 @@ def tree_size(path: Path) -> int:
     -------
     int
         The summed logical size of every regular file beneath ``path``.
+        Symlinks are not followed, since ``rmtree`` removes the link and not
+        its target.
 
     Raises
     ------
@@ -80,7 +82,11 @@ def tree_size(path: Path) -> int:
     3
     """
     try:
-        return sum(entry.stat().st_size for entry in path.rglob("*") if entry.is_file())
+        return sum(
+            entry.lstat().st_size
+            for entry in path.rglob("*")
+            if entry.is_file() and not entry.is_symlink()
+        )
     except OSError as error:
         message = f"cannot measure {path}: {error}"
         raise DiscardError(message) from error
@@ -121,7 +127,10 @@ def discard(root: Path, names: list[str]) -> list[Removal]:
     for name in names:
         tree = base / name
         resolved = tree.resolve()
-        if base not in resolved.parents:
+        if resolved == base:
+            message = f"{name!r} names the target directory {base} itself"
+            raise ValueError(message)
+        if not resolved.is_relative_to(base):
             message = f"{name!r} resolves outside {base}"
             raise ValueError(message)
         if resolved != tree:
@@ -156,8 +165,11 @@ def main(argv: list[str]) -> int:
     -------
     int
         ``0`` when every name was handled, ``1`` when a name was refused or a
-        filesystem operation failed.
+        filesystem operation failed, ``2`` when no target directory was given.
     """
+    if not argv:
+        print("usage: discard_build_trees.py TARGET_DIR [TREE ...]", file=sys.stderr)
+        return 2
     root, *names = argv
     try:
         removals = discard(Path(root), names)
