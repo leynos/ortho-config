@@ -2424,3 +2424,63 @@ again on `cf84c96f` and passed with the tree clean before and after.
 `cargo fmt`, `mdtablefix --check` and the contracts suite do not read
 `typos.toml`, so their results transfer on content identity — stated as a
 transfer, with the empty diff as evidence, rather than implied as a fresh pass.
+
+## Round 24: the rebase onto main's 8e4d3de3
+
+The branch was rebased from `bc6dc41c` onto `origin/main` at `8e4d3de3`, seven
+commits ahead of the shared merge-base `24698d0a`. `mergeStateStatus` was
+`DIRTY`, so a real conflict was expected rather than a clean fast-forward. The
+replay boundary is the merge-base itself, which is legitimate here because the
+branch was never stacked on a squash-merged parent: the graph is a plain fork,
+`git rev-list --merges 24698d0a..bc6dc41c` is empty, and the first replayed
+commit is unambiguously child-owned.
+
+**Weave was registered but not selected, and that was proven rather than
+assumed.** The global config carries `merge.weave.driver`, but an empty
+`~/.config/git/attributes`, no managed block, and no repository
+`.gitattributes` rule for any extension leave every path reporting
+`merge: unspecified` — checked directly on all six overlapping paths, not just
+the two named in the probe list. Registration is not selection. The replay
+therefore used Git's own text merge with `zdiff3`, and no driver override was
+needed because nothing was routing through the driver in the first place.
+
+**The conflict surface was one file, and the preview said so before any state
+changed.** `git merge-tree --write-tree --merge-base` reported exactly one
+content conflict, `ortho_config_macros/src/derive/load_impl/mod.rs`; the other
+five overlapping paths auto-merged. Five of the six overlaps trace to a single
+target commit, `fc4b590f` ("Inject sources into global composition"), which is
+what made a one-file conflict likely and a mechanical resolution unsafe.
+
+**The two sides were orthogonal, so the resolution is their union.** The target
+moved `build_config_impl_delegates` out of `mod.rs` into `source.rs` to stay
+under the 400-line ceiling, and added it to the `use source::{...}` group. The
+branch hoisted `LoadSourceTokens` into a `pub(crate) use` and removed it from
+that group. Both edits rewrite the same import block, which is the whole
+conflict. Taking either side alone breaks the build: dropping the target's
+addition leaves `build_config_impl_delegates` unimported at its call site, and
+dropping the branch's hoist breaks `policy_impl.rs:5`, which reads
+`LoadSourceTokens` *through* `load_impl` rather than from `source` directly.
+Keeping `LoadSourceTokens` in both places would instead be a duplicate import.
+The resolved block therefore keeps the hoist and adds
+`build_config_impl_delegates` to the group.
+
+**The replay was audited against evidence, not against a clean exit.**
+`range-diff` shows 57 of 58 commits as `=`, with exactly one `!` — the conflict
+commit — which localizes every semantic difference to the one hunk that was
+actually resolved. The stronger test is a set comparison: the paths differing
+between the old head and the new head are a bijection with the paths main
+changed, 47 against 47, with no path in either difference. That proves two
+things at once — no branch change was lost or mangled in the replay, and no
+target change was dropped in the resolution. Each branch-owned production file
+(`discovery/load.rs`, `discovery/policy.rs`, `discovery/scoped.rs`,
+`source_scan.py`, `trybuild_tier.py`) is byte-identical to its old-head
+revision, and no line deleted against the target is absent from the merge-base,
+so nothing the target added was destroyed.
+
+`Cargo.lock` is byte-identical to main's, which is what the rebase brief
+requires of a lock file: take main's side, then rebuild only if the merge
+changed a manifest. It did not. The only manifest main touched is
+`examples/hello_world/Cargo.toml`, whose four added lines are main's own and
+whose lock entries arrived with main's lock file; `cargo metadata --locked`
+resolves, and `quote` sits at the `1.0.47` main pinned. No rebuild was needed,
+and none was improvised.
