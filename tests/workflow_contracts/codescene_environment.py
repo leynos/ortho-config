@@ -46,6 +46,9 @@ PULL_REQUEST_EVENTS: typ.Final[frozenset[str]] = frozenset({
     "issue_comment",
     "merge_group",
     "workflow_run",
+    "status",
+    "check_run",
+    "check_suite",
 })
 
 #: The only push filter keys that confine a push to tags.
@@ -141,11 +144,18 @@ def has_unresolved_environment(job: dict[str, object]) -> bool:
     return name is not None and "${{" in name
 
 
+def _folded_action(uses: str) -> str:
+    """Return a `uses` path with its owner and repository folded, ref removed."""
+    owner, repository, path = (*uses.split("@", 1)[0].split("/", 2), "", "")[:3]
+    return f"{owner.casefold()}/{repository.casefold()}/{path}"
+
+
 def uploads(job: dict[str, object]) -> bool:
     """Return whether a job has a step invoking the shared uploader.
 
     The action path must match exactly, at any ref, so a look-alike action
-    does not count.
+    does not count. The owner and repository fold case, as GitHub folds them;
+    the path inside the repository does not.
 
     Parameters
     ----------
@@ -168,7 +178,7 @@ def uploads(job: dict[str, object]) -> bool:
     listed = declared if isinstance(declared, list) else []
     return any(
         isinstance(step, dict)
-        and str(step.get("uses", "")).split("@", 1)[0] == CODESCENE_ACTION
+        and _folded_action(str(step.get("uses", ""))) == _folded_action(CODESCENE_ACTION)
         for step in listed
     )
 

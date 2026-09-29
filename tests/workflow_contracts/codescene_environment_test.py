@@ -23,6 +23,7 @@ from codescene_environment import (
     UNRESOLVED,
     environment_violations,
     pull_request_closure,
+    uploads,
 )
 from workflow_reading import (
     WorkflowReadingError,
@@ -125,6 +126,22 @@ def test_a_look_alike_action_is_not_the_uploader(
     _reports(documents, f"{PUBLISHER}:other {STRAY}")
 
 
+@pytest.mark.parametrize(
+    ("uses", "is_uploader"),
+    [
+        (f"{CODESCENE_ACTION}@v1", True),
+        (f"{CODESCENE_ACTION.replace('leynos', 'Leynos', 1)}@v1", True),
+        (f"{CODESCENE_ACTION.replace('shared-actions', 'Shared-Actions')}@v1", True),
+        (f"{CODESCENE_ACTION.replace('upload', 'Upload')}@v1", False),
+    ],
+)
+def test_the_uploader_is_matched_without_case_in_owner_and_repository(
+    uses: str, is_uploader: bool
+) -> None:
+    """GitHub folds owner and repository names but not the path inside them."""
+    assert uploads({"steps": [{"uses": uses}]}) is is_uploader
+
+
 def test_an_expression_named_environment_is_refused(
     documents: dict[str, WorkflowDocument],
 ) -> None:
@@ -159,6 +176,8 @@ def test_a_called_workflow_is_read_too(
         "workflow_run:\n    workflows: [CI]",
         "merge_group:",
         "issue_comment:",
+        "status:",
+        "check_suite:",
         "push:\n    branches: [wip]",
         "push:",
     ],

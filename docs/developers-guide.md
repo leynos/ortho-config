@@ -1625,9 +1625,11 @@ declares `environment: codescene`, whose deployment policy admits `main` alone.
 The token belongs there, but moving it is a pending owner step: until it moves,
 `CS_ACCESS_TOKEN` is a repository secret, and the pull-request clauses above,
 not the environment, keep it out of what a pull request can start. Once it
-moves, branch code cannot be given the token whatever a workflow says. The
-publisher declares no `workflow_dispatch`, so no dispatch is refused today; one
-added later and aimed at a branch would be refused for the whole job.
+moves, the policy refuses every run whose ref is not `main`. It does not
+inspect what a job executes: a `main` run that checked out and ran pull-request
+code would still hold the secret, so no such job may exist. The publisher
+declares no `workflow_dispatch`, so no dispatch is refused today; one added
+later and aimed at a branch would be refused for the whole job.
 `codescene_environment_test.py` holds the placement through
 `codescene_environment.py`: every job invoking the uploader declares the
 environment, no other job does, and no job a pull request can reach does. Names
