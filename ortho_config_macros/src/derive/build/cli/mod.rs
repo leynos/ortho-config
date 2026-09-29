@@ -25,8 +25,9 @@ pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     cli_flags::option_type_tokens(ty)
 }
 
-/// Checks a user-supplied long flag against reserved names and previously
-/// claimed flags, returning a span-aware error for collisions.
+/// Checks a long flag's syntax and reserved names, returning a span-aware
+/// error when invalid. Duplicate checks happen separately while resolving each
+/// CLI field.
 pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     cli_flags::validate_cli_long(name, long)
 }

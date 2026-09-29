@@ -144,7 +144,7 @@ fn render_supported_formats(output: &mut String, disc: &LocalizedConfigDiscovery
     output.push_str(".\n");
 }
 
-/// States XDG compliance only when the metadata confirms that platform behavior.
+/// States XDG compliance only when the metadata confirms that platform behaviour.
 fn render_xdg_compliance(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     if disc.xdg_compliant {
         output.push_str(".PP\n");

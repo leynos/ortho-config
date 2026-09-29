@@ -351,7 +351,7 @@ fn push_possible_values(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<Str
     paragraphs.push(format!("Possible values: {}.", values.join(", ")));
 }
 
-/// Combine enum variants and clap possible values into a stable unique list.
+/// Combine enum variants and clap possible values into a sorted, deduplicated list.
 fn collect_possible_values(field: &LocalizedFieldMetadata) -> Vec<String> {
     let mut values = Vec::new();
     if let Some(ValueType::Enum { variants }) = field.value.as_ref() {

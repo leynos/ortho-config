@@ -159,7 +159,7 @@ fn resolve_cli_field(
     })
 }
 
-/// Emits one public generated CLI field with clap parsing and serde omission behavior.
+/// Emits one public generated CLI field with clap parsing and serde omission behaviour.
 fn process_cli_field(
     field: &syn::Field,
     attrs: &FieldAttrs,

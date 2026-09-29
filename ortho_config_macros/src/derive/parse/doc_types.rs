@@ -55,7 +55,7 @@ pub(crate) struct HeadingOverrides {
 /// Precedence configuration attributes.
 #[derive(Default, Clone)]
 pub(crate) struct PrecedenceAttrs {
-    /// Declared source names in highest-to-lowest precedence order.
+    /// Declared source names in lowest-to-highest precedence order.
     pub order: Vec<String>,
     /// Translation key for the explanation accompanying the declared order.
     pub rationale_id: Option<String>,

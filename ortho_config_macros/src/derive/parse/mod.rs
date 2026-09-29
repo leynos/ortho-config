@@ -287,7 +287,7 @@ fn parse_cli_default_as_absent(meta: &syn::meta::ParseNestedMeta) -> Result<bool
 /// documentation parser.
 ///
 /// Returns `false` only when no parser recognizes the key, allowing the caller
-/// to preserve the established unknown-attribute behavior.
+/// to preserve the established unknown-attribute behaviour.
 fn apply_field_attr(
     meta: &syn::meta::ParseNestedMeta,
     out: &mut FieldAttrs,
