@@ -78,11 +78,16 @@ def _build_test(ci: WorkflowDocument) -> dict[str, object]:
 
 
 def _legs(job: dict[str, object]) -> dict[str, dict[str, object]]:
-    """Return a job's matrix ``include`` entries keyed by platform."""
+    """Return a job's matrix ``include`` entries keyed by platform, one each."""
     strategy = job.get("strategy") or {}
     matrix = strategy.get("matrix") if isinstance(strategy, dict) else {}
     include = matrix.get("include", []) if isinstance(matrix, dict) else []
-    return {str(entry.get("platform")): entry for entry in include if isinstance(entry, dict)}
+    entries = [entry for entry in include if isinstance(entry, dict)]
+    platforms = [str(entry.get("platform")) for entry in entries]
+    duplicates = sorted({name for name in platforms if platforms.count(name) > 1})
+    # A dict comprehension would keep only the last duplicate and hide a leg.
+    assert not duplicates, f"the matrix repeats platform entries: {duplicates}"
+    return dict(zip(platforms, entries, strict=True))
 
 
 def _is_ubicloud(label: object) -> bool:

@@ -1,11 +1,11 @@
 """Discard named build trees under a Cargo target directory, reporting sizes.
 
-The Linux ``build-test`` leg runs on ``ubicloud-standard-2``, whose image
-leaves roughly 8 to 11 GB free. By the time coverage starts, the lint steps
-have filled ``target/`` with trees coverage never reads: rustdoc and Clippy
-output under ``debug`` and ``doc``, and Whitaker's under ``dylint``. The first
-run on that shape died of a full disk during coverage, so the job removes
-those trees first.
+The Linux ``build-test`` leg runs on ``ubicloud-standard-4``. By the time
+coverage starts, the lint steps have filled ``target/`` with trees coverage
+never reads: rustdoc and Clippy output under ``debug`` and ``doc``, and
+Whitaker's under ``dylint``. Two runs on ``ubicloud-standard-2`` died of a full
+disk during coverage, so the job removes those trees first, and the larger
+runner leaves headroom beyond that.
 
 Each tree is named, its size is printed, and a name with nothing on disk is
 reported as such rather than silently skipped. A discard that removed nothing
@@ -46,6 +46,16 @@ class Removal:
 def tree_size(path: Path) -> int:
     """Return the total size in bytes of the regular files under ``path``.
 
+    Parameters
+    ----------
+    path : Path
+        Directory to measure.
+
+    Returns
+    -------
+    int
+        The summed logical size of every regular file beneath ``path``.
+
     Examples
     --------
     >>> import tempfile
@@ -60,20 +70,40 @@ def tree_size(path: Path) -> int:
 def discard(root: Path, names: list[str]) -> list[Removal]:
     """Remove each named tree under ``root`` and report what was removed.
 
-    A name is resolved inside ``root`` only; a name that escapes it is
-    refused rather than followed.
+    A name is accepted only when it is a plain path directly under ``root``:
+    a name that escapes ``root``, or that reaches its tree through a symlink or
+    a ``..`` component, is refused rather than followed. That keeps a link such
+    as ``debug -> llvm-cov-target`` from deleting the tree it points at under
+    another name. The validated named path is removed, never its resolved
+    target.
+
+    Parameters
+    ----------
+    root : Path
+        The Cargo target directory; nothing outside it is ever deleted.
+    names : list[str]
+        Tree names relative to ``root``, for example ``["debug", "doc"]``.
+
+    Returns
+    -------
+    list[Removal]
+        One entry per name, in order; ``size`` is ``None`` for an absent tree.
 
     Raises
     ------
     ValueError
-        If a name resolves outside ``root``.
+        If a name resolves outside ``root`` or is not a plain path under it.
     """
     base = root.resolve()
     removals = []
     for name in names:
-        tree = (base / name).resolve()
-        if base not in tree.parents:
+        tree = base / name
+        resolved = tree.resolve()
+        if base not in resolved.parents:
             message = f"{name!r} resolves outside {base}"
+            raise ValueError(message)
+        if resolved != tree:
+            message = f"{name!r} is an alias for {resolved}, not a plain path under {base}"
             raise ValueError(message)
         if not tree.exists():
             removals.append(Removal(name, None))
@@ -85,7 +115,18 @@ def discard(root: Path, names: list[str]) -> list[Removal]:
 
 
 def main(argv: list[str]) -> int:
-    """Discard ``argv[1:]`` under the target directory ``argv[0]``."""
+    """Discard ``argv[1:]`` under the target directory ``argv[0]``.
+
+    Parameters
+    ----------
+    argv : list[str]
+        The target directory followed by the tree names to discard.
+
+    Returns
+    -------
+    int
+        The process exit status, ``0`` when every name was handled.
+    """
     root, *names = argv
     for removal in discard(Path(root), names):
         if removal.size is None:

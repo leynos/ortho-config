@@ -1584,8 +1584,10 @@ stay GitHub-hosted.
 Before coverage starts, the Linux leg runs `scripts/discard_build_trees.py`,
 which removes the rustdoc and Clippy output (`target/debug`, `target/doc`) and
 Whitaker's (`target/dylint`), prints each tree's size, and reports a tree that
-was not there. It keeps the registry and sccache. Trybuild's child builds land
-under the coverage target directory, which trybuild takes from
+was not there. It refuses a name that escapes the target directory or reaches
+its tree through a symlink, so a link such as `debug -> llvm-cov-target` cannot
+delete another tree. It keeps the registry and sccache. Trybuild's child builds
+land under the coverage target directory, which trybuild takes from
 `cargo metadata`, so they cannot be redirected independently. Removing them
 between the two coverage passes would throw away the warm builds the second
 pass reuses. The leg prints `df -BM /` at each boundary: before lint, before
