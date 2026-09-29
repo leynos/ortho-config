@@ -177,19 +177,29 @@ def _plain_tree_path(base: Path, name: str) -> Path:
     tree = base / name
     with _filesystem("resolve", tree):
         resolved = tree.resolve()
+    _require_inside(base, name, resolved)
+    _require_plain(base, name, tree, resolved)
+    return tree
+
+
+def _require_inside(base: Path, name: str, resolved: Path) -> None:
+    """Refuse a name whose resolved path is ``base`` itself or outside it."""
     if resolved == base:
         message = f"{name!r} names the target directory {base} itself"
         raise ValueError(message)
     if not resolved.is_relative_to(base):
         message = f"{name!r} resolves outside {base}"
         raise ValueError(message)
+
+
+def _require_plain(base: Path, name: str, tree: Path, resolved: Path) -> None:
+    """Refuse a name that is nested, absolute, or reached through an alias."""
     if Path(name).is_absolute() or len(Path(name).parts) != 1:
         message = f"{name!r} is not a single relative name directly under {base}"
         raise ValueError(message)
     if resolved != tree:
         message = f"{name!r} is an alias for {resolved}, not a plain path under {base}"
         raise ValueError(message)
-    return tree
 
 
 def _discard_one(base: Path, name: str) -> Removal:
