@@ -29,7 +29,7 @@ PYTHON_VENV ?= scripts/.venv
 UV ?= uv
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
-PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py \
+PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_trees.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
 	scripts/verify_release_archives.py scripts/tests -q
 # Pinned rather than tracking the default branch: the publish step depends

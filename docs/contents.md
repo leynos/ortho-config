@@ -51,6 +51,9 @@
 - [ADR-008: Opt-in agent-native policy configuration][adr-008]:
   review the accepted 7.1.1 policy configuration surface, the enforcement and
   advertisement defaults, the report contract, and the reserved 7.1.2 seam.
+- [ADR-009: Place the Linux build-test leg on Ubicloud][adr-009]:
+  review the accepted runner size, fork fallback, platform-based check names,
+  and pre-coverage disk discard for the Linux `build-test` leg.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -168,3 +171,4 @@
     the agent-native documentation and roadmap overhaul.
 
 [adr-008]: adr-008-agent-native-policy-configuration.md
+[adr-009]: adr-009-linux-build-test-runner-placement.md

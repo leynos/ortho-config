@@ -15,7 +15,24 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: ${{ matrix.os }}
+    # Named for the platform, not the runner: the Linux leg's runner
+    # follows the event, so a name built from it would differ between a
+    # fork's pull request and a branch's, and the required check context
+    # would exist on only one of them.
+    name: build-test (${{ matrix.platform }})
+    # The Linux leg runs on Ubicloud: hosted queue waits on it reached
+    # 29 min (median 10 min) over the last ten runs, against a 27 min
+    # median wall. A fork's pull request cannot obtain an Ubicloud runner,
+    # so it falls back to the hosted label. Windows stays hosted.
+    # The Linux leg is sized for disk, not for wall time: on
+    # ubicloud-standard-2 it ran out of disk in both runs (36308332712 and
+    # 36354295154). The second run started lint with 6,869 MB free and fell
+    # to 791 MB during the first coverage pass, even after the discard below.
+    # `>-` rather than `>`: a folded scalar keeps a trailing line break
+    # inside the expression otherwise.
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+      && matrix.fork-runner || matrix.runner }}
     # Two coverage steps run in this job, each under its own 2,700 s cargo
     # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
     # contain both before it contains anything else. On the Windows leg the
@@ -55,11 +72,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-          - os: windows-latest
+          - platform: linux
+            runner: ubicloud-standard-4
+            fork-runner: ubuntu-latest
+          - platform: windows
+            runner: windows-latest
+            fork-runner: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Export the Ubicloud cache credentials
+        # The runner hands `ACTIONS_CACHE_URL` and `ACTIONS_RUNTIME_TOKEN`
+        # to action steps only; this republishes them through `GITHUB_ENV`
+        # with the v2 cache-service flag cleared, because Ubicloud's proxy
+        # serves v1. Without it the sccache server binds local disk for the
+        # whole job. It must precede Setup Rust, which starts that server.
+        # On a hosted runner (Windows, or a fork's Linux fallback) there is
+        # no proxy and the action fails closed, so it runs on Ubicloud only.
+        if: ${{ runner.environment == 'self-hosted' }}
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@a5765019912a8ab6882b12db049c7cde635f3a85
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
@@ -73,17 +105,17 @@ jobs:
         # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
         # first release with `--check` and `--git`. The Markdown check is
         # platform-independent, so it runs on the Linux lane only.
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         uses: leynos/shared-actions/.github/actions/install-mdtablefix@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           version: "0.6.0"
 
       - name: Check formatting
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         run: make check-fmt
 
       - name: Check Rust formatting
-        if: ${{ matrix.os != 'ubuntu-latest' }}
+        if: ${{ matrix.platform != 'linux' }}
         run: cargo fmt --all -- --check
 
       - name: Install Mermaid CLI
@@ -123,7 +155,7 @@ jobs:
 
       - name: Resolve latest Whitaker installer release
         id: whitaker
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -132,7 +164,7 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Whitaker installer
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
@@ -141,7 +173,7 @@ jobs:
           key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ steps.whitaker.outputs.version }}
 
       - name: Install Whitaker
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         env:
           WHITAKER_INSTALLER_VERSION: ${{ steps.whitaker.outputs.version }}
           # binstall reads the release metadata from the GitHub API. Without a
@@ -200,19 +232,39 @@ jobs:
           fi
           whitaker-installer
 
+      - name: Disk sample (before lint)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
+
       - name: Lint
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         run: make lint
 
       # Whitaker lints under its own pinned toolchain on the Linux leg;
       # the Windows leg runs rustdoc and Clippy only.
       - name: Lint (Clippy only)
-        if: ${{ matrix.os != 'ubuntu-latest' }}
+        if: ${{ matrix.platform != 'linux' }}
         run: make lint-clippy
 
       - name: Workflow contract tests
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         run: make test-workflow-contracts
+
+      - name: Disk sample (before discard)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
+
+      - name: Discard lint build trees
+        # Coverage builds its own tree, so rustdoc's and Clippy's output
+        # (debug, doc) and Whitaker's (dylint) go first, about 1 GB on run
+        # 36354295154. The registry and sccache are kept. The disk samples
+        # around it show the headroom the runner size leaves.
+        if: ${{ matrix.platform == 'linux' }}
+        run: python3 scripts/discard_build_trees.py target debug doc dylint
+
+      - name: Disk sample (before coverage)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
 
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
@@ -227,7 +279,11 @@ jobs:
           # tests would never be compiled in CI at all.
           features: serde_json toml json5 yaml metrics
           artefact-name-suffix: serde-saphyr
-          with-ratchet: ${{ matrix.os == 'ubuntu-latest' }}
+          with-ratchet: ${{ matrix.platform == 'linux' }}
+
+      - name: Disk sample (after coverage with serde_saphyr)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
 
       - name: Test and Measure Coverage (without serde_saphyr)
         uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
@@ -237,8 +293,12 @@ jobs:
           features: serde_json toml json5
           artefact-name-suffix: no-serde-saphyr
 
+      - name: Disk sample (after coverage without serde_saphyr)
+        if: ${{ always() && matrix.platform == 'linux' }}
+        run: df -BM /
+
       - name: Merge coverage results
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.platform == 'linux' }}
         shell: bash
         # lcov-result-merger takes a single glob pattern and an optional
         # output file; passing two file paths treats the second as the
@@ -276,7 +336,7 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Validate PowerShell wrapper
-        if: ${{ matrix.os == 'windows-latest' }}
+        if: ${{ matrix.platform == 'windows' }}
         run: make powershell-wrapper-validate
 
       - name: Publish dry run

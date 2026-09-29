@@ -305,7 +305,7 @@ def test_the_ratcheting_lane_matches_its_baseline(
 #: alone. generate-coverage keys its baseline by ``runner.os`` and the
 #: publisher runs on Linux, so the Linux leg is the one with a baseline
 #: to compare against.
-LINUX_RATCHET: typ.Final[str] = "${{ matrix.os == 'ubuntu-latest' }}"
+LINUX_RATCHET: typ.Final[str] = "${{ matrix.platform == 'linux' }}"
 
 
 def _ratchet(step: dict[str, object]) -> str:

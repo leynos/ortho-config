@@ -1544,6 +1544,67 @@ step, so it is outside this contract, and bounding it is separate work.
 
 [shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
 
+## Runner placement
+
+The Linux leg of `ci.yml`'s `build-test` runs on Ubicloud's
+`ubicloud-standard-4`. On GitHub-hosted runners, its queue wait over the ten
+runs before the move had a 10-min median and reached 29 min, against a 27-min
+median wall. That made it the worst hosted-queue case in the estate.
+
+The size is set for disk, not for wall time. `ubicloud-standard-2` is the
+estate's starting shape, but on it this leg ran out of disk in both measured
+runs (36308332712 and 36354295154). The second run began lint with 6,869 MB
+free. After lint 5,297 MB remained, and the discard below freed about 1 GB. The
+first coverage pass then took it down to 791 MB and failed with "No space left
+on device". `ubicloud-standard-4` offers 150 GB, against 75 GB on `-2`.
+
+A pull request from a fork cannot obtain an Ubicloud runner, so the leg falls
+back to `ubuntu-latest` for forks:
+
+```yaml
+runs-on: >-
+  ${{ github.event.pull_request.head.repo.fork
+  && matrix.fork-runner || matrix.runner }}
+```
+
+Each matrix entry names its `platform`, its `runner` and its `fork-runner`. The
+Windows leg names `windows-latest` for both. The job is named
+`build-test (${{ matrix.platform }})`, so the required check contexts are
+`build-test (linux)` and `build-test (windows)` whichever runner serves the
+event. A name built from the runner would exist on only one of a fork's and a
+branch's pull requests. The steps choose their platform through
+`matrix.platform`, never through a runner label.
+
+The Ubicloud leg exports the cache proxy's credentials before Setup Rust, which
+starts the sccache server. That step is guarded on
+`runner.environment == 'self-hosted'` because on a hosted runner there is no
+proxy and the action fails closed. The Windows leg and the three packaging legs
+stay GitHub-hosted.
+
+Before coverage starts, the Linux leg runs `scripts/discard_build_trees.py`,
+which removes the rustdoc and Clippy output (`target/debug`, `target/doc`) and
+Whitaker's (`target/dylint`), prints each tree's size, and reports a tree that
+was not there. It accepts only a single relative name for a direct child of the
+target directory, and refuses one that is nested, absolute, escapes the target
+or reaches its tree through a symlink, so a link such as
+`debug -> llvm-cov-target` cannot delete another tree. A missing target
+directory or a filesystem failure while resolving, examining, measuring or
+removing a tree ends the step with a one-line diagnostic on standard error and
+status 1. It keeps the registry and sccache. Trybuild's child builds land under
+the coverage target directory, which trybuild takes from `cargo metadata`, so
+they cannot be redirected independently. Removing them between the two coverage
+passes would throw away the warm builds the second pass reuses. The leg prints
+`df -BM /` at each boundary: before lint, before and after the discard, and
+after each coverage pass.
+
+[ADR-009](adr-009-linux-build-test-runner-placement.md) records the decision.
+
+`runner_placement_test.py` holds all of this. It reads the fallback by
+position, checks each leg's runners, and checks that no fork reaches Ubicloud,
+that the names are runner-independent, and that the job has a ceiling. It also
+checks the credentials step's guard and position, that the packaging legs stay
+hosted, and that the Linux leg discards the lint build trees before coverage.
+
 ## CodeScene coverage belongs to main
 
 `coverage-main.yml` is the only workflow in this repository that runs a
@@ -1561,10 +1622,10 @@ returning a gates configuration that tool failed every pull request here over a
 defect in none of them.
 
 What a pull-request lane keeps is the ratchet. `ci.yml` runs
-`generate-coverage` with `with-ratchet` on the ubuntu leg, comparing against
-the baseline `coverage-main.yml` writes, which applies the same "do not go
-backwards" gate from this repository's own history with no token and no second
-tool.
+`generate-coverage` with `with-ratchet` on the Linux leg
+(`matrix.platform == 'linux'`), comparing against the baseline
+`coverage-main.yml` writes, which applies the same "do not go backwards" gate
+from this repository's own history with no token and no second tool.
 
 `build-test` takes the default depth-1 checkout. It used to fetch full history
 only so `cs-coverage check` could diff against the pull request's merge base,
