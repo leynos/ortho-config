@@ -115,7 +115,7 @@ impl DocSpec {
 /// Expands a compact test specification into documentation metadata.
 pub(super) fn doc(spec: DocSpec) -> DocMetadata {
     DocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: "1.2".to_owned(),
         app_name: spec.app_name.to_owned(),
         bin_name: spec.bin_name.map(str::to_owned),
         about_id: spec.about_id.to_owned(),
@@ -183,6 +183,7 @@ pub(super) fn cli_field_with_possible_values<const N: usize>(
             value_name: None,
             multiple: false,
             takes_value: spec.takes_value,
+            value_optional: false,
             possible_values: possible_values.map(str::to_owned).to_vec(),
             hide_in_help: spec.hide_in_help,
         }),

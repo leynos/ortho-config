@@ -51,6 +51,16 @@ pub(super) fn merge_layer_tokens(
 ///
 /// Produces tokens that destructure the state, build an overlay with collected
 /// append and map values, merge it into the final value, and deserialize.
+///
+/// The accumulator is normalized from `Null` to an empty object first. The
+/// generated state derives `Default`, so `value` starts as
+/// `serde_json::Value::Null`, and `merge_layer` skips empty maps rather than
+/// seating the accumulator. A layer list that supplied no values at all —
+/// which a prefixed, all-optional struct reaches whenever no environment
+/// variable is set and no configuration file exists — therefore reached the
+/// deserializer as `Null` and failed with `invalid type: null, expected struct
+/// …`. `Null` cannot mean anything else here: a layer whose whole value is
+/// `null` is rejected by the non-object guard in `merge_layer`.
 pub(super) fn finish_tokens(
     state_ident: &syn::Ident,
     krate: &TokenStream,
@@ -74,6 +84,9 @@ pub(super) fn finish_tokens(
                 &mut value,
                 #krate::serde_json::Value::Object(overlay),
             );
+        }
+        if value.is_null() {
+            value = #krate::serde_json::Value::Object(#krate::serde_json::Map::new());
         }
         #krate::declarative::from_value_merge(value)
     }

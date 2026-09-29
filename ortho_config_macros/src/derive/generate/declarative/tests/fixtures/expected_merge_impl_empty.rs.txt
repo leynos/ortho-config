@@ -65,6 +65,9 @@ impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
                 ortho_config::serde_json::Value::Object(overlay),
             );
         }
+        if value.is_null() {
+            value = ortho_config::serde_json::Value::Object(ortho_config::serde_json::Map::new());
+        }
         ortho_config::declarative::from_value_merge(value)
     }
 }

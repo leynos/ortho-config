@@ -41,7 +41,7 @@ fn make_test_metadata(
     about: &str,
 ) -> LocalizedDocMetadata {
     LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: "1.2".to_owned(),
         locale: "en-US".to_owned(),
         app_name: name.to_owned(),
         bin_name: None,
@@ -131,6 +131,7 @@ fn golden_enum_rendering(mut minimal_metadata: LocalizedDocMetadata) {
             value_name: None,
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: vec![
                 "debug".to_owned(),
                 "info".to_owned(),
@@ -190,6 +191,7 @@ fn golden_environment_section(mut minimal_metadata: LocalizedDocMetadata) {
             value_name: None,
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
         }),

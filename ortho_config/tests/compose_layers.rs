@@ -5,6 +5,7 @@ use anyhow::Result;
 use ortho_config::{MergeLayer, MergeProvenance, OrthoConfig, ResultIntoFigment};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use test_helpers::figment as figment_helpers;
 
 mod discovery_compose_layers {
     //! `ConfigDiscovery::compose_layers` pinned at its own API.
@@ -155,7 +156,7 @@ struct BuilderConfig {
 
 #[rstest]
 fn compose_layers_collects_cli_env_and_file() -> Result<()> {
-    figment::Jail::try_with(|jail| {
+    figment_helpers::with_jail(|jail| {
         jail.clear_env();
         jail.set_env("APP_PORT", "3030");
         jail.create_file(".app.toml", "port = 2020")?;
@@ -164,7 +165,9 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
         let (layers, errors) = composition.into_parts();
 
         if !errors.is_empty() {
-            return Err(figment::Error::from("expected composition without errors"));
+            return Err(figment_helpers::figment_error(
+                "expected composition without errors",
+            ));
         }
         let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
         let expected = vec![
@@ -174,12 +177,14 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
             MergeProvenance::Cli,
         ];
         if provenances != expected {
-            return Err(figment::Error::from("unexpected provenance ordering"));
+            return Err(figment_helpers::figment_error(
+                "unexpected provenance ordering",
+            ));
         }
 
         let merged = BuilderConfig::merge_from_layers(layers.clone()).to_figment()?;
         if merged.port != 4040 {
-            return Err(figment::Error::from("CLI override should win"));
+            return Err(figment_helpers::figment_error("CLI override should win"));
         }
 
         let file_layer = layers
@@ -189,7 +194,7 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
             .and_then(|path| path.file_name())
             .map(str::to_owned);
         if file_layer.as_deref() != Some(".app.toml") {
-            return Err(figment::Error::from("unexpected file layer"));
+            return Err(figment_helpers::figment_error("unexpected file layer"));
         }
         Ok(())
     })?;
@@ -202,7 +207,7 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
     reason = "Assertions give clearer intent for this negative path"
 )]
 fn compose_layers_collects_cli_parse_errors() -> Result<()> {
-    figment::Jail::try_with(|jail| {
+    figment_helpers::with_jail(|jail| {
         jail.clear_env();
         let composition =
             BuilderConfig::compose_layers_from_iter(["prog", "--port", "not-a-number"]);
@@ -223,7 +228,7 @@ fn compose_layers_collects_cli_parse_errors() -> Result<()> {
     reason = "Assertions give clearer intent for this negative path"
 )]
 fn compose_layers_collects_env_and_file_errors() -> Result<()> {
-    figment::Jail::try_with(|jail| {
+    figment_helpers::with_jail(|jail| {
         jail.clear_env();
         jail.set_env("APP_PORT", "env-not-a-number");
         jail.create_file(".app.toml", r#"port = "file-not-a-number""#)?;
@@ -242,6 +247,102 @@ fn compose_layers_collects_env_and_file_errors() -> Result<()> {
             aggregated.is_err(),
             "expected aggregated merge to fail with malformed values"
         );
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// A configuration with exactly one field.
+///
+/// The single field is what makes this a regression test rather than a
+/// duplicate of `compose_layers_collects_cli_env_and_file`: the defect it pins
+/// only appears when the sanitized CLI object can equal the defaults object
+/// field for field, which a one-field struct reaches as soon as the user
+/// restates the default.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct SingleFieldConfig {
+    #[ortho_config(default = false)]
+    excited: bool,
+}
+
+/// An explicit CLI value that happens to equal the struct default must still
+/// produce a CLI layer.
+///
+/// The generated guard used to compare the whole sanitized CLI object against
+/// the whole defaults object and skip `composer.push_cli` when they matched.
+/// Restating a default on the command line therefore discarded the entire CLI
+/// layer, and a lower-precedence environment value silently won. The layer
+/// stack is asserted directly so the regression is named at its source rather
+/// than surfacing as a distant merge mismatch.
+#[rstest]
+fn compose_layers_keeps_cli_layer_when_value_equals_default() -> Result<()> {
+    figment_helpers::with_jail(|jail| {
+        jail.clear_env();
+        jail.set_env("APP_EXCITED", "true");
+
+        let composition = SingleFieldConfig::compose_layers_from_iter(["prog", "--excited=false"]);
+        let (layers, errors) = composition.into_parts();
+
+        if !errors.is_empty() {
+            return Err(figment_helpers::figment_error(
+                "expected composition without errors",
+            ));
+        }
+        let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+        let expected = vec![
+            MergeProvenance::Defaults,
+            MergeProvenance::Environment,
+            MergeProvenance::Cli,
+        ];
+        if provenances != expected {
+            return Err(figment_helpers::figment_error(
+                "an explicit CLI value equal to the default must still push a CLI layer",
+            ));
+        }
+
+        let merged = SingleFieldConfig::merge_from_layers(layers).to_figment()?;
+        if merged.excited {
+            return Err(figment_helpers::figment_error(
+                "explicit --excited=false should clear the environment true",
+            ));
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// The same struct with no CLI argument must not push a CLI layer, so the
+/// environment value still wins. This is the absent-versus-present distinction
+/// the fix must preserve.
+#[rstest]
+fn compose_layers_omits_cli_layer_when_no_argument_is_supplied() -> Result<()> {
+    figment_helpers::with_jail(|jail| {
+        jail.clear_env();
+        jail.set_env("APP_EXCITED", "true");
+
+        let composition = SingleFieldConfig::compose_layers_from_iter(["prog"]);
+        let (layers, errors) = composition.into_parts();
+
+        if !errors.is_empty() {
+            return Err(figment_helpers::figment_error(
+                "expected composition without errors",
+            ));
+        }
+        let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+        let expected = vec![MergeProvenance::Defaults, MergeProvenance::Environment];
+        if provenances != expected {
+            return Err(figment_helpers::figment_error(
+                "an absent flag must not push a CLI layer",
+            ));
+        }
+
+        let merged = SingleFieldConfig::merge_from_layers(layers).to_figment()?;
+        if !merged.excited {
+            return Err(figment_helpers::figment_error(
+                "the environment value should survive an absent flag",
+            ));
+        }
         Ok(())
     })?;
     Ok(())

@@ -2,6 +2,26 @@
 
 use quote::quote;
 
+/// Generate the guard that decides whether the CLI layer may be pushed.
+///
+/// The CLI layer must be pushed whenever the user supplied *any* argument,
+/// regardless of whether the resulting sanitized object happens to equal the
+/// defaults object. Comparing whole objects instead silently discards the CLI
+/// layer for a single-field configuration whose explicit value matches the
+/// struct default, letting a lower-precedence file or environment value win
+/// over an explicit `--flag=false`. Ask clap's per-argument `value_source`
+/// instead, which reports `CommandLine` independently of the parsed value.
+fn build_cli_push_tokens() -> proc_macro2::TokenStream {
+    quote! {
+        let has_command_line_value = matches.ids().any(|id| {
+            matches.value_source(id.as_ref()) == Some(clap::parser::ValueSource::CommandLine)
+        });
+        if has_command_line_value {
+            composer.push_cli(value);
+        }
+    }
+}
+
 /// Generate CLI parsing that retains clap's value-source metadata for layering.
 pub(super) fn build_cli_parse_tokens() -> proc_macro2::TokenStream {
     quote! {
@@ -57,9 +77,6 @@ fn build_default_as_absent_pruning_tokens(
     cli_default_as_absent_fields: &[syn::LitStr],
 ) -> proc_macro2::TokenStream {
     quote! {
-        let has_explicit_default_as_absent_value = false
-            #( || matches.value_source(#cli_default_as_absent_fields)
-                == Some(clap::parser::ValueSource::CommandLine) )*;
         if let Some(values) = value.as_object_mut() {
             #(
                 if matches.value_source(#cli_default_as_absent_fields)
@@ -68,18 +85,6 @@ fn build_default_as_absent_pruning_tokens(
                     values.remove(#cli_default_as_absent_fields);
                 }
             )*
-        }
-    }
-}
-
-/// Generate the comparison that avoids pushing a CLI layer made only of defaults.
-fn build_cli_push_tokens() -> proc_macro2::TokenStream {
-    quote! {
-        let differs_from_defaults = defaults_value
-            .as_ref()
-            .map_or(true, |defaults| defaults != &value);
-        if differs_from_defaults || has_explicit_default_as_absent_value {
-            composer.push_cli(value);
         }
     }
 }

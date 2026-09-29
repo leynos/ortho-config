@@ -1,7 +1,7 @@
 //! Core rendering routines for MAML output.
 
 use crate::ir::{LocalizedFieldMetadata, LocalizedLink};
-use crate::schema::ValueType;
+use crate::schema::{CliMetadata, ValueType};
 use std::borrow::Cow;
 
 use super::types::{CommandSpec, MamlOptions};
@@ -303,9 +303,40 @@ fn push_cli_paragraphs(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<Stri
     if let Some(long) = cli.long.as_ref() {
         paragraphs.push(format!("Long flag: --{long}."));
     }
+    if cli.value_optional {
+        paragraphs.push(optional_value_paragraph(cli));
+    }
     if cli.multiple {
         paragraphs.push("This option may be supplied multiple times.".to_owned());
     }
+}
+
+/// Explains the optional `=<BOOL>` value in prose.
+///
+/// The sentence names the flag the way a user would type it, preferring the
+/// long form and falling back to the short form, because `-e=false` is the
+/// spelling a user copies from the help. Metadata that carries neither flag
+/// cannot name a spelling, so the sentence describes the value without quoting
+/// one rather than rendering the nonsense `the flag=false`.
+fn optional_value_paragraph(cli: &CliMetadata) -> String {
+    let Some(spelling) = cli
+        .long
+        .as_ref()
+        .map(|long| format!("--{long}"))
+        .or_else(|| cli.short.map(|short| format!("-{short}")))
+    else {
+        return String::from(concat!(
+            "The value is optional: the flag without a value means `true`, and ",
+            "an explicit `false` clears a lower-precedence `true`."
+        ));
+    };
+    format!(
+        concat!(
+            "The value is optional: `{spelling}` means `true`, and ",
+            "`{spelling}=false` supplies an explicit `false`."
+        ),
+        spelling = spelling
+    )
 }
 
 fn push_default_paragraph(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<String>) {

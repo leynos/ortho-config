@@ -5,7 +5,41 @@
 
 use std::borrow::Cow;
 
-use crate::schema::ValueType;
+use crate::schema::{CliMetadata, ValueType};
+
+/// Formats a CLI option, choosing the optional-value form for boolean flags.
+///
+/// Boolean options render as `--flag[=BOOL]`, with the bracketed placeholder
+/// italicized; everything else renders as an ordinary flag with a required
+/// value, or as a bare switch when [`CliMetadata::takes_value`] is false.
+///
+/// `fallback_placeholder` supplies a value name when the metadata does not
+/// carry one, derived from the field's semantic [`ValueType`]. An empty
+/// placeholder counts as absent: [`value_type_placeholder`] returns `""` for
+/// [`ValueType::Bool`], and every roff call site passes that result in here, so
+/// without the filter a boolean would render the malformed `--flag[=]` instead
+/// of a readable `--flag[=VALUE]`.
+#[must_use]
+pub fn format_option(
+    cli: &CliMetadata,
+    fallback_placeholder: Option<&str>,
+    fallback: &str,
+) -> String {
+    if !cli.takes_value {
+        return format_flag(cli.long.as_deref(), cli.short);
+    }
+    let value_name = cli
+        .value_name
+        .as_deref()
+        .filter(|name| !name.is_empty())
+        .or_else(|| fallback_placeholder.filter(|name| !name.is_empty()))
+        .unwrap_or(fallback);
+    if cli.value_optional {
+        format_flag_with_optional_value(cli.long.as_deref(), cli.short, value_name)
+    } else {
+        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
+    }
+}
 
 /// Escapes text for safe inclusion in roff output.
 ///
@@ -187,6 +221,43 @@ pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_nam
     }
 }
 
+/// Formats a CLI flag whose value is optional, as in `--flag[=BOOL]`.
+///
+/// Boolean options accept a value but do not require one: the bare spelling
+/// means `true`, and `--flag=false` supplies an explicit `false`. Bracketing
+/// the placeholder distinguishes the optional value from the required form
+/// produced by [`format_flag_with_value`].
+///
+/// The placeholder is joined directly to the flag, with no intervening space,
+/// because the value must follow an `=`. Rendering `--flag [=BOOL]` would
+/// document the invalid `--flag =BOOL` spelling. This matches the suffix that
+/// `clap` itself emits for an argument with `require_equals` set.
+///
+/// # Examples
+///
+/// ```
+/// use cargo_orthohelp::roff::escape::format_flag_with_optional_value;
+///
+/// assert_eq!(
+///     format_flag_with_optional_value(Some("is-excited"), Some('i'), "BOOL"),
+///     "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR, \\fB\\-i\\fR\\fI[=BOOL]\\fR"
+/// );
+/// ```
+#[must_use]
+pub fn format_flag_with_optional_value(
+    long: Option<&str>,
+    short: Option<char>,
+    value_name: &str,
+) -> String {
+    let value = italic(&format!("[={value_name}]"));
+    match (long, short) {
+        (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR{value}, \\fB\\-{s}\\fR{value}"),
+        (Some(l), None) => format!("\\fB\\-\\-{l}\\fR{value}"),
+        (None, Some(s)) => format!("\\fB\\-{s}\\fR{value}"),
+        (None, None) => value,
+    }
+}
+
 /// Returns a human-readable placeholder for a `ValueType`.
 ///
 /// For `Custom` types, returns the uppercased type name.
@@ -224,86 +295,4 @@ pub fn value_type_placeholder(value_type: &ValueType) -> Cow<'static, str> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for roff escaping.
-
-    use super::*;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case("hello", "hello")]
-    #[case("path\\to\\file", "path\\\\to\\\\file")]
-    #[case("-flag", "\\-flag")]
-    #[case(".macro", "\\&.macro")]
-    #[case("'quote", "\\&'quote")]
-    #[case("normal-dash", "normal-dash")]
-    #[case("a.period", "a.period")]
-    fn escape_text_handles_special_chars(#[case] input: &str, #[case] expected: &str) {
-        assert_eq!(escape_text(input), expected);
-    }
-
-    #[rstest]
-    fn escape_text_handles_multiline() {
-        let input = "-first\n.second\n'third";
-        let expected = "\\-first\n\\&.second\n\\&'third";
-        assert_eq!(escape_text(input), expected);
-    }
-
-    #[rstest]
-    fn escape_text_preserves_trailing_newline() {
-        assert_eq!(escape_text("hello\n"), "hello\n");
-        assert_eq!(escape_text("hello"), "hello");
-    }
-
-    #[rstest]
-    #[case("hello", "hello")]
-    #[case("path\\to\\file", "path\\\\to\\\\file")]
-    #[case("with \"quotes\"", "with \\(dqquotes\\(dq")]
-    #[case("mixed\\and\"both", "mixed\\\\and\\(dqboth")]
-    fn escape_macro_arg_handles_special_chars(#[case] input: &str, #[case] expected: &str) {
-        assert_eq!(escape_macro_arg(input), expected);
-    }
-
-    #[rstest]
-    fn bold_wraps_and_escapes_text() {
-        assert_eq!(bold("text"), "\\fBtext\\fR");
-        assert_eq!(bold("path\\to"), "\\fBpath\\\\to\\fR");
-    }
-
-    #[rstest]
-    fn italic_wraps_and_escapes_text() {
-        assert_eq!(italic("text"), "\\fItext\\fR");
-        assert_eq!(italic("path\\to"), "\\fIpath\\\\to\\fR");
-    }
-
-    #[rstest]
-    #[case(Some("verbose"), Some('v'), "\\fB\\-\\-verbose\\fR, \\fB\\-v\\fR")]
-    #[case(Some("help"), None, "\\fB\\-\\-help\\fR")]
-    #[case(None, Some('h'), "\\fB\\-h\\fR")]
-    #[case(None, None, "")]
-    fn format_flag_combinations(
-        #[case] long: Option<&str>,
-        #[case] short: Option<char>,
-        #[case] expected: &str,
-    ) {
-        assert_eq!(format_flag(long, short), expected);
-    }
-
-    #[rstest]
-    #[case(ValueType::String, "STRING")]
-    #[case(ValueType::Integer { bits: 32, signed: true }, "INT")]
-    #[case(ValueType::Float { bits: 64 }, "FLOAT")]
-    #[case(ValueType::Bool, "")]
-    #[case(ValueType::Duration, "DURATION")]
-    #[case(ValueType::Path, "PATH")]
-    #[case(ValueType::IpAddr, "IP")]
-    #[case(ValueType::Hostname, "HOST")]
-    #[case(ValueType::Url, "URL")]
-    #[case(ValueType::Enum { variants: vec![] }, "CHOICE")]
-    #[case(ValueType::List { of: Box::new(ValueType::String) }, "LIST")]
-    #[case(ValueType::Map { of: Box::new(ValueType::String) }, "MAP")]
-    #[case(ValueType::Custom { name: "MyType".to_owned() }, "MYTYPE")]
-    fn value_type_placeholder_mapping(#[case] vt: ValueType, #[case] expected: &str) {
-        assert_eq!(value_type_placeholder(&vt).as_ref(), expected);
-    }
-}
+mod tests;
