@@ -39,6 +39,11 @@ concurrency:
 jobs:
   coverage-upload:
     runs-on: ubuntu-latest
+    # The CodeScene token belongs in this environment, whose deployment
+    # policy admits `main` alone; until it moves here it is read as a
+    # repository secret. codescene_environment_test holds the
+    # environment to this job.
+    environment: codescene
     # Two coverage steps run in this job, each under its own 2,700 s cargo
     # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
     # contain both. The work outside them reached 284 s on run 31908409573,
