@@ -189,7 +189,7 @@ fn localization_args_for(command: &Command) -> LocalizationArgs<'static> {
     args
 }
 
-/// Localizes each argument using a stable snapshot of IDs and value-taking behavior.
+/// Localizes each argument using a stable snapshot of IDs and value-taking behaviour.
 ///
 /// The snapshot avoids borrowing arguments while `clap`'s consuming-style mutators replace them.
 fn apply_arg_metadata(mut command: Command, localizer: &dyn Localizer, path: &[String]) -> Command {
