@@ -28,10 +28,17 @@ False
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+import os
 import shutil
+import stat
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 __all__ = ["DiscardError", "Removal", "discard", "main", "tree_size"]
 
@@ -52,6 +59,21 @@ class Removal:
     size: int | None
 
 
+@contextlib.contextmanager
+def _filesystem(action: str, path: Path) -> Iterator[None]:
+    """Report an ``OSError`` raised by ``action`` on ``path`` as ``DiscardError``."""
+    try:
+        yield
+    except OSError as error:
+        message = f"cannot {action} {path}: {error}"
+        raise DiscardError(message) from error
+
+
+def _raise_scan_error(error: OSError) -> None:
+    """Re-raise a directory-scan error, which ``os.walk`` would otherwise drop."""
+    raise error
+
+
 def tree_size(path: Path) -> int:
     """Return the total size in bytes of the regular files under ``path``.
 
@@ -70,7 +92,7 @@ def tree_size(path: Path) -> int:
     Raises
     ------
     DiscardError
-        If a directory cannot be traversed or a file cannot be examined, for
+        If a directory cannot be scanned or a file cannot be examined, for
         example on a permission failure or a file removed mid-walk.
 
     Examples
@@ -81,23 +103,22 @@ def tree_size(path: Path) -> int:
     >>> tree_size(root)
     3
     """
-    try:
-        return sum(
-            entry.lstat().st_size
-            for entry in path.rglob("*")
-            if entry.is_file() and not entry.is_symlink()
+    with _filesystem("measure", path):
+        sizes = (
+            (Path(directory) / name).lstat()
+            for directory, _, names in os.walk(path, onerror=_raise_scan_error)
+            for name in names
         )
-    except OSError as error:
-        message = f"cannot measure {path}: {error}"
-        raise DiscardError(message) from error
+        return sum(status.st_size for status in sizes if stat.S_ISREG(status.st_mode))
 
 
 def discard(root: Path, names: list[str]) -> list[Removal]:
     """Remove each named tree under ``root`` and report what was removed.
 
-    A name is accepted only when it is a plain path directly under ``root``:
-    a name that escapes ``root``, or that reaches its tree through a symlink or
-    a ``..`` component, is refused rather than followed. That keeps a link such
+    A name is accepted only when it is one relative path component naming a
+    direct child of ``root``: a nested or absolute name, one that escapes
+    ``root``, or one that reaches its tree through a symlink or a ``..``
+    component, is refused rather than followed. That keeps a link such
     as ``debug -> llvm-cov-target`` from deleting the tree it points at under
     another name. The validated named path is removed, never its resolved
     target.
@@ -117,13 +138,28 @@ def discard(root: Path, names: list[str]) -> list[Removal]:
     Raises
     ------
     ValueError
-        If a name resolves outside ``root`` or is not a plain path under it.
+        If a name is not a single plain component directly under ``root``.
     DiscardError
-        If a tree cannot be measured or removed. Trees handled before the
-        failure stay removed; none after it are touched.
+        If ``root`` is not a directory, or a path cannot be resolved,
+        examined, measured or removed. Trees handled before the failure stay
+        removed; none after it are touched.
     """
-    base = root.resolve()
+    base = _target_directory(root)
     return [_discard_one(base, name) for name in names]
+
+
+def _target_directory(root: Path) -> Path:
+    """Return the resolved ``root``, refusing one that is not a directory.
+
+    A wrong target path would otherwise report every tree as absent and let
+    the step pass without freeing anything.
+    """
+    with _filesystem("resolve", root):
+        base = root.resolve()
+        if not base.is_dir():
+            message = f"cannot discard under {base}: not a directory"
+            raise DiscardError(message)
+    return base
 
 
 def _plain_tree_path(base: Path, name: str) -> Path:
@@ -132,16 +168,23 @@ def _plain_tree_path(base: Path, name: str) -> Path:
     Raises
     ------
     ValueError
-        If the name is the target itself, escapes it, or reaches its tree
-        through a symlink or ``..`` component.
+        If the name is the target itself, escapes it, is absolute or nested,
+        or reaches its tree through a symlink or ``..`` component.
+
+    DiscardError
+        If the path cannot be resolved.
     """
     tree = base / name
-    resolved = tree.resolve()
+    with _filesystem("resolve", tree):
+        resolved = tree.resolve()
     if resolved == base:
         message = f"{name!r} names the target directory {base} itself"
         raise ValueError(message)
     if not resolved.is_relative_to(base):
         message = f"{name!r} resolves outside {base}"
+        raise ValueError(message)
+    if Path(name).is_absolute() or len(Path(name).parts) != 1:
+        message = f"{name!r} is not a single relative name directly under {base}"
         raise ValueError(message)
     if resolved != tree:
         message = f"{name!r} is an alias for {resolved}, not a plain path under {base}"
@@ -152,15 +195,28 @@ def _plain_tree_path(base: Path, name: str) -> Path:
 def _discard_one(base: Path, name: str) -> Removal:
     """Remove the tree ``name`` under ``base`` and report its size, or ``None``."""
     tree = _plain_tree_path(base, name)
-    if not tree.exists():
+    if not _is_present(tree):
         return Removal(name, None)
     size = tree_size(tree)
-    try:
+    with _filesystem("remove", tree):
         shutil.rmtree(tree)
-    except OSError as error:
-        message = f"cannot remove {tree}: {error}"
-        raise DiscardError(message) from error
     return Removal(name, size)
+
+
+def _is_present(tree: Path) -> bool:
+    """Return whether ``tree`` exists, without hiding an environmental failure.
+
+    ``Path.exists`` can report a permission or I/O failure as absence, which
+    would let a cleanup that freed nothing pass; only a missing path is absent.
+    """
+    try:
+        tree.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        message = f"cannot examine {tree}: {error}"
+        raise DiscardError(message) from error
+    return True
 
 
 def main(argv: list[str]) -> int:

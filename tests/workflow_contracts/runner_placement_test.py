@@ -215,3 +215,97 @@ def test_the_lint_trees_go_before_coverage(ci: WorkflowDocument) -> None:
     ]
     assert coverage, "build-test runs no coverage step"
     assert index < min(coverage), "the lint trees must go before coverage starts"
+
+
+#: Every ``build-test`` step whose ``if`` follows the platform, exactly. The
+#: ratchet input is held by ``codescene_coverage_test.py``. A step keyed on the
+#: wrong platform, or on the old runner label, would skip or run the wrong leg
+#: with no failure to show for it.
+PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
+    "Install mdtablefix": LINUX_ONLY,
+    "Check formatting": LINUX_ONLY,
+    "Check Rust formatting": "${{ matrix.platform != 'linux' }}",
+    "Resolve latest Whitaker installer release": LINUX_ONLY,
+    "Cache Whitaker installer": LINUX_ONLY,
+    "Install Whitaker": LINUX_ONLY,
+    "Disk sample (before lint)": "${{ always() && matrix.platform == 'linux' }}",
+    "Lint": LINUX_ONLY,
+    "Lint (Clippy only)": "${{ matrix.platform != 'linux' }}",
+    "Workflow contract tests": LINUX_ONLY,
+    "Disk sample (before discard)": "${{ always() && matrix.platform == 'linux' }}",
+    "Discard lint build trees": LINUX_ONLY,
+    "Disk sample (before coverage)": "${{ always() && matrix.platform == 'linux' }}",
+    "Disk sample (after coverage with serde_saphyr)": (
+        "${{ always() && matrix.platform == 'linux' }}"
+    ),
+    "Disk sample (after coverage without serde_saphyr)": (
+        "${{ always() && matrix.platform == 'linux' }}"
+    ),
+    "Merge coverage results": LINUX_ONLY,
+    "Validate PowerShell wrapper": "${{ matrix.platform == 'windows' }}",
+}
+
+
+def _steps(ci: WorkflowDocument) -> list[dict[str, object]]:
+    """Return ``build-test``'s steps, failing clearly if they are not a list of mappings."""
+    steps = _build_test(ci).get("steps")
+    assert isinstance(steps, list), f"build-test's steps are not a list: {type(steps).__name__}"
+    assert all(isinstance(step, dict) for step in steps), "a build-test step is not a mapping"
+    return steps
+
+
+def _condition(step: dict[str, object]) -> str:
+    """Return a step's ``if`` with whitespace normalised, or an empty string."""
+    return " ".join(str(step.get("if", "")).split())
+
+
+@pytest.mark.parametrize(("name", "expected"), sorted(PLATFORM_CONDITIONS.items()))
+def test_each_migrated_step_keeps_its_exact_platform_condition(
+    ci: WorkflowDocument, name: str, expected: str
+) -> None:
+    """A step keyed on the platform runs on that leg and no other."""
+    matching = [step for step in _steps(ci) if step.get("name") == name]
+    assert len(matching) == 1, f"build-test has {len(matching)} steps named {name!r}"
+    assert _condition(matching[0]) == expected, (
+        f"{name!r} is conditioned on {_condition(matching[0])!r}, not {expected!r}"
+    )
+
+
+def test_no_other_step_is_keyed_on_the_platform_or_a_runner_label(ci: WorkflowDocument) -> None:
+    """The set of platform-keyed steps is closed, and none reads a runner label.
+
+    This is the narrow half of the contract above: a new step conditioned on
+    the platform must be added to the table on purpose, and none may go back
+    to testing ``matrix.os`` or ``runner.os`` labels the rename retired.
+    """
+    keyed = {
+        str(step.get("name"))
+        for step in _steps(ci)
+        if "matrix.platform" in _condition(step)
+    }
+    assert keyed == set(PLATFORM_CONDITIONS), (
+        f"platform-keyed steps differ from the table: {sorted(keyed ^ set(PLATFORM_CONDITIONS))}"
+    )
+    stale = [
+        str(step.get("name"))
+        for step in _steps(ci)
+        if "matrix.os" in _condition(step) or "ubuntu-latest" in _condition(step)
+    ]
+    assert not stale, f"steps still key on a runner label: {stale}"
+
+
+def test_the_discard_follows_lint_and_precedes_both_coverage_passes(ci: WorkflowDocument) -> None:
+    """The discard can only free the lint output if it runs after lint.
+
+    It must also precede both coverage steps, or one pass would build beside
+    the trees it was meant to replace.
+    """
+    steps = _steps(ci)
+    names = [str(step.get("name")) for step in steps]
+    discard = names.index("Discard lint build trees")
+    assert names.index("Lint") < discard, "the discard must run after Lint"
+    coverage = [
+        index for index, step in enumerate(steps) if "/generate-coverage@" in str(step.get("uses", ""))
+    ]
+    assert len(coverage) == 2, f"build-test runs {len(coverage)} coverage steps, not two"
+    assert discard < min(coverage), "the discard must run before both coverage passes"

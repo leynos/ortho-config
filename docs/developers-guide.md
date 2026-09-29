@@ -1584,16 +1584,20 @@ stay GitHub-hosted.
 Before coverage starts, the Linux leg runs `scripts/discard_build_trees.py`,
 which removes the rustdoc and Clippy output (`target/debug`, `target/doc`) and
 Whitaker's (`target/dylint`), prints each tree's size, and reports a tree that
-was not there. It refuses a name that escapes the target directory or reaches
-its tree through a symlink, so a link such as `debug -> llvm-cov-target` cannot
-delete another tree. A filesystem failure while measuring or removing a tree
-ends the step with a one-line diagnostic on standard error and status 1. It
-keeps the registry and sccache. Trybuild's child builds land under the coverage
-target directory, which trybuild takes from `cargo metadata`, so they cannot be
-redirected independently. Removing them between the two coverage passes would
-throw away the warm builds the second pass reuses. The leg prints `df -BM /` at
-each boundary: before lint, before and after the discard, and after each
-coverage pass.
+was not there. It accepts only a single relative name for a direct child of the
+target directory, and refuses one that is nested, absolute, escapes the target
+or reaches its tree through a symlink, so a link such as
+`debug -> llvm-cov-target` cannot delete another tree. A missing target
+directory or a filesystem failure while resolving, examining, measuring or
+removing a tree ends the step with a one-line diagnostic on standard error and
+status 1. It keeps the registry and sccache. Trybuild's child builds land under
+the coverage target directory, which trybuild takes from `cargo metadata`, so
+they cannot be redirected independently. Removing them between the two coverage
+passes would throw away the warm builds the second pass reuses. The leg prints
+`df -BM /` at each boundary: before lint, before and after the discard, and
+after each coverage pass.
+
+[ADR-009](adr-009-linux-build-test-runner-placement.md) records the decision.
 
 `runner_placement_test.py` holds all of this. It reads the fallback by
 position, checks each leg's runners, and checks that no fork reaches Ubicloud,
