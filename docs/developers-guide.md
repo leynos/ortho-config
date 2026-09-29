@@ -1586,12 +1586,14 @@ which removes the rustdoc and Clippy output (`target/debug`, `target/doc`) and
 Whitaker's (`target/dylint`), prints each tree's size, and reports a tree that
 was not there. It refuses a name that escapes the target directory or reaches
 its tree through a symlink, so a link such as `debug -> llvm-cov-target` cannot
-delete another tree. It keeps the registry and sccache. Trybuild's child builds
-land under the coverage target directory, which trybuild takes from
-`cargo metadata`, so they cannot be redirected independently. Removing them
-between the two coverage passes would throw away the warm builds the second
-pass reuses. The leg prints `df -BM /` at each boundary: before lint, before
-and after the discard, and after each coverage pass.
+delete another tree. A filesystem failure while measuring or removing a tree
+ends the step with a one-line diagnostic on standard error and status 1. It
+keeps the registry and sccache. Trybuild's child builds land under the coverage
+target directory, which trybuild takes from `cargo metadata`, so they cannot be
+redirected independently. Removing them between the two coverage passes would
+throw away the warm builds the second pass reuses. The leg prints `df -BM /` at
+each boundary: before lint, before and after the discard, and after each
+coverage pass.
 
 `runner_placement_test.py` holds all of this. It reads the fallback by
 position, checks each leg's runners, and checks that no fork reaches Ubicloud,
@@ -1616,10 +1618,10 @@ returning a gates configuration that tool failed every pull request here over a
 defect in none of them.
 
 What a pull-request lane keeps is the ratchet. `ci.yml` runs
-`generate-coverage` with `with-ratchet` on the ubuntu leg, comparing against
-the baseline `coverage-main.yml` writes, which applies the same "do not go
-backwards" gate from this repository's own history with no token and no second
-tool.
+`generate-coverage` with `with-ratchet` on the Linux leg
+(`matrix.platform == 'linux'`), comparing against the baseline
+`coverage-main.yml` writes, which applies the same "do not go backwards" gate
+from this repository's own history with no token and no second tool.
 
 `build-test` takes the default depth-1 checkout. It used to fetch full history
 only so `cs-coverage check` could diff against the pull request's merge base,

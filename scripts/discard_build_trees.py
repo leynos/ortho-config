@@ -3,9 +3,10 @@
 The Linux ``build-test`` leg runs on ``ubicloud-standard-4``. By the time
 coverage starts, the lint steps have filled ``target/`` with trees coverage
 never reads: rustdoc and Clippy output under ``debug`` and ``doc``, and
-Whitaker's under ``dylint``. Two runs on ``ubicloud-standard-2`` died of a full
-disk during coverage, so the job removes those trees first, and the larger
-runner leaves headroom beyond that.
+Whitaker's under ``dylint``. ``ubicloud-standard-2`` was the failed sizing
+trial: two runs on it died of a full disk during coverage. ``ubicloud-standard-4``
+is the current runner, and the job still removes those trees first to keep
+headroom.
 
 Each tree is named, its size is printed, and a name with nothing on disk is
 reported as such rather than silently skipped. A discard that removed nothing
@@ -32,7 +33,15 @@ import shutil
 import sys
 from pathlib import Path
 
-__all__ = ["Removal", "discard", "main", "tree_size"]
+__all__ = ["DiscardError", "Removal", "discard", "main", "tree_size"]
+
+
+class DiscardError(Exception):
+    """A filesystem operation on a named tree failed.
+
+    Wraps the underlying ``OSError`` as ``__cause__`` so the command can name
+    the path and reason without a traceback.
+    """
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -56,6 +65,12 @@ def tree_size(path: Path) -> int:
     int
         The summed logical size of every regular file beneath ``path``.
 
+    Raises
+    ------
+    DiscardError
+        If a directory cannot be traversed or a file cannot be examined, for
+        example on a permission failure or a file removed mid-walk.
+
     Examples
     --------
     >>> import tempfile
@@ -64,7 +79,11 @@ def tree_size(path: Path) -> int:
     >>> tree_size(root)
     3
     """
-    return sum(entry.stat().st_size for entry in path.rglob("*") if entry.is_file())
+    try:
+        return sum(entry.stat().st_size for entry in path.rglob("*") if entry.is_file())
+    except OSError as error:
+        message = f"cannot measure {path}: {error}"
+        raise DiscardError(message) from error
 
 
 def discard(root: Path, names: list[str]) -> list[Removal]:
@@ -93,6 +112,9 @@ def discard(root: Path, names: list[str]) -> list[Removal]:
     ------
     ValueError
         If a name resolves outside ``root`` or is not a plain path under it.
+    DiscardError
+        If a tree cannot be measured or removed. Trees handled before the
+        failure stay removed; none after it are touched.
     """
     base = root.resolve()
     removals = []
@@ -109,13 +131,21 @@ def discard(root: Path, names: list[str]) -> list[Removal]:
             removals.append(Removal(name, None))
             continue
         size = tree_size(tree)
-        shutil.rmtree(tree)
+        try:
+            shutil.rmtree(tree)
+        except OSError as error:
+            message = f"cannot remove {tree}: {error}"
+            raise DiscardError(message) from error
         removals.append(Removal(name, size))
     return removals
 
 
 def main(argv: list[str]) -> int:
     """Discard ``argv[1:]`` under the target directory ``argv[0]``.
+
+    A refused name or a failed filesystem operation is reported on standard
+    error with a non-zero status, so the workflow step fails with a clear
+    diagnostic instead of a traceback.
 
     Parameters
     ----------
@@ -125,10 +155,16 @@ def main(argv: list[str]) -> int:
     Returns
     -------
     int
-        The process exit status, ``0`` when every name was handled.
+        ``0`` when every name was handled, ``1`` when a name was refused or a
+        filesystem operation failed.
     """
     root, *names = argv
-    for removal in discard(Path(root), names):
+    try:
+        removals = discard(Path(root), names)
+    except (DiscardError, ValueError) as error:
+        print(f"discard failed: {error}", file=sys.stderr)
+        return 1
+    for removal in removals:
         if removal.size is None:
             print(f"{removal.name}: nothing to remove")
         else:

@@ -13,7 +13,7 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 
 # The script directory is not a package, so the import must follow the path
 # insertion above; E402 is expected here and nowhere else.
-from discard_build_trees import Removal, discard, main  # noqa: E402
+from discard_build_trees import DiscardError, Removal, discard, main, tree_size  # noqa: E402
 
 
 def _tree(root: Path, name: str, size: int) -> None:
@@ -75,3 +75,64 @@ def test_the_command_prints_one_line_per_name(
         "doc: removed 1.00 GiB",
         "dylint: nothing to remove",
     ], "each name must report its outcome"
+
+
+def test_an_unreadable_file_raises_a_typed_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``stat`` failure surfaces as ``DiscardError``, not a bare ``OSError``."""
+    _tree(tmp_path, "debug", 1)
+
+    def refuse(self: Path, **_: object) -> object:
+        message = "simulated stat failure"
+        raise PermissionError(message)
+
+    monkeypatch.setattr(Path, "stat", refuse)
+    with pytest.raises(DiscardError, match="cannot measure") as raised:
+        tree_size(tmp_path / "debug")
+    assert isinstance(raised.value.__cause__, PermissionError), "the cause must be kept"
+
+
+def test_a_failed_removal_raises_a_typed_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ``rmtree`` failure surfaces as ``DiscardError`` naming the tree."""
+    _tree(tmp_path, "debug", 1)
+
+    def refuse(path: Path) -> None:
+        message = "simulated removal failure"
+        raise OSError(message)
+
+    monkeypatch.setattr("discard_build_trees.shutil.rmtree", refuse)
+    with pytest.raises(DiscardError, match="cannot remove"):
+        discard(tmp_path, ["debug"])
+
+
+@pytest.mark.parametrize("name", ["..", "debug-link"])
+def test_the_command_reports_a_refusal_and_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
+) -> None:
+    """A refused name gives one diagnostic line and status 1, with no traceback."""
+    root = tmp_path / "target"
+    _tree(root, "real", 1)
+    (root / "debug-link").symlink_to(root / "real")
+    assert main([str(root), name]) == 1, "a refusal must fail the step"
+    captured = capsys.readouterr()
+    assert captured.out == "", "nothing may be reported as removed"
+    assert captured.err.startswith("discard failed: "), "the diagnostic must be on stderr"
+    assert (root / "real").exists(), "the tree behind the alias must survive"
+
+
+def test_the_command_reports_a_filesystem_failure_and_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed removal gives one diagnostic line and status 1."""
+    _tree(tmp_path, "debug", 1)
+
+    def refuse(path: Path) -> None:
+        message = "simulated removal failure"
+        raise OSError(message)
+
+    monkeypatch.setattr("discard_build_trees.shutil.rmtree", refuse)
+    assert main([str(tmp_path), "debug"]) == 1, "a failure must fail the step"
+    assert "cannot remove" in capsys.readouterr().err, "the diagnostic must name the action"
