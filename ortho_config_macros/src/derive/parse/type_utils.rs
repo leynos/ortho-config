@@ -9,15 +9,20 @@ use syn::{GenericArgument, PathArguments, Type};
 /// The outer shape supported when clap's string default is inferred.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ClapDefaultValueShape {
+    /// A single value with no option or collection wrapper.
     Scalar,
+    /// A value wrapped once in `Option<T>`.
     Option,
+    /// A value wrapped once in `Vec<T>`.
     Vec,
 }
 
 /// The leaf type and outer shape needed to reproduce a clap string default.
 #[derive(Clone)]
 pub(crate) struct ClapDefaultValueType {
+    /// Wrapper category retained after the supported outer layer is removed.
     pub shape: ClapDefaultValueShape,
+    /// Type clap parses from the inferred default string.
     pub leaf: Type,
 }
 

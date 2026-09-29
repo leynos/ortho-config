@@ -56,6 +56,10 @@ pub fn message_id_for(command_path: &[impl AsRef<str>], suffix: &str) -> String 
     id
 }
 
+/// Lowercases a valid non-empty ID segment without changing its separators.
+///
+/// Dots are rejected here because path and suffix separators are normalized by
+/// their callers before segments are joined into a `Fluent` identifier.
 pub(crate) fn normalize_segment(raw: &str) -> String {
     assert!(
         !raw.is_empty(),

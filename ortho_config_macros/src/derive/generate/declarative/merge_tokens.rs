@@ -8,10 +8,15 @@ use quote::quote;
 
 use super::guards::generate_non_object_guard;
 
+/// Borrowed collection fragments inserted into the generated `finish` method.
 pub(super) struct FinishCollectionTokens<'a> {
+    /// Pattern entries binding append state from the merge accumulator.
     pub append_destructured: &'a [TokenStream],
+    /// Pattern entries binding replacement-map state from the accumulator.
     pub map_destructured: &'a [TokenStream],
+    /// Statements copying accumulated vectors into the result overlay.
     pub append_inserts: &'a [TokenStream],
+    /// Statements copying selected replacement maps into the result overlay.
     pub map_inserts: &'a [TokenStream],
 }
 

@@ -10,6 +10,7 @@ use crate::derive::parse::{DocStructAttrs, HeadingOverrides, StructAttrs};
 use super::types::{AppName, ConfigFileName};
 use super::{example_tokens, link_tokens, note_tokens, option_string_tokens};
 
+/// Supplies the stable translation keys used when no heading override is present.
 fn default_headings() -> HeadingOverrides {
     HeadingOverrides {
         name: Some(String::from("ortho.headings.name")),
@@ -26,6 +27,7 @@ fn default_headings() -> HeadingOverrides {
     }
 }
 
+/// Prefers an explicitly discovered application name, then derives one from the struct.
 pub(super) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> String {
     struct_attrs
         .discovery
@@ -34,12 +36,17 @@ pub(super) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
         .unwrap_or_else(|| default_app_name(struct_attrs, ident))
 }
 
+/// Uses the declared about-text key or derives a stable key from the application name.
 pub(super) fn resolve_about_id(app_name: &AppName, doc: &DocStructAttrs) -> String {
     doc.about_id
         .clone()
         .unwrap_or_else(|| format!("{}.about", &**app_name))
 }
 
+/// Combines parsed section attributes into the runtime metadata struct construction.
+///
+/// The returned tokens refer to the selected runtime crate path so derive expansion
+/// remains valid when the dependency is renamed by the consuming package.
 #[expect(
     clippy::cognitive_complexity,
     reason = "`quote!` expansion inflates the complexity score; keep this wrapper minimal."
@@ -68,6 +75,10 @@ pub(super) fn build_sections_metadata(
     })
 }
 
+/// Emits Windows help metadata only when the derive input declares Windows settings.
+///
+/// Unspecified flags retain the generator's compatibility defaults: common
+/// parameters are included and subcommands remain in the parent help function.
 pub(super) fn build_windows_metadata(
     struct_attrs: &StructAttrs,
     krate: &TokenStream,
@@ -100,6 +111,7 @@ pub(super) fn build_windows_metadata(
     }
 }
 
+/// Resolves heading keys against defaults and emits the runtime `HeadingIds` value.
 fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> TokenStream {
     let headings = merge_headings(overrides);
 
@@ -138,11 +150,13 @@ fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> Toke
     }
 }
 
+/// Quotes a string as an owned literal for insertion into generated code.
 fn string_tokens(value: &str) -> TokenStream {
     let lit = syn::LitStr::new(value, proc_macro2::Span::call_site());
     quote! { String::from(#lit) }
 }
 
+/// Fills missing heading keys while preserving every explicit override.
 fn merge_headings(overrides: &HeadingOverrides) -> HeadingOverrides {
     let defaults = default_headings();
     HeadingOverrides {
@@ -160,6 +174,10 @@ fn merge_headings(overrides: &HeadingOverrides) -> HeadingOverrides {
     }
 }
 
+/// Converts declared source order to runtime variants, defaulting to the standard order.
+///
+/// Invalid source names return a `syn::Error` so the derive reports the problem at
+/// expansion time instead of emitting an incomplete precedence contract.
 fn build_precedence_metadata(
     doc: &DocStructAttrs,
     krate: &TokenStream,
@@ -197,6 +215,7 @@ fn build_precedence_metadata(
     })
 }
 
+/// Normalizes supported source aliases to the runtime enum's variant names.
 fn is_source_kind(value: &str) -> Option<&'static str> {
     match value.trim().to_ascii_lowercase().as_str() {
         "default" | "defaults" => Some("Defaults"),
@@ -207,6 +226,7 @@ fn is_source_kind(value: &str) -> Option<&'static str> {
     }
 }
 
+/// Quotes one recognized precedence source or returns a user-facing parse error.
 fn source_kind_tokens(value: &str, krate: &TokenStream) -> syn::Result<TokenStream> {
     let variant: syn::Ident = is_source_kind(value)
         .map(|v| syn::Ident::new(v, proc_macro2::Span::call_site()))
@@ -221,6 +241,10 @@ fn source_kind_tokens(value: &str, krate: &TokenStream) -> syn::Result<TokenStre
     Ok(quote! { #krate::docs::SourceKind::#variant })
 }
 
+/// Builds config-discovery documentation using explicit values before derived defaults.
+///
+/// The format list reflects the configured candidate filenames, while the XDG flag
+/// follows the target platform because only Unix-like targets use those locations.
 fn build_discovery_metadata(
     app_name: &AppName,
     struct_attrs: &StructAttrs,
@@ -276,11 +300,15 @@ fn build_discovery_metadata(
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FormatKind {
+    /// A TOML configuration candidate.
     Toml,
+    /// A YAML or YML configuration candidate.
     Yaml,
+    /// A JSON or JSON5 configuration candidate.
     Json,
 }
 
+/// Classifies supported filename extensions after case normalization.
 fn format_kind_from_extension(name: &str) -> Option<FormatKind> {
     match extension_from_name(name).as_deref() {
         Some("toml") => Some(FormatKind::Toml),
@@ -290,6 +318,7 @@ fn format_kind_from_extension(name: &str) -> Option<FormatKind> {
     }
 }
 
+/// Emits each supported format once, in the stable TOML, YAML, JSON order.
 fn collect_formats(names: &[&str], krate: &TokenStream) -> Vec<TokenStream> {
     let mut has_toml = false;
     let mut has_yaml = false;
@@ -316,6 +345,7 @@ fn collect_formats(names: &[&str], krate: &TokenStream) -> Vec<TokenStream> {
     formats
 }
 
+/// Extracts a non-empty, lower-case extension from a candidate filename.
 fn extension_from_name(name: &str) -> Option<String> {
     name.rsplit_once('.')
         .map(|(_, ext)| ext.trim())
@@ -323,6 +353,7 @@ fn extension_from_name(name: &str) -> Option<String> {
         .map(str::to_ascii_lowercase)
 }
 
+/// Derives a hidden config filename, retaining the configured extension when available.
 fn default_dotfile_name(app_name: &AppName, config_file_name: &ConfigFileName) -> String {
     let extension = config_file_name
         .rsplit_once('.')

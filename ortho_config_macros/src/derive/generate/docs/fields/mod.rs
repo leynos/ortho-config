@@ -1,6 +1,7 @@
 //! Field-level documentation IR generation.
 
 mod defaults;
+mod render;
 mod resolution;
 mod tokens;
 mod validation;
@@ -10,30 +11,44 @@ use std::collections::HashMap;
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::parse::{FieldAttrs, SerdeRenameAll, serde_serialized_field_key};
 
 use self::resolution::{resolve_required, resolve_value_type};
 use super::AppName;
-use super::{example_tokens, link_tokens, note_tokens, option_char_tokens, option_string_tokens};
+use super::{option_char_tokens, option_string_tokens};
 use defaults::{default_env_name, default_field_id};
-use tokens::{build_possible_values, default_tokens, deprecated_tokens};
+use render::{FieldContext, FieldIdentity, FieldMetadataComponents, IoTokens, ValueContext};
+use render::{render_field_metadata, render_meta_parts};
+use tokens::build_possible_values;
 use validation::{ensure_unique, validate_env_name, validate_file_key};
-use value_types::{ValueTypeModel, is_multi_value, value_type_tokens};
+use value_types::{is_multi_value, value_type_tokens};
 
+/// Borrowed field and container inputs used to build localized field IR.
 pub(super) struct FieldDocArgs<'a> {
+    /// Application identity used when synthesizing default help identifiers.
     pub app_name: &'a AppName,
+    /// Prefix prepended to generated environment-variable names, if configured.
     pub prefix: Option<&'a str>,
+    /// Source fields whose generated documentation metadata must stay in order.
     pub fields: &'a [syn::Field],
+    /// Parsed field options paired positionally with `fields`.
     pub field_attrs: &'a [FieldAttrs],
+    /// Serde's struct-wide rename rule for file keys without an explicit override.
     pub serde_rename_all: Option<SerdeRenameAll>,
+    /// CLI metadata indexed by source field name; skipped CLI fields need no entry.
     pub cli_fields: &'a [CliFieldMetadata],
     /// Resolved crate path for generated code references.
     pub krate: &'a proc_macro2::TokenStream,
 }
 
+/// Builds one generated documentation record per non-subcommand field.
+///
+/// The source fields and parsed attributes must have identical lengths because
+/// they are paired by position. Duplicate environment names and file-key paths
+/// are rejected while records are built so the generated metadata is
+/// unambiguous.
 pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<TokenStream>> {
     if args.fields.len() != args.field_attrs.len() {
         return Err(syn::Error::new(
@@ -73,17 +88,30 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
     Ok(output)
 }
 
+/// Accumulates field records while checking names that must be unique per app.
 struct FieldMetaBuilder<'a> {
+    /// Application name used to derive default help identifiers.
     app_name: &'a AppName,
+    /// Optional prefix used only when an environment name has no override.
     prefix: Option<&'a str>,
+    /// Struct-level Serde rename rule used only when a file key has no override.
     serde_rename_all: Option<SerdeRenameAll>,
+    /// CLI records keyed by source field name for constant-time field lookup.
     cli_lookup: HashMap<&'a str, &'a CliFieldMetadata>,
+    /// First source span for each emitted environment name, for duplicate errors.
     env_seen: HashMap<String, proc_macro2::Span>,
+    /// First source span for each emitted file key, for duplicate errors.
     file_seen: HashMap<String, proc_macro2::Span>,
+    /// Resolved crate path used in every generated metadata type reference.
     krate: &'a proc_macro2::TokenStream,
 }
 
 impl<'a> FieldMetaBuilder<'a> {
+    /// Resolves a field's identity and value type before assembling its metadata.
+    ///
+    /// Tuple fields are rejected because generated documentation identifies
+    /// fields by name. CLI metadata must already exist for every field that is
+    /// not marked `skip_cli`.
     fn build_field(
         &mut self,
         field: &'a syn::Field,
@@ -135,6 +163,7 @@ impl<'a> FieldMetaBuilder<'a> {
         Ok(render_field_metadata(components, self.krate))
     }
 
+    /// Renders the CLI, environment, and file-source portions as one bundle.
     fn render_io_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<IoTokens> {
         Ok(IoTokens {
             cli: self.build_cli_tokens(context)?,
@@ -143,6 +172,11 @@ impl<'a> FieldMetaBuilder<'a> {
         })
     }
 
+    /// Emits CLI metadata, preserving `None` for fields excluded from the CLI.
+    ///
+    /// The value name and help visibility come from documentation attributes;
+    /// option spelling, multiplicity, and value-taking behaviour come from the
+    /// already-resolved CLI metadata and Rust field type.
     fn build_cli_tokens(&self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         if context.attrs.skip_cli {
             return Ok(quote! { None });
@@ -175,6 +209,11 @@ impl<'a> FieldMetaBuilder<'a> {
         })
     }
 
+    /// Resolves and validates the field's environment name before tokenizing it.
+    ///
+    /// An explicit documentation override takes precedence over the generated
+    /// prefix-and-field name. Duplicate names are errors, with spans retained
+    /// so diagnostics can point back to the source fields.
     fn build_env_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         let env_name = context
             .attrs
@@ -193,6 +232,11 @@ impl<'a> FieldMetaBuilder<'a> {
         })
     }
 
+    /// Resolves and validates the file key path before tokenizing it.
+    ///
+    /// An explicit documentation key takes precedence over Serde's serialized
+    /// field key, including the struct-level rename rule. Duplicate resolved
+    /// paths are rejected to keep file-source metadata unambiguous.
     fn build_file_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
         let key_path = if let Some(key) = context.attrs.doc.file_key_path.clone() {
             key
@@ -209,149 +253,4 @@ impl<'a> FieldMetaBuilder<'a> {
             }
         })
     }
-}
-
-struct FieldContext<'a> {
-    name: &'a Ident,
-    field_name: &'a str,
-    field: &'a syn::Field,
-    attrs: &'a FieldAttrs,
-    value_type: Option<&'a ValueTypeModel>,
-}
-
-struct FieldIdentity<'a> {
-    field_name: &'a str,
-    help_id: &'a str,
-    long_help_id: &'a str,
-}
-
-struct ValueContext {
-    value_tokens: TokenStream,
-    required: bool,
-}
-
-struct IoTokens {
-    cli: TokenStream,
-    env: TokenStream,
-    file: TokenStream,
-}
-
-struct MetaParts {
-    default_tokens: TokenStream,
-    deprecated_tokens: TokenStream,
-    examples: Vec<TokenStream>,
-    links: Vec<TokenStream>,
-    notes: Vec<TokenStream>,
-}
-
-fn render_meta_parts(attrs: &FieldAttrs, krate: &proc_macro2::TokenStream) -> MetaParts {
-    MetaParts {
-        default_tokens: default_tokens(attrs, krate),
-        deprecated_tokens: deprecated_tokens(attrs, krate),
-        examples: example_tokens(&attrs.doc.examples, krate),
-        links: link_tokens(&attrs.doc.links, krate),
-        notes: note_tokens(&attrs.doc.notes, krate),
-    }
-}
-
-/// Bundles all components needed to render field metadata tokens.
-struct FieldMetadataComponents {
-    identity: FieldIdentityTokens,
-    value_context: ValueContext,
-    io_tokens: IoTokens,
-    meta_parts: MetaParts,
-}
-
-/// Pre-computed string literals for field identity.
-struct FieldIdentityTokens {
-    field_name: syn::LitStr,
-    help_id: syn::LitStr,
-    long_help: syn::LitStr,
-}
-
-impl FieldIdentity<'_> {
-    fn into_tokens(self) -> FieldIdentityTokens {
-        FieldIdentityTokens {
-            field_name: syn::LitStr::new(self.field_name, proc_macro2::Span::call_site()),
-            help_id: syn::LitStr::new(self.help_id, proc_macro2::Span::call_site()),
-            long_help: syn::LitStr::new(self.long_help_id, proc_macro2::Span::call_site()),
-        }
-    }
-}
-
-fn render_field_metadata(
-    components: FieldMetadataComponents,
-    krate: &proc_macro2::TokenStream,
-) -> TokenStream {
-    let FieldMetadataComponents {
-        identity,
-        value_context,
-        io_tokens,
-        meta_parts,
-    } = components;
-
-    let identity_tokens = render_identity_tokens(identity);
-    let value_tokens = render_value_tokens(value_context);
-    let io = render_io_block(io_tokens);
-    let meta = render_meta_block(meta_parts);
-
-    quote! {
-        #krate::docs::FieldMetadata {
-            #identity_tokens
-            #value_tokens
-            #io
-            #meta
-        }
-    }
-}
-
-fn render_identity_tokens(identity: FieldIdentityTokens) -> TokenStream {
-    let field_name = identity.field_name;
-    let help_id = identity.help_id;
-    let long_help = identity.long_help;
-    quote! {
-        name: String::from(#field_name),
-        help_id: String::from(#help_id),
-        long_help_id: Some(String::from(#long_help)),
-    }
-}
-
-fn render_value_tokens(value: ValueContext) -> TokenStream {
-    let value_tokens = value.value_tokens;
-    let required = value.required;
-    quote! {
-        value: #value_tokens,
-        required: #required,
-    }
-}
-
-fn render_io_block(io: IoTokens) -> TokenStream {
-    let cli = io.cli;
-    let env = io.env;
-    let file = io.file;
-    quote! {
-        cli: #cli,
-        env: Some(#env),
-        file: Some(#file),
-    }
-}
-
-fn render_meta_block(meta: MetaParts) -> TokenStream {
-    let default = meta.default_tokens;
-    let deprecated = meta.deprecated_tokens;
-    let examples = render_vec_field("examples", &meta.examples);
-    let links = render_vec_field("links", &meta.links);
-    let notes = render_vec_field("notes", &meta.notes);
-    quote! {
-        default: #default,
-        deprecated: #deprecated,
-        #examples
-        #links
-        #notes
-    }
-}
-
-fn render_vec_field(field_name: &str, items: &[TokenStream]) -> TokenStream {
-    let ident = syn::Ident::new(field_name, proc_macro2::Span::call_site());
-    quote! { #ident: vec![ #( #items ),* ], }
 }

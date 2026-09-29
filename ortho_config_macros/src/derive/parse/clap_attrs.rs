@@ -52,6 +52,8 @@ pub(crate) fn parse_id_from_meta(
     Ok(())
 }
 
+/// Merge an `id` override from one `arg` or `clap` attribute into the field's
+/// accumulated identifier, rejecting malformed nested metadata.
 pub(crate) fn clap_arg_id_from_attribute(
     attr: &syn::Attribute,
     existing_id: &mut Option<syn::LitStr>,
@@ -63,6 +65,10 @@ pub(crate) fn clap_arg_id_from_attribute(
     list.parse_nested_meta(|meta| parse_id_from_meta(&meta, existing_id))
 }
 
+/// Return a field's explicit clap identifier, if an `id = "..."` override exists.
+///
+/// Attributes are visited in source order and duplicate overrides are errors,
+/// so callers receive at most one unambiguous identifier.
 pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
     let mut arg_id: Option<syn::LitStr> = None;
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
@@ -71,6 +77,8 @@ pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
     Ok(arg_id.map(|lit| lit.value()))
 }
 
+/// Consume the value or parenthesized tokens of an unrelated clap key so the
+/// nested-meta parser can continue without interpreting clap's full grammar.
 fn consume_unknown_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
     if meta.input.peek(syn::Token![=]) {
         let value = meta.value()?;
@@ -123,41 +131,67 @@ pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool> 
     Ok(is_subcommand)
 }
 
+/// Default syntax retained for generated configuration defaults. Typed clap
+/// expressions stay intact, while string values carry parser details for later
+/// conversion using the field's inferred scalar type.
 #[derive(Clone)]
 pub(crate) enum ClapInferredDefault {
+    /// A string-like default requiring clap's parser metadata for conversion.
     Value(Box<ClapDefaultValue>),
+    /// A typed single-value default expression from `default_value_t`.
     ValueT(Expr),
+    /// A typed multi-value default expression from `default_values_t`.
     ValuesT(Expr),
 }
 
 /// Parser metadata retained for a clap `default_value` expression.
 #[derive(Clone)]
 pub(crate) struct ClapDefaultValue {
+    /// The source expression for clap's string-valued default.
     pub value: Expr,
+    /// Explicit parser expression, preserved so generated code uses clap's conversion.
     pub value_parser: Option<Expr>,
+    /// Whether clap should parse the value through its `ValueEnum` implementation.
     pub value_enum: bool,
+    /// Delimiter expression used when one default string represents several values.
     pub value_delimiter: Option<Expr>,
+    /// Case-insensitive parsing hint passed through to clap's value parser.
     pub ignore_case: Option<Expr>,
+    /// Scalar field type that clap must parse before optional or collection wrapping.
     pub leaf_type: Type,
+    /// Field container shape used to materialize the parsed value correctly.
     pub shape: ClapDefaultValueShape,
 }
 
+/// Clap parsing options collected alongside a string default and applied after
+/// the field type determines the parser's expected leaf value.
 #[derive(Default)]
 struct ClapDefaultHints {
+    /// Explicit clap parser expression, if supplied by the field attribute.
     value_parser: Option<Expr>,
+    /// Whether enum values should use clap's `ValueEnum` conversion.
     value_enum: bool,
+    /// Delimiter used to split a string default into multiple values.
     value_delimiter: Option<Expr>,
+    /// Whether value matching should ignore letter case.
     ignore_case: Option<Expr>,
 }
 
+/// Classification of clap metadata keys before parsing their value expressions.
 #[derive(Clone, Copy)]
 enum ClapDefaultKind {
+    /// `default_value`, whose string expression needs type and parser hints.
     Value,
+    /// `default_value_t`, whose expression is already typed by the caller.
     ValueT,
+    /// `default_values_t`, whose expression supplies a typed sequence.
     ValuesT,
+    /// Any key unrelated to the three supported default forms.
     Other,
 }
 
+/// Store one inferred default, rejecting a second form so mixed clap defaults
+/// cannot silently select a precedence based on attribute order.
 fn assign_default_expr(
     meta: &syn::meta::ParseNestedMeta<'_>,
     default_slot: &mut Option<ClapInferredDefault>,
@@ -173,6 +207,7 @@ fn assign_default_expr(
     Ok(())
 }
 
+/// Map a clap key to the default representation that preserves its type semantics.
 fn classify_default_kind(meta: &syn::meta::ParseNestedMeta<'_>) -> ClapDefaultKind {
     if meta.path.is_ident("default_value") {
         return ClapDefaultKind::Value;
@@ -186,6 +221,8 @@ fn classify_default_kind(meta: &syn::meta::ParseNestedMeta<'_>) -> ClapDefaultKi
     ClapDefaultKind::Other
 }
 
+/// Parse the value expression for a recognized default key; unrelated keys are
+/// left for hint collection or generic consumption.
 fn parse_default_expr(
     meta: &syn::meta::ParseNestedMeta<'_>,
     kind: ClapDefaultKind,
@@ -253,6 +290,7 @@ fn parse_default_from_meta(
     Ok(())
 }
 
+/// Collect default and parser metadata from one list-form clap attribute.
 fn clap_default_value_from_attribute(
     attr: &syn::Attribute,
     existing_default: &mut Option<ClapInferredDefault>,
@@ -268,7 +306,10 @@ fn clap_default_value_from_attribute(
 /// Returns the typed default expression inferred from clap attributes, if any.
 ///
 /// The generated defaults struct consumes these inferred values and
-/// materializes field-level defaults during code generation.
+/// materializes field-level defaults during code generation. The caller asks
+/// for inference only when no explicit `#[ortho_config(default = ...)]` exists,
+/// so the `OrthoConfig` default takes precedence over clap's default. String
+/// defaults retain clap parser hints; typed defaults retain their expressions.
 pub(crate) fn clap_default_value(field: &syn::Field) -> syn::Result<Option<ClapInferredDefault>> {
     let mut default_expr: Option<ClapInferredDefault> = None;
     let mut hints = ClapDefaultHints::default();

@@ -14,6 +14,7 @@ use ortho_config::AgentContext;
 // Process-wide suffix for atomic JSON artefact temp names. `Relaxed` ordering
 // hands out distinct values; the `create_new` and rename operations provide
 // the actual synchronization, so any collision is a hard failure.
+/// Supplies process-unique suffixes; file creation and rename provide write synchronization.
 static JSON_ARTEFACT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Writes the localized IR JSON for a single locale.
@@ -141,14 +142,20 @@ fn write_atomic_json(
     Ok(target.path)
 }
 
+/// Holds final and temporary names together so every write stage uses matching paths.
 struct JsonArtefactWriteTarget {
+    /// Final filename used for the directory-relative rename.
     filename: &'static str,
+    /// User-visible destination used in logs and returned paths.
     path: Utf8PathBuf,
+    /// Unique temporary filename opened with `create_new` before replacement.
     temp_filename: String,
+    /// Full temporary path attached to I/O errors and diagnostics.
     temp_path: Utf8PathBuf,
 }
 
 impl JsonArtefactWriteTarget {
+    /// Derives a temporary name from process ID and counter without touching the filesystem.
     fn new(out_dir: &Utf8Path, filename: &'static str) -> Self {
         let temp_id = JSON_ARTEFACT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
         let temp_filename = format!("{filename}.{}.{}.tmp", std::process::id(), temp_id);
@@ -161,6 +168,7 @@ impl JsonArtefactWriteTarget {
     }
 }
 
+/// Creates a new temporary artefact exclusively, so a collision fails without truncation.
 fn open_json_temp_file(
     dir: &Dir,
     target: &JsonArtefactWriteTarget,
@@ -184,6 +192,7 @@ fn open_json_temp_file(
     })
 }
 
+/// Writes all bytes and syncs the temporary file before it can replace the destination.
 fn write_and_sync_json_temp_file(
     file: &mut File,
     target: &JsonArtefactWriteTarget,
@@ -231,6 +240,7 @@ fn write_and_sync_json_temp_file(
     })
 }
 
+/// Renames the completed temporary file over the final name within the same directory.
 fn replace_json_file(
     dir: &Dir,
     target: &JsonArtefactWriteTarget,
@@ -252,6 +262,8 @@ fn replace_json_file(
         })
 }
 
+/// Persists a rename by syncing its containing directory after replacement.
+/// Directory-open and sync failures are returned to the caller.
 #[cfg(unix)]
 fn sync_parent_dir(dir: &Dir, path: &Utf8Path) -> Result<(), OrthohelpError> {
     let dir_file = dir.open(".").map_err(|io_err| OrthohelpError::Io {
@@ -264,6 +276,8 @@ fn sync_parent_dir(dir: &Dir, path: &Utf8Path) -> Result<(), OrthohelpError> {
     })
 }
 
+/// Skips directory syncing where the platform cannot use this descriptor path.
+/// The common write flow receives success with weaker directory durability.
 #[expect(
     clippy::unnecessary_wraps,
     reason = "non-Unix stub mirrors the Unix fn signature so call sites \
@@ -274,6 +288,7 @@ const fn sync_parent_dir(_dir: &Dir, _path: &Utf8Path) -> Result<(), OrthohelpEr
     Ok(())
 }
 
+/// Opens an output directory, creating it only when it is absent and preserving path errors.
 fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
     match Dir::open_ambient_dir(path, ambient_authority()) {
         Ok(dir) => Ok(dir),

@@ -86,6 +86,7 @@ pub fn synopsis_section(
     output
 }
 
+/// Formats a synopsis flag and brackets it unless the corresponding field is required.
 fn format_synopsis_option(
     field: &LocalizedFieldMetadata,
     cli: &crate::schema::CliMetadata,
@@ -191,6 +192,7 @@ pub fn files_section(
     output
 }
 
+/// Appends configuration keys after discovery details, omitting the block when there are none.
 fn render_file_keys(output: &mut String, file_fields: &[(&LocalizedFieldMetadata, &FileMetadata)]) {
     if file_fields.is_empty() {
         return;
@@ -245,6 +247,7 @@ pub fn precedence_section(
     output
 }
 
+/// Maps each precedence source to a reader-facing label; the caller preserves source order.
 const fn format_source_kind(kind: &SourceKind) -> &'static str {
     match kind {
         SourceKind::Defaults => "Built-in defaults",

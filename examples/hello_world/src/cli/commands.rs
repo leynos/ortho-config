@@ -84,6 +84,7 @@ impl GreetCommand {
     }
 }
 
+/// Supplies the punctuation used by both Clap parsing and `GreetCommand::default`.
 fn default_punctuation() -> String {
     String::from("!")
 }
@@ -178,6 +179,10 @@ impl TakeLeaveCommand {
         Ok(())
     }
 
+    /// Validates optional greeting fields before parting, reminder, and gift checks.
+    ///
+    /// An absent override is valid; a provided value containing only
+    /// whitespace is rejected using the same errors as the `greet` command.
     fn validate_greeting_overrides(&self) -> Result<(), ValidationError> {
         if self
             .greeting_preamble
@@ -197,6 +202,7 @@ impl TakeLeaveCommand {
     }
 }
 
+/// Supplies the standard farewell phrase to Clap, Serde defaults, and `Default`.
 fn default_parting() -> String {
     String::from("Take care")
 }

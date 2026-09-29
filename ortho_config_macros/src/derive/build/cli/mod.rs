@@ -19,14 +19,20 @@ use syn::{Ident, Type};
 pub(crate) use cli_flags::build_cli_struct_fields;
 pub(crate) use cli_flags::{CliFieldMetadata, build_cli_field_metadata};
 
+/// Emits an `Option<T>` type for CLI parsing while unwrapping one existing
+/// `Option<T>` layer to avoid nested options.
 pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     cli_flags::option_type_tokens(ty)
 }
 
+/// Checks a long flag's syntax and reserved names, returning a span-aware
+/// error when invalid. Duplicate checks happen separately while resolving each
+/// CLI field.
 pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     cli_flags::validate_cli_long(name, long)
 }
 
+/// Validates an explicit short flag and returns it when it is available.
 pub(super) fn validate_user_cli_short(
     name: &Ident,
     user: char,

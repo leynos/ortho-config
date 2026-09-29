@@ -149,13 +149,24 @@ pub(crate) struct CliFieldInfo {
 }
 
 /// Internal data generated during macro expansion.
+///
+/// These tokens and identifiers are kept together so each generator consumes
+/// the same parsed field model and cannot silently diverge on configuration
+/// precedence.
 struct MacroComponents {
+    /// Identifier of the synthetic struct that carries field defaults.
     defaults_ident: syn::Ident,
+    /// Field declarations emitted into the synthetic defaults struct.
     default_struct_fields: Vec<proc_macro2::TokenStream>,
+    /// Identifier of the synthetic `clap::Parser` struct.
     cli_ident: syn::Ident,
+    /// Field declarations emitted into the synthetic CLI parser struct.
     cli_struct_fields: Vec<proc_macro2::TokenStream>,
+    /// Implementation tokens that load and merge the configuration layers.
     load_impl: proc_macro2::TokenStream,
+    /// Optional method returning the configured prefix for legacy discovery.
     prefix_fn: Option<proc_macro2::TokenStream>,
+    /// Per-field collection merge rules shared by declarative merge generation.
     collection_strategies: CollectionStrategies,
     /// Field info for `CliValueExtractor` generation derived from the input
     /// configuration struct fields.
@@ -173,11 +184,16 @@ struct MacroComponents {
     post_merge_hook: bool,
 }
 
+/// References to tokens interpolated into generated `Load` implementations.
 #[derive(Clone, Copy)]
 struct LoadTokenRefs<'a> {
+    /// Environment provider expression reused by generated load paths.
     env_provider: &'a proc_macro2::TokenStream,
+    /// Constructor expression for the synthetic defaults value.
     default_struct_init: &'a DefaultStructInit,
+    /// Generated expression naming the configuration environment variable.
     config_env_var: &'a proc_macro2::TokenStream,
+    /// String literal used for the conventional dotfile candidate.
     dotfile_name: &'a syn::LitStr,
 }
 
@@ -219,22 +235,35 @@ fn build_discovery_tokens(
 /// about discovery without a long parameter list.
 #[derive(Clone, Copy)]
 struct LoadImplConfig<'a> {
+    /// Parsed settings shared with legacy and explicit discovery generation.
     struct_attrs: &'a derive::parse::StructAttrs,
+    /// Optional values that override defaults derived from struct identity.
     discovery_tokens: Option<&'a DiscoveryTokens>,
+    /// Whether the parser struct includes a user or generated config-path flag.
     has_config_path: bool,
 }
 
+/// Keeps generated load arguments alive alongside storage they borrow.
 struct LoadImplResult<'a> {
+    /// Parsed identifiers and token references consumed by the load generator.
     args: LoadImplArgs<'a>,
+    /// Owns the legacy application name referenced from `args`.
     legacy_app_name_storage: String,
 }
 
+/// Inputs shared by the independent derive output generators.
 struct MacroComponentArgs<'a> {
+    /// Name of the user configuration struct being derived.
     ident: &'a syn::Ident,
+    /// Original named fields, preserving source order for generated output.
     fields: &'a [syn::Field],
+    /// Struct-level settings that control discovery and generated metadata.
     struct_attrs: &'a derive::parse::StructAttrs,
+    /// Parsed per-field settings aligned with `fields` by index.
     field_attrs: &'a [derive::parse::FieldAttrs],
+    /// Container-level Serde naming rule used by serialized field lookup.
     serde_rename_all: Option<SerdeRenameAll>,
+    /// Resolved path to the downstream `ortho_config` crate.
     krate: &'a proc_macro2::TokenStream,
 }
 

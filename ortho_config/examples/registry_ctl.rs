@@ -19,8 +19,12 @@ use std::io::{self, Write};
 #[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct AddUserArgs {
+    /// Registry name to create; `None` leaves the required decision to
+    /// configuration loading and validation.
     #[arg(long)]
     username: Option<String>,
+    /// Optional administrator setting, preserving whether the flag was
+    /// omitted so configuration layers can supply a value.
     #[arg(long)]
     admin: Option<bool>,
 }
@@ -38,8 +42,10 @@ pub struct AddUserArgs {
 #[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct ListItemsArgs {
+    /// Category used to narrow the listing; omission allows configured defaults.
     #[arg(long)]
     category: Option<String>,
+    /// Whether to include every item, with `None` reserved for layered defaults.
     #[arg(long)]
     all: Option<bool>,
 }
@@ -70,11 +76,14 @@ impl Run for ListItemsArgs {
     }
 }
 
+/// Operations exposed by the example registry command-line interface.
 #[derive(Parser, OrthoConfigSubcommandDocs)]
 #[command(name = "registry-ctl", version = "0.3.0", about = "Manages a registry")]
 #[clap_dispatch(fn run(self, db_url: &str) -> Result<(), String>)]
 enum Commands {
+    /// Create a user after merging command-line values with configuration.
     AddUser(AddUserArgs),
+    /// List items after applying the same per-subcommand configuration flow.
     ListItems(ListItemsArgs),
 }
 
@@ -94,6 +103,12 @@ fn main() -> Result<(), String> {
     final_cmd.run(db_url)
 }
 
+/// Writes the connection notice and command output while holding one stdout lock.
+///
+/// The callback borrows the lock only for the duration of the call, so output
+/// stays serialized without transferring ownership of the process-wide stream.
+/// I/O failures are converted to strings to match the example command's error
+/// type.
 fn with_locked_stdout<F>(db_url: &str, emit: F) -> Result<(), String>
 where
     F: FnOnce(&mut dyn Write) -> Result<(), String>,

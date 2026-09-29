@@ -48,12 +48,20 @@ fn main() -> Result<(), OrthohelpError> {
     run(cli, format_was_explicit)
 }
 
+/// Installs the environment-filtered formatter when no global tracing subscriber exists.
+///
+/// Initialization failure is intentionally non-fatal because another embedding context
+/// may already own the process-wide subscriber.
 fn init_tracing() {
     let _result = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 }
 
+/// Parses `clap` arguments and records whether `--format` came explicitly from the command line.
+///
+/// The explicitness bit lets policy-only mode distinguish its default format from a
+/// caller-requested generation format.
 fn parse_cli() -> Result<(Cli, bool), ClapError> {
     let matches = Cli::command().try_get_matches()?;
     let cli = Cli::from_arg_matches(&matches)?;
@@ -63,6 +71,9 @@ fn parse_cli() -> Result<(Cli, bool), ClapError> {
     Ok((cli, format_was_explicit))
 }
 
+/// Preserves `clap`'s exit code, adding Cargo invocation guidance for dispatch mistakes.
+///
+/// Errors other than unknown arguments and a missing subcommand use `clap`'s own exit path.
 fn exit_for_clap_error(error: &ClapError) -> ! {
     let kind = error.kind();
     let exit_code = error.exit_code();
@@ -76,6 +87,9 @@ fn exit_for_clap_error(error: &ClapError) -> ! {
     error.exit();
 }
 
+/// Writes `clap`'s diagnostic and the Cargo external-subcommand invocation hint to stderr.
+///
+/// A write failure is returned to the caller, which keeps the original Clap exit status.
 fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
     let mut stderr = std::io::stderr().lock();
     write!(stderr, "{error}")?;
@@ -104,6 +118,11 @@ fn run_policy_check_if_requested(
     Ok(!format_was_explicit)
 }
 
+/// Runs policy checking, bridge discovery, localization, and the requested output writers.
+///
+/// An enabled policy-only request may return after its report is written; otherwise the
+/// selected format controls which IR, man-page, and `PowerShell` artefacts are generated.
+/// Failures from each stage propagate as `OrthohelpError` and stop later output work.
 fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let Cli {
         command: CargoSubcommand::Orthohelp(args),
@@ -179,6 +198,7 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     Ok(())
 }
 
+/// Copies the selected package identity and dependency details into bridge-owned config.
 fn build_bridge_config(selection: &PackageSelection) -> BridgeConfig {
     BridgeConfig {
         package_root: selection.package_root.clone(),

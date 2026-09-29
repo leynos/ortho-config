@@ -187,6 +187,7 @@ impl ScanEnvSource for ProcessEnv {
 pub struct MapEnv {
     // `HashMap`: lookups are name-only and nothing iterates the map, so
     // ordering would buy determinism no output consumes at O(log n) cost.
+    /// Owned values keyed by their exact operating-system environment name.
     vars: HashMap<String, OsString>,
 }
 

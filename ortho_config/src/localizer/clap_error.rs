@@ -111,6 +111,10 @@ pub fn localize_clap_error_with_command(
     ClapError::raw(error.kind(), message)
 }
 
+/// Maps `clap` error kinds to the stable `clap-error-<kind>` catalogue namespace.
+///
+/// Common missing-argument and missing-subcommand cases use the established
+/// catalogue keys; remaining kinds derive their suffix from the enum variant.
 fn message_id(kind: ErrorKind) -> String {
     match kind {
         ErrorKind::MissingRequiredArgument => "clap-error-missing-argument".to_owned(),
@@ -122,6 +126,10 @@ fn message_id(kind: ErrorKind) -> String {
     }
 }
 
+/// Copies supported `clap` context into the placeholder keys used by error catalogues.
+///
+/// If `clap` does not supply valid subcommands, command metadata supplies that list
+/// when available; an empty list is omitted so a translation can use its own fallback.
 fn localization_args(
     error: &ClapError,
     command: Option<&ClapCommand>,
@@ -170,6 +178,7 @@ fn localization_args(
     args
 }
 
+/// Adds one non-empty context value, leaving absent and unsupported values out of the map.
 fn insert_context(
     args: &mut LocalizationArgs<'static>,
     key: &'static str,
@@ -185,6 +194,7 @@ fn insert_context(
     args.insert(key, text.into());
 }
 
+/// Converts displayable `clap` context to interpolation text and logs unknown value kinds.
 fn stringify_context(context: &ContextValue) -> String {
     match context {
         ContextValue::Bool(flag) => flag.to_string(),
@@ -204,6 +214,8 @@ fn stringify_context(context: &ContextValue) -> String {
     }
 }
 
+/// Converts `clap`'s `PascalCase` error-kind debug name into a lower-case
+/// catalogue suffix.
 fn to_kebab_case(kind: ErrorKind) -> String {
     let debug = format!("{kind:?}");
     let mut kebab = String::with_capacity(debug.len());

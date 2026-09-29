@@ -30,6 +30,7 @@ pub fn render_about(metadata: &LocalizedDocMetadata, module_name: &str) -> Strin
     output
 }
 
+/// Add the synopsis section only when localized metadata provides its text.
 fn render_synopsis(output: &mut String, metadata: &LocalizedDocMetadata) {
     let Some(synopsis) = metadata.synopsis.as_ref() else {
         return;
@@ -39,6 +40,7 @@ fn render_synopsis(output: &mut String, metadata: &LocalizedDocMetadata) {
     push_line(output, &format!("      {synopsis}"));
 }
 
+/// Render discovery search paths, preserving an explicit empty-state marker.
 fn render_discovery(output: &mut String, discovery: Option<&LocalizedConfigDiscoveryMeta>) {
     let Some(discovery_meta) = discovery else {
         return;
@@ -54,6 +56,7 @@ fn render_discovery(output: &mut String, discovery: Option<&LocalizedConfigDisco
     }
 }
 
+/// Render source precedence in metadata order, then its optional rationale.
 fn render_precedence(output: &mut String, precedence: Option<&LocalizedPrecedenceMeta>) {
     let Some(precedence_meta) = precedence else {
         return;
@@ -69,6 +72,7 @@ fn render_precedence(output: &mut String, precedence: Option<&LocalizedPrecedenc
     }
 }
 
+/// Format one discovery pattern, including a non-empty explanatory note.
 fn format_discovery_path(path: &LocalizedPathPattern) -> String {
     path.note
         .as_deref()
@@ -79,6 +83,7 @@ fn format_discovery_path(path: &LocalizedPathPattern) -> String {
         )
 }
 
+/// Map each configuration source to the label used in the about topic.
 const fn source_label(source: &SourceKind) -> &'static str {
     match source {
         SourceKind::Defaults => "Defaults",

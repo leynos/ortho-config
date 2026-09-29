@@ -33,6 +33,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::sync::LazyLock;
 
+/// Serializes each process environment mutation and its restoration.
 static ENV_MUTEX: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::default);
 
 /// Wrapper around `std::env::set_var`.
@@ -81,7 +82,9 @@ where
 /// RAII guard restoring an environment variable to its prior value on drop.
 #[must_use = "dropping restores the prior value"]
 pub struct EnvVarGuard {
+    /// Variable restored when this guard is dropped.
     key: String,
+    /// Prior value, or `None` when the variable was originally unset.
     original: Option<OsString>,
 }
 
@@ -100,6 +103,7 @@ pub struct EnvVarGuard {
 /// ```
 #[must_use = "dropping releases the environment lock"]
 pub struct EnvVarLock {
+    /// Exclusive process-wide access retained for this lock's lifetime.
     guard: ReentrantMutexGuard<'static, ()>,
 }
 
@@ -151,7 +155,9 @@ impl EnvVarLock {
 /// ```
 #[must_use = "dropping releases the environment lock and restores guards"]
 pub struct EnvScope {
+    /// Keeps environment mutation and guard destruction inside one locked scope.
     _lock: EnvVarLock,
+    /// Restores variables in drop order before `_lock` is released.
     guards: Vec<EnvVarGuard>,
 }
 

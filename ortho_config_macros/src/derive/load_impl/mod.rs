@@ -11,7 +11,9 @@ use syn::Ident;
 use crate::derive::build::DefaultStructInit;
 
 mod cli;
+mod discovery;
 use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
+use discovery::build_file_discovery;
 
 mod source;
 use source::{
@@ -24,17 +26,26 @@ use source::{
     reason = "Field names mirror their purpose for clarity"
 )]
 pub(crate) struct LoadImplIdents<'a> {
+    /// Generated clap-facing type that owns argument parsing and composition.
     pub cli_ident: &'a Ident,
+    /// User configuration type receiving the generated loading methods.
     pub config_ident: &'a Ident,
+    /// Internal type used to materialize field defaults before merging.
     pub defaults_ident: &'a Ident,
 }
 /// Token collections used by the load implementation helpers.
 pub(crate) struct LoadImplTokens<'a> {
+    /// Tokens constructing the provider that reads the configured environment prefix.
     pub env_provider: &'a proc_macro2::TokenStream,
+    /// Field resolutions and initializer expressions for the generated defaults value.
     pub default_struct_init: &'a DefaultStructInit,
+    /// Legacy environment variable name used when discovery settings are absent.
     pub config_env_var: &'a proc_macro2::TokenStream,
+    /// Legacy dotfile name used when discovery settings are absent.
     pub dotfile_name: &'a syn::LitStr,
+    /// Legacy application name used to derive standard discovery locations.
     pub legacy_app_name: String,
+    /// Explicit discovery settings, when the derive input supplied them.
     pub discovery: Option<&'a DiscoveryTokens>,
     /// Runtime source tokens for the source-aware generated entry points.
     pub sources: Option<LoadSourceTokens<'a>>,
@@ -42,161 +53,28 @@ pub(crate) struct LoadImplTokens<'a> {
     pub krate: &'a proc_macro2::TokenStream,
 }
 
+/// Resolved discovery settings embedded into generated `ConfigDiscovery` setup.
 pub(crate) struct DiscoveryTokens {
+    /// Application identity used to select standard platform locations.
     pub app_name: String,
+    /// Environment variable that may point to an explicit configuration file.
     pub env_var: String,
+    /// Optional named configuration file to include in the search.
     pub config_file_name: Option<String>,
+    /// Optional per-user dotfile to include in the search.
     pub dotfile_name: Option<String>,
+    /// Optional project-level file to include in the search.
     pub project_file_name: Option<String>,
 }
 
 /// Convenience wrapper for passing identifiers and tokens together.
 pub(crate) struct LoadImplArgs<'a> {
+    /// Identifiers for generated config, CLI, and defaults types.
     pub idents: LoadImplIdents<'a>,
+    /// Runtime configuration and resolved paths referenced by generated tokens.
     pub tokens: LoadImplTokens<'a>,
+    /// Whether generated CLI parsing exposes an explicit config-path option.
     pub has_config_path: bool,
-}
-
-/// CLI parsing is performed outside the generated method.
-///
-/// Generate the file discovery logic section.
-///
-/// Configuration files are searched in multiple locations as described in the
-/// "Configuration File Discovery" section of the design document. This mirrors
-/// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
-fn to_lit_str(value: Option<&String>) -> Option<syn::LitStr> {
-    value.map(|contents| syn::LitStr::new(contents, proc_macro2::Span::call_site()))
-}
-
-fn build_optional_stmt(
-    lit: Option<syn::LitStr>,
-    method_name: &str,
-) -> Option<proc_macro2::TokenStream> {
-    lit.map(|lit_str| {
-        let method_ident = syn::Ident::new(method_name, proc_macro2::Span::call_site());
-        quote! { builder = builder.#method_ident(#lit_str); }
-    })
-}
-
-fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
-    if has_config_path {
-        quote! {
-            if let Some(ref cli) = cli {
-                if let Some(ref path) = cli.config_path {
-                    builder = builder.add_required_path(path.clone());
-                }
-            }
-        }
-    } else {
-        quote! {}
-    }
-}
-
-/// Generate discovery loading tokens with partitioned error handling.
-///
-/// Creates a code block that builds a `ConfigDiscovery`, loads the first
-/// available configuration file using partitioned error reporting, and
-/// conditionally appends optional discovery errors only when no file loads.
-/// Required-path errors are always appended to the main error collection to
-/// preserve the builder API's guarantees.
-///
-/// This uses `compose_layers()` to preserve each file in an `extends` chain
-/// as a separate layer, enabling declarative merge strategies (such as append
-/// for vectors) to work across the inheritance chain.
-///
-/// # Parameters
-/// - `krate`: Resolved crate path token stream.
-/// - `builder_init`: Tokens initializing the `ConfigDiscovery::builder`.
-/// - `builder_steps`: Sequence of builder method calls (for example
-///   `env_var`, `dotfile_name`).
-/// - `cli_chain`: Tokens adding CLI-provided required paths to the builder.
-fn build_discovery_loading_block(
-    krate: &proc_macro2::TokenStream,
-    builder_init: &proc_macro2::TokenStream,
-    builder_steps: &[proc_macro2::TokenStream],
-    cli_chain: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    quote! {{
-        let mut builder = #builder_init;
-        #(#builder_steps)*
-        #cli_chain
-        let discovery = builder.build();
-        let #krate::discovery::DiscoveryLayersOutcome {
-            value: layers,
-            mut required_errors,
-            mut optional_errors,
-        } = discovery.compose_layers();
-        errors.append(&mut required_errors);
-        if layers.is_empty() {
-            errors.append(&mut optional_errors);
-        }
-        layers
-    }}
-}
-
-fn build_discovery_based_loading(
-    krate: &proc_macro2::TokenStream,
-    discovery: &DiscoveryTokens,
-    has_config_path: bool,
-    source_tokens: Option<&LoadSourceTokens<'_>>,
-) -> proc_macro2::TokenStream {
-    let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
-    let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
-    let config_file_stmt = build_optional_stmt(
-        to_lit_str(discovery.config_file_name.as_ref()),
-        "config_file_name",
-    );
-    let dotfile_stmt =
-        build_optional_stmt(to_lit_str(discovery.dotfile_name.as_ref()), "dotfile_name");
-    let project_stmt = build_optional_stmt(
-        to_lit_str(discovery.project_file_name.as_ref()),
-        "project_file_name",
-    );
-    let cli_chain = build_cli_chain_tokens(has_config_path);
-    let builder_init = quote! { #krate::ConfigDiscovery::builder(#app_name) };
-    let mut builder_steps = vec![quote! { builder = builder.env_var(#env_var); }];
-    if let Some(injected_sources) = source_tokens {
-        let discovery_source = injected_sources.discovery;
-        builder_steps.push(quote! { builder = builder.env_source(#discovery_source); });
-    }
-    if let Some(stmt) = config_file_stmt {
-        builder_steps.push(stmt);
-    }
-    if let Some(stmt) = dotfile_stmt {
-        builder_steps.push(stmt);
-    }
-    if let Some(stmt) = project_stmt {
-        builder_steps.push(stmt);
-    }
-    build_discovery_loading_block(krate, &builder_init, &builder_steps, &cli_chain)
-}
-
-pub(crate) fn build_file_discovery(
-    tokens: &LoadImplTokens<'_>,
-    has_config_path: bool,
-) -> proc_macro2::TokenStream {
-    let krate = tokens.krate;
-    let source_tokens = tokens.sources.as_ref();
-    tokens.discovery.map_or_else(
-        || {
-            let app_name =
-                syn::LitStr::new(&tokens.legacy_app_name, proc_macro2::Span::call_site());
-            let config_env_var = tokens.config_env_var;
-            let dotfile_name = tokens.dotfile_name.clone();
-            let cli_chain = build_cli_chain_tokens(has_config_path);
-            let builder_init = quote! { #krate::ConfigDiscovery::builder(#app_name) };
-            let mut builder_steps = vec![
-                quote! { builder = builder.env_var(#config_env_var); },
-                quote! { builder = builder.dotfile_name(#dotfile_name); },
-            ];
-            if let Some(injected_sources) = source_tokens {
-                let discovery_source = injected_sources.discovery;
-                builder_steps.push(quote! { builder = builder.env_source(#discovery_source); });
-            }
-            build_discovery_loading_block(krate, &builder_init, &builder_steps, &cli_chain)
-        },
-        |discovery| build_discovery_based_loading(krate, discovery, has_config_path, source_tokens),
-    )
 }
 
 /// Build the environment provider setup.
@@ -218,6 +96,11 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
+/// Generate the composition body shared by iterator-based loading methods.
+///
+/// The emitted order is defaults, discovered file layers, environment, then
+/// CLI, so later sources retain their documented higher precedence. Errors
+/// from each conversion are accumulated with the composition result.
 fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplArgs {
         idents,
@@ -277,6 +160,7 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     }
 }
 
+/// Generate config methods that forward composition calls to the clap-facing type.
 fn build_config_impl_delegates(
     krate: &proc_macro2::TokenStream,
     cli_ident: &Ident,

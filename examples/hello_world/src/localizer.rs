@@ -25,7 +25,9 @@ pub const CLI_LONG_ABOUT_MESSAGE_ID: &str = "hello_world.cli.long_about";
 /// Identifier for the usage string presented on `--help`.
 pub const CLI_USAGE_MESSAGE_ID: &str = "hello_world.cli.usage";
 
+/// Embedded default English catalogue, also used for unsupported locales.
 const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
+/// Embedded Japanese catalogue selected for Japanese language identifiers.
 const HELLO_WORLD_JA: &str = include_str!("../locales/ja/messages.ftl");
 
 /// Environment variable names checked for locale preference, in priority order.
@@ -33,7 +35,9 @@ const LOCALE_ENV_VARS: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
 
 /// Localiser that layers the example's Fluent catalogue over the embedded defaults.
 pub struct DemoLocalizer {
+    /// Configured translator when Fluent setup succeeded; absent on fallback.
     inner: Option<FluentLocalizer>,
+    /// Always available fallback that preserves stock Clap messages.
     noop: NoOpLocalizer,
 }
 

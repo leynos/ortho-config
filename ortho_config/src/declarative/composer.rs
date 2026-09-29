@@ -58,6 +58,7 @@ use super::MergeLayer;
 /// ```
 #[derive(Default)]
 pub struct MergeComposer {
+    /// Layers in insertion order; later values retain higher merge precedence.
     layers: Vec<MergeLayer<'static>>,
 }
 
@@ -111,7 +112,10 @@ impl MergeComposer {
 /// Result of composing configuration layers alongside any collected errors.
 #[derive(Debug)]
 pub struct LayerComposition {
+    /// Parsed layers retained even when composition also found recoverable
+    /// input errors, so the final result can report both sources of failure.
     layers: Vec<MergeLayer<'static>>,
+    /// Errors gathered before the merge callback is invoked.
     errors: Vec<Arc<OrthoError>>,
 }
 
@@ -142,6 +146,8 @@ impl LayerComposition {
         !self.errors.is_empty()
     }
 
+    /// Returns a lone error directly and combines multiple failures into the
+    /// aggregate shape used by generated loading paths.
     fn errors_to_result<T>(mut errors: Vec<Arc<OrthoError>>) -> OrthoResult<T> {
         if errors.len() == 1 {
             Err(errors.remove(0))

@@ -121,6 +121,8 @@ pub trait IntoFigmentError {
     fn into_figment(self) -> figment::Error;
 }
 
+/// Reconstructs a cloneable Figment error from shared ownership, preserving
+/// structured details for merge and gathering failures when available.
 fn clone_figment(shared: &Arc<OrthoError>) -> figment::Error {
     match shared.as_ref() {
         OrthoError::Merge { source } | OrthoError::Gathering(source) => source.as_ref().clone(),
