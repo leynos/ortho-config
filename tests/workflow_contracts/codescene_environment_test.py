@@ -178,6 +178,7 @@ def test_a_called_workflow_is_read_too(
         "issue_comment:",
         "status:",
         "check_suite:",
+        "check_run:",
         "push:\n    branches: [wip]",
         "push:",
     ],
