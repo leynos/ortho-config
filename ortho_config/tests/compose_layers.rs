@@ -2,9 +2,13 @@
 //! discovery-level coverage of `ConfigDiscovery::compose_layers`.
 
 use anyhow::Result;
-use ortho_config::{MergeLayer, MergeProvenance, OrthoConfig, ResultIntoFigment};
+use ortho_config::{
+    MapEnv, MergeLayer, MergeProvenance, OrthoConfig, ResultIntoFigment, SharedEnvSource,
+    SharedScanEnvSource,
+};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 mod discovery_compose_layers {
     //! `ConfigDiscovery::compose_layers` pinned at its own API.
@@ -153,6 +157,12 @@ struct BuilderConfig {
     port: u16,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize, OrthoConfig, PartialEq)]
+#[ortho_config(prefix = "SOURCE_AWARE_")]
+struct SourceAwareConfig {
+    port: u16,
+}
+
 #[rstest]
 fn compose_layers_collects_cli_env_and_file() -> Result<()> {
     figment::Jail::try_with(|jail| {
@@ -191,6 +201,64 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
         if file_layer.as_deref() != Some(".app.toml") {
             return Err(figment::Error::from("unexpected file layer"));
         }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Exercise generated source-aware composition through its merged config value.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions expose the composition contract failures directly"
+)]
+#[rstest]
+fn source_aware_composition_uses_distinct_discovery_and_merge_sources() -> Result<()> {
+    figment::Jail::try_with(|jail| {
+        // The jail supplies an empty default project root; the injected XDG
+        // value also prevents discovery from reaching the host's /etc/xdg.
+        jail.clear_env();
+        jail.create_file("selected.toml", "port = 3030")?;
+
+        let discovery_source: SharedEnvSource = Arc::new(
+            MapEnv::new()
+                .with_var("SOURCE_AWARE_CONFIG_PATH", "selected.toml")
+                .with_var("XDG_CONFIG_DIRS", "/nonexistent/ortho-config-test-xdg"),
+        );
+        let merge_source: SharedScanEnvSource =
+            Arc::new(MapEnv::new().with_var("SOURCE_AWARE_PORT", "9000"));
+
+        let composition = SourceAwareConfig::compose_layers_from_iter_with_sources(
+            ["source-aware"],
+            discovery_source,
+            merge_source,
+        );
+        let (layers, errors) = composition.into_parts();
+        assert!(errors.is_empty(), "composition errors: {errors:?}");
+
+        let file_layer_count = layers
+            .iter()
+            .filter(|layer| layer.provenance() == MergeProvenance::File)
+            .count();
+        assert_eq!(
+            file_layer_count, 1,
+            "the explicit selector should be the only file layer"
+        );
+        let selected_file = layers
+            .iter()
+            .find(|layer| layer.provenance() == MergeProvenance::File)
+            .and_then(|layer| layer.path())
+            .and_then(|path| path.file_name());
+        assert_eq!(
+            selected_file,
+            Some("selected.toml"),
+            "discovery should select the injected file"
+        );
+
+        let merged = SourceAwareConfig::merge_from_layers(layers).to_figment()?;
+        assert_eq!(
+            merged.port, 9000,
+            "the distinct merge source should override the file value"
+        );
         Ok(())
     })?;
     Ok(())

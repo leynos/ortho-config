@@ -736,6 +736,22 @@ variables for tests.
 - The process-backed loaders are the legacy/default wrappers. They route their
   lookups through `ProcessEnv`, whose `get` is the crate's only
   `std::env::var_os` call.
+- `GlobalConfigSources` is the `hello_world` application's narrow composition
+  context. Its global and greeting-default loaders pass lookup and scan sources
+  to the appropriate boundaries. Greeting-default loading also requires an
+  explicit file base for `SubcommandFileContext`, so its source-aware path does
+  not inspect the process working directory. It supplies clap match metadata
+  with no explicit options so a clap default does not override an injected file
+  or environment value. The existing no-argument loaders remain process-backed.
+  File-only greeting overrides take a lookup source without acquiring the scan
+  capability. This context belongs only at the example's configuration-loading
+  call sites, not in command construction.
+- Example tests may pass a `ConfigDiscovery` with explicit project roots to the
+  crate-private override loader. Source injection alone does not disable
+  project-root or current-directory candidates. Tests needing no ambient
+  candidates must configure the discovery builder and set `XDG_CONFIG_DIRS` to
+  a fixture directory when applicable, since an unset value selects the
+  platform's system fallback.
 - It is **not** a general environment service. Adding readers elsewhere in the
   crate requires a decision about scope, not a call site.
 - Subcommand file loading may use `SubcommandFileContext` for named lookup of

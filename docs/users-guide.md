@@ -333,6 +333,45 @@ fn main() -> OrthoResult<()> {
 The example prints `port=9000`. No process variable is read: the discovery
 source handles named lookups, while the scan source supplies the merge layer.
 
+When layer composition is needed without deserializing a configuration,
+`OrthoConfig` also generates `compose_layers_from_iter_with_sources`. It takes
+the command-line iterator, a `SharedEnvSource` for named discovery lookups, and
+a separate `SharedScanEnvSource` for enumerating merge variables. For example:
+
+<!-- tested-example: guide-compose-layers-with-sources -->
+```rust
+use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
+use serde::Deserialize;
+use std::sync::Arc;
+
+#[derive(Debug, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_")]
+struct Config {
+    #[serde(default)]
+    port: u16,
+}
+
+fn main() {
+    let environment = Arc::new(
+        MapEnv::new()
+            .with_var("ACME_CONFIG_PATH", "/srv/acme.toml")
+            .with_var("ACME_PORT", "9000"),
+    );
+    let discovery: SharedEnvSource = environment.clone();
+    let merge: SharedScanEnvSource = environment;
+
+    let _composition = Config::compose_layers_from_iter_with_sources(
+        ["acme"], discovery, merge,
+    );
+    println!("composition=ready");
+}
+```
+
+This method composes layers only; `load_from_iter_with_sources` additionally
+deserializes them into the configuration type. The ordinary
+`compose_layers_from_iter`, `compose_layers`, and loading methods remain
+process-backed by default.
+
 ## Give each subcommand its own settings
 
 Many CLIs have global options plus commands with different configuration. Derive
