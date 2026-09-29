@@ -2,11 +2,11 @@
 
 ## Who should read this
 
-Read this guide when adopting source-aware environment merging, parser-faithful
-clap string defaults, or the Cargo external-subcommand helper. Existing callers
-can upgrade without changing their loading code: process-backed behaviour
-remains the default, and applications that do not use the Cargo helper require
-no changes.
+Read this guide when adopting source-aware environment merging and layer
+composition, parser-faithful clap string defaults, or the Cargo
+external-subcommand helper. Existing callers can upgrade without changing their
+loading code: process-backed behaviour remains the default, and applications
+that do not use the Cargo helper require no changes.
 
 ## Adopt the opt-in agent-native policy check
 
@@ -47,6 +47,15 @@ The discovery source performs named lookups. The separate scan source gives the
 merge layer permission to enumerate the supplied variables. This separation
 preserves the `EnvSource` safety boundary while allowing a complete
 configuration resolution without process mutation.
+
+## Compose layers from injected sources
+
+`Config::compose_layers_from_iter_with_sources` accepts separate
+`SharedEnvSource` and `SharedScanEnvSource` arguments for discovery lookups and
+merge-variable scanning. It returns the composed layers without deserializing a
+configuration. Use `load_from_iter_with_sources` when the resolved
+configuration value is required. Existing composition entry points remain
+process-backed.
 
 ## Review `CsvEnv` transforms
 
