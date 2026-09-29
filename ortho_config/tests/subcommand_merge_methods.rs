@@ -7,118 +7,65 @@
 //! `#[ortho_config(cli_default_as_absent)]` must stay absent when clap only
 //! supplied its own default.
 //!
-//! The methods resolve configuration files relative to the working directory,
-//! so each case enters a temporary directory of its own instead of depending on
-//! the ambient one. No case mutates the process environment.
+//! The methods are process-backed: they resolve configuration files through
+//! `ProcessEnv` and the working directory, neither of which a caller can
+//! inject, so isolation has to be arranged around them rather than supplied to
+//! them. Each case enters a temporary directory of its own *and* points every
+//! environment rung discovery consults into an empty temporary tree.
+//!
+//! Working-directory isolation alone would not be enough. `collect_unix_paths`
+//! and `collect_non_unix_paths` push the home and platform candidates *before*
+//! the local ones, so a developer's own `~/.vk.toml` or
+//! `~/.config/vk/config.toml` would otherwise be merged into the result.
+//!
+//! The structs, sentinels, and fixtures live in
+//! `support/subcommand_merge_support.rs`, which keeps this file within the
+//! repository's module-size limit without trimming coverage to get there.
 
 use anyhow::{Context, Result, ensure};
-use cap_std::{ambient_authority, fs::Dir};
-use clap::{CommandFactory, FromArgMatches, Parser};
-use ortho_config::{MapEnv, OrthoConfig, SharedScanEnvSource, SubcmdConfigMerge};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tempfile::TempDir;
+use clap::{CommandFactory, FromArgMatches};
+use ortho_config::SubcmdConfigMerge;
+use rstest::rstest;
 use test_helpers::cwd;
 
-/// Subcommand used by the plain injected-source cases.
-#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
-#[command(name = "pr")]
-#[ortho_config(prefix = "VK_")]
-struct PrArgs {
-    #[arg(long)]
-    reference: Option<String>,
-}
+#[path = "support/subcommand_merge_support.rs"]
+mod support;
 
-/// Subcommand whose clap default must not reach the merge unless the user
-/// supplies the value explicitly.
-#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
-#[command(name = "issue")]
-#[ortho_config(prefix = "VK_")]
-struct IssueArgs {
-    /// The explicit default deliberately differs from the clap default, so a
-    /// leaked clap default is observable in the merged result.
-    #[arg(long, default_value = "2")]
-    #[ortho_config(default = 5, cli_default_as_absent)]
-    retries: u32,
-}
+use support::{
+    CLAP_DEFAULT_RETRIES, CLI_REFERENCE, CLI_RETRIES, ConfigDir, FILE_RETRIES, INJECTED_REFERENCE,
+    INJECTED_RETRIES, ISSUE_RETRIES_KEY, IsolatedEnv, IssueArgs, PR_REFERENCE_KEY, PrArgs,
+    STRUCT_DEFAULT_RETRIES, empty_dir, ensure_key_is_unset, isolated_env, issue_dir, pr_dir,
+    scan_source,
+};
 
-impl Default for IssueArgs {
-    /// Mirrors the `#[ortho_config(default = ...)]` value, not clap's.
-    fn default() -> Self {
-        Self { retries: 5 }
-    }
-}
-
-/// Environment key holding the injected reference for [`PrArgs`].
-const PR_REFERENCE_KEY: &str = "VK_CMDS_PR_REFERENCE";
-/// Injected environment value for `PR_REFERENCE_KEY`.
-const INJECTED_REFERENCE: &str = "injected_ref";
-/// File value written to the `[cmds.pr] reference` key.
-const FILE_REFERENCE: &str = "file_ref";
-/// Explicit CLI value passed as `--reference`.
-const CLI_REFERENCE: &str = "cli_ref";
-
-/// Environment key holding the injected retry count for [`IssueArgs`].
-const ISSUE_RETRIES_KEY: &str = "VK_CMDS_ISSUE_RETRIES";
-/// Injected environment value for `ISSUE_RETRIES_KEY`.
-const INJECTED_RETRIES: u32 = 7;
-/// File value written to the `[cmds.issue] retries` key.
-const FILE_RETRIES: u32 = 4;
-/// Explicit CLI value passed as `--retries`.
-const CLI_RETRIES: u32 = 9;
-/// What clap's own `default_value` supplies, which must stay absent.
-const CLAP_DEFAULT_RETRIES: u32 = 2;
-/// What the explicit `#[ortho_config(default = ...)]` supplies.
-const STRUCT_DEFAULT_RETRIES: u32 = 5;
-
-/// Builds a scan source whose only variable is `key = value`.
-fn scan_source(key: &str, value: impl std::fmt::Display) -> SharedScanEnvSource {
-    Arc::new(MapEnv::new().with_var(key, value.to_string()))
-}
-
-/// Fails when `key` is visible in the process environment.
+/// Discovery resolves the home and XDG rungs through the process environment
+/// rather than the working directory, so entering a temporary directory does
+/// not close them.
 ///
-/// An exported variable reaches every merge through the process-backed
-/// environment layer, so it can supply an expected value whether or not the
-/// source under test contributes anything. Requiring the key to be unset keeps
-/// each case decisive.
-fn ensure_key_is_unset(key: &str) -> Result<()> {
+/// This pins the invariant [`isolated_env`] exists to maintain. Were the
+/// fixture ever reduced to a working-directory change, every other case in this
+/// module would once again merge a developer's own `~/.vk.toml` or
+/// `~/.config/vk/config.toml`, and nothing else here would catch that: the suite
+/// still passes on a host that has neither file.
+#[rstest]
+fn isolated_env_excludes_the_ambient_home(isolated_env: Result<IsolatedEnv>) -> Result<()> {
+    let _isolated = isolated_env?;
+    ensure_key_is_unset(PR_REFERENCE_KEY)?;
+    let bare = tempfile::tempdir().context("create bare working directory")?;
+    let _guard = cwd::set_dir(bare.path()).context("enter bare working directory")?;
+
+    // Nothing but the process environment is configured, and the fixture has
+    // emptied it of every rung discovery consults.
+    let merged = PrArgs::default()
+        .load_and_merge()
+        .context("merge against the isolated environment")?;
+
     ensure!(
-        std::env::var_os(key).is_none(),
-        "{key} must be unset for this case to be meaningful"
+        merged.reference.is_none(),
+        "an ambient home or XDG file reached the merge: {:?}",
+        merged.reference
     );
     Ok(())
-}
-
-/// Writes `cfg` to `.vk.toml` inside a fresh temporary directory.
-fn config_dir(cfg: &str) -> Result<TempDir> {
-    let dir = tempfile::tempdir().context("create temp dir")?;
-    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
-    cap.write(".vk.toml", cfg.as_bytes())
-        .context("write config")?;
-    Ok(dir)
-}
-
-/// Writes `cfg` to `.vk.toml` and enters the directory holding it.
-fn config_dir_with_cwd(cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
-    let dir = config_dir(cfg)?;
-    let guard = cwd::set_dir(dir.path()).context("enter temp config dir")?;
-    Ok((dir, guard))
-}
-
-/// Enters a fresh temporary directory holding no subcommand configuration.
-fn empty_dir_with_cwd() -> Result<(TempDir, cwd::CwdGuard)> {
-    config_dir_with_cwd("")
-}
-
-/// Enters a temporary directory whose only file supplies `FILE_REFERENCE`.
-fn pr_config_dir() -> Result<(TempDir, cwd::CwdGuard)> {
-    config_dir_with_cwd(&format!("[cmds.pr]\nreference = \"{FILE_REFERENCE}\"\n"))
-}
-
-/// Enters a temporary directory whose only file supplies `FILE_RETRIES`.
-fn issue_config_dir() -> Result<(TempDir, cwd::CwdGuard)> {
-    config_dir_with_cwd(&format!("[cmds.issue]\nretries = {FILE_RETRIES}\n"))
 }
 
 /// `SubcmdConfigMerge::load_and_merge_with_sources` merges the supplied scan
@@ -129,10 +76,14 @@ fn issue_config_dir() -> Result<(TempDir, cwd::CwdGuard)> {
 /// precondition keeps the case non-vacuous: a `PR_REFERENCE_KEY` exported into
 /// the process environment could otherwise satisfy the assertion without the
 /// injected source being read at all.
-#[test]
-fn sources_method_prefers_the_injected_environment_over_the_file() -> Result<()> {
+#[rstest]
+fn sources_method_prefers_the_injected_environment_over_the_file(
+    isolated_env: Result<IsolatedEnv>,
+    pr_dir: Result<ConfigDir>,
+) -> Result<()> {
+    let _isolated = isolated_env?;
+    let _dir = pr_dir?;
     ensure_key_is_unset(PR_REFERENCE_KEY)?;
-    let (_dir, _cwd_guard) = pr_config_dir()?;
     let source = scan_source(PR_REFERENCE_KEY, INJECTED_REFERENCE);
 
     let cli = PrArgs::default();
@@ -153,9 +104,13 @@ fn sources_method_prefers_the_injected_environment_over_the_file() -> Result<()>
 ///
 /// Catches a forwarding that omits the CLI overlay, which would leave
 /// `INJECTED_REFERENCE` in place instead of `CLI_REFERENCE`.
-#[test]
-fn sources_method_keeps_cli_values_above_the_injected_environment() -> Result<()> {
-    let (_dir, _cwd_guard) = pr_config_dir()?;
+#[rstest]
+fn sources_method_keeps_cli_values_above_the_injected_environment(
+    isolated_env: Result<IsolatedEnv>,
+    pr_dir: Result<ConfigDir>,
+) -> Result<()> {
+    let _isolated = isolated_env?;
+    let _dir = pr_dir?;
     let source = scan_source(PR_REFERENCE_KEY, INJECTED_REFERENCE);
     let matches = PrArgs::command().get_matches_from(["pr", "--reference", CLI_REFERENCE]);
     let cli = PrArgs::from_arg_matches(&matches).context("parse explicit values")?;
@@ -178,10 +133,14 @@ fn sources_method_keeps_cli_values_above_the_injected_environment() -> Result<()
 /// Catches a forwarding that ignores `matches` and serialises the parsed values
 /// wholesale, which would leak `CLAP_DEFAULT_RETRIES` over the explicit default
 /// of `STRUCT_DEFAULT_RETRIES`.
-#[test]
-fn matches_method_keeps_clap_defaults_absent() -> Result<()> {
+#[rstest]
+fn matches_method_keeps_clap_defaults_absent(
+    isolated_env: Result<IsolatedEnv>,
+    empty_dir: Result<ConfigDir>,
+) -> Result<()> {
+    let _isolated = isolated_env?;
+    let _dir = empty_dir?;
     ensure_key_is_unset(ISSUE_RETRIES_KEY)?;
-    let (_dir, _cwd_guard) = empty_dir_with_cwd()?;
     let matches = IssueArgs::command().get_matches_from(["issue"]);
     let args = IssueArgs::from_arg_matches(&matches).context("parse clap defaults")?;
 
@@ -203,9 +162,13 @@ fn matches_method_keeps_clap_defaults_absent() -> Result<()> {
 /// Catches a forwarding that drops the parsed CLI values or substitutes the
 /// struct default, either of which would leave `STRUCT_DEFAULT_RETRIES` instead
 /// of `CLI_RETRIES`.
-#[test]
-fn matches_method_honours_explicit_cli_values() -> Result<()> {
-    let (_dir, _cwd_guard) = empty_dir_with_cwd()?;
+#[rstest]
+fn matches_method_honours_explicit_cli_values(
+    isolated_env: Result<IsolatedEnv>,
+    empty_dir: Result<ConfigDir>,
+) -> Result<()> {
+    let _isolated = isolated_env?;
+    let _dir = empty_dir?;
     let retries = CLI_RETRIES.to_string();
     let matches = IssueArgs::command().get_matches_from(["issue", "--retries", retries.as_str()]);
     let args = IssueArgs::from_arg_matches(&matches).context("parse explicit values")?;
@@ -228,10 +191,14 @@ fn matches_method_honours_explicit_cli_values() -> Result<()> {
 /// Catches a forwarding that ignores `matches`, which would leak
 /// `CLAP_DEFAULT_RETRIES` over the staged `FILE_RETRIES`; reaching the file at
 /// all also shows that file discovery still runs.
-#[test]
-fn matches_method_prefers_the_file_over_absent_clap_defaults() -> Result<()> {
+#[rstest]
+fn matches_method_prefers_the_file_over_absent_clap_defaults(
+    isolated_env: Result<IsolatedEnv>,
+    issue_dir: Result<ConfigDir>,
+) -> Result<()> {
+    let _isolated = isolated_env?;
+    let _dir = issue_dir?;
     ensure_key_is_unset(ISSUE_RETRIES_KEY)?;
-    let (_dir, _cwd_guard) = issue_config_dir()?;
     let matches = IssueArgs::command().get_matches_from(["issue"]);
     let args = IssueArgs::from_arg_matches(&matches).context("parse clap defaults")?;
 
@@ -248,28 +215,32 @@ fn matches_method_prefers_the_file_over_absent_clap_defaults() -> Result<()> {
 }
 
 /// `SubcmdConfigMerge::load_and_merge_with_matches_with_sources` merges the
-/// supplied scan source beneath absent clap defaults.
+/// supplied scan source above the file and beneath absent clap defaults.
 ///
 /// Catches a forwarding that drops the supplied source, which would leave
-/// either `STRUCT_DEFAULT_RETRIES` or `CLAP_DEFAULT_RETRIES` in place instead
-/// of `INJECTED_RETRIES`. Requiring the key to be unset in the process
-/// environment also shows the value came from the injected source rather than
-/// from the live environment.
-#[test]
-fn matches_with_sources_method_reads_the_injected_environment() -> Result<()> {
+/// `FILE_RETRIES` in place instead of `INJECTED_RETRIES`. Staging a distinct
+/// file value also catches a precedence inversion that would let the file win,
+/// and requiring the key to be unset in the process environment shows the value
+/// came from the injected source rather than from the live environment.
+#[rstest]
+fn matches_with_sources_method_reads_the_injected_environment(
+    isolated_env: Result<IsolatedEnv>,
+    issue_dir: Result<ConfigDir>,
+) -> Result<()> {
+    let _isolated = isolated_env?;
+    let _dir = issue_dir?;
     ensure_key_is_unset(ISSUE_RETRIES_KEY)?;
-    let (_dir, _cwd_guard) = empty_dir_with_cwd()?;
     let matches = IssueArgs::command().get_matches_from(["issue"]);
     let args = IssueArgs::from_arg_matches(&matches).context("parse clap defaults")?;
     let source = scan_source(ISSUE_RETRIES_KEY, INJECTED_RETRIES);
 
     let merged = args
         .load_and_merge_with_matches_with_sources(&matches, source)
-        .context("merge the injected source beneath clap defaults")?;
+        .context("merge the injected source above the file")?;
 
     ensure!(
         merged.retries == INJECTED_RETRIES,
-        "expected the injected {INJECTED_RETRIES}, got {}",
+        "expected the injected {INJECTED_RETRIES} above the file value {FILE_RETRIES}, got {}",
         merged.retries
     );
     Ok(())
@@ -280,9 +251,13 @@ fn matches_with_sources_method_reads_the_injected_environment() -> Result<()> {
 ///
 /// Catches a forwarding that applies the environment layer last, which would
 /// leave `INJECTED_RETRIES` instead of `CLI_RETRIES`.
-#[test]
-fn matches_with_sources_method_keeps_cli_values_above_the_source() -> Result<()> {
-    let (_dir, _cwd_guard) = empty_dir_with_cwd()?;
+#[rstest]
+fn matches_with_sources_method_keeps_cli_values_above_the_source(
+    isolated_env: Result<IsolatedEnv>,
+    empty_dir: Result<ConfigDir>,
+) -> Result<()> {
+    let _isolated = isolated_env?;
+    let _dir = empty_dir?;
     let retries = CLI_RETRIES.to_string();
     let matches = IssueArgs::command().get_matches_from(["issue", "--retries", retries.as_str()]);
     let args = IssueArgs::from_arg_matches(&matches).context("parse explicit values")?;

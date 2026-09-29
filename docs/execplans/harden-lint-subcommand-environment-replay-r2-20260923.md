@@ -513,3 +513,63 @@ time out on it, the remedy is to add the binary to the override *and* update
 `TRYBUILD_BINARIES` in
 `tests/workflow_contracts/windows_trybuild_isolation_test.py` in the same
 change.
+
+### Fourth round: review findings on the follow-up pull request
+
+The standalone pull request that carries this work was reviewed in its turn and
+raised four findings. All four were verified against the code before any
+repair; three were valid and one was advisory.
+
+- **Ambient environment reaches the process-backed methods.** The behavioural
+  suite entered a temporary directory but left every other discovery rung
+  alone. That is not sufficient, and the gap was real rather than theoretical:
+  `collect_unix_paths` and `collect_non_unix_paths` append the home and
+  platform candidates *before* the local ones, and `ProcessEnv::home_fallback`
+  reaches the real user database through `dirs::home_dir` when `HOME` is unset.
+  The review host has `~/.config/vk/config.toml`, so an ambient file would have
+  been merged into the expected results. Demonstrated by execution: the
+  pre-repair suite run with `HOME` and the XDG variables pointed at a tree
+  holding `[cmds.issue] retries = 99` fails with
+  `expected 5, not the clap default 2: 99`.
+  - The methods hard-code `ProcessEnv` and the working directory, so the ambient
+    environment cannot be injected away; AGENTS.md admits environment mutation
+    only through the shared guards, which is what the new `isolated_env` fixture
+    uses. It sets `HOME` rather than clearing it, because `dirs::home_dir`
+    honours the variable when present and falls back to `passwd` when absent —
+    clearing it would have left the rung open. `USERPROFILE`, `XDG_CONFIG_HOME`,
+    `XDG_CONFIG_DIRS` and `APPDATA` are pointed at the same empty tree, closing
+    the Unix and Windows rungs alike. The lock order is env then cwd, matching
+    `discovery_attributes.rs`.
+  - `isolated_env_excludes_the_ambient_home` pins the invariant, because the
+    other
+    cases cannot: they pass on a host with no ambient file. Its teeth were
+    confirmed by mutation — reducing the fixture to a no-op makes it fail with
+    `an ambient home or XDG file reached the merge: Some("poisoned_home")`.
+- **Directory setup should be `rstest` fixtures.** Valid, and required by
+  AGENTS.md. `staged_dir` now backs `empty_dir`, `pr_dir` and `issue_dir`
+  fixtures consumed as `Result<ConfigDir>`, following the `isolated_root`
+  precedent in the sibling `subcommand/fixtures.rs`. This also removes the
+  duplication a structural metric had flagged, since the three staged cases no
+  longer repeat their own setup.
+- **A distinct file value in the injected-source case.** Valid. The
+  `matches_with_sources` case staged an empty directory, so it could not
+  observe a file-over-injected inversion; it now stages `issue_dir`, putting
+  `FILE_RETRIES` (4) beneath `INJECTED_RETRIES` (7) and asserting the injected
+  value wins.
+- **Structural duplication at the module level.** Advisory only — CodeScene is
+  not a required check on this repository — and subsumed by the fixture change
+  above.
+- **Module size, found while repairing the above.** AGENTS.md caps any code file
+  at 400 lines, and the repairs had carried the suite to 422 — the longest file
+  in the tree. The scaffolding moved to
+  `ortho_config/tests/support/subcommand_merge_support.rs`, reached through
+  `#[path]` in the established `tests/support/` style, leaving the suite at 276
+  and the support file at 196. Coverage was not trimmed to fit: the only change
+  to the cases is that the directory fixtures are now named by an import rather
+  than defined in the same file, and `subcommand/prefix.rs` already shows that
+  an imported `rstest` fixture resolves by name.
+
+Both suites were re-run after the repairs: `8 passed; 0 failed` for the
+behavioural suite (seven cases plus the isolation guard) and
+`1 passed; 0 failed` for the trybuild suite, with the committed `.stderr` still
+byte-identical at `bb6a1467` and no `wip/` regenerated.
