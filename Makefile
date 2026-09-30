@@ -27,7 +27,7 @@ CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
 # Single source of truth for the spelling gate. The builder pins the typos
 # binary and owns the shared dictionary, so CI consumes it through the
 # spellcheck target and the Makefile and CI cannot drift apart.
-TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.1
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --from \
 	"git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
