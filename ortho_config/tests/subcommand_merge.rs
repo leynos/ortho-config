@@ -1,7 +1,11 @@
 //! Tests subcommand configuration precedence (defaults < file < env < CLI) for pr and issue.
+
+#[path = "support/isolated_discovery.rs"]
+mod isolated_discovery;
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
+use isolated_discovery::isolated_discovery;
 use ortho_config::{
     MapEnv, OrthoConfig, SubcommandFileContext, load_and_merge_subcommand_for_with_sources_at,
 };
@@ -53,6 +57,7 @@ struct IssuePrecedenceCase {
     expected_reference: Option<&'static str>,
 }
 
+/// Confirms pull-request precedence across CLI, environment, file, and defaults.
 #[rstest]
 #[case::env_over_file(
     PrPrecedenceCase {
@@ -88,7 +93,7 @@ fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
     });
     let merged = load_and_merge_subcommand_for_with_sources_at(
         &case.cli,
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &isolated_discovery(temp_dir.path())),
         Arc::new(source),
     )
     .context("merge pr args")?;
@@ -107,6 +112,7 @@ fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
     Ok(())
 }
 
+/// Confirms issue precedence across CLI, environment, file, and defaults.
 #[rstest]
 #[case::env_over_file(
     IssuePrecedenceCase {
@@ -139,7 +145,7 @@ fn test_issue_precedence(#[case] case: IssuePrecedenceCase) -> Result<()> {
     });
     let merged = load_and_merge_subcommand_for_with_sources_at(
         &case.cli,
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &isolated_discovery(temp_dir.path())),
         Arc::new(source),
     )
     .context("merge issue args")?;

@@ -34,6 +34,7 @@ fn cli_ref_id() -> RequiredCli {
     }
 }
 
+/// Confirms parsed CLI values merge when no file or environment value exists.
 #[rstest]
 fn cli_only_values_are_accepted(
     cli_ref_id: RequiredCli,
@@ -92,6 +93,7 @@ fn conflicting_values_cli_takes_precedence(
     Ok(())
 }
 
+/// Confirms an injected environment value fills a missing optional CLI value.
 #[rstest]
 fn env_value_used_when_cli_missing(isolated_root: Result<IsolatedRoot>) -> Result<()> {
     let isolated = isolated_root?;

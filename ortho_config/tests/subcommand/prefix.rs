@@ -19,6 +19,7 @@ struct PrefixedCfg {
     foo: Option<String>,
 }
 
+/// Confirms the configured struct prefix is used by the wrapper loader.
 #[rstest]
 fn wrapper_uses_struct_prefix(isolated_root: Result<IsolatedRoot>) -> Result<()> {
     let isolated = isolated_root?;

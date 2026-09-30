@@ -3,6 +3,8 @@
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
+#[cfg(any(unix, target_os = "redox"))]
+use ortho_config::OrthoError;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_with_sources_at};
 use serde::{Deserialize, Serialize};
@@ -159,6 +161,44 @@ fn loads_from_xdg_config() -> Result<()> {
         cfg.foo.as_deref() == Some("xdg"),
         "expected xdg, got {:?}",
         cfg.foo
+    );
+    Ok(())
+}
+
+/// The public loader returns non-missing XDG metadata failures with their path.
+#[cfg(any(unix, target_os = "redox"))]
+#[test]
+fn xdg_metadata_error_reaches_public_subcommand_loader() -> Result<()> {
+    let root = tempfile::tempdir().context("create XDG error fixture")?;
+    write_config(root.path(), Path::new("not-a-directory"), "")?;
+    let not_a_directory = root.path().join("not-a-directory");
+    let candidate = not_a_directory.join("app/config.toml");
+    let discovery = close_discovery(root.path()).with_var("XDG_CONFIG_HOME", &not_a_directory);
+
+    let error = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
+        &CmdCfg::default(),
+        SubcommandFileContext::new(root.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .expect_err("a failed XDG metadata probe must reach the public loader");
+    let OrthoError::File {
+        path,
+        source: error_source,
+    } = error.as_ref()
+    else {
+        anyhow::bail!("expected a file error, got {error:?}");
+    };
+    ensure!(
+        path == &candidate,
+        "reported candidate path differs: {path:?}"
+    );
+    let io_error = error_source
+        .downcast_ref::<std::io::Error>()
+        .context("metadata error source was not an I/O error")?;
+    ensure!(
+        io_error.kind() != std::io::ErrorKind::NotFound,
+        "a non-directory parent must not be treated as a missing candidate"
     );
     Ok(())
 }

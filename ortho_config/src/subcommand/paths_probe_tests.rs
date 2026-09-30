@@ -39,6 +39,38 @@ fn first_existing_xdg_candidate_skips_missing_bases() -> Result<()> {
     Ok(())
 }
 
+/// A non-directory XDG root preserves its candidate path and I/O error.
+#[test]
+fn xdg_candidate_metadata_errors_are_returned() -> Result<()> {
+    let root = TempDir::new().context("create root")?;
+    let not_a_directory = root.path().join("not-a-directory");
+    std::fs::write(&not_a_directory, "").context("write non-directory XDG root")?;
+    let candidate = not_a_directory.join("app/config.toml");
+    let expected = std::fs::metadata(&candidate).expect_err("file parent must reject child path");
+    let source = MapEnv::new().with_var("XDG_CONFIG_HOME", &not_a_directory);
+
+    let error = candidate_paths_at(&Prefix::new("app"), root.path(), &source)
+        .expect_err("metadata failure must not be treated as absence");
+    let OrthoError::File {
+        path,
+        source: error_source,
+    } = error.as_ref()
+    else {
+        anyhow::bail!("expected a file error, got {error:?}");
+    };
+    ensure!(path == &candidate, "reported path differs: {path:?}");
+    let actual = error_source
+        .downcast_ref::<std::io::Error>()
+        .context("metadata error source was not an I/O error")?;
+    ensure!(
+        actual.kind() == expected.kind(),
+        "metadata error kind differs: {:?} != {:?}",
+        actual.kind(),
+        expected.kind()
+    );
+    Ok(())
+}
+
 /// A candidate under an unsearchable directory fails loading instead of being
 /// skipped.
 ///

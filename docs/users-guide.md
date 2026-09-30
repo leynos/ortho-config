@@ -446,18 +446,40 @@ own environment should decide which configuration files are found and which
 variables are merged: they take their named lookups from the live process
 environment and use the current directory as the local base.
 
-Use `SubcommandFileContext` with the `_with_sources_at` loaders when the search
-inputs must be supplied rather than inherited. A context pairs an explicit
-local base path with a lookup-only `EnvSource`; the source answers named
-lookups for `HOME`, `USERPROFILE` (non-Unix), `XDG_CONFIG_HOME`, and
-`XDG_CONFIG_DIRS`, and on non-Unix targets it may also supply the native
-platform configuration directory. On Unix and Redox, candidates are tried in
-the order `HOME` dotfiles, the XDG bases (the configured `XDG_CONFIG_HOME`, else
-`$HOME/.config` or the platform home fallback, then each absolute
-`XDG_CONFIG_DIRS` entry), and finally the explicit base. Only the first existing
-`config.<ext>` per extension is kept from the XDG bases. The merge source is
-separate: `SharedScanEnvSource` enumerates the environment layer, while the
-`EnvSource` inside the context only performs lookups.
+Use `SubcommandFileContext::new(base, discovery)` with a source-aware `_at`
+loader when the search inputs must be supplied rather than inherited. The
+context pairs an explicit local file base with a lookup-only `EnvSource`; it
+answers named lookups for `HOME`, `USERPROFILE` (non-Unix), `XDG_CONFIG_HOME`,
+and `XDG_CONFIG_DIRS`, and on non-Unix targets may also supply the native
+configuration directory. The explicit-prefix and configured-prefix loaders are
+`load_and_merge_subcommand_with_sources_at` and
+`load_and_merge_subcommand_for_with_sources_at`; their match-aware variants are
+`load_and_merge_subcommand_with_matches_with_sources_at` and
+`load_and_merge_subcommand_for_with_matches_with_sources_at`. Pass
+`SubcommandCliMatches::new(&cli, &matches)` to a match-aware variant.
+
+On Unix and Redox, candidates are tried in the order `HOME` dotfiles, the XDG
+bases (the configured `XDG_CONFIG_HOME`, else `$HOME/.config` or the platform
+home fallback, then each absolute `XDG_CONFIG_DIRS` entry), and finally the
+explicit base. Only the first existing `config.<ext>` per extension is kept
+from the XDG bases. On other platforms, discovery uses `HOME`/`USERPROFILE` or
+the platform home fallback, then the native configuration directory from
+`EnvSource::config_dir_fallback` when available, and finally the explicit base.
+The merge source is separate: `SharedScanEnvSource` enumerates the environment
+layer, while the context's `EnvSource` only performs lookups.
+
+On Unix and Redox, missing XDG candidates, including candidates whose metadata
+check returns `NotFound`, are skipped. Any other metadata-check error stops
+discovery and is returned as `OrthoError::File`, with the candidate path and
+underlying I/O error. API callers should inspect the reported path and correct
+the discovery source or filesystem permissions before retrying.
+
+Use a match-aware loader for fields marked
+`#[ortho_config(cli_default_as_absent)]`. Clap match metadata distinguishes a
+parser default from an explicit command-line value, so files and environment
+values can override the default while explicit CLI values retain the highest
+precedence. Without match metadata, values in the parsed struct are treated as
+CLI input.
 
 <!-- tested-example: guide-subcommand-sources -->
 ```rust

@@ -136,12 +136,13 @@ fn merge_default_parity_over_file(
     merge_context: &'static str,
 ) -> Result<DefaultParityArgs> {
     let temp_dir = config_dir(DEFAULT_PARITY_FILE)?;
+    let discovery = isolated_discovery(temp_dir.path());
     let matches = DefaultParityArgs::command().get_matches_from(cli_args);
     let args = DefaultParityArgs::from_arg_matches(&matches).context(parse_context)?;
     load_and_merge_subcommand_with_matches_with_sources_at(
         &Prefix::new("APP_"),
         &SubcommandCliMatches::new(&args, &matches),
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &discovery),
         Arc::new(MapEnv::new()),
     )
     .context(merge_context)
@@ -299,10 +300,11 @@ fn explicit_ortho_default_overrides_inferred_default_value() -> Result<()> {
     let prefix = Prefix::new("APP_");
     let matches = ExplicitDefaultArgs::command().get_matches_from(["explicit-default"]);
     let args = ExplicitDefaultArgs::from_arg_matches(&matches).context("parse defaults")?;
+    let discovery = isolated_discovery(temp_dir.path());
     let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &prefix,
         &SubcommandCliMatches::new(&args, &matches),
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &discovery),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit OrthoConfig default")?;

@@ -140,6 +140,15 @@ fn xdg_candidate_exists(path: &Path) -> OrthoResult<bool> {
 }
 
 /// Select the first existing `name` across the ordered XDG base list.
+///
+/// For bases `/opt/app` and `/etc/xdg/app`, a
+/// `config.toml` in the first base wins; if it is missing, lookup
+/// continues to the second base.
+///
+/// # Errors
+///
+/// Returns [`crate::OrthoError::File`] when a candidate probe fails
+/// for a reason other than the candidate being absent.
 #[cfg(any(unix, target_os = "redox"))]
 fn first_existing_xdg_candidate(bases: &[PathBuf], name: &str) -> OrthoResult<Option<PathBuf>> {
     for (index, base) in bases.iter().enumerate() {
@@ -173,12 +182,10 @@ fn push_xdg_candidates(
     paths: &mut Vec<PathBuf>,
 ) -> OrthoResult<()> {
     let bases = source_xdg_bases(prefix, source);
-    for group in EXT_GROUPS {
-        for ext in *group {
-            let file = format!("config.{ext}");
-            if let Some(path) = first_existing_xdg_candidate(&bases, &file)? {
-                paths.push(path);
-            }
+    for ext in EXT_GROUPS.iter().flat_map(|group| *group) {
+        let file = format!("config.{ext}");
+        if let Some(path) = first_existing_xdg_candidate(&bases, &file)? {
+            paths.push(path);
         }
     }
     Ok(())

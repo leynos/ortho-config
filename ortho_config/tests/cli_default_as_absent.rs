@@ -11,10 +11,13 @@
 
 #[path = "support/default_punct.rs"]
 mod default_punct;
+#[path = "support/isolated_discovery.rs"]
+mod isolated_discovery;
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
+use isolated_discovery::isolated_discovery;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
     CliValueExtractor, MapEnv, OrthoConfig, OrthoError, SubcommandCliMatches,
@@ -151,7 +154,7 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
     let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &prefix,
         &SubcommandCliMatches::new(&args, &matches),
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &isolated_discovery(temp_dir.path())),
         Arc::new(source),
     )
     .context("merge greet args")?;
@@ -179,7 +182,7 @@ fn test_load_and_merge_subcommand_keeps_clap_default() -> Result<()> {
     let merged = load_and_merge_subcommand_with_sources_at(
         &prefix,
         &args,
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &isolated_discovery(temp_dir.path())),
         Arc::new(MapEnv::new()),
     )
     .context("merge greet args")?;

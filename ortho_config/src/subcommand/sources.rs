@@ -185,7 +185,7 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_with_sources<T>(
     prefix: &Prefix,
@@ -210,7 +210,7 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_for_with_sources<T>(
     cli: &T,
@@ -233,7 +233,7 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_with_matches_with_sources<T>(
     prefix: &Prefix,
@@ -259,7 +259,7 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_for_with_matches_with_sources<T>(
     cli: &T,
