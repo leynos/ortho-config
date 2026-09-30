@@ -299,15 +299,43 @@ fn compose_layers_collects_cli_parse_errors() -> Result<()> {
 }
 
 #[rstest]
-fn compose_layers_collects_env_and_file_errors() -> Result<()> {
+#[case::invalid_file(
+    Some("port = \"file-not-a-number\""),
+    None,
+    [MergeProvenance::Defaults, MergeProvenance::File],
+)]
+#[case::invalid_environment(
+    None,
+    Some("env-not-a-number"),
+    [MergeProvenance::Defaults, MergeProvenance::Environment],
+)]
+fn compose_layers_collects_env_and_file_errors(
+    #[case] file_contents: Option<&str>,
+    #[case] environment_port: Option<&str>,
+    #[case] expected_provenance: [MergeProvenance; 2],
+) -> Result<()> {
     let fixture = tempfile::tempdir().context("create invalid layers fixture root")?;
-    let file = selected_file(fixture.path(), "port = \"file-not-a-number\"")?;
-    let discovery: SharedEnvSource = Arc::new(MapEnv::new().with_var("APP_CONFIG_PATH", &file));
-    let merge: SharedScanEnvSource =
-        Arc::new(MapEnv::new().with_var("APP_PORT", "env-not-a-number"));
-    let composition =
-        BuilderConfig::compose_layers_from_iter_with_sources(["prog"], discovery, merge);
+    let discovery_map = if let Some(contents) = file_contents {
+        let file = selected_file(fixture.path(), contents)?;
+        MapEnv::new().with_var("APP_CONFIG_PATH", &file)
+    } else {
+        MapEnv::new()
+    };
+    let merge_map =
+        environment_port.map_or_else(MapEnv::new, |port| MapEnv::new().with_var("APP_PORT", port));
+    let discovery_source: SharedEnvSource = Arc::new(discovery_map);
+    let merge_source: SharedScanEnvSource = Arc::new(merge_map);
+    let composition = BuilderConfig::compose_layers_from_iter_with_sources(
+        ["prog"],
+        discovery_source,
+        merge_source,
+    );
     let (layers, errors) = composition.into_parts();
+    let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+    ensure!(
+        provenances.starts_with(&expected_provenance),
+        "unexpected provenance prefix: {provenances:?}"
+    );
     let merged = BuilderConfig::merge_from_layers(layers.clone());
     ensure!(merged.is_err(), "expected malformed layer merge to fail");
     let aggregated = ortho_config::declarative::LayerComposition::new(layers, errors)

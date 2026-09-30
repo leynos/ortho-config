@@ -7,6 +7,7 @@
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
+use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
@@ -52,10 +53,18 @@ fn write_selector_fixture(dir: &Path, contents: &[u8]) -> Result<PathBuf> {
     Ok(dir.join("selected.toml"))
 }
 
+/// Create the isolated root used by source-aware loading scenarios.
+#[fixture]
+fn loading_fixture_dir() -> Result<tempfile::TempDir> {
+    tempfile::tempdir().context("create source-aware loading fixture")
+}
+
 /// One map drives both the selector lookup and the complete merge layer.
-#[test]
-fn derived_loading_uses_one_map_for_both_environment_capabilities() -> Result<()> {
-    let fixture_dir = tempfile::tempdir().context("create source-aware loading fixture")?;
+#[rstest]
+fn derived_loading_uses_one_map_for_both_environment_capabilities(
+    loading_fixture_dir: Result<tempfile::TempDir>,
+) -> Result<()> {
+    let fixture_dir = loading_fixture_dir?;
     let selector_path = write_selector_fixture(fixture_dir.path(), b"from_file = \"selected\"\n")?;
     let source = Arc::new(
         MapEnv::new()
@@ -87,9 +96,11 @@ fn derived_loading_uses_one_map_for_both_environment_capabilities() -> Result<()
 }
 
 /// Generated raw providers apply the same uppercase and split replay rules.
-#[test]
-fn unprefixed_derived_loading_replays_generated_key_transforms() -> Result<()> {
-    let fixture_dir = tempfile::tempdir().context("create raw loading selector fixture")?;
+#[rstest]
+fn unprefixed_derived_loading_replays_generated_key_transforms(
+    loading_fixture_dir: Result<tempfile::TempDir>,
+) -> Result<()> {
+    let fixture_dir = loading_fixture_dir?;
     // An explicit selector avoids searching ambient CWD candidates, though the
     // discovery builder still resolves the current directory.
     let selector_path = write_selector_fixture(fixture_dir.path(), b"# selector fixture\n")?;
