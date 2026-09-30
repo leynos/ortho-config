@@ -125,19 +125,18 @@ fn assert_entry_ownership(entries: &[Value]) -> Result<()> {
     for entry in entries {
         let id = string_field(entry, "id", "<unknown>")?;
         let kind = string_field(entry, "kind", id)?;
-        let field = entry.get("field").and_then(Value::as_str);
-        if field.is_none() {
-            ensure!(
+        match entry.get("field").and_then(Value::as_str) {
+            None => ensure!(
                 !matches!(kind, "help" | "long_help" | "value_name"),
                 "argument entry {id} must name its owning field",
-            );
-            continue;
+            ),
+            Some(field) => {
+                suffixes_per_field
+                    .entry(field.to_owned())
+                    .or_default()
+                    .insert(kind.to_owned());
+            }
         }
-        let field = field.unwrap_or_default();
-        suffixes_per_field
-            .entry(field.to_owned())
-            .or_default()
-            .insert(kind.to_owned());
     }
 
     ensure!(

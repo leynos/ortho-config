@@ -236,17 +236,20 @@ fn merge_fragments_propagates_non_not_found_metadata_errors() -> Result<()> {
     let root = TempRoot::new()?;
     // Placing a regular file in a parent position makes `metadata` fail with
     // `NotADirectory`, which is not `NotFound`.
-    let blocker = root.path().join("blocker");
-    fs::write(&blocker, "not a directory").context("write blocker file")?;
+    let not_a_directory = root.path().join("blocker");
+    fs::write(&not_a_directory, "not a directory").context("write blocker file")?;
     let ident = Ident::new("Config", Span::call_site());
-    let blocked = Source {
-        file: blocker.join("child.rs").to_string_lossy().into_owned(),
+    let unreachable = Source {
+        file: not_a_directory
+            .join("child.rs")
+            .to_string_lossy()
+            .into_owned(),
         line: 7,
         column: 0,
     };
     write_fragment(
-        &fragment_path(root.path(), &ident, &blocked),
-        blocked.file.clone(),
+        &fragment_path(root.path(), &ident, &unreachable),
+        unreachable.file.clone(),
         vec![fixture_entry("blocked-about")],
     )?;
 
