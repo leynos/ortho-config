@@ -1466,3 +1466,45 @@ The remaining five gates are sound for the tip. `make typecheck` and
 deadlock began, so they cover the rebased Rust tree. `make check-fmt`,
 `make markdownlint`, and `make nixie` ran at 03:52 and 03:59; none of the three
 needs cargo. The only commit after them is this Markdown-only note.
+
+2026-09-30: rebased a third time onto `origin/main` (`e9f9e01e`), replaying all
+32 commits. The exclusive replay boundary is `f6a406fc`, the previous target,
+which remains the parent of the branch's first commit and the start of a
+merge-free range. The deadlock that blocked the previous entry cleared before
+this rebase began; the lock is held only by transient live cargo jobs now.
+
+Main advanced twice while this rebase was being prepared, from `f6a406fc` to
+`8e4d3de3` and then to `e9f9e01e`; both advances are included, since the second
+fetch resolved the target to its current tip. Two conflicts arose, both in
+`docs/contents.md` and both the same collision class this branch has already
+resolved once.
+
+The first conflict was the original artefact-ADR addition (`6f05675f`), which
+had claimed 008 when that number was free. Main has since published 008 for the
+agent-native policy configuration and 009 for the Linux build-test runner
+placement, so both numbers the branch had used were occupied. The resolution
+keeps both ADDED entries verbatim: main's ADR-009 entry and the branch's new
+ADR entry, in the historical numbering the commit itself used. The renumber is
+left to the commit that exists for it.
+
+The second conflict was that renumber commit (`bd935b0b`) meeting the moved
+occupancy. Its stated purpose — renumber the branch's unlanded ADR to the next
+free number and rename its file, because a published number must not be
+reclaimed — still holds; only its numeral was stale. The branch's ADR becomes
+**ADR-010**, and its file is
+`docs/adr-010-opt-in-identifier-artefact-emission.md`. This follows the
+precedent the commit itself set: the landed ADR keeps its number, and the
+unlanded branch adjusts. Main's own ADR-009 files and their two references
+(`docs/developers-guide.md` and the `[adr-009]` link definition) were left
+byte-identical to main; only this branch's references were moved, across
+`docs/contents.md`, `docs/cli-localization-design.md`, `docs/roadmap.md`, the
+ADR's own title, and the 11.1.3 execplan.
+
+`range-diff` over `f6a406fc..ce8795d6` against `e9f9e01e..d18ab56b` reports
+exactly two entries as changed — the two conflict resolutions — and the
+remaining 30 as identical. The semantic audit found no unintended deletions and
+no lost target work: no file was deleted, no target-only path exists (the
+target is the tip of main), and main's `#[command(name = "greet")]` rename
+survived. The repeated-block scan reported only idiomatic repetition in new
+test files and two methods legitimately sharing a doc sentence; Weave never
+participated, so its reconstruction defects are not a mechanism here.
