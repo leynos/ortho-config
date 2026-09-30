@@ -3,6 +3,10 @@
 CRATE ?= ortho_config
 CARGO ?= cargo
 WHITAKER ?= whitaker
+# Whitaker invokes a nested Cargo build; bound its parallelism on shared hosts.
+WHITAKER_CARGO_BUILD_JOBS ?= 1
+# Bound typechecking parallelism on shared hosts; callers can override it.
+TYPECHECK_CARGO_BUILD_JOBS ?= 1
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
@@ -111,10 +115,12 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	$(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
+	CARGO_BUILD_JOBS="$(WHITAKER_CARGO_BUILD_JOBS)" \
+		RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
 typecheck: ## Typecheck workspace (cargo check)
-	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
+	CARGO_BUILD_JOBS="$(TYPECHECK_CARGO_BUILD_JOBS)" \
+		RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
