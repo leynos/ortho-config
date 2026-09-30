@@ -10,8 +10,8 @@
 /// Fluent identifiers for one argument of a derived command-line surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArgLocalizationIds {
-    /// The argument's clap id (explicit `#[arg(id = "…")]` or the
-    /// kebab-cased field name).
+    /// The argument's clap id (explicit `#[arg(id = "…")]` or the raw Rust
+    /// field name).
     pub name: &'static str,
     /// Identifier for the argument's `help` text.
     pub help_id: &'static str,
