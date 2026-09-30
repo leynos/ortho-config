@@ -199,17 +199,22 @@ fn flattened_fields_are_excluded() -> Result<()> {
 
 #[test]
 fn colliding_normalised_arg_ids_fail_with_pinned_message() -> Result<()> {
+    // The collision must be genuine, not assumed. `normalize_segment` only
+    // lowercases; it preserves `-` and `_`, so `foo_bar` and `foo-bar` are
+    // *distinct* segments even though they are the same `clap` flag. Clap also
+    // keeps the raw Rust field name as the argument id, so two plain field
+    // names can only collide through case alone.
     let input: syn::DeriveInput = parse_quote! {
         #[ortho_config(localization_base = "acme.cli")]
         struct App {
             foo_bar: String,
-            #[arg(id = "foo-bar")]
+            #[arg(id = "FOO_BAR")]
             other: String,
         }
     };
     let message = expect_model_error(&input);
     ensure!(
-        message.contains("duplicate localized argument id 'foo-bar'"),
+        message.contains("duplicate localized argument id 'foo_bar'"),
         "message must name the colliding normalised id: {message}"
     );
     ensure!(

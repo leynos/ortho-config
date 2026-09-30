@@ -358,7 +358,6 @@ fn missing_clap_error_translation_emits_warning_fields(fallback_localizer: Trans
     );
 }
 
-
 // Agreement coverage lives in a shared module below `support/` so Cargo does
 // not also discover it as a standalone integration test, and this file stays
 // within the repository's 400-line limit.

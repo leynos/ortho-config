@@ -298,9 +298,12 @@ fn merge_fragments(root: &Path) -> Result<Vec<Entry>, String> {
         let bytes = fs::read(&path).map_err(|error| error.to_string())?;
         let fragment: Fragment =
             serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-        if source_still_exists(Path::new(&fragment.source_file))
-            .map_err(|error| format!("cannot probe fragment source {}: {error}", fragment.source_file))?
-        {
+        if source_still_exists(Path::new(&fragment.source_file)).map_err(|error| {
+            format!(
+                "cannot probe fragment source {}: {error}",
+                fragment.source_file
+            )
+        })? {
             output.extend(fragment.entries);
         }
     }
