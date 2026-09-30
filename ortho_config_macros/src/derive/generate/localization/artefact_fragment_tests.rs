@@ -225,6 +225,44 @@ fn merge_fragments_reports_missing_fragment_directory() -> Result<()> {
     Ok(())
 }
 
+/// Verifies a non-`NotFound` metadata failure aborts merging rather than
+/// silently dropping that fragment's entries.
+///
+/// Only a missing source file means the fragment is stale. Treating every
+/// metadata error as absence would publish an inventory with a silent gap and
+/// no diagnostic to explain it, so the error must reach the caller.
+#[test]
+fn merge_fragments_propagates_non_not_found_metadata_errors() -> Result<()> {
+    let root = TempRoot::new()?;
+    // Placing a regular file in a parent position makes `metadata` fail with
+    // `NotADirectory`, which is not `NotFound`.
+    let blocker = root.path().join("blocker");
+    fs::write(&blocker, "not a directory").context("write blocker file")?;
+    let ident = Ident::new("Config", Span::call_site());
+    let blocked = Source {
+        file: blocker.join("child.rs").to_string_lossy().into_owned(),
+        line: 7,
+        column: 0,
+    };
+    write_fragment(
+        &fragment_path(root.path(), &ident, &blocked),
+        blocked.file.clone(),
+        vec![fixture_entry("blocked-about")],
+    )?;
+
+    let error =
+        merge_fragments(root.path()).expect_err("non-NotFound metadata failure must abort merging");
+    ensure!(
+        error.contains("cannot probe fragment source"),
+        "error must identify the probe failure, got: {error}"
+    );
+    ensure!(
+        error.contains("blocker"),
+        "error must name the offending source, got: {error}"
+    );
+    Ok(())
+}
+
 /// Verifies atomic writer preserves filesystem errors for an invalid destination.
 #[test]
 fn atomic_write_reports_invalid_destination() -> Result<()> {

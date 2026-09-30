@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 
-use super::super::{ArgIdsModel, ClapArgId, CommandIds, FluentMessageId};
+use super::super::{ArgIdsModel, ClapArgId, CommandIds, FluentMessageId, LocalizationBase};
 use super::*;
 
 const SPLIT_PAYLOAD_BYTES: usize = 524_288;
@@ -229,6 +229,110 @@ fn argument_entries_preserve_field_and_suffix_order() -> Result<()> {
         json(&actual)? == json(&expected)?,
         "argument entries must preserve their schema order and JSON bytes"
     );
+    Ok(())
+}
+
+/// Verifies the combiner emits every command entry followed by every
+/// argument's three suffix entries, with the full schema populated.
+///
+/// Cardinality is asserted explicitly: the expected-vector comparisons above
+/// pin each field, but only a count makes a silently dropped trailing entry
+/// (for example, a truncated suffix list) observable.
+#[test]
+fn entries_emit_all_command_and_argument_entries() -> Result<()> {
+    let command = CommandIds {
+        about_id: message_id("cli-about"),
+        long_about_id: message_id("cli-long-about"),
+        usage_id: message_id("cli-usage"),
+        version_id: message_id("cli-version"),
+        long_version_id: message_id("cli-long-version"),
+        after_help_id: message_id("cli-after-help"),
+        after_long_help_id: message_id("cli-after-long-help"),
+    };
+    let args = vec![
+        ArgIdsModel {
+            field_name: String::from("first"),
+            name: ClapArgId(String::from("first")),
+            help_id: message_id("cli-args-first-help"),
+            long_help_id: message_id("cli-args-first-long-help"),
+            value_name_id: message_id("cli-args-first-value-name"),
+        },
+        ArgIdsModel {
+            field_name: String::from("second"),
+            name: ClapArgId(String::from("second")),
+            help_id: message_id("cli-args-second-help"),
+            long_help_id: message_id("cli-args-second-long-help"),
+            value_name_id: message_id("cli-args-second-value-name"),
+        },
+    ];
+    let model = LocalizationIds {
+        base: LocalizationBase(String::from("fixture")),
+        command,
+        args,
+    };
+    let ident = Ident::new("Cli", Span::call_site());
+    let source = fixture_source();
+    let actual = entries(&model, &ident, Span::call_site(), "fixture");
+
+    ensure!(
+        actual.len() == 7 + 2 * 3,
+        "expected seven command entries plus three per argument, got {}",
+        actual.len()
+    );
+
+    let expected_ids = [
+        "cli-about",
+        "cli-long-about",
+        "cli-usage",
+        "cli-version",
+        "cli-long-version",
+        "cli-after-help",
+        "cli-after-long-help",
+        "cli-args-first-help",
+        "cli-args-first-long-help",
+        "cli-args-first-value-name",
+        "cli-args-second-help",
+        "cli-args-second-long-help",
+        "cli-args-second-value-name",
+    ];
+    let actual_ids = actual
+        .iter()
+        .map(|entry| entry.id.as_str())
+        .collect::<Vec<_>>();
+    ensure!(
+        actual_ids == expected_ids,
+        "combiner must emit command entries before argument entries, got {actual_ids:?}"
+    );
+
+    // Every entry shares one derive site and type identity, so a regression
+    // that forgets to thread the context through shows up here. The concrete
+    // span value is not asserted: `Span::call_site()` outside a real macro
+    // expansion carries no file, and pinning that would test proc-macro2
+    // rather than the combiner.
+    let Some(first) = actual.first() else {
+        return Err(anyhow::anyhow!("combiner must emit at least one entry"));
+    };
+    let expected_source = json(&first.source)?;
+    for entry in &actual {
+        ensure!(
+            entry.type_name == "fixture::Cli",
+            "entry {} must carry the derive type name, got {}",
+            entry.id,
+            entry.type_name,
+        );
+        ensure!(
+            json(&entry.source)? == expected_source,
+            "entry {} must carry the shared derive source, got {:?}",
+            entry.id,
+            entry.source,
+        );
+        ensure!(
+            entry.path_scope == "standalone",
+            "entry {} must record the standalone path scope, got {}",
+            entry.id,
+            entry.path_scope,
+        );
+    }
     Ok(())
 }
 

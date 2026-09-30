@@ -7,7 +7,7 @@
 //! This module is the runtime twin of
 //! `ortho_config_macros::derive::generate::localization::identifier`; the two
 //! share the §4.1 identifier convention and must not drift. The marker comment
-//! below gate both: a test in each crate fails when the numbers differ
+//! below gates both: a test in each crate fails when the numbers differ
 //! (Decision D-8).
 //!
 //! NORMALIZATION-RULES-VERSION: 1
