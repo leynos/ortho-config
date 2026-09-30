@@ -849,9 +849,9 @@ New module `ortho_config_macros/src/derive/generate/localization/` with:
 - `mod.rs`: the identifier-generation pass. Inputs: the resolved base
   segments (Decision D-5) and the field list. For each own, non-subcommand,
   non-`skip_cli`, non-flattened field (D-12), the argument id is the field's
-  clap `id` override (`clap_arg_id` in `derive/parse/clap_attrs.rs`) or the
-  raw Rust field name, matching clap's derived argument id. Outputs a
-  struct-shaped model
+  clap `id` override (`clap_arg_id` in `derive/parse/clap_attrs.rs`) or the raw
+  Rust field name, matching clap's derived argument id. Outputs a struct-shaped
+  model
   (`LocalizationIds { base, command: CommandIds, args: Vec<ArgIdsModel> }`)
   used by Milestones 3–5.
 - Collision detection: normalized argument ids are checked for uniqueness

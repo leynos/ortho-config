@@ -101,7 +101,10 @@ fn assert_entries_are_well_formed(entries: &[Value]) -> Result<()> {
             .and_then(Value::as_object)
             .with_context(|| format!("entry {id} must carry a source object"))?;
         ensure!(
-            source.get("file").and_then(Value::as_str).is_some_and(|f| !f.is_empty()),
+            source
+                .get("file")
+                .and_then(Value::as_str)
+                .is_some_and(|f| !f.is_empty()),
             "entry {id} must record a non-empty source file",
         );
         for coordinate in ["line", "column"] {

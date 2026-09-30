@@ -1,10 +1,10 @@
 //! Tests for `OrthoConfigDocs` IR generation.
 
 use anyhow::{Result, anyhow, ensure};
+use ortho_config::OrthoConfig;
 use ortho_config::docs::{
     ConfigFormat, DocMetadata, ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, SourceKind, ValueType,
 };
-use ortho_config::OrthoConfig;
 
 // Runtime-agreement coverage lives in a shared module below `support/` so
 // Cargo does not also discover it as a standalone integration test, and this

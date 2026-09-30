@@ -338,7 +338,6 @@ fn entries_emit_all_command_and_argument_entries() -> Result<()> {
     Ok(())
 }
 
-
 // Renderer coverage lives in a sibling module to keep this file within
 // the repository's 400-line limit.
 #[path = "artefact_renderer_tests.rs"]
