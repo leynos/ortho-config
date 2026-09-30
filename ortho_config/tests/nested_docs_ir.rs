@@ -155,7 +155,7 @@ fn nested_admin_audit_has_inherited_fluent_id_pattern(nested_metadata: DocMetada
         audit.about_id,
     );
     ensure!(
-        dry_run.help_id == "nested-app-admin-audit-args-dry-run-help",
+        dry_run.help_id == "nested-app-admin-audit-args-dry_run-help",
         "expected audit field help_id default, got {}",
         dry_run.help_id,
     );

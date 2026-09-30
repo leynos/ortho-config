@@ -1,6 +1,11 @@
 //! Fixed suffixes used in derived Fluent message identifiers.
 
 /// A fixed final or intermediate identifier segment.
+///
+/// Both identifier producers share this vocabulary: the localization
+/// generator builds `ARG_IDS`, and the documentation generator builds the
+/// matching IR keys. Sourcing the literals here is what keeps a runtime
+/// lookup and its documented identifier from drifting apart.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum MessageSuffix {
     About,

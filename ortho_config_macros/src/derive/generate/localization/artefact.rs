@@ -298,11 +298,28 @@ fn merge_fragments(root: &Path) -> Result<Vec<Entry>, String> {
         let bytes = fs::read(&path).map_err(|error| error.to_string())?;
         let fragment: Fragment =
             serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-        if Path::new(&fragment.source_file).exists() {
+        if source_still_exists(Path::new(&fragment.source_file))
+            .map_err(|error| format!("cannot probe fragment source {}: {error}", fragment.source_file))?
+        {
             output.extend(fragment.entries);
         }
     }
     Ok(output)
+}
+
+/// Reports whether a fragment's recorded source file is still present.
+///
+/// Only `NotFound` means the source was deleted or moved, which is the one
+/// case that makes the fragment stale. Any other metadata failure says
+/// nothing about presence, so it is propagated: silently dropping the
+/// fragment would publish an inventory that is missing entries with no
+/// diagnostic to explain the gap.
+fn source_still_exists(path: &Path) -> std::io::Result<bool> {
+    match fs::metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 /// Writes an artefact only when explicitly requested by the consuming build.

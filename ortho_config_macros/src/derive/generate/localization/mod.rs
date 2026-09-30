@@ -5,7 +5,7 @@
 
 mod artefact;
 mod identifier;
-mod suffix;
+pub(crate) mod suffix;
 #[cfg(test)]
 mod tests;
 
@@ -314,9 +314,12 @@ fn build_arg_models(
             ));
         };
 
-        let arg_id = ClapArgId(
-            clap_arg_id(field)?.unwrap_or_else(|| name_ident.to_string().to_kebab_case()),
-        );
+        // Clap's derived arg id is the raw field name: `clap_derive` emits
+        // `Name::Derived(ident)` as `ident.unraw().to_string()` and only
+        // kebab-cases the *long flag*, not the id. Deriving from the
+        // kebab-cased spelling here would therefore emit a key that no
+        // runtime lookup ever requests for an underscored field.
+        let arg_id = ClapArgId(clap_arg_id(field)?.unwrap_or_else(|| name_ident.to_string()));
         let (normalised, arg_segments) = normalise_arg_id(&arg_id, name_ident.span())?;
 
         if let Some((first_span, first_name)) = seen.get(&normalised) {

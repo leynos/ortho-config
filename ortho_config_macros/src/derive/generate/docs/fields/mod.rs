@@ -13,6 +13,7 @@ use quote::quote;
 use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
+use crate::derive::generate::localization::suffix::MessageSuffix;
 use crate::derive::generate::localization::{ArgIdsModel, LocalizationIds};
 use crate::derive::parse::{FieldAttrs, SerdeRenameAll, serde_serialized_field_key};
 
@@ -104,9 +105,16 @@ impl<'a> FieldMetaBuilder<'a> {
             .as_ref()
             .ok_or_else(|| syn::Error::new_spanned(field, "tuple fields are not supported"))?;
         let field_name = name.to_string();
-        let help_id = self.identifier_tokens(attrs.doc.help_id.as_deref(), &field_name, "help");
-        let long_help_id =
-            self.identifier_tokens(attrs.doc.long_help_id.as_deref(), &field_name, "long-help");
+        let help_id = self.identifier_tokens(
+            attrs.doc.help_id.as_deref(),
+            &field_name,
+            MessageSuffix::Help,
+        );
+        let long_help_id = self.identifier_tokens(
+            attrs.doc.long_help_id.as_deref(),
+            &field_name,
+            MessageSuffix::LongHelp,
+        );
         let value_type = resolve_value_type(attrs, field);
         let required = resolve_required(field, attrs)?;
         let value_context = ValueContext {
@@ -150,20 +158,21 @@ impl<'a> FieldMetaBuilder<'a> {
         &self,
         explicit: Option<&str>,
         field_name: &str,
-        suffix: &str,
+        suffix: MessageSuffix,
     ) -> TokenStream {
+        let segment: &str = suffix.as_ref();
         if let Some(identifier) = explicit {
             return string_tokens(identifier);
         }
         if let Some(arg) = self.localization_args.get(field_name) {
             let message_suffix = syn::LitStr::new(
-                &format!("args.{}.{}", arg.name.as_ref(), suffix),
+                &format!("args.{}.{}", arg.name.as_ref(), segment),
                 proc_macro2::Span::call_site(),
             );
             let krate = self.krate;
             return quote! { #krate::message_id_for(command_path, #message_suffix) };
         }
-        string_tokens(&default_field_id(self.app_name, field_name, suffix))
+        string_tokens(&default_field_id(self.app_name, field_name, segment))
     }
 
     fn build_cli_tokens(&self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {

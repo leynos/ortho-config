@@ -3,7 +3,7 @@
 //! This is the test-locked macro-side twin of
 //! `ortho_config::localizer::identifier::normalize_segment`. The two
 //! implementations cannot share source (the macro crate is `proc-macro = true`
-//! and must stay build-independent of `ortho_config`), so agreements is locked
+//! and must stay build-independent of `ortho_config`), so agreement is locked
 //! by (a) this marker, (b) the dev-dependency-cycle property test, and (c) the
 //! cross-crate agreement tests in `ortho_config/tests/`.
 //!
