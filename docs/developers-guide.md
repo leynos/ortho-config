@@ -1725,52 +1725,40 @@ across under the new name fails every run. The action pins the CLI through its
 own manifest now, which is what that variable stood in for; the variable is
 unreferenced and can be removed from the repository's settings.
 
-`tests/workflow_contracts/codescene_coverage_test.py` holds the shape, reading
-through `codescene_coverage.py` (which workflows a rule applies to) and
-`codescene_reach.py` (what a selected workflow must not do). The generic
-parsing is in `workflow_reading.py`. `codescene_reader_test.py` drives those
-readings on documents this repository does not contain, and
-`codescene_reader_properties_test.py` drives the step and token readings with
-Hypothesis over generated workflows of any number of jobs and steps.
+`make test-workflow-contracts` holds the shape by running
+`cv005-contracts check`, the shared contract library in
+`leynos/shared-actions`, from the full commit named by `CV005_CONTRACTS_REF` in
+the Makefile; a fix to the rules is a pin bump. The library reads workflows
+with a loader that refuses duplicate keys, follows the pull-request lane as a
+closure through local calls and composite actions (a workflow declaring only
+`workflow_call` runs on a pull request when a pull-request workflow calls it,
+and `secrets: inherit` hands it the token), refuses the CodeScene action, the
+CLI, the token and the `codescene.io` host anywhere a pull request reaches, and
+drives every clause against breaching fixtures in its own suite, so this
+repository keeps no copy of the readers. `workflow_reading.py` stays for the
+runner-placement contract.
 
-**The pull-request lane is a closure, not a trigger list.** A workflow
-declaring only `workflow_call` runs on a pull request when a pull-request
-workflow calls it, and `secrets: inherit` hands it the token. Every
-pull-request clause (the action, the command, the token and the `codescene.io`
-host) runs over the pull-request workflows and everything they call,
-transitively. A call is recognized by shape rather than by a list of prefixes:
-a leading `./` is stripped, and the remainder must be a file directly under
-`.github/workflows/`. `pull_request_closure_test.py` holds a `workflow_call`
-probe that curls the CodeScene API with an inherited token and asserts that
-both the token clause and the host clause catch it. The host clause reads every
-value in each parsed workflow rather than a list of expected places, because a
-URL reaches a step through the workflow's, the job's or the step's `env`, a
-step's inputs, or a reusable-workflow call's `with`; comments are not read,
-because the parser discards them.
+`.github/cv005.toml` holds the repository's parameters. Its two `[[pairing]]`
+tables map each pull-request feature leg to the publisher leg that writes its
+report; the broad leg ratchets in the Linux cell of the matrix, through
+`with-ratchet: ${{ matrix.ratchet }}`, which the library reads in. Its
+`[selection]` pins the publisher's exact inputs, so a change made to both lanes
+at once is still a reviewed change. `coverage_lane_facts_test.py` keeps the two
+facts the shared rules do not know: only the Linux leg ratchets, and the
+pull-request checkout is shallow.
 
 **The ratchet has to stay switched on.** Pairing the legs' selections proves
-the comparison is fair, not that it happens, so the contract also holds each
-pull-request leg to the publisher's choice: a leg whose baseline is written
-ratchets on the Linux leg, and a leg whose baseline is not written does not
-ratchet at all.
+the comparison is fair, not that it happens. The library counts the broad leg
+as the job's one ratchet in its declared Linux cell and refuses a job that
+ratchets in none or in two, and `coverage_lane_facts_test.py` holds the matrix
+`ratchet` value to true for Linux alone.
 
-**Workflows are loaded strictly.** The loader refuses a mapping that declares
-one key twice, since PyYAML otherwise keeps the last value silently and a job
-declaring `runs-on` twice would read as the half GitHub may not run. A file
-that is not YAML at all is reported as a `WorkflowReadingError` naming the
-file, not as a parser error naming none.
-
-Two properties of that reading are worth knowing before changing it. The
-publisher is "pushes to main **and serves no pull request**": a repository's
-main workflow often declares both, so a predicate reading only the push makes
-one file simultaneously required to upload and forbidden from uploading. And
-the trigger reader looks under both `"on"` and the boolean `True`, because YAML
-1.1 resolves an unquoted `on:` to a boolean; a reader finding nothing makes
-every rule above pass over an empty set, which reports compliance rather than
-an error. `load_workflow` uses `yaml.BaseLoader` and keeps the string, which is
-precisely why narrowing the reader to the string key alone fails nothing
-against the real files, and why the constructed case in
-`codescene_reader_test.py` exists.
+**Workflows are loaded strictly.** `workflow_reading.py`, kept for the
+runner-placement contract, refuses a mapping that declares one key twice, since
+PyYAML otherwise keeps the last value silently and a job declaring `runs-on`
+twice would read as the half GitHub may not run. The library's loader does the
+same for the CV-005 shape and exits 2 on a file it cannot read, rather than
+passing.
 
 ## Command checklist
 

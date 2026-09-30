@@ -75,9 +75,14 @@ jobs:
           - platform: linux
             runner: ubicloud-standard-4
             fork-runner: ubuntu-latest
+            # generate-coverage keys its baseline by `runner.os` and the
+            # publisher runs on Linux, so only this leg has a baseline to
+            # ratchet against.
+            ratchet: true
           - platform: windows
             runner: windows-latest
             fork-runner: windows-latest
+            ratchet: false
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -279,7 +284,8 @@ jobs:
           # tests would never be compiled in CI at all.
           features: serde_json toml json5 yaml metrics
           artefact-name-suffix: serde-saphyr
-          with-ratchet: ${{ matrix.platform == 'linux' }}
+          with-ratchet: ${{ matrix.ratchet }}
+          publish-artefact: 'false'
 
       - name: Disk sample (after coverage with serde_saphyr)
         if: ${{ always() && matrix.platform == 'linux' }}
@@ -292,6 +298,7 @@ jobs:
           format: lcov
           features: serde_json toml json5
           artefact-name-suffix: no-serde-saphyr
+          publish-artefact: 'false'
 
       - name: Disk sample (after coverage without serde_saphyr)
         if: ${{ always() && matrix.platform == 'linux' }}
