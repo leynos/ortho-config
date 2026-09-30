@@ -47,7 +47,6 @@ extend-ignore-re = [
     "\\bcolor-(?:mix|contrast)\\b",
     "\\bflavor = ",
     "\\brust-analyzer\\b",
-    "\\bvar\\.iamge_id\\b",
     "\\{COLOR\\}",
     "\\{color\\}",
     "`#\\[tokio::test\\(flavor = \"current_thread\"\\)\\]`",
@@ -64,6 +63,7 @@ extend-ignore-re = [
     "`color`",
     "`env\\(allias = …\\)`",
     "`skill_manifest_serialises_with_camino_path`",
+    "`var\\.iamge_id` instead of `var\\.image_id`",
     "currentColor",
     "rust-analyzer",
 ]
