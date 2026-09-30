@@ -1,17 +1,17 @@
-error: duplicate localized argument id 'foo-bar' for field 'foo_bar' and 'fooBar'; rename the field or set `#[arg(id = "…")]`
- --> tests/ui/localization_id_collision.rs:9:5
-  |
-9 |     fooBar: String,
-  |     ^^^^^^
+error: duplicate localized argument id 'foo_bar' for field 'foo_bar' and 'unrelated'; rename the field or set `#[arg(id = "…")]`
+  --> tests/ui/localization_id_collision.rs:15:5
+   |
+15 |     unrelated: String,
+   |     ^^^^^^^^^
 
 error: first defined here
- --> tests/ui/localization_id_collision.rs:7:5
-  |
-7 |     foo_bar: String,
-  |     ^^^^^^^
+  --> tests/ui/localization_id_collision.rs:13:5
+   |
+13 |     foo_bar: String,
+   |     ^^^^^^^
 
 error[E0601]: `main` function not found in crate `$CRATE`
-  --> tests/ui/localization_id_collision.rs:10:2
+  --> tests/ui/localization_id_collision.rs:16:2
    |
-10 | }
+16 | }
    |  ^ consider adding a `main` function to `$DIR/tests/ui/localization_id_collision.rs`
