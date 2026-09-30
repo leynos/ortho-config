@@ -920,13 +920,14 @@ Two Rust lanes are outside this, each for its own reason:
 
 `rust-build-release` and `mutation-cargo` are exempt from the one-SHA
 assertion. Every reference into the shared-actions tree, those two included,
-sits at `d4d248bb` today, where the Dependabot repin left them. The exemption
-remains an allowance for them to diverge without the contract reporting a
-partial repin, as they did after the CodeScene coverage adoption's repin:
-neither serves a lane this wiring governs, `rust-build-release` is the release
-build the action excludes from sccache, and `mutation-cargo` is a reusable
-workflow, which caller job environments cannot reach. Moving either is a
-separate change that needs its own evidence.
+sits at `6cec89bac47a` today, where the repin that brought in setup-rust's
+fail-open sccache start-up left them. The exemption remains an allowance for
+them to diverge without the contract reporting a partial repin, as they did
+after the CodeScene coverage adoption's repin: neither serves a lane this
+wiring governs, `rust-build-release` is the release build the action excludes
+from sccache, and `mutation-cargo` is a reusable workflow, which caller job
+environments cannot reach. Moving either is a separate change that needs its
+own evidence.
 
 The allowance is proved in both directions rather than assumed. Moving
 `rust-build-release` to a SHA of its own leaves the contract passing, which is

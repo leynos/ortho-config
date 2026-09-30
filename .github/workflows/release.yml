@@ -130,7 +130,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.tag }}
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@d4d248bbbecdcf7b4f5bc79ffd4d6caee370bd79
+        uses: leynos/shared-actions/.github/actions/rust-build-release@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           target: ${{ matrix.target }}
           manifest-path: cargo-orthohelp/Cargo.toml
@@ -253,7 +253,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.tag }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@d4d248bbbecdcf7b4f5bc79ffd4d6caee370bd79
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
       # Resolves the real pkg-url for every target against the published
       # release, so a template that renders an unreachable URL fails here
       # rather than in a consumer's install.
