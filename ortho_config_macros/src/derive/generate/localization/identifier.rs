@@ -196,7 +196,7 @@ mod tests {
         }
 
         #[test]
-        fn normalisation_is_idempotent(raw in segment()) {
+        fn normalization_is_idempotent(raw in segment()) {
             let span = proc_macro2::Span::call_site();
             let once = normalize_segment(&raw, span).expect("generated segment normalises once");
             let twice = normalize_segment(&once, span).expect("normalised segment is stable");
