@@ -218,7 +218,8 @@ def test_the_lint_trees_go_before_coverage(ci: WorkflowDocument) -> None:
 
 
 #: Every ``build-test`` step whose ``if`` follows the platform, exactly. The
-#: ratchet input is held by ``codescene_coverage_test.py``. A step keyed on the
+#: ratchet input is held by the shared CV-005 library and
+#: ``coverage_lane_facts_test.py``. A step keyed on the
 #: wrong platform, or on the old runner label, would skip or run the wrong leg
 #: with no failure to show for it.
 PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
