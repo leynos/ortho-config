@@ -5,8 +5,8 @@ mod isolated_discovery;
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use isolated_discovery::isolated_discovery;
 use clap::{CommandFactory, FromArgMatches, Parser};
+use isolated_discovery::isolated_discovery;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
     CliValueExtractor, MapEnv, OrthoConfig, SubcommandCliMatches, SubcommandFileContext,

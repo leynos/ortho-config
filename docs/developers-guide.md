@@ -760,9 +760,8 @@ variables for tests.
   use the source's native platform configuration-directory fallback. It must
   not enumerate variables or become a general-purpose environment service.
 - `first_existing_xdg_candidate` is private to subcommand path
-  discovery and is called only by `push_xdg_candidates`. It skips
-  `NotFound` and propagates other metadata errors with the candidate
-  path.
+  discovery and is called only by `push_xdg_candidates`. It skips `NotFound`
+  and propagates other metadata errors with the candidate path.
 
 ### Composition rules
 
