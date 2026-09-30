@@ -1,10 +1,10 @@
-"""The CV-005 readers, driven on documents this repository does not have.
+"""The workflow readers, driven on documents this repository does not have.
 
-Every rule in ``codescene_coverage_test`` derives its subject from these
-readings, and each of those rules is a refusal. A refusal over an empty
-subject set is satisfied by any repository at all, so a reader that
-quietly finds nothing does not report an error and does not report zero:
-it reports compliance.
+`workflow_reading.py` is kept for the runner-placement contract, whose rules
+derive their subject from these readings, and each of those rules is a
+refusal. A refusal over an empty subject set is satisfied by any repository at
+all, so a reader that quietly finds nothing does not report an error and does
+not report zero: it reports compliance.
 
 The real workflows cannot catch that. They use one spelling of ``on:``,
 one push filter and one job shape, so they exercise one path through
@@ -20,16 +20,11 @@ import typing as typ
 
 import pytest
 import yaml
-from codescene_coverage import (
-    publishers,
-    pull_request_workflows,
-)
 from workflow_reading import (
     WorkflowReadingError,
     load_workflow,
     pushes_to_main,
     read_workflows,
-    serves_pull_requests,
     triggers,
     workflow_steps,
 )
@@ -137,10 +132,9 @@ def test_the_push_reader_answers_every_filter_form(
 ) -> None:
     """Which workflow may publish turns on this reading.
 
-    ``publishers`` grants the CodeScene upload to a workflow that pushes
-    to main, so a reader answering True for a shape that never runs on a
-    main push hands that permission to the wrong file, and the contract
-    passes while the wrong workflow uploads.
+    The publisher is the workflow that pushes to main, so a reader answering
+    True for a shape that never runs on a main push names the wrong file,
+    and a rule about the publisher passes while another workflow uploads.
 
     The tag forms are the ones a naive reading gets wrong. A ``push``
     filtered to tags alone fires for tag pushes and never for a branch.
@@ -160,23 +154,6 @@ def test_a_workflow_with_no_push_trigger_never_publishes() -> None:
     """
     assert not pushes_to_main(load_workflow(f"on:\n  pull_request:\n{JOBS}")), (
         "a workflow declaring no push trigger cannot push to main"
-    )
-
-
-def test_a_publisher_serving_pull_requests_is_not_a_publisher() -> None:
-    """Both halves of the predicate, and the second is the one dropped.
-
-    A repository's main workflow often declares ``pull_request`` and
-    ``push: branches: [main]`` together. A predicate reading only the
-    push makes that one file simultaneously required to upload and
-    forbidden from uploading, so the contract contradicts itself rather
-    than failing.
-    """
-    both = load_workflow(f"on:\n  pull_request:\n  push:\n    branches: [main]\n{JOBS}")
-    assert serves_pull_requests(both), "the fixture must serve pull requests"
-    assert publishers({"ci.yml": both}) == {}, (
-        "a workflow serving pull requests is not a publisher, whatever else "
-        "triggers it"
     )
 
 
@@ -290,19 +267,6 @@ def test_distinct_keys_at_different_levels_are_not_duplicates() -> None:
     jobs = load_workflow(body)["jobs"]
     assert isinstance(jobs, dict), jobs
     assert sorted(jobs) == ["a", "b"], "each job keeps its own runs-on"
-
-
-def test_no_pull_request_workflow_is_a_reader_fault() -> None:
-    """The same argument one layer up.
-
-    A repository with a pull-request lane that reads as having none is a
-    broken reading, and the rules refusing things on that lane would all
-    pass over the empty set.
-    """
-    documents = {"main-only.yml": load_workflow(f"on:\n  push:\n{JOBS}")}
-    with pytest.raises(WorkflowReadingError) as raised:
-        pull_request_workflows(documents)
-    assert raised.value.reader == "pull_request_workflows", raised.value
 
 
 @pytest.mark.parametrize(

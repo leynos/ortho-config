@@ -10,8 +10,8 @@ name: Coverage (main)
 # read the token, so the changed-line gate there was a silent skip for
 # exactly the contributions least likely to have been measured; and on a
 # branch it put a second tool on the critical path for a gate the
-# ratchet already applies. `tests/workflow_contracts/codescene_coverage_test.py`
-# holds the shape.
+# ratchet already applies. `cv005-contracts` (the Makefile's
+# `test-workflow-contracts` target) holds the shape.
 #
 # This workflow also advances the coverage ratchet baseline: caches
 # saved on main are readable by every pull-request run, so the baseline
@@ -77,6 +77,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@d4d248bbbecdcf7b4f5bc79ffd4d6caee370bd79

@@ -1,0 +1,26 @@
+repository = "leynos/ortho-config"
+
+# Each build-test leg measures two feature sets, and only the Linux leg
+# ratchets (`with-ratchet: ${{ matrix.ratchet }}`, true for Linux alone), so
+# each pull-request leg is paired with the publisher leg that writes its
+# report. The broad leg ratchets in the Linux cell the pairing declares; the
+# leg runs in every cell and takes only `with-ratchet` from the matrix, so no
+# guard is needed.
+[[pairing]]
+lane = "ci.yml:build-test:Test and Measure Coverage (with serde_saphyr)"
+publisher = "coverage-main.yml:coverage-upload:Test and Measure Coverage (with serde_saphyr)"
+[pairing.matrix]
+ratchet = "true"
+
+[[pairing]]
+lane = "ci.yml:build-test:Test and Measure Coverage (without serde_saphyr)"
+publisher = "coverage-main.yml:coverage-upload:Test and Measure Coverage (without serde_saphyr)"
+
+# What the publisher's ratcheting generator measures, exactly. The shared rules
+# hold every lane equal to the publisher; this pins the publisher's own value,
+# so a change made to both at once is still a reviewed change.
+[selection]
+output-path = "lcov-serde-saphyr.info"
+format = "lcov"
+features = "serde_json toml json5 yaml metrics"
+with-ratchet = "true"

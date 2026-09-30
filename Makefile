@@ -17,6 +17,13 @@ MDTABLEFIX_SELECT = --git --include-untracked
 MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 NIXIE ?= nixie
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# only parameters.
+CV005_CONTRACTS_REF ?= 2f58fab140cc8dfe69756aaa6a3bbb987c426023
+CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
 # Single source of truth for the spelling gate. The builder pins the typos
 # binary and owns the shared dictionary, so CI consumes it through the
 # spellcheck target and the Makefile and CI cannot drift apart.
@@ -84,7 +91,8 @@ python-test-deps: ## Ensure Python test dependencies are provisioned
 # requirement lets a future major release change collection or doctest
 # behaviour with no edit to this repository. hypothesis arrived with the
 # coverage-ceiling contract (#482) and is bounded for the same reason.
-test-workflow-contracts: ## Validate the workflow caller contracts
+test-workflow-contracts: ## Validate the workflow caller contracts, including the shared CV-005 shape
+	$(CV005_CONTRACTS) check --repository .
 	$(UV) run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' \
 		--with 'hypothesis>=6,<7' pytest \
 		tests/workflow_contracts \
