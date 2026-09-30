@@ -4,7 +4,13 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::{
     ConfigFormat, DocMetadata, ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, SourceKind, ValueType,
 };
-use ortho_config::{OrthoConfig, OrthoConfigLocalization, message_id_for};
+use ortho_config::OrthoConfig;
+
+// Runtime-agreement coverage lives in a shared module below `support/` so
+// Cargo does not also discover it as a standalone integration test, and this
+// file stays within the repository's 400-line limit.
+#[path = "support/docs_ir_runtime_agreement.rs"]
+mod runtime_agreement;
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 
@@ -259,44 +265,6 @@ fn test_field_log_level(docs_metadata: DocMetadata) -> Result<()> {
     ensure!(
         log_level.file.as_ref().map(|value| value.key_path.as_str()) == Some("logLevel"),
         "expected log_level file key"
-    );
-    Ok(())
-}
-
-/// Guards the contract that the documentation IR and the runtime localizer
-/// resolve the *same* Fluent key for a field.
-///
-/// The IR is consumed by external tooling that writes catalogues, while
-/// `clap_command` builds its lookup key at runtime from
-/// `message_id_for(command_path, "args.{arg_id}.long_help")`. If the two
-/// derivations disagree, the emitted catalogue simply never matches the
-/// lookup.
-///
-/// `log_level` is the discriminating case: it is snake_case in Rust but
-/// `clap_derive` keeps the raw field name as the argument id, so a kebab-cased
-/// or otherwise re-spelled id would silently miss.
-#[rstest]
-fn test_field_long_help_id_matches_runtime_lookup(docs_metadata: DocMetadata) -> Result<()> {
-    let log_level = field_by_name(&docs_metadata, "log_level")?;
-    let command_path = DocsConfig::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
-    let expected = message_id_for(&command_path, "args.log_level.long_help");
-
-    ensure!(
-        log_level.long_help_id.as_deref() == Some(expected.as_str()),
-        "IR long_help_id {:?} must equal the runtime lookup key {expected:?}",
-        log_level.long_help_id,
-    );
-
-    let Some(arg) = DocsConfig::ARG_IDS
-        .iter()
-        .find(|arg| arg.name == "log_level")
-    else {
-        return Err(anyhow!("ARG_IDS should contain the log_level argument"));
-    };
-    ensure!(
-        arg.long_help_id == expected,
-        "ARG_IDS long_help_id {:?} must equal the runtime lookup key {expected:?}",
-        arg.long_help_id,
     );
     Ok(())
 }

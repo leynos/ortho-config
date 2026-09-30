@@ -232,14 +232,8 @@ fn argument_entries_preserve_field_and_suffix_order() -> Result<()> {
     Ok(())
 }
 
-/// Verifies the combiner emits every command entry followed by every
-/// argument's three suffix entries, with the full schema populated.
-///
-/// Cardinality is asserted explicitly: the expected-vector comparisons above
-/// pin each field, but only a count makes a silently dropped trailing entry
-/// (for example, a truncated suffix list) observable.
-#[test]
-fn entries_emit_all_command_and_argument_entries() -> Result<()> {
+/// Builds the two-argument localization model shared by combiner tests.
+fn fixture_model() -> LocalizationIds {
     let command = CommandIds {
         about_id: message_id("cli-about"),
         long_about_id: message_id("cli-long-about"),
@@ -249,29 +243,65 @@ fn entries_emit_all_command_and_argument_entries() -> Result<()> {
         after_help_id: message_id("cli-after-help"),
         after_long_help_id: message_id("cli-after-long-help"),
     };
-    let args = vec![
-        ArgIdsModel {
-            field_name: String::from("first"),
-            name: ClapArgId(String::from("first")),
-            help_id: message_id("cli-args-first-help"),
-            long_help_id: message_id("cli-args-first-long-help"),
-            value_name_id: message_id("cli-args-first-value-name"),
-        },
-        ArgIdsModel {
-            field_name: String::from("second"),
-            name: ClapArgId(String::from("second")),
-            help_id: message_id("cli-args-second-help"),
-            long_help_id: message_id("cli-args-second-long-help"),
-            value_name_id: message_id("cli-args-second-value-name"),
-        },
-    ];
-    let model = LocalizationIds {
+    let args = ["first", "second"]
+        .into_iter()
+        .map(|field| ArgIdsModel {
+            field_name: String::from(field),
+            name: ClapArgId(String::from(field)),
+            help_id: message_id(&format!("cli-args-{field}-help")),
+            long_help_id: message_id(&format!("cli-args-{field}-long-help")),
+            value_name_id: message_id(&format!("cli-args-{field}-value-name")),
+        })
+        .collect();
+    LocalizationIds {
         base: LocalizationBase(String::from("fixture")),
         command,
         args,
+    }
+}
+
+/// Verifies every entry carries one shared derive site and type identity.
+fn assert_shared_provenance(actual: &[Entry], type_name: &str) -> Result<()> {
+    // The concrete span value is not asserted: `Span::call_site()` outside a
+    // real macro expansion carries no file, and pinning that would test
+    // proc-macro2 rather than the combiner.
+    let Some(first) = actual.first() else {
+        return Err(anyhow::anyhow!("combiner must emit at least one entry"));
     };
+    let expected_source = json(&first.source)?;
+    for entry in actual {
+        ensure!(
+            entry.type_name == type_name,
+            "entry {} must carry the derive type name, got {}",
+            entry.id,
+            entry.type_name,
+        );
+        ensure!(
+            json(&entry.source)? == expected_source,
+            "entry {} must carry the shared derive source, got {:?}",
+            entry.id,
+            entry.source,
+        );
+        ensure!(
+            entry.path_scope == "standalone",
+            "entry {} must record the standalone path scope, got {}",
+            entry.id,
+            entry.path_scope,
+        );
+    }
+    Ok(())
+}
+
+/// Verifies the combiner emits every command entry followed by every
+/// argument's three suffix entries, with the full schema populated.
+///
+/// Cardinality is asserted explicitly: the expected-vector comparisons above
+/// pin each field, but only a count makes a silently dropped trailing entry
+/// (for example, a truncated suffix list) observable.
+#[test]
+fn entries_emit_all_command_and_argument_entries() -> Result<()> {
+    let model = fixture_model();
     let ident = Ident::new("Cli", Span::call_site());
-    let source = fixture_source();
     let actual = entries(&model, &ident, Span::call_site(), "fixture");
 
     ensure!(
@@ -304,179 +334,12 @@ fn entries_emit_all_command_and_argument_entries() -> Result<()> {
         "combiner must emit command entries before argument entries, got {actual_ids:?}"
     );
 
-    // Every entry shares one derive site and type identity, so a regression
-    // that forgets to thread the context through shows up here. The concrete
-    // span value is not asserted: `Span::call_site()` outside a real macro
-    // expansion carries no file, and pinning that would test proc-macro2
-    // rather than the combiner.
-    let Some(first) = actual.first() else {
-        return Err(anyhow::anyhow!("combiner must emit at least one entry"));
-    };
-    let expected_source = json(&first.source)?;
-    for entry in &actual {
-        ensure!(
-            entry.type_name == "fixture::Cli",
-            "entry {} must carry the derive type name, got {}",
-            entry.id,
-            entry.type_name,
-        );
-        ensure!(
-            json(&entry.source)? == expected_source,
-            "entry {} must carry the shared derive source, got {:?}",
-            entry.id,
-            entry.source,
-        );
-        ensure!(
-            entry.path_scope == "standalone",
-            "entry {} must record the standalone path scope, got {}",
-            entry.id,
-            entry.path_scope,
-        );
-    }
+    assert_shared_provenance(&actual, "fixture::Cli")?;
     Ok(())
 }
 
-/// Verifies rendering sorts deterministically regardless of input order.
-#[test]
-fn renderer_sorts_entries_deterministically() -> Result<()> {
-    let entries = vec![
-        entry_with_type_name("zeta", String::from("Fixture")),
-        entry_with_type_name("alpha", String::from("Fixture")),
-        entry_with_type_name("middle", String::from("Fixture")),
-    ];
-    let first = render(entries.clone())?;
-    let second = render(entries)?;
-    let ids = round_trip_entries(&first)?
-        .into_iter()
-        .map(|entry| entry.id)
-        .collect::<Vec<_>>();
 
-    ensure!(
-        file_bytes(&first) == file_bytes(&second),
-        "repeated renders must have identical file bytes"
-    );
-    ensure!(
-        ids == ["alpha", "middle", "zeta"],
-        "renderer must sort entries by stable schema order"
-    );
-    Ok(())
-}
-
-/// Verifies split output round-trips every ordered entry through its index.
-#[test]
-fn split_renderer_round_trips_ordered_entries() -> Result<()> {
-    let entries = vec![
-        entry_with_type_name("second", "x".repeat(SPLIT_PAYLOAD_BYTES)),
-        entry_with_type_name("first", "x".repeat(SPLIT_PAYLOAD_BYTES)),
-        entry_with_type_name("third", "x".repeat(SPLIT_PAYLOAD_BYTES)),
-    ];
-    let files = render(entries.clone())?;
-    let round_tripped = round_trip_entries(&files)?;
-
-    ensure!(
-        files
-            .first()
-            .is_some_and(|file| file.name == "cli-identifiers.index.json"),
-        "oversized document must begin with its split index"
-    );
-    ensure!(
-        json(&round_tripped)? == json(&ordered(entries))?,
-        "split artefact must round-trip every ordered entry"
-    );
-    Ok(())
-}
-
-/// Verifies the one MiB cap keeps boundary output whole and splits above it.
-#[test]
-fn renderer_honours_the_one_mebibyte_boundary() -> Result<()> {
-    let at_cap = entry_at_cap()?;
-    let above_cap = entry_with_type_name("boundary", format!("{}x", at_cap.type_name.as_str()));
-    let at_cap_files = render(vec![at_cap])?;
-    let above_cap_files = render(vec![above_cap])?;
-
-    ensure!(
-        at_cap_files
-            .first()
-            .is_some_and(|file| file.name == "cli-identifiers.json"),
-        "a document exactly at the cap must remain unsplit"
-    );
-    ensure!(
-        above_cap_files
-            .first()
-            .is_some_and(|file| file.name == "cli-identifiers.index.json"),
-        "a document above the cap must use the split index"
-    );
-    Ok(())
-}
-
-/// Verifies one oversized entry remains available as a single indexed part.
-#[test]
-fn renderer_keeps_one_oversized_entry_in_a_single_part() -> Result<()> {
-    let entry = entry_with_type_name("oversized", "x".repeat(CAP_BYTES));
-    let files = render(vec![entry.clone()])?;
-    let part = files
-        .iter()
-        .find(|file| file.name == "cli-identifiers.0.json")
-        .context("single oversized entry part")?;
-
-    ensure!(
-        files.len() == 2,
-        "single oversized entry must render only an index and one part"
-    );
-    ensure!(
-        serde_json::from_slice::<Document>(&part.contents)?
-            .entries
-            .len()
-            == 1,
-        "single oversized entry part must retain the entry"
-    );
-    ensure!(
-        json(&round_trip_entries(&files)?)? == json(&ordered(vec![entry]))?,
-        "single oversized entry must round-trip through the index"
-    );
-    Ok(())
-}
-
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(32))]
-
-    /// Verifies split rendering round-trips arbitrary entries in every input order.
-    #[test]
-    fn split_renderer_round_trips_arbitrary_entries(
-        entries in proptest::collection::vec(split_entry_strategy(), 5..8),
-        offset in 0_usize..5,
-    ) {
-        let expected = ordered(entries.clone());
-        let files = render(entries.clone()).map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let round_tripped = round_trip_entries(&files)
-            .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let mut permuted = entries;
-        permuted.rotate_left(offset);
-        let permuted_files = render(permuted).map_err(|error| TestCaseError::fail(error.to_string()))?;
-
-        prop_assert!(
-            files.first().is_some_and(|file| file.name == "cli-identifiers.index.json"),
-            "large generated inputs must use an index"
-        );
-        prop_assert_eq!(
-            json(&round_tripped).map_err(|error| TestCaseError::fail(error.to_string()))?,
-            json(&expected).map_err(|error| TestCaseError::fail(error.to_string()))?,
-            "split output must round-trip every ordered entry"
-        );
-        prop_assert_eq!(
-            file_bytes(&files),
-            file_bytes(&permuted_files),
-            "permuted input must render identical file bytes"
-        );
-        for file in &files {
-            if file.name != "cli-identifiers.index.json" {
-                let document = serde_json::from_slice::<Document>(&file.contents)
-                    .map_err(|error| TestCaseError::fail(error.to_string()))?;
-                prop_assert!(
-                    file.contents.len() <= CAP_BYTES || document.entries.len() == 1,
-                    "split parts must respect the cap unless one entry alone exceeds it"
-                );
-            }
-        }
-    }
-}
+// Renderer coverage lives in a sibling module to keep this file within
+// the repository's 400-line limit.
+#[path = "artefact_renderer_tests.rs"]
+mod artefact_renderer_tests;
