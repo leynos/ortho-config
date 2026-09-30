@@ -96,10 +96,10 @@ jobs:
         # On a hosted runner (Windows, or a fork's Linux fallback) there is
         # no proxy and the action fails closed, so it runs on Ubicloud only.
         if: ${{ runner.environment == 'self-hosted' }}
-        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@c4ed5ffaf0640b1907d5359a87fd1677034eec27
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@c4ed5ffaf0640b1907d5359a87fd1677034eec27
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
@@ -111,7 +111,7 @@ jobs:
         # first release with `--check` and `--git`. The Markdown check is
         # platform-independent, so it runs on the Linux lane only.
         if: ${{ matrix.platform == 'linux' }}
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@c4ed5ffaf0640b1907d5359a87fd1677034eec27
         with:
           version: "0.6.0"
 
@@ -275,7 +275,7 @@ jobs:
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@c4ed5ffaf0640b1907d5359a87fd1677034eec27
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -292,7 +292,7 @@ jobs:
         run: df -BM /
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@c4ed5ffaf0640b1907d5359a87fd1677034eec27
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -409,7 +409,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@c4ed5ffaf0640b1907d5359a87fd1677034eec27
 
       - name: Setup uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
