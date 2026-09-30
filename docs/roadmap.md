@@ -590,8 +590,8 @@ later progressively add opinion.
   - [x] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
     `USAGE_ID`, and per-argument `ARG_IDS` constants.
   - [x] Extend the `OrthoConfig` derive to emit `OrthoConfigLocalization`
-    impls. Generate identifiers from command path and field `id` (or
-    kebab-cased field name).
+    impls. Generate identifiers from command path and field `id` (or the raw
+    Rust field name, matching clap's derived argument id).
   - [x] Add generated path-aware `OrthoConfigDocs` delegation so the docs IR
     picks up the same identifiers.
   - [x] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB

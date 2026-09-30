@@ -731,9 +731,12 @@ this is generated delegation rather than a Rust blanket implementation.
 The extended derive:
 
 - Generates the localization identifier for each argument from the command
-  path and the field's `id` (or, when absent, the kebab-cased field name).
-  Identifiers are exposed as `OrthoConfigLocalization` associated constants so
-  application code can refer to them without string concatenation.
+  path and the field's `id` (or, when absent, the raw Rust field name).
+  `clap_derive` emits `Name::Derived(ident)` as `ident.unraw().to_string()`
+  and only kebab-cases the long flag, so an underscored field keeps its
+  underscore in the identifier. Identifiers are exposed as
+  `OrthoConfigLocalization` associated constants so application code can
+  refer to them without string concatenation.
 - Recognizes `localized_default` but rejects it with a deferral diagnostic;
   embedding localized defaults remains planned work. Consequently,
   `embedded_default` is always `null` in emitted artefact entries.
