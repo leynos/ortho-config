@@ -3,10 +3,10 @@
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
+#[cfg(any(unix, target_os = "redox"))]
+use ortho_config::OrthoError;
 use ortho_config::subcommand::Prefix;
-use ortho_config::{
-    MapEnv, OrthoError, SubcommandFileContext, load_and_merge_subcommand_with_sources_at,
-};
+use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_with_sources_at};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
