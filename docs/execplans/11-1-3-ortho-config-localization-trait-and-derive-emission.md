@@ -408,6 +408,16 @@ review's findings are folded into the Decision Log and milestones below.
   the command path must be threaded into metadata construction before field ids
   are materialized. This resolved the Ambiguity tolerance through revised
   Decision D-9 rather than by changing pinned assertions alone.
+- Observation (implementation correction): the plan assumed the argument id
+  follows the same kebab-cased rule as the long flag in `cli_flags.rs`; that
+  assumption was wrong. `clap_derive`'s `impl ToTokens for Name` emits the raw
+  field name as the id (`ident.unraw().to_string()`) and kebab-cases only the
+  long flag, so the kebab-cased rule governs the flag, not the id, and the two
+  must not be conflated. Evidence: the emitted artefact contains
+  `simple-fixture-args-is_dry_run-long_help`, which preserves the underscore.
+  Impact: the implementation now matches clap, and the design document,
+  roadmap, and this plan are corrected to derive the id from the raw Rust field
+  name.
 
 ## Decision log
 
@@ -776,8 +786,8 @@ alongside the existing localizer exports):
 ```rust
 /// Fluent identifiers for one argument of a derived command-line surface.
 pub struct ArgLocalizationIds {
-    /// The argument's clap id (explicit `#[arg(id = "…")]` or the
-    /// kebab-cased field name).
+    /// The argument's clap id (explicit `#[arg(id = "…")]` or the raw
+    /// Rust field name).
     pub name: &'static str,
     /// Identifier for the argument's `help` text.
     pub help_id: &'static str,
@@ -840,8 +850,8 @@ New module `ortho_config_macros/src/derive/generate/localization/` with:
   segments (Decision D-5) and the field list. For each own, non-subcommand,
   non-`skip_cli`, non-flattened field (D-12), the argument id is the field's
   clap `id` override (`clap_arg_id` in `derive/parse/clap_attrs.rs`) or the
-  kebab-cased field name (same rule as `cli_flags.rs`). Outputs a struct-shaped
-  model
+  raw Rust field name, matching clap's derived argument id. Outputs a
+  struct-shaped model
   (`LocalizationIds { base, command: CommandIds, args: Vec<ArgIdsModel> }`)
   used by Milestones 3–5.
 - Collision detection: normalized argument ids are checked for uniqueness
@@ -1508,3 +1518,29 @@ target is the tip of main), and main's `#[command(name = "greet")]` rename
 survived. The repeated-block scan reported only idiomatic repetition in new
 test files and two methods legitimately sharing a doc sentence; Weave never
 participated, so its reconstruction defects are not a mechanism here.
+
+## Lessons
+
+2026-09-30: the plan assumed the argument id followed the same kebab-cased
+rule as `cli_flags.rs`, and stated that rule in the design document, the
+roadmap, and the milestone specification above. The assumption was wrong.
+`clap_derive`'s `impl ToTokens for Name` emits `ident.unraw().to_string()`
+with no case conversion, and the kebab-casing lives in a separate `impl Name`
+that serves environment-variable and deprecated-flag naming. Only the long
+flag is kebab-cased; the id keeps the raw Rust field name. A probe of
+`Arg::get_id()` for `is_dry_run`, `max_retries_count`, and `logLevel`
+returned those exact spellings, confirming the source reading.
+
+The two rules govern different things and must not be conflated: the
+kebab-cased rule governs the *flag*, the raw-name rule governs the *id*.
+An underscored field's identifier is therefore
+`<base>-args-is_dry_run-long_help`, and because `normalize_segment` preserves
+both `-` and `_`, a kebab-cased id is a distinct and unreachable key rather
+than a cosmetic variation. The same conflation had also produced a
+hyphenated `long-help` suffix in the documentation IR, so a single mistaken
+rule made every underscored field's long-help identifier wrong on both axes.
+
+`cli_long` renames the flag and not the id, so code that reads an id override
+must consult `#[arg(id = "…")]` alone. The implementation now matches clap,
+verified against a real emitted artefact, and the four documents that
+restated the old rule have been corrected.

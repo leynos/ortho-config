@@ -27,10 +27,6 @@ sibling commands or arguments normalize to the same identifier. These failures
 come from command declarations, not from user input, locale selection, or
 catalogue contents.
 
-`OrthoConfig` now detects normalized argument-id collisions within one derived
-struct at compile time. Hand-built trees and sibling subcommand-name collisions
-remain runtime panic cases because they are assembled outside the derive.
-
 The question is whether the public identifier helpers should return `Result`,
 panic, or silently leave invalid command-tree nodes unlocalized.
 
@@ -81,9 +77,9 @@ distinguished.
 In the context of deriving Fluent identifiers from compile-time-fixed clap
 command trees, facing the need to surface unrepresentable or colliding ids, we
 decided to panic (matching clap's `mut_arg` convention and the §4.1 mandate)
-and deliberately rejected a `Result`-returning API for the default path,
-accepting that hand-built dynamic trees must validate names before localizing,
-because the inputs are developer-authored constants surfaced at first run.
+and neglected a `Result`-returning API, accepting that hand-built dynamic trees
+must validate names before localizing, because the inputs are
+developer-authored constants surfaced at first run.
 
 `message_id_for` owns the strict segment normalization rule. The command-tree
 walker owns collision detection while it traverses each parent node. Collision
@@ -121,9 +117,8 @@ invalid segments, and avoid changing the existing panic contract.
   become a process panic.
 - `LocalizedParse` widens the reachable panic surface from explicit command
   localization calls to every `clap::Parser` that opts into localized parsing.
-  The derive now rejects normalized argument-ID collisions within one deriving
-  struct at compile time; hand-built and dynamic command trees retain the
-  runtime panic contract.
+  This is accepted until the planned derive-time guard in 11.1.3 can emit a
+  compile-time error for generated identifiers.
 - Panic contracts are harder to relax than ordinary internal implementation
   choices because downstream tests may begin to rely on the exact failure
   surface.
@@ -138,3 +133,30 @@ invalid segments, and avoid changing the existing panic contract.
   belong in that enum or in a walker-specific error type.
 - Decide whether dynamic command-tree validation should expose all detected
   errors at once or fail on the first invalid segment or collision.
+
+## Subsequent amendments
+
+On 2026-09-30 the localization derive closed the first half of the
+"derive-time guard" promise recorded as a risk above.
+
+`#[derive(OrthoConfig)]` now detects normalized argument-id collisions
+within a single derived struct at compile time and emits a spanned error
+that names both colliding fields and suggests renaming the field or
+setting `#[arg(id = "…")]`. Two details of that guard matter. First, the
+default argument id is the **raw Rust field name**, not its kebab-cased
+spelling, because `clap_derive` emits `Name::Derived(ident)` as
+`ident.unraw().to_string()` and only kebab-cases the long flag, so an
+identifier derived from the kebab-cased spelling would name a key that no
+runtime lookup ever requests for an underscored field. Second, the fixed
+message suffixes are sourced from one shared vocabulary, `MessageSuffix`, so
+the documentation IR and the runtime localizer emit the same text and cannot
+drift apart. The long-help suffix is therefore **`long_help`**, not
+`long-help`. That distinction is not cosmetic, because `normalize_segment`
+preserves both `-` and `_`, so the two spellings normalize to distinct keys.
+A re-spelled suffix is therefore an unreachable identifier rather than a
+cosmetic difference: a catalogue entry may translate cleanly and still never
+be reached.
+
+The decision recorded here is unchanged: hand-built and sibling subcommand
+collisions still follow the accepted panic contract, and the derive now
+fails before it can emit an ambiguous identifier.
