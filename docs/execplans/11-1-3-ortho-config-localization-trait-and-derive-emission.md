@@ -1538,9 +1538,9 @@ ADR-006's historical decision text confirmed byte-identical afterwards.
 
 `make test` aborted at the `ortho_config_macros` lib target, the second Rust
 target to run, on
-`derive::generate::localization::tests::colliding_normalised_arg_ids_fail_with_pinned_message`.
+`derive::generate::localization::tests::colliding_normalized_arg_ids_fail_with_pinned_message`.
 That test asserted a collision that does not exist: `normalize_segment` only
-lowercases and preserves `-` and `_`, so `foo_bar` and `foo-bar` normalise to
+lowercases and preserves `-` and `_`, so `foo_bar` and `foo-bar` normalize to
 *distinct* segments. Clap keeps the raw Rust field name as the argument id, so
 two plain field names can only collide through case alone. The fixture was the
 stale half, not the production rule, which is the same class of error the
@@ -1555,3 +1555,60 @@ every doctest were unreported rather than passing. Repairs are committed as
 `c1c175cd`, verified locally by `cargo test -p ortho_config_macros --lib` (173
 passed, 0 failed) and `make check-fmt` (exit 0, 76 files unchanged), and a
 fresh full-set run was requested on that frozen SHA.
+
+### Fourth full-set gate run: `a26c3b8e` (five of six green)
+
+The full-set run on `a26c3b8e` is a valid certificate — HEAD was frozen and the
+tree clean at the start, midpoint, and end. Five gates pass. `make test` now
+runs to completion: 81 Rust targets, 1439 passed with zero failures, plus the
+Python half at 115 passed and 5 skipped. The three targets the previous run
+never reached all ran (`test_helpers`, `tests/fixtures/orthohelp_fixture`, and
+the pytest suite). The repaired collision test passes. `TRYBUILD` was unset and
+no `wip/` directory appeared, so no trybuild expectation was silently accepted.
+
+One gate failed: `make markdownlint` reached its final step, `make spellcheck`,
+and the spelling gate rejected two lines in *this* document — both introduced by
+`a26c3b8e` itself. The second was free prose, but the first was a verbatim
+quotation of a Rust test identifier that genuinely carried the `-is-` spelling.
+That identifier was the real fault: the file's production helper is
+`normalize_segment`, spelled `-ize`, as were its sibling tests. A test name
+that disagrees with the helper it exercises is a naming defect, not a quotation
+that needs an exception. It was therefore renamed to
+`colliding_normalized_arg_ids_fail_with_pinned_message` and the prose reworded,
+rather than adding a `typos.local.toml` pattern. This keeps the spelling gate's
+inline-code coverage intact, which `AGENTS.md` explicitly asks for: add a
+backtick-bound pattern only for an *upstream API or identifier*, never for a
+name this repository owns.
+
+Three further identifiers added by this branch in `be97d4e3` carried the same
+nonconforming spelling: a helper in the macro-side localization module, its
+call-site binding, and one property test in the identifier twin. They were
+invisible to the spelling gate, because the gate lints Markdown prose and not
+Rust sources, and the execplan's first attempt to record them *as quotations*
+made them visible — which is the one trap worth naming here. The spelling gate
+reads inline code spans, so describing a misspelling inside backticks re-trips
+the very check the description is about. That paragraph was rewritten to
+describe the fault categorically instead.
+
+The underlying inconsistency was genuine rather than a false positive. Within
+this feature `-ize` is the established spelling by a wide margin (43
+occurrences against 29), and `normalize_segment` — the production helper the
+whole identifier path is built on — is one of them. The three outliers were
+therefore renamed to match, together with the one assertion message from the
+same commit that used the `-is-` form. Renaming was preferred over a
+`typos.local.toml` exception because the fault was in an identifier this
+repository owns, not in an upstream API, and `AGENTS.md` reserves the pattern
+list for the latter.
+
+The fix was applied as a scoped rename rather than a sweep. Long-standing
+`-is-` vocabulary in untouched files, such as the localization helpers in
+`fluent.rs` and the PowerShell CRLF writers, was deliberately left alone: those
+names predate this branch, are not spelled inconsistently *within* their own
+modules, and rewriting them would churn unrelated code without improving
+behaviour.
+
+A coverage fact worth recording, since it is a property of the Makefile rather
+than a regression: Rust doctests do not run in any gate. `make test` uses
+`cargo test --all-targets`, which excludes `--doc`, and no other target passes
+it; the recipe's doctest flags apply only to the Python `scripts/` half. Every
+`///` example in the workspace is therefore unexercised by these gates.

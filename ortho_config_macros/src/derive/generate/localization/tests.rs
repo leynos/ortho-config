@@ -198,7 +198,7 @@ fn flattened_fields_are_excluded() -> Result<()> {
 }
 
 #[test]
-fn colliding_normalised_arg_ids_fail_with_pinned_message() -> Result<()> {
+fn colliding_normalized_arg_ids_fail_with_pinned_message() -> Result<()> {
     // The collision must be genuine, not assumed. `normalize_segment` only
     // lowercases; it preserves `-` and `_`, so `foo_bar` and `foo-bar` are
     // *distinct* segments even though they are the same `clap` flag. Clap also
@@ -215,7 +215,7 @@ fn colliding_normalised_arg_ids_fail_with_pinned_message() -> Result<()> {
     let message = expect_model_error(&input);
     ensure!(
         message.contains("duplicate localized argument id 'foo_bar'"),
-        "message must name the colliding normalised id: {message}"
+        "message must name the colliding normalized id: {message}"
     );
     ensure!(
         message.contains("for field 'foo_bar' and 'other'"),
@@ -232,7 +232,7 @@ fn colliding_normalised_arg_ids_fail_with_pinned_message() -> Result<()> {
 }
 
 #[test]
-fn dotted_arg_id_is_normalised_per_segment() -> Result<()> {
+fn dotted_arg_id_is_normalized_per_segment() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
         #[ortho_config(localization_base = "acme.cli")]
         struct App {
@@ -244,7 +244,7 @@ fn dotted_arg_id_is_normalised_per_segment() -> Result<()> {
     let arg = model.args.first().ok_or_else(|| anyhow!("missing arg"))?;
     ensure!(
         arg.help_id.as_ref() == "acme-cli-args-kebab-tail-help",
-        "dotted arg id must be normalised per segment: {}",
+        "dotted arg id must be normalized per segment: {}",
         arg.help_id.as_ref()
     );
     Ok(())

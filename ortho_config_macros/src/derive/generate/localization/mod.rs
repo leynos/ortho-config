@@ -320,21 +320,21 @@ fn build_arg_models(
         // kebab-cased spelling here would therefore emit a key that no
         // runtime lookup ever requests for an underscored field.
         let arg_id = ClapArgId(clap_arg_id(field)?.unwrap_or_else(|| name_ident.to_string()));
-        let (normalised, arg_segments) = normalise_arg_id(&arg_id, name_ident.span())?;
+        let (normalized, arg_segments) = normalize_arg_id(&arg_id, name_ident.span())?;
 
-        if let Some((first_span, first_name)) = seen.get(&normalised) {
+        if let Some((first_span, first_name)) = seen.get(&normalized) {
             let mut err = syn::Error::new_spanned(
                 name_ident,
                 format!(
                     "duplicate localized argument id '{}' for field '{first_name}' and '{name_ident}'; rename the field or set `#[arg(id = \"…\")]`",
-                    normalised.as_ref(),
+                    normalized.as_ref(),
                 ),
             );
             err.combine(syn::Error::new(*first_span, "first defined here"));
             return Err(err);
         }
         seen.insert(
-            normalised.clone(),
+            normalized.clone(),
             (name_ident.span(), name_ident.to_string()),
         );
 
@@ -368,7 +368,7 @@ fn build_arg_models(
 /// Normalizes a (possibly dotted) clap argument id into its joined form plus
 /// its per-segment parts. Mirrors the runtime `message_id_for` suffix handling:
 /// `args.<arg_id>.help` is split on `.`, with each segment normalized.
-fn normalise_arg_id(
+fn normalize_arg_id(
     arg_id: &ClapArgId,
     span: Span,
 ) -> syn::Result<(FluentMessageId, FluentSegments)> {
