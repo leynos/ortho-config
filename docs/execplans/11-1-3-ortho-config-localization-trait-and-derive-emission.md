@@ -1518,29 +1518,3 @@ target is the tip of main), and main's `#[command(name = "greet")]` rename
 survived. The repeated-block scan reported only idiomatic repetition in new
 test files and two methods legitimately sharing a doc sentence; Weave never
 participated, so its reconstruction defects are not a mechanism here.
-
-## Lessons
-
-2026-09-30: the plan assumed the argument id followed the same kebab-cased
-rule as `cli_flags.rs`, and stated that rule in the design document, the
-roadmap, and the milestone specification above. The assumption was wrong.
-`clap_derive`'s `impl ToTokens for Name` emits `ident.unraw().to_string()`
-with no case conversion, and the kebab-casing lives in a separate `impl Name`
-that serves environment-variable and deprecated-flag naming. Only the long
-flag is kebab-cased; the id keeps the raw Rust field name. A probe of
-`Arg::get_id()` for `is_dry_run`, `max_retries_count`, and `logLevel`
-returned those exact spellings, confirming the source reading.
-
-The two rules govern different things and must not be conflated: the
-kebab-cased rule governs the *flag*, the raw-name rule governs the *id*.
-An underscored field's identifier is therefore
-`<base>-args-is_dry_run-long_help`, and because `normalize_segment` preserves
-both `-` and `_`, a kebab-cased id is a distinct and unreachable key rather
-than a cosmetic variation. The same conflation had also produced a
-hyphenated `long-help` suffix in the documentation IR, so a single mistaken
-rule made every underscored field's long-help identifier wrong on both axes.
-
-`cli_long` renames the flag and not the id, so code that reads an id override
-must consult `#[arg(id = "…")]` alone. The implementation now matches clap,
-verified against a real emitted artefact, and the four documents that
-restated the old rule have been corrected.
