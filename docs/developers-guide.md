@@ -976,10 +976,14 @@ rather than theoretical.
 
 ### Workflow contract gate
 
-`make test-workflow-contracts` runs the contracts in `tests/workflow_contracts`
-against the checked-in workflow and Make sources. It is a separate target from
+`make test-workflow-contracts` runs two stages against the checked-in workflow
+and Make sources. The first is the shared CV-005 contract library,
+`cv005-contracts check --repository .`, run through `uv tool run` on Python
+3.13 from the full commit named by `CV005_CONTRACTS_REF`; it needs `uv` and
+network access to fetch that commit. The second is the repository's own
+contracts in `tests/workflow_contracts`. The target is separate from
 `make test` because it needs neither a Rust toolchain nor the workspace's
-Python test requirements:
+Python test requirements. The second stage is this command:
 
 ```bash
 uv run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' \
@@ -1695,8 +1699,8 @@ nested artefact-upload and cache steps, so the contract refuses the token in
 every `env` block of the publisher. The old guard, `env.CS_ACCESS_TOKEN != ''`
 on a step-level binding, also passed with the binding deleted, after which the
 upload would skip forever. The contract therefore asserts the check step and
-its command positively, and names each of those failures in
-`codescene_publisher_test.py`.
+its command positively, and the shared CV-005 library names each of those
+failures.
 
 **The upload job runs in the `codescene` environment.** `coverage-upload`
 declares `environment: codescene`, whose deployment policy admits `main` alone.
