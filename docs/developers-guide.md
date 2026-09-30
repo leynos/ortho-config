@@ -1639,9 +1639,10 @@ defect in none of them.
 
 What a pull-request lane keeps is the ratchet. `ci.yml` runs
 `generate-coverage` with `with-ratchet` on the Linux leg
-(`matrix.platform == 'linux'`), comparing against the baseline
-`coverage-main.yml` writes, which applies the same "do not go backwards" gate
-from this repository's own history with no token and no second tool.
+(`with-ratchet: ${{ matrix.ratchet }}`, true for the Linux matrix entry alone),
+comparing against the baseline `coverage-main.yml` writes, which applies the
+same "do not go backwards" gate from this repository's own history with no
+token and no second tool.
 
 `build-test` takes the default depth-1 checkout. It used to fetch full history
 only so `cs-coverage check` could diff against the pull request's merge base,
@@ -1706,16 +1707,15 @@ moves, the policy refuses every run whose ref is not `main`. It does not
 inspect what a job executes: a `main` run that checked out and ran pull-request
 code would still hold the secret, so no such job may exist. The publisher
 declares no `workflow_dispatch`, so no dispatch is refused today; one added
-later and aimed at a branch would be refused for the whole job.
-`codescene_environment_test.py` holds the placement through
-`codescene_environment.py`: every job invoking the uploader declares the
+later and aimed at a branch would be refused for the whole job. The shared
+library holds the placement: every job invoking the uploader declares the
 environment, no other job does, and no job a pull request can reach does. Names
 are compared without case, as GitHub compares them, and a name computed by an
 expression is refused because its placement cannot be proved. The pull-request
-surface there is wider than the closure below: it also seeds from review and
-comment events, the merge queue, `workflow_run` chains and pushes not confined
-to `main` or to tags, and it follows `$/` calls as well as `./`, because an
-environment declaration is safe only where no branch can start the job.
+surface there also seeds from review and comment events, the merge queue,
+`workflow_run` chains and pushes not confined to `main` or to tags, and it
+follows `$/` calls as well as `./`, because an environment declaration is safe
+only where no branch can start the job.
 
 **No checksum input.** `installer-checksum` is rejected outright when non-empty
 from the pinned uploader, and `archive-checksum` is not a rename of it: it
