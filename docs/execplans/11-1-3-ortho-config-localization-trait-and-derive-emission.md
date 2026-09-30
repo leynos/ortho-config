@@ -1518,3 +1518,40 @@ target is the tip of main), and main's `#[command(name = "greet")]` rename
 survived. The repeated-block scan reported only idiomatic repetition in new
 test files and two methods legitimately sharing a doc sentence; Weave never
 participated, so its reconstruction defects are not a mechanism here.
+
+2026-09-30 (later): the post-rebase gate run failed two gates, and both were
+regressions introduced inside the rebased range rather than inherited faults.
+The run was also not a valid certificate: `fe0b8d32` was committed at 18:14:24,
+after `make check-fmt` had finished at 18:13:34 and during `make lint`, so the
+checked-out content changed mid-run. `make typecheck`, `make lint` (including
+Whitaker), `make markdownlint`, `make nixie`, and
+`make test-workflow-contracts` passed; `make check-fmt` and `make test` failed.
+
+`make check-fmt` reported six rustfmt diffs across five files — an import
+ordering in `ortho_config/tests/docs_ir.rs`, stray blank lines above two
+`#[path]` includes, and two line-width reflows. These were leftovers from the
+suite-splitting commits, not new drift. Repairing them let the recipe reach its
+second step, `mdtablefix --check`, for the first time in any recorded run of
+this range; that step then reported three Markdown files needing `--wrap`.
+Those re-wraps were applied and verified as pure line-break changes, with
+ADR-006's historical decision text confirmed byte-identical afterwards.
+
+`make test` aborted at the `ortho_config_macros` lib target, the second Rust
+target to run, on
+`derive::generate::localization::tests::colliding_normalised_arg_ids_fail_with_pinned_message`.
+That test asserted a collision that does not exist: `normalize_segment` only
+lowercases and preserves `-` and `_`, so `foo_bar` and `foo-bar` normalise to
+*distinct* segments. Clap keeps the raw Rust field name as the argument id, so
+two plain field names can only collide through case alone. The fixture was the
+stale half, not the production rule, which is the same class of error the
+trybuild fixture had already been repaired for in `326377b1`. It now collides
+genuinely on case, with a comment recording why the previous pairing was not a
+collision. This is the second place the branch carried the retired kebab
+premise; the first was the `.stderr` fixture.
+
+Because cargo aborts at the first failing target, nothing after the macros
+crate ran in that gate: `test_helpers`, `tests/fixtures/orthohelp_fixture`, and
+every doctest were unreported rather than passing. Repairs are committed as
+`c1c175cd`, verified locally by `cargo test -p ortho_config_macros --lib` (173
+passed, 0 failed) and `make check-fmt` (exit 0, 76 files unchanged), and a
+fresh full-set run was requested on that frozen SHA.
