@@ -1012,12 +1012,12 @@ contains no test functions; its own executable examples are what
 document rather than matching its text, so a re-indentation cannot change a
 verdict.
 
-### Whitaker in CI
+### Whitaker in continuous integration
 
-The Linux lint leg installs Whitaker through the shared
-`leynos/shared-actions/.github/actions/install-whitaker` action, pinned to a
-full commit SHA, in a step named `Install Whitaker` that is guarded to
-`matrix.platform == 'linux'`. The action owns the install: it takes a
+In continuous integration (CI), the Linux lint leg installs Whitaker through
+the shared `leynos/shared-actions/.github/actions/install-whitaker` action,
+pinned to a full commit SHA, in a step named `Install Whitaker` that is guarded
+to `matrix.platform == 'linux'`. The action owns the install: it takes a
 digest-verified, prebuilt `whitaker-installer` (0.2.9 or later), passes
 `--no-source-fallback`, preinstalls the prebuilt `dylint-link`, authenticates
 with `github.token`, and caches the installer itself. The repository therefore
@@ -1030,7 +1030,8 @@ shared-actions commit at or after `6dea5677` that leaves the action directory
 content-identical, so the pin moves with the other shared-actions references
 (the one-SHA contract in `sccache_wiring_test.py`). The workflow contract
 `whitaker_install_test.py` asserts exactly one `Install Whitaker` step, using
-the action at a full SHA, with no script of its own, on the Linux leg only.
+the action at a full commit hash, with no script of its own, on the Linux leg
+only.
 
 ## Publish dry run
 
