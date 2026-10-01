@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -404,3 +404,287 @@ structurally invisible to it**. The remedy is a cross-compilation probe
 whenever a diff touches a platform cfg. That probe cost seconds here and would
 have caught all three Windows failures before the review request was ever
 queued.
+
+### Third round (pre-merge row dispositions)
+
+The same review left a pre-merge table with two errors and four warnings. Each
+row was re-verified against the current head rather than taken at face value,
+and the rows did not resolve uniformly — two were already repaired by the
+second round's commits, three needed new work, and one was wrong.
+
+Two rows were **already satisfied** and needed only evidence. Observability was
+the pre-merge restatement of Finding B, so the `windows_home_from_fallback`
+repair answers it; the row was left open only because the table had not been
+recomputed. User-Facing Documentation overlapped the guide edit made in the
+second round.
+
+Three rows were **valid and needed new work**: Testing (Overall), for the three
+`SubcmdConfigMerge` methods that no test reached; Testing (Compile-Time / Ui),
+for the absence of any trybuild coverage of the newly public discovery
+contracts; and Developer Documentation, which correctly noticed that the plan
+still declared `IN PROGRESS` while its own Outcomes section asserted the work
+was finished.
+
+The Testing (Overall) row deserves a provenance correction, because its
+attribution is easy to get wrong and was wrong in the first draft of this
+record. The three methods are *not* new. `git grep` at the live base `5732adf9`
+finds all three defined on `pub trait SubcmdConfigMerge` in
+`ortho_config/src/subcommand/mod.rs:330,348,362`, with the trait re-exported
+from `lib.rs:63`; what this PR contributes is richer coverage, not the API.
+`git log -S` traces them to `056ccfa5` (#412). A first-pass check appended
+`-- ortho_config/src/subcommand/config_merge.rs` and read the resulting zero,
+but that file does not exist at base — the trait was extracted into it by this
+branch — so the empty result measured the extraction, not the API. The
+corrected statement is stronger for the review, not weaker: the methods are
+pre-existing public surface that shipped untested, and the Base-layer evidence
+below is what establishes the difference.
+
+Only the discovery surface is genuinely new at the base:
+`SubcommandFileContext`, `SubcommandCliMatches`, `candidate_paths_at`, and
+`paths_telemetry` all return zero hits at `5732adf9`, and those are the
+contracts the trybuild fixtures pin.
+
+One row was **rebutted with base-layer evidence**. Unit Architecture asked for
+`candidate_paths_at` to be made side-effect free, arguing that this PR
+introduced telemetry into a query. The premise is wrong on both counts. The
+started/finished pattern already existed at the PR base: `csv_env/mod.rs`'s
+`data()` — a Figment provider method on the read path — calls
+`merge_telemetry::csv_env_injected_started()` and its siblings inside the same
+function that collects entries, and `merge_telemetry` is a base-layer module,
+declared at `lib.rs:57` in the base tree. The row's supporting detail is also
+factually wrong: `grep -n 'tracing::\|metrics::' paths.rs` returns nothing,
+because every emission goes through the `paths_telemetry` façade. That façade
+accepts no caller-controlled text — `candidate_exists` takes only a `usize`
+position, and the remaining entry points take no arguments at all — so paths,
+environment values, and host state never become event fields. Routing telemetry
+through the façade is the design under review, not an oversight in it.
+
+The Developer Documentation row is closed by the status line at the top of this
+plan, which now declares `COMPLETE` and matches the checked `Progress` list.
+
+### Third-round repairs and the evidence for them
+
+The three valid rows were repaired in the commits that followed `a3ec6c82` and
+each repair was confirmed by execution rather than by inspection, because every
+one of them added code that had never been compiled.
+
+Those repairs did not land with PR #509. They were still uncommitted when #509
+merged as `f303aa11`, and the branch that carried them was deleted by that
+merge, so the rows recorded here were repaired *after* the review that raised
+them had already closed. This plan is retained rather than rewritten because
+the dispositions above are the evidence for the row-by-row reasoning; the code
+they describe is delivered separately, in the pull request that carries this
+revision of the file.
+
+- Testing (Overall) — `ortho_config/tests/subcommand_merge_methods.rs`, seven
+  cases across the three methods. Each sentinel is distinct per layer
+  (`file_ref`/`injected_ref`/`cli_ref` and `4`/`5`/`7`/`9`/clap's `2`), so no
+  case can pass by coincidence, and each stages its own temp directory through
+  `test_helpers::cwd::set_dir` rather than relying on the ambient one.
+  `cargo test -p ortho_config --test subcommand_merge_methods` → 7 passed, 0
+  failed.
+- Testing (Compile-Time / Ui) — `ortho_config/tests/subcommand_trybuild.rs`
+  with a pass fixture and a compile-fail fixture. The first confirmation run
+  came back **red**, and the failure was instructive: the pass fixture compiled
+  and ran (`[should pass] ... ok`), while the compile-fail fixture failed for
+  exactly the intended reason but had no accepted `.stderr`, so trybuild wrote
+  `wip/subcommand_merge_requires_extractor.stderr` and failed the test.
+  trybuild requires the committed file; it does not accept the snapshot for
+  you. The captured diagnostic names `CliValueExtractor` four times across two
+  `E0277` blocks, one per withheld method, so it pins the intended bound rather
+  than some incidental error. After accepting it byte-exact the suite is
+  `1 passed; 0 failed`, and no `wip/` is regenerated. Note where trybuild
+  writes: `ortho_config/wip/`, not beside the fixture, and it drops its own
+  `.gitignore` containing `*` there — so the snapshot is invisible to
+  `git status` and to `git add -A` until it is copied out deliberately.
+- User-Facing Documentation and Developer Documentation — the migration-guide
+  section, the `COMPLETE` status line, and the `docs/contents.md` index entry,
+  all checked for the 80-column fill and the en-GB-oxendict vocabulary.
+
+The `.config/nextest.toml` Windows override was deliberately **not** extended
+to name the new binary. The override exists because cold trybuild child builds
+exhausted the 600s per-test allowance on Windows, and it names exactly the four
+binaries whose tests had done so — a contract test asserts that set exactly.
+`subcommand_trybuild` has no such history, and three existing trybuild
+binaries, including `localized_parse_trybuild` with its own `compile_fail`
+fixture, are likewise unnamed. Naming it without evidence would widen a
+contract test and its documentation on speculation. If the Windows leg does
+time out on it, the remedy is to add the binary to the override *and* update
+`TRYBUILD_BINARIES` in
+`tests/workflow_contracts/windows_trybuild_isolation_test.py` in the same
+change.
+
+### Fourth round: review findings on the follow-up pull request
+
+The standalone pull request that carries this work was reviewed in its turn and
+raised four findings. All four were verified against the code before any
+repair; three were valid and one was advisory.
+
+- **Ambient environment reaches the process-backed methods.** The behavioural
+  suite entered a temporary directory but left every other discovery rung
+  alone. That is not sufficient, and the gap was real rather than theoretical:
+  `collect_unix_paths` and `collect_non_unix_paths` append the home and
+  platform candidates *before* the local ones, and `ProcessEnv::home_fallback`
+  reaches the real user database through `dirs::home_dir` when `HOME` is unset.
+  The review host has `~/.config/vk/config.toml`, so an ambient file would have
+  been merged into the expected results. Demonstrated by execution: the
+  pre-repair suite run with `HOME` and the XDG variables pointed at a tree
+  holding `[cmds.issue] retries = 99` fails with
+  `expected 5, not the clap default 2: 99`.
+  - The methods hard-code `ProcessEnv` and the working directory, so the ambient
+    environment cannot be injected away; AGENTS.md admits environment mutation
+    only through the shared guards, which is what the new `isolated_env` fixture
+    uses. It sets `HOME` rather than clearing it, because `dirs::home_dir`
+    honours the variable when present and falls back to `passwd` when absent —
+    clearing it would have left the rung open. `USERPROFILE`, `XDG_CONFIG_HOME`,
+    `XDG_CONFIG_DIRS` and `APPDATA` are pointed at the same empty tree, closing
+    the Unix and Windows rungs alike. The lock order is env then cwd, matching
+    `discovery_attributes.rs`.
+  - `isolated_env_excludes_the_ambient_home` pins the invariant, because the
+    other
+    cases cannot: they pass on a host with no ambient file. Its teeth were
+    confirmed by mutation — reducing the fixture to a no-op makes it fail with
+    `an ambient home or XDG file reached the merge: Some("poisoned_home")`.
+- **Directory setup should be `rstest` fixtures.** Valid, and required by
+  AGENTS.md. `staged_dir` now backs `empty_dir`, `pr_dir` and `issue_dir`
+  fixtures consumed as `Result<ConfigDir>`, following the `isolated_root`
+  precedent in the sibling `subcommand/fixtures.rs`. This also removes the
+  duplication a structural metric had flagged, since the three staged cases no
+  longer repeat their own setup.
+- **A distinct file value in the injected-source case.** Valid. The
+  `matches_with_sources` case staged an empty directory, so it could not
+  observe a file-over-injected inversion; it now stages `issue_dir`, putting
+  `FILE_RETRIES` (4) beneath `INJECTED_RETRIES` (7) and asserting the injected
+  value wins.
+- **Structural duplication at the module level.** Advisory only in the sense
+  that CodeScene is not a required check on this repository, but the finding
+  recurred against this revision and was repaired in the fifth round below.
+- **Module size, found while repairing the above.** AGENTS.md caps any code file
+  at 400 lines, and the repairs had carried the suite to 422 — the longest file
+  in the tree. The scaffolding moved to
+  `ortho_config/tests/support/subcommand_merge_support.rs`, reached through
+  `#[path]` in the established `tests/support/` style, leaving the suite at 276
+  and the support file at 196. Coverage was not trimmed to fit: the only change
+  to the cases is that the directory fixtures are now named by an import rather
+  than defined in the same file, and `subcommand/prefix.rs` already shows that
+  an imported `rstest` fixture resolves by name.
+
+Both suites were re-run after the repairs: `8 passed; 0 failed` for the
+behavioural suite (seven cases plus the isolation guard) and
+`1 passed; 0 failed` for the trybuild suite, with the committed `.stderr` still
+byte-identical at `bb6a1467` and no `wip/` regenerated.
+
+### Fifth round: the duplication finding returned
+
+The structural-duplication finding was recorded above as advisory and subsumed.
+That was wrong on the second point. CodeScene re-reported it against the
+repaired revision — the extraction to a support file moved the shared *setup*
+out of the module but left five test bodies repeating the same
+parse-merge-assert shape, which is what the metric measures. It now named five
+functions rather than four, so the earlier dismissal had also gone stale in its
+detail.
+
+**The recurrence was reproduced locally before any edit.** The CodeScene CLI is
+installed on this host, so
+`cs review ortho_config/tests/subcommand_merge_methods.rs` reported the same
+five functions at a code health score of 9.38. That turns a bot comment into a
+reproducible check, and it makes the fix verifiable in the same terms the
+reviewer uses rather than by inspection alone.
+
+The five bodies were two `load_and_merge_with_matches` cases and three
+`load_and_merge_with_matches_with_sources` cases. They were folded into one
+table driven by a `LayerRow`:
+
+- `MatchesMethod` names which of the two match-aware methods the row drives, so
+  a row cannot invoke one while claiming the other.
+- `CliMode::Absent`/`Explicit` selects whether `--retries` is passed, replacing
+  the two arg-vector literals that appeared in every case.
+- The injected value is an `Option<u32>`, and a `with_sources` row that omits it
+  is refused by the driver rather than run vacuous — that refusal has its own
+  test.
+- Cases are grouped into two tables by the staged directory they need, so the
+  fixtures remain the parameters that stage the working directory, and the case
+  list is the one place each expectation is stated.
+
+The table itself was first written with six parameters on the shared assertion
+helper, which CodeScene flagged in turn as an excess-argument smell. AGENTS.md
+prescribes the remedy — group related parameters in a meaningfully named struct
+— which is what `LayerRow` is.
+
+**Two refinements came from writing the table, not from the finding.** A row
+that expects `STRUCT_DEFAULT_RETRIES` cannot run against a directory holding an
+issue file, because the file value (`FILE_RETRIES`, 4) beats the struct default
+(5) and would answer first; the empty-directory table is therefore not a
+grouping convenience but a requirement. And a row that passes `--retries`
+explicitly has the CLI above every lower layer whatever those layers hold, so
+its directory choice is genuinely free — which is why `explicit_cli_value_wins`
+can sit in the empty table while `explicit_cli_value_beats_file_and_source`
+sits in the other, both asserting `CLI_RETRIES`.
+
+Coverage was not reduced. The behavioural suite grew from 8 cases to 11: the
+seven original assertions are all still present, the two `Plain` cases that
+share `CliMode::Absent` no longer collapse into one, and the vacuous-row
+refusal and the `with_sources`-without-a-value guard are new. After the change
+both files report a code health score of 10.0 from the same local `cs review`
+that reproduced the finding.
+
+### Sixth round: the suite was still host-dependent
+
+CodeRabbit re-opened the environment-isolation finding against `35582cec`, with
+a codegraph trace showing that `isolated_env` redirects the five discovery
+rungs but never removes `VK_CMDS_PR_REFERENCE` or `VK_CMDS_ISSUE_RETRIES`. The
+finding was correct, and its reasoning was the part the earlier repair had
+missed: pointing discovery at an empty tree closes the *file* rungs, but the
+process environment is also a **merge** layer, sitting above the file and below
+the CLI. A host that exports `VK_CMDS_ISSUE_RETRIES` answers before the staged
+file does, so the layer the rows assert is masked — and `ensure_key_is_unset`
+turns that into a hard failure rather than a silent mis-assertion.
+
+The failure was reproduced rather than reasoned about. With the keys exported
+and the removal absent, the suite reported `2 passed; 9 failed`. With the
+removal in place, both configurations pass 11 of 11:
+
+```sh
+VK_CMDS_PR_REFERENCE=exported_ref VK_CMDS_ISSUE_RETRIES=6 \
+  cargo test -p ortho_config --test subcommand_merge_methods
+```
+
+The repair adds `lock.remove_var(PR_REFERENCE_KEY)` and
+`lock.remove_var(ISSUE_RETRIES_KEY)` to the existing `EnvScope::new_with`
+builder, keeping every discovery guard and the environment-before-cwd lock
+order. `EnvVarLock::remove_var` snapshots the prior value before removing and
+restores it when the guard drops, and `EnvScope` drops its guards while still
+holding the lock, so an exported value is put back — no state leaks into the
+rest of the test process.
+
+Two facts made the change safe to apply without touching the assertions. No
+case sets either key, so nothing depends on the process environment supplying a
+value. And the injected-source rows read from the supplied scan source, which
+*replaces* the process environment layer rather than augmenting it, so removal
+cannot disturb them. The `ensure_key_is_unset` calls stay as isolation
+assertions; they are now belt-and-braces rather than the only defence.
+
+### Seventh round: both findings closed at the new head
+
+The two dispositions arrived on the same day and both landed after the fifth
+and sixth rounds were pushed.
+
+**Duplication.** CodeRabbit had re-reported the Code Duplication finding against
+`35582cec`, endorsing my earlier "advisory" reply as insufficient, and
+CodeScene still showed FAILURE there. The parameterization in `0180cb91`
+removed the five handwritten functions: the tables now carry rows naming
+`MatchesMethod`, `CliMode`, the injected value, and the expected result, driven
+by `parse_issue`, `MatchesMethod::merge`, and `merged_retries`. A local
+`cs review` returns `score: 10.0` with an empty `review` array on both files,
+and the live CodeScene review moved to **APPROVED** at `0180cb91` and again at
+`359c8a04`. The advisory code health impact fell from 9.39 to within the
+passing band.
+
+**Environment isolation.** CodeRabbit accepted the `359c8a04` repair, recorded
+the layer-order learning, and resolved the thread: "`isolated_env` now removes
+both merge-layer keys through shared guards while retaining discovery isolation
+and the environment-before-cwd lock order."
+
+Both threads now carry affirmative dispositions on the current head, and the
+stale "advisory" reply was superseded rather than deleted — the record shows
+which position was corrected and why.
