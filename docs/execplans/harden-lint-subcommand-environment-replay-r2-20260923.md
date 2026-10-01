@@ -627,3 +627,39 @@ share `CliMode::Absent` no longer collapse into one, and the vacuous-row
 refusal and the `with_sources`-without-a-value guard are new. After the change
 both files report a code health score of 10.0 from the same local `cs review`
 that reproduced the finding.
+
+### Sixth round: the suite was still host-dependent
+
+CodeRabbit re-opened the environment-isolation finding against `35582cec`, with
+a codegraph trace showing that `isolated_env` redirects the five discovery
+rungs but never removes `VK_CMDS_PR_REFERENCE` or `VK_CMDS_ISSUE_RETRIES`. The
+finding was correct, and its reasoning was the part the earlier repair had
+missed: pointing discovery at an empty tree closes the *file* rungs, but the
+process environment is also a **merge** layer, sitting above the file and below
+the CLI. A host that exports `VK_CMDS_ISSUE_RETRIES` answers before the staged
+file does, so the layer the rows assert is masked — and `ensure_key_is_unset`
+turns that into a hard failure rather than a silent mis-assertion.
+
+The failure was reproduced rather than reasoned about. With the keys exported
+and the removal absent, the suite reported `2 passed; 9 failed`. With the
+removal in place, both configurations pass 11 of 11:
+
+```sh
+VK_CMDS_PR_REFERENCE=exported_ref VK_CMDS_ISSUE_RETRIES=6 \
+  cargo test -p ortho_config --test subcommand_merge_methods
+```
+
+The repair adds `lock.remove_var(PR_REFERENCE_KEY)` and
+`lock.remove_var(ISSUE_RETRIES_KEY)` to the existing `EnvScope::new_with`
+builder, keeping every discovery guard and the environment-before-cwd lock
+order. `EnvVarLock::remove_var` snapshots the prior value before removing and
+restores it when the guard drops, and `EnvScope` drops its guards while still
+holding the lock, so an exported value is put back — no state leaks into the
+rest of the test process.
+
+Two facts made the change safe to apply without touching the assertions. No
+case sets either key, so nothing depends on the process environment supplying a
+value. And the injected-source rows read from the supplied scan source, which
+*replaces* the process environment layer rather than augmenting it, so removal
+cannot disturb them. The `ensure_key_is_unset` calls stay as isolation
+assertions; they are now belt-and-braces rather than the only defence.

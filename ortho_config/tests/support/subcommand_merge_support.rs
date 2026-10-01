@@ -252,15 +252,24 @@ pub struct IsolatedEnv {
     _root: TempDir,
 }
 
-/// Points every environment rung discovery consults at an empty temporary tree.
+/// Points every environment rung discovery consults at an empty temporary tree,
+/// and removes the subcommand variables the merge layer would otherwise read.
 ///
 /// The methods under test hard-code `ProcessEnv`, so the ambient environment
 /// cannot be injected away and is neutralised instead. `HOME` is *set* rather
 /// than merely cleared because `ProcessEnv::home_fallback` consults it through
 /// `dirs::home_dir`, which honours the variable when it is present and falls
-/// back to the real user database when it is not. Every other variable is
-/// pointed at the same empty tree, so no rung can contribute a file whatever
-/// the host exports and whichever platform the suite runs on.
+/// back to the real user database when it is not. Every other discovery
+/// variable is pointed at the same empty tree, so no rung can contribute a file
+/// whatever the host exports and whichever platform the suite runs on.
+///
+/// Pointing the discovery rungs at an empty tree is not enough on its own. The
+/// process environment is also a merge layer, sitting above the file and below
+/// the CLI, so a key exported by the host would answer before the file does and
+/// the layer the rows assert would be masked. The two keys are removed rather
+/// than merely checked, because an exported value has to be made harmless
+/// rather than reported; the guard returned restores it on drop, so nothing
+/// leaks back into the running process.
 #[fixture]
 pub fn isolated_env() -> Result<IsolatedEnv> {
     let root = tempfile::tempdir().context("create isolated environment root")?;
@@ -273,6 +282,8 @@ pub fn isolated_env() -> Result<IsolatedEnv> {
             lock.set_var("XDG_CONFIG_HOME", &config_home),
             lock.set_var("XDG_CONFIG_DIRS", &home),
             lock.set_var("APPDATA", &home),
+            lock.remove_var(PR_REFERENCE_KEY),
+            lock.remove_var(ISSUE_RETRIES_KEY),
         ]
     });
     Ok(IsolatedEnv {
