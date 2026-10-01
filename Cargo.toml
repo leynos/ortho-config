@@ -27,7 +27,7 @@ categories = ["config", "command-line-interface"]
 
 [workspace.dependencies]
 rstest-bdd = "0.5.0"
-rstest-bdd-macros = "0.5.0"
+rstest-bdd-macros = "0.6.0"
 
 # `cargo clippy` lints configuration
 [workspace.lints.clippy]
