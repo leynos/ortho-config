@@ -2563,9 +2563,9 @@ carried survives in this plan and in the memory record.
 **The replay exposed a defect no gate could see before it.** This branch
 rewrote the trybuild override's filter from two names to an enumeration of the
 whole class (`.config/nextest.toml`), and that filter is a list of names. Main's
-`34a595ea` added `ortho_config/tests/subcommand_trybuild.rs`, a trybuild binary
-the enumeration could not name because it did not exist when the list was
-written. Neither side is wrong alone: the branch's list covers every binary
+`34a595ea` added `ortho_config/tests/subcommand_trybuild.rs`, a trybuild
+binary the enumeration could not name because it did not exist when the list
+was written. Neither side is wrong alone: the branch's list covers every binary
 that existed for it, and main's binary is correctly a trybuild binary.
 
 What caught it is the contract this branch itself added. `trybuild_tier.py`
@@ -2587,8 +2587,8 @@ never measured against those Windows timeouts.
 **The gate itself had been misread.** `make test-workflow-contracts` first
 failed as `infrastructure-error` at invocation, running no check at all: the
 session harness injects `GIT_CONFIG_*` variables carrying
-`url.lody-github::.insteadof https://github.com/` rules, so `uv tool run
---from "git+https://…"` was routed to a helper that refused it. Clearing those
-variables let the fetch resolve and the suite run — and the suite then failed
-on a real defect. An infrastructure failure and a passing suite are different
-facts, and the first was briefly mistaken for the second.
+`url.lody-github::.insteadof https://github.com/` rules, so
+`uv tool run --from "git+https://…"` was routed to a helper that refused it.
+Clearing those variables let the fetch resolve and the suite run — and the
+suite then failed on a real defect. An infrastructure failure and a passing
+suite are different facts, and the first was briefly mistaken for the second.

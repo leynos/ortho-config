@@ -85,11 +85,11 @@ file carries both. nextest resolves each override field from the **first**
 matching entry that sets it, so the Windows entry above, being first, decides
 the four binaries it names; the wider entry below is second and supplies the
 rest of the class. The four therefore keep both 600 s *and* run alone, while
-`env_source_trybuild`, `generated_lint_trybuild` and `localized_parse_trybuild`
-take the 960 s entry and Linux takes 960 s for all eight. Merging the two would
-have to choose between running alone and the larger allowance; leaving both
-keeps each measured remedy at the binaries it was measured on.
-`trybuild_tier_test.py` reads the widening and
+`env_source_trybuild`, `generated_lint_trybuild`, `localized_parse_trybuild` and
+`subcommand_trybuild` take the 960 s entry, and Linux takes 960 s for all
+eight. Merging the two would have to choose between running alone and the
+larger allowance; leaving both keeps each measured remedy at the binaries it
+was measured on. `trybuild_tier_test.py` reads the widening and
 `windows_trybuild_isolation_test.py` the reservation, so neither remedy can be
 removed by editing the other's entry.
 
