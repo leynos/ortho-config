@@ -483,7 +483,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 The existing `load_globals_and_merge_selected_subcommand` helper remains
 available when process-backed file discovery and environment access are
 appropriate. The per-command `load_and_merge_with_sources` method is useful
-when handling a selected command directly rather than merging an enum.
+when handling a selected command directly rather than merging an enum. Existing
+process-backed callers do not need to migrate.
+
+`SelectedSubcommandSources` applies only to the selected command. The caller
+still owns globals loading; if globals must also avoid process access, inject
+their file and environment sources separately in the globals loader.
+
+For a manual `SelectedSubcommandMerge` implementation, override
+`load_and_merge_selected_with_sources` to support injected sources. Otherwise,
+the default returns `SelectedSubcommandMergeError::SourceInjectionUnsupported`
+without invoking the process-backed `load_and_merge_selected` method.
 
 When a subcommand needs the same hermetic merge boundary, pass a
 `SharedScanEnvSource` to `load_and_merge_with_sources` instead of using the

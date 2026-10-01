@@ -71,6 +71,25 @@ fn load_cfg(base: &Path, discovery: &MapEnv, merge_env: MapEnv) -> Result<CmdCfg
     .to_anyhow()
 }
 
+/// Merge file defaults with an explicit discovery source and no merge values.
+///
+/// This helper is private to the file-focused scenarios in this module. Tests
+/// that need injected merge values continue to use [`load_cfg`].
+///
+/// # Examples
+///
+/// `merge_file_defaults(base, &discovery)` returns the command values loaded
+/// from the discovered file, without consulting the process environment.
+fn merge_file_defaults(base: &Path, discovery: &MapEnv) -> Result<CmdCfg> {
+    load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
+        &CmdCfg::default(),
+        SubcommandFileContext::new(base, discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .to_anyhow()
+}
+
 #[test]
 fn file_and_env_loading() -> Result<()> {
     let root = tempfile::tempdir().context("create file and environment fixture")?;
@@ -95,6 +114,7 @@ fn file_and_env_loading() -> Result<()> {
     Ok(())
 }
 
+/// Loads the configuration file under the injected home directory.
 #[test]
 fn loads_from_home() -> Result<()> {
     let root = tempfile::tempdir().context("create home fixture")?;
@@ -106,7 +126,7 @@ fn loads_from_home() -> Result<()> {
         "[cmds.test]\nfoo = \"home\"",
     )?;
     let discovery = close_discovery(root.path()).with_var("HOME", &home);
-    let cfg = load_cfg(&base, &discovery, MapEnv::new())
+    let cfg = merge_file_defaults(&base, &discovery)
         .context("merge home defaults from injected source")?;
     ensure!(
         cfg.foo.as_deref() == Some("home"),
@@ -116,6 +136,7 @@ fn loads_from_home() -> Result<()> {
     Ok(())
 }
 
+/// Confirms a local configuration file takes precedence over the home file.
 #[test]
 fn local_overrides_home() -> Result<()> {
     let root = tempfile::tempdir().context("create local-overrides-home fixture")?;
@@ -132,7 +153,7 @@ fn local_overrides_home() -> Result<()> {
         "[cmds.test]\nfoo = \"local\"",
     )?;
     let discovery = close_discovery(root.path()).with_var("HOME", &home);
-    let cfg = load_cfg(&base, &discovery, MapEnv::new())
+    let cfg = merge_file_defaults(&base, &discovery)
         .context("merge local defaults after injected home defaults")?;
     ensure!(
         cfg.foo.as_deref() == Some("local"),
@@ -143,6 +164,7 @@ fn local_overrides_home() -> Result<()> {
 }
 
 // Windows lacks XDG support.
+/// Loads the configuration file from the injected XDG config directory.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() -> Result<()> {
@@ -155,7 +177,7 @@ fn loads_from_xdg_config() -> Result<()> {
         "[cmds.test]\nfoo = \"xdg\"",
     )?;
     let discovery = close_discovery(root.path()).with_var("XDG_CONFIG_HOME", &xdg);
-    let cfg = load_cfg(&base, &discovery, MapEnv::new())
+    let cfg = merge_file_defaults(&base, &discovery)
         .context("merge XDG defaults from injected source")?;
     ensure!(
         cfg.foo.as_deref() == Some("xdg"),
@@ -203,6 +225,7 @@ fn xdg_metadata_error_reaches_public_subcommand_loader() -> Result<()> {
     Ok(())
 }
 
+/// Loads YAML configuration from the explicit discovery base.
 #[cfg(feature = "yaml")]
 #[test]
 fn loads_yaml_file() -> Result<()> {
@@ -213,7 +236,7 @@ fn loads_yaml_file() -> Result<()> {
         "cmds:\n  test:\n    foo: yaml",
     )?;
     let discovery = close_discovery(root.path());
-    let cfg = load_cfg(root.path(), &discovery, MapEnv::new())
+    let cfg = merge_file_defaults(root.path(), &discovery)
         .context("merge YAML defaults from explicit base")?;
     ensure!(
         cfg.foo.as_deref() == Some("yaml"),
