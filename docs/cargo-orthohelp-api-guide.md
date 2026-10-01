@@ -27,14 +27,12 @@ creates the same report and derives its summary from `results`.
 
 <!-- tested-example: api-guide-policy-report-constructors -->
 ```rust
-impl PolicyReport {
-    /// Creates an empty report for the supplied enforcement mode.
-    #[must_use]
-    pub fn empty(mode: PolicyMode) -> Self;
+use cargo_orthohelp::policy::{PolicyMode, PolicyReport};
 
-    /// Creates a report and derives the summary from the supplied results.
-    #[must_use]
-    pub fn with_results(mode: PolicyMode, results: Vec<PolicyResult>) -> Self;
+fn main() {
+    let report = PolicyReport::empty(PolicyMode::Warn);
+    assert!(report.results.is_empty());
+    assert_eq!(report.summary.total, 0);
 }
 ```
 
@@ -109,10 +107,12 @@ from `agent_context_kind`. Do not hand-format the discriminator:
 
 <!-- tested-example: api-guide-agent-context-constructor -->
 ```rust
-impl AgentContext {
-    /// Creates an empty context for a package using the current schema version.
-    #[must_use]
-    pub fn new(package: impl Into<String>) -> Self;
+use ortho_config::AgentContext;
+
+fn main() {
+    let context = AgentContext::new("acme");
+    assert_eq!(context.package, "acme");
+    assert!(context.commands.is_empty());
 }
 ```
 
