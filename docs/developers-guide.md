@@ -1016,8 +1016,9 @@ verdict.
 
 In continuous integration (CI), the Linux lint leg installs Whitaker through
 the shared `leynos/shared-actions/.github/actions/install-whitaker` action,
-pinned to a full commit SHA, in a step named `Install Whitaker` that is guarded
-to `matrix.platform == 'linux'`. The action owns the install: it takes a
+pinned to a full commit hash (SHA, the Secure Hash Algorithm identifier of a
+Git commit), in a step named `Install Whitaker` that is guarded to
+`matrix.platform == 'linux'`. The action owns the install: it takes a
 digest-verified, prebuilt `whitaker-installer` (0.2.9 or later), passes
 `--no-source-fallback`, preinstalls the prebuilt `dylint-link`, authenticates
 with `github.token`, and caches the installer itself. The repository therefore
