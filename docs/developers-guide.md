@@ -974,6 +974,35 @@ grammar also cannot express every policy — a root derived from two fields, or
 conditional scopes — so the runtime `ConfigFilePolicy` remains the escape hatch
 for an application that builds one by hand and bypasses the derive.
 
+### Testing these diagnostics
+
+Each refusal above has two tests, and they are not duplicates of one another.
+The unit tests in
+`ortho_config_macros/src/derive/parse/tests/discovery_validation.rs` call the
+parser directly and assert the *message string* and the variant it belongs to;
+that is the place a message is changed. The trybuild fixtures under
+`ortho_config/tests/ui/` compile a small derive and pin the *rendered form* —
+the message together with the span the compiler points at — which is the only
+way to catch a diagnostic that still says the right thing in the wrong place.
+
+Five fixtures cover the policy and discovery vocabulary:
+
+- `policy_explicit_mode_invalid_value` and
+  `policy_automatic_mode_invalid_value` for the two mode enums, each using a
+  near-miss spelling so the fixture exercises the rejection rather than a typo;
+- `policy_scope_order_invalid_value` for a scope name outside the three;
+- `policy_project_root_from_skipped` and
+  `policy_project_root_from_wrong_type` for the two `project_root_from`
+  refusals the field lookup reaches. The third — a name matching no field at
+  all — is covered by a parser unit test, which is why no fixture mirrors it.
+
+Each `.stderr` is compiler output rather than a handwritten guess: emit it with
+`TRYBUILD=overwrite cargo test -p ortho_config --test compile_fail`, then
+re-run the same command with `TRYBUILD` unset to confirm. A snapshot that
+drifts fails under the default, which is what makes the pair a check rather
+than a record; a fixture whose code compiles clean is reported by trybuild as a
+case that failed to fail, so add the `.rs` and `.stderr` together.
+
 ## Environment access boundary
 
 `EnvSource` is the crate's injectable environment. `ProcessEnv` is the default
