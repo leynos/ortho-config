@@ -296,6 +296,7 @@ fn cargo_dispatch_path(fixture_bin_dir: &Path, inherited_path: Option<&OsStr>) -
     .context("construct PATH for Cargo dispatch")
 }
 
+/// Builds a generated example manifest with local crate dependency paths.
 fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
     let crate_path = toml::Value::String(env!("CARGO_MANIFEST_DIR").to_owned()).to_string();
     let cargo_orthohelp_path =

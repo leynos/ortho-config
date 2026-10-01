@@ -929,6 +929,10 @@ command scope.
 and requires `--check-agent-native`. It never changes the generated agent
 context, which records what the project has committed to.
 
+For Rust library consumers who construct and serialize these contracts
+directly, see the [API guide](cargo-orthohelp-api-guide.md) for construction
+and serialization details.
+
 Because a misspelt table _name_ still resolves to `off`, gate on the mode
 rather than assuming the check ran. The loud off-mode summary ("nothing was
 checked") is one signal; a `jq`-based assertion is a stronger CI recipe:

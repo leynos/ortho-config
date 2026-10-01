@@ -1,4 +1,4 @@
-//! Executable contracts for examples in the README and user's guide.
+//! Executable contracts for examples in public documentation.
 
 #[path = "documentation_examples/cargo_runner.rs"]
 mod cargo_runner;
