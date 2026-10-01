@@ -72,13 +72,18 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # neighbours build.
 #
 # The names are listed rather than globbed. There is no single pattern for
-# them -- five end in `trybuild` and `compile_fail` and `compile_time` do
+# them -- six end in `trybuild` and `compile_fail` and `compile_time` do
 # not -- and only exact-name matching is proved against the pinned
 # `cargo-nextest@0.9.120` the coverage action installs, where the logs show
 # `binary(crate_path_trybuild)` taking this override and
 # `binary(compile_fail)` not. `trybuild_tier_test.py` reads this filter and
 # the Rust sources and fails when the two sets drift apart, so a new
 # trybuild binary cannot quietly land on the wrong tier as these five did.
+#
+# `subcommand_trybuild` was added here after `34a595ea` merged it upstream.
+# The filter enumerates the class by name, so a binary arriving on main is
+# not covered by it until it is named; `trybuild_tier_test.py` is what
+# reported the omission, on the first run that could reach it.
 #
 # The allowance is 960s: eight warning periods of 120s. The worst this
 # binary class reached on a run that finished was 572.5s
@@ -91,7 +96,7 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # Keep below [profile.default]'s global-timeout, which the contract in
 # tests/workflow_contracts asserts.
 [[profile.default.overrides]]
-filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localized_parse_trybuild) | binary(compile_fail) | binary(compile_time)'
+filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
 # Serialise orthohelp BDD scenarios: each runs in its own nextest process,
