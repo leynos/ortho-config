@@ -1650,7 +1650,7 @@ orphans), so the failure mode that matters — an unpaired `compile_fail` — do
 not exist here.
 
 **Superseded in part by Round 25.** The count above was this round's inventory;
-`ortho_config/tests/ui/` now holds thirteen `.rs` fixtures against thirteen
+`ortho_config/tests/ui/` now holds fifteen `.rs` fixtures against fifteen
 committed `.stderr` snapshots, and the decline recorded here is superseded in
 part. See Round 25 at the end of this file.
 
@@ -1857,7 +1857,7 @@ no `.stderr`) is not one — `compile_time.rs:11` declares it `t.pass(...)`. The
 failure mode the row names does not exist.
 
 **Superseded in part by Round 25.** The nine pairs above were this round's
-inventory; the directory now holds thirteen `.rs` fixtures against thirteen
+inventory; the directory now holds fifteen `.rs` fixtures against fifteen
 committed `.stderr` snapshots, and the decline recorded here is superseded in
 part. See Round 25 at the end of this file.
 
@@ -2507,6 +2507,18 @@ fixtures against 13 committed `.stderr` snapshots**. The 9/9 pairs recorded in
 earlier rounds were the state at those rounds: `4551bcd9` added the tenth pair,
 `policy_scope_order_invalid_value`, and this round adds three more.
 
+**Corrected.** That was the inventory when this round was written. The
+directory now holds **15 `.rs` fixtures against 15 committed `.stderr`
+snapshots**: `870af4ce` added two more after this round was recorded, for the
+two `project_root_from` refusals no earlier round enumerated —
+`policy_project_root_from_skipped` (a field the CLI omits, so the lookup never
+reaches it) and `policy_project_root_from_wrong_type` (a field the lookup does
+reach whose type is not a path). Both take the same message as the third
+refusal, a name matching no field at all, which stays pinned by unit test in
+`ortho_config_macros/src/derive/parse/tests/discovery_validation.rs`. The
+rebased SHA of `4551bcd9` is `5d7c40cf`; that commit was the one replayed with
+the conflict resolution, so the pair it added is unchanged but its hash is not.
+
 The three added here, and the diagnostic each pins:
 
 - `policy_explicit_mode_invalid_value` —
@@ -2538,3 +2550,45 @@ rather than answering with an empty inventory, and one pins that a single
 unusable table is skipped while the readable targets around it are kept.
 Refusing less loses binaries from the trybuild class in silence; refusing more
 hides targets that are readable.
+
+## Round 26: the replay onto `34a595ea`, and the class member it uncovered
+
+`71333125` is `4551bcd9` replayed onto `origin/main` `34a595ea`. One conflict,
+in `docs/v0-10-0-migration-guide.md`: main and this branch each append a link
+reference definition at the same end-of-file position, and neither may be
+dropped, so both are kept. `fab61e90` became empty — it touched only the
+generated `typos.toml`, whose content now arrives from main, and the lesson it
+carried survives in this plan and in the memory record.
+
+**The replay exposed a defect no gate could see before it.** This branch
+rewrote the trybuild override's filter from two names to an enumeration of the
+whole class (`.config/nextest.toml`), and that filter is a list of names. Main's
+`34a595ea` added `ortho_config/tests/subcommand_trybuild.rs`, a trybuild binary
+the enumeration could not name because it did not exist when the list was
+written. Neither side is wrong alone: the branch's list covers every binary
+that existed for it, and main's binary is correctly a trybuild binary.
+
+What caught it is the contract this branch itself added. `trybuild_tier.py`
+derives the class from the sources — anything calling
+`trybuild::TestCases::new()` — and `trybuild_tier_test.py` compares that class
+against the names the filter selects, in both directions, so neither an
+omission nor an over-wide filter passes. It reported exactly one missing name.
+That is the failure mode the contract exists for, and the replay is what made
+it reachable: gating before the replay would have certified a tree that did not
+yet contain main's binary, and the certificate would have been green and wrong.
+
+**Repair.** `binary(subcommand_trybuild)` is added to the 960 s filter, and the
+two now-stale counts in the same comment (`five` binaries ending in `trybuild`)
+and in `docs/developers-guide.md` (`all seven`) are corrected to six and eight.
+Nothing is added to the Windows exclusivity entry: it is pinned to exactly four
+binaries by `windows_trybuild_isolation_test.py`, and `subcommand_trybuild` was
+never measured against those Windows timeouts.
+
+**The gate itself had been misread.** `make test-workflow-contracts` first
+failed as `infrastructure-error` at invocation, running no check at all: the
+session harness injects `GIT_CONFIG_*` variables carrying
+`url.lody-github::.insteadof https://github.com/` rules, so `uv tool run
+--from "git+https://…"` was routed to a helper that refused it. Clearing those
+variables let the fetch resolve and the suite run — and the suite then failed
+on a real defect. An infrastructure failure and a passing suite are different
+facts, and the first was briefly mistaken for the second.
