@@ -23,6 +23,8 @@ from __future__ import annotations
 import os
 import pathlib
 import sys
+import tomllib
+from tomllib import TOMLDecodeError
 
 import pytest
 from nextest_budgets import (
@@ -33,6 +35,7 @@ from nextest_budgets import (
 from timeout_budgets import NEXTEST_CONFIG
 from trybuild_tier import (
     TRYBUILD_CALL,
+    ManifestError,
     ScanError,
     UnreadableMatcherError,
     binaries_selected_by,
@@ -327,6 +330,88 @@ def test_a_declared_target_outside_tests_is_read_without_a_tests_directory(
     )
     assert trybuild_binaries(tmp_path) == frozenset({"outside_the_directory"})
     assert non_trybuild_binaries(tmp_path) == frozenset()
+
+
+def test_an_unparseable_manifest_is_refused_not_read_as_empty(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A manifest that is not TOML is a fault, not a crate with no targets.
+
+    Reading a parse failure as ``{}`` reports the crate as declaring no
+    ``[[test]]`` targets at all. The class still comes from the walk, so
+    a crate whose trybuild binaries are *declared* rather than discovered
+    would lose them in silence -- and every declared binary also leaves
+    ``non_trybuild_binaries``, which is what the over-selection check is
+    read against. An empty mapping is indistinguishable from a crate that
+    genuinely declares nothing, so the two must not converge.
+
+    The message has to name the manifest, because that is the difference
+    between pointing at the file and pointing at the frame that read it.
+    """
+    root = _nested_trybuild_tree(tmp_path)
+    crate = root / "ortho_config"
+    manifest = crate / "Cargo.toml"
+    manifest.write_text('[[test]\nname = "broken"\n', encoding="utf-8")
+    with pytest.raises(ManifestError) as raised:
+        trybuild_binaries(root)
+    assert str(manifest) in str(raised.value), raised.value
+    assert isinstance(raised.value.__cause__, TOMLDecodeError), (
+        raised.value.__cause__
+    )
+    assert isinstance(raised.value.__cause__, ValueError), raised.value.__cause__
+
+
+def test_a_manifest_declaring_test_in_another_shape_is_refused(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A singular ``[test]`` table names no target, and must not read as none.
+
+    ``[[test]]`` yields a *list* of tables; ``[test]`` yields a single
+    one, which cargo does not accept as a target declaration. Returning
+    ``[]`` for it read the manifest as declaring nothing and dropped every
+    target it meant to declare, which is the same silent loss as the parse
+    failure above and is refused for the same reason.
+
+    Unlike the parse failure there is no earlier exception to chain, so
+    the message names the offending value instead of carrying a cause.
+    """
+    root = _nested_trybuild_tree(tmp_path)
+    crate = root / "ortho_config"
+    manifest = crate / "Cargo.toml"
+    manifest.write_text(
+        '[package]\nname = "ortho_config"\n\n[test]\nname = "singular"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestError) as raised:
+        trybuild_binaries(root)
+    assert str(manifest) in str(raised.value), raised.value
+    assert "singular" in str(raised.value), raised.value
+
+
+def test_a_table_without_a_usable_name_is_skipped_and_the_rest_kept(
+    tmp_path: pathlib.Path,
+) -> None:
+    """One unusable row does not refuse the manifest's readable targets.
+
+    A table whose ``name`` is not a non-empty string names no target to
+    enumerate, so there is nothing for the caller to ask about. Refusing
+    the whole manifest over it would hide the targets that *are* readable
+    -- the opposite failure to the two above, and the reason the refusal
+    is scoped to a manifest that cannot be read rather than to a row that
+    cannot be used.
+    """
+    root = _nested_trybuild_tree(tmp_path)
+    crate = root / "ortho_config"
+    (crate / "Cargo.toml").write_text(
+        '[package]\nname = "ortho_config"\n\n'
+        "[[test]]\nname = 7\n\n"
+        '[[test]]\nname = "usable"\n',
+        encoding="utf-8",
+    )
+    (crate / "tests" / "usable.rs").write_text(
+        "fn c() { trybuild::TestCases::new(); }\n", encoding="utf-8"
+    )
+    assert trybuild_binaries(root) == frozenset({"usable"})
 
 
 @pytest.mark.skipif(

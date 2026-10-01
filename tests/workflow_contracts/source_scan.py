@@ -30,6 +30,25 @@ class ScanError(OSError):
     """
 
 
+class ManifestError(ValueError):
+    """Raised when a manifest this module reads is not a manifest.
+
+    A read that succeeded and a parse that failed are different faults,
+    so this is not a :class:`ScanError`: the bytes arrived, they are
+    simply not TOML. Kept separate for the same reason ``nextest_errors``
+    keeps its configuration fault apart from its budget faults -- the
+    caller that must report a manifest at odds with itself should not
+    have to catch a filesystem error to do it.
+
+    Both the message and the manifest's path name the file, so a failure
+    points at the source rather than at the frame that happened to call
+    this. A parse failure keeps the original ``TOMLDecodeError`` as
+    ``__cause__``; a table declared in a shape cargo does not accept has
+    no earlier exception to chain, so it names the offending value
+    instead.
+    """
+
+
 def sources_under(directory: Path) -> typ.Iterator[Path]:
     """Yield every ``*.rs`` file at or beneath ``directory``, refusing a miss.
 
@@ -199,18 +218,48 @@ def listing(directory: Path) -> typ.Callable[[], list[Path]]:
     return enumerate_once
 
 
-def _manifest_tables(manifest: str) -> list[dict[str, object]]:
-    """Return each ``[[test]]`` table a manifest declares, in order."""
-    declared = tomllib.loads(manifest).get("test", [])
+def _manifest_tables(manifest: str, at: Path) -> list[dict[str, object]]:
+    """Return each ``[[test]]`` table a manifest declares, in order.
+
+    ``at`` names the manifest in the message a refusal carries, so a
+    failure points at the file rather than at whichever frame called
+    this. It is likewise what a :class:`ManifestError` is built from.
+
+    Parameters
+    ----------
+    manifest : str
+        The manifest's text.
+    at : Path
+        The manifest's path, for naming it in a refusal.
+
+    Raises
+    ------
+    ManifestError
+        If the text is not TOML, or if its ``test`` key is present and
+        not the list of tables cargo accepts for ``[[test]]``. A parse
+        failure keeps the original ``TOMLDecodeError`` as ``__cause__``;
+        a shape failure names the offending value in the message, there
+        being no earlier exception to chain.
+    """
+    try:
+        loaded = tomllib.loads(manifest)
+    except tomllib.TOMLDecodeError as error:
+        raise ManifestError(f"{at} is not valid TOML: {error}") from error
+    declared = loaded.get("test", [])
     # ``[[test]]`` yields a list of tables. A value of any other type was
     # not declared in the form cargo accepts -- a singular ``[test]``
-    # table, say -- so it names no target to read.
+    # table, say -- so it names no target to read, and reading on would
+    # hand the caller an inventory missing every target the manifest
+    # meant to declare.
     if not isinstance(declared, list):
-        return []
+        raise ManifestError(
+            f"{at} declares `test` as {declared!r}, not the list of "
+            f"tables `[[test]]` yields"
+        )
     return [dict(entry) for entry in declared if isinstance(entry, dict)]
 
 
-def declared_test_targets(manifest: str) -> dict[str, str]:
+def declared_test_targets(manifest: str, at: Path) -> dict[str, str]:
     """Return each ``[[test]]`` target's name, keyed by its source path.
 
     The manifest is parsed as TOML rather than matched as text. Text
@@ -224,28 +273,40 @@ def declared_test_targets(manifest: str) -> dict[str, str]:
     exists to catch.
 
     ``path`` is optional to cargo, so a table without one is read as the
-    source cargo defaults it to, ``tests/{name}.rs``. A manifest this
-    reader cannot parse, and a table that declares no usable ``name``,
-    yield no entry rather than raising: the caller asserts that a
-    declared binary is asked for, and a manifest at odds with itself
-    should leave that assertion reporting the binary, not the reader
-    failing several frames from the cause.
+    source cargo defaults it to, ``tests/{name}.rs``. A table that
+    declares no usable ``name`` yields no entry rather than raising: it
+    names no target to enumerate, so there is nothing for the caller to
+    ask about, and refusing the whole manifest over one unusable row
+    would hide the targets that *are* readable. A manifest that is not
+    TOML, or whose ``test`` key is not ``[[test]]``'s list of tables, is
+    a different case and is **refused** rather than read as empty. An
+    empty mapping is indistinguishable from "this crate declares no
+    targets", which is exactly the inventory the coverage assertion
+    cannot see a gap in.
 
     Parameters
     ----------
     manifest : str
         A crate's ``Cargo.toml`` text.
+    at : Path
+        The manifest's path, used to name it in a refusal. Required, so
+        a refusal can always name the file rather than a placeholder.
 
     Returns
     -------
     dict of str to str
         The declared binary name for each declared source path, the
         path relative to the crate directory.
+
+    Raises
+    ------
+    ManifestError
+        If the text is not TOML, or if its ``test`` key is not the list
+        of tables ``[[test]]`` yields. Propagated from
+        :func:`_manifest_tables`, which is where the failure is
+        diagnosed.
     """
-    try:
-        tables = _manifest_tables(manifest)
-    except tomllib.TOMLDecodeError:
-        return {}
+    tables = _manifest_tables(manifest, at)
     declared: dict[str, str] = {}
     for table in tables:
         name = table.get("name")

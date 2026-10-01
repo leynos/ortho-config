@@ -31,6 +31,7 @@ from nextest_filterset import (
     binaries_selected_by as _binaries_selected_by,
 )
 from source_scan import (
+    ManifestError,
     ScanError,
     declared_test_targets,
     exists,
@@ -43,6 +44,7 @@ from timeout_budgets import REPO_ROOT
 #: Re-exported so the coverage contract keeps one import site for the
 #: class it reads here and the language it reads there.
 __all__ = [
+    "ManifestError",
     "ScanError",
     "UnreadableMatcherError",
     "binaries_selected_by",
@@ -172,7 +174,8 @@ def _crate_test_binaries(base: Path, crate: str) -> dict[str, bool]:
     manifest_path = base / crate / "Cargo.toml"
     declared = (
         declared_test_targets(
-            scan(manifest_path, manifest_path.read_text, encoding="utf-8")
+            scan(manifest_path, manifest_path.read_text, encoding="utf-8"),
+            manifest_path,
         )
         if scan(manifest_path, exists(manifest_path))
         else {}
