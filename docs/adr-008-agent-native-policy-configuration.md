@@ -108,12 +108,15 @@ report only.
 ### Report channel and exit behaviour (D5, D6)
 
 `--check-agent-native` always writes `policy-report.json` atomically to the
-output directory (same channel as other generator artefacts), then prints a
-one-line human summary to standard error. In `deny` mode with deny-level
-findings, the command returns a `PolicyViolation` error after the report has
-been written, so the artefact exists even when CI gates on the exit code. The
+output directory and emits the same compact JSON document to standard output,
+followed by a newline. It then prints a one-line human summary to standard
+error. In `deny` mode with deny-level findings, the command returns a
+`PolicyViolation` error after the report has been written and emitted, so both
+machine-readable channels remain available when CI gates on the exit code. The
 exit code (1) is shared with generic tool failure; the report's `summary.deny`
-is documented as the authoritative CI signal.
+is documented as the authoritative CI signal. When an explicit generator format
+is also requested, the policy report owns stdout to keep the stream to one JSON
+document.
 
 ### Two defaults (D9)
 

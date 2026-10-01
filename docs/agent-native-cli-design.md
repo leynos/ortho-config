@@ -169,8 +169,9 @@ The `cargo-orthohelp` generator interface is:
 cargo orthohelp --format agent-context
 ```
 
-This remains a generator format that writes an artefact. It is not the
-downstream application command name. Downstream applications expose the public
+This remains a generator format, not the downstream application command name.
+It writes `agent-context.json` and emits the same compact JSON document to
+stdout, followed by a newline. Downstream applications expose the public
 command surface `context --json`:
 
 ```console
@@ -240,11 +241,14 @@ defaults to `off`; `--policy-mode` overrides it for the report and requires the
 check flag. The check resolves the package manifest without the bridge build,
 so it also runs for a package that has no `root_type` or library target.
 
-`cargo orthohelp --check-agent-native` always writes a machine-stable policy
-report atomically to `policy-report.json` in the output directory, and prints a
-short human summary to standard error. Tests and CI should parse `rule_id` and
-`code` for deterministic handling; prose in `message` is explanatory and may
-improve without changing the machine contract.
+`cargo orthohelp --check-agent-native` emits one compact, machine-stable policy
+report to stdout, followed by a newline, and writes the same report atomically
+to `policy-report.json` in the output directory. It also prints a short human
+summary to standard error. Tests and CI should parse `rule_id` and `code` for
+deterministic handling; prose in `message` is explanatory and may improve
+without changing the machine contract. If an explicit generator format is
+requested at the same time, the policy report owns stdout and remains the
+invocation's only JSON document.
 
 <!-- markdownlint-disable MD013 -->
 ```json
@@ -265,7 +269,7 @@ improve without changing the machine contract.
   ],
   "summary": {
     "off": 0,
-    "warn": 2,
+    "warn": 1,
     "deny": 0,
     "total": 1
   },
@@ -723,9 +727,10 @@ declares a stronger contract.
 
 The existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`,
 `--format agent-context`, and `--format all` outputs are compatibility
-surfaces. JSON result streams and policy reports may be added beside them, but
-they must not alter those existing formats, output paths, stdout and stderr
-contracts, or exit-status behaviour without an approved versioned migration.
+surfaces. Issue #329 adds stdout JSON for the agent-native formats while
+preserving their generated artefact paths and exit-status behaviour; policy
+report output takes precedence when combined with an explicit generator format.
+Other output formats and their stdout/stderr contracts remain unchanged.
 
 Strict policy should begin as opt-in. Projects should be able to run the check
 in warning mode before enforcing it in CI.

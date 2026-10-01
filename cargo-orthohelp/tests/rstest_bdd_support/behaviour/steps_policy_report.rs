@@ -1,16 +1,15 @@
 //! Policy-report JSON contract assertions for `cargo-orthohelp` scenarios.
 //!
-//! The shared policy steps invoke the compiled binary. These assertions read
-//! its report artefact and verify the stable schema and enforcement summary.
+//! The shared policy steps invoke the compiled binary. These assertions
+//! deserialize captured stdout and verify the stable schema and enforcement
+//! summary.
 
 use std::fmt;
 
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::then;
 use serde_json::Value;
 
-use super::steps::{OrthoHelpContext, StepResult, get_out_dir};
+use super::steps::{OrthoHelpContext, StepResult};
 
 const EXPECTED_SCHEMA_VERSION: &str = "1";
 
@@ -110,7 +109,7 @@ impl fmt::Display for JsonField {
     }
 }
 
-#[then("the policy report has {mode} mode and no findings")]
+#[then("stdout policy report has {mode} mode and no findings")]
 fn policy_report_has_empty_results(
     orthohelp_context: &mut OrthoHelpContext,
     mode: String,
@@ -124,12 +123,12 @@ fn policy_report_has_empty_results(
     expect_summary(&run.report, EMPTY_SUMMARY)
 }
 
-#[then("the policy report has one warning finding")]
+#[then("stdout contains a policy report with one warning finding")]
 fn policy_report_has_warning_finding(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_finding_report(orthohelp_context, WARN_EXPECTATION)
 }
 
-#[then("the policy report has one deny finding and a validation failure")]
+#[then("stdout contains a policy report with one deny finding and a validation failure")]
 fn policy_report_has_deny_finding(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     assert_finding_report(orthohelp_context, DENY_EXPECTATION)
 }
@@ -154,23 +153,33 @@ struct PolicyRun {
 }
 
 fn policy_run(ctx: &OrthoHelpContext) -> StepResult<PolicyRun> {
-    let (is_success, stderr) = ctx
+    let (is_success, stderr, stdout) = ctx
         .last_output
         .with_ref(|output| {
             (
                 output.status.success(),
                 String::from_utf8_lossy(&output.stderr).into_owned(),
+                output.stdout.clone(),
             )
         })
         .ok_or("last_output should be set")?;
-    let out_root = get_out_dir(ctx)?;
-    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-    let serialized = dir.read_to_string("policy-report.json")?;
+    assert_one_compact_json_line(&stdout)?;
     Ok(PolicyRun {
         is_success,
         stderr,
-        report: serde_json::from_str(&serialized)?,
+        report: serde_json::from_slice(&stdout)?,
     })
+}
+
+fn assert_one_compact_json_line(stdout: &[u8]) -> StepResult<()> {
+    if stdout
+        .strip_suffix(b"\n")
+        .is_some_and(|document| !document.contains(&b'\n'))
+    {
+        Ok(())
+    } else {
+        Err("stdout should contain one compact JSON document and a trailing newline".into())
+    }
 }
 
 fn assert_report_header(report: &Value, expected_mode: &str) -> StepResult<()> {

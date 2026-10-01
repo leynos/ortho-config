@@ -1,7 +1,8 @@
 //! Integration contracts for emitted agent-native policy-report JSON.
 //!
-//! These tests invoke the compiled binary and validate the report artefact
-//! independently from unit-level report construction and snapshots.
+//! These tests invoke the compiled binary, validate captured stdout
+//! independently from unit-level report construction and snapshots, and check
+//! that the retained artefact contains the same report.
 
 mod fixtures;
 
@@ -26,6 +27,7 @@ const DENY_CODE: &str = "malformed_exception";
 struct PolicyCase {
     mode: &'static str,
     package: &'static str,
+    format: Option<&'static str>,
     should_succeed: bool,
     finding: Option<Finding>,
     summary: SummaryCounts,
@@ -50,6 +52,7 @@ struct SummaryCounts {
 #[case::warn_clean(PolicyCase {
     mode: "warn",
     package: "orthohelp_fixture",
+    format: None,
     should_succeed: true,
     finding: None,
     summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
@@ -57,6 +60,7 @@ struct SummaryCounts {
 #[case::warn_finding(PolicyCase {
     mode: "warn",
     package: "orthohelp_policy_warn_fixture",
+    format: None,
     should_succeed: true,
     finding: Some(Finding { rule_id: WARN_RULE_ID, code: WARN_CODE, severity: "warn" }),
     summary: SummaryCounts { off: 0, warn: 1, deny: 0, total: 1 },
@@ -64,6 +68,7 @@ struct SummaryCounts {
 #[case::deny_clean(PolicyCase {
     mode: "deny",
     package: "orthohelp_fixture",
+    format: None,
     should_succeed: true,
     finding: None,
     summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
@@ -71,6 +76,7 @@ struct SummaryCounts {
 #[case::deny_finding(PolicyCase {
     mode: "deny",
     package: "orthohelp_policy_deny_fixture",
+    format: None,
     should_succeed: false,
     finding: Some(Finding { rule_id: DENY_RULE_ID, code: DENY_CODE, severity: "deny" }),
     summary: SummaryCounts { off: 0, warn: 0, deny: 1, total: 1 },
@@ -78,6 +84,15 @@ struct SummaryCounts {
 #[case::off_suppresses_findings(PolicyCase {
     mode: "off",
     package: "orthohelp_policy_off_fixture",
+    format: None,
+    should_succeed: true,
+    finding: None,
+    summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
+})]
+#[case::policy_report_owns_stdout_when_agent_context_is_also_requested(PolicyCase {
+    mode: "warn",
+    package: "orthohelp_fixture",
+    format: Some("agent-context"),
     should_succeed: true,
     finding: None,
     summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
@@ -87,12 +102,23 @@ fn emitted_policy_report_has_stable_contract(#[case] case: PolicyCase) -> TestRe
     let output = run_policy_check(&out_dir, case)?;
 
     assert_exit_status(&output, case)?;
-    let report = read_policy_report(&out_dir)?;
+    assert_one_compact_json_line(&output.stdout)?;
+    let report: Value = serde_json::from_slice(&output.stdout)?;
     assert_string_field(&report, "version", EXPECTED_SCHEMA_VERSION)?;
     assert_string_field(&report, "tool", "cargo-orthohelp")?;
     assert_string_field(&report, "mode", case.mode)?;
     assert_results(&report, case.finding)?;
-    assert_summary(&report, case.summary)
+    assert_summary(&report, case.summary)?;
+    if report != read_policy_report(&out_dir)? {
+        return Err("policy-report stdout should match its generated artefact".into());
+    }
+    if case.format.is_some() {
+        let out_path = Utf8PathBuf::from_path_buf(out_dir.path().to_path_buf())
+            .map_err(|path| format!("non-UTF-8 output path: {}", path.display()))?;
+        let dir = Dir::open_ambient_dir(&out_path, ambient_authority())?;
+        let _agent_context = dir.read_to_string("agent-context.json")?;
+    }
+    Ok(())
 }
 
 fn run_policy_check(out_dir: &TempDir, case: PolicyCase) -> TestResult<Output> {
@@ -101,6 +127,7 @@ fn run_policy_check(out_dir: &TempDir, case: PolicyCase) -> TestResult<Output> {
     // Policy-only runs return before the generator and bridge-build path.
     command
         .current_dir(fixtures::workspace_root()?.as_std_path())
+        .env("CARGO_TARGET_DIR", out_dir.path().join("cargo-target"))
         .args([
             "orthohelp",
             "--check-agent-native",
@@ -111,6 +138,9 @@ fn run_policy_check(out_dir: &TempDir, case: PolicyCase) -> TestResult<Output> {
             "--out-dir",
         ])
         .arg(out_dir.path());
+    if let Some(output_format) = case.format {
+        command.args(["--format", output_format]);
+    }
     Ok(command.output()?)
 }
 
@@ -139,6 +169,17 @@ fn read_policy_report(out_dir: &TempDir) -> TestResult<Value> {
     let dir = Dir::open_ambient_dir(&out_path, ambient_authority())?;
     let serialized = dir.read_to_string("policy-report.json")?;
     Ok(serde_json::from_str(&serialized)?)
+}
+
+fn assert_one_compact_json_line(stdout: &[u8]) -> TestResult {
+    if stdout
+        .strip_suffix(b"\n")
+        .is_some_and(|document| !document.contains(&b'\n'))
+    {
+        Ok(())
+    } else {
+        Err("stdout should contain one compact JSON document and a trailing newline".into())
+    }
 }
 
 fn assert_results(report: &Value, expected: Option<Finding>) -> TestResult {

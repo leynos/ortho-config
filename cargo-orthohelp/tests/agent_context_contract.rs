@@ -45,10 +45,13 @@ fn emitted_agent_context_has_stable_contract(
     let output = run_agent_context(&out_dir, root_type)?;
     ensure_success(&output)?;
 
-    let context = read_agent_context(&out_dir)?;
+    let context = read_stdout_agent_context(&output)?;
     assert_string_field(&context, "schema_version", EXPECTED_SCHEMA_VERSION)?;
     assert_kind_suffix(&context)?;
     assert_first_command(&context, expected_path, expected_summary)?;
+    if context != read_agent_context(&out_dir)? {
+        return Err("agent-context stdout should match its generated artefact".into());
+    }
     Ok(())
 }
 
@@ -96,6 +99,22 @@ fn read_agent_context(out_dir: &TempDir) -> TestResult<Value> {
     let directory = Dir::open_ambient_dir(out_path, ambient_authority())?;
     let json = directory.read_to_string("agent-context.json")?;
     Ok(serde_json::from_str(&json)?)
+}
+
+fn read_stdout_agent_context(output: &Output) -> TestResult<Value> {
+    assert_one_compact_json_line(&output.stdout)?;
+    Ok(serde_json::from_slice(&output.stdout)?)
+}
+
+fn assert_one_compact_json_line(stdout: &[u8]) -> TestResult {
+    if stdout
+        .strip_suffix(b"\n")
+        .is_some_and(|document| !document.contains(&b'\n'))
+    {
+        Ok(())
+    } else {
+        Err("stdout should contain one compact JSON document and a trailing newline".into())
+    }
 }
 
 fn assert_kind_suffix(context: &Value) -> TestResult {
