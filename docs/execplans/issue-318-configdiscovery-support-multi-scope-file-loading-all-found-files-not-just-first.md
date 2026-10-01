@@ -1046,13 +1046,12 @@ here; the fourth is resolved.
    genuinely faults. The test the plan named was renamed to the `-ize` spelling
    and the sentence reworded to match; the prose forms were corrected too.
    Renaming defeated the point of the previous round's decision. The sibling
-   `-ised` identifier at `clap_attrs.rs:300` predates this branch on
-   `origin/main`, so it is not this branch's to rename; the precedent now
-   followed is that the overlay already uses for quoted identifiers. The gate
-   scans prose and inline code spans and does **not** flag `.rs` files —
-   proven, not assumed: the same spelling at `clap_attrs.rs:300` is tracked and
-   unflagged, while the plain-text rewrite of it in the plan had failed the
-   gate minutes earlier.
+   `-ised` identifier at `clap_attrs.rs:300` is **pre-existing on `origin/main`
+   ** and is not this branch's to rename; the precedent now followed is the one
+   the overlay already uses for quoted identifiers. The gate scans prose and
+   inline code spans and does **not** flag `.rs` files — proven, not assumed:
+   the same spelling at `clap_attrs.rs:300` is tracked and unflagged, while the
+   plain-text rewrite of it in the plan had failed the gate minutes earlier.
 3. **A newly written paragraph tripped `check-fmt`.** `mdtablefix --wrap`
    wanted a line joined at 80 columns. Fixed with `make fmt` (the tool the gate
    runs) rather than by hand-wrapping, which is what produced the discrepancy
@@ -1650,6 +1649,11 @@ but the `ui/` pairs are all intact (9 `.rs` + 9 committed `.stderr`, no
 orphans), so the failure mode that matters — an unpaired `compile_fail` — does
 not exist here.
 
+**Superseded in part by Round 25.** The count above was this round's inventory;
+`ortho_config/tests/ui/` now holds thirteen `.rs` fixtures against thirteen
+committed `.stderr` snapshots, and the decline recorded here is superseded in
+part. See Round 25 at the end of this file.
+
 **Docstring Coverage** is re-confirmed still valid, and still bounded in the
 way Round 7 described. The metric counts private helpers and `#[test]` bodies,
 not public API: `missing_docs = "deny"` (`Cargo.toml:98`) means every genuine
@@ -1852,6 +1856,11 @@ apparent orphan elsewhere (`cargo-orthohelp/tests/ui/policy_public_api.rs` with
 no `.stderr`) is not one — `compile_time.rs:11` declares it `t.pass(...)`. The
 failure mode the row names does not exist.
 
+**Superseded in part by Round 25.** The nine pairs above were this round's
+inventory; the directory now holds thirteen `.rs` fixtures against thirteen
+committed `.stderr` snapshots, and the decline recorded here is superseded in
+part. See Round 25 at the end of this file.
+
 **Corrections to this plan.** Three claims did not survive re-verification, and
 all three were load-bearing for an exemption this plan had granted itself:
 
@@ -2031,6 +2040,11 @@ stays declined because the errors are raised by pure token-generation
 functions, and a UI fixture would compile the identical message through a
 slower, more fragile instrument while pinning strictly less: it pins one
 message, where the unit test pins the message *and* the variant it maps to.
+
+**Superseded in part by Round 25.** The nine fixtures above were this round's
+count; thirteen now stand, including the three added this round that cover the
+discovery-attribute vocabulary, and the decline recorded here is superseded in
+part. See Round 25 at the end of this file.
 
 **A counting error in this plan, corrected while citing it.** Round 13 wrote
 that `mode_tokens` and `scope_order_tokens` are covered by "six cases". The
@@ -2485,3 +2499,42 @@ changed a manifest. It did not. The only manifest main touched is
 whose lock entries arrived with main's lock file; `cargo metadata --locked`
 resolves, and `quote` sits at the `1.0.47` main pinned. No rebuild was needed,
 and none was improvised.
+
+## Round 25: three compile-fail fixtures, and a decline superseded in part
+
+The trybuild inventory under `ortho_config/tests/ui/` now holds **13 `.rs`
+fixtures against 13 committed `.stderr` snapshots**. The 9/9 pairs recorded in
+earlier rounds were the state at those rounds: `4551bcd9` added the tenth pair,
+`policy_scope_order_invalid_value`, and this round adds three more.
+
+The three added here, and the diagnostic each pins:
+
+- `policy_explicit_mode_invalid_value` —
+  `explicit_mode must be required_exclusive or optional`.
+- `policy_automatic_mode_invalid_value` —
+  `automatic_mode must be first_wins or stack_scopes`.
+- `discovery_env_selector_conflict` —
+  `` `env_var` and `env_vars` are mutually exclusive ``.
+
+Each `.stderr` was emitted by the compiler, never written by hand: trybuild
+writes an expected snapshot only when the suite runs under
+`TRYBUILD=overwrite`, and the committed snapshots are validated by running the
+suite with `TRYBUILD` unset, so a message that drifts from its snapshot fails
+the run rather than being silently refreshed.
+
+**The `Testing (Compile-Time / Ui)` decline is superseded in part.** Earlier
+rounds declined the row on the argument that the direct unit tests pin these
+diagnostics closely enough that a snapshot would add nothing. That argument was
+about the message rather than the surface: the unit tests assert the strings
+against the returned error, and the fixtures pin the same rejection where the
+compiler renders it, message and span together. The plan now treats the two as
+additive — the unit tests remain the place the message strings are asserted,
+and the fixtures are the place the rendered form is pinned.
+
+**Three contract tests accompany the fixtures.** The
+`tests/workflow_contracts/trybuild_tier_test.py` suite now holds fourteen
+tests, three of them added here: two refuse a manifest that cannot be read
+rather than answering with an empty inventory, and one pins that a single
+unusable table is skipped while the readable targets around it are kept.
+Refusing less loses binaries from the trybuild class in silence; refusing more
+hides targets that are readable.
