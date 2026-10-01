@@ -10,6 +10,7 @@ use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 use crate::policy::PolicyReport;
 use ortho_config::AgentContext;
+use serde::Serialize;
 
 // Process-wide suffix for atomic JSON artefact temp names. `Relaxed` ordering
 // hands out distinct values; the `create_new` and rename operations provide
@@ -91,6 +92,14 @@ pub fn write_agent_context(
     Ok(path)
 }
 
+/// Writes one compact agent-context JSON document to standard output.
+///
+/// # Errors
+/// Returns a JSON error on serialization or an I/O error when writing stdout.
+pub fn write_agent_context_stdout(payload: &AgentContext) -> Result<(), OrthohelpError> {
+    write_json_stdout("agent-context", payload)
+}
+
 /// Writes the machine-readable policy-report JSON document.
 ///
 /// # Errors
@@ -101,6 +110,36 @@ pub fn write_policy_report(
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     let content = serde_json::to_string_pretty(payload).map_err(OrthohelpError::IrJson)?;
     write_atomic_json(out_dir, "policy-report.json", &content, "policy-report")
+}
+
+/// Writes one compact policy-report JSON document to standard output.
+///
+/// # Errors
+/// Returns a JSON error on serialization or an I/O error when writing stdout.
+pub fn write_policy_report_stdout(payload: &PolicyReport) -> Result<(), OrthohelpError> {
+    write_json_stdout("policy-report", payload)
+}
+
+/// Serializes an agent-native payload before taking the stdout lock so a
+/// serialization failure cannot leave a partial JSON document in the stream.
+fn write_json_stdout<T: Serialize>(
+    artefact: &'static str,
+    payload: &T,
+) -> Result<(), OrthohelpError> {
+    let mut content = serde_json::to_vec(payload).map_err(OrthohelpError::IrJson)?;
+    content.push(b'\n');
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    handle
+        .write_all(&content)
+        .and_then(|()| handle.flush())
+        .map_err(OrthohelpError::StdoutIo)?;
+    tracing::debug!(
+        artefact,
+        bytes = content.len(),
+        "JSON document written to stdout"
+    );
+    Ok(())
 }
 
 /// Atomically writes one JSON artefact via temp file, rename, and fsync,

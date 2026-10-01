@@ -4,16 +4,12 @@
 //! against the fixture crate and assert the compact JSON contract that agents
 //! consume.
 
-use std::fmt;
-use std::io::Read;
-
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
 use ortho_config::AGENT_CONTEXT_KIND_SUFFIX;
 use rstest_bdd_macros::{then, when};
 use serde_json::Value;
+use std::fmt;
 
-use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
+use super::steps::{OrthoHelpContext, StepResult, run_orthohelp};
 
 const EXPECTED_SCHEMA_VERSION: &str = "1";
 
@@ -94,13 +90,13 @@ fn run_with_agent_context_args(
     Ok(())
 }
 
-#[then("the output contains agent-context JSON for the fixture")]
+#[then("stdout contains agent-context JSON for the fixture")]
 fn output_contains_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let json = read_agent_context(orthohelp_context)?;
     assert_agent_context_contract(&json, &["fixture"], "Orthohelp fixture configuration.")
 }
 
-#[then("the output contains agent-context JSON for the simple fixture")]
+#[then("stdout contains agent-context JSON for the simple fixture")]
 fn output_contains_simple_agent_context(
     orthohelp_context: &mut OrthoHelpContext,
 ) -> StepResult<()> {
@@ -108,7 +104,7 @@ fn output_contains_simple_agent_context(
     assert_agent_context_contract(&json, &["simple_fixture"], "Simple fixture configuration.")
 }
 
-#[then("the output contains nested agent-context command paths for the fixture")]
+#[then("stdout contains nested agent-context command paths for the fixture")]
 fn output_contains_nested_agent_context_paths(
     orthohelp_context: &mut OrthoHelpContext,
 ) -> StepResult<()> {
@@ -157,13 +153,24 @@ fn expect_first_input_required_boolean(command: &Value) -> StepResult<()> {
     }
 }
 
-fn read_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<Value> {
-    let out_root = get_out_dir(orthohelp_context)?;
-    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-    let mut file = dir.open("agent-context.json")?;
-    let mut buffer = String::new();
-    file.read_to_string(&mut buffer)?;
-    Ok(serde_json::from_str(&buffer)?)
+fn read_agent_context(orthohelp_context: &OrthoHelpContext) -> StepResult<Value> {
+    let stdout = orthohelp_context
+        .last_output
+        .with_ref(|output| output.stdout.clone())
+        .ok_or("last_output should be set")?;
+    assert_one_compact_json_line(&stdout)?;
+    Ok(serde_json::from_slice(&stdout)?)
+}
+
+fn assert_one_compact_json_line(stdout: &[u8]) -> StepResult<()> {
+    if stdout
+        .strip_suffix(b"\n")
+        .is_some_and(|document| !document.contains(&b'\n'))
+    {
+        Ok(())
+    } else {
+        Err("stdout should contain one compact JSON document and a trailing newline".into())
+    }
 }
 
 fn string_field(value: &Value, field: JsonField) -> StepResult<&str> {
