@@ -556,9 +556,9 @@ repair; three were valid and one was advisory.
   observe a file-over-injected inversion; it now stages `issue_dir`, putting
   `FILE_RETRIES` (4) beneath `INJECTED_RETRIES` (7) and asserting the injected
   value wins.
-- **Structural duplication at the module level.** Advisory only — CodeScene is
-  not a required check on this repository — and subsumed by the fixture change
-  above.
+- **Structural duplication at the module level.** Advisory only in the sense
+  that CodeScene is not a required check on this repository, but the finding
+  recurred against this revision and was repaired in the fifth round below.
 - **Module size, found while repairing the above.** AGENTS.md caps any code file
   at 400 lines, and the repairs had carried the suite to 422 — the longest file
   in the tree. The scaffolding moved to
@@ -573,3 +573,57 @@ Both suites were re-run after the repairs: `8 passed; 0 failed` for the
 behavioural suite (seven cases plus the isolation guard) and
 `1 passed; 0 failed` for the trybuild suite, with the committed `.stderr` still
 byte-identical at `bb6a1467` and no `wip/` regenerated.
+
+### Fifth round: the duplication finding returned
+
+The structural-duplication finding was recorded above as advisory and subsumed.
+That was wrong on the second point. CodeScene re-reported it against the
+repaired revision — the extraction to a support file moved the shared *setup*
+out of the module but left five test bodies repeating the same
+parse-merge-assert shape, which is what the metric measures. It now named five
+functions rather than four, so the earlier dismissal had also gone stale in its
+detail.
+
+**The recurrence was reproduced locally before any edit.** The CodeScene CLI is
+installed on this host, so
+`cs review ortho_config/tests/subcommand_merge_methods.rs` reported the same
+five functions at a code health score of 9.38. That turns a bot comment into a
+reproducible check, and it makes the fix verifiable in the same terms the
+reviewer uses rather than by inspection alone.
+
+The five bodies were two `load_and_merge_with_matches` cases and three
+`load_and_merge_with_matches_with_sources` cases. They were folded into one
+table driven by a `LayerRow`:
+
+- `MatchesMethod` names which of the two match-aware methods the row drives, so
+  a row cannot invoke one while claiming the other.
+- `CliMode::Absent`/`Explicit` selects whether `--retries` is passed, replacing
+  the two arg-vector literals that appeared in every case.
+- The injected value is an `Option<u32>`, and a `with_sources` row that omits it
+  is refused by the driver rather than run vacuous — that refusal has its own
+  test.
+- Cases are grouped into two tables by the staged directory they need, so the
+  fixtures remain the parameters that stage the working directory, and the case
+  list is the one place each expectation is stated.
+
+The table itself was first written with six parameters on the shared assertion
+helper, which CodeScene flagged in turn as an excess-argument smell. AGENTS.md
+prescribes the remedy — group related parameters in a meaningfully named struct
+— which is what `LayerRow` is.
+
+**Two refinements came from writing the table, not from the finding.** A row
+that expects `STRUCT_DEFAULT_RETRIES` cannot run against a directory holding an
+issue file, because the file value (`FILE_RETRIES`, 4) beats the struct default
+(5) and would answer first; the empty-directory table is therefore not a
+grouping convenience but a requirement. And a row that passes `--retries`
+explicitly has the CLI above every lower layer whatever those layers hold, so
+its directory choice is genuinely free — which is why `explicit_cli_value_wins`
+can sit in the empty table while `explicit_cli_value_beats_file_and_source`
+sits in the other, both asserting `CLI_RETRIES`.
+
+Coverage was not reduced. The behavioural suite grew from 8 cases to 11: the
+seven original assertions are all still present, the two `Plain` cases that
+share `CliMode::Absent` no longer collapse into one, and the vacuous-row
+refusal and the `with_sources`-without-a-value guard are new. After the change
+both files report a code health score of 10.0 from the same local `cs review`
+that reproduced the finding.

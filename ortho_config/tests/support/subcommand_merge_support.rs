@@ -30,8 +30,8 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use clap::Parser;
-use ortho_config::{MapEnv, OrthoConfig, SharedScanEnvSource};
+use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
+use ortho_config::{MapEnv, OrthoConfig, SharedScanEnvSource, SubcmdConfigMerge};
 use rstest::fixture;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -95,6 +95,132 @@ pub const STRUCT_DEFAULT_RETRIES: u32 = 5;
 /// Builds a scan source whose only variable is `key = value`.
 pub fn scan_source(key: &str, value: impl std::fmt::Display) -> SharedScanEnvSource {
     Arc::new(MapEnv::new().with_var(key, value.to_string()))
+}
+
+/// Folds an optional injected value into the scan source the merge layer takes.
+///
+/// `None` means the process environment is the row's only environment layer,
+/// which [`MatchesMethod::Plain`] already supplies; a [`MatchesMethod::WithSources`]
+/// row without a value would be vacuous, so it is reported rather than run.
+pub fn fold_source(value: Option<u32>) -> Result<SharedScanEnvSource> {
+    value
+        .map(|injected| scan_source(ISSUE_RETRIES_KEY, injected))
+        .context("a with_sources row must supply an injected value")
+}
+
+/// Which match-aware trait method a table row exercises.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MatchesMethod {
+    /// `load_and_merge_with_matches`, whose only environment layer is the
+    /// process environment.
+    Plain,
+    /// `load_and_merge_with_matches_with_sources`, which additionally merges a
+    /// caller-supplied scan source.
+    WithSources,
+}
+
+impl MatchesMethod {
+    /// Merges `parsed` by this method, with `source` as the injected value.
+    ///
+    /// A [`Self::Plain`] row supplies no injected value; a [`Self::WithSources`]
+    /// row must supply one, because the method it names has no other use.
+    fn merge(self, parsed: &ParsedIssue, source: Option<u32>) -> Result<IssueArgs> {
+        match self {
+            Self::Plain => parsed
+                .args
+                .load_and_merge_with_matches(&parsed.matches)
+                .context("merge with matches"),
+            Self::WithSources => {
+                let injected = fold_source(source)?;
+                parsed
+                    .args
+                    .load_and_merge_with_matches_with_sources(&parsed.matches, injected)
+                    .context("merge with matches and sources")
+            }
+        }
+    }
+}
+
+/// Whether a row passes `--retries` explicitly or leaves clap's default in
+/// place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CliMode {
+    /// No flag: clap supplies its own `default_value`, which the merge must
+    /// treat as absent.
+    Absent,
+    /// `--retries <CLI_RETRIES>` passed by the user.
+    Explicit,
+}
+
+/// An `IssueArgs` together with the matches it was parsed from.
+pub struct ParsedIssue {
+    /// The raw clap matches, which carry explicit-versus-default metadata.
+    pub matches: ArgMatches,
+    /// The parsed subcommand values.
+    pub args: IssueArgs,
+}
+
+/// Parses `IssueArgs` in the argv shape `cli` names.
+pub fn parse_issue(cli: CliMode) -> Result<ParsedIssue> {
+    let command_line: Vec<String> = match cli {
+        CliMode::Absent => vec!["issue".to_owned()],
+        CliMode::Explicit => vec![
+            "issue".to_owned(),
+            "--retries".to_owned(),
+            CLI_RETRIES.to_string(),
+        ],
+    };
+    let matches = IssueArgs::command().get_matches_from(command_line);
+    let args = IssueArgs::from_arg_matches(&matches).context("parse row arguments")?;
+    Ok(ParsedIssue { matches, args })
+}
+
+/// One row of the match-aware layer table.
+///
+/// The four fields are what a row states about the merge it expects; the staged
+/// directory stays a case-level fixture rather than a row field, because which
+/// configuration file a case runs against is a property of the case, not of the
+/// precedence it asserts.
+#[derive(Clone, Copy)]
+pub struct LayerRow {
+    /// Which match-aware method the row drives.
+    pub method: MatchesMethod,
+    /// Whether the caller supplied `--retries` or left clap's default in place.
+    pub cli: CliMode,
+    /// The value the caller-supplied scan source carries, if the row supplies
+    /// one. A `WithSources` row must.
+    pub injected: Option<u32>,
+    /// The retry count a correctly wired merge must produce.
+    pub expected: u32,
+}
+
+impl LayerRow {
+    /// Builds a row. Short enough to keep the case list readable, where the
+    /// field names would otherwise be repeated for every row.
+    pub const fn new(
+        method: MatchesMethod,
+        cli: CliMode,
+        injected: Option<u32>,
+        expected: u32,
+    ) -> Self {
+        Self {
+            method,
+            cli,
+            injected,
+            expected,
+        }
+    }
+}
+
+/// Drives one match-aware row and returns the merged retry count.
+///
+/// Both match-aware methods share this shape — parse, merge, read the field —
+/// so the table in `subcommand_merge_methods.rs` carries only what actually
+/// distinguishes its rows, and a row cannot accidentally drive a different
+/// method from the one it names.
+pub fn merged_retries(method: MatchesMethod, cli: CliMode, source: Option<u32>) -> Result<u32> {
+    let parsed = parse_issue(cli)?;
+    Ok(method.merge(&parsed, source)?.retries)
 }
 
 /// Fails when `key` is visible in the process environment.

@@ -7,6 +7,14 @@
 //! `#[ortho_config(cli_default_as_absent)]` must stay absent when clap only
 //! supplied its own default.
 //!
+//! The two match-aware methods are driven from one table, because they differ
+//! only in where their environment layer comes from — the process environment,
+//! or a caller-supplied scan source — and a row names which of the two it
+//! exercises. `merged_retries` performs the parse-and-merge the rows share, so
+//! each row carries only what distinguishes it: the method, the CLI shape, the
+//! injected value, and the layer that should win. The expectations are distinct
+//! per row, so a table row can still fail only for its own reason.
+//!
 //! The methods are process-backed: they resolve configuration files through
 //! `ProcessEnv` and the working directory, neither of which a caller can
 //! inject, so isolation has to be arranged around them rather than supplied to
@@ -18,11 +26,11 @@
 //! the local ones, so a developer's own `~/.vk.toml` or
 //! `~/.config/vk/config.toml` would otherwise be merged into the result.
 //!
-//! The structs, sentinels, and fixtures live in
+//! The structs, sentinels, fixtures, and the row driver live in
 //! `support/subcommand_merge_support.rs`, which keeps this file within the
 //! repository's module-size limit without trimming coverage to get there.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use clap::{CommandFactory, FromArgMatches};
 use ortho_config::SubcmdConfigMerge;
 use rstest::rstest;
@@ -32,10 +40,10 @@ use test_helpers::cwd;
 mod support;
 
 use support::{
-    CLAP_DEFAULT_RETRIES, CLI_REFERENCE, CLI_RETRIES, ConfigDir, FILE_RETRIES, INJECTED_REFERENCE,
-    INJECTED_RETRIES, ISSUE_RETRIES_KEY, IsolatedEnv, IssueArgs, PR_REFERENCE_KEY, PrArgs,
-    STRUCT_DEFAULT_RETRIES, empty_dir, ensure_key_is_unset, isolated_env, issue_dir, pr_dir,
-    scan_source,
+    CLAP_DEFAULT_RETRIES, CLI_REFERENCE, CLI_RETRIES, CliMode, ConfigDir, FILE_RETRIES,
+    INJECTED_REFERENCE, INJECTED_RETRIES, ISSUE_RETRIES_KEY, IsolatedEnv, LayerRow, MatchesMethod,
+    PR_REFERENCE_KEY, PrArgs, STRUCT_DEFAULT_RETRIES, empty_dir, ensure_key_is_unset, isolated_env,
+    issue_dir, merged_retries, pr_dir, scan_source,
 };
 
 /// Discovery resolves the home and XDG rungs through the process environment
@@ -127,150 +135,141 @@ fn sources_method_keeps_cli_values_above_the_injected_environment(
     Ok(())
 }
 
-/// `SubcmdConfigMerge::load_and_merge_with_matches` treats a clap default as
-/// absent when no match metadata names it explicit.
+/// The match-aware methods place every layer on the right rung when no
+/// configuration file is present.
 ///
-/// Catches a forwarding that ignores `matches` and serialises the parsed values
-/// wholesale, which would leak `CLAP_DEFAULT_RETRIES` over the explicit default
-/// of `STRUCT_DEFAULT_RETRIES`.
+/// Cases:
+///
+/// - `clap_default_stays_absent` catches a forwarding that serialises the
+///   parsed values wholesale, leaking `CLAP_DEFAULT_RETRIES` over the explicit
+///   struct default. Only the empty directory can show this: with a file
+///   present its value would answer first.
+/// - `injected_source_beats_empty_file` catches a forwarding that drops the
+///   supplied source, leaving the (absent) file layer in place.
+/// - `explicit_cli_value_wins` catches one that drops the parsed CLI values or
+///   substitutes the struct default.
+/// - `injected_source_beneath_cli` catches one that applies the environment
+///   layer last, leaving `INJECTED_RETRIES` instead of `CLI_RETRIES`.
 #[rstest]
-fn matches_method_keeps_clap_defaults_absent(
+#[case::clap_default_stays_absent(LayerRow::new(
+    MatchesMethod::Plain,
+    CliMode::Absent,
+    None,
+    STRUCT_DEFAULT_RETRIES
+))]
+#[case::injected_source_beats_empty_file(LayerRow::new(
+    MatchesMethod::WithSources,
+    CliMode::Absent,
+    Some(INJECTED_RETRIES),
+    INJECTED_RETRIES
+))]
+#[case::explicit_cli_value_wins(LayerRow::new(
+    MatchesMethod::Plain,
+    CliMode::Explicit,
+    None,
+    CLI_RETRIES
+))]
+#[case::injected_source_beneath_cli(LayerRow::new(
+    MatchesMethod::WithSources,
+    CliMode::Explicit,
+    Some(INJECTED_RETRIES),
+    CLI_RETRIES
+))]
+fn matches_methods_place_each_layer_without_a_file(
     isolated_env: Result<IsolatedEnv>,
     empty_dir: Result<ConfigDir>,
+    #[case] row: LayerRow,
 ) -> Result<()> {
-    let _isolated = isolated_env?;
-    let _dir = empty_dir?;
-    ensure_key_is_unset(ISSUE_RETRIES_KEY)?;
-    let matches = IssueArgs::command().get_matches_from(["issue"]);
-    let args = IssueArgs::from_arg_matches(&matches).context("parse clap defaults")?;
-
-    let merged = args
-        .load_and_merge_with_matches(&matches)
-        .context("merge absent clap defaults")?;
-
-    ensure!(
-        merged.retries == STRUCT_DEFAULT_RETRIES,
-        "expected {STRUCT_DEFAULT_RETRIES}, not the clap default {CLAP_DEFAULT_RETRIES}: {}",
-        merged.retries
-    );
-    Ok(())
+    assert_layer_rung(isolated_env, empty_dir, row)
 }
 
-/// `SubcmdConfigMerge::load_and_merge_with_matches` still honours a value the
-/// user supplied explicitly.
+/// The match-aware methods place every layer on the right rung when a
+/// configuration file is present.
 ///
-/// Catches a forwarding that drops the parsed CLI values or substitutes the
-/// struct default, either of which would leave `STRUCT_DEFAULT_RETRIES` instead
-/// of `CLI_RETRIES`.
-#[rstest]
-fn matches_method_honours_explicit_cli_values(
-    isolated_env: Result<IsolatedEnv>,
-    empty_dir: Result<ConfigDir>,
-) -> Result<()> {
-    let _isolated = isolated_env?;
-    let _dir = empty_dir?;
-    let retries = CLI_RETRIES.to_string();
-    let matches = IssueArgs::command().get_matches_from(["issue", "--retries", retries.as_str()]);
-    let args = IssueArgs::from_arg_matches(&matches).context("parse explicit values")?;
-
-    let merged = args
-        .load_and_merge_with_matches(&matches)
-        .context("merge explicit CLI values")?;
-
-    ensure!(
-        merged.retries == CLI_RETRIES,
-        "expected the explicit CLI value {CLI_RETRIES}, got {}",
-        merged.retries
-    );
-    Ok(())
-}
-
-/// `SubcmdConfigMerge::load_and_merge_with_matches` lets the file layer supply
-/// a value the user did not pass, instead of the clap default.
+/// Cases:
 ///
-/// Catches a forwarding that ignores `matches`, which would leak
-/// `CLAP_DEFAULT_RETRIES` over the staged `FILE_RETRIES`; reaching the file at
-/// all also shows that file discovery still runs.
+/// - `file_beats_clap_default` catches a forwarding that ignores `matches`;
+///   reaching the file at all also shows that file discovery still runs.
+/// - `injected_source_beats_file` catches one that drops the supplied source,
+///   leaving `FILE_RETRIES`. Staging a distinct file value also catches a
+///   precedence inversion that would let the file win.
+/// - `explicit_cli_value_beats_file_and_source` catches one that lets either
+///   lower layer win over the CLI.
+///
+/// Every case also requires `ISSUE_RETRIES_KEY` to be unset in the process
+/// environment, so a value that is present came from the injected source rather
+/// than the live environment.
 #[rstest]
-fn matches_method_prefers_the_file_over_absent_clap_defaults(
+#[case::file_beats_clap_default(LayerRow::new(
+    MatchesMethod::Plain,
+    CliMode::Absent,
+    Some(INJECTED_RETRIES),
+    FILE_RETRIES
+))]
+#[case::injected_source_beats_file(LayerRow::new(
+    MatchesMethod::WithSources,
+    CliMode::Absent,
+    Some(INJECTED_RETRIES),
+    INJECTED_RETRIES
+))]
+#[case::explicit_cli_value_beats_file_and_source(LayerRow::new(
+    MatchesMethod::WithSources,
+    CliMode::Explicit,
+    Some(INJECTED_RETRIES),
+    CLI_RETRIES
+))]
+fn matches_methods_place_each_layer_over_a_file(
     isolated_env: Result<IsolatedEnv>,
     issue_dir: Result<ConfigDir>,
+    #[case] row: LayerRow,
+) -> Result<()> {
+    assert_layer_rung(isolated_env, issue_dir, row)
+}
+
+/// Drives one table row against the configuration directory the case entered.
+///
+/// The directory arrives as a consumed fixture rather than being chosen from a
+/// row field: staging is a case-level decision, so which directory a row runs
+/// against is visible in the test that owns it, and the only expected value a
+/// row can carry is one its own layers can produce.
+fn assert_layer_rung(
+    isolated_env: Result<IsolatedEnv>,
+    staged: Result<ConfigDir>,
+    row: LayerRow,
 ) -> Result<()> {
     let _isolated = isolated_env?;
-    let _dir = issue_dir?;
+    let _dir = staged?;
     ensure_key_is_unset(ISSUE_RETRIES_KEY)?;
-    let matches = IssueArgs::command().get_matches_from(["issue"]);
-    let args = IssueArgs::from_arg_matches(&matches).context("parse clap defaults")?;
 
-    let merged = args
-        .load_and_merge_with_matches(&matches)
-        .context("merge file defaults beneath clap defaults")?;
+    let merged = merged_retries(row.method, row.cli, row.injected)?;
 
     ensure!(
-        merged.retries == FILE_RETRIES,
-        "expected the file value {FILE_RETRIES}, not the clap default {CLAP_DEFAULT_RETRIES}: {}",
-        merged.retries
+        merged == row.expected,
+        "{:?} with {:?} CLI and injected {:?}: expected {}, got {merged} — the clap default \
+         {CLAP_DEFAULT_RETRIES} leaking is the usual cause",
+        row.method,
+        row.cli,
+        row.injected,
+        row.expected
     );
     Ok(())
 }
 
-/// `SubcmdConfigMerge::load_and_merge_with_matches_with_sources` merges the
-/// supplied scan source above the file and beneath absent clap defaults.
+/// The row driver refuses a `with_sources` row that supplies no injected value.
 ///
-/// Catches a forwarding that drops the supplied source, which would leave
-/// `FILE_RETRIES` in place instead of `INJECTED_RETRIES`. Staging a distinct
-/// file value also catches a precedence inversion that would let the file win,
-/// and requiring the key to be unset in the process environment shows the value
-/// came from the injected source rather than from the live environment.
+/// Such a row would leave the method with the process environment as its only
+/// environment layer, so it would pass or fail exactly like a `Plain` row and
+/// could not detect a forwarding that dropped the supplied source. Failing
+/// loudly keeps a mis-specified row from looking like coverage.
 #[rstest]
-fn matches_with_sources_method_reads_the_injected_environment(
-    isolated_env: Result<IsolatedEnv>,
-    issue_dir: Result<ConfigDir>,
-) -> Result<()> {
-    let _isolated = isolated_env?;
-    let _dir = issue_dir?;
-    ensure_key_is_unset(ISSUE_RETRIES_KEY)?;
-    let matches = IssueArgs::command().get_matches_from(["issue"]);
-    let args = IssueArgs::from_arg_matches(&matches).context("parse clap defaults")?;
-    let source = scan_source(ISSUE_RETRIES_KEY, INJECTED_RETRIES);
-
-    let merged = args
-        .load_and_merge_with_matches_with_sources(&matches, source)
-        .context("merge the injected source above the file")?;
+fn with_sources_rows_require_an_injected_value() -> Result<()> {
+    let Err(err) = merged_retries(MatchesMethod::WithSources, CliMode::Absent, None) else {
+        bail!("a with_sources row without an injected value must be refused");
+    };
 
     ensure!(
-        merged.retries == INJECTED_RETRIES,
-        "expected the injected {INJECTED_RETRIES} above the file value {FILE_RETRIES}, got {}",
-        merged.retries
-    );
-    Ok(())
-}
-
-/// `SubcmdConfigMerge::load_and_merge_with_matches_with_sources` keeps explicit
-/// CLI values above the injected environment.
-///
-/// Catches a forwarding that applies the environment layer last, which would
-/// leave `INJECTED_RETRIES` instead of `CLI_RETRIES`.
-#[rstest]
-fn matches_with_sources_method_keeps_cli_values_above_the_source(
-    isolated_env: Result<IsolatedEnv>,
-    empty_dir: Result<ConfigDir>,
-) -> Result<()> {
-    let _isolated = isolated_env?;
-    let _dir = empty_dir?;
-    let retries = CLI_RETRIES.to_string();
-    let matches = IssueArgs::command().get_matches_from(["issue", "--retries", retries.as_str()]);
-    let args = IssueArgs::from_arg_matches(&matches).context("parse explicit values")?;
-    let source = scan_source(ISSUE_RETRIES_KEY, INJECTED_RETRIES);
-
-    let merged = args
-        .load_and_merge_with_matches_with_sources(&matches, source)
-        .context("merge explicit CLI values over the injected source")?;
-
-    ensure!(
-        merged.retries == CLI_RETRIES,
-        "expected the CLI value {CLI_RETRIES}, not the injected {INJECTED_RETRIES}: {}",
-        merged.retries
+        err.to_string().contains("must supply an injected value"),
+        "refused for the wrong reason: {err}"
     );
     Ok(())
 }
