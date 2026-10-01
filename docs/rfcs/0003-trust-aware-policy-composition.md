@@ -332,6 +332,15 @@ that distinction.
 Allowed and denied capabilities use mathematical set semantics. Their runtime
 representation may accept `BTreeSet`, a deduplicated vector, or a domain
 newtype, but ordering and duplicate behaviour do not alter the policy algebra.
+In the built-in allowed-capabilities family, executable roots are application-
+defined atomic identifiers compared by exact identifier equality and composed
+by mathematical set intersection. OrthoConfig does not infer filesystem
+containment or normalize paths: distinct parent and child directory labels are
+not automatically equivalent or ordered by restrictiveness. The application
+maps identifiers to approved roots and enforces filesystem boundaries. An
+application that needs containment-based composition must define a separate
+custom policy family with a documented relation and restrictive reducer that
+satisfy §§6.4 and 6.13.
 
 ### 6.6. Keyed capability maps
 
@@ -569,11 +578,13 @@ command parsing, provider selection, process execution, and sandboxing.
 
 ### 7.3. Executable roots and provider allowlists
 
-An operator may authorize executables beneath fixed roots and a bounded set of
-providers. Project configuration can remove roots or providers. A keyed
-provider map may reduce parameters through its declared value reducer. The
-project cannot introduce a provider key, add an executable root, or relax a
-per-provider restriction.
+An operator may authorize executable-root identifiers that the application maps
+to fixed filesystem roots, and a bounded set of providers. Project
+configuration can remove root identifiers or providers. Root identifiers use
+exact equality and set intersection; the application enforces filesystem
+containment. A keyed provider map may reduce parameters through its declared
+value reducer. The project cannot introduce a provider key, add an executable
+root identifier, or relax a per-provider restriction.
 
 ### 7.4. Filesystem and network capabilities
 
