@@ -226,8 +226,6 @@ PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
     "Install mdtablefix": LINUX_ONLY,
     "Check formatting": LINUX_ONLY,
     "Check Rust formatting": "${{ matrix.platform != 'linux' }}",
-    "Resolve latest Whitaker installer release": LINUX_ONLY,
-    "Cache Whitaker installer": LINUX_ONLY,
     "Install Whitaker": LINUX_ONLY,
     "Disk sample (before lint)": "${{ always() && matrix.platform == 'linux' }}",
     "Lint": LINUX_ONLY,
