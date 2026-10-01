@@ -663,3 +663,28 @@ value. And the injected-source rows read from the supplied scan source, which
 *replaces* the process environment layer rather than augmenting it, so removal
 cannot disturb them. The `ensure_key_is_unset` calls stay as isolation
 assertions; they are now belt-and-braces rather than the only defence.
+
+### Seventh round: both findings closed at the new head
+
+The two dispositions arrived on the same day and both landed after the fifth
+and sixth rounds were pushed.
+
+**Duplication.** CodeRabbit had re-reported the Code Duplication finding against
+`35582cec`, endorsing my earlier "advisory" reply as insufficient, and
+CodeScene still showed FAILURE there. The parameterization in `0180cb91`
+removed the five handwritten functions: the tables now carry rows naming
+`MatchesMethod`, `CliMode`, the injected value, and the expected result, driven
+by `parse_issue`, `MatchesMethod::merge`, and `merged_retries`. A local
+`cs review` returns `score: 10.0` with an empty `review` array on both files,
+and the live CodeScene review moved to **APPROVED** at `0180cb91` and again at
+`359c8a04`. The advisory code health impact fell from 9.39 to within the
+passing band.
+
+**Environment isolation.** CodeRabbit accepted the `359c8a04` repair, recorded
+the layer-order learning, and resolved the thread: "`isolated_env` now removes
+both merge-layer keys through shared guards while retaining discovery isolation
+and the environment-before-cwd lock order."
+
+Both threads now carry affirmative dispositions on the current head, and the
+stale "advisory" reply was superseded rather than deleted — the record shows
+which position was corrected and why.
