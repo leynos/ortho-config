@@ -1027,12 +1027,12 @@ rolling release, so the suite is not pinned here; the pinned action revision is
 what stays fixed.
 
 The concordat QG-002 rule accepts a revision of that action only if it is a
-shared-actions commit at or after `6dea5677` that leaves the action directory
-content-identical, so the pin moves with the other shared-actions references
-(the one-SHA contract in `sccache_wiring_test.py`). The workflow contract
-`whitaker_install_test.py` asserts exactly one `Install Whitaker` step, using
-the action at a full commit hash, with no script of its own, on the Linux leg
-only.
+shared-actions commit, from the revision that first carried the install rules
+onwards, that leaves the action directory content-identical, so the pin moves
+with the other shared-actions references (the one-SHA contract in
+`sccache_wiring_test.py`). The workflow contract `whitaker_install_test.py`
+asserts exactly one `Install Whitaker` step, using the action at a full commit
+hash, with no script of its own, on the Linux leg only.
 
 ## Publish dry run
 
