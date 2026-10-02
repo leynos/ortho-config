@@ -6,6 +6,9 @@ updates:
       github-actions:
         patterns:
           - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
     # `/` covers `.github/workflows` and root action manifests.
     directory: "/"
     open-pull-requests-limit: 5
@@ -13,7 +16,7 @@ updates:
       - "dependencies"
       - "github-actions"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     cooldown:
       default-days: 7
 
@@ -21,6 +24,13 @@ updates:
   - package-ecosystem: "cargo"
     # The root manifest owns all six Cargo workspace members.
     directory: "/"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -34,6 +44,13 @@ updates:
   # Enable version updates for Python test requirements
   - package-ecosystem: "pip"
     directory: "/scripts"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -47,9 +64,16 @@ updates:
   # Keep the pinned Rust toolchain current independently of Cargo crates.
   - package-ecosystem: "rust-toolchain"
     directory: "/"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "rust-toolchain"
     schedule:
-      interval: "weekly"
+      interval: "daily"
