@@ -2,7 +2,9 @@
 
 Separated from ``timeout_budgets`` so the configuration reading and the
 values it is compared against stay legible apart, and so neither module
-outgrows the 400-line limit ``AGENTS.md`` sets.
+outgrows the 400-line limit ``AGENTS.md`` sets. Reading one declared
+value as a number of seconds lives in ``nextest_allowances`` for the
+same reason.
 
 The configuration is parsed with ``tomllib`` rather than matched as
 text. A text match finds a key inside a comment, inside a ``filter``
@@ -12,10 +14,11 @@ runner does not use.
 
 from __future__ import annotations
 
-import tomllib
 from itertools import starmap
-from typing import TypeGuard
 
+from nextest_allowances import budget_of, is_positive_integer
+from nextest_document import budget_tables, parsed, slow_timeouts
+from nextest_document import table as _table
 from nextest_durations import seconds
 from nextest_errors import (
     NextestConfigurationError,
@@ -28,185 +31,103 @@ from timeout_budgets import (
 )
 
 #: Re-exported so every module that reads the configuration through this
-#: one keeps a single import site for the faults it reports and for the
-#: duration reading those faults come out of.
+#: one keeps a single import site for the faults it reports, the duration
+#: reading those faults come out of, and the `slow-timeout` reader the
+#: tiers below are built on.
 __all__ = [
     "NextestConfigurationError",
     "TimeoutBudgetError",
     "UnboundedTestError",
     "seconds",
+    "slow_timeouts",
 ]
 
 
-def _table(value: object) -> dict[str, object]:
-    """Return a parsed value as a table, or an empty one."""
-    # `tomllib` returns whatever the document said, so a configuration
-    # naming a scalar where a table belongs yields nothing here rather
-    # than raising several frames away, and the assertion that finds no
-    # budget reports the absence.
-    return dict(value) if isinstance(value, dict) else {}
+def _override_selector(path: str, entry: dict[str, object]) -> str | None:
+    """Return the filter an override applies its allowance through, if any.
 
+    ``None`` means the override carries no filter and is gated another way,
+    so it applies to every test nextest runs under it. That is a different
+    kind of selector from a filter and is not expressed as one.
 
-def _parsed(config_text: str) -> dict[str, object]:
-    """Return the nextest configuration as TOML, or raise."""
-    try:
-        return tomllib.loads(config_text)
-    except tomllib.TOMLDecodeError as error:
-        message = f"the nextest configuration is not valid TOML: {error}"
-        raise NextestConfigurationError(message) from error
+    ``filter`` is the only key holding a filterset. ``platform`` is a
+    *gate*, not a filter: it is a cfg expression such as ``cfg(windows)``,
+    in either a string or a ``{ host = ... }`` table, and it decides
+    whether the override applies at all. Rendering it as a filterset
+    predicate would invent a ``platform(...)`` term that nextest does not
+    accept -- the filterset ``platform`` takes ``host`` or ``target`` and
+    is a different construct -- so it is reported as the absence of a
+    filter rather than converted into one.
 
-
-def _budget_tables(config_text: str) -> list[tuple[str, dict[str, object]]]:
-    """Return every table nextest reads a per-test budget from."""
-    # Each profile's own table and each of its `[[overrides]]` entries,
-    # paired with the dotted path that names it so a failure can say
-    # which one is at fault.
-    tables: list[tuple[str, dict[str, object]]] = []
-    for name, raw in _table(_parsed(config_text).get("profile")).items():
-        profile = _table(raw)
-        tables.append((f"profile.{name}", profile))
-        overrides = profile.get("overrides")
-        entries = overrides if isinstance(overrides, list) else []
-        tables.extend(
-            (f"profile.{name}.overrides[{index}]", _table(entry))
-            for index, entry in enumerate(entries)
-        )
-    return tables
-
-
-def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
-    """Return each ``slow-timeout`` with the path of the table declaring it."""
-    return [
-        (path, table["slow-timeout"])
-        for path, table in _budget_tables(config_text)
-        if "slow-timeout" in table
-    ]
-
-
-def _budget_of(path: str, value: object) -> float:
-    """Return the per-test budget one ``slow-timeout`` declares, or raise."""
-    # A value naming no `terminate-after`, in either spelling, raises
-    # `UnboundedTestError`: nextest marks the test slow and lets it run
-    # on, so there is no per-test tier to compare against. A table with
-    # no `period`, or a value that is neither a table nor a duration,
-    # raises `NextestConfigurationError`.
-    match value:
-        case str():
-            message = (
-                f'{path}.slow-timeout = "{value}" sets a warning period with '
-                f"no terminate-after, so nextest reports the test as slow and "
-                f"never stops it"
-            )
-            raise UnboundedTestError(message)
-        case dict():
-            pass
-        case _:
-            message = f"{path}.slow-timeout is neither a table nor a duration"
-            raise NextestConfigurationError(message)
-    period = value.get("period")
-    if not isinstance(period, str):
-        message = f"{path}.slow-timeout names no period: {value!r}"
-        raise NextestConfigurationError(message)
-    multiplier = value.get("terminate-after")
-    if multiplier is None:
-        message = (
-            f"{path}.slow-timeout sets no terminate-after, so nextest marks "
-            f"the test slow and lets it run on; there is no per-test tier to "
-            f"compare against"
-        )
-        raise UnboundedTestError(message)
-    return seconds(period) * _terminate_after(path, multiplier)
-
-
-def _is_positive_integer(value: object) -> TypeGuard[int]:
-    """Return whether a parsed value is a TOML positive integer.
-
-    Matched rather than tested with a chained condition, so each shape
-    is answered on its own line. ``bool`` is answered first because it
-    is a subclass of ``int`` in Python and is not one in TOML: without
-    its own arm, ``terminate-after = true`` reads as a multiplier of
-    one.
-
-    Narrowing is declared with ``TypeGuard`` rather than ``TypeIs``
-    because the two say different things and only the looser one is
-    true here. ``TypeIs`` asserts the predicate answers True for every
-    ``int``; this one refuses ``True`` and refuses zero and negatives,
-    all of which are ``int``. ``TypeGuard`` asserts only that a True
-    answer implies the type, which is what ``_terminate_after`` needs
-    to return its ``object`` argument as an ``int``.
-
-    Parameters
-    ----------
-    value : object
-        The parsed value.
-
-    Returns
-    -------
-    TypeGuard[int]
-        True when nextest would accept it as a ``NonZeroUsize``,
-        narrowing the argument to ``int`` for the caller.
-
-    Examples
-    --------
-    >>> _is_positive_integer(2)
-    True
-    >>> _is_positive_integer(True)
-    False
-    >>> _is_positive_integer(1.5)
-    False
+    No key at all is the refusal: nextest rejects an override that sets
+    no selector, and this reports that rather than reading it as
+    applying everywhere.
     """
-    match value:
-        case bool():
-            return False
-        case int():
-            return value >= 1
-        case _:
-            return False
+    expression = entry.get("filter")
+    if isinstance(expression, str):
+        return expression
+    if "platform" in entry:
+        return None
+    message = (
+        f"{path} declares a slow-timeout but neither a filter nor a "
+        f"platform, so there is no set of tests that allowance applies "
+        f"to; nextest refuses such a file"
+    )
+    raise NextestConfigurationError(message)
 
 
-def _terminate_after(path: str, value: object) -> int:
-    """Return a ``terminate-after`` as nextest deserializes one.
+def override_allowances(config_text: str) -> list[tuple[str, str | None, float]]:
+    """Return each override's selector and the per-test allowance it carries.
 
-    nextest reads this field into an ``Option<NonZeroUsize>``, so it is
-    a positive integer and nothing else. Reading it through
-    ``float(str(...))`` accepted three shapes the runner refuses and
-    misread a fourth: a TOML float such as ``1.5``, a quoted ``"2"``,
-    and zero or a negative integer all became budgets, and a boolean
-    raised ``ValueError`` out of this module rather than the
-    configuration error every caller here handles.
-
-    The refusal is by shape rather than by catching the conversion's
-    exception. Wrapping ``float`` would report the boolean properly and
-    still accept ``1.5``, ``"2"`` and zero, which is the larger half of
-    the defect: a contract that multiplies a period by a multiplier
-    nextest will not load reports a per-test tier for a file that
-    cannot run.
+    An override is the only way a set of tests gets an allowance other
+    than the profile's own, so this is the reader that answers which
+    selector a given allowance belongs to.
 
     Parameters
     ----------
-    path : str
-        The dotted path of the declaring table, for the message.
-    value : object
-        The parsed value.
+    config_text : str
+        The nextest configuration file's text.
 
     Returns
     -------
-    int
-        The multiplier.
+    list of (str, str or None, float)
+        Each override's path, its filter expression, and its budget in
+        seconds, in file order. The filter is ``None`` when the override
+        carries no ``filter`` and selects through something other than a
+        filterset, such as a ``platform`` gate: such an entry applies to
+        every test nextest runs under it, which no filter expression
+        describes. An override declaring no ``slow-timeout`` is left out:
+        it grants no per-test budget, so there is nothing to compare.
 
     Raises
     ------
     NextestConfigurationError
-        If the value is not a positive integer.
+        If such an override declares neither a ``filter`` nor a
+        ``platform``, which nextest refuses, or its ``slow-timeout`` is
+        unreadable.
+
+    Examples
+    --------
+    >>> override_allowances(
+    ...     '[profile.default]\\n[[profile.default.overrides]]\\n'
+    ...     'filter = "binary(a)"\\nslow-timeout = { period = "1m", '
+    ...     'terminate-after = 2 }\\n'
+    ... )
+    [('profile.default.overrides[0]', 'binary(a)', 120.0)]
+    >>> override_allowances(
+    ...     '[profile.default]\\n[[profile.default.overrides]]\\n'
+    ...     'platform = { host = "cfg(unix)" }\\n'
+    ...     'slow-timeout = { period = "1m", terminate-after = 2 }\\n'
+    ... )
+    [('profile.default.overrides[0]', None, 120.0)]
     """
-    if not _is_positive_integer(value):
-        message = (
-            f"{path}.slow-timeout sets terminate-after = {value!r}; nextest "
-            f"reads it as a positive integer and refuses the file otherwise, "
-            f"so no budget can be derived from it"
-        )
-        raise NextestConfigurationError(message)
-    return value
+    found: list[tuple[str, str | None, float]] = []
+    for path, entry in budget_tables(config_text):
+        if "overrides[" not in path or "slow-timeout" not in entry:
+            continue
+        selector = _override_selector(path, entry)
+        found.append((path, selector, budget_of(path, entry["slow-timeout"])))
+    return found
 
 
 def configured_periods(config_text: str) -> list[float]:
@@ -230,7 +151,7 @@ def configured_periods(config_text: str) -> list[float]:
         Each configured period in seconds, in file order.
     """
     periods: list[float] = []
-    for _, value in _slow_timeouts(config_text):
+    for _, value in slow_timeouts(config_text):
         match value:
             case str():
                 periods.append(seconds(value))
@@ -261,15 +182,16 @@ def largest_test_allowance(config_text: str) -> float:
         The longest per-test budget.
 
     A ``slow-timeout`` that names no ``terminate-after`` raises
-    :class:`UnboundedTestError` from :func:`_budget_of` rather than
-    counting as one period, because such a configuration bounds nothing.
+    :class:`UnboundedTestError` from
+    :func:`nextest_allowances.budget_of` rather than counting as one
+    period, because such a configuration bounds nothing.
 
     Raises
     ------
     NextestConfigurationError
         If the configuration declares no ``slow-timeout`` at all.
     """
-    budgets = list(starmap(_budget_of, _slow_timeouts(config_text)))
+    budgets = list(starmap(budget_of, slow_timeouts(config_text)))
     if not budgets:
         message = (
             "the nextest configuration declares no slow-timeout, so no test "
@@ -277,6 +199,48 @@ def largest_test_allowance(config_text: str) -> float:
         )
         raise NextestConfigurationError(message)
     return max(budgets)
+
+
+def profile_allowance(config_text: str, profile: str = "default") -> float:
+    """Return a profile's own per-test allowance, in seconds.
+
+    Only the profile's own ``slow-timeout`` counts, not an override's. That
+    is the allowance a test which no override matches gets, so it is the
+    figure an override's own is compared against when asking whether the
+    override buys anything.
+
+    Parameters
+    ----------
+    config_text : str
+        The nextest configuration file's text.
+    profile : str
+        The profile to read.
+
+    Returns
+    -------
+    float
+        The profile's own per-test budget.
+
+    Raises
+    ------
+    NextestConfigurationError, UnboundedTestError
+        If the profile declares no readable ``slow-timeout``, under the
+        same rules :func:`largest_test_allowance` applies.
+
+    Examples
+    --------
+    >>> profile_allowance('[profile.default]\\nslow-timeout = { period = "60s", '
+    ...                   'terminate-after = 10 }\\n')
+    600.0
+    """
+    own = _table(_table(parsed(config_text).get("profile")).get(profile))
+    if "slow-timeout" not in own:
+        message = (
+            f"profile.{profile} declares no slow-timeout of its own, so there "
+            f"is no per-test allowance to compare an override against"
+        )
+        raise NextestConfigurationError(message)
+    return budget_of(f"profile.{profile}", own["slow-timeout"])
 
 
 def bounds_a_single_test(config_text: str, profile: str = "default") -> bool:
@@ -310,11 +274,11 @@ def bounds_a_single_test(config_text: str, profile: str = "default") -> bool:
         True when that profile's own ``slow-timeout`` is a table whose
         ``terminate-after`` nextest would accept.
     """
-    own = _table(_table(_parsed(config_text).get("profile")).get(profile))
-    table = own.get("slow-timeout")
-    if not isinstance(table, dict):
+    own = _table(_table(parsed(config_text).get("profile")).get(profile))
+    bound = own.get("slow-timeout")
+    if not isinstance(bound, dict):
         return False
-    return _is_positive_integer(table.get("terminate-after"))
+    return is_positive_integer(bound.get("terminate-after"))
 
 
 def grace_period(config_text: str) -> float:
@@ -336,7 +300,7 @@ def grace_period(config_text: str) -> float:
     """
     periods = [
         seconds(grace)
-        for _, value in _slow_timeouts(config_text)
+        for _, value in slow_timeouts(config_text)
         if isinstance(value, dict)
         and isinstance(grace := value.get("grace-period"), str)
     ]
@@ -388,6 +352,6 @@ def global_timeout(config_text: str) -> float | None:
         The whole-run budget in seconds, or None when the default
         profile declares none.
     """
-    profile = _table(_table(_parsed(config_text).get("profile")).get("default"))
+    profile = _table(_table(parsed(config_text).get("profile")).get("default"))
     budget = profile.get("global-timeout")
     return seconds(budget) if isinstance(budget, str) else None

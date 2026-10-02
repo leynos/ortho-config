@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::ffi::{OsStr, OsString};
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
@@ -279,8 +279,41 @@ impl ExampleWorkspace {
         let run_dir_name = format!("run-{id}");
         self.directory.create_dir_all(&run_dir_name)?;
         let run_dir = self.directory.open_dir(&run_dir_name)?;
+        // `Dir::write` does not create intermediate directories, so a nested
+        // fixture path — a scope directory such as `xdg/acme/config.toml` —
+        // needs them made first. A bare filename has no parent to create.
+        if let Some(parent) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+            run_dir
+                .create_dir_all(parent)
+                .with_context(|| format!("create fixture directory {}", parent.display()))?;
+        }
         run_dir.write(path, contents)?;
         Ok(())
+    }
+
+    /// Resolve a path relative to the workspace root.
+    ///
+    /// `write_run_file` writes through a capability handle rather than ambient
+    /// `std::fs`, so the absolute location of a fixture is not otherwise
+    /// observable. A test that has to hand a *path* to a child process - as an
+    /// environment variable naming a configuration file, for instance - needs
+    /// it, because discovery resolves a relative selector value against the
+    /// child's working directory, which is a different directory from the
+    /// workspace root.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `relative` escapes the workspace root.
+    pub fn path_in_root(&self, relative: &str) -> Result<PathBuf> {
+        let relative_path = Path::new(relative);
+        ensure!(
+            !relative_path.as_os_str().is_empty()
+                && relative_path
+                    .components()
+                    .all(|component| matches!(component, Component::Normal(_))),
+            "workspace-relative path must stay within the workspace root"
+        );
+        Ok(self.root.path().join(relative_path))
     }
 
     fn cargo_command(&mut self) -> Result<Command> {

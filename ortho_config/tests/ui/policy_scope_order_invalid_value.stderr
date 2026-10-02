@@ -1,0 +1,7 @@
+error: scope_order values must be system, user, or project
+  --> tests/ui/policy_scope_order_invalid_value.rs:14:23
+   |
+14 | #[derive(Deserialize, OrthoConfig)]
+   |                       ^^^^^^^^^^^
+   |
+   = note: this error originates in the derive macro `OrthoConfig` (in Nightly builds, run with -Z macro-backtrace for more info)

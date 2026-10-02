@@ -36,6 +36,12 @@ use std::sync::Arc;
 #[path = "support/load_source.rs"]
 mod load_source;
 
+/// The `ConfigFilePolicy` resolution cases, split out for the same reason.
+#[path = "support/policy_telemetry.rs"]
+mod policy_telemetry;
+
+/// An injected source is named as such, not as the process environment,
+/// so a test host cannot be mistaken for production in an event stream.
 #[test]
 fn building_with_an_injected_source_is_reported() {
     let events = capture(|| discovery_with(MapEnv::new()));
@@ -45,6 +51,7 @@ fn building_with_an_injected_source_is_reported() {
     );
 }
 
+/// The default is the real environment, and the event must say so.
 #[test]
 fn building_without_a_source_reports_the_process_environment() {
     let events = capture(|| {
@@ -131,6 +138,8 @@ fn xdg_decision_is_reported(#[case] pairs: &[(&str, &str)], #[case] expected: (&
     &[("HOME", "/home/injected"), ("USERPROFILE", "/users/injected")],
     "home"
 )]
+/// A home-fallback win is attributed to the `home` source, not to the
+/// environment variable that named the file.
 #[case::neither(&[], "none")]
 fn home_decision_is_reported(#[case] pairs: &[(&str, &str)], #[case] expected: &str) {
     let env: MapEnv = pairs.iter().copied().collect();
@@ -151,10 +160,12 @@ fn home_from_the_source_fallback_is_reported() {
     struct FallbackOnlyEnv;
 
     impl ortho_config::EnvSource for FallbackOnlyEnv {
+        /// Reports no variable, so only the home fallback can produce a path.
         fn get(&self, _key: &str) -> Option<std::ffi::OsString> {
             None
         }
 
+        /// The sole source of a candidate location in this fixture.
         fn home_fallback(&self) -> Option<std::path::PathBuf> {
             Some(std::path::PathBuf::from("/fallback/home"))
         }
@@ -170,6 +181,7 @@ fn home_from_the_source_fallback_is_reported() {
     assert_eq!(only(&events, "discovery.home").field("source"), "fallback");
 }
 
+/// Every candidate rejected still yields exactly one terminal outcome.
 #[test]
 fn exhausting_every_candidate_reports_not_found() {
     let discovery = discovery_with(MapEnv::new());
@@ -183,6 +195,8 @@ fn exhausting_every_candidate_reports_not_found() {
     assert_eq!(load.field("outcome"), "not_found");
 }
 
+/// The terminal outcome names the rung that won, so success is not
+/// reported anonymously.
 #[test]
 fn a_loaded_candidate_reports_success() {
     let dir = tempfile::tempdir().expect("a temporary directory should be creatable");
@@ -223,6 +237,8 @@ fn a_missing_required_candidate_reports_a_required_failure() {
     assert_eq!(candidate.field("required"), "true");
 }
 
+/// Stacked scopes are their own operation, distinct from the
+/// first-wins walk they replace.
 #[test]
 fn compose_layers_reports_its_own_operation() {
     let discovery = discovery_with(MapEnv::new());
@@ -275,6 +291,9 @@ fn no_event_field_carries_an_environment_value_or_path() {
         .env_source(Arc::new(env))
         .build();
 
+    // The policy path shares none of this plumbing and carries no caller-
+    // supplied text by construction; `support/policy_telemetry.rs` redaction-
+    // checks that event on its own terms.
     let events = capture(|| {
         drop(discovery.candidates());
         drop(discovery.load_first());

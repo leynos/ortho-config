@@ -1,0 +1,7 @@
+error: `env_var` and `env_vars` are mutually exclusive
+  --> tests/ui/discovery_env_selector_conflict.rs:14:23
+   |
+14 | #[derive(Deserialize, OrthoConfig)]
+   |                       ^^^^^^^^^^^
+   |
+   = note: this error originates in the derive macro `OrthoConfig` (in Nightly builds, run with -Z macro-backtrace for more info)
