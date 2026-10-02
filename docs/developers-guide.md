@@ -15,6 +15,11 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+The Whitaker step in `make lint` defaults its nested Cargo build to one job via
+`WHITAKER_CARGO_BUILD_JOBS`, bounding process use on shared hosts. Contributors
+can override this variable when appropriate. `make typecheck` likewise defaults
+to one Cargo job via `TYPECHECK_CARGO_BUILD_JOBS`, which can also be overridden.
+
 ## Clap default inference
 
 The `cli_default_as_absent` default path is split between parse-time metadata
@@ -762,6 +767,15 @@ variables for tests.
 - `first_existing_xdg_candidate` is private to subcommand path
   discovery and is called only by `push_xdg_candidates`. It skips `NotFound`
   and propagates other metadata errors with the candidate path.
+- The derived `SelectedSubcommandMerge::load_and_merge_selected_with_sources`
+  uses that file context and a separate `SharedScanEnvSource` to merge the
+  selected enum variant. Its file base and environment values are supplied by
+  the caller; the existing `load_and_merge_selected` remains process-backed.
+  `SelectedSubcommandSources` groups the two capabilities only for
+  `load_globals_and_merge_selected_subcommand_with_sources`; its global loader
+  remains caller-owned. Manual trait implementations must override the injected
+  method or receive `SourceInjectionUnsupported`, without falling back to the
+  process environment.
 
 ### Composition rules
 
