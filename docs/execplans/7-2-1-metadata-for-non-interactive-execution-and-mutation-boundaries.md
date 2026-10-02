@@ -331,13 +331,20 @@ escalation, not workarounds.
   added roughly 2313 lines of test code across the seven commits it
   contributed. Both named commits were confirmed ancestors of the target before
   this claim was recorded.
-- [ ] (2026-10-02) Started a third rebase, onto `main` at `4f02fcb8` (PR #560).
-  `main` has advanced 21 commits since `f6a406fc`, so PR #417 is `CONFLICTING`
-  again. Unlike Revision 5, this replay is expected to conflict: the two sides
-  overlap in eight files, including a renewed **ADR-009 number collision** —
-  `main` published `adr-009-linux-build-test-runner-placement.md` while this
-  branch owns `adr-009-behavioural-metadata-attribute-surface.md`. Plan and
-  evidence for this revision are recorded under Revision 6 below.
+- [x] (2026-10-02) Completed the third rebase, onto `main` at `4f02fcb8`
+  (PR #560) from boundary `f6a406fc`. All 38 commits replayed; **two commits
+  conflicted** and were resolved by hand, in both cases as a union that keeps
+  both sides' subject matter rather than a choice between them. The new head is
+  `cc4d9d02`. Audit: `range-diff` aligns all 38 entries 1:1 with none dropped
+  (5 changed, and every change is a deliberate conflict resolution); all five
+  conflict-resolved files still contain every line `main` added; the replay
+  touched no file this branch does not itself own, apart from the ADR rename
+  pair; and `typos.toml` is a verified regeneration fixed point. Details and
+  rationale are recorded under Revision 6 below.
+- [ ] (2026-10-02) Renumbered the behavioural ADR a second time, from 009 to
+  **010**, because `main` independently published
+  `adr-009-linux-build-test-runner-placement.md`. See Revision 6 for why main's
+  number cannot move and how the five live references were traced and updated.
 
 ## Surprises & discoveries
 
@@ -1507,14 +1514,15 @@ nothing but their path:
 branch's behavioural ADR from 008 to 009 because `main` had published
 `adr-008-agent-native-policy-configuration.md`. The numbering scheme is
 first-come across the whole repository, and `main` has since claimed 009 as
-well: `adr-009-linux-build-test-runner-placement.md` shipped in the same window.
-Both decisions are real, independent, and published on `main` already, so
-`main`'s assignment cannot move — a public document number that other branches
-may already cite must not be re-used for a different subject. This branch's ADR
-is the movable one, and there is no higher number in the tree (`adr-010` is
-free), so the behavioural ADR becomes **ADR-010**. Five live references follow
-it: two in `docs/agent-native-cli-design.md`, one in `docs/contents.md`, one in
-`docs/developers-guide.md`, and the execplan's own historical notes.
+well: `adr-009-linux-build-test-runner-placement.md` shipped in the same
+window. Both decisions are real, independent, and published on `main` already,
+so `main`'s assignment cannot move — a public document number that other
+branches may already cite must not be re-used for a different subject. This
+branch's ADR is the movable one, and there is no higher number in the tree
+(`adr-010` is free), so the behavioural ADR becomes **ADR-010**. Five live
+references follow it: two in `docs/agent-native-cli-design.md`, one in
+`docs/contents.md`, one in `docs/developers-guide.md`, and the execplan's own
+historical notes.
 
 **Conflict-resolution policy for this replay.**
 
@@ -1537,13 +1545,13 @@ it: two in `docs/agent-native-cli-design.md`, one in `docs/contents.md`, one in
 5. Gate the result before committing, on a frozen head.
 
 **Replay mechanics.** `main` is reachable only through the Lody `gh` shim, whose
-`git-remote-lody-github` helper currently fails: its node `fetch()` to the local
-broker times out at 10s even though `curl` against the same endpoint returns
-`{"personalEnabled":true,"allowLocalAuth":true}` with HTTP 200. The repository
-is public, so the target's objects were fetched anonymously over HTTPS straight
-to a recovery ref and the rebase runs entirely from local objects. No push can
-proceed until the shim is repaired, since the configured push URL is the shim's
-own scheme.
+`git-remote-lody-github` helper currently fails: its node `fetch()` to the
+local broker times out at 10s even though `curl` against the same endpoint
+returns `{"personalEnabled":true,"allowLocalAuth":true}` with HTTP 200. The
+repository is public, so the target's objects were fetched anonymously over
+HTTPS straight to a recovery ref and the rebase runs entirely from local
+objects. No push can proceed until the shim is repaired, since the configured
+push URL is the shim's own scheme.
 
 - `refs/recovery/721-OLD_BASE-f6a406fc`, `721-OLD_HEAD-beb40d11`,
   `721-TARGET-4f02fcb8` pin the replay inputs.
@@ -1554,3 +1562,69 @@ own scheme.
 - No merge driver participates: `.gitattributes` selects none, and although
   `merge.weave`/`merge.mergiraf` are registered in config they are not attached
   to any path, so git's built-in merge machinery applies.
+
+**Outcome.** The replay ran and produced head `cc4d9d02`. Two commits
+conflicted and both were resolved by hand.
+
+*Conflict 1 — `docs/v0-10-0-migration-guide.md`, in `8be7144a`.* The `zdiff3`
+hunk showed a one-sentence paragraph that `main` had extended with "and layer
+composition" and this branch had extended with "agent-native behaviour
+metadata". The two clauses are independent additions to the same list, so the
+resolution keeps both and re-wraps the sentence. `mdtablefix` then normalised
+the wrap, which is why four of `main`'s added lines appear "missing" under a
+naive line-equality check while the paragraph is in fact a superset of main's.
+
+*Conflict 2 — `docs/contents.md`, in `104734b5`.* Both sides inserted an ADR
+list entry immediately after ADR-008 and both appended an `[adr-009]` link
+definition pointing at different files. This is not a textual conflict that any
+merge tool can settle correctly, because the *meaning* of the shared label
+differs. Nor was it the only site of the collision: the same number was claimed
+in the ADR filename, the ADR's own title, and four other documents.
+
+The resolution renumbers this branch's ADR to **010** and renames the file, on
+the reasoning that `main`'s `adr-009` is already merged, already indexed, and
+already cited by other branches, whereas this branch's is not yet published, so
+only one of the two can move. Number 010 is free — nothing above `adr-009`
+exists at the target. References were enumerated by grep rather than from
+memory, which is how the two Rust doc comments in the derive and agent-context
+test modules were found alongside the three markdown sites:
+
+- `docs/contents.md` — list entry renamed to ADR-010; main's `[adr-009]` link
+  definition kept as merged; ADR-010 uses an inline link, matching the style
+  ADR-007 already uses in the same list.
+- `docs/agent-native-cli-design.md` (2 sites), `docs/developers-guide.md`,
+  `docs/design.md` — renumbered to ADR-010.
+- `cargo-orthohelp/src/agent_context/tests.rs`,
+  `ortho_config/src/agent_context/tests_round_trip.rs`,
+  `ortho_config_macros/src/derive/parse/behaviour_attrs.rs` and its test module
+  — five bare `ADR-009` citations in doc comments renumbered to `ADR-010`.
+- The execplan's own historical entries were renumbered too, and the one note
+  that recorded the *original* 008→009 decision was reworded instead, since a
+  blanket rename would have made it self-contradictory: it now says the ADR
+  "was numbered 009 at the time of this entry, and is
+  `adr-010-behavioural-metadata-attribute-surface.md` after the Revision 6
+  renumber".
+
+**Audit evidence.**
+
+- `git range-diff` aligns all 38 entries 1:1, nothing dropped. Five entries
+  differ, and each is one of the two resolutions above or a downstream renumber:
+  `74102cc3` (a `Vec<Self>` rewrite inherited from main), `7a4bf157`,
+  `3f099a3d` (a `typos.toml` entry main replaced), `104734b5` (the ADR
+  renumber) and `8be7144a` (the migration-guide union).
+- Every line `main` added to the five conflict-resolved files is still present
+  at the new head, verified line by line. The single apparent exception, the
+  migration-guide paragraph, is the deliberate re-wrap described above.
+- The set of files the replay changed relative to the target is exactly the set
+  this branch already owned, plus the one rename pair (`adr-009-behavioural-…` →
+  `adr-010-behavioural-…`).
+- `git diff --check` is clean; no conflict markers remain anywhere in the tree.
+- `typos.toml` is a fixed point across two consecutive `make spellcheck` runs
+  (identical `git hash-object`, `e1d8bdec`), so the merged content is exactly
+  what the generator produces and no entry was hand-written.
+- `make check-fmt` passes with no files reformatted.
+- Noted and pre-existing, not introduced here: `docs/rstest-bdd-users-guide.md`
+  links to `adr-001-async-fixtures-and-test.md`, which does not exist in this
+  repository. It is broken identically at the target and at the previous branch
+  head, so it is a vendored-document defect for a separate change, not part of
+  this rebase.
