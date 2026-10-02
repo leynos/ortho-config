@@ -29,7 +29,7 @@ and rendered-file publication sequence. Atomic fragment replacement alone is
 insufficient: it protects a single file, but not the read-modify-write of the
 merged inventory, so a writer that merged before a peer's fragment landed would
 replace the peer's complete inventory with that stale rendering. Locking the
-complete sequence makes the publication a serialised read-modify-write per
+complete sequence makes the publication a serialized read-modify-write per
 `OUT_DIR`.
 
 Cargo does not fingerprint proc-macro environment reads. After changing the
