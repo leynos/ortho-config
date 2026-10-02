@@ -8,11 +8,12 @@ use anyhow::{Context, Result, ensure};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+/// Verifies that a quoted Windows dependency path survives TOML serialization.
 #[test]
 fn windows_dependency_path_produces_valid_toml() {
     let windows_path = r#"D:\a\"quoted\"\ortho-config\ortho_config"#;
     let serialized_path = toml::Value::String(windows_path.to_owned()).to_string();
-    let generated = render_manifest("ortho_config", &serialized_path);
+    let generated = render_manifest("ortho_config", &serialized_path, &serialized_path);
     let parsed = toml::from_str::<toml::Value>(&generated)
         .expect("serialized documentation manifest should parse as TOML");
     let parsed_path = parsed

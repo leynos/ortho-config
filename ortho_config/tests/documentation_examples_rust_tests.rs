@@ -1,5 +1,7 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
 
+#[path = "documentation_examples/api_guide.rs"]
+mod api_guide;
 mod documentation_examples;
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
@@ -24,8 +26,13 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-localization",
     "guide-tracing",
     "guide-orthohelp-metadata",
+    "api-guide-policy-report-constructors",
+    "api-guide-policy-report-json",
+    "api-guide-agent-context-constructor",
+    "api-guide-agent-context-json",
 ];
 
+/// Compiles the documented Rust examples and checks their expected output.
 #[test]
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
@@ -33,8 +40,10 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         workspace.add_binary(documented_example(id)?)?;
     }
     workspace.add_binary(&environment_probe())?;
+    api_guide::add_schema_version_probe(&mut workspace)?;
     workspace.build()?;
 
+    let (policy_version, agent_context_version) = api_guide::schema_versions(&mut workspace)?;
     assert_standard_example_runs(&mut workspace)?;
     assert_tracing_flow(&mut workspace)?;
     assert_run(
@@ -42,6 +51,30 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         ExampleId("guide-orthohelp-metadata"),
         [],
         "field=host\n",
+    )?;
+    assert_run(
+        &mut workspace,
+        ExampleId("api-guide-policy-report-constructors"),
+        [],
+        "",
+    )?;
+    assert_run(
+        &mut workspace,
+        ExampleId("api-guide-agent-context-constructor"),
+        [],
+        "",
+    )?;
+    api_guide::assert_json_schema_version(
+        &mut workspace,
+        ExampleId("api-guide-policy-report-json"),
+        "version",
+        &policy_version,
+    )?;
+    api_guide::assert_json_schema_version(
+        &mut workspace,
+        ExampleId("api-guide-agent-context-json"),
+        "schema_version",
+        &agent_context_version,
     )?;
     assert_sanitized_binary_environment(&mut workspace)?;
 

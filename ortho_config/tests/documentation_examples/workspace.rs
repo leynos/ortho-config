@@ -296,16 +296,24 @@ fn cargo_dispatch_path(fixture_bin_dir: &Path, inherited_path: Option<&OsStr>) -
     .context("construct PATH for Cargo dispatch")
 }
 
+/// Builds a generated example manifest with local crate dependency paths.
 fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
     let crate_path = toml::Value::String(env!("CARGO_MANIFEST_DIR").to_owned()).to_string();
-    render_manifest(dependency_name, &crate_path)
+    let cargo_orthohelp_path =
+        toml::Value::String(concat!(env!("CARGO_MANIFEST_DIR"), "/../cargo-orthohelp").to_owned())
+            .to_string();
+    render_manifest(dependency_name, &crate_path, &cargo_orthohelp_path)
 }
 
 /// Render the generated manifest from a serialized Cargo dependency path.
 ///
 /// This stays private to the documentation workspace and its path regression
 /// test; callers must serialize the path as a TOML value before using it.
-fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String {
+fn render_manifest(
+    dependency_name: &str,
+    serialized_crate_path: &str,
+    serialized_cargo_orthohelp_path: &str,
+) -> String {
     format!(
         concat!(
             "[package]\n",
@@ -314,11 +322,13 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
             "edition = \"2024\"\n\n",
             "[dependencies]\n",
             "{} = {{ package = \"ortho_config\", path = {} }}\n",
+            "cargo_orthohelp = {{ package = \"cargo-orthohelp\", path = {} }}\n",
             "clap = {{ version = \"4.5\", features = [\"derive\"] }}\n",
             "serde = {{ version = \"1.0\", features = [\"derive\"] }}\n",
+            "serde_json = \"1\"\n",
             "tracing-subscriber = {{ version = \"0.3\", features = [\"env-filter\"] }}\n",
         ),
-        dependency_name, serialized_crate_path,
+        dependency_name, serialized_crate_path, serialized_cargo_orthohelp_path,
     )
 }
 
