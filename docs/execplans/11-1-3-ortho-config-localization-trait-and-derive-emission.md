@@ -1797,9 +1797,56 @@ Two inline findings were answered in their own threads with `@coderabbitai`:
   `ed13b876`, with the primitive caveat (`try_lock` returns the distinct
   `TryLockError`) and the mutation-probe evidence recorded.
 
-A fresh review was queued via `comenq put` as entry `134d3306`. The queue holds
-88 pending entries and is draining at roughly one review per twenty minutes, so
+A fresh review was queued via `comenq put` as entry `6262bb99`, at head
+`0407370b`. An earlier entry, `134d3306`, pointed at `7fd10f1b` and was deleted
+before it posted; the replacement carries the newer head. The queue holds 88
+pending entries and is draining at roughly one review per twenty minutes, so
 the quoted ETA is about thirty-two hours. The comment body carries only the
 three claims verified against the frozen head; the previously deleted message
 had asserted three repairs that did not exist, and that failure mode is the
-reason each claim is now re-checked immediately before queueing.
+reason each claim is now re-checked immediately before queueing. The rebase
+recorded below replaces the candidate `0407370b`, so an entry pointing at it
+is superseded and must be re-queued against the new head.
+
+### The fourth rebase onto `origin/main`
+
+The target advanced from `e9f9e01e` to `4f02fcb8` — six commits: the
+shared-actions repin (`f7c3edfc`), the `toml` bump (`b5415b96`), the hypothesis
+requirement update (`8354a869`), Whitaker provisioning through
+`install-whitaker` (`8e0c7d66`), the subcommand merge contracts (#538,
+`34a595ea`), and grouped Dependabot updates (`4f02fcb8`). `git merge-base`
+resolved to `e9f9e01e`, so the exclusive boundary was unchanged and all 50
+branch commits were replayed onto the target.
+
+The replay was conflict-free: `git rebase` exited 0 at commit 50 of 50 and the
+worktree was clean throughout. `Cargo.lock` required no resolution because
+taking the target side and taking the branch side produce the same file; the
+branch adds three dev-dependency edges to the `ortho_config_macros` package and
+the target had already added a lock entry the branch's entries do not
+contradict. `cargo metadata --offline` resolves all workspace members against
+the replayed lock, so no rebuild was needed.
+
+Weave did not participate. `git check-attr merge` reported `unspecified` for
+every overlapping path, and no attributes rule selects a driver: the repository
+has no `.gitattributes` merge rules, the configured global attributes file
+holds none, and `.git/config` carries no clone-local rules. The global
+`merge.weave.driver` registration exists but is never selected, which is the
+estate baseline working as intended; the replay therefore used `zdiff3` with
+Git's built-in text merge and needed no driver override.
+
+`git range-diff` reports 50 of 50 entries matched, and 49 of them identical. The
+single non-identical entry is `520bf3c4` → `a69e340f` ("Fix identifier
+derivation in docs IR and artefacts"), and the only textual difference is that
+its `typos.toml` hunk no longer applies. That hunk is not lost: `34a595ea` on
+the target made the byte-identical edit, so the path is unchanged between the
+target and the replayed head, and the final `typos.toml` is exactly the file
+`main` carries. The remaining branch commits replay byte-for-byte.
+
+The semantic audit found no unintended change. Of the 80 paths the branch
+touches, exactly five are also touched by the target, and four of those differ
+from the target at the new head for a verified reason: three are additive-only
+branch documentation (`docs/contents.md`, `docs/developers-guide.md`, and
+`docs/v0-10-0-migration-guide.md`, with zero deleted lines between them) and the
+fifth is the `ortho_config_macros` lock block above. All 16 target-only paths
+are byte-identical at the new head, and no file is deleted against the target.
+`git diff --check` is clean.
