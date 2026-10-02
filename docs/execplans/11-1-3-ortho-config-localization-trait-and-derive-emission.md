@@ -1685,7 +1685,7 @@ substitute: it protects one file, not the read-modify-write of the merged
 inventory, so a unique temporary filename would remove the `.tmp` collision
 while leaving the stale-merge hazard intact.
 
-`std::fs::File::lock` stabilised in Rust 1.89.0 — exactly this project's MSRV
+`std::fs::File::lock` stabilized in Rust 1.89.0 — exactly this project's MSRV
 and the toolchain of the Windows CI leg — so the fix needed no new dependency
 and no MSRV bump. (`try_lock` returns `TryLockError`, a distinct enum with
 `WouldBlock` and `Error` variants, so it is not a drop-in for `lock()`'s
