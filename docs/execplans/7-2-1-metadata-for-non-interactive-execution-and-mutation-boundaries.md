@@ -350,6 +350,14 @@ escalation, not workarounds.
   found both; each was a pair of textually disjoint changes whose interaction
   only a build or a spellcheck can detect. See "Post-rebase gate repair" under
   Revision 6.
+- [x] (2026-10-02) Force-pushed the rebased branch with lease (remote head
+  `beb40d11` → `35dfbd22`, the second and definitive attempt after the remote
+  helper aborted once with an identity-check failure; the retry authenticated
+  via machine-local credentials). Opened replacement PR **#564** as
+  ready-for-review and closed the superseded **#417** with a comment explaining
+  the swap. GitHub permits only one open pull request per head branch, so the
+  close necessarily preceded the create. A CodeRabbit review was then queued as
+  `f340ad79`.
 
 ## Surprises & discoveries
 
@@ -1667,3 +1675,31 @@ Evidence: the pre-fix logs are preserved as
 overwrites its own `tee` path and would have destroyed the failing state that
 motivated the repair. The re-run then passed all seven gates on `2977e75e` with
 HEAD unchanged across the run.
+
+#### Publication, 2026-10-02
+
+The branch was force-pushed with lease and published as pull request #564,
+replacing #417. Three operational lessons are worth keeping.
+
+1. **The remote helper is not reliably available.** The dry run and the first
+   real push disagreed: the dry run authenticated via machine-local
+   credentials, then the real push aborted with *Cannot verify GitHub identity
+   preferences with Lody … no GitHub operation was attempted*. `curl` to the
+   auth endpoint returned `404` while a Node `fetch` to the same URL succeeded,
+   so the local transport was healthy and the identity check itself was
+   failing. A plain retry a short time later authenticated successfully. When
+   this message appears, the correct move is to wait and retry, not to change
+   credentials, because the fallback path to machine-local credentials works.
+2. **A second pull request cannot be opened for a live head branch.** Creating
+   the replacement before closing #417 was refused outright (*a pull request
+   for branch … already exists*), so the ordering the task description implied
+   is not attainable on GitHub. The close goes first, carrying a comment that
+   points at the replacement.
+3. **Verify the posted body by byte count.** `gh pr create --body-file`
+   succeeded and returned a URL, and the body was then read back and compared
+   against the drafted file (5653 bytes, 83 lines, exact match). This is a
+   cheap guard against the silently-truncated body failure mode.
+
+The CodeRabbit request was queued as `f340ad79` with a long ETA; the queue is
+shared across repositories and deep. Delivery of the request comment is not
+completion of the review, and no review result is claimed here.
