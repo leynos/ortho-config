@@ -2,6 +2,13 @@
 //!
 //! The pure renderer is intentionally separate from the `OUT_DIR` writer so
 //! schema and splitting behaviour stay testable without filesystem state.
+//!
+//! `OUT_DIR` is package-scoped rather than target-scoped, so a package with
+//! more than one compilation target can have several compiler processes
+//! writing here concurrently. `emit` serialises the complete fragment-write,
+//! merge, and publication sequence behind an exclusive file lock in the
+//! artefact directory; see `lock` for why a unique temporary filename alone
+//! is not sufficient.
 
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
@@ -12,6 +19,9 @@ use proc_macro2::Span;
 use serde::{Deserialize, Serialize};
 use syn::Ident;
 
+#[cfg(test)]
+use super::artefact_lock::is_free;
+use super::artefact_lock::lock;
 use super::{LocalizationIds, MessageSuffix};
 
 const CAP_BYTES: usize = 1_048_576;
@@ -332,6 +342,21 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
     }
     let out_dir = std::env::var("OUT_DIR").map_err(|_| syn::Error::new(span, "identifier artefact emission requires OUT_DIR; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or add a build.rs"))?;
     let root = Path::new(&out_dir).join(ARTEFACT_DIR);
+    // The lock file lives inside the artefact directory, so the directory has
+    // to exist before the lock can be taken.
+    fs::create_dir_all(&root).map_err(|error| {
+        syn::Error::new(
+            span,
+            format!(
+                "cannot create identifier artefact directory {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions",
+                root.display()
+            ),
+        )
+    })?;
+    // Hold the lock across the fragment write, the merge, and the rendered-file
+    // publication: a peer process that merged before this fragment landed would
+    // otherwise replace the combined inventory with a stale rendering.
+    let _lock = lock(&root)?;
     let source = source(span);
     let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| String::from("unknown"));
     fs::create_dir_all(root.join(FRAGMENT_DIR)).map_err(|error| syn::Error::new(span, format!("cannot create identifier artefact directory {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions", root.display())))?;
@@ -363,3 +388,7 @@ mod tests;
 #[cfg(test)]
 #[path = "artefact_fragment_tests.rs"]
 mod fragment_tests;
+
+#[cfg(test)]
+#[path = "artefact_lock_tests.rs"]
+mod lock_tests;
