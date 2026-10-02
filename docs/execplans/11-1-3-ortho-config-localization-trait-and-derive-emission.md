@@ -1560,7 +1560,7 @@ fresh full-set run was requested on that frozen SHA.
 
 The full-set run on `a26c3b8e` is a valid certificate — HEAD was frozen and the
 tree clean at the start, midpoint, and end. Five gates pass. `make test` now
-runs to completion: 81 Rust targets, 1439 passed with zero failures, plus the
+runs to completion: 80 Rust targets, 1439 passed with zero failures, plus the
 Python half at 115 passed and 5 skipped. The three targets the previous run
 never reached all ran (`test_helpers`, `tests/fixtures/orthohelp_fixture`, and
 the pytest suite). The repaired collision test passes. `TRYBUILD` was unset and
@@ -1612,3 +1612,61 @@ than a regression: Rust doctests do not run in any gate. `make test` uses
 `cargo test --all-targets`, which excludes `--doc`, and no other target passes
 it; the recipe's doctest flags apply only to the Python `scripts/` half. Every
 `///` example in the workspace is therefore unexercised by these gates.
+
+### Untracking the VT Code tool policy: `10a5fda9` (six of six green)
+
+`.vtcode/tool-policy.json` was removed from the index in `10a5fda9`, a commit
+of one file and 352 deletions. `.gitignore` line 41 already listed `.vtcode/`,
+but an ignore rule is not consulted for a path that is already in the index, so
+the rule had never applied and the file was tracked regardless. The file
+entered the branch through two session-archive commits authored by
+`Lody Archive`, not as deliberate task work, and is unrelated to this feature.
+
+Nothing reads it. The only references anywhere in the repository are the
+`.gitignore` exclusion, a `**/.vtcode/**` entry in `.markdownlint-cli2.jsonc`,
+and this document's own account of that lint exclusion; all three remain
+accurate. The working copy on disk was deliberately left in place, so the local
+tool configuration still functions — only the index entry went. Removing the
+file also resolves the two open review threads that had been raised against it,
+since it is no longer part of the pull request.
+
+All six gates pass on `10a5fda9`: `make check-fmt` (76 files unchanged),
+`make typecheck` (`Finished dev profile`), `make lint` (rustdoc, Clippy, and
+Whitaker all clean), `make test` (80 targets, 1439 passed, 0 failed, 15 ignored;
+`TRYBUILD` unset and no `wip/`), `make markdownlint` (77 files, 0 issues), and
+`make nixie` (all diagrams validated). HEAD was frozen and verified unchanged
+at the start and end of every run.
+
+The "81 targets" figure recorded in the previous section was a miscount and has
+been corrected above. The logs hold exactly 80 `Running` lines and 80
+`test result:` blocks, with no doctest block, because `--all-targets` excludes
+`--doc`. The pass and failure totals were never in doubt and are unchanged.
+
+### The Windows leg caught a Unix-only test premise: `aa85c07b`
+
+The Windows leg failed on `54791f5f`, the head before the untracking, at
+`build-test (windows)` step 27. The failing test was
+`merge_fragments_propagates_non_not_found_metadata_errors`, added by this
+branch in `520bf3c4`. It provoked the failure by placing a regular file in a
+parent position, which on Unix makes `metadata` report `NotADirectory` — not
+`NotFound`, so the probe error propagates. On Windows the same layout reports
+`NotFound` instead, the fragment is correctly treated as stale and skipped, and
+`merge_fragments` returns an empty `Ok`. The assertion then failed with an
+empty error string. The production predicate was never wrong; only the test's
+provocation was platform-specific. `ErrorKind::NotADirectory` has no Windows
+counterpart, so no filesystem layout can provoke it there.
+
+The repair uses an interior NUL in the recorded source path. Rust rejects such
+a path during its own conversion to a C string, before any syscall reaches the
+kernel: `CString::new` yields `InvalidInput` on Unix, and
+`sys::pal::windows::to_u16s` yields the same kind on Windows, reachable from
+`fs::metadata` through `with_native_path` and `maybe_verbatim`. The error text
+does not repeat the path, so a reader consulting the failing output should look
+at the stable `cannot probe fragment source` prefix and at the asserted
+`blocker` substring, which the test checks against the formatted message rather
+than the `io::Error` bytes.
+
+This class of defect is invisible to every local gate, which is Linux-only, and
+to a cross-target `cargo clippy`, which type-checks but cannot execute. The
+local proxy confirms the Windows target still compiles; only the hosted leg can
+confirm the behaviour.
