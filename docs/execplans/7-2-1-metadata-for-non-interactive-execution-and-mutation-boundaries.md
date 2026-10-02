@@ -1570,7 +1570,7 @@ conflicted and both were resolved by hand.
 hunk showed a one-sentence paragraph that `main` had extended with "and layer
 composition" and this branch had extended with "agent-native behaviour
 metadata". The two clauses are independent additions to the same list, so the
-resolution keeps both and re-wraps the sentence. `mdtablefix` then normalised
+resolution keeps both and re-wraps the sentence. `mdtablefix` then normalized
 the wrap, which is why four of `main`'s added lines appear "missing" under a
 naive line-equality check while the paragraph is in fact a superset of main's.
 
@@ -1621,7 +1621,7 @@ test modules were found alongside the three markdown sites:
 - `git diff --check` is clean; no conflict markers remain anywhere in the tree.
 - `typos.toml` is a fixed point across two consecutive `make spellcheck` runs
   (identical `git hash-object`, `e1d8bdec`), so the merged content is exactly
-  what the generator produces and no entry was hand-written.
+  what the generator produces and no entry was handwritten.
 - `make check-fmt` passes with no files reformatted.
 - Noted and pre-existing, not introduced here: `docs/rstest-bdd-users-guide.md`
   links to `adr-001-async-fixtures-and-test.md`, which does not exist in this
