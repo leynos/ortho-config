@@ -76,6 +76,9 @@ pub fn generate_agent_context_if_requested(
         "agent-context transformation complete",
     );
     output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
+    if !args.check_agent_native {
+        output::write_agent_context_stdout(&agent_context)?;
+    }
     Ok(())
 }
 

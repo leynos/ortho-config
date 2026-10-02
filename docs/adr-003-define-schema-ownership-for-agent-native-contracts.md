@@ -99,6 +99,15 @@ their paths or meanings. The agent-context versioning and compatibility
 mechanism is defined in
 [agent-native-cli-design.md](agent-native-cli-design.md) §8.2.
 
+Issue #329 establishes an additive stdout channel for the two agent-native
+contracts: `--format agent-context` and `--format all` emit the generated
+AgentContext JSON while retaining `agent-context.json`, and
+`--check-agent-native` emits the PolicyReport JSON while retaining
+`policy-report.json`. The output adapter owns serialization and stream writes;
+the schema owners and wire versions are unchanged. When policy checking and an
+explicit agent-context format are combined, the policy report is the only JSON
+document written to stdout.
+
 New optional metadata fields require explicit defaults for older derives. Those
 defaults are applied by OrthoConfig readers, generators, or transforms; schema
 annotations may document defaults but do not populate missing values during

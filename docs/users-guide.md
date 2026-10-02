@@ -832,8 +832,10 @@ cargo orthohelp --package hello_world --format agent-context
 
 The tool builds a small bridge against the selected package. Keep the root
 configuration type public and ensure its documentation metadata is available
-from the selected library or binary target. `--format all` includes agent
-context as well as IR, man pages, and PowerShell output.
+from the selected library or binary target. `--format agent-context` writes
+`agent-context.json` and emits the same compact JSON document to standard
+output. `--format all` includes agent context as well as IR, man pages, and
+PowerShell output, and emits the agent-context JSON to standard output.
 
 ## Offer a compact contract to automation
 
@@ -876,13 +878,16 @@ packages still adopting the toolchain:
 cargo orthohelp --check-agent-native --package my-cli --out-dir out
 ```
 
-With `--check-agent-native` alone, the command writes only a machine-stable
-`policy-report.json` atomically to the output directory, prints a one-line
-summary to standard error, and skips generation. Supplying `--format` runs the
-policy check before generation, including an explicit `--format ir`; the
-default format is treated as implicit when the check flag is used alone. The
-policy is configured under `[package.metadata.ortho_config.policy]` in the
-target package's `Cargo.toml`:
+With `--check-agent-native` alone, the command atomically writes a
+machine-stable `policy-report.json` and emits the same compact JSON document to
+standard output. It also prints a one-line human summary to standard error and
+skips generation. Supplying `--format` runs the policy check before generation,
+including an explicit `--format ir`; the default format is treated as implicit
+when the check flag is used alone. When an explicit agent-context format is
+combined with the policy check, the policy report is the sole JSON document on
+standard output; the agent-context file is still generated. The policy is
+configured under `[package.metadata.ortho_config.policy]` in the target
+package's `Cargo.toml`:
 
 _Table 2: Agent-native policy configuration keys._
 
