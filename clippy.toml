@@ -5,3 +5,13 @@ too-many-lines-threshold = 70          # default is 100
 excessive-nesting-threshold = 4        # default is off
 
 allow-expect-in-tests = true
+
+# `figment::Error` measures ~208 bytes and figment's `Jail::try_with` /
+# `expect_with` API requires every jail closure to return
+# `Result<(), figment::Error>`, so the signature-based `result_large_err`
+# check (extended to closures in Clippy 1.98, rust-lang/rust-clippy#16277)
+# fires on every jail closure and cannot be satisfied by any local
+# refactor. Exclude that upstream type only; the lint remains active for
+# every other error type in the workspace. Both spellings are listed
+# because some crates reach the type through `ortho_config`'s re-export.
+large-error-ignored = ["figment::Error", "ortho_config::figment::Error"]
