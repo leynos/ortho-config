@@ -153,6 +153,11 @@ validated for normalized collisions during expansion; flattened, subcommand, and
 `${OUT_DIR}/ortho-config/cli-identifiers.json`; the derive writes this file
 through per-expansion fragments and merges them deterministically. Mounted
 command-tree identifiers remain owned by the path-aware documentation IR.
+`OUT_DIR` is package-scoped, so every writer holds an exclusive
+`cli-identifiers.lock` across the complete fragment-write, merge, and
+publication sequence; the unit tests in `artefact_lock_tests.rs` spawn two real
+processes to prove the exclusion and the release, rather than relying on an
+in-process mutex.
 
 Normalized argument-ID collisions within one derived struct fail at compile
 time. Hand-built and dynamic command trees retain the runtime panic contract.

@@ -4,6 +4,7 @@
 //! identifiers agree with `ortho_config::message_id_for`.
 
 mod artefact;
+mod artefact_lock;
 mod identifier;
 pub(crate) mod suffix;
 #[cfg(test)]

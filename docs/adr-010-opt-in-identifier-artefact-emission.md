@@ -21,6 +21,17 @@ deterministically. The merged document splits at 1 MiB and supplies an index
 when needed. The schema is provisional until a consumer exists and marks every
 entry with `path_scope: "standalone"`.
 
+`OUT_DIR` is scoped to the package rather than to individual compilation
+targets, so one consuming package can have several compiler processes
+publishing into one artefact directory. Each writer therefore takes an
+exclusive lock (`cli-identifiers.lock`) across the whole fragment-write, merge,
+and rendered-file publication sequence. Atomic fragment replacement alone is
+insufficient: it protects a single file, but not the read-modify-write of the
+merged inventory, so a writer that merged before a peer's fragment landed would
+replace the peer's complete inventory with that stale rendering. Locking the
+complete sequence makes the publication a serialised read-modify-write per
+`OUT_DIR`.
+
 Cargo does not fingerprint proc-macro environment reads. After changing the
 opt-in variable or source, force a fresh expansion with
 `cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`.
