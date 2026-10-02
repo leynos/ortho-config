@@ -1670,3 +1670,53 @@ This class of defect is invisible to every local gate, which is Linux-only, and
 to a cross-target `cargo clippy`, which type-checks but cannot execute. The
 local proxy confirms the Windows target still compiles; only the hosted leg can
 confirm the behaviour.
+
+### The artefact publication lock: `ed13b876`
+
+CodeRabbit's `artefact.rs` finding (comment 4117636478) survived its own
+re-verification on the branch head and remained the one confirmed-unfixed
+inline finding. It is valid: `OUT_DIR` is package-scoped, not target-scoped, so
+one consuming package can have several compiler processes publishing into a
+single artefact directory, and procedural-macro side effects carry no ordering
+guarantee. The repair takes an exclusive `cli-identifiers.lock` inside the
+artefact directory for the whole fragment-write, merge, and publication
+sequence. Atomic fragment replacement was already present but is not a
+substitute: it protects one file, not the read-modify-write of the merged
+inventory, so a unique temporary filename would remove the `.tmp` collision
+while leaving the stale-merge hazard intact.
+
+`std::fs::File::lock` stabilised in Rust 1.89.0 — exactly this project's MSRV
+and the toolchain of the Windows CI leg — so the fix needed no new dependency
+and no MSRV bump. (`try_lock` returns `TryLockError`, a distinct enum with
+`WouldBlock` and `Error` variants, so it is not a drop-in for `lock()`'s
+`io::Result`.) The lock lives in `artefact_lock.rs` rather than `artefact.rs`
+because the latter had reached 436 lines, over the 400-line file cap.
+
+Two mistakes in the first test attempt are worth recording, because both
+produced a green that meant nothing:
+
+- The helper's mode travelled through `argv`. libtest consumes any extra
+  positional argument as an additional name filter, so the child selected zero
+  tests, printed `running 0 tests`, and exited `0`. The parent read that exit
+  status as success and the exclusivity test failed on timing while the release
+  test passed vacuously. The mode now travels through the environment, and
+  `wait_for` additionally requires `1 passed` in the child's stdout so a
+  filtered-out helper can never be mistaken for a passing one.
+- The first exclusivity assertion used a wall-clock threshold, which a
+  coverage-instrumented or loaded CI machine can flip in either direction. It
+  now uses a sentinel: the holder writes `acquired` while it still owns the
+  lock and `released` before it drops the guard, and a contender may only
+  observe `released`. Machine speed changes how long the contender blocks,
+  never what it observes. The child filter must name the full test path
+  (`...::artefact::lock_tests::lock_helper_entry_point`): the shorter
+  `localization::artefact` prefix also matches the fragment and renderer
+  suites, which would run the whole set inside every helper.
+
+A mutation probe confirms the tests are load-bearing: removing the
+`file.lock()` call from `lock()` makes
+`artefact_lock_is_exclusive_across_processes` fail with `observed "acquired"`,
+which is the direct statement that no inter-process exclusion held. The file
+was restored from a backup afterwards and the restore proved with `diff`.
+
+Gate evidence for `ed13b876` is recorded separately below once the run
+completes.
