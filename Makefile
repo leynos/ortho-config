@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint spellcheck nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint spellcheck spelling nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -27,7 +27,7 @@ CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
 # Single source of truth for the spelling gate. The builder pins the typos
 # binary and owns the shared dictionary, so CI consumes it through the
 # spellcheck target and the Makefile and CI cannot drift apart.
-TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.1
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --from \
 	"git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
@@ -131,6 +131,9 @@ markdownlint: ## Lint Markdown files and enforce en-GB-oxendict spelling
 
 spellcheck: ## Enforce en-GB-oxendict (Oxford) spelling over Markdown prose
 	$(TYPOS_CONFIG_BUILDER) gate --repository .
+
+# The shared AGENTS.md spelling block tells agents to run `make spelling`.
+spelling: spellcheck ## Alias for spellcheck
 
 nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports

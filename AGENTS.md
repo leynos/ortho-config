@@ -318,18 +318,8 @@ project:
 
 ## Markdown guidance
 
-- Validate Markdown files using `make markdownlint`. This target also
-  enforces en-GB-oxendict spelling through the shared `typos-config-builder`
-  gate, pinned by the Makefile `TYPOS_CONFIG_BUILDER_VERSION` variable, so
-  local runs and CI use the same version. Run the spelling gate alone with
-  `make spellcheck`.
-- The spelling configuration `typos.toml` is generated; never edit its
-  entries by hand. The gate regenerates it on every run from the live shared
-  dictionary and the `typos.local.toml` overlay, so a word added to the shared
-  dictionary needs no change here and `typos.toml` is never drift checked in
-  CI. Put only repository-specific names, quotations, and deliberate fixtures
-  in the overlay. See the spelling gate section of `docs/developers-guide.md`
-  for details.
+- Validate Markdown files using `make markdownlint`. This target also runs
+  the spelling gate; run the gate alone with `make spellcheck`.
 - Quoted APIs and identifiers keep their upstream spelling. Fenced code blocks
   are ignored, but inline code is spellchecked. Add a narrowly backtick-bound
   pattern to `typos.local.toml` for an upstream API or identifier, and avoid
@@ -343,6 +333,22 @@ project:
 - Use dashes (`-`) for list bullets.
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
+
+<!-- typos-config-builder:agents-md:start -->
+
+## Spelling
+
+- `make spelling` runs the pinned `typos-config-builder gate`, which
+  regenerates `typos.toml` from the shared en-GB-oxendict dictionary and
+  `typos.local.toml`, then checks spelling and the shared phrase corrections.
+- `typos.toml` is generated: never edit it by hand. Put narrow
+  repository-specific exceptions in `typos.local.toml`, as exact or full-line
+  patterns rather than bare accepted words.
+- When `make spelling` changes `typos.toml`, commit the regenerated file. If
+  the change is unrelated to your work, commit it in a separate base pull
+  request and stack your branch on it, so each review diff stays focused.
+
+<!-- typos-config-builder:agents-md:end -->
 
 ## Project documentation
 
