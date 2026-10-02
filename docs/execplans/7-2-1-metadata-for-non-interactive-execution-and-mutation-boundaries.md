@@ -331,6 +331,13 @@ escalation, not workarounds.
   added roughly 2313 lines of test code across the seven commits it
   contributed. Both named commits were confirmed ancestors of the target before
   this claim was recorded.
+- [ ] (2026-10-02) Started a third rebase, onto `main` at `4f02fcb8` (PR #560).
+  `main` has advanced 21 commits since `f6a406fc`, so PR #417 is `CONFLICTING`
+  again. Unlike Revision 5, this replay is expected to conflict: the two sides
+  overlap in eight files, including a renewed **ADR-009 number collision** —
+  `main` published `adr-009-linux-build-test-runner-placement.md` while this
+  branch owns `adr-009-behavioural-metadata-attribute-surface.md`. Plan and
+  evidence for this revision are recorded under Revision 6 below.
 
 ## Surprises & discoveries
 
@@ -1470,3 +1477,80 @@ resolved itself, and the revision records evidence rather than decisions:
 - The tree verified during the 2026-09-25 run was `e7ed8b44`/`0f153e88`. Those
   identities and their gate results remain historical evidence for the previous
   candidate; the binding candidate is now `6b817120`.
+
+### Revision 6 (2026-10-02)
+
+Third rebase, onto `main` at `4f02fcb8` (PR #560), from the same exclusive
+boundary `f6a406fc` that Revision 5 targeted. That boundary is also the current
+merge base, which simplifies the replay: `f6a406fc` is an ancestor of both
+`beb40d11` (branch head) and `4f02fcb8` (target), and the branch touches no
+manifest or lock file, so Cargo's resolution is `main`'s alone.
+
+**Why this revision differs from Revision 5.** Revision 5 was conflict-free
+because the two sides overlapped in only five files and the three Rust and
+documentation overlaps were additive on both sides. That is not the case here.
+The two sides now overlap in eight files, and two of those overlaps share
+nothing but their path:
+
+- **`docs/contents.md`.** Both sides insert a new ADR entry immediately after
+  ADR-008 and both append a link definition after `[adr-008]`. The two
+  insertions land at the same lines, and the two link definitions both use
+  `[adr-009]` while resolving to *different* files. A textual merge of this
+  hunk cannot be correct: whichever definition wins would silently repoint the
+  other decision's reference.
+- **`typos.toml`.** `main` changed one existing entry (a 1-for-1 swap) while
+  this branch appends three overlay-derived entries. Neither is additive over
+  the other relative to the shared base, so the usual byte-identity argument
+  from Revision 5 does not apply and the file must be regenerated.
+
+**The ADR-009 collision, and why it recurs.** Revision 4 renumbered this
+branch's behavioural ADR from 008 to 009 because `main` had published
+`adr-008-agent-native-policy-configuration.md`. The numbering scheme is
+first-come across the whole repository, and `main` has since claimed 009 as
+well: `adr-009-linux-build-test-runner-placement.md` shipped in the same window.
+Both decisions are real, independent, and published on `main` already, so
+`main`'s assignment cannot move — a public document number that other branches
+may already cite must not be re-used for a different subject. This branch's ADR
+is the movable one, and there is no higher number in the tree (`adr-010` is
+free), so the behavioural ADR becomes **ADR-010**. Five live references follow
+it: two in `docs/agent-native-cli-design.md`, one in `docs/contents.md`, one in
+`docs/developers-guide.md`, and the execplan's own historical notes.
+
+**Conflict-resolution policy for this replay.**
+
+1. Preserve both sides' intent. Where `main` and this branch describe different
+   subjects at the same location, the resolution is a union that keeps main's
+   content verbatim and re-adds this branch's with a corrected identifier —
+   never a choice between them.
+2. Prefer `main`'s wording for shared prose (`docs/developers-guide.md`,
+   `docs/users-guide.md`, the migration guide, and `typos.toml`) and graft this
+   branch's additions into it, because `main` has restructured prose this
+   branch only appended to. Replaying onto main's structure is the point of the
+   rebase; keeping the branch's older framing would undo main's work.
+3. Renumber identifiers rather than duplicating them. A duplicate ADR number is
+   a defect that outlives the rebase.
+4. For `typos.toml` specifically: let the conflict resolve toward either side,
+   then disregard the merged content and **regenerate** the file with
+   `make spellcheck`, and commit the regenerated fixed point. Hand-resolving
+   generated content is never correct (AGENTS.md: never edit its entries by
+   hand).
+5. Gate the result before committing, on a frozen head.
+
+**Replay mechanics.** `main` is reachable only through the Lody `gh` shim, whose
+`git-remote-lody-github` helper currently fails: its node `fetch()` to the local
+broker times out at 10s even though `curl` against the same endpoint returns
+`{"personalEnabled":true,"allowLocalAuth":true}` with HTTP 200. The repository
+is public, so the target's objects were fetched anonymously over HTTPS straight
+to a recovery ref and the rebase runs entirely from local objects. No push can
+proceed until the shim is repaired, since the configured push URL is the shim's
+own scheme.
+
+- `refs/recovery/721-OLD_BASE-f6a406fc`, `721-OLD_HEAD-beb40d11`,
+  `721-TARGET-4f02fcb8` pin the replay inputs.
+- The replay command is the same shape as Revision 5's:
+  `git rebase --merge --no-fork-point --no-update-refs --no-autostash
+  --reapply-cherry-picks --keep-empty --empty=stop --onto 4f02fcb8 f6a406fc
+  7-2-1-metadata-for-non-interactive-execution-and-mutation-boundaries`.
+- No merge driver participates: `.gitattributes` selects none, and although
+  `merge.weave`/`merge.mergiraf` are registered in config they are not attached
+  to any path, so git's built-in merge machinery applies.
