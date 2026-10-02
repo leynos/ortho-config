@@ -22,6 +22,9 @@ pub(super) enum JsonField {
     Path,
     Summary,
     Inputs,
+    InteractionMode,
+    MutationEffect,
+    BypassFlag,
 }
 
 impl JsonField {
@@ -33,6 +36,9 @@ impl JsonField {
             Self::Path => "path",
             Self::Summary => "summary",
             Self::Inputs => "inputs",
+            Self::InteractionMode => "interaction_mode",
+            Self::MutationEffect => "mutation_effect",
+            Self::BypassFlag => "bypass_flag",
         }
     }
 }
@@ -208,4 +214,130 @@ fn string_array_field(value: &Value, field: JsonField) -> StepResult<Vec<String>
                 .ok_or_else(|| format!("{field} item should be a string").into())
         })
         .collect()
+}
+
+/// Finds the command whose `path` array equals `path_segments`.
+///
+/// Comparison is element-wise over the whole path, so a subcommand is not
+/// matched by a shorter prefix or a shared leaf name.
+fn command_by_path<'a>(value: &'a Value, path_segments: &[&str]) -> Option<&'a Value> {
+    value
+        .get(JsonField::Commands.as_str())
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|command| {
+            command
+                .get(JsonField::Path.as_str())
+                .and_then(Value::as_array)
+                .is_some_and(|path| {
+                    path.iter()
+                        .filter_map(Value::as_str)
+                        .eq(path_segments.iter().copied())
+                })
+        })
+}
+
+/// Asserts one string field of a command identified by its full path.
+///
+/// Fails with the offending path and field name when either the command or the
+/// field is missing, so a mismatch is traceable to the fixture rather than the
+/// assertion.
+fn assert_command_string_field(
+    orthohelp_context: &mut OrthoHelpContext,
+    path: &[&str],
+    field: JsonField,
+    expected: &str,
+) -> StepResult<()> {
+    let json = read_agent_context(orthohelp_context)?;
+    let command =
+        command_by_path(&json, path).ok_or_else(|| format!("command path {path:?} missing"))?;
+    let actual = string_field(command, field)?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!("command {path:?} {field} should be {expected}, got {actual}").into())
+    }
+}
+
+/// The fixture's declared interactive mode survives into the artefact.
+#[then("the command admin purge reports interaction mode interactive")]
+fn admin_purge_interaction_interactive(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "purge"],
+        JsonField::InteractionMode,
+        "interactive",
+    )
+}
+
+/// A declared destructive mutation is reported verbatim, not normalised.
+#[then("the command admin purge reports mutation effect delete")]
+fn admin_purge_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "purge"],
+        JsonField::MutationEffect,
+        "delete",
+    )
+}
+
+/// The declared bypass flag reaches agents so they can actually pass it.
+#[then("the command admin purge reports bypass flag --force")]
+fn admin_purge_bypass_force(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "purge"],
+        JsonField::BypassFlag,
+        "--force",
+    )
+}
+
+/// A destructive command with no bypass still reports its mutation.
+///
+/// This is the fixture command the policy check flags in deny mode, so the
+/// artefact must describe it accurately for the report to make sense.
+#[then("the command admin prune reports mutation effect delete")]
+fn admin_prune_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "prune"],
+        JsonField::MutationEffect,
+        "delete",
+    )
+}
+
+/// A declared non-interactive command reports that mode, not a guess.
+#[then("the command greet reports interaction mode non_interactive")]
+fn greet_interaction_non_interactive(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "greet"],
+        JsonField::InteractionMode,
+        "non_interactive",
+    )
+}
+
+/// The read-only boundary is reported for a command that changes nothing.
+#[then("the command greet reports mutation effect read_only")]
+fn greet_mutation_read_only(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "greet"],
+        JsonField::MutationEffect,
+        "read_only",
+    )
+}
+
+/// A command declaring nothing reports `unknown` rather than a default.
+///
+/// This is the no-inference rule observed end-to-end: the bridge must not
+/// guess `non_interactive` merely because `version` sounds harmless.
+#[then("the command version reports interaction mode unknown")]
+fn version_interaction_unknown(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "version"],
+        JsonField::InteractionMode,
+        "unknown",
+    )
 }

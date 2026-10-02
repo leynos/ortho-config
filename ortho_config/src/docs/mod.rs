@@ -5,14 +5,18 @@
 
 mod ir;
 
+#[cfg(test)]
+mod proptests;
+
 pub use ir::{
-    CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
-    EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note, PathPattern,
-    PrecedenceMeta, SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
+    BehaviourMetadata, CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation,
+    DocMetadata, EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, InteractionKind,
+    Link, MutationKind, Note, PathPattern, PrecedenceMeta, SectionsMetadata, SourceKind, ValueType,
+    WindowsMetadata,
 };
 
 /// Current IR schema version.
-pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
+pub const ORTHO_DOCS_IR_VERSION: &str = "1.2";
 
 /// Trait implemented for configs that can emit documentation metadata.
 pub trait OrthoConfigDocs {
@@ -47,7 +51,10 @@ pub trait OrthoConfigDocs {
 /// }
 ///
 /// #[derive(Parser, Serialize, Deserialize, Default, OrthoConfig)]
-/// #[ortho_config(prefix = "APP_")]
+/// #[ortho_config(
+///     prefix = "APP_",
+///     behaviour(interaction = "interactive", mutation = "read_only")
+/// )]
 /// struct RunArgs {
 ///     #[arg(long)]
 ///     name: String,
