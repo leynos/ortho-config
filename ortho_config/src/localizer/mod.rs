@@ -18,6 +18,7 @@ mod clap_command;
 mod clap_error;
 mod fluent;
 mod identifier;
+mod localization_ids;
 use fluent::{BundleWithLocale, normalize_identifier};
 
 /// Arguments forwarded to localisation lookups.
@@ -29,6 +30,7 @@ pub type LocalizationArgs<'value> = HashMap<&'value str, FluentValue<'value>>;
 pub use clap_command::{LocalizeCmd, LocalizedParse, WithBase, parse_localized_command};
 pub use clap_error::{clap_error_formatter, localize_clap_error, localize_clap_error_with_command};
 pub use identifier::message_id_for;
+pub use localization_ids::{ArgLocalizationIds, OrthoConfigLocalization};
 
 /// Provides localised strings for user-facing CLI output.
 ///

@@ -1,9 +1,7 @@
 //! Tests for clap attribute parsing helpers.
 
 use super::super::parse_input;
-use crate::derive::parse::{
-    ClapInferredDefault, FieldAttrs, clap_field_is_subcommand, clap_variant_name,
-};
+use crate::derive::parse::{ClapInferredDefault, FieldAttrs, clap_variant_name};
 use anyhow::{Result, anyhow, ensure};
 use quote::ToTokens;
 use syn::{DeriveInput, parse_quote};
@@ -58,16 +56,6 @@ fn first_variant(input: &DeriveInput) -> Result<&syn::Variant> {
     data.variants
         .first()
         .ok_or_else(|| anyhow!("missing first variant"))
-}
-
-fn first_field(input: &DeriveInput) -> Result<&syn::Field> {
-    let syn::Data::Struct(data) = &input.data else {
-        return Err(anyhow!("expected struct"));
-    };
-    data.fields
-        .iter()
-        .next()
-        .ok_or_else(|| anyhow!("missing first field"))
 }
 
 #[test]
@@ -360,38 +348,6 @@ fn clap_variant_name_cases() -> Result<()> {
             name.value() == *expected_name,
             "expected name `{expected_name}`, got `{}`",
             name.value(),
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn clap_field_is_subcommand_cases() -> Result<()> {
-    use proc_macro2::TokenStream;
-    use quote::quote;
-
-    let cases: &[(TokenStream, bool)] = &[
-        (
-            quote! { struct Cli { #[command(subcommand)] command: Commands, } },
-            true,
-        ),
-        (
-            quote! { struct Cli { #[clap(subcommand)] command: Commands, } },
-            true,
-        ),
-        (
-            quote! { struct Cli { #[command(subcommand, long = "cmd")] command: Commands, } },
-            true,
-        ),
-        (quote! { struct Cli { #[arg(long)] name: String, } }, false),
-    ];
-
-    for (tokens, expected) in cases {
-        let input: DeriveInput = syn::parse2(tokens.clone())?;
-        let actual = clap_field_is_subcommand(first_field(&input)?)?;
-        ensure!(
-            actual == *expected,
-            "input `{tokens}`: expected subcommand={expected}, got {actual}",
         );
     }
     Ok(())

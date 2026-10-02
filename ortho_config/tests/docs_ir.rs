@@ -5,6 +5,12 @@ use ortho_config::OrthoConfig;
 use ortho_config::docs::{
     ConfigFormat, DocMetadata, ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, SourceKind, ValueType,
 };
+
+// Runtime-agreement coverage lives in a shared module below `support/` so
+// Cargo does not also discover it as a standalone integration test, and this
+// file stays within the repository's 400-line limit.
+#[path = "support/docs_ir_runtime_agreement.rs"]
+mod runtime_agreement;
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 
@@ -83,7 +89,7 @@ fn test_basic_metadata(docs_metadata: DocMetadata) -> Result<()> {
         metadata.bin_name
     );
     ensure!(
-        metadata.about_id == "demo-app.about",
+        metadata.about_id == "demo-app-about",
         "expected default about_id, got {}",
         metadata.about_id
     );
@@ -240,11 +246,11 @@ fn test_field_port(docs_metadata: DocMetadata) -> Result<()> {
 fn test_field_log_level(docs_metadata: DocMetadata) -> Result<()> {
     let log_level = field_by_name(&docs_metadata, "log_level")?;
     ensure!(
-        log_level.help_id == "demo-app.fields.log_level.help",
+        log_level.help_id == "demo-app-args-log_level-help",
         "expected log_level help_id default"
     );
     ensure!(
-        log_level.long_help_id.as_deref() == Some("demo-app.fields.log_level.long_help"),
+        log_level.long_help_id.as_deref() == Some("demo-app-args-log_level-long_help"),
         "expected log_level long_help_id default"
     );
     ensure!(!log_level.required, "expected log_level optional");
