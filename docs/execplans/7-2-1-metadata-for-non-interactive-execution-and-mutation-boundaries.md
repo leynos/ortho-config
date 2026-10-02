@@ -341,10 +341,15 @@ escalation, not workarounds.
   touched no file this branch does not itself own, apart from the ADR rename
   pair; and `typos.toml` is a verified regeneration fixed point. Details and
   rationale are recorded under Revision 6 below.
-- [ ] (2026-10-02) Renumbered the behavioural ADR a second time, from 009 to
+- [x] (2026-10-02) Renumbered the behavioural ADR a second time, from 009 to
   **010**, because `main` independently published
   `adr-009-linux-build-test-runner-placement.md`. See Revision 6 for why main's
   number cannot move and how the five live references were traced and updated.
+- [x] (2026-10-02) Repaired two gate failures the replay introduced but could
+  not see, in `2977e75e`. The gates on the rebased head were run first and
+  found both; each was a pair of textually disjoint changes whose interaction
+  only a build or a spellcheck can detect. See "Post-rebase gate repair" under
+  Revision 6.
 
 ## Surprises & discoveries
 
@@ -1628,3 +1633,37 @@ test modules were found alongside the three markdown sites:
   repository. It is broken identically at the target and at the previous branch
   head, so it is a vendored-document defect for a separate change, not part of
   this rebase.
+
+#### Post-rebase gate repair (2026-10-02)
+
+The textual audit above cannot see a semantic interaction between two changes
+that never touched the same line. The gate run on `941b29c9` found two, both
+genuine, both introduced by this replay; both were repaired in `2977e75e`, and
+the full seven-gate set was re-run green on the repaired head.
+
+1. **`make test` — `error[E0063]: missing field 'behaviour'`.** `main` added
+   `ortho_config/tests/trybuild/public_api_contracts.rs` in the commit titled
+   "Add public API trybuild contract coverage", a trybuild pass fixture that
+   builds `DocMetadata` with an *exhaustive* struct literal. This branch adds
+   the `behaviour` field to that struct. Neither change touches the other's
+   text, so the replay merged both and the fixture stopped compiling. The
+   fixture is a `t.pass(...)` input, not a Cargo target, which is why
+   `make typecheck` and Clippy stayed green and only `make test` caught it. The
+   fix adds `behaviour: None,`, which preserves both sides: main's downstream
+   contract coverage and this branch's opt-in field, with undeclared staying
+   absent. This is precisely the class of defect the recommendation "re-gate
+   after a replay, never before" exists for.
+2. **`make markdownlint` (spellcheck half) — two words.** The Revision 6 prose
+   written during this rebase used the "-ise" form of "normalize" and the
+   hyphenated form of "handwritten", neither of which is in the shared
+   dictionary. Both were replaced with the dictionary spellings. Neither is a
+   quoted upstream identifier, so a `typos.local.toml` pattern would have been
+   the wrong tool; the earlier revision was simply unidiomatic for this house
+   style.
+
+Evidence: the pre-fix logs are preserved as
+`/tmp/scrutineer-test-….FAIL-before-fix.out` and
+`/tmp/scrutineer-markdownlint-….FAIL-before-fix.out`, because re-running a gate
+overwrites its own `tee` path and would have destroyed the failing state that
+motivated the repair. The re-run then passed all seven gates on `2977e75e` with
+HEAD unchanged across the run.
