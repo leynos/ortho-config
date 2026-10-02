@@ -1765,3 +1765,41 @@ this plan all used the `-ise` form. They are corrected in `ce023fee` with no
 word-level exemptions added to `typos.local.toml`.
 
 The certificate for the lock change is therefore `ce023fee`, not `ed13b876`.
+
+### Publication and the review request
+
+The branch now sits at `7fd10f1b`, which adds one more docs-only commit
+recording the certificate above. That commit was gated with `make check-fmt`,
+`make markdownlint`, and `make nixie` at its own head, all green, so the
+certificate rolls forward to `7fd10f1b` by the same content-identity argument.
+Four commits were pushed: `ed13b876`, `fa42de89`, `ce023fee`, `7fd10f1b`. The
+remote head before the push was `93b16393`, so this was a fast-forward.
+
+The first push attempt was refused by the Lody credential broker
+(`Cannot verify GitHub identity preferences with Lody`), which aborted before
+reaching GitHub. The broker's `/health` endpoint answered `200`, and a retry
+after a short delay succeeded on the machine-local credentials. This is the
+self-healing broker restart pattern recorded in the session's notes, not an
+authorization failure, so no credential was reselected.
+
+The PR body was rewritten to replace the stale validation certificate
+(`54791f5f`, "81 Rust targets: 1439 passed") with `7fd10f1b`, 80 targets, and
+1442 passed, and to state per gate whether it was captured at the new head or
+carried across the docs-only deltas. The posted body was read back and checked
+for the new strings and against the old ones, rather than trusting the edit
+command's exit status.
+
+Two inline findings were answered in their own threads with `@coderabbitai`:
+
+- `.vtcode/tool-policy.json` (comment 4117636458) — the file is withdrawn from
+  the branch, so both of the finding's follow-on suggestions are moot.
+- The `artefact.rs` publication lock (comment 4117636478) — fixed in
+  `ed13b876`, with the primitive caveat (`try_lock` returns the distinct
+  `TryLockError`) and the mutation-probe evidence recorded.
+
+A fresh review was queued via `comenq put` as entry `134d3306`. The queue holds
+88 pending entries and is draining at roughly one review per twenty minutes, so
+the quoted ETA is about thirty-two hours. The comment body carries only the
+three claims verified against the frozen head; the previously deleted message
+had asserted three repairs that did not exist, and that failure mode is the
+reason each claim is now re-checked immediately before queueing.
