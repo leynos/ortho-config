@@ -231,19 +231,21 @@ fn merge_fragments_reports_missing_fragment_directory() -> Result<()> {
 /// Only a missing source file means the fragment is stale. Treating every
 /// metadata error as absence would publish an inventory with a silent gap and
 /// no diagnostic to explain it, so the error must reach the caller.
+///
+/// The provocation is a path holding an interior NUL. That rejection happens
+/// inside Rust's own path-to-C-string conversion, before any syscall, so it
+/// yields `InvalidInput` on every platform. Provoking the failure with a
+/// regular file in a parent position instead would not: on Unix `metadata`
+/// then fails with `NotADirectory`, but on Windows it reports `NotFound`, which
+/// correctly takes the stale-fragment branch and silently drops the entry.
 #[test]
 fn merge_fragments_propagates_non_not_found_metadata_errors() -> Result<()> {
     let root = TempRoot::new()?;
-    // Placing a regular file in a parent position makes `metadata` fail with
-    // `NotADirectory`, which is not `NotFound`.
-    let not_a_directory = root.path().join("blocker");
-    fs::write(&not_a_directory, "not a directory").context("write blocker file")?;
+    let blocker = root.path().join("blocker");
+    fs::write(&blocker, "not a directory").context("write blocker file")?;
     let ident = Ident::new("Config", Span::call_site());
     let unreachable = Source {
-        file: not_a_directory
-            .join("child.rs")
-            .to_string_lossy()
-            .into_owned(),
+        file: format!("{}\0child.rs", blocker.to_string_lossy()),
         line: 7,
         column: 0,
     };
