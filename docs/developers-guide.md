@@ -1012,6 +1012,28 @@ contains no test functions; its own executable examples are what
 document rather than matching its text, so a re-indentation cannot change a
 verdict.
 
+### Whitaker in continuous integration
+
+In continuous integration (CI), the Linux lint leg installs Whitaker through
+the shared `leynos/shared-actions/.github/actions/install-whitaker` action,
+pinned to a full commit hash (SHA, the Secure Hash Algorithm identifier of a
+Git commit), in a step named `Install Whitaker` that is guarded to
+`matrix.platform == 'linux'`. The action owns the install: it takes a
+digest-verified, prebuilt `whitaker-installer` (0.2.9 or later), passes
+`--no-source-fallback`, preinstalls the prebuilt `dylint-link`, authenticates
+with `github.token`, and caches the installer itself. The repository therefore
+carries no resolve, cache or install script for it. Whitaker's lint suite is a
+rolling release, so the suite is not pinned here; the pinned action revision is
+what stays fixed.
+
+The concordat QG-002 rule accepts a revision of that action only if it is a
+shared-actions commit, from the revision that first carried the install rules
+onwards, that leaves the action directory content-identical, so the pin moves
+with the other shared-actions references (the one-SHA contract in
+`sccache_wiring_test.py`). The workflow contract `whitaker_install_test.py`
+asserts exactly one `Install Whitaker` step, using the action at a full commit
+hash, with no script of its own, on the Linux leg only.
+
 ## Publish dry run
 
 `make publish-check` runs `lading publish` over the workspace. lading copies
