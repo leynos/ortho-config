@@ -1718,5 +1718,50 @@ A mutation probe confirms the tests are load-bearing: removing the
 which is the direct statement that no inter-process exclusion held. The file
 was restored from a backup afterwards and the restore proved with `diff`.
 
-Gate evidence for `ed13b876` is recorded separately below once the run
-completes.
+### Gate evidence for the lock change: `ce023fee`
+
+The scrutineer ran the six deterministic gates and reported 6/6 green on the
+frozen tree at `ce023fee`, with `git status --porcelain` empty and
+`head_before == head_after` on every run.
+
+Three of the gates are direct captures at `ce023fee`:
+
+- `make check-fmt` — exit 0, `cargo fmt --check` plus mdtablefix reporting 76
+  files unchanged.
+- `make markdownlint` — exit 0, markdownlint-cli2 v0.23.2 reporting 0 issues
+  across 77 files, and the spelling gate reaching its `typos.toml` fixed point
+  with no diff.
+- `make nixie` — exit 0, all diagrams validated.
+
+Three carry forward from `fa42de89`, which the two later commits reach by
+docs-only deltas (50 appended execplan lines, then three `-ise`/`-ize` word
+corrections):
+
+- `make typecheck` — exit 0,
+  `cargo check --workspace --all-targets --all-features` in 8.79s with no
+  warnings.
+- `make lint` — exit 0, all three sibling steps ran: rustdoc, Clippy with
+  `-D warnings`, and Whitaker.
+- `make test` — exit 0, 80 Rust test targets with 1442 passed / 0 failed / 15
+  ignored, and pytest reporting 115 passed / 5 skipped.
+
+Two lessons from this run are worth keeping.
+
+The first `markdownlint` run exited 2 and was **not** a content failure. The
+`spellcheck` sub-step shells out to
+`uv tool run --from
+"git+https://github.com/leynos/typos-config-builder.git@v0.1.1"`,
+and this session exports `GIT_CONFIG_*` variables that rewrite `github.com` to
+the refused Lody git helper. The fetch died with
+`Failed to resolve '--with' requirement` before any check ran. Clearing those
+variables for the invocation produced a genuine pass. A gate that fails at
+*invocation* rather than at a check must be re-run with the interception
+removed before it is believed.
+
+The three `-ise` spellings that the spelling gate did catch were real. The
+repository enforces en-GB-oxendict, so the `typos` dictionary maps that word
+class to `-ize`; the lock prose in ADR-010, the localization design guide, and
+this plan all used the `-ise` form. They are corrected in `ce023fee` with no
+word-level exemptions added to `typos.local.toml`.
+
+The certificate for the lock change is therefore `ce023fee`, not `ed13b876`.
