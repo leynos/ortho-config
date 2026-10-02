@@ -1850,3 +1850,48 @@ branch documentation (`docs/contents.md`, `docs/developers-guide.md`, and
 the fifth is the `ortho_config_macros` lock block above. All 16 target-only
 paths are byte-identical at the new head, and no file is deleted against the
 target. `git diff --check` is clean.
+
+### Post-rebase validation and publication
+
+The replay produced candidate `f013ac2d`. Two record commits followed:
+`758d3c2c` (above) and `34afddb9`, which rewraps three of its paragraphs to the
+80-column margin after `make check-fmt` rejected them. The rewrap is a pure
+whitespace change; the whitespace-token stream of the plan is byte-identical
+across the two heads, so no words moved.
+
+All six gates are green at `34afddb9`. `check-fmt`, `markdownlint`, and `nixie`
+were captured at that head directly. `typecheck`, `lint`, and `test` were
+captured at `758d3c2c` and transfer across the rewrap by content identity: the
+delta is one Markdown path whose token stream is unchanged, no build or test
+input reads it, and the only runtime Markdown readers in the workspace use a
+fixed two-file allowlist that does not include it. The tallies are 82 cargo
+test binaries with 1454 passed, 0 failed, and 15 ignored, plus 115 pytest
+passes and 5 skips. `make markdownlint` again needed the session's
+`GIT_CONFIG_*` rewrites cleared for the `typos-config-builder` fetch, which is
+interception rather than a gate failure.
+
+CodeRabbit had approved the pre-rebase head `0407370b` and resolved both
+outstanding threads, re-verifying each repair against that checkout. A rebase
+invalidates the candidate an approval names, so the approval is preserved as
+historical evidence and does not carry to `34afddb9`.
+
+Two publication problems were worked around rather than through the broker. The
+Lody credential broker was down for over an hour: its `/health` endpoint
+returned connection-reset (`000`, not a `4xx` refusal), `git ls-remote` failed
+on the `lody-github` remote helper, and the socket's accept queue stayed
+non-empty with the listener pinned. The documented direct route worked: with
+the session's `GIT_CONFIG_*` rewrites cleared for the invocation, `https://`
+remotes authenticate through the real `gh` credential helper at
+`/usr/bin/gh auth git-credential`.
+
+The remote head was read as `0407370b` through the REST API before the push, so
+that SHA is the lease base rather than an assumed one, and the push used an
+explicit `--force-with-lease=refs/heads/<branch>:0407370b`. It reported
+`0407370b...34afddb9 (forced update)` and the remote head was then re-read as
+`34afddb9`, matching the local ref.
+
+The review request was re-queued as `d8980a66` at head `34afddb9`, after
+deleting the superseded `6262bb99`. The queue holds 87 entries and quotes about
+thirty-two hours. The message states that this candidate is a rebase rather
+than a repair round, records the conflict-free replay and the range-diff
+result, and points the review at the new head instead of the previous anchor.
