@@ -1805,8 +1805,8 @@ the quoted ETA is about thirty-two hours. The comment body carries only the
 three claims verified against the frozen head; the previously deleted message
 had asserted three repairs that did not exist, and that failure mode is the
 reason each claim is now re-checked immediately before queueing. The rebase
-recorded below replaces the candidate `0407370b`, so an entry pointing at it
-is superseded and must be re-queued against the new head.
+recorded below replaces the candidate `0407370b`, so an entry pointing at it is
+superseded and must be re-queued against the new head.
 
 ### The fourth rebase onto `origin/main`
 
@@ -1834,8 +1834,8 @@ holds none, and `.git/config` carries no clone-local rules. The global
 estate baseline working as intended; the replay therefore used `zdiff3` with
 Git's built-in text merge and needed no driver override.
 
-`git range-diff` reports 50 of 50 entries matched, and 49 of them identical. The
-single non-identical entry is `520bf3c4` → `a69e340f` ("Fix identifier
+`git range-diff` reports 50 of 50 entries matched, and 49 of them identical.
+The single non-identical entry is `520bf3c4` → `a69e340f` ("Fix identifier
 derivation in docs IR and artefacts"), and the only textual difference is that
 its `typos.toml` hunk no longer applies. That hunk is not lost: `34a595ea` on
 the target made the byte-identical edit, so the path is unchanged between the
@@ -1846,7 +1846,7 @@ The semantic audit found no unintended change. Of the 80 paths the branch
 touches, exactly five are also touched by the target, and four of those differ
 from the target at the new head for a verified reason: three are additive-only
 branch documentation (`docs/contents.md`, `docs/developers-guide.md`, and
-`docs/v0-10-0-migration-guide.md`, with zero deleted lines between them) and the
-fifth is the `ortho_config_macros` lock block above. All 16 target-only paths
-are byte-identical at the new head, and no file is deleted against the target.
-`git diff --check` is clean.
+`docs/v0-10-0-migration-guide.md`, with zero deleted lines between them) and
+the fifth is the `ortho_config_macros` lock block above. All 16 target-only
+paths are byte-identical at the new head, and no file is deleted against the
+target. `git diff --check` is clean.
