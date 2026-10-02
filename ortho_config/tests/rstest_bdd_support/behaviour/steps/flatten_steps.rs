@@ -2,7 +2,7 @@
 
 use super::common::{SlotTakeOrExt, set_scalar_once};
 use super::value_parsing::normalize_scalar;
-use crate::scenario_state::{FlatArgs, FlattenContext};
+use crate::rstest_bdd_support::scenario_state::{FlatArgs, FlattenContext};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use figment::{Figment, providers::Serialized};

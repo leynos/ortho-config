@@ -1,7 +1,7 @@
 //! Steps for testing configuration inheritance.
 
 use super::common::SlotTakeOrExt;
-use crate::scenario_state::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
+use crate::rstest_bdd_support::scenario_state::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoResult};
 use rstest_bdd::Slot;

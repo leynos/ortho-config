@@ -32,6 +32,7 @@ ignore = [
   "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",
   "`[^`\\n]*cli::tests::localisation[^`\\n]*`",
   "`skill_manifest_serialises_with_camino_path`",
+  "`var\\.iamge_id` instead of `var\\.image_id`",
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",

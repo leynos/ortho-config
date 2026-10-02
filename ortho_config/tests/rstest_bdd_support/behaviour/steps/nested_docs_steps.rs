@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::{DocMetadata, FieldMetadata, OrthoConfigDocs};
 use rstest_bdd_macros::{given, then, when};
 
-use crate::scenario_state::{NestedDocsConfig, NestedDocsContext};
+use crate::rstest_bdd_support::scenario_state::{NestedDocsConfig, NestedDocsContext};
 
 use std::str::FromStr;
 

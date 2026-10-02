@@ -324,6 +324,14 @@ and revisit the boundary in the agent-native design.
 Behavioural suites live in crate-local integration test targets. The repository
 layout guide records the current target and feature-file inventory.
 
+The `ortho_config` BDD target is rooted at `tests/rstest_bdd.rs`; it declares
+the shared `tests/fixtures/` module and the `tests/rstest_bdd_support/` module
+with conventional `mod` declarations. `cargo-orthohelp` also uses a top-level
+`tests/rstest_bdd.rs` entry point and keeps its BDD modules under
+`tests/rstest_bdd_support/`. Keep the PowerShell golden-test fixture at
+`cargo-orthohelp/tests/golden/powershell_fixture.rs` with the golden tests that
+consume it.
+
 Step definitions use `rstest-bdd` macros (`#[given]`, `#[when]`, `#[then]`) and
 consume `rstest` fixtures. Scenario-local mutable state is modelled with
 fixtures and `Slot<T>` values inside `#[derive(ScenarioState)]` structs.
@@ -334,7 +342,7 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
 fixture-specific module rather than expanding unrelated step files. Likewise,
 `CargoContext` and its `#[fixture]` provider plus the `cargo` steps live in
-`tests/rstest_bdd/behaviour/steps/cargo_steps.rs`, backing
+`tests/rstest_bdd_support/behaviour/steps/cargo_steps.rs`, backing
 `cargo_entry_point.feature` (scenarios: Cargo dispatch parses the inner
 options; bare invocation without the injected token is rejected), also isolated
 in a fixture-specific steps module. Future contributors should extend the
@@ -361,8 +369,8 @@ keeps no policy table and serves the "off by default" scenario (Decision D10).
 covered for packages still adopting the toolchain. The CLI-level policy
 behaviour is exercised end-to-end by
 `cargo-orthohelp/tests/features/orthohelp_policy.feature` with steps in
-`cargo-orthohelp/tests/rstest_bdd/behaviour/steps_policy.rs`, and the report
-wire format is snapshotted in
+`cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps_policy.rs`, and the
+report wire format is snapshotted in
 `cargo-orthohelp/tests/golden/policy_report_tests.rs`.
 
 The policy boundary keeps `PolicyConfig` and `evaluate` as pure domain code.
@@ -550,8 +558,9 @@ Migration guidance for contributors:
 When adding scenarios or steps:
 
 1. Add or edit the `.feature` file first.
-2. Implement or update step definitions under the matching `tests/rstest_bdd`
-   module.
+2. Implement or update step definitions under the matching
+   `tests/rstest_bdd_support/` module tree in `ortho_config` or
+   `cargo-orthohelp`.
 3. Bind scenarios using `scenarios!` where possible; use explicit `#[scenario]`
    only when a feature needs bespoke fixtures or per-scenario control.
 4. Keep assertions user-observable (`Then` steps) and avoid asserting private

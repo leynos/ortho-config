@@ -14,7 +14,7 @@ use self::helpers::{
     assert_field_help_id, assert_field_long_help_id, assert_ir_version, assert_windows_module_name,
     windows_value,
 };
-use crate::scenario_state::{DocsConfig, DocsContext};
+use crate::rstest_bdd_support::scenario_state::{DocsConfig, DocsContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::OrthoConfigDocs;
 use rstest_bdd_macros::{then, when};
