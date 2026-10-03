@@ -2,7 +2,7 @@
 
 use super::common::{SlotTakeOrExt, set_scalar_once};
 use super::value_parsing::{normalize_scalar, parse_csv_values};
-use crate::scenario_state::{RulesConfig, RulesContext};
+use crate::rstest_bdd_support::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, ensure};
 use rstest_bdd_macros::{given, then, when};
 use test_helpers::figment as figment_helpers;

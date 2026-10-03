@@ -1,7 +1,7 @@
 //! Steps covering collection merge strategy scenarios.
 
 use super::common::{SlotTakeOrExt, set_scalar_once};
-use crate::scenario_state::{CollectionContext, RulesConfig};
+use crate::rstest_bdd_support::scenario_state::{CollectionContext, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};

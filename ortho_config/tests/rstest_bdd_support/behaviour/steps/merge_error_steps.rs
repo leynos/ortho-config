@@ -2,7 +2,7 @@
 
 use super::common::SlotTakeOrExt;
 use super::value_parsing::unquote;
-use crate::scenario_state::{MergeErrorContext, MergeErrorSample};
+use crate::rstest_bdd_support::scenario_state::{MergeErrorContext, MergeErrorSample};
 use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::{MergeComposer, OrthoError};
 use rstest_bdd_macros::{given, then, when};

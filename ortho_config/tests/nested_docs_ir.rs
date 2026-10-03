@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::{DocMetadata, OrthoConfigDocs, ValueType};
 use rstest::{fixture, rstest};
 
-#[path = "rstest_bdd/nested_docs_fixture.rs"]
+#[path = "rstest_bdd_support/nested_docs_fixture.rs"]
 mod nested_docs_fixture;
 
 use nested_docs_fixture::NestedDocsConfig;

@@ -2,7 +2,7 @@
 
 use super::common::SlotTakeOrExt;
 use super::value_parsing::normalize_scalar;
-use crate::scenario_state::{RulesConfig, RulesContext};
+use crate::rstest_bdd_support::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};

@@ -80,13 +80,24 @@ Run either target independently with
 
 ## Behavioural test inventory
 
-Behavioural suites use crate-local integration targets. Their feature files are
-kept alongside the targets that consume them:
+Behavioural suites use crate-local integration targets. The `ortho_config` and
+`cargo-orthohelp` targets have top-level `tests/rstest_bdd.rs` entry points and
+keep their support modules under `tests/rstest_bdd_support/`. The
+`ortho_config` entry point declares the shared `tests/fixtures/` module using a
+conventional `mod` declaration. Feature files are kept alongside the targets
+that consume them:
 
-- `ortho_config/tests/rstest_bdd/` and `ortho_config/tests/features/`
-- `cargo-orthohelp/tests/rstest_bdd/` and `cargo-orthohelp/tests/features/`
+- `ortho_config/tests/rstest_bdd.rs`,
+  `ortho_config/tests/rstest_bdd_support/`, and `ortho_config/tests/features/`
+- `cargo-orthohelp/tests/rstest_bdd.rs`,
+  `cargo-orthohelp/tests/rstest_bdd_support/`, and
+  `cargo-orthohelp/tests/features/`
 - `examples/hello_world/tests/rstest_bdd/` and
   `examples/hello_world/tests/features/`
+
+The `cargo-orthohelp` PowerShell golden tests keep their fixture at
+`cargo-orthohelp/tests/golden/powershell_fixture.rs`, beside the target that
+uses it.
 
 ## Shared test-support modules
 
@@ -100,7 +111,7 @@ These modules provide shared integration-test infrastructure:
   builder. It creates an independent `ConfigDiscovery` over the caller's
   `MapEnv`, with no other environment or filesystem access, for deterministic
   injected-source discovery tests.
-- `ortho_config/tests/rstest_bdd/behaviour/steps/common.rs` owns the
+- `ortho_config/tests/rstest_bdd_support/behaviour/steps/common.rs` owns the
   `set_scalar_once`, `set_nonblank_scalar_once`, and `SlotTakeOrExt::take_or`
   helpers. Step modules under `behaviour/steps/` use them for scalar-slot
   validation and descriptive missing-slot errors.
