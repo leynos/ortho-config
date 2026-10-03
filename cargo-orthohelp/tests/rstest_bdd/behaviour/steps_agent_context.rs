@@ -4,15 +4,14 @@
 //! against the fixture crate and assert the compact JSON contract that agents
 //! consume.
 
-use std::fmt;
-use std::io::Read;
-
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
+use ortho_config::AGENT_CONTEXT_KIND_SUFFIX;
 use rstest_bdd_macros::{then, when};
 use serde_json::Value;
+use std::fmt;
 
-use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
+use super::steps::{OrthoHelpContext, StepResult, run_orthohelp};
+
+const EXPECTED_SCHEMA_VERSION: &str = "1";
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum JsonField {
@@ -22,6 +21,7 @@ pub(super) enum JsonField {
     Path,
     Summary,
     Inputs,
+    Required,
 }
 
 impl JsonField {
@@ -33,6 +33,7 @@ impl JsonField {
             Self::Path => "path",
             Self::Summary => "summary",
             Self::Inputs => "inputs",
+            Self::Required => "required",
         }
     }
 }
@@ -53,6 +54,15 @@ const BASE_AGENT_CONTEXT_ARGS: [&str; 4] = [
 #[when("I run cargo-orthohelp with format agent-context for the fixture")]
 fn run_with_format_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     run_with_agent_context_args(orthohelp_context, &BASE_AGENT_CONTEXT_ARGS)
+}
+
+#[when("I run cargo-orthohelp with format agent-context for the simple fixture")]
+fn run_with_format_agent_context_simple(
+    orthohelp_context: &mut OrthoHelpContext,
+) -> StepResult<()> {
+    let mut args = Vec::from(BASE_AGENT_CONTEXT_ARGS);
+    args.extend(["--root-type", "orthohelp_fixture::SimpleFixtureConfig"]);
+    run_with_agent_context_args(orthohelp_context, &args)
 }
 
 #[when("I run cargo-orthohelp with format agent-context for the nested fixture")]
@@ -80,61 +90,87 @@ fn run_with_agent_context_args(
     Ok(())
 }
 
-#[then("the output contains agent-context JSON for the fixture")]
+#[then("stdout contains agent-context JSON for the fixture")]
 fn output_contains_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let output_succeeded = orthohelp_context
-        .last_output
-        .with_ref(|output| output.status.success())
-        .ok_or("last_output should be set")?;
-    if !output_succeeded {
-        return Err("cargo-orthohelp should succeed".into());
-    }
-
     let json = read_agent_context(orthohelp_context)?;
-    expect_str_field(&json, JsonField::SchemaVersion, "1")?;
-    expect_str_field(&json, JsonField::Kind, "orthohelp_fixture.agent_context")?;
-    let command = json
-        .get(JsonField::Commands.as_str())
-        .and_then(Value::as_array)
-        .and_then(|commands| commands.first())
-        .ok_or("first command missing")?;
-    expect_string_array_field(command, JsonField::Path, &["fixture"])?;
-    expect_str_field(
-        command,
-        JsonField::Summary,
-        "Orthohelp fixture configuration.",
-    )?;
-    expect_non_empty_array(command, JsonField::Inputs)?;
-    Ok(())
+    assert_agent_context_contract(&json, &["fixture"], "Orthohelp fixture configuration.")
 }
 
-#[then("the output contains nested agent-context command paths for the fixture")]
+#[then("stdout contains agent-context JSON for the simple fixture")]
+fn output_contains_simple_agent_context(
+    orthohelp_context: &mut OrthoHelpContext,
+) -> StepResult<()> {
+    let json = read_agent_context(orthohelp_context)?;
+    assert_agent_context_contract(&json, &["simple_fixture"], "Simple fixture configuration.")
+}
+
+#[then("stdout contains nested agent-context command paths for the fixture")]
 fn output_contains_nested_agent_context_paths(
     orthohelp_context: &mut OrthoHelpContext,
 ) -> StepResult<()> {
-    let output_succeeded = orthohelp_context
-        .last_output
-        .with_ref(|output| output.status.success())
-        .ok_or("last_output should be set")?;
-    if !output_succeeded {
-        return Err("cargo-orthohelp should succeed".into());
-    }
-
     let json = read_agent_context(orthohelp_context)?;
-    expect_str_field(&json, JsonField::SchemaVersion, "1")?;
-    expect_str_field(&json, JsonField::Kind, "orthohelp_fixture.agent_context")?;
+    assert_agent_context_contract(&json, &["nested_fixture"], "Nested fixture command tree.")?;
     expect_command_path(&json, &["nested_fixture", "greet"])?;
     expect_command_path(&json, &["nested_fixture", "admin", "audit"])?;
     Ok(())
 }
 
-fn read_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<Value> {
-    let out_root = get_out_dir(orthohelp_context)?;
-    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-    let mut file = dir.open("agent-context.json")?;
-    let mut buffer = String::new();
-    file.read_to_string(&mut buffer)?;
-    Ok(serde_json::from_str(&buffer)?)
+fn assert_agent_context_contract(
+    json: &Value,
+    expected_path: &[&str],
+    expected_summary: &str,
+) -> StepResult<()> {
+    expect_str_field(json, JsonField::SchemaVersion, EXPECTED_SCHEMA_VERSION)?;
+    let kind = string_field(json, JsonField::Kind)?;
+    let expected_suffix = format!(".{AGENT_CONTEXT_KIND_SUFFIX}");
+    if !kind.ends_with(&expected_suffix) {
+        return Err(format!("kind should end with {expected_suffix}, got {kind}").into());
+    }
+    let command = json
+        .get(JsonField::Commands.as_str())
+        .and_then(Value::as_array)
+        .and_then(|commands| commands.first())
+        .ok_or("first command missing")?;
+    expect_string_array_field(command, JsonField::Path, expected_path)?;
+    expect_str_field(command, JsonField::Summary, expected_summary)?;
+    expect_non_empty_array(command, JsonField::Inputs)?;
+    expect_first_input_required_boolean(command)
+}
+
+fn expect_first_input_required_boolean(command: &Value) -> StepResult<()> {
+    let input = command
+        .get(JsonField::Inputs.as_str())
+        .and_then(Value::as_array)
+        .and_then(|inputs| inputs.first())
+        .ok_or("first command input missing")?;
+    if input
+        .get(JsonField::Required.as_str())
+        .is_some_and(Value::is_boolean)
+    {
+        Ok(())
+    } else {
+        Err("first command input required should be a boolean".into())
+    }
+}
+
+fn read_agent_context(orthohelp_context: &OrthoHelpContext) -> StepResult<Value> {
+    let stdout = orthohelp_context
+        .last_output
+        .with_ref(|output| output.stdout.clone())
+        .ok_or("last_output should be set")?;
+    assert_one_compact_json_line(&stdout)?;
+    Ok(serde_json::from_slice(&stdout)?)
+}
+
+fn assert_one_compact_json_line(stdout: &[u8]) -> StepResult<()> {
+    if stdout
+        .strip_suffix(b"\n")
+        .is_some_and(|document| !document.contains(&b'\n'))
+    {
+        Ok(())
+    } else {
+        Err("stdout should contain one compact JSON document and a trailing newline".into())
+    }
 }
 
 fn string_field(value: &Value, field: JsonField) -> StepResult<&str> {
