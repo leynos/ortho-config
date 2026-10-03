@@ -13,6 +13,10 @@ mod clap_test_utils;
 use clap_test_utils::ConfigValueAssertions;
 pub(crate) use clap_test_utils::assert_config_values;
 
+#[path = "../support/isolated_env.rs"]
+mod isolated_env;
+use isolated_env::with_host_overrides;
+
 #[path = "../support/to_anyhow.rs"]
 mod to_anyhow;
 pub(crate) use to_anyhow::ToAnyhow;
@@ -101,6 +105,9 @@ impl Default for ExpectedConfig {
     }
 }
 
+/// Shared harness for CLI cases: writes the fixture files, builds the injected
+/// environment, rewrites path-taking CLI arguments, loads the configuration
+/// through both injected sources, then runs the caller's validation closure.
 pub(crate) fn run_config_case<T, F>(
     files: &[(&str, &str)],
     env: &[(&str, &str)],
@@ -112,23 +119,38 @@ where
     F: FnOnce(&T) -> Result<()>,
 {
     let temp_dir = tempfile::tempdir()?;
-    let cap = Dir::open_ambient_dir(temp_dir.path(), ambient_authority())?;
+    write_fixtures(temp_dir.path(), files)?;
+    let env_map = build_env(temp_dir.path(), files, env);
+    let args = resolve_args(temp_dir.path(), cli_args);
+    let source = Arc::new(env_map);
+    let config = T::load_from_iter_with_sources(args, source.clone(), source).to_anyhow()?;
+    validate(&config)?;
+    Ok(config)
+}
+
+/// Write each fixture beneath `root`, failing on the first that cannot be
+/// created.
+fn write_fixtures(root: &Path, files: &[(&str, &str)]) -> Result<()> {
+    let cap = Dir::open_ambient_dir(root, ambient_authority())?;
     for (path, contents) in files {
         cap.write(path, contents.as_bytes())?;
     }
+    Ok(())
+}
 
-    // Keep explicit selectors and CLI paths pointed at their temporary files.
-    let fixture_path = |value: &str| -> OsString {
-        if Path::new(value).is_absolute() {
-            OsString::from(value)
-        } else {
-            temp_dir.path().join(value).into_os_string()
-        }
-    };
+/// Build the injected environment for one case.
+///
+/// A `CONFIG_PATH` entry names a fixture file, so its value is resolved
+/// against `root`; every other variable is passed through untouched. When the
+/// fixtures include the default dotfile and no selector was supplied, the
+/// selector is pointed at that file so the case does not depend on the
+/// process working directory. [`with_host_overrides`] then pins the XDG bases,
+/// closing the platform default that would otherwise reach `/etc/xdg`.
+fn build_env(root: &Path, files: &[(&str, &str)], env: &[(&str, &str)]) -> MapEnv {
     let mut env_map = MapEnv::new();
     for (key, value) in env {
         if *key == "CONFIG_PATH" {
-            env_map.insert(*key, fixture_path(value));
+            env_map.insert(*key, fixture_path(root, value));
         } else {
             env_map.insert(*key, value);
         }
@@ -136,23 +158,37 @@ where
     if files.iter().any(|(name, _)| *name == ".config.toml")
         && !env.iter().any(|(name, _)| *name == "CONFIG_PATH")
     {
-        env_map.insert("CONFIG_PATH", temp_dir.path().join(".config.toml"));
+        env_map.insert("CONFIG_PATH", root.join(".config.toml"));
     }
+    with_host_overrides(env_map, root)
+}
+
+/// Resolve a case's relative path against the temporary fixture root.
+///
+/// Absolute values are preserved so a case can deliberately point outside the
+/// fixture.
+fn fixture_path(root: &Path, value: &str) -> OsString {
+    if Path::new(value).is_absolute() {
+        OsString::from(value)
+    } else {
+        root.join(value).into_os_string()
+    }
+}
+
+/// Rewrite CLI arguments so a path-taking flag names a fixture file.
+fn resolve_args(root: &Path, cli_args: &[&str]) -> Vec<OsString> {
     let mut args = Vec::with_capacity(cli_args.len());
     let mut next_is_path = false;
     for arg in cli_args {
         let value = if next_is_path {
-            fixture_path(arg)
+            fixture_path(root, arg)
         } else {
             OsString::from(*arg)
         };
         next_is_path = matches!(value.to_str(), Some("--config-path" | "--config"));
         args.push(value);
     }
-    let source = Arc::new(env_map);
-    let config = T::load_from_iter_with_sources(args, source.clone(), source).to_anyhow()?;
-    validate(&config)?;
-    Ok(config)
+    args
 }
 
 pub(crate) fn assert_ortho_error<T, F>(

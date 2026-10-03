@@ -53,6 +53,8 @@ fn assert_basic_rules(cfg: &TableConfig) -> Result<()> {
     Ok(())
 }
 
+/// Table-driven check that a nested `rules` map deserializes identically from
+/// a TOML file, a prefixed environment source, and CLI/serialized defaults.
 #[rstest]
 #[case::file("file")]
 #[case::env("env")]
@@ -96,6 +98,8 @@ enabled = false
     Ok(())
 }
 
+/// Entries contributed by a file, an environment source, and defaults merge
+/// into one `rules` map rather than one source replacing another.
 #[rstest]
 fn merges_map_from_sources() -> Result<()> {
     let temp_dir = tempfile::tempdir().context("create dynamic-table fixture directory")?;

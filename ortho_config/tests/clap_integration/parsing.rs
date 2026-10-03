@@ -6,6 +6,9 @@ use super::common::{
 use anyhow::Result;
 use rstest::rstest;
 
+/// Table-driven check that each CLI argument combination yields the expected
+/// `TestConfig` values, with an empty injected environment so concurrent tests
+/// cannot interfere.
 #[rstest]
 #[case::defaults(&["prog"], ExpectedConfig::default())]
 #[case::sample_and_other(

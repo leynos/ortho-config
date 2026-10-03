@@ -15,6 +15,8 @@ struct Cfg {
     values: Vec<String>,
 }
 
+/// `CsvEnv` splits a comma-separated `VALUES` variable into a list, covering
+/// the literal JSON array form and empty elements.
 #[rstest]
 #[case("A,B,C", vec!["A", "B", "C"])]
 #[case("[\"x\",\"y\"]", vec!["x", "y"])]
@@ -36,6 +38,8 @@ fn parses_lists(#[case] raw: &str, #[case] expected: Vec<&str>) -> Result<()> {
     Ok(())
 }
 
+/// A scalar that cannot be parsed as a list fails extraction rather than
+/// silently producing a one-element (or empty) list.
 #[rstest]
 #[case("")]
 #[case("single")]
@@ -55,6 +59,8 @@ struct BoolCfg {
     flag: bool,
 }
 
+/// `CsvEnv` accepts the case-insensitive `true`/`false` spellings, including
+/// surrounding whitespace, for a boolean field.
 #[rstest]
 #[case("true", true)]
 #[case("false", false)]

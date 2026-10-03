@@ -30,6 +30,8 @@ fn option_field_rejects_invalid_value() {
     .expect("invalid option value should produce a CLI parsing error");
 }
 
+/// A required field with no value in any supplied source surfaces as an
+/// `OrthoError::Merge` rather than a CLI parsing error.
 #[rstest]
 fn missing_required_field_surfaces_merge_error() -> Result<()> {
     let source = Arc::new(MapEnv::new());

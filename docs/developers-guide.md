@@ -489,6 +489,26 @@ metrics — which need a `ConfigDiscovery` configured identically so that their
 results remain comparable. Any test needing a deterministic discovery over an
 injected environment may reuse it.
 
+The shared isolated-environment helper owns `with_host_overrides`. It serves
+suites that load through the *derived* entry points, where the derive macro
+builds its own `ConfigDiscovery` and no attribute can select a project root.
+`with_host_overrides` points the XDG search bases at the caller's fixture root,
+which ranks them above the platform default `/etc/xdg`; an empty
+`XDG_CONFIG_DIRS` still falls back to that default, so leaving the variable
+unset is not isolation. It is owned by the CLI integration and
+error-aggregation suites.
+
+One hole stays open and is inherited from the injected-source migration: the
+derived loader's project rung resolves its root from `std::env::current_dir`,
+so a `.config.toml` beside the test binary's working directory would still be
+discovered. The exposure is bounded by the rung's position — projects are
+searched *last*, so the ambient file is reached only when no explicit path,
+selector, XDG, Windows, or home candidate matched. No injection point can
+redirect it: `project_file_name` names a file, while `project_roots`,
+`add_project_root`, and `clear_project_roots` are reachable only when a test
+builds the `ConfigDiscovery` itself, as the discovery-builder suite above does.
+Closing the gap needs a derive-level discovery attribute for project roots.
+
 The common behavioural-step helper module owns `set_scalar_once`,
 `set_nonblank_scalar_once`, and the `SlotTakeOrExt` extension trait's
 `take_or`. The first two centralize the repeated "guard, validate, and populate

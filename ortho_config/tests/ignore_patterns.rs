@@ -13,6 +13,8 @@ struct IgnoreCfg {
     ignore_patterns: Vec<String>,
 }
 
+/// With the `append` merge strategy, environment and CLI contributions to
+/// `ignore_patterns` accumulate, with each source's entries trimmed.
 #[rstest]
 #[case(None, None, vec![])]
 #[case(Some(".git/,build/"), None, vec![".git/", "build/"])]
