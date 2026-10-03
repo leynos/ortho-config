@@ -433,6 +433,26 @@ centralizes the repeated "take the slot's value or fail with a descriptive
 error" shape. Both are scoped to behavioural step modules; step modules must
 use these helpers rather than re-implementing slot-guard boilerplate.
 
+The common behavioural-step helper module also owns `config_fixture`,
+`shared_sources`, and `isolated_home_env`. `config_fixture` writes `contents`
+into `file_name` inside a fresh temporary directory and returns the
+`tempfile::TempDir` guard together with the absolute file path; passing `None`
+for `contents` derives the path without writing, which preserves scenarios that
+deliberately leave a selected file absent, such as those in
+`merge_composer_steps`, `cli_default_as_absent_steps`, and `subcommand_steps`.
+`shared_sources` splits one owned `MapEnv` into the `SharedEnvSource` and
+`SharedScanEnvSource` handles that loader APIs require for their separate
+discovery and merge roles, both reading that single environment.
+`isolated_home_env` returns a `MapEnv` pinning `HOME`, `XDG_CONFIG_HOME`, and
+`XDG_CONFIG_DIRS` under a supplied root, so subcommand scenarios do not inherit
+the machine's home directory; it is gated on the `serde_json` feature because
+only the subcommand step modules use it. These helpers are owned by the
+behavioural step modules under `behaviour/steps/`, which must use them rather
+than re-implementing temporary-directory, config-file, or
+environment-source-pair boilerplate. Callers must keep the `tempfile::TempDir`
+guard alive until the loader has read the fixture, because dropping it deletes
+the directory.
+
 ## Snapshot tests
 
 Use `insta` for renderer golden coverage that would be noisy as handwritten

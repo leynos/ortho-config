@@ -3,18 +3,15 @@
 //! This module verifies the precedence of CLI, environment, and configuration
 //! file sources when loading subcommand inputs.
 
-use super::common::SlotTakeOrExt;
+use super::common::{SlotTakeOrExt, config_fixture, isolated_home_env, shared_sources};
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{PrArgs, SubcommandContext, SubcommandSources};
-use anyhow::{Context as _, Result, ensure};
-use cap_std::{ambient_authority, fs::Dir};
+use anyhow::{Result, ensure};
 use clap::Parser;
 use ortho_config::subcommand::{
     Prefix, SubcommandFileContext, load_and_merge_subcommand_with_sources_at,
 };
-use ortho_config::{MapEnv, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use std::sync::Arc;
 
 fn take_sources(subcommand_context: &SubcommandContext) -> SubcommandSources {
     subcommand_context.sources.take().unwrap_or_default()
@@ -121,31 +118,19 @@ fn load_from_isolated_sources(
     sources: &SubcommandSources,
     cli: &PrArgs,
 ) -> Result<Result<PrArgs, anyhow::Error>> {
-    let fixture_dir = tempfile::tempdir().context("create subcommand fixture directory")?;
-    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
-        .context("open subcommand fixture directory")?;
-    if let Some(file_reference) = sources.file.as_ref() {
-        fixture
-            .write(
-                ".app.toml",
-                format!("[cmds.test]\nreference = \"{file_reference}\"").as_bytes(),
-            )
-            .context("write subcommand fixture")?;
-    }
+    // A scenario without a file value leaves the selected file absent; the
+    // guard stays bound until the subcommand loader below has finished.
+    let file_contents = sources
+        .file
+        .as_ref()
+        .map(|file_reference| format!("[cmds.test]\nreference = \"{file_reference}\""));
+    let (fixture_dir, _config_path) = config_fixture(".app.toml", file_contents.as_deref())?;
 
-    let isolated_home = fixture_dir.path().join("home");
-    let isolated_xdg_home = fixture_dir.path().join("xdg-home");
-    let isolated_xdg_dirs = fixture_dir.path().join("xdg-dirs");
-    let mut environment = MapEnv::new()
-        .with_var("HOME", isolated_home.as_os_str())
-        .with_var("XDG_CONFIG_HOME", isolated_xdg_home.as_os_str())
-        .with_var("XDG_CONFIG_DIRS", isolated_xdg_dirs.as_os_str());
+    let mut environment = isolated_home_env(fixture_dir.path());
     if let Some(env_reference) = sources.env.as_ref() {
         environment.insert("APP_CMDS_TEST_REFERENCE", env_reference);
     }
-    let source = Arc::new(environment);
-    let discovery: SharedEnvSource = source.clone();
-    let merge: SharedScanEnvSource = source;
+    let (discovery, merge) = shared_sources(environment);
     let files = SubcommandFileContext::new(fixture_dir.path(), discovery.as_ref());
     let prefix = Prefix::new("APP_");
     let result = load_and_merge_subcommand_with_sources_at(&prefix, cli, files, merge)

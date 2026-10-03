@@ -3,14 +3,12 @@
 //! Provides BDD steps for setting environment variables, loading configuration
 //! using [`CsvEnv`], and verifying parsed results.
 
-use super::common::{SlotTakeOrExt, set_nonblank_scalar_once};
+use super::common::{SlotTakeOrExt, config_fixture, set_nonblank_scalar_once, shared_sources};
 use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Context, Result, anyhow, ensure};
-use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
+use ortho_config::{MapEnv, OrthoConfig};
 use rstest_bdd_macros::{given, then, when};
-use std::sync::Arc;
 
 /// Records `DDLINT_RULES` for the injected test environment.
 #[given("the environment variable DDLINT_RULES is {value}")]
@@ -26,24 +24,17 @@ fn load_config(rules_context: &RulesContext) -> Result<()> {
         .env_value
         .get()
         .ok_or_else(|| anyhow!("environment value not configured"))?;
-    let fixture_dir = tempfile::tempdir().context("create CSV selector fixture directory")?;
-    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
-        .context("open CSV selector fixture directory")?;
-    fixture
-        .write("selected.toml", b"# source-aware CSV selector fixture\n")
-        .context("write CSV selector fixture")?;
+    // The guard stays bound until the loader below has read the fixture.
+    let (_fixture_dir, config_path) = config_fixture(
+        "selected.toml",
+        Some("# source-aware CSV selector fixture\n"),
+    )?;
     // A valid explicit selector prevents the generated loader reaching the
     // ambient current-working-directory fallback during this pure env scenario.
-    let source = Arc::new(
-        MapEnv::new()
-            .with_var(
-                "DDLINT_CONFIG_PATH",
-                fixture_dir.path().join("selected.toml"),
-            )
-            .with_var("DDLINT_RULES", &value),
-    );
-    let discovery: SharedEnvSource = source.clone();
-    let merge: SharedScanEnvSource = source;
+    let source = MapEnv::new()
+        .with_var("DDLINT_CONFIG_PATH", config_path)
+        .with_var("DDLINT_RULES", &value);
+    let (discovery, merge) = shared_sources(source);
     let config_result = RulesConfig::load_from_iter_with_sources(["prog"], discovery, merge);
     rules_context.result.set(config_result);
     Ok(())

@@ -4,19 +4,18 @@
 //! as absent when the user did not override them on the CLI, allowing file and
 //! environment configuration to take precedence.
 
+use super::common::{config_fixture, isolated_home_env, shared_sources};
 use super::value_parsing::normalize_scalar;
 use crate::cli_default_mode::CliDefaultMode;
 use crate::scenario_state::{CliDefaultArgs, CliDefaultContext, CliDefaultSources};
-use anyhow::{Context as _, Result, anyhow, ensure};
-use cap_std::{ambient_authority, fs::Dir};
+use anyhow::{Result, anyhow, ensure};
 use clap::{CommandFactory, FromArgMatches};
+use ortho_config::CliValueExtractor;
 use ortho_config::subcommand::{
     Prefix, SubcommandCliMatches, SubcommandFileContext,
     load_and_merge_subcommand_with_matches_with_sources_at,
 };
-use ortho_config::{CliValueExtractor, MapEnv, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use std::sync::Arc;
 
 fn take_sources(ctx: &CliDefaultContext) -> CliDefaultSources {
     ctx.sources.take().unwrap_or_default()
@@ -78,31 +77,19 @@ fn merge_subcommand(cli_default_context: &CliDefaultContext) -> Result<()> {
 }
 
 fn merge_from_isolated_sources(sources: &CliDefaultSources) -> Result<Result<CliDefaultArgs>> {
-    let fixture_dir = tempfile::tempdir().context("create CLI default fixture directory")?;
-    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
-        .context("open CLI default fixture directory")?;
-    if let Some(file_value) = sources.file.as_ref() {
-        fixture
-            .write(
-                ".app.toml",
-                format!("[cmds.greet]\npunctuation = \"{file_value}\"").as_bytes(),
-            )
-            .context("write CLI default fixture")?;
-    }
+    // A scenario without a file value leaves the selected file absent; the
+    // guard stays bound until the subcommand loader below has finished.
+    let file_contents = sources
+        .file
+        .as_ref()
+        .map(|file_value| format!("[cmds.greet]\npunctuation = \"{file_value}\""));
+    let (fixture_dir, _config_path) = config_fixture(".app.toml", file_contents.as_deref())?;
 
-    let isolated_home = fixture_dir.path().join("home");
-    let isolated_xdg_home = fixture_dir.path().join("xdg-home");
-    let isolated_xdg_dirs = fixture_dir.path().join("xdg-dirs");
-    let mut environment = MapEnv::new()
-        .with_var("HOME", isolated_home.as_os_str())
-        .with_var("XDG_CONFIG_HOME", isolated_xdg_home.as_os_str())
-        .with_var("XDG_CONFIG_DIRS", isolated_xdg_dirs.as_os_str());
+    let mut environment = isolated_home_env(fixture_dir.path());
     if let Some(env_value) = sources.env.as_ref() {
         environment.insert("APP_CMDS_GREET_PUNCTUATION", env_value);
     }
-    let source = Arc::new(environment);
-    let discovery: SharedEnvSource = source.clone();
-    let merge: SharedScanEnvSource = source;
+    let (discovery, merge) = shared_sources(environment);
 
     let cli_args: Vec<&str> = if let Some(explicit_value) = &sources.explicit_cli {
         vec!["greet", "--punctuation", explicit_value.as_str()]

@@ -1,13 +1,11 @@
 //! Steps for testing ignore pattern list handling.
 
-use super::common::{SlotTakeOrExt, set_scalar_once};
+use super::common::{SlotTakeOrExt, config_fixture, set_scalar_once, shared_sources};
 use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::scenario_state::{RulesConfig, RulesContext};
-use anyhow::{Context as _, Result, ensure};
-use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
+use anyhow::{Result, ensure};
+use ortho_config::{MapEnv, OrthoConfig};
 use rstest_bdd_macros::{given, then, when};
-use std::sync::Arc;
 
 #[given("the environment variable DDLINT_IGNORE_PATTERNS is {value}")]
 fn set_ignore_env(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -23,13 +21,8 @@ fn set_ignore_env(rules_context: &RulesContext, value: String) -> Result<()> {
 fn load_ignore(rules_context: &RulesContext, cli: String) -> Result<()> {
     let cli = normalize_scalar(&cli);
     let env_val = rules_context.env_value.take();
-    let fixture_dir = tempfile::tempdir().context("create ignore config fixture directory")?;
-    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
-        .context("open ignore config fixture directory")?;
-    fixture
-        .write(".ddlint.toml", b"")
-        .context("write ignore config fixture")?;
-    let config_path = fixture_dir.path().join(".ddlint.toml");
+    // The guard stays bound until the loader below has read the fixture.
+    let (_fixture_dir, config_path) = config_fixture(".ddlint.toml", Some(""))?;
     let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", config_path);
     if let Some(value) = env_val
         .as_deref()
@@ -38,9 +31,7 @@ fn load_ignore(rules_context: &RulesContext, cli: String) -> Result<()> {
     {
         source = source.with_var("DDLINT_IGNORE_PATTERNS", value);
     }
-    let source = Arc::new(source);
-    let discovery: SharedEnvSource = source.clone();
-    let merge: SharedScanEnvSource = source;
+    let (discovery, merge) = shared_sources(source);
     let mut args = vec![String::from("prog")];
     if !cli.is_empty() {
         args.push("--ignore-patterns".into());

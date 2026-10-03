@@ -1,13 +1,11 @@
 //! Steps verifying CLI precedence over environment variables and files.
 
-use super::common::SlotTakeOrExt;
+use super::common::{SlotTakeOrExt, config_fixture, shared_sources};
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{RulesConfig, RulesContext};
-use anyhow::{Context as _, Result, anyhow, ensure};
-use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
+use anyhow::{Result, anyhow, ensure};
+use ortho_config::{MapEnv, OrthoConfig};
 use rstest_bdd_macros::{given, then, when};
-use std::sync::Arc;
 
 #[given("the configuration file has rules {value}")]
 fn file_rules(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -29,23 +27,16 @@ fn load_with_cli(rules_context: &RulesContext, cli_rules: String) -> Result<()> 
     let cli_rules = normalize_scalar(&cli_rules);
     let file_val = rules_context.file_value.get();
     let env_val = rules_context.env_value.get();
-    let fixture_dir = tempfile::tempdir().context("create CLI config fixture directory")?;
-    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
-        .context("open CLI config fixture directory")?;
     let file_contents = file_val
         .map(|value| format!("rules = [\"{value}\"]"))
         .unwrap_or_default();
-    fixture
-        .write(".ddlint.toml", file_contents.as_bytes())
-        .context("write CLI config fixture")?;
-    let config_path = fixture_dir.path().join(".ddlint.toml");
+    // The guard stays bound until the loader below has read the fixture.
+    let (_fixture_dir, config_path) = config_fixture(".ddlint.toml", Some(&file_contents))?;
     let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", config_path);
     if let Some(value) = env_val.as_ref() {
         source = source.with_var("DDLINT_RULES", value);
     }
-    let source = Arc::new(source);
-    let discovery: SharedEnvSource = source.clone();
-    let merge: SharedScanEnvSource = source;
+    let (discovery, merge) = shared_sources(source);
     let config_result = RulesConfig::load_from_iter_with_sources(
         ["prog", "--rules", cli_rules.as_str()],
         discovery,

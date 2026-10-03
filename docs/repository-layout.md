@@ -101,8 +101,10 @@ These modules provide shared integration-test infrastructure:
   injected-source discovery tests.
 - `ortho_config/tests/rstest_bdd/behaviour/steps/common.rs` owns the
   `set_scalar_once`, `set_nonblank_scalar_once`, and `SlotTakeOrExt::take_or`
-  helpers. Step modules under `behaviour/steps/` use them for scalar-slot
-  validation and descriptive missing-slot errors.
+  helpers, alongside `config_fixture`, `shared_sources`, and
+  `isolated_home_env`. Step modules under `behaviour/steps/` use them for
+  scalar-slot validation, descriptive missing-slot errors, temporary fixture
+  files, shared environment source pairs, and home-directory isolation.
 
 ## Important root files
 

@@ -1,13 +1,13 @@
 //! Steps for testing configuration inheritance.
 
-use super::common::SlotTakeOrExt;
+use super::common::{SlotTakeOrExt, shared_sources};
 use crate::scenario_state::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
 use anyhow::{Context as _, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::{MapEnv, OrthoConfig, OrthoResult, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
-use std::{ffi::OsString, path::PathBuf, sync::Arc};
+use std::{ffi::OsString, path::PathBuf};
 
 #[given("a configuration file extending a base file")]
 fn create_files(extends_context: &ExtendsContext) -> Result<()> {
@@ -96,9 +96,8 @@ where
         .context("open extends fixture directory")?;
     setup(&dir)?;
     let child_path = fixture_dir.path().join(".ddlint.toml");
-    let source = Arc::new(MapEnv::new().with_var("DDLINT_CONFIG_PATH", &child_path));
-    let discovery: SharedEnvSource = source.clone();
-    let merge: SharedScanEnvSource = source;
+    let (discovery, merge) =
+        shared_sources(MapEnv::new().with_var("DDLINT_CONFIG_PATH", &child_path));
     Ok((fixture_dir, child_path, discovery, merge))
 }
 
