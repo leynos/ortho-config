@@ -364,15 +364,22 @@ generation in `ortho_config_macros`; and aggregate translation reports in
 - `BootLocalizer` / `BootHandle` define the boot-to-final typestate lifecycle.
 - `FluentEmbedLocalizer` adapts an application-owned loader. No
   `i18n-embed-bridge` feature currently exists; the design proposes a dedicated
-  optional feature for this adapter and dependency.
+  optional feature for this adapter and dependency. `cargo-orthohelp`
+  translation tooling is an integration point: the bridge adapts an
+  application-owned loader and neither creates nor owns it.
 - `ClapErrorCoverage` and the exhaustive error-kind count gate remain proposed.
-  The count must be tied to the explicitly supported resolved `clap_builder`
-  identity and checked against the compiled `clap` facade re-export before a
-  `const_assert_eq!` against the matrix length is mechanical. See
+  The proposed `ortho_config/build.rs` emits
+  `ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` for the total variant count of the
+  supported resolved `clap_builder` identity and verifies the compiled `clap`
+  facade re-export. Only then is `const_assert_eq!` against the matrix length a
+  mechanical gate. `ClapErrorCoverage` reports translated identifiers the
+  supplied localizer cannot resolve. See
   [design §6.1.1](cli-localization-design.md#611-proposed-coverage-gate) and
   §6.2 for the contract.
 - `MissingTranslationReporter` / `MissingTranslationEvent` and
-  `cargo-orthohelp` translation coverage reports remain roadmap work.
+  `cargo-orthohelp` JSON translation coverage reports remain roadmap work; the
+  proposed reporter aggregates events under
+  `target/orthohelp/missing-translations/<locale>.json`.
 
 The proposed lifecycle treats each parse as a locale snapshot: parsing uses
 `BootHandle<Boot>`, and finalization consumes it to produce `BootHandle<Final>`
