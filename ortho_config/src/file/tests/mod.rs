@@ -54,8 +54,8 @@ pub(super) struct TestRoot {
 /// Fallible fixture returning a fresh isolation root for one test.
 ///
 /// Consume it as `test_root: Result<TestRoot>` and bind the whole value
-/// (`let test_root = test_root?;`) so the [`TempDir`] guard is not dropped
-/// early.
+/// (`let root = test_root?;`) so the [`TempDir`] guard is not dropped early.
+/// Renaming the binding also keeps the denied `shadow_*` lints satisfied.
 #[fixture]
 pub(super) fn test_root() -> Result<TestRoot> {
     let temp = TempDir::new().context("create isolated configuration directory")?;
