@@ -19,6 +19,8 @@
 //!   generation.
 //! - [`steps_agent_context`] — `when`/`then` steps for agent-context JSON
 //!   generation.
+//! - [`steps_policy`] — `when`/`then` steps for the `--check-agent-native`
+//!   policy report.
 //! - [`scenarios`] — wires each feature file to the step registry via
 //!   `scenarios!`.
 

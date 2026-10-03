@@ -54,6 +54,10 @@
 - [ADR-009: Place the Linux build-test leg on Ubicloud][adr-009]:
   review the accepted runner size, fork fallback, platform-based check names,
   and pre-coverage disk discard for the Linux `build-test` leg.
+- [ADR-010: Behavioural metadata attribute surface](adr-010-behavioural-metadata-attribute-surface.md):
+  review the accepted 7.2.1 `behaviour(...)` derive attribute, the no-inference
+  rule, the pinned bypass and dry-run flag grammar, and the
+  `agent-native.behaviour.*` rule set.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

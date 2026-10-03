@@ -67,8 +67,12 @@ roadmap boundary:
 3. `cargo-orthohelp` becomes the reference CLI for table-stakes agent-native
    behaviour: `--json`, stdout/stderr separation, enumerating errors, stable
    result summaries, and atomic artefact writes.
-4. Agent-native linting is added as a future `cargo-orthohelp` responsibility,
-   with strict policy defined in
+4. Agent-native linting is now a `cargo-orthohelp` responsibility: the
+   `--check-agent-native` flag (with the `--policy-mode <off|warn|deny>`
+   override) evaluates the package's policy configuration, writes
+   `policy-report.json` atomically to the output directory, and writes a
+   one-line summary to stderr. Strict policy, the bridge-driven behaviour
+   rules, and future extensions are defined in
    [agent-native-cli-design.md](agent-native-cli-design.md).
 5. Consumer applications such as Weaver and Netsuke depend on the same generic
    metadata for renderer policy, JSON mode contracts, exit-code classes, skill
@@ -166,14 +170,14 @@ Key choices:
   `ortho_config::agent_context`, and policy reports in
   `cargo_orthohelp::policy` until a later extraction is approved.
 
-## 2. Documentation IR (schema v1.1)
+## 2. Documentation IR (schema v1.2)
 
 ### 2.1 Top-level metadata
 
 ```rust
 #[derive(Debug, Serialize)]
 pub struct DocMetadata {
-    pub ir_version: String,            // e.g., "1.1"
+    pub ir_version: String,            // e.g., "1.2"
     pub app_name: String,              // binary or display name
     pub bin_name: Option<String>,      // override for man page or wrapper name
     pub about_id: String,              // Fluent ID for app description
@@ -182,6 +186,7 @@ pub struct DocMetadata {
     pub fields: Vec<FieldMetadata>,    // flattened fields for this command
     pub subcommands: Vec<DocMetadata>, // recursively the same schema
     pub windows: Option<WindowsMetadata>, // Windows-only generator hints
+    pub behaviour: Option<BehaviourMetadata>, // declared execution behaviour
 }
 ```
 
@@ -891,7 +896,7 @@ sentinel so generators can surface gaps during development.
 
 ```json
 {
-  "ir_version": "1.1",
+  "ir_version": "1.2",
   "locale": "en-US",
   "app_name": "my-app",
   "bin_name": "my-app",
@@ -1106,8 +1111,9 @@ installs the executable in a different location.
 
 ## 12. Versioning and compatibility
 
-- IR: `ir_version = "1.1"` (Windows metadata added). Future breaking schema
-  changes bump the major version.
+- IR: `ir_version = "1.2"` (optional `behaviour` metadata added; `1.1` added
+  Windows metadata). Additive optional fields bump the minor version; future
+  breaking schema changes bump the major version.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 
@@ -1171,11 +1177,11 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
 
 ## 13. Worked example (abridged)
 
-### 13.1 IR JSON (excerpt, 1.1)
+### 13.1 IR JSON (excerpt, 1.2)
 
 ```json
 {
-  "ir_version": "1.1",
+  "ir_version": "1.2",
   "app_name": "my-app",
   "bin_name": "my-app",
   "about_id": "my-app.about",
@@ -1222,14 +1228,14 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
   },
   "subcommands": [
     {
-      "ir_version": "1.1",
+      "ir_version": "1.2",
       "app_name": "run",
       "about_id": "run.about",
       "fields": [],
       "windows": null,
       "subcommands": [
         {
-          "ir_version": "1.1",
+          "ir_version": "1.2",
           "app_name": "audit",
           "about_id": "audit.about",
           "fields": [],

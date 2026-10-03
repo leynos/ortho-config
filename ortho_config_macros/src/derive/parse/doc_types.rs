@@ -14,6 +14,7 @@ pub(crate) struct DocStructAttrs {
     pub links: Vec<DocLinkAttr>,
     pub notes: Vec<DocNoteAttr>,
     pub windows: Option<WindowsAttrs>,
+    pub behaviour: Option<BehaviourAttrs>,
 }
 
 /// Heading ID overrides for documentation sections.
@@ -47,6 +48,18 @@ pub(crate) struct WindowsAttrs {
     pub include_common_parameters: Option<bool>,
     pub split_subcommands: Option<bool>,
     pub help_info_uri: Option<String>,
+}
+
+/// Declared execution behaviour for a command (agent-native metadata).
+///
+/// Mirrors the rendered `ortho_config::docs::BehaviourMetadata` block; the
+/// generate stage converts these validated strings into typed IR values.
+#[derive(Default, Clone)]
+pub(crate) struct BehaviourAttrs {
+    pub interaction: Option<String>,
+    pub mutation: Option<String>,
+    pub bypass: Option<String>,
+    pub dry_run: Option<String>,
 }
 
 /// Field-level documentation attributes captured during parsing.

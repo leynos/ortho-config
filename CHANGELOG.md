@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Add behavioural metadata for non-interactive execution and mutation
+  boundaries (roadmap 7.2.1): the struct-level
+  `#[ortho_config(behaviour(interaction = …, mutation = …, bypass = …,
+  dry_run = …))]`
+  derive attribute, carried into documentation IR version 1.2 and the
+  agent-context `interaction_mode`, `mutation_effect`, `bypass_flag`, and
+  `dry_run_flag` fields without a schema version bump; and the
+  `cargo_orthohelp::policy::rules::behaviour` rule set, which reports
+  `agent-native.behaviour.*` findings for destructive commands that lack an
+  approved bypass, interactive commands that lack a bypass, bypasses that match
+  no declared input, and undeclared metadata. Undeclared behaviour stays
+  `unknown`; no semantics are inferred from command names or flags.
 - Add an opt-in agent-native policy configuration
   (`cargo orthohelp --check-agent-native`, roadmap 7.1.1):
   `[package.metadata.ortho_config.policy]` metadata table with `off`, `warn`,
