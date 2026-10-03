@@ -1,32 +1,27 @@
 //! Tests covering base path resolution and graph merging.
 
 use super::super::path::resolve_base_path;
-use super::to_anyhow;
+use super::{TestRoot, test_root};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Result, anyhow, ensure};
-use cap_std::ambient_authority;
-use cap_std::fs::Dir;
 use rstest::rstest;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
 
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
-fn resolve_base_path_resolves(#[case] is_abs: bool) -> Result<()> {
-    let temp = TempDir::new()?;
-    let dir = Dir::open_ambient_dir(temp.path(), ambient_authority())?;
-    dir.write("base.toml", b"")?;
-    let root = to_anyhow(super::super::canonicalise(temp.path()))?;
-    let current = root.join("config.toml");
+fn resolve_base_path_resolves(#[case] is_abs: bool, test_root: Result<TestRoot>) -> Result<()> {
+    let test_root = test_root?;
+    test_root.dir.write("base.toml", b"")?;
+    let current = test_root.root.join("config.toml");
     let base_path = if is_abs {
-        root.join("base.toml")
+        test_root.root.join("base.toml")
     } else {
         PathBuf::from("base.toml")
     };
     let resolved = resolve_base_path(&current, base_path).to_figment()?;
     ensure!(
-        resolved == root.join("base.toml"),
+        resolved == test_root.root.join("base.toml"),
         "unexpected resolved path {resolved:?}"
     );
     Ok(())
@@ -53,11 +48,13 @@ fn resolve_base_path_errors_when_no_parent() -> Result<()> {
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
-fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) -> Result<()> {
-    let temp = TempDir::new()?;
-    let root = to_anyhow(super::super::canonicalise(temp.path()))?;
-    let current = root.join("config.toml");
-    let expected_base = root.join("missing.toml");
+fn resolve_base_path_reports_missing_file(
+    #[case] is_abs: bool,
+    test_root: Result<TestRoot>,
+) -> Result<()> {
+    let test_root = test_root?;
+    let current = test_root.root.join("config.toml");
+    let expected_base = test_root.root.join("missing.toml");
     let base = if is_abs {
         expected_base.clone()
     } else {

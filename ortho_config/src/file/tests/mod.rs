@@ -5,6 +5,7 @@ use super::path::normalize_cycle_key;
 use anyhow::{Context, Result};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
+use rstest::fixture;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -30,17 +31,64 @@ where
     Ok((root, current))
 }
 
+/// Per-test isolation root for file-module tests.
+///
+/// The [`TempDir`] is held rather than exposed so it lives for as long as the
+/// fixture value does; dropping it would delete the directory that
+/// [`Self::root`] points into. Bind the whole fixture — destructuring with
+/// `..` drops the guard at the end of the `let` statement and deletes the root
+/// before the test body runs.
+///
+/// Keeping the root canonical matters because
+/// `load_config_file` canonicalises paths before reading them, so tests that
+/// speak in `Dir`-relative names still observe absolute, symlink-resolved
+/// paths in errors and merge results.
+pub(super) struct TestRoot {
+    _temp: TempDir,
+    /// Canonical form of the temporary root.
+    pub(super) root: PathBuf,
+    /// Directory capability scoped to the temporary root, for fixture writes.
+    pub(super) dir: Dir,
+}
+
+/// Fallible fixture returning a fresh isolation root for one test.
+///
+/// Consume it as `test_root: Result<TestRoot>` and bind the whole value
+/// (`let test_root = test_root?;`) so the [`TempDir`] guard is not dropped
+/// early.
+#[fixture]
+pub(super) fn test_root() -> Result<TestRoot> {
+    let temp = TempDir::new().context("create isolated configuration directory")?;
+    let dir = Dir::open_ambient_dir(temp.path(), ambient_authority())
+        .context("open isolated configuration directory")?;
+    let root = to_anyhow(canonicalise(temp.path()))?;
+    Ok(TestRoot {
+        _temp: temp,
+        root,
+        dir,
+    })
+}
+
+/// Run `f` against a fresh isolation root and empty cycle-detection state.
+///
+/// The callback receives, in order, the root's [`Dir`], the canonical root,
+/// the current `config.toml` path, and the mutable visited and stack graph
+/// state that the extends loader threads through its cycle detection.
 pub(super) fn with_fresh_graph<F>(f: F) -> Result<()>
 where
     F: FnOnce(&Dir, &Path, &Path, &mut HashSet<PathBuf>, &mut Vec<PathBuf>) -> Result<()>,
 {
-    let temp = TempDir::new().context("create isolated configuration directory")?;
-    let dir = Dir::open_ambient_dir(temp.path(), ambient_authority())
-        .context("open isolated configuration directory")?;
-    let (root, current) = canonical_root_and_current_with(temp.path(), canonicalise)?;
+    let test_root = test_root()?;
+    let current = test_root.root.join("config.toml");
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
-    f(&dir, &root, &current, &mut visited, &mut stack)
+    f(
+        &test_root.dir,
+        &test_root.root,
+        &current,
+        &mut visited,
+        &mut stack,
+    )
 }
 
 pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {

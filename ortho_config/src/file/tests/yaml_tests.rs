@@ -2,14 +2,11 @@
 //! Ensures `serde-saphyr` integration preserves YAML 1.2 semantics and reports
 //! malformed input clearly.
 
-use super::to_anyhow;
+use super::{TestRoot, test_root, to_anyhow};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
-use cap_std::ambient_authority;
-use cap_std::fs::Dir;
 use figment::Figment;
 use rstest::rstest;
-use tempfile::TempDir;
 
 use crate::file::{SaphyrYaml, load_config_file};
 
@@ -50,11 +47,10 @@ fn yaml_respects_boolean_scalars(#[case] literal: &str, #[case] expected: bool) 
 }
 
 #[rstest]
-fn yaml_loader_reads_files_via_saphyr() -> Result<()> {
-    let temp = TempDir::new()?;
-    let dir = Dir::open_ambient_dir(temp.path(), ambient_authority())?;
-    dir.write("config.yaml", b"recipient: friend")?;
-    let figment = to_anyhow(load_config_file(&temp.path().join("config.yaml")))?
+fn yaml_loader_reads_files_via_saphyr(test_root: Result<TestRoot>) -> Result<()> {
+    let test_root = test_root?;
+    test_root.dir.write("config.yaml", b"recipient: friend")?;
+    let figment = to_anyhow(load_config_file(&test_root.root.join("config.yaml")))?
         .expect("expected configuration figment");
     let recipient = figment
         .extract_inner::<String>("recipient")
@@ -64,11 +60,10 @@ fn yaml_loader_reads_files_via_saphyr() -> Result<()> {
 }
 
 #[rstest]
-fn yaml_loader_reports_parse_errors_with_paths() -> Result<()> {
-    let temp = TempDir::new()?;
-    let dir = Dir::open_ambient_dir(temp.path(), ambient_authority())?;
-    dir.write("config.yaml", b"recipient: [")?;
-    let err = to_anyhow(load_config_file(&temp.path().join("config.yaml")))
+fn yaml_loader_reports_parse_errors_with_paths(test_root: Result<TestRoot>) -> Result<()> {
+    let test_root = test_root?;
+    test_root.dir.write("config.yaml", b"recipient: [")?;
+    let err = to_anyhow(load_config_file(&test_root.root.join("config.yaml")))
         .expect_err("expected load failure for invalid YAML");
     ensure!(
         err.to_string().contains("config.yaml"),
