@@ -105,8 +105,24 @@ fn subcommand_docs_regenerate_about_ids() -> Result<()> {
     let metadata = Commands::get_subcommand_doc_metadata();
     let about_ids = field_values(&metadata, |e| e.about_id.as_str());
     ensure!(
-        about_ids == ["zebra.about", "run.about", "take-leave.about"],
+        about_ids == ["zebra-about", "run-about", "take-leave-about"],
         "expected about IDs to follow command labels, got {about_ids:?}",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn handwritten_docs_implementations_retain_path_aware_compatibility() -> Result<()> {
+    let parent_path = [String::from("root")];
+    let metadata = NestedCommands::get_subcommand_doc_metadata_for_path(&parent_path);
+    let outer = metadata
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("missing outer command metadata"))?;
+
+    ensure!(
+        outer.about_id == "nested-args.about",
+        "handwritten metadata should use its provided fallback, got {}",
+        outer.about_id,
     );
     Ok(())
 }

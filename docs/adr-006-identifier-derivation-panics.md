@@ -133,3 +133,28 @@ invalid segments, and avoid changing the existing panic contract.
   belong in that enum or in a walker-specific error type.
 - Decide whether dynamic command-tree validation should expose all detected
   errors at once or fail on the first invalid segment or collision.
+
+## Subsequent amendments
+
+On 2026-09-30 the localization derive closed the first half of the "derive-time
+guard" promise recorded as a risk above.
+
+`#[derive(OrthoConfig)]` now detects normalized argument-id collisions within a
+single derived struct at compile time and emits a spanned error that names both
+colliding fields and suggests renaming the field or setting `#[arg(id = "…")]`.
+Two details of that guard matter. First, the default argument id is the **raw
+Rust field name**, not its kebab-cased spelling, because `clap_derive` emits
+`Name::Derived(ident)` as `ident.unraw().to_string()` and only kebab-cases the
+long flag, so an identifier derived from the kebab-cased spelling would name a
+key that no runtime lookup ever requests for an underscored field. Second, the
+fixed message suffixes are sourced from one shared vocabulary, `MessageSuffix`,
+so the documentation IR and the runtime localizer emit the same text and cannot
+drift apart. The long-help suffix is therefore **`long_help`**, not
+`long-help`. That distinction is not cosmetic, because `normalize_segment`
+preserves both `-` and `_`, so the two spellings normalize to distinct keys. A
+re-spelled suffix is therefore an unreachable identifier rather than a cosmetic
+difference: a catalogue entry may translate cleanly and still never be reached.
+
+The decision recorded here is unchanged: hand-built and sibling subcommand
+collisions still follow the accepted panic contract, and the derive now fails
+before it can emit an ambiguous identifier.
