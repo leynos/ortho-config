@@ -20,12 +20,14 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-compose-layers-with-sources",
     "guide-subcommand",
     "guide-subcommand-sources",
+    "guide-selected-subcommand-sources",
     "guide-errors",
     "guide-localization",
     "guide-tracing",
     "guide-orthohelp-metadata",
 ];
 
+/// Verifies the public Rust examples compile and behave as documented.
 #[test]
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
@@ -47,7 +49,13 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 
     assert_error_flow(&mut workspace)?;
 
-    assert_console_flows(&mut workspace)
+    assert_console_flows(&mut workspace)?;
+    assert_run(
+        &mut workspace,
+        ExampleId("guide-selected-subcommand-sources"),
+        [],
+        "",
+    )
 }
 
 #[test]

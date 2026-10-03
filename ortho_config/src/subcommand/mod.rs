@@ -39,7 +39,8 @@ pub use paths::push_stem_candidates;
 #[cfg(feature = "serde_json")]
 pub use selected::{
     LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMerge, SelectedSubcommandMergeError,
-    load_globals_and_merge_selected_subcommand,
+    SelectedSubcommandSources, load_globals_and_merge_selected_subcommand,
+    load_globals_and_merge_selected_subcommand_with_sources,
 };
 #[cfg(feature = "serde_json")]
 pub use sources::{
@@ -52,7 +53,6 @@ pub use sources::{
     load_and_merge_subcommand_with_sources_at,
 };
 pub use types::{CmdName, Prefix};
-
 /// Load and merge `[cmds.<name>]` sections from the given paths.
 ///
 /// For each provided path, loads the configuration file and merges the

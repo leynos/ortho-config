@@ -130,31 +130,30 @@ const DEFAULT_PARITY_FILE: &str =
 /// The temporary directory lives until the merge completes and is passed as
 /// the explicit discovery base, so discovery always sees the shared
 /// configuration file.
-fn merge_default_parity_over_file(
-    cli_args: &[&str],
-    parse_context: &'static str,
-    merge_context: &'static str,
-) -> Result<DefaultParityArgs> {
-    let temp_dir = config_dir(DEFAULT_PARITY_FILE)?;
+///
+/// # Examples
+///
+/// `merge_file_backed_default_parity(&["default-parity"])` returns the file's
+/// 5, `Safe`, 6, and `file` values when no CLI overrides are supplied.
+fn merge_file_backed_default_parity(cli_args: &[&str]) -> Result<DefaultParityArgs> {
+    let temp_dir = config_dir(DEFAULT_PARITY_FILE).context("create parity config fixture")?;
     let discovery = isolated_discovery(temp_dir.path());
     let matches = DefaultParityArgs::command().get_matches_from(cli_args);
-    let args = DefaultParityArgs::from_arg_matches(&matches).context(parse_context)?;
+    let args = DefaultParityArgs::from_arg_matches(&matches)
+        .context("parse file-backed default parity CLI arguments")?;
     load_and_merge_subcommand_with_matches_with_sources_at(
         &Prefix::new("APP_"),
         &SubcommandCliMatches::new(&args, &matches),
         SubcommandFileContext::new(temp_dir.path(), &discovery),
         Arc::new(MapEnv::new()),
     )
-    .context(merge_context)
+    .context("merge file-backed default parity values")
 }
 
 /// File values replace inferred clap defaults that the user did not supply.
 fn assert_file_overrides_inferred_default_parity() -> Result<()> {
-    let merged = merge_default_parity_over_file(
-        &["default-parity"],
-        "parse defaults",
-        "merge parser-faithful defaults",
-    )?;
+    let merged = merge_file_backed_default_parity(&["default-parity"])
+        .context("merge parser-faithful defaults")?;
     assert_default_parity(
         &merged,
         DefaultParityExpected {
@@ -168,21 +167,18 @@ fn assert_file_overrides_inferred_default_parity() -> Result<()> {
 
 /// Explicit CLI values win over file values and are parsed by clap.
 fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
-    let merged = merge_default_parity_over_file(
-        &[
-            "default-parity",
-            "--count",
-            "9",
-            "--mode",
-            "fast",
-            "--port",
-            "tcp:10",
-            "--label",
-            "cli",
-        ],
-        "parse explicit values",
-        "merge explicit values",
-    )?;
+    let merged = merge_file_backed_default_parity(&[
+        "default-parity",
+        "--count",
+        "9",
+        "--mode",
+        "fast",
+        "--port",
+        "tcp:10",
+        "--label",
+        "cli",
+    ])
+    .context("merge explicit values")?;
     assert_default_parity(
         &merged,
         DefaultParityExpected {
