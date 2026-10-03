@@ -123,5 +123,4 @@ All notable changes to this project will be documented in this file.
   feature is enabled, so feature-disabled test runs no longer invoke YAML
   parsing.
 - Add doc comments to generated `OrthoConfig` support structs so crates with
-  strict `missing_docs` linting build without broad suppressions (closes
-  #253).
+  strict `missing_docs` linting build without broad suppressions (closes #253).
