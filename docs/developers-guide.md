@@ -1030,9 +1030,12 @@ The concordat QG-002 rule accepts a revision of that action only if it is a
 shared-actions commit, from the revision that first carried the install rules
 onwards, that leaves the action directory content-identical, so the pin moves
 with the other shared-actions references (the one-SHA contract in
-`sccache_wiring_test.py`). The workflow contract `whitaker_install_test.py`
-asserts exactly one `Install Whitaker` step, using the action at a full commit
-hash, with no script of its own, on the Linux leg only.
+`sccache_wiring_test.py`, which exempts `.github/actions/rust-build-release` and
+`.github/workflows/mutation-cargo.yml`; those two may sit at their own full
+commit hashes, and the Whitaker pin follows the rule for every non-exempt
+reference). The workflow contract `whitaker_install_test.py` asserts exactly one
+`Install Whitaker` step, using the action at a full commit hash, with no
+script of its own, on the Linux leg only.
 
 ## Publish dry run
 
