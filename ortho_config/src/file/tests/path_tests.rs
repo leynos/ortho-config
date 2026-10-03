@@ -11,17 +11,17 @@ use std::path::{Path, PathBuf};
 #[case::relative(false)]
 #[case::absolute(true)]
 fn resolve_base_path_resolves(#[case] is_abs: bool, test_root: Result<TestRoot>) -> Result<()> {
-    let test_root = test_root?;
-    test_root.dir.write("base.toml", b"")?;
-    let current = test_root.root.join("config.toml");
+    let root = test_root?;
+    root.dir.write("base.toml", b"")?;
+    let current = root.root.join("config.toml");
     let base_path = if is_abs {
-        test_root.root.join("base.toml")
+        root.root.join("base.toml")
     } else {
         PathBuf::from("base.toml")
     };
     let resolved = resolve_base_path(&current, base_path).to_figment()?;
     ensure!(
-        resolved == test_root.root.join("base.toml"),
+        resolved == root.root.join("base.toml"),
         "unexpected resolved path {resolved:?}"
     );
     Ok(())
@@ -52,9 +52,9 @@ fn resolve_base_path_reports_missing_file(
     #[case] is_abs: bool,
     test_root: Result<TestRoot>,
 ) -> Result<()> {
-    let test_root = test_root?;
-    let current = test_root.root.join("config.toml");
-    let expected_base = test_root.root.join("missing.toml");
+    let root = test_root?;
+    let current = root.root.join("config.toml");
+    let expected_base = root.root.join("missing.toml");
     let base = if is_abs {
         expected_base.clone()
     } else {

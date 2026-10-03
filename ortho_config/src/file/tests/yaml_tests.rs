@@ -48,9 +48,9 @@ fn yaml_respects_boolean_scalars(#[case] literal: &str, #[case] expected: bool) 
 
 #[rstest]
 fn yaml_loader_reads_files_via_saphyr(test_root: Result<TestRoot>) -> Result<()> {
-    let test_root = test_root?;
-    test_root.dir.write("config.yaml", b"recipient: friend")?;
-    let figment = to_anyhow(load_config_file(&test_root.root.join("config.yaml")))?
+    let root = test_root?;
+    root.dir.write("config.yaml", b"recipient: friend")?;
+    let figment = to_anyhow(load_config_file(&root.root.join("config.yaml")))?
         .expect("expected configuration figment");
     let recipient = figment
         .extract_inner::<String>("recipient")
@@ -61,9 +61,9 @@ fn yaml_loader_reads_files_via_saphyr(test_root: Result<TestRoot>) -> Result<()>
 
 #[rstest]
 fn yaml_loader_reports_parse_errors_with_paths(test_root: Result<TestRoot>) -> Result<()> {
-    let test_root = test_root?;
-    test_root.dir.write("config.yaml", b"recipient: [")?;
-    let err = to_anyhow(load_config_file(&test_root.root.join("config.yaml")))
+    let root = test_root?;
+    root.dir.write("config.yaml", b"recipient: [")?;
+    let err = to_anyhow(load_config_file(&root.root.join("config.yaml")))
         .expect_err("expected load failure for invalid YAML");
     ensure!(
         err.to_string().contains("config.yaml"),

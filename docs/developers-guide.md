@@ -467,13 +467,14 @@ ambient-filesystem ceremony into two entry points, imported by submodules as
 
 - `test_root` is a fallible `rstest` fixture returning `Result<TestRoot>`. A
   test takes it as `test_root: Result<TestRoot>` and binds the whole value with
-  `let test_root = test_root?;`.
+  `let root = test_root?;`. Renaming the binding keeps the lint configuration's
+  denied `shadow_*` lints satisfied; the guard still outlives the test body.
 - `with_fresh_graph` is a callback helper for tests that need the loader's
   cycle-detection state. Its callback receives the capability, the canonical
   root, the current `config.toml` path, and the mutable visited and stack sets.
 
-`TestRoot` pairs a private `TempDir` guard, the canonical `root: PathBuf`, and
-a `dir: cap_std::fs::Dir` capability opened with `open_ambient_dir` over the
+`TestRoot` pairs a private `TempDir` guard, the canonical `root: PathBuf`, and a
+`dir: cap_std::fs::Dir` capability opened with `open_ambient_dir` over the
 same directory; the fixture is the only place in the test module that opens a
 capability. The guard is held rather than exposed so it outlives the test;
 dropping it deletes the directory that `root` points into.
@@ -481,7 +482,7 @@ dropping it deletes the directory that `root` points into.
 Fixture files are written through the capability
 (`dir.write("config.yaml", b"...")`) and passed to production helpers as
 canonical absolute paths. `load_config_file`, `process_extends`, and
-`resolve_base_path` canonicalise their input before reading it, so a test that
+`resolve_base_path` canonicalize their input before reading it, so a test that
 speaks in `Dir`-relative names still observes absolute, symlink-resolved paths
 in merge results and error messages.
 
