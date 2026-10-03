@@ -1683,9 +1683,9 @@ are documentation rather than behaviour:
    design doc is organized around the resolver boundary here, so this is a gap
    by omission rather than contradiction.
 2. `docs/rfcs/0002-config-layer-resolution-policy.md:998-1001` still carries a
-   #411-era note that scope partitioning and that rewire "edit the same code and
-   should not be built independently". Both changes have long since landed, so
-   the note now reads as a live constraint on work already complete.
+   #411-era note that scope partitioning and that rewire "edit the same code
+   and should not be built independently". Both changes have long since landed,
+   so the note now reads as a live constraint on work already complete.
 
 Neither is load-bearing for #318, and this round does not change them: they are
 recorded so the next reader does not rediscover them, and so a maintainer who
@@ -2592,3 +2592,177 @@ session harness injects `GIT_CONFIG_*` variables carrying
 Clearing those variables let the fetch resolve and the suite run — and the
 suite then failed on a real defect. An infrastructure failure and a passing
 suite are different facts, and the first was briefly mistaken for the second.
+
+## Round 27: the third replay, onto `40dbc81b`, and a warrant that was false
+
+**The replay.** `f8402005` is `58467d81` replayed onto `origin/main`
+`40dbc81b`. The exclusive boundary is `34a595ea`, #538's landing commit: it is
+an ancestor of `origin/main`, no commit in the replay range touches #538's own
+artefact, and the branch contains no #538 commit, so it is inherited rather
+than branch-authored. Range `34a595ea..58467d81` is 66 commits and no merges;
+the replayed range `40dbc81b..f8402005` is the same 66 and no merges.
+
+`git range-diff` over the true range is 63 `=`, 3 `!`, 0 `<`, 0 `>`. All three
+`!` entries are the single conflict resolved below, which rewrote
+`ortho_config/tests/documentation_examples_tests.rs` and left each of the three
+commits one line taller. Nothing was dropped and nothing was invented.
+
+**The one conflict, and why both sides were kept.** The branch and main each
+append one identifier to `EXPECTED_EXAMPLE_IDS`. The branch adds
+`guide-scoped-discovery`; main's `a06cfe28`-era work adds
+`guide-selected-subcommand-sources`. Neither may be dropped — a missing entry
+fails the registry test in one direction, and the two id sets are disjoint — so
+both are kept, in ascending order, which is the order the surrounding list
+already uses. The check is order-insensitive at the comparison site (both sides
+are collected into a `BTreeSet`), so the ordering is presentational; it is kept
+ascending because that is the file's convention.
+
+The resolution was then verified **without compiling**, by reproducing the
+loader's computation directly. `parse_document` scans `README.md` and
+`docs/users-guide.md` for `<!-- tested-example: <id> -->` markers, so a static
+scan of both documents at the rebased head, compared against the declared list,
+gives the test's own answer: 36 declared, 36 found, no duplicates, no id in
+either set that is absent from the other, list ascending. Exact match. That is
+the same predicate `every_documented_fence_has_a_known_unique_identifier`
+asserts, computed independently of the gate run.
+
+**Weave was bypassed, deliberately and narrowly.** `git check-attr` reports
+`merge: weave` for the `.rs` and `.py` conflict surfaces, but only because the
+global ambient `~/.config/git/attributes` selects it; the repository's own
+tracked `.gitattributes` carries no merge rule for these paths. Ambient
+selection is not repository consent, and Weave 0.5.1 is a containment change
+rather than evidence its earlier clean-exit semantic corruption is fixed, so
+the replay ran under `-c core.attributesFile=/dev/null` with an explicit
+`merge.weave.driver='git merge-file --zdiff3 --marker-size=%L %A %O %B'`
+override. Verified by `git check-attr merge` reporting `unspecified` under that
+setting. No tracked attribute file was edited, so no restore step was needed.
+
+**Five semantic audits, all clean.** (1) Target-only paths are byte-identical
+at the rebased head — every file main changed and the branch did not matches
+`40dbc81b` exactly. (2) Every deletion against the target in a branch-touched
+file is explained by a branch-owned hunk; unexplained losses: 0. (3) Main's
+added lines survive in every file it touched across `4c595b0e`, `40bc21aa` and
+`40dbc81b`. (4) No newly repeated block: the growth is boilerplate. (5)
+Structural: `rustfmt` exit 0, `py_compile` exit 0, `diff --check` clean, and
+zero conflict markers anywhere in the tree.
+
+**The trybuild filter was the replay's real risk, and it held.** Round 26's
+defect was a name-enumerated filter that could not see a binary main added
+after the list was written. This replay adds no trybuild binary: main's
+`ortho_config/tests/trybuild/selected_subcommand_sources.rs` is a *fixture*,
+not a harness — it never calls `trybuild::TestCases::new()` — so the class is
+still the eight members the filter names. `trybuild_tier_test.py` compares both
+directions, so an omission and an over-wide filter both fail; that is the
+contract that caught Round 26, and it is unchanged.
+
+**A warrant in a posted comment was false, and this plan recorded it as true.**
+The comment
+[`5938400784`](https://github.com/leynos/ortho-config/pull/465#issuecomment-5938400784)
+told CodeRabbit the three repaired files are "byte-identical between the two
+heads" `4551bcd9` and `71333125`. Measured, all three differ: `source_scan.py`
+is `fb6b7037` against `ad13fcca`, the `ui/` tree is `3224abc5` against
+`a31c829a`, and `compose_layers.rs` is `63f3797c` against `5830f3cf`.
+`4551bcd9` is the **pre-repair** state — it has no FirstWins test and no
+`ManifestError`, and its `ui/` inventory holds 20 entries against 30 — so it
+cannot support a claim about the repairs. The four repair commits are exactly
+what follows it: `23e9fa47`, `445799e8`, `0a4978bc`, `05f5cf0e`.
+
+The comment's mistake was to treat an ancestor of the repaired state as one of
+the "two heads". CodeRabbit reached the right conclusion regardless, because it
+inspected the tree rather than the warrant. **The lesson is the general one: a
+content-identity claim needs a post-change baseline on both sides, and the
+baseline must be checked for a symbol the change introduced before it is
+used.** Recorded in the memory as
+`content-identity-warrant-needs-post-change-baseline`.
+
+**The corrected warrant, for the rebased head.** Against `58467d81`, the head
+the three rows were adjudicated at: `source_scan.py` is the blob `ad13fcca` at
+both, and the `ui/` tree is `a31c829a` at both, with 30 entries on each side.
+`compose_layers.rs` legitimately differs, because main's `40bc21aa` refactored
+it (113 insertions, 81 deletions) — so the claim has to be split, and the split
+is the honest form of it. The *file* changed; the *branch-owned change* did
+not. Extracting `scoped_first_wins_keeps_only_the_preferred_candidate` from its
+`fn` line to its closing brace yields 57 lines with SHA-256 `ecb2f9b4…` at
+`05f5cf0e`, `58467d81` **and** `f8402005`, `cmp`-verified identical; it now
+sits at `:163` rather than `:162` only because main added a line above it. The
+test does not exist in `40dbc81b`'s copy of the file at all (`git grep` exits
+1), so it is unambiguously the branch's. At the hunk level the two series agree
+exactly: `+70/-2` on both, three hunks on both, and the added-line set hashes to
+`82a0cfce…` on both — the sole divergence in the diff bodies being one context
+line where main rewrote a neighbouring import. See
+`differing-file-identical-repair`.
+
+**Every Codex finding survives the replay.** All four (`load_impl/mod.rs`,
+`policy_impl.rs`, `candidate_set.rs`, `policy.rs`) are marked addressed, and
+their four source files are byte-identical between `58467d81` and `f8402005`.
+Main did not touch any of them, so their identity was never at risk — but that
+is now a measured fact rather than an assumption.
+
+**The seven gates, and what each verdict actually certifies.** Run once each
+against the frozen head `f8402005`, which was identical before gate 1 and after
+gate 7, with a clean tree throughout and nothing retried or modified.
+
+| Gate                      | Verdict                         | Evidence                                                               |
+| ------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
+| `check-fmt`               | **fail — content**              | `mdtablefix --check` rejects 1 file `+3 -3`; `cargo fmt --check` clean |
+| `typecheck`               | pass, exit 0, 399 s             | `Finished dev profile`, `-D warnings`, all targets                     |
+| `lint`                    | **infrastructure — no verdict** | rustdoc and clippy both passed; Whitaker died in the wrapper           |
+| `test`                    | **infrastructure — no verdict** | `[Errno 24]` aborted the nested fixture builds                         |
+| `markdownlint`            | pass, exit 0                    | 0 issues in 0 files across 77 files                                    |
+| `test-workflow-contracts` | pass, exit 0                    | **306 passed, 1 skipped**                                              |
+| `nixie`                   | pass, exit 0                    | all diagrams validated, 77 files                                       |
+
+**The two infrastructure failures are host pressure, not branch defects.** Both
+fail inside the shared compile-admission path and neither produced a verdict
+for this tree.
+
+- `make lint` reached line 394 and stopped:
+  `build-limits: descriptor count mismatch`. That string is the supervisor's
+  `Refused("bad-request", …)` from `requesters.py:158`, raised when the
+  descriptors the adapter declared do not match the descriptors that arrived.
+  The adapter declares them by scanning `/proc/self/fd` immediately before
+  `sendmsg`, so the two can disagree under descriptor pressure — and a trivial
+  round-trip through the same adapter, `build-limits-rustc rustc --version`,
+  succeeds (exit 0), which makes a persistent protocol fault and a transient
+  race the difference between this run and a passing one. **No rustc diagnostic
+  appears anywhere in the log**; the lint verdict is absent, not negative.
+  rustdoc and clippy had already completed cleanly, clippy under `-D warnings`.
+- `make test` failed 10 of 18 `rstest_bdd` scenarios in `cargo-orthohelp`, all
+  with the same shape: `BridgeBuildFailure { status: 101 }` whose payload
+  contains
+  `build-limits: cannot start /home/leynos/.cargo/bin/sccache: [Errno
+  24] Too many open files`,
+  repeated 15 times, each followed by `error: could not compile <crate>`.
+  Those scenarios spawn a *nested* cargo that resolves and builds 138 packages
+  from scratch; the nested build's own compiler wrapper could not `exec`
+  sccache, so the fixture under test was never built. The seven binaries before
+  it passed.
+
+Four facts localize the cause to the environment rather than the change. The
+branch touches **zero** `cargo-orthohelp` files, and neither does main between
+the old and new bases — the failing suite is not on the diff at all. The BDD
+step spawns a plain `Command` with no `rlimit` manipulation, so nothing in the
+tree narrowed the descriptor budget. `build-limits-status` reported
+`capacity 2, held 2` throughout with several *foreign* worktrees queued (a
+netsuke `cargo-nextest`, another ortho-config worktree). And the system-wide
+allocated descriptor count is only ~9,400 against a per-process soft limit of
+524,288, while load average stood at 7.4 with 51 cargo/rustc processes running
+— the exhaustion is a spawn-time race between concurrent builders, not a leak
+in this tree. Both failures are therefore **re-run candidates once the host
+quiets**, not findings to report.
+
+**One caveat on the `test` gate, stated plainly.** `build-test (linux)` and
+`build-test (windows)` both pass in CI on the pre-rebase head `58467d81`, which
+contains the same `cargo-orthohelp` suite and the same discovery change — but
+**CI at `58467d81` is not a certificate for `f8402005`.** The replay is what
+introduced the rebased tree, so the honest status of the full test suite at
+`f8402005` is *unverified*, and it needs a re-run. The CI result is evidence
+about the suite's health, not a substitute for the missing verdict.
+
+**`make check-fmt` is red, and the replay is not the cause.**
+`mdtablefix --check` reports the execplan `+3 -3`: a prose re-wrap of one
+80-character line inside numbered-list item 2 at `:1686`. It fails identically
+at `05f5cf0e` and at `71333125`, so the branch's own `b5385c4e` introduced it.
+This is the documented trap — `make check-fmt` enforces `mdtablefix`'s wrap,
+not only `rustfmt` — and the fix is a Markdown-only rewrap, which cannot
+invalidate a Rust or workflow certificate cast before it.
