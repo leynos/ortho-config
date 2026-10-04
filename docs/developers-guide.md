@@ -1163,7 +1163,9 @@ test of the extracted binary on Linux, macOS, and Windows.
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-Run the gate on its own with `make spellcheck`. The whole gate is the shared
+Run the gate on its own with `make spellcheck`; `make spelling` is an alias for
+it, because the shared `AGENTS.md` spelling block names that command. The whole
+gate is the shared
 [`typos-config-builder`](https://github.com/leynos/typos-config-builder), run
 through `uv tool run` and pinned by the Makefile `TYPOS_CONFIG_BUILDER_VERSION`
 variable, so local runs and CI use the same version of both the builder and the
@@ -1197,7 +1199,12 @@ into untracked `.typos-oxendict-base.toml`, merged with the `typos.local.toml`
 overlay. A word added to the shared dictionary therefore reaches this
 repository on its next run, with no change here. Because the dictionary is live,
 `typos.toml` must never be drift checked in continuous integration; any hand
-edit is overwritten on the next run.
+edit is overwritten on the next run. When a run changes the tracked
+`typos.toml`, commit the regenerated file; if the change is unrelated to the
+work in hand, commit it in a separate base pull request and stack the branch on
+it. `TYPOS_CONFIG_BUILDER_VERSION` in the `Makefile` pins the release the gate
+runs (currently `v0.1.3`); raise it together with the regenerated `typos.toml`,
+never on its own.
 
 Generic Oxford stems and corrections belong in the shared dictionary maintained
 by `leynos/agent-helper-scripts`. Keep local entries narrow: this repository's
