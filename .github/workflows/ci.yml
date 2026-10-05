@@ -160,7 +160,7 @@ jobs:
 
       - name: Install Whitaker
         if: ${{ matrix.platform == 'linux' }}
-        uses: leynos/shared-actions/.github/actions/install-whitaker@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/install-whitaker@7d751eded578e48dacf43ab173d5820e6437c474
 
       - name: Disk sample (before lint)
         if: ${{ always() && matrix.platform == 'linux' }}
