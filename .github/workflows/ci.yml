@@ -96,7 +96,7 @@ jobs:
         # On a hosted runner (Windows, or a fork's Linux fallback) there is
         # no proxy and the action fails closed, so it runs on Ubicloud only.
         if: ${{ runner.environment == 'self-hosted' }}
-        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@7d751eded578e48dacf43ab173d5820e6437c474
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
