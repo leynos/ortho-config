@@ -26,7 +26,7 @@ pub struct DocMetadata {
     /// Field-level documentation metadata.
     pub fields: Vec<FieldMetadata>,
     /// Nested subcommand metadata.
-    pub subcommands: Vec<DocMetadata>,
+    pub subcommands: Vec<Self>,
     /// Optional Windows metadata for `PowerShell` help output.
     pub windows: Option<WindowsMetadata>,
 }
@@ -177,12 +177,12 @@ pub enum ValueType {
     /// List of nested values.
     List {
         /// Element type for list values.
-        of: Box<ValueType>,
+        of: Box<Self>,
     },
     /// Map with value type metadata.
     Map {
         /// Value type for map entries.
-        of: Box<ValueType>,
+        of: Box<Self>,
     },
     /// Custom domain-specific value type.
     Custom {
