@@ -113,7 +113,7 @@ jobs:
         if: ${{ matrix.platform == 'linux' }}
         uses: leynos/shared-actions/.github/actions/install-mdtablefix@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
-          version: "0.6.0"
+          version: "0.6.1"
 
       - name: Check formatting
         if: ${{ matrix.platform == 'linux' }}
