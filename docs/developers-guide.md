@@ -85,13 +85,13 @@ file carries both. nextest resolves each override field from the **first**
 matching entry that sets it, so the Windows entry above, being first, decides
 the four binaries it names; the wider entry below is second and supplies the
 rest of the class. The four therefore keep both 600 s *and* run alone, while
-`env_source_trybuild`, `generated_lint_trybuild`, `localized_parse_trybuild` and
-`subcommand_trybuild` take the 960 s entry, and Linux takes 960 s for all
-eight. Merging the two would have to choose between running alone and the
-larger allowance; leaving both keeps each measured remedy at the binaries it
-was measured on. `trybuild_tier_test.py` reads the widening and
-`windows_trybuild_isolation_test.py` the reservation, so neither remedy can be
-removed by editing the other's entry.
+`env_source_trybuild`, `generated_lint_trybuild`, `localization_trybuild`,
+`localized_parse_trybuild` and `subcommand_trybuild` take the 960 s entry, and
+Linux takes 960 s for all nine. Merging the two would have to choose between
+running alone and the larger allowance; leaving both keeps each measured remedy
+at the binaries it was measured on. `trybuild_tier_test.py` reads the widening
+and `windows_trybuild_isolation_test.py` the reservation, so neither remedy can
+be removed by editing the other's entry.
 
 The reservation costs Windows wall time. On run 36195916343 the job took 53.5
 min, against a 38 min median over the preceding pull-request runs, and
@@ -1849,13 +1849,14 @@ than hung.*
 
 The allowance is now 960 s, eight warning periods of 120 s, which is 1.68 times
 the 572.5 s worst observed — the same headroom the base allowance was sized
-with against its own 364.8 s. The filter names all eight trybuild binaries
-rather than the two it used to; six end in `trybuild` and `compile_fail` and
+with against its own 364.8 s. The filter names all nine trybuild binaries
+rather than the two it used to; seven end in `trybuild` and `compile_fail` and
 `compile_time` do not, so no single glob covers the class and the names are
-enumerated instead. Eight is the count `trybuild_tier_test.py` enforces, so a
-trybuild binary that lands on `main` after the enumeration is written is
-reported by the contract rather than silently left on the base allowance:
-`subcommand_trybuild` arrived that way, and the contract is what caught it.
+enumerated instead. Nine is the count `trybuild_tier_test.py` enforces, so a
+trybuild binary that arrives after the enumeration is written is reported by
+the contract rather than silently left on the base allowance:
+`subcommand_trybuild` arrived that way on `main`, and `localization_trybuild`
+arrived that way from a branch, and the contract is what caught both.
 
 The 960 s allowance is lower than the 1,800 s whole-run budget, which the
 ordering contract asserts. That comparison does not by itself guarantee a test

@@ -85,6 +85,11 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # not covered by it until it is named; `trybuild_tier_test.py` is what
 # reported the omission, on the first run that could reach it.
 #
+# `localization_trybuild` arrived from the localization-artefact branch
+# rather than from main, and was reported by the same contract on the same
+# terms: the branch added the binary and did not name it here, `build-test
+# (linux)` failed the workflow contract step, and no other step failed.
+#
 # The allowance is 960s: eight warning periods of 120s. The worst this
 # binary class reached on a run that finished was 572.5s
 # (`crate_path_trybuild`, run 36068184976), which is 0.95 of the 600s it
@@ -96,7 +101,7 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # Keep below [profile.default]'s global-timeout, which the contract in
 # tests/workflow_contracts asserts.
 [[profile.default.overrides]]
-filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
+filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
 # Serialise orthohelp BDD scenarios: each runs in its own nextest process,
