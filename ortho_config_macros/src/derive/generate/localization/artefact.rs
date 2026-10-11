@@ -22,6 +22,9 @@ use syn::Ident;
 #[cfg(test)]
 use super::artefact_lock::is_free;
 use super::artefact_lock::lock;
+use super::artefact_probe::source_still_exists;
+#[cfg(test)]
+use super::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
 use super::{LocalizationIds, MessageSuffix};
 
 const CAP_BYTES: usize = 1_048_576;
@@ -318,21 +321,6 @@ fn merge_fragments(root: &Path) -> Result<Vec<Entry>, String> {
         }
     }
     Ok(output)
-}
-
-/// Reports whether a fragment's recorded source file is still present.
-///
-/// Only `NotFound` means the source was deleted or moved, which is the one
-/// case that makes the fragment stale. Any other metadata failure says
-/// nothing about presence, so it is propagated: silently dropping the
-/// fragment would publish an inventory that is missing entries with no
-/// diagnostic to explain the gap.
-fn source_still_exists(path: &Path) -> std::io::Result<bool> {
-    match fs::metadata(path) {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error),
-    }
 }
 
 /// Writes an artefact only when explicitly requested by the consuming build.

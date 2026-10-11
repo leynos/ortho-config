@@ -172,6 +172,25 @@ publication sequence; the unit tests in `artefact_lock_tests.rs` spawn two real
 processes to prove the exclusion and the release, rather than relying on an
 in-process mutex.
 
+`artefact_probe.rs` owns the stale-fragment policy: `source_still_exists` is
+its only entry point, `probe_metadata` is the only `std::fs::metadata` call
+site for it, and `classify_metadata` is the only copy of the rule that
+`NotFound` alone means stale while every other metadata error aborts the merge.
+`merge_fragments` is the single production caller; the identity artefact's
+merge and the merge-level regression tests are its only call sites. For
+OS-independent policy tests, `with_metadata_outcome` is a test-only,
+thread-local injection that matches one exact probe path and is compiled out of
+non-test builds. It exists because no filesystem layout provokes the same
+metadata error portably: a regular file in a parent position yields
+`NotADirectory` on Unix and `NotFound` on Windows, and
+`ErrorKind::NotADirectory` has no Windows counterpart at all. The policy tests
+in `artefact_probe_tests.rs` inject the outcome and drive the shared
+classification, while the merge-level tests in `artefact_fragment_tests.rs`
+inject through the same boundary and assert the diagnostic retains the path and
+the injected error marker. It is **not** a general-purpose filesystem
+abstraction and must not grow readers, an enumeration capability, or call sites
+beyond this probe.
+
 Normalized argument-ID collisions within one derived struct fail at compile
 time. Hand-built and dynamic command trees retain the runtime panic contract.
 Cargo does not include proc-macro environment reads in its rebuild fingerprint;

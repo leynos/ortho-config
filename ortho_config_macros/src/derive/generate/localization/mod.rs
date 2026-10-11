@@ -5,6 +5,7 @@
 
 mod artefact;
 mod artefact_lock;
+mod artefact_probe;
 mod identifier;
 pub(crate) mod suffix;
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! Filesystem-focused regression tests for identifier artefact fragments.
 
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -232,38 +233,59 @@ fn merge_fragments_reports_missing_fragment_directory() -> Result<()> {
 /// metadata error as absence would publish an inventory with a silent gap and
 /// no diagnostic to explain it, so the error must reach the caller.
 ///
-/// The provocation is a path holding an interior NUL. That rejection happens
-/// inside Rust's own path-to-C-string conversion, before any syscall, so it
-/// yields `InvalidInput` on every platform. Provoking the failure with a
-/// regular file in a parent position instead would not: on Unix `metadata`
-/// then fails with `NotADirectory`, but on Windows it reports `NotFound`, which
-/// correctly takes the stale-fragment branch and silently drops the entry.
+/// The failure is injected rather than provoked through filesystem topology.
+/// No layout yields the same metadata error kind on every platform — a
+/// regular file in a parent position makes Unix report `NotADirectory` and
+/// Windows report `NotFound`, which is the stale-fragment branch — so an
+/// injection, not a layout, is what lets this policy be tested on both.
 #[test]
 fn merge_fragments_propagates_non_not_found_metadata_errors() -> Result<()> {
     let root = TempRoot::new()?;
-    let blocker = root.path().join("blocker");
-    fs::write(&blocker, "not a directory").context("write blocker file")?;
+    // A second, healthy fragment stands in for the entries an error-swallowing
+    // merge would have already collected: returning `Ok` with just its entries
+    // is the partial-success outcome this test must reject, so the error has to
+    // abort the merge wherever the guarded fragment falls in the directory
+    // order.
+    let current = current_source(root.path())?;
     let ident = Ident::new("Config", Span::call_site());
-    let unreachable = Source {
-        file: format!("{}\0child.rs", blocker.to_string_lossy()),
+    let valid = Source {
+        file: current.to_string_lossy().into_owned(),
+        line: 1,
+        column: 0,
+    };
+    write_fragment(
+        &fragment_path(root.path(), &ident, &valid),
+        valid.file.clone(),
+        vec![fixture_entry("current-about")],
+    )?;
+    let probe = root.path().join("guarded.rs");
+    let probe_path = probe.to_string_lossy().into_owned();
+    let guarded = Source {
+        file: probe_path.clone(),
         line: 7,
         column: 0,
     };
     write_fragment(
-        &fragment_path(root.path(), &ident, &unreachable),
-        unreachable.file.clone(),
-        vec![fixture_entry("blocked-about")],
+        &fragment_path(root.path(), &ident, &guarded),
+        guarded.file.clone(),
+        vec![fixture_entry("guarded-about")],
     )?;
 
-    let error =
-        merge_fragments(root.path()).expect_err("non-NotFound metadata failure must abort merging");
+    let error = with_metadata_outcome(&probe, Err(ErrorKind::PermissionDenied), || {
+        merge_fragments(root.path())
+    })
+    .expect_err("non-NotFound metadata failure must abort merging instead of dropping entries");
     ensure!(
         error.contains("cannot probe fragment source"),
         "error must identify the probe failure, got: {error}"
     );
     ensure!(
-        error.contains("blocker"),
-        "error must name the offending source, got: {error}"
+        error.contains(&probe_path),
+        "error must retain the probed source path, got: {error}"
+    );
+    ensure!(
+        error.contains(INJECTED_PROBE_MESSAGE),
+        "error must carry the underlying metadata error, got: {error}"
     );
     Ok(())
 }
