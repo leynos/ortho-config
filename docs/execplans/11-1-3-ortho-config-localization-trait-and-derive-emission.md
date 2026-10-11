@@ -1939,16 +1939,16 @@ drives the outcome. Second, `git diff` of the five Rust paths against the
 previous head confirms that only the probe module, its tests, and the deletion
 of the inline predicate changed; `merge_fragments` is untouched, so the
 production contract cannot have shifted. An audit of adjacent filesystem tests
-found no unguarded portability defect, but did find three items worth
-reporting separately rather than changing here: a latent
-`!= NotFound` assertion in `ortho_config/tests/subcommand/basic.rs` sitting
-under an unrelated `cfg(unix)` gate; a doc comment on `subcommand/paths.rs`
-that describes an error the body cannot produce; and a Windows-only message
-assertion in `ortho_config/tests/extends.rs`.
+found no unguarded portability defect, but did find three items worth reporting
+separately rather than changing here: a latent `!= NotFound` assertion in
+`ortho_config/tests/subcommand/basic.rs` sitting under an unrelated `cfg(unix)`
+gate; a doc comment on `subcommand/paths.rs` that describes an error the body
+cannot produce; and a Windows-only message assertion in
+`ortho_config/tests/extends.rs`.
 
 The `docs/developers-guide.md` paragraph recording the module's scope and
 ownership was rewrapped to satisfy mdtablefix, and `check-fmt` then reported
-`CHANGELOG.md` alone. That finding is a local tool-version artifact, not branch
+`CHANGELOG.md` alone. That finding is a local tool-version artefact, not branch
 work: the file is blob-identical to the CI-green head `0a41054d`, and the CI
 lane pins mdtablefix 0.6.0 while the local binary is 0.6.1. Verifying against
 both versions showed that 0.6.0 declines the rewrap, which is why it passed CI.
@@ -1963,13 +1963,13 @@ and 15 ignored, plus 115 pytest passes and 5 skips. `check-fmt` reported
 `CHANGELOG.md` alone, which the following paragraph resolves. The workspace
 feature combination
 `cargo nextest run --workspace --features "serde_json toml json5 yaml metrics"`
-reported two timed-out trybuild suites
-(`declarative_merge_trybuild` and `env_source_trybuild`). Both are
-subprocess-spawning trybuild binaries whose children compile into a separate
-target directory, and the host was running full gates concurrently with
-another agent's cargo jobs holding the shared package-cache lock. Both tests
-had already passed under `make test` in the same session. Re-running the two
-binaries alone turns both green — 76 s and 180 s against the 600 s ceiling —
-which identifies the timeouts as build-slot contention rather than assertion
-failures. A timeout in this suite carries no assertion diagnostic at all,
-whereas a genuine defect here would fail the binary's own harness output.
+reported two timed-out trybuild suites (`declarative_merge_trybuild` and
+`env_source_trybuild`). Both are subprocess-spawning trybuild binaries whose
+children compile into a separate target directory, and the host was running
+full gates concurrently with another agent's cargo jobs holding the shared
+package-cache lock. Both tests had already passed under `make test` in the same
+session. Re-running the two binaries alone turns both green — 76 s and 180 s
+against the 600 s ceiling — which identifies the timeouts as build-slot
+contention rather than assertion failures. A timeout in this suite carries no
+assertion diagnostic at all, whereas a genuine defect here would fail the
+binary's own harness output.
