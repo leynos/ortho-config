@@ -11,9 +11,7 @@
 //! [`PolicyInputs`].
 
 use crate::policy::config::{ExceptionKind, PolicyConfig, PolicyException, PolicyInputs};
-use crate::policy::vocabulary::{
-    CANONICAL_FLAGS, CANONICAL_VERBS, is_canonical_flag, is_canonical_verb,
-};
+use crate::policy::vocabulary::{is_canonical_flag, is_canonical_verb};
 use crate::policy::{PolicyMode, PolicyReport, PolicyResult, PolicySeverity, Vocabulary};
 
 /// Evaluates a policy configuration and produces a report.
@@ -163,16 +161,7 @@ fn exception_result(
 }
 
 fn canonical_vocabulary() -> Vocabulary {
-    Vocabulary {
-        verbs: CANONICAL_VERBS
-            .iter()
-            .map(|verb| (*verb).to_owned())
-            .collect(),
-        flags: CANONICAL_FLAGS
-            .iter()
-            .map(|flag| (*flag).to_owned())
-            .collect(),
-    }
+    Vocabulary::canonical()
 }
 
 #[cfg(test)]

@@ -5,6 +5,15 @@
 //! canonical list; this module is the single source of truth that the 7.1.2
 //! lint rules and the agent-context verb mapper both consult, so the two
 //! consumers cannot drift apart.
+//!
+//! Every policy report advertises this list through its `vocabulary` block, so
+//! [`Vocabulary::canonical`] is the one builder that both [`evaluate`] and the
+//! behaviour rules use; a second copy would let the advertised surface drift
+//! from the list the rules are actually checked against.
+//!
+//! [`evaluate`]: crate::policy::evaluate::evaluate
+
+use crate::policy::Vocabulary;
 
 /// Canonical command verbs from design §5.
 pub const CANONICAL_VERBS: &[&str] = &[
@@ -24,6 +33,37 @@ pub const CANONICAL_FLAGS: &[&str] = &[
     "--profile",
     "--deliver",
 ];
+
+impl Vocabulary {
+    /// Builds the canonical vocabulary block advertised by a policy report.
+    ///
+    /// The returned lists are owned copies of [`CANONICAL_VERBS`] and
+    /// [`CANONICAL_FLAGS`], in declaration order, so a serialized report
+    /// reproduces the constants a consumer sees documented.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use cargo_orthohelp::policy::Vocabulary;
+    ///
+    /// let vocabulary = Vocabulary::canonical();
+    /// assert!(vocabulary.verbs.contains(&"get".to_owned()));
+    /// assert!(vocabulary.flags.contains(&"--json".to_owned()));
+    /// ```
+    #[must_use]
+    pub fn canonical() -> Self {
+        Self {
+            verbs: CANONICAL_VERBS
+                .iter()
+                .map(|verb| (*verb).to_owned())
+                .collect(),
+            flags: CANONICAL_FLAGS
+                .iter()
+                .map(|flag| (*flag).to_owned())
+                .collect(),
+        }
+    }
+}
 
 /// Returns whether `verb` is one of the canonical command verbs.
 ///

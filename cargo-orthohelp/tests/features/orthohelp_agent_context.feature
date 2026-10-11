@@ -22,4 +22,5 @@ Feature: cargo-orthohelp agent-context generation
     And the command admin prune reports mutation effect delete
     And the command greet reports interaction mode non_interactive
     And the command greet reports mutation effect read_only
+    And the command admin grant-access reports mutation effect submit
     And the command version reports interaction mode unknown

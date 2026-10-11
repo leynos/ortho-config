@@ -225,8 +225,13 @@ pub struct NestedAuditCommand {
 }
 
 /// Options for the nested fixture grant-access command.
+///
+/// Declared `submit` so the end-to-end attribute → IR → agent-context path
+/// covers a boundary that is neither read-only, write, nor delete: the fixture
+/// is the only place the full pipeline runs, so the rarest accepted value
+/// belongs here rather than only in unit-level tables.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "NESTED_FIXTURE")]
+#[ortho_config(prefix = "NESTED_FIXTURE", behaviour(mutation = "submit"))]
 pub struct NestedGrantAccessCommand {
     /// Principal receiving access.
     pub principal: Option<String>,

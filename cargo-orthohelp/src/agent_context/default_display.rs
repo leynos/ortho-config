@@ -6,10 +6,18 @@
 //! `crate::module` (with surrounding whitespace trimmed), while the literal
 //! contents of quoted strings, character literals, and raw strings are
 //! preserved verbatim.
+//!
+//! This is an internal helper of the agent-context bridge, not a supported
+//! API: it exists so the bridge can normalize `AgentInput.default`, and its
+//! only callers are that bridge and its tests. Normalization is display-only
+//! and lossy in the same way the IR is — the value is never executed or
+//! re-parsed — so a consumer that needs the original rendering must read the
+//! documentation IR rather than this output. Widen the visibility only
+//! alongside a documented agent-context API decision.
 
 /// Normalizes displayed Rust paths while preserving all literal contents.
 #[must_use]
-pub fn normalize_default_display(display: &str) -> String {
+pub(crate) fn normalize_default_display(display: &str) -> String {
     let mut normalized = String::with_capacity(display.len());
     let mut chars = display.chars().peekable();
     let mut literal = LiteralState::default();
@@ -18,20 +26,53 @@ pub fn normalize_default_display(display: &str) -> String {
         if literal.copy_character(character, &mut normalized, &mut chars) {
             continue;
         }
-        if character == '"' {
-            literal.start_string(&normalized);
-            normalized.push(character);
-        } else if character == '\'' && starts_character_literal(&chars) {
-            literal.start_character();
-            normalized.push(character);
-        } else if character == ':' && chars.peek() == Some(&':') {
-            normalize_path_separator(&mut normalized, &mut chars);
-        } else {
-            normalized.push(character);
+        match classify(character, &chars) {
+            Token::StringStart => {
+                literal.start_string(&normalized);
+                normalized.push(character);
+            }
+            Token::CharStart => {
+                literal.start_character();
+                normalized.push(character);
+            }
+            Token::PathSeparator => normalize_path_separator(&mut normalized, &mut chars),
+            Token::Other => normalized.push(character),
         }
     }
 
     normalized
+}
+
+/// One syntactic token recognised while scanning a displayed default value.
+///
+/// Naming the tokens keeps the scan loop a flat dispatch instead of a chain of
+/// conditions; classification itself never advances the cursor.
+#[derive(Debug, Clone, Copy)]
+enum Token {
+    /// A double quote opening a quoted or raw string.
+    StringStart,
+    /// A single quote opening a character literal, as opposed to a lifetime.
+    CharStart,
+    /// A `::` Rust path separator, possibly padded with whitespace.
+    PathSeparator,
+    /// Any other character, copied through unchanged.
+    Other,
+}
+
+/// Classifies a character that sits outside every literal.
+///
+/// The lookahead is non-consuming: `chars` is inspected but never advanced, so
+/// the scan loop keeps ownership of iteration and the helpers it delegates to
+/// still see every character they expect. The clone is what keeps this
+/// function read-only — `Peekable::peek` needs `&mut`, and borrowing the real
+/// iterator mutably here would strand the caller's own iteration.
+fn classify(character: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) -> Token {
+    match character {
+        '"' => Token::StringStart,
+        '\'' if starts_character_literal(chars) => Token::CharStart,
+        ':' if chars.clone().peek() == Some(&':') => Token::PathSeparator,
+        _ => Token::Other,
+    }
 }
 
 #[derive(Default)]

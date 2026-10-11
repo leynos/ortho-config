@@ -302,7 +302,7 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
     }
 }
 
-pub use default_display::normalize_default_display;
+pub(crate) use default_display::normalize_default_display;
 
 mod default_display;
 

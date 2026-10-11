@@ -358,6 +358,18 @@ escalation, not workarounds.
   the swap. GitHub permits only one open pull request per head branch, so the
   close necessarily preceded the create. A CodeRabbit review was then queued as
   `f340ad79`.
+- [x] (2026-10-11) Repaired the review-repair round for PR #564. Three
+  pre-merge findings landed against `52f38027` and all three were verified
+  valid against the current source before repair: two inline findings from
+  `chatgpt-codex-connector[bot]` (comments `4166342332` and `4166342339`, both
+  on `cargo-orthohelp/src/policy/rules/behaviour.rs`) and one inline trivial
+  finding from `coderabbitai[bot]` (comment `4166468093`, on
+  `cargo-orthohelp/src/agent_context/default_display.rs`). CodeRabbit's
+  pre-merge banner (issue comment `5953762970`) additionally raised a Testing
+  error and a Developer Documentation warning, both of which the three code
+  findings' repairs also close. See "Review repairs" under Revision 6 for the
+  per-finding rationale. Gates and the push are recorded below when they
+  complete; this entry covers the source repairs alone.
 
 ## Surprises & discoveries
 
@@ -1703,3 +1715,89 @@ replacing #417. Three operational lessons are worth keeping.
 The CodeRabbit request was queued as `f340ad79` with a long ETA; the queue is
 shared across repositories and deep. Delivery of the request comment is not
 completion of the review, and no review result is claimed here.
+
+#### Review repairs (2026-10-11)
+
+Three pre-merge findings landed against `52f38027`. Each was re-verified
+against the live source before any edit, from the GitHub API rather than from
+memory, and all three were valid. Two further banner rows from the same review
+round are closed by the same repairs.
+
+1. **Codex `4166342332`, `behaviour.rs:64` — the report omits its
+   vocabulary.** `PolicyReport::with_results` initializes `vocabulary` with
+   `Vocabulary::default()`, so a report built by `check_behaviour` serializes
+   with empty `verbs` and `flags` lists, while `policy::evaluate` populates
+   both. The published `guide-check-report` example shows a populated block, so
+   the two producer paths disagreed about the same documented contract. The
+   repair makes the canonical vocabulary the single source: `Vocabulary`
+   gains a `canonical()` constructor in
+   `cargo-orthohelp/src/policy/vocabulary/mod.rs` that copies
+   `CANONICAL_VERBS` and `CANONICAL_FLAGS` in declaration order, the private
+   `canonical_vocabulary()` helper in `policy/evaluate/mod.rs` delegates to it,
+   and both return paths of `check_behaviour` (including the `Off` early
+   return) now build the report with it. The two former producers of the same
+   list can no longer drift, and a new test,
+   `behaviour_report_advertises_the_canonical_vocabulary`, pins the contract for
+   every mode by comparing against `Vocabulary::canonical()` rather than a
+   literal, so the assertion cannot itself go stale.
+2. **Codex `4166342339`, `behaviour.rs:165` — the remedy names the wrong
+   attribute.** The `bypass_flag_unknown` remedy told authors to add a matching
+   `#[arg(long = "…")]` input. That advice does not work here: the derive
+   resolves `AgentInput.long` from `FieldAttrs::cli_long` (or a kebab-cased
+   field name) in
+   `ortho_config_macros/src/derive/build/cli/cli_flags.rs`, and
+   `clap_replay_attributes` replays only inferred clap defaults — never `long`.
+   A hand-written `#[arg(long = "…")]` therefore registers a clap argument but
+   leaves the metadata untouched, so the finding would reappear unchanged while
+   the clap and generated-metadata surfaces diverged. The remedy now names the
+   attribute that actually moves the metadata,
+   `#[ortho_config(cli_long = "…")]`. Two guards lock it:
+   `bypass_flag_unknown_remedy_names_the_cli_long_attribute` asserts the message
+   mentions `cli_long` and does *not* mention the `#[arg(long` form. The change
+   is safe for existing consumers because only the message text moved — the
+   stable `rule_id`/`code` identifiers are unchanged, and the existing
+   `declared_bypass_not_matching_an_input_triggers_bypass_flag_unknown` case
+   asserts the code rather than the prose.
+3. **CodeRabbit `4166468093` (trivial), `default_display.rs:31` — extract the
+   four-way classification.** The lexical scan dispatched on character class
+   inline. The repair lifts it into a `classify` helper returning a `Token`
+   enum, so the scan loop is a flat dispatch over named cases. The lookahead
+   inside `classify` is deliberately non-consuming (`chars.clone().peek()`):
+   `Peekable::peek` needs `&mut`, and borrowing the caller's iterator mutably
+   there would strand its own iteration, so the clone is what keeps the
+   classifier read-only. The reasoning is recorded on the function.
+
+**Banner rows the same repairs close.** The Developer Documentation warning
+noted that `normalize_default_display` was re-exported publicly via
+`agent_context/mod.rs` without being documented as API. It is not API: it was
+private before the Milestone B extraction, its only callers are the bridge and
+its own tests, and the guide's public-surface list excludes it, so the repair
+narrows the re-export to `pub(crate)` *and* documents the ownership and scope
+in `docs/developers-guide.md` — a visibility change alone would have left
+AGENTS.md's abstraction-documentation requirement unmet. The Testing error
+noted that
+`MutationKind::Submit` was accepted by the parser and emitted by the generator
+with no derive-level test producing it and the bridge tests covering only
+`Delete` and `ReadOnly`. The repair adds a `submit` case at each level: a
+`SubmitBoundaryConfig` derive struct with a matching rstest case in
+`ortho_config/tests/docs_ir_behaviour.rs`, a `behaviour(mutation = "submit")`
+annotation on the only end-to-end fixture
+(`tests/fixtures/orthohelp_fixture/src/lib.rs`, the rarest accepted value on the
+only command that reaches the generator), the matching golden-row update in
+`agent_context__nested_fixture.json.snap`, and a new BDD step plus feature line
+asserting the effect on that command's row.
+
+**Structural consequence.** Two test files crossed the Whitaker 400-line
+`module_max_lines` ceiling as the repairs' tests accumulated, so the additions
+were split into sibling modules (`agent_context/behaviour_tests.rs`,
+`policy/rules/report_tests.rs`) wired with `#[path]`, and the shared helpers in
+`policy/rules/tests.rs` were promoted to `pub(super)` for the new module to
+reuse. This mirrors the Milestone B split recorded above: the ceiling forces the
+module boundary, and the extraction is behaviour-neutral.
+
+**The Milestone B passage above is unchanged by design.** It records
+`mod.rs` re-exporting `normalize_default_display` "so the unit and property
+tests' `use super::...` call-sites are unchanged". That was accurate when
+written and describes the tree as it stood then; this round narrows the
+re-export, and the historical entry is left as written rather than rewritten to
+match.

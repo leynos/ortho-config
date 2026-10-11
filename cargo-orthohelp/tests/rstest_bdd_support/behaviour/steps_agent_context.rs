@@ -341,3 +341,20 @@ fn version_interaction_unknown(orthohelp_context: &mut OrthoHelpContext) -> Step
         "unknown",
     )
 }
+
+/// The `submit` boundary survives the whole attribute → IR → bridge path.
+///
+/// `submit` is the least common accepted mutation, so it is asserted through
+/// the real fixture rather than only in unit-level tables. A derive or bridge
+/// arm that collapsed it to `unknown` would still pass every other case.
+#[then("the command admin grant-access reports mutation effect submit")]
+fn admin_grant_access_mutation_submit(
+    orthohelp_context: &mut OrthoHelpContext,
+) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "grant-access"],
+        JsonField::MutationEffect,
+        "submit",
+    )
+}

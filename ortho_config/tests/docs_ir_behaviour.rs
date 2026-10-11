@@ -204,6 +204,24 @@ struct ReadOnlyNonInteractiveConfig {
     value: u8,
 }
 
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "APP",
+    behaviour(interaction = "non_interactive", mutation = "write")
+)]
+struct WriteBoundaryConfig {
+    value: u8,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "APP",
+    behaviour(interaction = "non_interactive", mutation = "submit")
+)]
+struct SubmitBoundaryConfig {
+    value: u8,
+}
+
 #[rstest]
 #[case::fully_declared(
     DeclaredBehaviourConfig::get_doc_metadata,
@@ -217,7 +235,23 @@ struct ReadOnlyNonInteractiveConfig {
     Some(MutationKind::ReadOnly),
     (None, None)
 )]
+#[case::write_boundary(
+    WriteBoundaryConfig::get_doc_metadata,
+    Some(InteractionKind::NonInteractive),
+    Some(MutationKind::Write),
+    (None, None)
+)]
+#[case::submit_boundary(
+    SubmitBoundaryConfig::get_doc_metadata,
+    Some(InteractionKind::NonInteractive),
+    Some(MutationKind::Submit),
+    (None, None)
+)]
 /// Each `#[ortho_config(behaviour(...))]` case reaches the generated IR.
+///
+/// Every accepted `mutation` value has a row, so an attribute that parsed but
+/// emitted nothing — or emitted the wrong variant — fails here rather than
+/// reaching an agent-context consumer as `unknown`.
 fn test_derive_emits_behaviour_block(
     #[case] metadata_producer: fn() -> DocMetadata,
     #[case] expected_interaction: Option<InteractionKind>,

@@ -108,7 +108,7 @@ expression: snapshot
       ],
       "output_modes": [],
       "interaction_mode": "unknown",
-      "mutation_effect": "unknown",
+      "mutation_effect": "submit",
       "bypass_flag": null,
       "dry_run_flag": null,
       "async_submission": null,

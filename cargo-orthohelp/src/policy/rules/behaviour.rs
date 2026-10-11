@@ -14,6 +14,7 @@
 
 use ortho_config::{AgentCommand, AgentContext, InteractionMode, MutationEffect};
 
+use crate::policy::Vocabulary;
 use crate::policy::{PolicyMode, PolicyReport, PolicyResult, PolicySeverity};
 
 /// Severity shared by every finding in a given mode.
@@ -41,10 +42,16 @@ impl RuleSeverity {
 ///
 /// The function is total: [`PolicyMode::Off`] returns an empty report without
 /// evaluating any rule. Findings are emitted in command-path order.
+///
+/// Both the enforcing and the suppressed report are self-describing: they
+/// advertise the canonical vocabulary, matching
+/// [`evaluate`](crate::policy::evaluate::evaluate) so a consumer parsing this
+/// rule set sees the same `vocabulary` block it would see from any other
+/// policy report.
 #[must_use]
 pub fn check_behaviour(context: &AgentContext, mode: PolicyMode) -> PolicyReport {
     if mode == PolicyMode::Off {
-        return PolicyReport::empty(mode);
+        return PolicyReport::with_details(mode, Vec::new(), Vec::new(), Vocabulary::canonical());
     }
     // `Off` is handled above, so only the two enforcing modes remain.
     let severity = match mode {
@@ -61,7 +68,7 @@ pub fn check_behaviour(context: &AgentContext, mode: PolicyMode) -> PolicyReport
         check_bypass_known(command, severity, &mut results);
         check_undeclared(command, severity, &mut results);
     }
-    PolicyReport::with_results(mode, results)
+    PolicyReport::with_details(mode, results, Vec::new(), Vocabulary::canonical())
 }
 
 /// One lint rule's stable identifiers.
@@ -160,7 +167,7 @@ fn check_bypass_known(command: &AgentCommand, severity: RuleSeverity, out: &mut 
         &Rule::BYPASS_UNKNOWN,
         severity,
         format!(
-            "command `{}` declares bypass flag `{bypass}` but no input exposes it; add a matching `#[arg(long = \"{}\")]` input or change the declared bypass",
+            "command `{}` declares bypass flag `{bypass}` but no input exposes it; add a field with `#[ortho_config(cli_long = \"{}\")]` or change the declared bypass",
             command.path.join(" "),
             bypass.strip_prefix("--").unwrap_or(bypass)
         ),
