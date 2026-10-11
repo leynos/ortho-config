@@ -1843,3 +1843,51 @@ re-exporting `normalize_default_display` "so the unit and property tests'
 `use super::...` call-sites are unchanged". That was accurate when written and
 describes the tree as it stood then; this round narrows the re-export, and the
 historical entry is left as written rather than rewritten to match.
+
+#### Gate repair and fifth publication (2026-10-11)
+
+The first gate run against the review-repair head `01aa50d8` was red on two
+targets. Both failures were real, and both were latent for the same structural
+reason: each target runs two sub-steps, and the first sub-step aborted its
+target before the second ever executed, so neither second sub-step had been
+exercised on this branch at all.
+
+1. **`make check-fmt` — `cargo fmt` failed, hiding `mdtablefix`.** A new BDD
+   step's signature in
+   `cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps_agent_context.rs`
+   was rustfmt-unstable at 103 columns; collapsed to one line at 99 and
+   committed by amending `01aa50d8` into `7585760b`. On the re-run `cargo fmt`
+   passed, `mdtablefix --check` then ran for the first time and rejected
+   `docs/developers-guide.md` (+8/−9) and this execplan (+36/−39) on the
+   80-column wrap. `make fmt` was applied and its diff read back before
+   trusting it.
+2. **`make markdownlint` — `markdownlint-cli2` failed, hiding the spelling
+   gate.** An ATX-heading parse (`MD018`) at the line where wrapped prose began
+   a line with a bare issue number; reworded to `PR #539`. On the re-run
+   `markdownlint-cli2` passed (0 errors, 78 files) and the
+   `typos-config-builder` gate ran for the first time, rejecting a hyphenated
+   compound in the Codex `4166342339` passage that the dictionary spells as a
+   single word. That text is prose about a Rust attribute rather than quoted
+   upstream API, so the sentence was fixed in place and no `typos.local.toml`
+   exception was added.
+
+**Read back, not assumed.** `mdtablefix --renumber` rewrites a line-initial
+`NN.` into a list marker, so the formatter's own output was inspected rather
+than trusted: no bare issue number survived at line start in either file, and
+the other edits are re-wraps that preserve every word.
+
+The repair is `4ce4a058` "Repair the gateway residue left by the review fixes".
+Both targets then passed end-to-end locally — `make check-fmt` exit 0 ("78
+files left unchanged") and `make markdownlint` exit 0 (0 errors, 78 files;
+spelling gate `current: typos.toml`) — with both sub-steps confirmed executing,
+which is the specific evidence the previous run could not produce.
+
+**Fifth publication.** The branch was force-pushed to `4ce4a058` over
+`52f38027` with an explicit `--force-with-lease` naming the observed remote
+value, and remote parity was verified after the push. Advancing the branch onto
+the fourth rebase's base resolved the pull request's conflict: GitHub reported
+`mergeable: false` / `mergeable_state: dirty` against the stale `4f02fcb8`
+before the push and `mergeable: true` / `mergeable_state: blocked` against
+`89cffbd3` after it. `blocked` here is the review gate, not a content conflict:
+the last review on this branch is still the `CHANGES_REQUESTED` recorded above,
+which predates both the repairs and the rebase.
