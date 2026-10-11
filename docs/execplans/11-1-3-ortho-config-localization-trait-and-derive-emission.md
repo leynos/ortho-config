@@ -2012,3 +2012,25 @@ combination the request named, and the leg whose `build-test (windows)` failure
 began this work. The Windows-only `Validate PowerShell wrapper` step passed too.
 `build-test (linux)` failed only at `Publish dry run`; all of its coverage,
 lint, Markdown, spelling, and workflow-contract steps passed.
+
+### The branch has fallen behind `origin/main`
+
+`origin/main` has advanced seventeen commits past the merge base `4f02fcb8`, to
+`89cffbd3`, so the pull request reports `mergeStateStatus: DIRTY`. A dry merge
+into the new main conflicts in two paths: `CHANGELOG.md` and
+`ortho_config/tests/rstest_bdd_support/behaviour/steps/localizer_steps.rs`. The
+latter is a BDD step-module restructuring on main that overlaps this branch's
+localization steps.
+
+Two of main's commits change the premises this plan recorded. `5ed41aa2` moves
+the mdtablefix pin from 0.6.0 to **0.6.1**, which is the version running
+locally, so the version split that produced the spurious `CHANGELOG.md` finding
+no longer exists — main has converged on the local behaviour. Main also made
+the **same** `#253` wrap join independently, at the identical line, so the
+local commit that adopted it becomes a no-op on replay.
+
+No rebase has been performed. It is a separate, outward-facing history
+operation that supersedes every gate certificate and every review anchor
+recorded above, and it was not part of the requested work. The conflict
+resolution needs a decision on the BDD step modules, so it is reported to the
+user before any replay.
