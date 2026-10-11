@@ -1973,3 +1973,42 @@ against the 600 s ceiling — which identifies the timeouts as build-slot
 contention rather than assertion failures. A timeout in this suite carries no
 assertion diagnostic at all, whereas a genuine defect here would fail the
 binary's own harness output.
+
+### Publication and the hosted Windows leg
+
+The push to `b97d4d01` was a fast-forward from `0a41054d`, so the lease base
+was read over SSH rather than assumed, and `--force-with-lease` was bound to
+that SHA. The push reported `0a41054d..b97d4d01`, and the pull request head was
+then re-read at `b97d4d01`.
+
+The push fired `pull_request_target` but no `pull_request`, so the CI workflow
+never started. The gap was recovered with
+`gh workflow run CI --ref 11-1-3-...`, and the dispatched run `38165866061`
+reports head `b97d4d01`, matching the branch. Dispatching has one consequence
+worth recording: the `Publish dry run` step is conditioned on
+`github.event_name == 'workflow_dispatch'`, so it runs in a dispatched run and
+is skipped in every ordinary pull-request run. That step therefore executed
+here for the first time on this branch.
+
+It fails, and the failure is not this branch's. `lading publish` stages the
+workspace and runs `cargo package` per crate, whose verification step compiles
+each crate against the *registry* version of its path dependencies.
+`cargo-orthohelp` imports `ortho_config::agent_context::PolicyException`, which
+exists in this tree but is absent from the published `ortho_config` 0.9.0 — the
+registry copy's `AgentPolicy` has no `exceptions` field at all. PR #416 added
+the type without bumping the version past the published one, so verification
+compiles the new consumer against the old crate and fails with `E0432` and
+`E0560`. `origin/main` carries a byte-identical import at
+`cargo-orthohelp/src/agent_context/policy.rs:7-9` with the same `0.9.0` pin,
+and no commit on this branch touches that path, so the defect is inherited
+rather than introduced. It is reported to the user rather than repaired here:
+it is outside this request's scope, and the repair is a release decision (bump
+the version, or make the import version-conditional) that belongs to the crate
+owner.
+
+Both hosted coverage steps passed on **Windows**, including step 25, which runs
+`cargo nextest` with `serde_json toml json5 yaml metrics` — the exact feature
+combination the request named, and the leg whose `build-test (windows)` failure
+began this work. The Windows-only `Validate PowerShell wrapper` step passed too.
+`build-test (linux)` failed only at `Publish dry run`; all of its coverage,
+lint, Markdown, spelling, and workflow-contract steps passed.
