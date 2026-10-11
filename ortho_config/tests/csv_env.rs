@@ -5,19 +5,18 @@
 
 use anyhow::{Context, Result, anyhow, ensure};
 use figment::Figment;
-use ortho_config::CsvEnv;
+use ortho_config::{CsvEnv, MapEnv};
 use rstest::rstest;
 use serde::Deserialize;
-
-#[path = "test_utils.rs"]
-mod test_utils;
-use test_utils::with_jail;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, serde::Serialize)]
 struct Cfg {
     values: Vec<String>,
 }
 
+/// `CsvEnv` splits a comma-separated `VALUES` variable into a list, covering
+/// the literal JSON array form and empty elements.
 #[rstest]
 #[case("A,B,C", vec!["A", "B", "C"])]
 #[case("[\"x\",\"y\"]", vec!["x", "y"])]
@@ -26,37 +25,33 @@ struct Cfg {
 #[case(",A,B", vec!["", "A", "B"])]
 fn parses_lists(#[case] raw: &str, #[case] expected: Vec<&str>) -> Result<()> {
     let want: Vec<String> = expected.into_iter().map(str::to_string).collect();
-    with_jail(|j| {
-        j.set_env("VALUES", raw);
-        let cfg: Cfg = Figment::from(CsvEnv::raw())
-            .extract()
-            .context("failed to extract Cfg from CsvEnv")?;
-        ensure!(
-            cfg.values == want,
-            "expected {:?}, got {:?}",
-            want,
-            cfg.values
-        );
-        Ok(())
-    })?;
+    let source = Arc::new(MapEnv::new().with_var("VALUES", raw));
+    let cfg: Cfg = Figment::from(CsvEnv::raw().with_source(source))
+        .extract()
+        .context("failed to extract Cfg from CsvEnv")?;
+    ensure!(
+        cfg.values == want,
+        "expected {:?}, got {:?}",
+        want,
+        cfg.values
+    );
     Ok(())
 }
 
+/// A scalar that cannot be parsed as a list fails extraction rather than
+/// silently producing a one-element (or empty) list.
 #[rstest]
 #[case("")]
 #[case("single")]
 fn fails_on_non_lists(#[case] raw: &str) -> Result<()> {
-    with_jail(|j| {
-        j.set_env("VALUES", raw);
-        match Figment::from(CsvEnv::raw()).extract::<Cfg>() {
-            Ok(cfg) => Err(anyhow!(
-                "expected parse failure for {raw:?}, but succeeded with values {:?}",
-                cfg.values
-            )),
-            Err(_) => Ok(()),
-        }
-    })?;
-    Ok(())
+    let source = Arc::new(MapEnv::new().with_var("VALUES", raw));
+    match Figment::from(CsvEnv::raw().with_source(source)).extract::<Cfg>() {
+        Ok(cfg) => Err(anyhow!(
+            "expected parse failure for {raw:?}, but succeeded with values {:?}",
+            cfg.values
+        )),
+        Err(_) => Ok(()),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +59,8 @@ struct BoolCfg {
     flag: bool,
 }
 
+/// `CsvEnv` accepts the case-insensitive `true`/`false` spellings, including
+/// surrounding whitespace, for a boolean field.
 #[rstest]
 #[case("true", true)]
 #[case("false", false)]
@@ -74,17 +71,14 @@ struct BoolCfg {
 #[case("  true  ", true)]
 #[case("  false  ", false)]
 fn parses_booleans(#[case] raw: &str, #[case] expected: bool) -> Result<()> {
-    with_jail(|j| {
-        j.set_env("FLAG", raw);
-        let cfg: BoolCfg = Figment::from(CsvEnv::raw())
-            .extract()
-            .context("failed to extract BoolCfg from CsvEnv")?;
-        ensure!(
-            cfg.flag == expected,
-            "expected {expected}, got {}",
-            cfg.flag
-        );
-        Ok(())
-    })?;
+    let source = Arc::new(MapEnv::new().with_var("FLAG", raw));
+    let cfg: BoolCfg = Figment::from(CsvEnv::raw().with_source(source))
+        .extract()
+        .context("failed to extract BoolCfg from CsvEnv")?;
+    ensure!(
+        cfg.flag == expected,
+        "expected {expected}, got {}",
+        cfg.flag
+    );
     Ok(())
 }

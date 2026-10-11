@@ -6,6 +6,9 @@ use super::common::{
 use anyhow::Result;
 use rstest::rstest;
 
+/// Table-driven check that each CLI argument combination yields the expected
+/// `TestConfig` values, with an empty injected environment so concurrent tests
+/// cannot interfere.
 #[rstest]
 #[case::defaults(&["prog"], ExpectedConfig::default())]
 #[case::sample_and_other(
@@ -34,8 +37,7 @@ fn parses_cli_arguments(
     #[case] args: &[&'static str],
     #[case] expected: ExpectedConfig,
 ) -> Result<()> {
-    // Run inside the jail so concurrent tests' environment mutations cannot
-    // leak into an unjailed load.
+    // Inject an empty environment so concurrent tests cannot affect this load.
     run_config_case::<TestConfig, _>(&[], &[], args, |cfg| {
         assert_config_eq(cfg, &expected).to_anyhow()
     })?;
