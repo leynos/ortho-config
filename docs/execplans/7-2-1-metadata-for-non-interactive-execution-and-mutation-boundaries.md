@@ -1716,6 +1716,51 @@ The CodeRabbit request was queued as `f340ad79` with a long ETA; the queue is
 shared across repositories and deep. Delivery of the request comment is not
 completion of the review, and no review result is claimed here.
 
+#### Fourth rebase (2026-10-11)
+
+The published candidate `52f38027` was based on `4f02fcb8` (2026-10-02). Main
+advances in the meantime: 17 commits, the last of them `89cffbd3` "Enable
+scoped configuration discovery (#318) (#465)" landing at 03:31 on 2026-10-11,
+which is also how a long-lived sibling branch (#318) finally reached trunk.
+The branch was replayed a fourth time onto `89cffbd3`, and the replay is
+complete in the working tree; this section records it, because the three
+revisions above document only the third replay.
+
+**Relationship to the published head.** The published head `52f38027` is *not*
+an ancestor of the new head, because a rebase rewrites every replayed commit.
+The two heads share the merge base `4f02fcb8` and differ in exactly the way a
+replay makes them differ, so the audit below compares like with like:
+`git range-diff 4f02fcb8..52f38027 89cffbd3..<new head>` rather than a plain
+diff, which would report every rewritten commit as a change.
+
+**Audit.** The range-diff aligns all 42 entries 1:1 with none dropped, none
+added, and 37 byte-identical. The five differing entries are not semantic
+changes at all: each is the same patch applied to a path that main renamed in
+PR #539 (`cargo-orthohelp/tests/rstest_bdd/…` → `…/rstest_bdd_support/…`, and
+`tests/fixtures/powershell_fixture.rs` → `tests/golden/powershell_fixture.rs`).
+A separate line-level check confirms no loss: of the 148 files main changed
+between the two bases, every file the branch did not itself touch is
+byte-identical to main at the new head (zero losses), and for the 15 files both
+sides changed, every line main added is still present — with one apparent
+exception that is in fact the branch's own change, the documentation IR version
+constant replacing a literal `"1.1"` in `powershell_fixture.rs`.
+
+**Why the replay's patches changed where main renamed a path.** The replay
+follows main's new layout rather than re-creating the old one, so a commit that
+originally edited `rstest_bdd/behaviour/steps_agent_context.rs` now edits
+`rstest_bdd_support/behaviour/steps_agent_context.rs`. That is why the branch's
+own file set at the new head contains three paths the published head did not
+(`…/rstest_bdd_support/behaviour/mod.rs`, `…/behaviour/steps_agent_context.rs`
+and `tests/golden/powershell_fixture.rs`) and no longer contains the three
+corresponding old paths. The content is the same; only the location moved with
+main.
+
+**Consequence for the execplan's own history.** The entries above name the
+third rebase's head and the published head `52f38027`; those identities stay as
+written, because they describe the trees that existed then. The binding
+candidate is now the head recorded in the progress section, and this section is
+the authority on how it was produced.
+
 #### Review repairs (2026-10-11)
 
 Three pre-merge findings landed against `52f38027`. Each was re-verified
