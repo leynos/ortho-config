@@ -333,13 +333,12 @@ AgentContext,
 
 ### Internal default-display normalizer
 
-`cargo_orthohelp::agent_context::normalize_default_display` is a
-crate-internal helper of the agent-context bridge, not part of the stable
-surface listed above. It rewrites a displayed default value so Rust path
-separators render consistently, removing whitespace around `::` outside
-quoted strings, character literals, and raw strings, whose contents it copies
-verbatim. Whitespace inside a literal is data, so only the surrounding path
-separator is normalized.
+`cargo_orthohelp::agent_context::normalize_default_display` is a crate-internal
+helper of the agent-context bridge, not part of the stable surface listed
+above. It rewrites a displayed default value so Rust path separators render
+consistently, removing whitespace around `::` outside quoted strings, character
+literals, and raw strings, whose contents it copies verbatim. Whitespace inside
+a literal is data, so only the surrounding path separator is normalized.
 
 Ownership stays with the agent-context bridge: the bridge calls it when
 populating `AgentInput.default`, and nothing outside `cargo-orthohelp` may
@@ -347,8 +346,8 @@ depend on it. The normalization is display-only. `AgentInput.default` is not
 executable or machine-parseable, so a consumer needing the original rendering
 must read the documentation IR rather than this output. Keep the helper
 `pub(crate)`; exposing it publicly would make a display detail of one bridge a
-compatibility promise, and widening it belongs with a documented
-agent-context API decision, not a refactor.
+compatibility promise, and widening it belongs with a documented agent-context
+API decision, not a refactor.
 
 ### Consumer dependency tiers
 

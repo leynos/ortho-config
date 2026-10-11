@@ -159,8 +159,8 @@ escalation, not workarounds.
 - [x] (2026-08-07) Plan approved by the user; implementation begun.
 - [x] (2026-08-12) Milestone B: IR and agent-context schema types implemented
   red-first; goldens updated; all gates green (check-fmt, typecheck, lint,
-  test, markdownlint); CodeRabbit review (`coderabbit review --agent`, PR
-  #417) returned 0 findings across 33 reviewed files; pass clear. A follow-up
+  test, markdownlint); CodeRabbit review (`coderabbit review --agent`, PR #417)
+  returned 0 findings across 33 reviewed files; pass clear. A follow-up
   spelling fix (`normalisation` -> `normalization`) landed and all gates
   re-verified green.
 - [x] (2026-08-12) Milestone C: derive attribute surface (`behaviour(...)`)
@@ -1721,10 +1721,10 @@ completion of the review, and no review result is claimed here.
 The published candidate `52f38027` was based on `4f02fcb8` (2026-10-02). Main
 advances in the meantime: 17 commits, the last of them `89cffbd3` "Enable
 scoped configuration discovery (#318) (#465)" landing at 03:31 on 2026-10-11,
-which is also how a long-lived sibling branch (#318) finally reached trunk.
-The branch was replayed a fourth time onto `89cffbd3`, and the replay is
-complete in the working tree; this section records it, because the three
-revisions above document only the third replay.
+which is also how a long-lived sibling branch (#318) finally reached trunk. The
+branch was replayed a fourth time onto `89cffbd3`, and the replay is complete
+in the working tree; this section records it, because the three revisions above
+document only the third replay.
 
 **Relationship to the published head.** The published head `52f38027` is *not*
 an ancestor of the new head, because a rebase rewrites every replayed commit.
@@ -1774,33 +1774,32 @@ round are closed by the same repairs.
    with empty `verbs` and `flags` lists, while `policy::evaluate` populates
    both. The published `guide-check-report` example shows a populated block, so
    the two producer paths disagreed about the same documented contract. The
-   repair makes the canonical vocabulary the single source: `Vocabulary`
-   gains a `canonical()` constructor in
-   `cargo-orthohelp/src/policy/vocabulary/mod.rs` that copies
-   `CANONICAL_VERBS` and `CANONICAL_FLAGS` in declaration order, the private
-   `canonical_vocabulary()` helper in `policy/evaluate/mod.rs` delegates to it,
-   and both return paths of `check_behaviour` (including the `Off` early
-   return) now build the report with it. The two former producers of the same
-   list can no longer drift, and a new test,
-   `behaviour_report_advertises_the_canonical_vocabulary`, pins the contract for
-   every mode by comparing against `Vocabulary::canonical()` rather than a
+   repair makes the canonical vocabulary the single source: `Vocabulary` gains a
+   `canonical()` constructor in `cargo-orthohelp/src/policy/vocabulary/mod.rs`
+   that copies `CANONICAL_VERBS` and `CANONICAL_FLAGS` in declaration order,
+   the private `canonical_vocabulary()` helper in `policy/evaluate/mod.rs`
+   delegates to it, and both return paths of `check_behaviour` (including the
+   `Off` early return) now build the report with it. The two former producers
+   of the same list can no longer drift, and a new test,
+   `behaviour_report_advertises_the_canonical_vocabulary`, pins the contract
+   for every mode by comparing against `Vocabulary::canonical()` rather than a
    literal, so the assertion cannot itself go stale.
 2. **Codex `4166342339`, `behaviour.rs:165` — the remedy names the wrong
    attribute.** The `bypass_flag_unknown` remedy told authors to add a matching
    `#[arg(long = "…")]` input. That advice does not work here: the derive
    resolves `AgentInput.long` from `FieldAttrs::cli_long` (or a kebab-cased
-   field name) in
-   `ortho_config_macros/src/derive/build/cli/cli_flags.rs`, and
+   field name) in `ortho_config_macros/src/derive/build/cli/cli_flags.rs`, and
    `clap_replay_attributes` replays only inferred clap defaults — never `long`.
-   A hand-written `#[arg(long = "…")]` therefore registers a clap argument but
+   A handwritten `#[arg(long = "…")]` therefore registers a clap argument but
    leaves the metadata untouched, so the finding would reappear unchanged while
    the clap and generated-metadata surfaces diverged. The remedy now names the
    attribute that actually moves the metadata,
    `#[ortho_config(cli_long = "…")]`. Two guards lock it:
-   `bypass_flag_unknown_remedy_names_the_cli_long_attribute` asserts the message
-   mentions `cli_long` and does *not* mention the `#[arg(long` form. The change
-   is safe for existing consumers because only the message text moved — the
-   stable `rule_id`/`code` identifiers are unchanged, and the existing
+   `bypass_flag_unknown_remedy_names_the_cli_long_attribute` asserts the
+   message mentions `cli_long` and does *not* mention the `#[arg(long` form.
+   The change is safe for existing consumers because only the message text
+   moved — the stable `rule_id`/`code` identifiers are unchanged, and the
+   existing
    `declared_bypass_not_matching_an_input_triggers_bypass_flag_unknown` case
    asserts the code rather than the prose.
 3. **CodeRabbit `4166468093` (trivial), `default_display.rs:31` — extract the
@@ -1817,18 +1816,17 @@ noted that `normalize_default_display` was re-exported publicly via
 `agent_context/mod.rs` without being documented as API. It is not API: it was
 private before the Milestone B extraction, its only callers are the bridge and
 its own tests, and the guide's public-surface list excludes it, so the repair
-narrows the re-export to `pub(crate)` *and* documents the ownership and scope
-in `docs/developers-guide.md` — a visibility change alone would have left
+narrows the re-export to `pub(crate)` *and* documents the ownership and scope in
+`docs/developers-guide.md` — a visibility change alone would have left
 AGENTS.md's abstraction-documentation requirement unmet. The Testing error
-noted that
-`MutationKind::Submit` was accepted by the parser and emitted by the generator
-with no derive-level test producing it and the bridge tests covering only
-`Delete` and `ReadOnly`. The repair adds a `submit` case at each level: a
+noted that `MutationKind::Submit` was accepted by the parser and emitted by the
+generator with no derive-level test producing it and the bridge tests covering
+only `Delete` and `ReadOnly`. The repair adds a `submit` case at each level: a
 `SubmitBoundaryConfig` derive struct with a matching rstest case in
 `ortho_config/tests/docs_ir_behaviour.rs`, a `behaviour(mutation = "submit")`
 annotation on the only end-to-end fixture
-(`tests/fixtures/orthohelp_fixture/src/lib.rs`, the rarest accepted value on the
-only command that reaches the generator), the matching golden-row update in
+(`tests/fixtures/orthohelp_fixture/src/lib.rs`, the rarest accepted value on
+the only command that reaches the generator), the matching golden-row update in
 `agent_context__nested_fixture.json.snap`, and a new BDD step plus feature line
 asserting the effect on that command's row.
 
@@ -1837,12 +1835,11 @@ asserting the effect on that command's row.
 were split into sibling modules (`agent_context/behaviour_tests.rs`,
 `policy/rules/report_tests.rs`) wired with `#[path]`, and the shared helpers in
 `policy/rules/tests.rs` were promoted to `pub(super)` for the new module to
-reuse. This mirrors the Milestone B split recorded above: the ceiling forces the
-module boundary, and the extraction is behaviour-neutral.
+reuse. This mirrors the Milestone B split recorded above: the ceiling forces
+the module boundary, and the extraction is behaviour-neutral.
 
-**The Milestone B passage above is unchanged by design.** It records
-`mod.rs` re-exporting `normalize_default_display` "so the unit and property
-tests' `use super::...` call-sites are unchanged". That was accurate when
-written and describes the tree as it stood then; this round narrows the
-re-export, and the historical entry is left as written rather than rewritten to
-match.
+**The Milestone B passage above is unchanged by design.** It records `mod.rs`
+re-exporting `normalize_default_display` "so the unit and property tests'
+`use super::...` call-sites are unchanged". That was accurate when written and
+describes the tree as it stood then; this round narrows the re-export, and the
+historical entry is left as written rather than rewritten to match.
