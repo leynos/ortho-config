@@ -1895,3 +1895,81 @@ deleting the superseded `6262bb99`. The queue holds 87 entries and quotes about
 thirty-two hours. The message states that this candidate is a rebase rather
 than a repair round, records the conflict-free replay and the range-diff
 result, and points the review at the new head instead of the previous anchor.
+
+### The injected probe boundary supersedes the interior NUL: `7d2803ad`
+
+The `aa85c07b` repair worked, and the Windows leg went green, but it satisfied
+the request only in the narrowest sense. It swapped one platform-dependent
+provocation for another platform-dependent provocation: an interior NUL happens
+to raise `InvalidInput` on both platforms because Rust rejects the path during
+its own C-string conversion, yet the test still asserted a specific error kind
+by accident of implementation rather than by policy. Nothing in the test
+enumerated the kinds the policy distinguishes, and nothing proved the healthy
+metadata path reached the same classification the production probe uses.
+
+The fix replaces the provocation with a boundary. `artefact_probe.rs` now owns
+the stale-fragment policy in three layers. `probe_metadata` is the only
+`fs::metadata` call site for it; under `#[cfg(test)]` it first consults a
+thread-local injection keyed on one exact probe path. `classify_metadata` is
+the only copy of the rule that `NotFound` alone means stale while every other
+metadata error propagates, and `source_still_exists` composes them, so
+production and tests run the identical decision path. The injection,
+`with_metadata_outcome`, is `#[cfg(test)]` only and is compiled out entirely in
+release builds. It is not a filesystem abstraction: it has no reader, no
+enumeration, and no call site beyond this probe, and the duplicate-metadata
+lookup for a successful injection exists only because a synthesized `Metadata`
+value cannot be constructed portably.
+
+The regression test now writes a healthy fragment beside a guarded one and
+injects `PermissionDenied` for the guarded source. It asserts that
+`merge_fragments` returns `Err` — not `Ok` with a partial inventory, and not
+`Ok([])` — and that the diagnostic retains both the probed path and the
+injected error marker, which the injection makes distinguishable from a real
+filesystem error. A second test drives successful metadata through the same
+boundary, and a parameterized table covers `NotFound`, `PermissionDenied`,
+`NotADirectory`, and `Other` against the shared classification. The real
+filesystem tests for current sources, removed sources, malformed fragments,
+unreadable fragment paths, and invalid write destinations are retained
+unchanged.
+
+Two falsification checks were run. First, the boundary's injection was proven
+live by mutating the regression to inject `NotFound` and confirming that the
+test then fails, which shows it is the injection and not ambient state that
+drives the outcome. Second, `git diff` of the five Rust paths against the
+previous head confirms that only the probe module, its tests, and the deletion
+of the inline predicate changed; `merge_fragments` is untouched, so the
+production contract cannot have shifted. An audit of adjacent filesystem tests
+found no unguarded portability defect, but did find three items worth
+reporting separately rather than changing here: a latent
+`!= NotFound` assertion in `ortho_config/tests/subcommand/basic.rs` sitting
+under an unrelated `cfg(unix)` gate; a doc comment on `subcommand/paths.rs`
+that describes an error the body cannot produce; and a Windows-only message
+assertion in `ortho_config/tests/extends.rs`.
+
+The `docs/developers-guide.md` paragraph recording the module's scope and
+ownership was rewrapped to satisfy mdtablefix, and `check-fmt` then reported
+`CHANGELOG.md` alone. That finding is a local tool-version artifact, not branch
+work: the file is blob-identical to the CI-green head `0a41054d`, and the CI
+lane pins mdtablefix 0.6.0 while the local binary is 0.6.1. Verifying against
+both versions showed that 0.6.0 declines the rewrap, which is why it passed CI.
+The remaining `CHANGELOG.md` rewrite in `9744cbd0` joins a wrapped issue
+reference onto its preceding line; both 0.6.0 and 0.6.1 accept the joined form,
+so the fix removes a local false positive without pinning the gate to one
+formatter build.
+
+At `7d2803ad` with a stable head, `typecheck`, `lint`, `test`, `markdownlint`,
+and `nixie` all pass; the tallies are 82 cargo test binaries with 1459 passed
+and 15 ignored, plus 115 pytest passes and 5 skips. `check-fmt` reported
+`CHANGELOG.md` alone, which the following paragraph resolves. The workspace
+feature combination
+`cargo nextest run --workspace --features "serde_json toml json5 yaml metrics"`
+reported two timed-out trybuild suites
+(`declarative_merge_trybuild` and `env_source_trybuild`). Both are
+subprocess-spawning trybuild binaries whose children compile into a separate
+target directory, and the host was running full gates concurrently with
+another agent's cargo jobs holding the shared package-cache lock. Both tests
+had already passed under `make test` in the same session. Re-running the two
+binaries alone turns both green — 76 s and 180 s against the 600 s ceiling —
+which identifies the timeouts as build-slot contention rather than assertion
+failures. A timeout in this suite carries no assertion diagnostic at all,
+whereas a genuine defect here would fail the binary's own harness output.
