@@ -502,12 +502,15 @@ One hole stays open and is inherited from the injected-source migration: the
 derived loader's project rung resolves its root from `std::env::current_dir`,
 so a `.config.toml` beside the test binary's working directory would still be
 discovered. The exposure is bounded by the rung's position — projects are
-searched *last*, so the ambient file is reached only when no explicit path,
-selector, XDG, Windows, or home candidate matched. No injection point can
-redirect it: `project_file_name` names a file, while `project_roots`,
-`add_project_root`, and `clear_project_roots` are reachable only when a test
-builds the `ConfigDiscovery` itself, as the discovery-builder suite above does.
-Closing the gap needs a derive-level discovery attribute for project roots.
+searched *last*, so the ambient file is reached only once every earlier
+candidate is absent or has failed to load. The bound is weaker than it looks:
+discovery records a failure and keeps walking, so a malformed file, an invalid
+selector target, or a failed required candidate all fall through to the project
+rung rather than ending the search. No injection point can redirect it:
+`project_file_name` names a file, while `project_roots`, `add_project_root`, and
+`clear_project_roots` are reachable only when a test builds the
+`ConfigDiscovery` itself, as the discovery-builder suite above does. Closing
+the gap needs a derive-level discovery attribute for project roots.
 
 The common behavioural-step helper module owns `set_scalar_once`,
 `set_nonblank_scalar_once`, and the `SlotTakeOrExt` extension trait's
