@@ -75,10 +75,23 @@ a cold child `cargo` build through trybuild in the first coverage pass. Run
 side by side on Windows, those builds exhausted the 600 s per-test allowance:
 every Windows failure in runs 36127709137, 36127710357, 36127710423,
 36127710779 and 36127709460 was `compile_time`'s `must_use_compile_tests` at
-600 s. The 600 s ceiling stays, and Linux keeps its parallel execution.
-`windows_trybuild_isolation_test.py` holds the exact binary set, the platform,
-the reservation, the unchanged allowance, and the absence of any other slot
-reservation.
+600 s. That entry keeps its 600 s ceiling, and Linux keeps its parallel
+execution. `windows_trybuild_isolation_test.py` holds the exact binary set, the
+platform, the reservation, that entry's allowance, and the absence of any other
+slot reservation.
+
+Exclusivity and the raised allowance are two fixes for one failure, and the
+file carries both. nextest resolves each override field from the **first**
+matching entry that sets it, so the Windows entry above, being first, decides
+the four binaries it names; the wider entry below is second and supplies the
+rest of the class. The four therefore keep both 600 s *and* run alone, while
+`env_source_trybuild`, `generated_lint_trybuild`, `localized_parse_trybuild` and
+`subcommand_trybuild` take the 960 s entry, and Linux takes 960 s for all
+eight. Merging the two would have to choose between running alone and the
+larger allowance; leaving both keeps each measured remedy at the binaries it
+was measured on. `trybuild_tier_test.py` reads the widening and
+`windows_trybuild_isolation_test.py` the reservation, so neither remedy can be
+removed by editing the other's entry.
 
 The reservation costs Windows wall time. On run 36195916343 the job took 53.5
 min, against a 38 min median over the preceding pull-request runs, and
@@ -700,16 +713,17 @@ encoder cannot pass.
 events, and it is written so that a leak is a compile-time impossibility rather
 than a review responsibility.
 
-| Event                       | Fields                                                                                                                                                                                                                                           | Emitted from                |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
-| `discovery.source_selected` | `source`: `process`, `injected`                                                                                                                                                                                                                  | `builder::build`            |
-| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                                                                                                                                                                          | `candidates::push_selector` |
-| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`                                                                                                                                                          | `candidates::push_xdg`      |
-| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                                                                                                                                                                              | `candidates::push_home`     |
-| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                                                                                                                                                                                  | `load`                      |
-| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`; `source`: `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `category`: `file`, `cyclic_extends`, `gathering`, `validation`, `other` | `load`                      |
-| `discovery.project_root`    | `state`: `cwd_unavailable`                                                                                                                                                                                                                       | `builder::build`            |
-| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`; `source` (success only): `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`                                                                                        | `load`                      |
+| Event                       | Fields                                                                                                                                                                                                                                                                                                                                            | Emitted from                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `discovery.source_selected` | `source`: `process`, `injected`                                                                                                                                                                                                                                                                                                                   | `builder::build`            |
+| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                                                                                                                                                                                                                                                                           | `candidates::push_selector` |
+| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`                                                                                                                                                                                                                                                           | `candidates::push_xdg`      |
+| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                                                                                                                                                                                                                                                                               | `candidates::push_home`     |
+| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`, `policy_resolve`                                                                                                                                                                                                                                                                                 | `load`, `policy`            |
+| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`; `source`: `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `category`: `file`, `cyclic_extends`, `gathering`, `validation`, `other`; `scope` (scoped walks only): `system`, `user`, `project`                                        | `load`                      |
+| `discovery.project_root`    | `state`: `cwd_unavailable`                                                                                                                                                                                                                                                                                                                        | `builder::build`            |
+| `discovery.load`            | `operation`: `discover_first`, `compose_layers`, `policy_resolve`; `outcome`: `success`, `not_found`, and under `policy_resolve` also `required_failure`, `optional_failure`; `source` (success only): `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `scope` (scoped walks only): `system`, `user`, `project` | `load`, `policy`            |
+| `discovery.policy`          | `operation`: `policy_resolve`; `selector_class` (optional): `cli`, `environment`                                                                                                                                                                                                                                                                  | `policy`                    |
 
 Table: Structured events emitted during configuration discovery, with the
 closed field vocabulary each carries and the module that emits it.
@@ -747,6 +761,279 @@ thread-local subscriber can drop the maximum out from under one another and
 silently lose events. `pin_global_max_level` in that test file holds one
 dispatcher for the lifetime of the binary. This was an observed intermittent
 failure, not a precaution.
+
+## Scoped and policy-based configuration discovery
+
+Automatic discovery historically resolved one file: the candidate list was
+scanned most-preferred first and the scan stopped at the first success. The
+build tool that motivated the change needed an ordered, fail-closed explicit
+selector chain and a stack of every file that exists, with project keys
+overriding user keys while user-only keys survive. The resulting runtime types
+live in `ortho_config/src/discovery/`, and RFC 0002
+(`docs/rfcs/0002-config-layer-resolution-policy.md`) is their design record: it
+fixes the semantics tables, the suppression gate, the drain precedence, and the
+stability surface that must settle before the first release shipping them. Read
+it before changing any behaviour here.
+
+This section is about file-layer *resolution*. The agent-native,
+`cargo-orthohelp` policy configuration described in
+[Policy configuration test layout](#policy-configuration-test-layout) is a
+different feature that shares only the word "policy".
+
+### Type roles and how they compose
+
+Four layers of responsibility, each thin enough to test on its own:
+
+- `ConfigDiscovery` and `ConfigDiscoveryBuilder` own the candidate search space:
+  the file names, the project roots, and the injected `EnvSource`. See
+  [Environment access boundary](#environment-access-boundary).
+- `ConfigFilePolicy` sits above that builder and adds the explicit selector
+  chain, the two mode enums, and the scope order. `from_builder` is the
+  constructor; the builder methods are chainable.
+- `FileLayerOutcome` is the replayable result of `resolve_layers`. It is a
+  struct rather than an enum because a successful chain can coexist with an
+  earlier ignorable probe, and because a fatal selected-file failure must still
+  carry the winning selector.
+- `ResolvedSelection` records which selector won and where it pointed, on both
+  the success and the failure path, so an error can name the selector that
+  chose the offending file.
+
+`resolve_layers` reads the environment once, at resolve time, and never returns
+`Err`; failures are carried in the outcome's classified error buckets and
+realized only when it is drained. Two exhaustive lists in RFC 0002 describe the
+surface and are worth checking against any change: the "Reusable file-layer
+resolver" section for the accessors, and "File-layer error policy" for the
+four-case mapping. That document also records what has deliberately not changed:
+`compose_layers`, `compose_layer`, `load_first*`, `DiscoveryLayersOutcome`,
+`LayerComposition`, `MergeComposer`, and `MergeLayer` keep their signatures and
+behaviour, because the new types are additive.
+
+### First-wins and scope stacking are two code paths
+
+`AutomaticMode` decides what automatic discovery does once it runs, and the two
+variants do not share a traversal.
+
+- `AutomaticMode::FirstWins` is the default. `compose_scoped_layers` preserves
+  `ConfigDiscovery::compose_layers` exactly, by calling it directly and
+  returning no origins. `compose_layers` walks the flat candidate list that
+  interleaves explicit, environment, and platform entries, and stops at the
+  first candidate whose `extends` chain loads.
+- `AutomaticMode::StackScopes` resolves every requested scope in `scope_order`
+  and appends the layers of every applicable candidate that loads, so a project
+  file layers over a user file instead of replacing it.
+
+Scope is not a concept under `FirstWins`, so a scope request is never
+dereferenced there and no scope can be an origin. Within `StackScopes`, every
+candidate in a scope is attempted rather than only the first that loads: that
+is the mode, and it is also what makes the diagnostics complete, since a
+candidate's defect is only discoverable by opening it. A failed lower-preferred
+candidate therefore does not prevent the layers that did load from being
+returned.
+
+The legacy `compose_layers` is retained unchanged and the scoped engine groups
+the platform generators only; explicit and environment selection belong to the
+selector chain. They are two tested code paths, not one path wearing two
+signatures, so a fix to one is not automatically a fix to the other.
+
+### Selector precedence, and why it suppresses
+
+`ConfigFilePolicy::selectors` takes an ordered chain. `resolve_layers` walks it
+with `find_map` and the first selector that resolves a path wins. Resolution
+reads a CLI-supplied `PathBuf` directly, and for `ConfigPathSelector::env`
+reads the named variable through the discovery `EnvSource`, treating an unset
+or empty value as "no selection".
+
+A winning selector suppresses every later selector and all automatic probing.
+That is the property `add_required_path` cannot deliver: the gate lives at
+candidate generation, so a required path can no longer mechanically coexist
+with later discovered layers. `ExplicitMode` decides what happens once a rung
+wins:
+
+- `ExplicitMode::RequiredExclusive` is the default. A missing or malformed
+  selected file produces a single terminal `selected_error` carrying the winning
+  `ResolvedSelection`; automatic discovery never runs, and there is no
+  fallback.
+- `ExplicitMode::Optional` is exclusive but tolerant. An absent selected path
+  yields no file layers while still suppressing automatic discovery; a
+  malformed file is still an error.
+
+Draining follows a fixed precedence, and the change is worth knowing because it
+alters which failures surface: a `selected_error`, when present, is the sole
+surfaced error and the layers are empty; otherwise `reportable_errors` always
+surface, and `ignorable_errors` surface only when no layer loaded. The
+reportable bucket is the genuinely new expressiveness. Previously a malformed
+*automatic* file landed in `optional_errors` and was dropped whenever a later
+candidate succeeded, so a broken project file could vanish behind a valid user
+file.
+
+### Scope order, and the two opposite orderings
+
+Two orderings meet in `discovery/scoped.rs` and they run in opposite directions.
+`docs/design.md` states the point authoritatively and should be read in full;
+the short form is:
+
+- The candidate list is a **preference** order, most-preferred first, because
+  index 0 is the location the historic first-wins scan selects.
+- A composed layer list is a **precedence** order, because a `MergeComposer`
+  applies layers in the order given and the last one wins.
+
+A scope therefore walks its candidates in reverse preference order, applying
+the least-preferred location first and the most-preferred last, so the historic
+winner still wins while every lower-preferred location contributes a base layer
+for the keys it alone sets. This keeps "later applied wins" as the single rule
+for the whole system. Emitting candidates in preference order instead would let
+a fallback such as `~/.demo.toml` silently override
+`$XDG_CONFIG_HOME/demo/config.toml`, inverting established behaviour the moment
+a second location starts loading.
+
+The reversal happens in one named place, `ConfigDiscovery::scope_candidates`,
+so that no call site has to hold two opposite orderings in mind: everything
+downstream of it merely appends in application order. A maintainer changing the
+traversal should keep that property — a second reversal, or a call site that
+"fixes up" the order it receives, would restore the inversion this design
+exists to prevent.
+
+`scope_order` is a *request*, not a record. The default is
+`[System, User, Project]`, and later scopes override earlier ones, so project
+layers naturally override user layers. A scope contributes nothing when none of
+its candidates loads, or when every layer it produced was already contributed
+by an earlier scope.
+
+Two invariants make that stacking deterministic, because the loader
+de-duplicates and detects `extends` cycles only within a single chain:
+
+- De-duplication is by **canonical** path across the whole composition, keeping
+  the earliest position in application order, which within a scope is the
+  lowest-precedence one. Keying on the canonical path the loader already stored
+  collapses aliases and symlinks without changing public layer metadata, and it
+  stops a file reachable from two places from contributing two layers and
+  silently doubling append-strategy vectors. A parent reached by two children
+  applies once, at the position its first child gave it; both children still
+  override it.
+- The `extends` chain of each file remains parent-first, so a parent is still
+  applied before the child that overrides it. `extends` resolution is
+  chain-local, with each file resolving its own parents against its own visited
+  set, and a cross-scope cycle is reported with the same cyclic-extends error
+  as a within-chain cycle.
+
+### Inspecting and replaying a `FileLayerOutcome`
+
+The load-bearing requirement is that the layers are resolved once and reused:
+the same outcome is peeked for an early scalar read, then replayed into the
+merge. The accessors split by purpose rather than by field.
+
+- Early inspection, before any merge runs. `selection()` returns the winning
+  `ResolvedSelection`; `selected_error()` returns the fatal selected-file error;
+  `reportable_errors()` returns the non-fatal errors that should always be
+  reported; and `merged_file_value()` folds the loaded layers into one JSON
+  object for a scalar-only peek, such as a diagnostics flag that governs how
+  later errors are rendered.
+- Provenance for an operator-facing "what loaded" trace. `origins()` returns the
+  scopes that actually contributed, and it does **not** echo `scope_order`: a
+  requested scope whose candidates were all absent, or whose every layer was
+  already contributed by an earlier scope, is not an origin. Under `FirstWins`
+  it is always empty, and a failed explicit selection reports none either,
+  because selection is not automatic discovery. That is why the report is
+  computed inside the scoped engine rather than reconstructed by the policy.
+- Replay, which reads no files because the layers are already resolved.
+  `push_into` drains the layers into an existing `MergeComposer`;
+  `into_layers_and_errors` drains them plus the classified errors into a
+  caller-owned buffer, which is the shape the generated loader already feeds to
+  `LayerComposition::new`; and `into_result` is the convenience form that
+  aggregates into an `OrthoResult` instead. Both drains call one private
+  helper, so the order above has a single source of truth rather than two
+  restatements.
+
+`merged_file_value` is deliberately narrow. The fold covers scalar keys only: a
+collection-typed key reflects last-file-wins rather than the field's append or
+keyed-merge strategy, so only scalars should be read from it. Widening it later
+would be safe; broadening the claim and then narrowing it would not.
+
+### The derive attribute plumbing
+
+A struct opts into this path by setting any policy key alongside the existing
+discovery keys:
+
+```rust
+#[ortho_config(discovery(
+    app_name = "demo",
+    env_vars = ["DEMO_CONFIG"],
+    explicit_mode = "required_exclusive",
+    automatic_mode = "stack_scopes",
+    scope_order = ["user", "project"],
+    project_file_name = "demo.toml",
+    project_root_from = "directory",
+))]
+struct DemoConfig { /* ... */ }
+```
+
+`ortho_config_macros/src/derive/parse/discovery_attrs.rs` parses the keys, and
+`uses_policy` is what selects the emitter: a struct setting only the
+pre-existing keys keeps generating the legacy loader verbatim, while an opt-in
+struct routes through `build_policy_based_loading` in
+`ortho_config_macros/src/derive/policy_impl.rs`, which assembles a
+`ConfigFilePolicy`, calls `resolve_layers`, and drains it with
+`into_layers_and_errors`.
+
+- `env_vars` is an ordered alias chain, resolved into `ConfigPathSelector::env`
+  rungs in the order written. It is mutually exclusive with the single
+  `env_var`, which is a compile error because the combined precedence would be
+  ambiguous. A struct that sets only `automatic_mode` still honours `env_var`;
+  the emitter prefers `env_vars` when it is non-empty, so opting into the
+  policy path cannot silently drop the override a non-policy struct already
+  honours.
+- `explicit_mode` and `automatic_mode` accept the string forms of the runtime
+  enum variants and are validated at compile time. Their defaults reproduce the
+  existing behaviour: `first_wins` for automatic mode, and `required_exclusive`
+  for explicit mode. An unrecognized string is a compile error naming the
+  accepted set.
+- `scope_order` lists scopes by name — `system`, `user`, or `project` — and is
+  validated at compile time.
+- `project_root_from` names a CLI field to read at run time, which is the part
+  static attributes cannot otherwise reach: the generated code checks the
+  parsed CLI value and calls `project_root` when it is present. The macro
+  rejects the attribute unless the field exists, is not `skip_cli`, and is a
+  `PathBuf` or `Option<PathBuf>`. The value is the Rust field identifier, not
+  the serde rename, because the wiring is code-level.
+- An injected environment source still reaches the builder on this path, so a
+  `load_from_iter_with_sources` caller's `MapEnv` is honoured for both the
+  selector rungs and automatic discovery. Without that step, discovery would
+  read the real process environment instead.
+
+The derive grammar and the runtime enum strings become a public grammar once
+shipped, which is why RFC 0002 stages the derive extension last. The static
+grammar also cannot express every policy — a root derived from two fields, or
+conditional scopes — so the runtime `ConfigFilePolicy` remains the escape hatch
+for an application that builds one by hand and bypasses the derive.
+
+### Testing these diagnostics
+
+Each refusal above has two tests, and they are not duplicates of one another.
+The unit tests in
+`ortho_config_macros/src/derive/parse/tests/discovery_validation.rs` call the
+parser directly and assert the *message string* and the variant it belongs to;
+that is the place a message is changed. The trybuild fixtures under
+`ortho_config/tests/ui/` compile a small derive and pin the *rendered form* —
+the message together with the span the compiler points at — which is the only
+way to catch a diagnostic that still says the right thing in the wrong place.
+
+Five fixtures cover the policy and discovery vocabulary:
+
+- `policy_explicit_mode_invalid_value` and
+  `policy_automatic_mode_invalid_value` for the two mode enums, each using a
+  near-miss spelling so the fixture exercises the rejection rather than a typo;
+- `policy_scope_order_invalid_value` for a scope name outside the three;
+- `policy_project_root_from_skipped` and
+  `policy_project_root_from_wrong_type` for the two `project_root_from`
+  refusals the field lookup reaches. The third — a name matching no field at
+  all — is covered by a parser unit test, which is why no fixture mirrors it.
+
+Each `.stderr` is compiler output rather than a handwritten guess: emit it with
+`TRYBUILD=overwrite cargo test -p ortho_config --test compile_fail`, then
+re-run the same command with `TRYBUILD` unset to confirm. A snapshot that
+drifts fails under the default, which is what makes the pair a check rather
+than a record; a fixture whose code compiles clean is reported by trybuild as a
+case that failed to fail, so add the `.rs` and `.stderr` together.
 
 ## Environment access boundary
 
@@ -1330,7 +1617,7 @@ tier two did not exist at all.
 
 | Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
 | ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10); the trybuild override is also 600 s |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
 | Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
@@ -1356,9 +1643,16 @@ callers invoke the action once.
 ### The per-test budget is a product, not a period
 
 `terminate-after` counts warning periods, so the budget a test gets is `period`
-multiplied by it. The longest override here is 120 s with a multiplier of five,
-so reading the period alone would report 120 s where the real figure is 600 s.
-The contract asserts that reading outright rather than leaving it implied.
+multiplied by it. The longest override here is 120 s with a multiplier of
+eight, so reading the period alone would report 120 s where the real figure is
+960 s. The contract asserts that reading outright rather than leaving it
+implied.
+
+Two tiers can also name the *same* product while meaning different things,
+which is worth knowing before sizing one by the other. The trybuild override
+was 120 s x 5 and the default profile is 60 s x 10, so both allowed 600 s and
+the override changed only how often the warning appeared. A binary added to the
+override for its larger-looking period therefore gained nothing at all.
 
 ### Tier one covered two binaries, and tier two did not exist
 
@@ -1390,6 +1684,45 @@ The slowest test outside the trybuild override was
 allowance is 600 s, ten warning periods of 60 s, about 1.6 times that worst
 case: enough that a legitimately slow test finishes, small enough that a hang
 is caught well inside the whole-run budget.
+
+### The trybuild allowance was raised after it killed two tests
+
+The trybuild class outgrew its 600 s. It is budgeted apart from the base
+allowance because each of these binaries spawns a child `cargo` in a separate
+target directory, so none shares cargo-llvm-cov's warmed cache and each pays a
+cold dependency build. They also share one package cache and so block on its
+lock while their neighbours build, which the logs show directly: run
+36070786646 recorded four `Blocking waiting for file lock on package cache`
+lines, and run 36068184976 recorded none.
+
+Two measurements set the new figure:
+
+| What                             | Duration | Of its budget   | Run         |
+| -------------------------------- | -------- | --------------- | ----------- |
+| `crate_path_trybuild`, passed    | 572.5 s  | 0.95 of 600 s   | 36068184976 |
+| `must_use_compile_tests`, killed | 600.2 s  | the whole of it | 36070786646 |
+
+*Table: the worst trybuild durations observed. The first passed with only 27 s
+to spare, so the old allowance was already too small rather than merely
+unlucky; the second was still cold-compiling its first dependencies
+(`proc-macro2`, `unicode-ident`) when it was stopped, so it was slow rather
+than hung.*
+
+The allowance is now 960 s, eight warning periods of 120 s, which is 1.68 times
+the 572.5 s worst observed — the same headroom the base allowance was sized
+with against its own 364.8 s. The filter names all eight trybuild binaries
+rather than the two it used to; six end in `trybuild` and `compile_fail` and
+`compile_time` do not, so no single glob covers the class and the names are
+enumerated instead. Eight is the count `trybuild_tier_test.py` enforces, so a
+trybuild binary that lands on `main` after the enumeration is written is
+reported by the contract rather than silently left on the base allowance:
+`subcommand_trybuild` arrived that way, and the contract is what caught it.
+
+The 960 s allowance is lower than the 1,800 s whole-run budget, which the
+ordering contract asserts. That comparison does not by itself guarantee a test
+using its full allowance finishes before the run deadline, since a test that
+starts late spends part of the budget waiting to be scheduled; it establishes
+that the allowance cannot exhaust the run on its own.
 
 The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
 It has to fit inside the watchdog with nextest's termination procedure and a
@@ -1455,9 +1788,9 @@ a job and has to contain every watchdog inside it; counting the steps is what
 makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
 coverage-invoking job that declares no ceiling at all. The readings it rests on
-live in `nextest_budgets.py`, `nextest_durations.py`, `nextest_errors.py`,
-`timeout_budgets.py` and `coverage_lanes.py`, and are driven with controlled
-values in `timeout_reading_test.py`.
+live in `nextest_budgets.py`, `nextest_document.py`, `nextest_durations.py`,
+`nextest_errors.py`, `timeout_budgets.py` and `coverage_lanes.py`, and are
+driven with controlled values in `timeout_reading_test.py`.
 
 Run them with `make test-workflow-contracts`. The target provisions `pytest`,
 `pyyaml` and `hypothesis` through `uv run --with` rather than from the

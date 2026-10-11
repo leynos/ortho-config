@@ -19,6 +19,21 @@ behaviour. See the
 [agent-native policy section in the user's guide][users-guide-policy] for the
 report shape, exceptions, and command-line override.
 
+## Load files from more than one scope
+
+Nothing changes by default: discovery still stops at the first file that loads,
+which is what `AutomaticMode::FirstWins` means, and that remains the default.
+
+Opting into `AutomaticMode::StackScopes` makes every applicable file that loads
+in each requested scope contribute a layer, rather than only the first. Scopes
+apply in the order named, so a later scope overrides an earlier one. Within a
+scope the most-preferred location still wins, preserving the first-wins result.
+
+Two ways to opt in: the `automatic_mode = "stack_scopes"` derive key, and
+`ConfigFilePolicy::from_builder(...).automatic_mode(...)` on a hand-built
+policy. Both live under the same `discovery(...)` attribute and policy API
+described in [the user's guide][users-guide-scoped-discovery].
+
 ## Keep the default process behaviour
 
 `load()`, `load_from_iter()`, and the existing subcommand merge methods
@@ -196,3 +211,4 @@ Cargo external-subcommand entry-point shape.
 
 [users-guide-policy]: users-guide.md#agent-native-policy-checking
 [users-guide-discovery]: users-guide.md#choose-the-file-discovery-source
+[users-guide-scoped-discovery]: users-guide.md#control-which-configuration-files-become-layers

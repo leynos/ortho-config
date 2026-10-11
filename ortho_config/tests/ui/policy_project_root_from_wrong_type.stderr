@@ -1,0 +1,5 @@
+error: `project_root_from` must name a non-skipped `PathBuf` or `Option<PathBuf>` field
+  --> tests/ui/policy_project_root_from_wrong_type.rs:14:5
+   |
+14 |     root_name: String,
+   |     ^^^^^^^^^^^^^^^^^

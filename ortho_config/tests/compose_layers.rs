@@ -11,6 +11,12 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
 
+#[path = "support/layer_assertions.rs"]
+mod layer_assertions;
+#[path = "support/scoped_fixtures.rs"]
+#[expect(dead_code, reason = "write_config serves sibling suites")]
+mod scoped_fixtures;
+
 mod discovery_compose_layers {
     //! `ConfigDiscovery::compose_layers` pinned at its own API.
     //!
@@ -24,9 +30,12 @@ mod discovery_compose_layers {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
-    use anyhow::{Context as _, Result, ensure};
+    use anyhow::{Context as _, Result, anyhow, ensure};
     use cap_std::{ambient_authority, fs::Dir};
-    use ortho_config::{ConfigDiscovery, MapEnv};
+    use ortho_config::{AutomaticMode, ConfigDiscovery, DiscoveryScope, MapEnv};
+
+    use crate::layer_assertions::{assert_layer_path, merge_layers};
+    use crate::scoped_fixtures::write_body;
 
     /// Write a fixture through a capability handle, per the repository's
     /// filesystem policy: the handle names the directory it may touch.
@@ -146,6 +155,65 @@ mod discovery_compose_layers {
             outcome.required_errors.len() == 1,
             "the broken chain should be a required failure: {:?}",
             outcome.required_errors,
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scoped_first_wins_keeps_only_the_preferred_candidate() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let home = dir.path().join("home");
+        // Two candidates in one scope, both loadable: the XDG location the
+        // candidate list prefers, and the dotfile fallback behind it. A mode
+        // that loaded every applicable file would return both layers and let
+        // the fallback's value override, so the layer count and the merged
+        // value together are what distinguish first-wins from stacking here.
+        let preferred = home.join(".config/demo/config.toml");
+        let fallback = home.join(".demo.toml");
+        write_body(&preferred, "value = 1\n")?;
+        write_body(&fallback, "value = 2\n")?;
+
+        // `env_source` replaces rather than merges, so the isolation variable
+        // has to travel in the same map as `HOME`; a second `env_source` call
+        // would drop it and let a host's `/etc/xdg/demo/config.toml` load
+        // ahead of the fixtures.
+        let outcome = ConfigDiscovery::builder("demo")
+            .clear_project_roots()
+            .env_source(Arc::new(
+                MapEnv::new()
+                    .with_var("XDG_CONFIG_DIRS", "/nonexistent/ortho-config-test-xdg")
+                    .with_var("HOME", &home),
+            ))
+            .build()
+            .compose_scoped_layers(AutomaticMode::FirstWins, &[DiscoveryScope::User]);
+
+        ensure!(
+            outcome.required_errors.is_empty() && outcome.optional_errors.is_empty(),
+            "composing should not fail: {:?} / {:?}",
+            outcome.required_errors,
+            outcome.optional_errors,
+        );
+        let names = layer_file_names(&outcome.value);
+        ensure!(
+            names == ["config.toml"],
+            "first-wins must contribute exactly the preferred candidate: {names:?}",
+        );
+        let only = outcome
+            .value
+            .first()
+            .ok_or_else(|| anyhow!("first-wins must still return the one layer it loaded"))?;
+        assert_layer_path(only, &preferred)?;
+        let merged = merge_layers(outcome.value);
+        ensure!(
+            merged.get("value") == Some(&serde_json::json!(1)),
+            "the preferred candidate's value must win, not the fallback's: {merged:?}",
+        );
+        // Guard the case itself: with only one candidate on disk the
+        // assertions above would hold for a reader that never consulted the
+        // candidate list at all.
+        ensure!(
+            preferred.exists() && fallback.exists(),
+            "both candidates must be loadable, or the case proves nothing",
         );
         Ok(())
     }

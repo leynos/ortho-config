@@ -5,6 +5,7 @@
 //! according to the order described in the design document. See
 //! [`docs/design.md`](../../docs/design.md) for the high-level architecture.
 
+use super::policy_impl::build_policy_based_loading;
 use quote::quote;
 use syn::Ident;
 
@@ -14,9 +15,10 @@ mod cli;
 use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
 
 mod source;
+pub(crate) use source::LoadSourceTokens;
 use source::{
-    LoadSourceTokens, build_config_impl_delegates, build_load_from_iter_impl,
-    build_load_from_iter_with_sources_impl, build_source_aware_compose_layers_impl,
+    build_config_impl_delegates, build_load_from_iter_impl, build_load_from_iter_with_sources_impl,
+    build_source_aware_compose_layers_impl,
 };
 /// Identifiers used when generating the load implementation.
 #[expect(
@@ -48,6 +50,17 @@ pub(crate) struct DiscoveryTokens {
     pub config_file_name: Option<String>,
     pub dotfile_name: Option<String>,
     pub project_file_name: Option<String>,
+    pub policy_enabled: bool,
+    pub env_vars: Vec<String>,
+    pub explicit_mode: Option<String>,
+    pub automatic_mode: Option<String>,
+    pub scope_order: Vec<String>,
+    /// Names the CLI field whose parsed value becomes the project root.
+    ///
+    /// The field's declared type is validated by the parser but not recorded
+    /// here: the generated CLI struct wraps *every* field in `Option`, so the
+    /// emitter reads an `Option` whichever type was written.
+    pub project_root_from: Option<String>,
 }
 
 /// Convenience wrapper for passing identifiers and tokens together.
@@ -140,6 +153,9 @@ fn build_discovery_based_loading(
     has_config_path: bool,
     source_tokens: Option<&LoadSourceTokens<'_>>,
 ) -> proc_macro2::TokenStream {
+    if discovery.policy_enabled {
+        return build_policy_based_loading(krate, discovery, has_config_path, source_tokens);
+    }
     let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
     let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
     let config_file_stmt = build_optional_stmt(

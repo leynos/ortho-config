@@ -33,6 +33,39 @@ struct DiscoveryConfig {
     value: u32,
 }
 
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "POLICY_",
+    discovery(
+        app_name = "policy_app",
+        config_file_name = "policy.toml",
+        project_file_name = "project.toml",
+        config_cli_long = "config",
+        config_cli_visible = true,
+        automatic_mode = "stack_scopes",
+        scope_order = ["user", "project"]
+    )
+)]
+struct PolicyDiscoveryConfig {
+    #[ortho_config(default = 1)]
+    value: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "OPTIONAL_POLICY_",
+    discovery(
+        app_name = "optional_policy_app",
+        config_cli_long = "config",
+        config_cli_visible = true,
+        explicit_mode = "optional"
+    )
+)]
+struct OptionalPolicyDiscoveryConfig {
+    #[ortho_config(default = 1)]
+    value: u32,
+}
+
 #[fixture]
 fn env_lock() -> test_env::EnvVarLock {
     test_env::lock()
@@ -272,6 +305,69 @@ fn defaults_apply_when_no_config_found(_env_lock: test_env::EnvVarLock) -> Resul
     let _env = setup_clean_env();
     let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
     ensure!(cfg.value == 1, "expected default 1, got {}", cfg.value);
+    Ok(())
+}
+
+#[rstest]
+#[expect(
+    clippy::used_underscore_binding,
+    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
+)]
+fn policy_attribute_stacks_scopes_and_suppresses_them_after_selection(
+    _env_lock: test_env::EnvVarLock,
+) -> Result<()> {
+    let _env = clear_support_env();
+    let dir = TempDir::new().context("create temp dir")?;
+    let user_home = dir.path().join("user");
+    let project_root = dir.path().join("project");
+    let selected = dir.path().join("selected.toml");
+    let _ = create_test_config(&user_home.join("policy_app"), "policy.toml", 20)?;
+    let _ = create_test_config(&project_root, "project.toml", 30)?;
+    let _ = create_test_config(dir.path(), "selected.toml", 40)?;
+    let xdg_home = user_home
+        .to_str()
+        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
+    let _xdg = test_env::set_var("XDG_CONFIG_HOME", xdg_home);
+    let _cwd_guard = cwd::set_dir(&project_root)?;
+
+    let stacked = PolicyDiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+    ensure!(
+        stacked.value == 30,
+        "project scope must override user scope"
+    );
+
+    let selected_path = selected
+        .to_str()
+        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
+    let explicit = PolicyDiscoveryConfig::load_from_iter(["prog", "--config", selected_path])
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        explicit.value == 40,
+        "--config must suppress automatic scopes"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[expect(
+    clippy::used_underscore_binding,
+    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
+)]
+fn optional_policy_selector_ignores_a_missing_config_path(
+    _env_lock: test_env::EnvVarLock,
+) -> Result<()> {
+    let _env = clear_support_env();
+    let dir = TempDir::new().context("create temp dir")?;
+    let missing = dir.path().join("missing.toml");
+    let missing_path = missing
+        .to_str()
+        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
+    let config = OptionalPolicyDiscoveryConfig::load_from_iter(["prog", "--config", missing_path])
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        config.value == 1,
+        "optional missing selection must use defaults"
+    );
     Ok(())
 }
 

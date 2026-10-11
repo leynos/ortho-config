@@ -1,0 +1,7 @@
+error: automatic_mode must be first_wins or stack_scopes
+  --> tests/ui/policy_automatic_mode_invalid_value.rs:15:23
+   |
+15 | #[derive(Deserialize, OrthoConfig)]
+   |                       ^^^^^^^^^^^
+   |
+   = note: this error originates in the derive macro `OrthoConfig` (in Nightly builds, run with -Z macro-backtrace for more info)

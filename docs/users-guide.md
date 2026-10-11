@@ -619,6 +619,138 @@ For a hand-built Cargo external-subcommand parser, see the
 [Cargo external-subcommand entry points](#cargo-external-subcommand-entry-points)
 section.
 
+## Control which configuration files become layers
+
+File discovery normally stops at the first candidate that loads, and that
+remains the default: `AutomaticMode::FirstWins` scans candidates most-preferred
+first and stops at the first file that parses. The opt-in
+`AutomaticMode::StackScopes` composes every applicable file that loads instead,
+so a lower-preference file still contributes the keys it alone sets.
+
+Three ideas order that stack:
+
+- a **scope** is `DiscoveryScope::System`, `DiscoveryScope::User`, or
+  `DiscoveryScope::Project`, covering automatic locations such as `/etc/xdg`,
+  the home and application-data folders, and the project directory;
+- **scope order is precedence order**: scopes are applied in the order given,
+  and the default `system`, `user`, `project` order lets project files override
+  user files, which in turn override system-wide files; and
+- within a scope the least-preferred location is applied first and the
+  most-preferred last, so the location that first-wins would have selected
+  still wins, while every lower-preferred location contributes a base layer for
+  the keys it alone sets.
+
+That reversal is deliberate, because the two orderings run in opposite
+directions: the candidate list is a _preference_ order, while a composed layer
+list is a _precedence_ order. Walking candidates in reverse is what lets one
+rule, "later applied wins", serve both. Emitting them in preference order
+instead would let a fallback such as `~/.demo.toml` silently override
+`$XDG_CONFIG_HOME/demo/config.toml` as soon as a second location started
+loading.
+
+Canonical paths are de-duplicated across scopes, keeping the earliest position
+in application order, so a file reachable from two scopes contributes one layer
+rather than two.
+
+### Select a file explicitly
+
+`ConfigFilePolicy` places an ordered chain of explicit selectors above
+automatic discovery. Each rung is a `ConfigPathSelector`:
+
+- `ConfigPathSelector::cli(path)` takes an optional path already parsed by a
+  CLI adapter, such as the generated `--config-path` field;
+- `ConfigPathSelector::env("VAR")` names an environment variable to read; an
+  empty value counts as unset;
+- `.label("primary")`, applied to a rung, replaces the diagnostics label it
+  would otherwise carry, such as the variable name; and
+- `.legacy_alias()`, applied to a rung, marks it as an older, compatibility
+  variable name.
+
+Rungs resolve in order and the first that yields a path wins. A winning rung
+suppresses the rungs after it and automatic probing entirely, so a file named
+on the command line is never joined by automatically discovered files. When no
+rung yields a path, the policy falls back to automatic discovery over
+`scope_order`.
+
+`ExplicitMode` decides what a selected path means:
+
+- `ExplicitMode::RequiredExclusive`, the default, reports a selected file that
+  is missing or unreadable as a failure and loads no fallback; and
+- `ExplicitMode::Optional` accepts an absent selected path while still
+  suppressing automatic discovery.
+
+Resolution returns a `FileLayerOutcome`, a replayable value reporting the
+winning selection through `selection()`, non-fatal defects through
+`reportable_errors()`, and the scopes that actually contributed layers through
+`origins()`. Under `AutomaticMode::FirstWins`, `origins()` is always empty,
+because that mode walks a flat candidate list and scope has no bearing on what
+loads.
+
+### Root the project scope
+
+The project scope is rooted at the working directory by default. Two spellings
+replace it with a caller-selected directory:
+
+- `ConfigFilePolicy::project_root(root)` replaces every automatic project root
+  on a hand-built policy; and
+- the derive attribute `project_root_from = "field_name"` names the CLI field
+  whose value becomes that root. The field must be of type `PathBuf` or
+  `Option<PathBuf>`, and must not be skipped for the CLI; the derive rejects
+  any other field at compile time.
+
+### Configure the policy from the derive
+
+The policy keys live in the same `discovery(...)` attribute as the other
+discovery settings. Supplying any of them switches the generated loader onto
+the policy path:
+
+<!-- tested-example: guide-scoped-discovery -->
+```rust
+use ortho_config::{OrthoConfig, OrthoResult};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "ACME_",
+    discovery(
+        app_name = "acme",
+        env_vars = ["ACME_CONFIG_PATH", "ACME_LEGACY_CONFIG"],
+        explicit_mode = "optional",
+        automatic_mode = "stack_scopes",
+        scope_order = ["system", "user", "project"]
+    )
+)]
+struct Config {
+    #[ortho_config(default = 8080)]
+    port: u16,
+}
+
+fn main() -> OrthoResult<()> {
+    let config = Config::load()?;
+    println!("port={}", config.port);
+    Ok(())
+}
+```
+
+With neither selector variable set and no candidate file present, the example
+prints `port=8080`: the stacked scopes contribute nothing and the default
+survives. The policy keys are:
+
+- `env_vars`: an array of environment variable names, tried in order, so that
+  an older name still selects a file. It is mutually exclusive with `env_var`.
+- `explicit_mode`: `"required_exclusive"` (the default) or `"optional"`.
+- `automatic_mode`: `"first_wins"` (the default) or `"stack_scopes"`.
+- `scope_order`: an array drawn from `"system"`, `"user"`, and `"project"`,
+  applied in the order written.
+- `project_root_from`: the name of a `PathBuf` or `Option<PathBuf>` CLI field
+  whose value supplies the project root described above.
+
+Every part of this section is opt-in. Discovery stays first-wins and every
+selected path stays required unless one of the keys above says otherwise, so
+applications that do not use them need no change. See the
+[v0.10.0 migration guide](v0-10-0-migration-guide.md) for the other opt-in
+changes in this release line.
+
 ## Cargo external-subcommand entry points
 
 Cargo runs `cargo <name> [OPTIONS]` by locating a binary named `cargo-<name>` on
