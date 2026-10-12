@@ -205,10 +205,16 @@ fn a_blocked_publication_announces_its_wait_and_retires_it() -> Result<()> {
 fn marker_path(root: &std::path::Path) -> Option<std::path::PathBuf> {
     let entries = fs::read_dir(root).ok()?;
     for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        if name.starts_with(super::artefact_wait_marker::WAIT_STEM) && name.ends_with(".json") {
-            return Some(entry.path());
+        let path = entry.path();
+        let raw_name = entry.file_name();
+        let Some(name) = raw_name.to_str() else {
+            continue;
+        };
+        let is_json = path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("json"));
+        if name.starts_with(super::artefact_wait_marker::WAIT_STEM) && is_json {
+            return Some(path);
         }
     }
     None
@@ -244,7 +250,7 @@ fn wait_for_growth(root: &std::path::Path, previous: u64, timeout: Duration) -> 
     while Instant::now() < deadline {
         let waited = read_announcement(root)
             .and_then(|parsed| parsed.get("waited_ms").and_then(serde_json::Value::as_u64));
-        if waited.is_some_and(|waited| waited > previous) {
+        if waited.is_some_and(|current| current > previous) {
             return waited.context("a growing wait must have a value");
         }
         std::thread::sleep(SHORT_WAIT_REFRESH);

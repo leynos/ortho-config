@@ -69,7 +69,10 @@ fn a_channel_write_failure_is_recorded_rather_than_dropped() -> Result<()> {
         recorded.len() == 1,
         "one lost observation must leave exactly one record; got {recorded:?}",
     );
-    let operation = recorded[0]
+    let record = recorded
+        .first()
+        .context("the single record read back must be addressable")?;
+    let operation = record
         .get("operation")
         .and_then(serde_json::Value::as_str)
         .context("the record must name the operation that failed")?;
@@ -78,9 +81,9 @@ fn a_channel_write_failure_is_recorded_rather_than_dropped() -> Result<()> {
         "the record must name the operation that failed; got {operation}",
     );
     ensure!(
-        recorded[0].get("error").and_then(serde_json::Value::as_str) == Some("io"),
+        record.get("error").and_then(serde_json::Value::as_str) == Some("io"),
         "a refused rename is an I/O failure and must be classified as one; got {:?}",
-        recorded[0].get("error"),
+        record.get("error"),
     );
     Ok(())
 }
@@ -104,7 +107,9 @@ fn the_failure_record_names_the_operation_the_category_and_the_detail() -> Resul
 
     let recorded = records(root.path())?;
     ensure!(recorded.len() == 1, "one failure must leave one record");
-    let record = &recorded[0];
+    let record = recorded
+        .first()
+        .context("the single record read back must be addressable")?;
     ensure!(
         record.get("operation").and_then(serde_json::Value::as_str)
             == Some("cannot write the lock-wait marker"),
@@ -147,8 +152,11 @@ fn a_serialization_failure_is_categorised_separately() -> Result<()> {
     );
 
     let recorded = records(root.path())?;
+    let record = recorded
+        .first()
+        .context("the single record read back must be addressable")?;
     ensure!(
-        recorded[0].get("error").and_then(serde_json::Value::as_str) == Some("serialization"),
+        record.get("error").and_then(serde_json::Value::as_str) == Some("serialization"),
         "a serialization failure must be classified as one; got {recorded:?}",
     );
     Ok(())
@@ -170,15 +178,12 @@ fn repeated_channel_failures_accumulate() -> Result<()> {
         recorded.len() == 2,
         "every lost observation must survive as its own record; got {recorded:?}",
     );
+    let operations = recorded
+        .iter()
+        .map(|record| record.get("operation").and_then(serde_json::Value::as_str))
+        .collect::<Vec<_>>();
     ensure!(
-        recorded[0]
-            .get("operation")
-            .and_then(serde_json::Value::as_str)
-            == Some("first operation")
-            && recorded[1]
-                .get("operation")
-                .and_then(serde_json::Value::as_str)
-                == Some("second operation"),
+        operations == [Some("first operation"), Some("second operation")],
         "the records must preserve the order they happened in; got {recorded:?}",
     );
     Ok(())
@@ -214,7 +219,8 @@ fn the_failure_record_is_named_for_its_format() -> Result<()> {
         .and_then(|name| name.to_str())
         .context("the failure record must have a name")?;
     ensure!(
-        name.ends_with(".jsonl"),
+        path.extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("jsonl")),
         "a JSON Lines file must not claim to be a JSON document; got {name}",
     );
     ensure!(
