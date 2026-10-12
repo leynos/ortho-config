@@ -88,6 +88,16 @@ fn is_rendered_artefact(name: &str) -> bool {
         .is_some_and(|index| index == "index" || index.parse::<usize>().is_ok())
 }
 
+/// Returns whether a directory entry is a superseded rendered artefact.
+///
+/// Only a regular file that is rendered output and is absent from the current
+/// render is superseded. Splitting the three tests out of the prune loop keeps
+/// the directory scan reading as "for each entry: drop it when superseded",
+/// rather than as a single conjunct that a reader must unpack.
+fn is_superseded(name: &str, keep: &std::collections::HashSet<&str>, path: &Path) -> bool {
+    is_rendered_artefact(name) && !keep.contains(name) && path.is_file()
+}
+
 /// Removes rendered artefact files left over from a previous layout.
 ///
 /// `render` returns only the files the current entry set needs, so switching
@@ -111,7 +121,7 @@ fn prune_stale_rendered(root: &Path, current: &[ArtefactFile]) -> std::io::Resul
             continue;
         };
         let path = candidate.path();
-        if is_rendered_artefact(name) && !keep.contains(name) && path.is_file() {
+        if is_superseded(name, &keep, &path) {
             fs::remove_file(path)?;
         }
     }

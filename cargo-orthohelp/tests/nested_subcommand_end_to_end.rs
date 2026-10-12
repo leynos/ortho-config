@@ -203,10 +203,12 @@ fn assert_no_respelled_identifier_misses(root: &Value) -> Result<(), TestError> 
 /// carry these placeholders, at every depth of the nested command tree.
 fn collect_missing_ids(value: &Value, misses: &mut Vec<String>) {
     const PLACEHOLDER_PREFIX: &str = "[missing: ";
+    const LOCALIZED_KEYS: [&str; 5] = ["about", "synopsis", "help", "long_help", "value_name"];
+    const CHILD_KEYS: [&str; 2] = ["fields", "subcommands"];
 
     let mut record = |text: Option<&str>| {
         if let Some(id) = text
-            .and_then(|text| text.strip_prefix(PLACEHOLDER_PREFIX))
+            .and_then(|candidate| candidate.strip_prefix(PLACEHOLDER_PREFIX))
             .and_then(|id| id.strip_suffix(']'))
         {
             misses.push(id.to_owned());
@@ -214,18 +216,17 @@ fn collect_missing_ids(value: &Value, misses: &mut Vec<String>) {
     };
 
     if let Some(object) = value.as_object() {
-        for key in ["about", "synopsis", "help", "long_help", "value_name"] {
+        for key in LOCALIZED_KEYS {
             record(object.get(key).and_then(Value::as_str));
         }
     }
-    if let Some(children) = value.get("fields").and_then(Value::as_array) {
-        for child in children {
-            collect_missing_ids(child, misses);
-        }
-    }
-    if let Some(children) = value.get("subcommands").and_then(Value::as_array) {
-        for child in children {
-            collect_missing_ids(child, misses);
+    // Both child-bearing keys hold arrays of the same node shape, so one loop
+    // walks them together instead of repeating the recursion per key.
+    for key in CHILD_KEYS {
+        if let Some(children) = value.get(key).and_then(Value::as_array) {
+            for child in children {
+                collect_missing_ids(child, misses);
+            }
         }
     }
 }

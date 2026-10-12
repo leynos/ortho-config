@@ -1,10 +1,12 @@
 //! Tests for the identifier-generation pass, base resolution, exclusion
 //! rules and the collision message contract.
 
+use rstest::rstest;
+use syn::parse_quote;
+
 use super::*;
 use crate::derive::parse::parse_input;
 use anyhow::{Result, anyhow, ensure};
-use syn::parse_quote;
 
 fn model_for(input: &syn::DeriveInput) -> Result<LocalizationIds> {
     let (ident, fields, struct_attrs, field_attrs) =
@@ -78,24 +80,6 @@ fn numeric_argument_id_composes_with_the_base_root() -> Result<()> {
         arg.long_help_id.as_ref() == "acme-args-123-long_help",
         "numeric argument id must compose its long-help id, got `{}`",
         arg.long_help_id.as_ref()
-    );
-    Ok(())
-}
-
-/// A numeric base is still rejected: there the segment *is* the root, and a
-/// Fluent message id cannot start with a digit.
-#[test]
-fn numeric_localization_root_is_still_rejected() -> Result<()> {
-    let input: syn::DeriveInput = parse_quote! {
-        #[ortho_config(localization_base = "123")]
-        struct App {
-            field: String,
-        }
-    };
-    let message = expect_model_error(&input);
-    ensure!(
-        message.contains("Fluent identifier must start with an ASCII letter"),
-        "numeric root must still be rejected: {message}"
     );
     Ok(())
 }
@@ -299,18 +283,37 @@ fn dotted_arg_id_is_normalized_per_segment() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn empty_path_without_root_is_rejected() -> Result<()> {
+/// The base must be rejected with a diagnostic that names the rule it broke.
+///
+/// The two cases cover the two ways a base can be unusable as a Fluent root,
+/// and they are asymmetric on purpose. An empty segment fails the empty-segment
+/// rule. A numeric base fails the ASCII-letter rule, because there the segment
+/// *is* the root and a Fluent message id cannot start with a digit. Contrast
+/// `numeric_argument_id_composes_with_the_base_root`, where the same `123` is
+/// a valid argument *fragment* under an alphabetic root.
+#[rstest]
+#[case("", "segment must not be empty", "empty base")]
+#[case(
+    "123",
+    "Fluent identifier must start with an ASCII letter",
+    "numeric root"
+)]
+fn rejected_localization_base_reports_its_reason(
+    #[case] base: &str,
+    #[case] expected: &str,
+    #[case] context: &str,
+) -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
-        #[ortho_config(localization_base = "")]
+        #[ortho_config(localization_base = #base)]
         struct App {
             field: String,
         }
     };
     let message = expect_model_error(&input);
     ensure!(
-        message.contains("segment must not be empty"),
-        "empty base should be rejected: {message}"
+        message.contains(expected),
+        "{context} must be rejected with a reason naming the rule; \
+         expected `{expected}` in `{message}`"
     );
     Ok(())
 }
