@@ -26,7 +26,8 @@ use syn::Ident;
 
 use super::artefact_lock::{LockGuard, lock, lock_while};
 use super::artefact_observation::{Observation, Subject, observe};
-use super::artefact_report::{ErrorCategory, Outcome, ReportConfig, Stage, note_wait};
+use super::artefact_report::{ErrorCategory, Outcome, ReportConfig, Stage};
+use super::artefact_wait_marker::note_wait;
 use super::{
     ARTEFACT_DIR, FRAGMENT_DIR, Fragment, Source, atomic_write, fragment_path, json,
     merge_fragments, prune_stale_rendered, render,

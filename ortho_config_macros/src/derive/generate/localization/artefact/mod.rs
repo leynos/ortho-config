@@ -11,10 +11,12 @@
 //! artefact directory; see `publish` for why a unique temporary filename alone
 //! is not sufficient.
 
+mod artefact_channel_log;
 mod artefact_lock;
 mod artefact_observation;
 mod artefact_probe;
 mod artefact_report;
+mod artefact_wait_marker;
 mod publish;
 mod schema;
 
@@ -331,6 +333,13 @@ mod prune_tests;
 #[path = "artefact_report_tests.rs"]
 mod report_tests;
 
+// What a channel file's *name* lets a reader conclude, split from
+// `report_tests` so neither suite outgrows the file-length cap; the two share
+// `report_tests::report`.
+#[cfg(test)]
+#[path = "artefact_report_identity_tests.rs"]
+mod report_identity_tests;
+
 // The channel's own failure record, split from `report_tests` so neither suite
 // outgrows the file-length cap; `report_tests::report` is shared between them.
 #[cfg(test)]
@@ -355,3 +364,9 @@ mod lock_tests;
 #[cfg(test)]
 #[path = "artefact_publication_tests.rs"]
 mod publication_tests;
+
+// The channel observed against real publications, split from `report_tests` so
+// neither suite outgrows the file-length cap.
+#[cfg(test)]
+#[path = "artefact_channel_tests.rs"]
+mod channel_tests;

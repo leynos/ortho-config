@@ -25,6 +25,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::artefact_lock::{create_lock, is_free, lock};
 use super::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
+use super::artefact_report::{ReportConfig, Reporting};
 use super::lock_fixture::fixture_source_path;
 
 /// Names the environment variable that turns this test binary into a helper.
@@ -52,6 +53,22 @@ pub(super) const VARIANT_CRATES: [&str; 2] = ["alpha", "beta"];
 /// `localization::artefact` filter, so the full path is required.
 const LOCK_HELPER_FILTER: &str =
     "derive::generate::localization::artefact::lock_support::lock_helper_entry_point";
+
+/// Names the wait that makes an observed publisher announce promptly.
+///
+/// Production announces after five seconds, which a test cannot spend
+/// genuinely blocked on every run. This is short enough to be reached inside a
+/// test's budget while a peer really holds the lock, so the announcement under
+/// test is one the production acquisition path made for a real wait rather
+/// than one the test wrote on its behalf.
+pub(super) const SHORT_WAIT_THRESHOLD: Duration = Duration::from_millis(50);
+
+/// Names the refresh gap the observed helper announces on.
+///
+/// Short for the same reason as [`SHORT_WAIT_THRESHOLD`], and short enough
+/// relative to it that the parent can observe the marker being *rewritten*
+/// with a larger wait rather than only written once.
+pub(super) const SHORT_WAIT_REFRESH: Duration = Duration::from_millis(100);
 
 /// Records the state a holder leaves in the artefacts directory.
 const SENTINEL_FILE: &str = "lock-sentinel.txt";
@@ -209,6 +226,7 @@ fn lock_helper_entry_point() -> Result<()> {
             publish_variant(&root, &variant)
         }
         "publish-announced" => publish_announced(&root),
+        "publish-observed" => publish_observed(&root),
         "publish-then-probe" => publish_then_probe(&root),
         "publish-failing-then-probe" => publish_failing_then_probe(&root),
         other => Err(anyhow::anyhow!("unknown helper mode {other}")),
@@ -288,6 +306,27 @@ fn publish_announced(root: &Path) -> Result<()> {
     publish(root)?;
     fs::write(root.join(PUBLISH_FINISHED_FILE), "finished")
         .context("record publication completion")?;
+    Ok(())
+}
+
+/// Announces, then publishes with the channel on and a prompt threshold.
+///
+/// The parent needs a publisher that is *genuinely* blocked while a peer holds
+/// the lock, so that the wait marker it observes was written by the production
+/// acquisition path. The threshold is shortened through the explicit
+/// configuration rather than the environment, which would change it for every
+/// test running concurrently in this binary. The announcement is written before
+/// the publication call, so a parent that sees it knows the child is about to
+/// contend rather than about to start.
+fn publish_observed(root: &Path) -> Result<()> {
+    fs::write(root.join(PUBLISH_STARTED_FILE), "started")
+        .context("announce the observed publication call")?;
+    publish_fixture(
+        root,
+        ReportConfig::with_timing(Reporting::On, SHORT_WAIT_THRESHOLD, SHORT_WAIT_REFRESH),
+    )?;
+    fs::write(root.join(PUBLISH_FINISHED_FILE), "finished")
+        .context("record observed publication completion")?;
     Ok(())
 }
 

@@ -7,27 +7,40 @@
 //! observations where a maintainer is already looking — the artefact directory
 //! below `OUT_DIR` — and only when the build explicitly opts in.
 //!
-//! Three files carry the channel, and they answer different questions:
+//! Three files carry the channel, each answering a different question in its
+//! own module:
 //!
-//! * `cli-identifiers.lock-wait.<pid>.json` exists only *while* a publication
-//!   is blocked on the artefact lock. A build that appears hung can therefore
-//!   be diagnosed as waiting rather than deadlocked, and the wait is observable
-//!   before the lock is ever granted. A reader looking for a stall globs
-//!   `cli-identifiers.lock-wait.*.json`.
-//! * `cli-identifiers.build-report.<pid>.json` records one publication — its
-//!   process, crate, stage, lock-wait and total durations, and a bounded
-//!   outcome category. One file per process rather than one shared file,
-//!   because `OUT_DIR` is package-scoped: a package with several targets has
-//!   several compiler processes publishing concurrently, and a single name
-//!   would let each overwrite the one before it, leaving a maintainer unable to
-//!   tell which publication the surviving report describes. A reader globs
-//!   `cli-identifiers.build-report.*.json`.
-//! * `cli-identifiers.observation-errors.<pid>.json` appears only when the
-//!   channel itself failed to write. See [`write_failure`] for why a
-//!   best-effort channel still needs to say when it dropped something.
+//! * [`artefact_wait_marker`](super::artefact_wait_marker) answers "is this
+//!   publication blocked on the lock?" with a marker that exists while it
+//!   waits.
+//! * This module answers "what did this process's publication do?" with one
+//!   dated report per compiler process.
+//! * [`artefact_channel_log`](super::artefact_channel_log) answers "did the
+//!   channel itself lose an observation?" with one record per lost write.
 //!
 //! None of the three is part of the identifier inventory and none is matched by
 //! the renderer's artefact-name matcher, so pruning leaves all three alone.
+//!
+//! # Report identity and freshness
+//!
+//! A report is named for the process that wrote it, not for the publication it
+//! describes, and each publication **replaces** what that process reported
+//! before. The last publication a compiler process completes is therefore the
+//! one a reader finds. Three consequences follow, and each is a contract rather
+//! than an accident:
+//!
+//! * A reader cannot assume the file describes the build it is diagnosing. The
+//!   report dates itself in `written_at_ms` so its age is stated rather than
+//!   inferred from the file's existence, and it names the crate, deriving type,
+//!   and source file of the expansion it does describe.
+//! * A replacement that fails leaves the *earlier* report in place: the write
+//!   is atomic, so a failed rename never truncates the destination. The
+//!   timestamp is what separates "the last publication could not report" from
+//!   "the report is current".
+//! * Process ids are reused, so a stale report can carry the id of a later
+//!   build's process. Its timestamp and expansion are then the only evidence
+//!   that it describes the earlier one, which is exactly what lets a reader set
+//!   it aside.
 //!
 //! The channel is best effort: it exists to explain builds and must never fail
 //! one, so a report that cannot be written leaves the publication's own result
@@ -35,16 +48,16 @@
 //! failure silently. A writer that quietly discards its error turns a broken
 //! channel into a channel that merely looks quiet, and the two are
 //! indistinguishable to the maintainer who opted in. Each discarded failure is
-//! therefore recorded in the bounded [`write_failure`] file — the last
-//! observation to be written, and the one that says the rest cannot be trusted.
+//! therefore recorded in the bounded channel log — the last observation to be
+//! written, and the one that says the rest cannot be trusted.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::Serialize;
 
-use super::{atomic_write, requested_value};
+use super::artefact_channel_log::write_failure;
+use super::atomic_write;
 
 /// Names the environment variable that opts a build into this channel.
 pub(super) const REPORT_ENV: &str = "ORTHO_CONFIG_ARTEFACT_REPORT";
@@ -58,33 +71,11 @@ pub(super) const REPORT_ENV: &str = "ORTHO_CONFIG_ARTEFACT_REPORT";
 /// reports say about themselves.
 pub(super) const REPORT_STEM: &str = "cli-identifiers.build-report";
 
-/// Prefixes the file recording observation-channel write failures.
-///
-/// Process-scoped for the same reason as the report: only the publishing
-/// process knows what its own channel dropped.
-pub(super) const ERRORS_STEM: &str = "cli-identifiers.observation-errors";
-
-/// Prefixes the per-process file that exists only while a publication waits.
-///
-/// The process id is appended to the stem rather than recorded in the body
-/// alone. Two publishers that are both blocked write this marker while neither
-/// holds the lock, so a single shared name could only be written through a
-/// shared temporary — the very collision a unique filename exists to avoid.
-pub(super) const WAIT_STEM: &str = "cli-identifiers.lock-wait";
-
 /// Names the wait after which a blocked acquisition announces itself.
 ///
-/// Several expansions serialise well inside this window on an ordinary machine,
-/// so a contended build stays quiet; a maintainer watching a stalled build sees
-/// the cause long before reaching for a profiler.
-pub(super) const WAIT_WARN_THRESHOLD: Duration = Duration::from_secs(5);
-
-/// Names how often a still-blocked waiter refreshes its announcement.
-///
-/// The marker is rewritten rather than written once so a long stall keeps
-/// showing a growing wait, and on an interval rather than every poll so a
-/// blocked build does not spin on the marker file.
-pub(super) const WAIT_REANNOUNCE: Duration = Duration::from_secs(1);
+/// Re-exported from [`artefact_wait_marker`](super::artefact_wait_marker),
+/// which owns the marker and therefore owns its timing.
+pub(super) use super::artefact_wait_marker::{WAIT_REANNOUNCE, WAIT_WARN_THRESHOLD};
 
 /// Classifies how far a publication reached, so a failure names its stage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -139,10 +130,15 @@ impl Reporting {
     }
 }
 
+/// Returns whether an artefact-emission environment value explicitly opts in.
+fn requested_value(value: Option<&str>) -> bool {
+    value == Some("1")
+}
+
 /// Carries the observation inputs `emit` resolved at the entry boundary.
 ///
-/// Grouping the two keeps the publication boundary's parameter list honest and
-/// lets a test enable the channel, or shorten its warning threshold, without
+/// Grouping the values keeps the publication boundary's parameter list honest
+/// and lets a test enable the channel, or shorten its warning threshold, without
 /// mutating the process environment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct ReportConfig {
@@ -169,21 +165,27 @@ impl ReportConfig {
 
     /// Describes a build with the given opt-in and default timing.
     pub(super) const fn observed(reporting: Reporting) -> Self {
+        Self::with_timing(reporting, WAIT_WARN_THRESHOLD, WAIT_REANNOUNCE)
+    }
+
+    /// Describes a build with an explicit announcement threshold and refresh.
+    ///
+    /// Production always uses [`Self::observed`]; this exists so a test can
+    /// reach the announcement and refresh paths inside a test's budget instead
+    /// of spending the production five seconds genuinely blocked, and so the
+    /// helper process that proves a *real* contention announces itself can do
+    /// the same while a peer really holds the lock.
+    pub(super) const fn with_timing(
+        reporting: Reporting,
+        threshold: Duration,
+        refresh: Duration,
+    ) -> Self {
         Self {
             reporting,
-            threshold: WAIT_WARN_THRESHOLD,
-            refresh: WAIT_REANNOUNCE,
+            threshold,
+            refresh,
         }
     }
-}
-
-/// Records the process and elapsed wait a blocked publication reached.
-#[derive(Debug, Serialize)]
-struct WaitMarker {
-    /// The waiting process, so a marker left by a dead one can be told apart.
-    pid: u32,
-    /// Time already spent waiting when the marker was written.
-    waited_ms: u64,
 }
 
 /// Records one publication's stage, durations, and bounded outcome.
@@ -215,6 +217,12 @@ pub(super) struct PublicationReport<'a> {
     /// milliseconds.
     #[serde(rename = "elapsed_ms", serialize_with = "serialize_millis")]
     pub(super) elapsed: Duration,
+    /// Wall-clock write time, in whole milliseconds since the Unix epoch.
+    ///
+    /// A report is replaced by each publication its process completes, and a
+    /// failed replacement leaves the earlier one in place, so presence says
+    /// nothing about age. This is the field that does.
+    pub(super) written_at_ms: u64,
 }
 
 /// Classifies how a publication's failing stage failed.
@@ -251,117 +259,48 @@ where
 /// A wait beyond `u64::MAX` milliseconds cannot occur in a build, so saturation
 /// records "very long" where a narrowing cast would report a wrapped small
 /// number and understate the stall a maintainer is trying to explain.
-fn millis(value: Duration) -> u64 {
+pub(super) fn millis(value: Duration) -> u64 {
     u64::try_from(value.as_millis()).unwrap_or(u64::MAX)
 }
 
-/// Joins a process-scoped channel filename onto an artefact root.
+/// Returns the wall clock as whole milliseconds since the Unix epoch.
 ///
-/// The three channel files share one naming rule, so the spelling of the
-/// process suffix lives here rather than in each of the three constructors.
-fn process_file(root: &Path, stem: &str) -> PathBuf {
-    root.join(format!("{stem}.{}.json", std::process::id()))
+/// A clock before the epoch cannot occur on a supported platform, and a report
+/// that cannot be dated is still worth writing, so an unreadable clock records
+/// the epoch rather than failing a build the channel exists only to explain.
+pub(super) fn epoch_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, millis)
 }
 
-/// Returns this process's wait-marker path below one artefact root.
-pub(super) fn wait_marker(root: &Path) -> PathBuf {
-    process_file(root, WAIT_STEM)
+/// Names one process-scoped channel file below an artefact root.
+///
+/// The report and the wait marker share this rule, so the spelling of the
+/// process suffix lives here rather than in each of their constructors. The
+/// channel log takes the same suffix under a different extension, because it
+/// appends records rather than holding one document.
+fn process_file(root: &Path, stem: &str, pid: u32) -> PathBuf {
+    root.join(format!("{stem}.{pid}.json"))
 }
 
 /// Returns this process's build-report path below one artefact root.
 pub(super) fn report_path(root: &Path) -> PathBuf {
-    process_file(root, REPORT_STEM)
+    process_file(root, REPORT_STEM, std::process::id())
 }
 
-/// Returns this process's observation-error path below one artefact root.
-pub(super) fn errors_path(root: &Path) -> PathBuf {
-    process_file(root, ERRORS_STEM)
+/// Returns the build-report path one process writes below an artefact root.
+///
+/// Tests hold a helper process's id rather than its `std::process::id()`, so
+/// they need the naming rule without the ambient answer. The rule itself is
+/// what keeps two compiler processes apart, which is a property worth checking
+/// without spawning a process to check it.
+#[cfg(test)]
+pub(super) fn report_path_for(root: &Path, pid: u32) -> PathBuf {
+    process_file(root, REPORT_STEM, pid)
 }
 
-/// Publishes bytes atomically through a temporary beside the destination.
-///
-/// This is deliberately not `atomic_write`: that helper derives its temporary
-/// from the destination alone, and the wait marker is written precisely while
-/// the artefact lock is *not* held, so two blocked publishers would collide on
-/// one shared temporary name. Deriving the temporary from the destination,
-/// which is already process-private, keeps both writes independent.
-fn write_private_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
-    let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, contents)?;
-    fs::rename(temporary, path)
-}
-
-/// Records that the observation channel itself could not write.
-///
-/// The channel's contract is that it never fails a build, so a write error
-/// cannot become a `syn::Error` the compilation reports. Discarding it is not
-/// the alternative: a channel that silently drops its observations looks
-/// exactly like a build with nothing to observe, and a maintainer who opted in
-/// would read the empty directory as "all quiet". The failure is therefore
-/// appended to a bounded process-scoped file — one line per lost observation,
-/// naming the operation and the error — so an opted-in build that could not
-/// explain itself says so.
-///
-/// A failure to write *this* record is discarded: if the directory cannot be
-/// written at all, there is nowhere left to record the failure of recording
-/// it, and the compilation must still succeed.
-pub(super) fn write_failure(root: &Path, operation: &str, error: &dyn std::fmt::Display) {
-    let line = format!("{operation}: {error}\n");
-    drop(
-        fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(errors_path(root))
-            .and_then(|mut file| std::io::Write::write_all(&mut file, line.as_bytes())),
-    );
-}
-
-/// Announces that a publication has been waiting for the lock for too long.
-///
-/// Only an opted-in build reaches here. The write is best effort: the marker
-/// explains a stalled build but must not be able to fail one, so a write error
-/// leaves the publisher waiting and the wait still ends when the lock is
-/// granted. The error is recorded through [`write_failure`] rather than
-/// dropped, so a channel that cannot announce a stall is distinguishable from
-/// a build that never stalled.
-pub(super) fn note_wait(root: &Path, waited: Duration) {
-    let marker = WaitMarker {
-        pid: std::process::id(),
-        waited_ms: millis(waited),
-    };
-    match serde_json::to_vec(&marker) {
-        Ok(contents) => {
-            if let Err(error) = write_private_atomic(&wait_marker(root), &contents) {
-                write_failure(root, "cannot write the lock-wait marker", &error);
-            }
-        }
-        Err(error) => write_failure(root, "cannot serialize the lock-wait marker", &error),
-    }
-}
-
-/// Removes this process's wait marker once it holds the lock.
-///
-/// Absence is the normal case for a build that never waited, so a missing file
-/// is **not** reported: only a removal that fails for another reason means a
-/// stale marker can outlive the wait it described.
-///
-/// A marker left by a terminated process is the case the file naming already
-/// answers. The pid is in the filename, so a reader globbing
-/// `cli-identifiers.lock-wait.*.json` can tell a marker whose process is gone
-/// from one whose process is alive and still blocked — the presence of a marker
-/// is not by itself evidence of a stall, and this function deliberately does
-/// not sweep other processes' markers, because a live peer's marker is
-/// information rather than litter.
-pub(super) fn clear_wait(root: &Path) {
-    match fs::remove_file(wait_marker(root)) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            write_failure(root, "cannot remove the lock-wait marker", &error);
-        }
-        Ok(()) | Err(_) => {}
-    }
-}
-
-/// Writes one publication's observation, reporting any failure it hits.
+/// Writes one publication's observation, replacing this process's last one.
 ///
 /// Failure behaviour is deliberate and is the contract for this channel: it
 /// explains builds and must not break them. An unwritable directory or a full
@@ -369,17 +308,34 @@ pub(super) fn clear_wait(root: &Path) {
 /// through [`write_failure`] so the absent report is accompanied by the reason
 /// it is absent.
 ///
-/// The caller holds the artefact lock, so the shared temporary `atomic_write`
-/// derives from the destination cannot collide here. The report's own path is
-/// process-scoped, so two concurrent publications of one package write to
-/// distinct files rather than racing for one name.
+/// The report path is process-scoped rather than lock-scoped, and that is what
+/// makes its temporary safe. `atomic_write` derives the temporary from the
+/// destination, so two writers of one path would collide on it — and the
+/// acquisition-failure path reaches here without ever holding the artefact
+/// lock. Neither can happen: the destination already names exactly one process,
+/// and one process runs one publication at a time. The lock is irrelevant to
+/// this write for the same reason.
+///
+/// A publication replaces whatever this process last reported, so a build with
+/// several expansions leaves the report of its last one. See the module
+/// documentation for what a reader may and may not conclude from that.
 pub(super) fn write(root: &Path, report: &PublicationReport<'_>) {
     match serde_json::to_vec(report) {
         Ok(contents) => {
             if let Err(error) = atomic_write(&report_path(root), &contents) {
-                write_failure(root, "cannot write the build report", &error);
+                write_failure(
+                    root,
+                    "cannot write the build report",
+                    ErrorCategory::Io,
+                    &error,
+                );
             }
         }
-        Err(error) => write_failure(root, "cannot serialize the build report", &error),
+        Err(error) => write_failure(
+            root,
+            "cannot serialize the build report",
+            ErrorCategory::Serialization,
+            &error,
+        ),
     }
 }

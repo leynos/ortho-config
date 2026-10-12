@@ -25,9 +25,9 @@ use std::fs;
 
 use anyhow::{Context, Result, ensure};
 
-use super::artefact_report::{
-    ReportConfig, Reporting, WAIT_WARN_THRESHOLD, note_wait, report_path, wait_marker,
-};
+use super::artefact_lock::lock_path;
+use super::artefact_report::{ReportConfig, Reporting, report_path};
+use super::artefact_wait_marker::{WAIT_WARN_THRESHOLD, note_wait, wait_marker};
 use super::fragment_tests::TempRoot;
 use super::lock_support::{
     ACQUIRE_TIMEOUT, BLOCKED_WINDOW, PUBLISH_FINISHED_FILE, PUBLISH_STARTED_FILE,
@@ -215,20 +215,60 @@ fn a_completed_publication_retires_its_wait_marker() -> Result<()> {
 /// could not take the lock look like a build still waiting for it — the
 /// opposite of what happened, and the failure a maintainer most needs stated
 /// plainly.
+///
+/// **The lock file is what must be unopenable, not the fragment directory.**
+/// Blocking the fragment directory fails *after* the lock was granted, so it
+/// exercises `Observation::granted`'s retirement and leaves `abandon_wait`
+/// unreached: the test would pass with `abandon_wait` deleted, which is
+/// precisely the defect it exists to catch. A directory in the lock file's
+/// place makes `open_lock_file` fail before any lock is held.
+///
+/// A *non-empty* directory is what makes the open fail portably: opening a
+/// directory for writing is refused, and a regular file would be opened
+/// happily, taking a lock the publication would then succeed with while the
+/// test asserted a failure.
 #[test]
 fn a_failed_acquisition_retires_its_wait_marker() -> Result<()> {
     let root = TempRoot::new()?;
-    let fragment_dir = root.path().join(super::FRAGMENT_DIR);
-    fs::write(&fragment_dir, b"not a directory").context("place a file in the directory's path")?;
+    let blocker = lock_path(root.path());
+    fs::create_dir(&blocker).context("place a directory where the lock file must go")?;
+    fs::write(blocker.join("occupant"), b"keeps the directory non-empty")
+        .context("keep the blocking directory non-empty")?;
     note_wait(root.path(), WAIT_WARN_THRESHOLD);
+    ensure!(
+        wait_marker(root.path()).exists(),
+        "the fixture must place the marker before the publication runs",
+    );
 
-    publish_fixture(root.path(), ReportConfig::observed(Reporting::On))
-        .expect_err("the publication must fail");
+    let error = publish_fixture(root.path(), ReportConfig::observed(Reporting::On))
+        .expect_err("a publication whose lock file cannot be opened must fail");
+    ensure!(
+        error
+            .to_string()
+            .contains("cannot open identifier artefact lock"),
+        "the failure must be the acquisition's own diagnostic, so this test cannot \
+         pass by failing somewhere later; got {error}",
+    );
 
     ensure!(
         !wait_marker(root.path()).exists(),
         "a terminal publication must not leave a wait marker describing a wait \
          that has ended",
+    );
+    let raw = fs::read_to_string(report_path(root.path()))
+        .context("the failed acquisition must still record its report")?;
+    ensure!(
+        raw.contains("\"stage\":\"lock_wait\""),
+        "the failure happened before the lock was granted, so the report must name \
+         the lock wait; got {raw}",
+    );
+    ensure!(
+        raw.contains("\"outcome\":\"failed\""),
+        "the report must record the failure; got {raw}",
+    );
+    ensure!(
+        raw.contains("\"error\":\"io\""),
+        "an unopenable lock file is an I/O failure; got {raw}",
     );
     Ok(())
 }

@@ -17,8 +17,9 @@ use std::path::Path;
 use std::time::Instant;
 
 use super::artefact_report::{
-    ErrorCategory, Outcome, PublicationReport, ReportConfig, Stage, clear_wait, write,
+    ErrorCategory, Outcome, PublicationReport, ReportConfig, Stage, epoch_millis, write,
 };
+use super::artefact_wait_marker::clear_wait;
 
 /// Identifies the publication an [`Observation`] describes.
 ///
@@ -166,6 +167,7 @@ impl<'a> Observation<'a> {
                 error: self.failure.get(),
                 lock_wait,
                 elapsed: self.started.elapsed(),
+                written_at_ms: epoch_millis(),
             },
         );
     }

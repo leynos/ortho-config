@@ -11,16 +11,25 @@
 //! reported, not asserted, and the wait marker is driven through its own
 //! reporting function rather than by keeping a publisher genuinely blocked for
 //! the production threshold.
+//!
+//! What a report says about *identity and freshness* — that a later publication
+//! replaces this process's earlier one, that two processes keep their own
+//! reports, and that a report dates itself — lives in
+//! [`artefact_report_identity_tests`](super::report_identity_tests), so the
+//! document's own format and each contract about its lifetime can be read
+//! separately.
 
 use std::fs;
 use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
 
+use super::artefact_channel_log::{ERRORS_STEM, errors_path};
 use super::artefact_report::{
     ErrorCategory, Outcome, PublicationReport, REPORT_ENV, REPORT_STEM, ReportConfig, Reporting,
-    Stage, WAIT_STEM, WAIT_WARN_THRESHOLD, errors_path, report_path, wait_marker, write,
+    Stage, WAIT_WARN_THRESHOLD, report_path, write,
 };
+use super::artefact_wait_marker::{WAIT_STEM, wait_marker};
 use super::fragment_tests::TempRoot;
 use super::lock_support::publish_fixture;
 
@@ -40,6 +49,7 @@ pub(super) fn report(stage: Stage, outcome: Outcome) -> PublicationReport<'stati
         error: None,
         lock_wait: Duration::from_millis(3),
         elapsed: Duration::from_millis(9),
+        written_at_ms: super::artefact_report::epoch_millis(),
     }
 }
 
@@ -185,20 +195,23 @@ fn every_stage_serializes_to_a_distinct_name() -> Result<()> {
     Ok(())
 }
 
-/// Verifies neither channel file is mistaken for rendered inventory.
+/// Verifies no channel file is mistaken for rendered inventory.
 ///
 /// Pruning deletes rendered files the current render does not produce, so a
 /// channel filename that matched the artefact matcher would be deleted on the
 /// next publication and the report would silently vanish. Every name the
-/// channel writes therefore has to sit outside that matcher.
+/// channel writes therefore has to sit outside that matcher — including the
+/// failure record, whose `.jsonl` extension is what keeps its second stem from
+/// being read as an index.
 #[test]
 fn channel_files_are_not_rendered_artefacts() -> Result<()> {
     for name in [
         format!("{REPORT_STEM}.1234.json"),
         format!("{WAIT_STEM}.1234.json"),
-        "cli-identifiers.observation-errors.1234.json".to_owned(),
+        format!("{ERRORS_STEM}.1234.jsonl"),
         REPORT_STEM.to_owned(),
         WAIT_STEM.to_owned(),
+        ERRORS_STEM.to_owned(),
     ] {
         ensure!(
             !super::is_rendered_artefact(&name),
@@ -303,7 +316,7 @@ fn the_channel_names_are_the_documented_ones() -> Result<()> {
     ensure!(REPORT_STEM == "cli-identifiers.build-report");
     ensure!(WAIT_STEM == "cli-identifiers.lock-wait");
     ensure!(
-        super::artefact_report::ERRORS_STEM == "cli-identifiers.observation-errors",
+        ERRORS_STEM == "cli-identifiers.observation-errors",
         "the observation-error stem must be the documented one",
     );
     Ok(())

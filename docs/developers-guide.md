@@ -194,24 +194,49 @@ reader that must be consistent has to take the same lock or retry.
 A second opt-in, `ORTHO_CONFIG_ARTEFACT_REPORT=1`, turns on the observation
 channel that explains the same sequence when a build is slow or fails. It
 writes three files below the artefact root, none of which is part of the
-inventory and none of which the prune matches:
-`cli-identifiers.lock-wait.<pid>.json` exists only *while* a publication is
-blocked on the lock, so a build that appears hung can be diagnosed as waiting
-rather than deadlocked. `cli-identifiers.build-report.<pid>.json` records the
-process, the expansion, the stage the publication reached — `lock_wait`,
-`fragment_write`, `merge`, `render`, `prune`, or `publish` — with its lock-wait
-and total durations in whole milliseconds, a bounded `completed`/`failed`
-outcome, and, on failure, a bounded `io`/`serialization` error category.
-`cli-identifiers.observation-errors.<pid>.json` is the channel's own failure
-record: it appends one line per observation that could not be written, naming
-the operation and the underlying error. All three are per-process because
-`OUT_DIR` is package-scoped and several compiler processes may publish into one
-directory; the error record is what makes the best-effort contract safe, since
-a build with no report at all is otherwise indistinguishable from one whose
-report was dropped. Every write is best effort: the channel explains builds and
-must not be able to fail one, so an unwritable directory leaves the
-publication's own result untouched. `artefact/artefact_report.rs` owns the
-channel's vocabulary, serialization, and writers;
+inventory and none of which the prune matches.
+`cli-identifiers.lock-wait.<pid>.json` is written once a publication has been
+blocked on the lock for five seconds, and refreshed every second while the wait
+continues, so a build that appears hung can be diagnosed as waiting rather than
+deadlocked. `cli-identifiers.build-report.<pid>.json` records the process, the
+expansion, the stage the publication reached — `lock_wait`, `fragment_write`,
+`merge`, `render`, `prune`, or `publish` — with its lock-wait and total
+durations in whole milliseconds, a bounded `completed`/`failed` outcome, a
+`written_at_ms` timestamp, and, on failure, a bounded `io`/`serialization`
+error category. `cli-identifiers.observation-errors.<pid>.jsonl` is the
+channel's own failure record: it appends one JSON Lines record per observation
+that could not be written, carrying the operation, the same bounded category,
+and the underlying error's text.
+
+All three are per-process because `OUT_DIR` is package-scoped and several
+compiler processes may publish into one directory; the error record is what
+makes the best-effort contract safe, since a build with no report at all is
+otherwise indistinguishable from one whose report was dropped. Every write is
+best effort: the channel explains builds and must not be able to fail one, so
+an unwritable directory leaves the publication's own result untouched — the
+report write on the acquisition-failure path is attempted even though no lock
+was taken, precisely so that the build which could not start is still explained.
+
+**A marker's presence is not evidence of contention now.** The wait marker is a
+snapshot, not a lock: a process killed mid-wait never retires its marker,
+failed cleanup leaves one behind and records that in the error log, and process
+ids are reused, so a live pid does not prove the writing process is still
+running. Read `written_at_ms` against the build's own timeline; a marker older
+than the build under investigation is a leftover, not a clue. This is why the
+filename carries the pid *and* the body carries a timestamp — neither alone
+establishes freshness.
+
+**A report describes the last publication its process completed.** A report is
+named for the process, and each publication replaces what that process reported
+before, so a crate with several derives leaves the report of its last one
+rather than a file per derive per build. A replacement that fails leaves the
+*earlier* report in place — the write is atomic, so a failed rename never
+truncates the destination — which is the other reason `written_at_ms` and the
+recorded expansion are load-bearing rather than decorative.
+
+`artefact/artefact_report.rs` owns the channel's vocabulary, serialization, and
+the build report; `artefact/artefact_wait_marker.rs` owns the announcement and
+its retirement; `artefact/artefact_channel_log.rs` owns the failure record;
 `artefact/artefact_observation.rs` owns the stage and duration state one
 publication accumulates; `artefact/publish.rs` is its only producer. A build
 that did not opt in takes the plain blocking `lock`, so the common case pays no

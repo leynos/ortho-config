@@ -938,16 +938,21 @@ index file.
 Concurrent compiler processes for one package serialize their writes behind an
 exclusive lock, so a build that looks stuck may be waiting for a peer. To see
 that, add `ORTHO_CONFIG_ARTEFACT_REPORT=1` alongside the emission variable and
-rebuild. A publication that waits for the lock longer than five seconds leaves
-`cli-identifiers.lock-wait.<pid>.json` in the artefact directory, which proves
-the build is waiting rather than deadlocked; the file disappears once the lock
-is granted. Each finished publication also writes
-`cli-identifiers.build-report.<pid>.json`, naming the process, the expansion,
-the stage it reached, and how long it waited. Both names carry the process id,
-so a directory shared by several compiler processes keeps one file per
-publication rather than letting the last write replace the others. A channel
-that cannot write its observations appends a line naming the lost operation to
-`cli-identifiers.observation-errors.<pid>.json`, so a build with no report is
+rebuild. A publication that waits for the lock longer than five seconds writes
+`cli-identifiers.lock-wait.<pid>.json` in the artefact directory, and refreshes
+it while the wait continues, so the build can be diagnosed as waiting rather
+than deadlocked; the file is removed once the lock is granted. Read its
+`written_at_ms` before acting on it: a process killed mid-wait, or one whose
+cleanup failed, can leave a marker behind, and process ids are reused, so a
+marker that is not recent describes a wait that has ended. Each finished
+publication also writes `cli-identifiers.build-report.<pid>.json`, naming the
+process, the expansion, the stage it reached, how long it waited, and when. A
+report is named for the process, so a crate with several derives leaves the
+report of its last publication rather than one file per derive; if a later
+publication could not replace it, the file still holds the earlier report, and
+its timestamp is what says so. A channel that cannot write its observations
+appends a JSON Lines record naming the lost operation to
+`cli-identifiers.observation-errors.<pid>.jsonl`, so a build with no report is
 distinguishable from one that could not write it. These files are best effort:
 they explain a build and never fail one, and none of them is part of the
 identifier inventory.
