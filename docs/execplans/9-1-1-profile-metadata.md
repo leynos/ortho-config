@@ -2227,11 +2227,30 @@ pub struct ProfileSelectionContract {
 // DocProfilesMeta { flag: String, env_var: String }
 ```
 
-Generated for opted-in structs only:
+Generated for opted-in structs only. The process-backed pair is
 `load_with_profile_from_iter(iter) -> OrthoResult<ProfileLoadOutcome<Self>>`
-and a `load_with_profile()` convenience; the `--profile` argument also appears
-as a normal `AgentInput` on each command so the contract's `flag` field
-references an input that exists.
+and a `load_with_profile()` convenience. The injected pair, added so profile
+resolution can be exercised hermetically, is
+`load_with_profile_from_iter_with_sources(iter, discovery_source, merge_source)`
+and `load_with_profile_with_sources(discovery_source, merge_source)`, plus the
+two-argument primitive
+`compose_layers_with_selection_from_iter_with_sources(iter, discovery_source,
+merge_source) -> (LayerComposition, Vec<SelectedProfile>)`
+that the injected `from_iter` form is built on; the config struct receives
+thin delegates to all four. `discovery_source` is a `SharedEnvSource`
+(`Arc<dyn EnvSource>`, lookup only) so a discovery walk cannot enumerate the
+merge environment, and `merge_source` is a `SharedScanEnvSource`
+(`Arc<dyn ScanEnvSource>`); one `MapEnv` can back both by coercing two `Arc`
+clones. The `--profile` argument also appears as a normal `AgentInput` on each
+command so the contract's `flag` field references an input that exists.
+
+Telemetry label: the injected members emit `operation = profile_load`,
+`source = injected`, which is why `load_with_profile_with_sources` is
+injected-labelled even though it reads `std::env::args_os()` for its argument
+vector — only the environment sources are injected. The process-backed pair
+emits `source = process`. A profile-enabled struct's
+`load_from_iter_with_sources` likewise reports `operation = profile_load`
+rather than `derived_load`, since it resolves a selection on that boundary.
 
 `ProfilesDeclaration` deliberately leaves room for 9.1.2 (a future `redaction`
 field) and 9.1.3 (a future `store` field and the `list_command` population).

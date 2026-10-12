@@ -598,14 +598,81 @@ The merge API and the post-load surface divide as follows:
   returning an `ExtractionOutcome` with `file_layers` and `profile_layers`;
 - `ProfileLoadOutcome` is the post-load runtime type that reports the active
   selection, with `config()`, `into_config()`, and `selection()` accessors; and
-- the generated `load_with_profile_from_iter` and `load_with_profile` methods
-  return a `ProfileLoadOutcome`.
+- the generated profile entry points named below return a `ProfileLoadOutcome`.
 
 Keep the [ADR-007](adr-007-downstream-context-command-naming.md) static/runtime
 split: profile *support* is agent-context metadata and is static, while the
 *active selection* is runtime-only and reported by `ProfileLoadOutcome`.
 Selected-profile output is deliberately not part of the static agent-context
 contract, which documents the mechanism rather than the moment.
+
+### Generated profile entry points
+
+Opting in with `#[ortho_config(profiles)]` adds methods that an opted-in struct
+does not otherwise have. They divide into a process-backed pair and an injected
+pair, and the split matters: the process-backed methods read the live
+environment, so a test that calls them cannot be hermetic, whereas the injected
+methods take their environment from the caller.
+
+The process-backed pair, generated on both the CLI struct and the config struct:
+
+- `load_with_profile_from_iter(iter)` composes the five tiers from an argument
+  iterator plus the live process environment and returns a
+  `ProfileLoadOutcome<Self>`; and
+- `load_with_profile()` is its convenience form over `std::env::args_os()`.
+
+The injected pair, which mirror the source-aware loaders described under the
+[environment access boundary](#environment-access-boundary):
+
+- `load_with_profile_from_iter_with_sources(iter, discovery_source, merge_source)`
+  is the hermetic counterpart of `load_with_profile_from_iter`; and
+- `load_with_profile_with_sources(discovery_source, merge_source)` is the
+  hermetic counterpart of `load_with_profile`.
+
+The two sources are deliberately separate types, and the separation is a safety
+property rather than an ergonomic detail. `discovery_source` is a
+`SharedEnvSource` (`Arc<dyn EnvSource>`), which resolves a named variable only;
+`merge_source` is a `SharedScanEnvSource` (`Arc<dyn ScanEnvSource>`), which can
+enumerate everything the source holds. Discovery needs to look up a handful of
+names — the configuration-path selector, the XDG base directories, the Windows
+application-data variables, and the home directory fallback — while the
+environment merge layer has to scan an application prefix. Typing the
+capabilities apart means a lookup-only discovery source physically cannot
+enumerate the merge environment, so a caller cannot accidentally hand the
+discovery walk a scanner that sweeps unrelated process secrets into a layer. A
+single `MapEnv` can back both roles by coercing two `Arc` clones, one to each
+type. The `EnvSource` boundary itself is documented under the
+[environment access boundary](#environment-access-boundary).
+
+Opted-in structs also gain the two-argument form
+`compose_layers_with_selection_from_iter_with_sources(iter, discovery_source,
+merge_source)`,
+which returns the `LayerComposition` together with the resolved
+`Vec<SelectedProfile>` instead of merging immediately. It is the primitive the
+injected pair is built on: `load_with_profile_from_iter_with_sources` calls it
+and maps `into_merge_result` over the composition. It is generated on the CLI
+struct only; the config struct receives delegating wrappers instead. Both
+structs also gain the injected `compose_layers_from_iter_with_sources`, which
+the config struct delegates to the CLI struct.
+
+The injected methods, and the compose helpers they build on, carry
+`#[allow(dead_code, reason = "Generated method may not be used in all builds")]`
+because a generated method can be unused in a consumer that never calls it;
+the process-backed `load_with_profile_from_iter` and `load_with_profile` are
+not annotated, since a consumer that opts into profiles is expected to call one
+of them. See [issue #584](https://github.com/leynos/ortho-config/issues/584)
+for the tracked follow-up that would replace that blanket allow.
+
+Of the injected pair, only `load_with_profile_from_iter_with_sources` carries
+the hooks itself; `load_with_profile_with_sources` is a thin delegation that
+reaches them through the `from_iter` form. Those hooks label the event
+`operation = profile_load`, `source = injected`, where the process-backed pair
+emit `source = process`; the
+[environment merge telemetry](#environment-merge-telemetry) section lists the
+full closed vocabulary. Because the delegation supplies its own argument vector
+from `std::env::args_os()` while taking the environment sources from the caller,
+`load_with_profile_with_sources` is injected-labelled on the strength of its
+*environment* sources alone — the argument vector is never injected.
 
 ## Behavioural test layout
 
@@ -961,14 +1028,25 @@ only these bounded fields:
   `validation`, `profile`, or `aggregate`.
 
 `CsvEnv` emits process-backed events, or injected events when `with_source`
-supplies a scanning source. Derive-generated and subcommand source-aware loads
-(`*_with_sources`) take injected sources and emit `source = injected`; the
-profile-aware entry points (`load_with_profile_from_iter` and
-`load_with_profile`) accept no injected source and read the live process, so
-they emit `source = process`. The events never contain environment values,
-keys, paths, configuration data, caller-supplied prefixes, or raw error text.
-Error categories are reduced to the closed vocabulary before emission so
-subscribers can aggregate failures without receiving sensitive input.
+supplies a scanning source. The source label tracks the environment the entry
+point actually reads, and for the generated loaders that means the
+`*_with_sources` suffix rather than the operation name. Derive-generated and
+subcommand source-aware loads (`*_with_sources`) take injected sources and emit
+`source = injected`; so do the profile-aware injected pair
+(`load_with_profile_from_iter_with_sources` and
+`load_with_profile_with_sources`), which are covered in
+[generated profile entry points](#generated-profile-entry-points). The
+profile-aware entry points without that suffix (`load_with_profile_from_iter`
+and `load_with_profile`) accept no injected source and read the live process,
+so they emit `source = process`. A profile-enabled struct's
+`load_from_iter_with_sources` emits `source = injected` under
+`operation = profile_load`, not `derived_load`, because it resolves a selection
+on that boundary; the operation label distinguishes what the call does, and the
+source label distinguishes where its environment came from. The events never
+contain environment values, keys, paths, configuration data, caller-supplied
+prefixes, or raw error text. Error categories are reduced to the closed
+vocabulary before emission so subscribers can aggregate failures without
+receiving sensitive input.
 
 Capture tests must cover successful and failing paths for each emitting
 operation. They assert the operation, source, outcome, and category fields, and

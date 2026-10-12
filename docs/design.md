@@ -431,6 +431,11 @@ and are rejected when a source is injected. The process-backed path remains
 delegated to figment and keeps its existing behaviour. Source-aware derived
 loading uses `OrthoConfig::load_from_iter_with_sources`, so one `MapEnv` can
 drive discovery and `APP_*` merging without a process environment mutation.
+Profile-opted-in structs extend the same boundary to selection through the
+`load_with_profile_from_iter_with_sources` entry point and its
+`compose_layers_with_selection_from_iter_with_sources` primitive, so a test can
+resolve a profile from a `MapEnv` without touching the process environment; the
+process-backed `load_with_profile_from_iter` remains for the ordinary case.
 This completes [issue #412](https://github.com/leynos/ortho-config/issues/412).
 
 Default project-root resolution is a distinct boundary.

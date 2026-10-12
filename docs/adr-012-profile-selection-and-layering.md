@@ -254,8 +254,14 @@ it can be re-seated without semantic change.
 
 Opted-in structs gain generated associated functions
 `load_with_profile_from_iter(iter) -> OrthoResult<ProfileLoadOutcome<Self>>`
-and a `load_with_profile()` convenience. `ProfileLoadOutcome<T>` has private
-fields with accessors `config()`, `into_config()`, and
+and a `load_with_profile()` convenience, together with the injected pair
+`load_with_profile_from_iter_with_sources` and `load_with_profile_with_sources`
+and the `compose_layers_with_selection_from_iter_with_sources` primitive they
+build on. The injected members keep discovery's lookup-only `SharedEnvSource`
+separate from the merge layer's scanning `SharedScanEnvSource`, so a
+profile-aware load can be driven hermetically without a process environment
+that discovery is able to enumerate. `ProfileLoadOutcome<T>` has private fields
+with accessors `config()`, `into_config()`, and
 `selection() -> &[SelectedProfile]` (empty or singleton today; a slice so
 multiple simultaneous profiles can arrive additively later).
 `SelectedProfile { name, source }` and
