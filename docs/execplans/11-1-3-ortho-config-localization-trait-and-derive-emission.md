@@ -338,7 +338,32 @@ review's findings are folded into the Decision Log and milestones below.
 
 ### Delivery ledger (PR #536, 2026-10-12)
 
-- Candidate: head `cff889f5`; base `9664641a`. PR is open and ready
+- **Rebase record.** `f061abe1` was replayed onto target `252941d4` (97 commits,
+  linear, no merges) with `core.attributesFile=/dev/null` and `zdiff3`, giving
+  new head `aeacb935`. Weave was selected on this host only by the ambient
+  user-wide `~/.config/git/attributes` block; the repository does not opt in
+  through tracked attributes, so the ambient selection was bypassed for the
+  replay rather than treated as consent.
+- Conflict: exactly one, `CHANGELOG.md`, during the replay of `051917b7` (the
+  only branch commit touching that file; `252941d4` is the only target commit
+  touching it). Both sides prepended a bullet under `### Changed` over an empty
+  base. Resolution rule: keep the target's single line, then insert the
+  branch's. Verified mechanically rather than by inspection — the resolution is
+  the target's `CHANGELOG.md` byte-for-byte plus exactly the four lines
+  `051917b7` adds relative to its own parent, with **zero** deletions.
+- Weave audit on `252941d4..aeacb935`: (1) all 32 target-only paths
+  byte-identical; (2) no file deleted relative to the target, and per-file
+  changed-line counts against each side's own base are identical pre- and
+  post-rebase across all 103 paths, leaving `CHANGELOG.md` as the only delta;
+  (3) the set of repeated multi-line blocks is identical pre- and post-rebase
+  (27 flags, unchanged), so the replay introduced no duplication.
+- Interface-risk check the audit does not cover: `c82c517e` migrated the BDD
+  steps onto a new base, and its `behaviour/steps/` overlap with the branch is
+  zero — the branch touches only `localizer_steps.rs`, while main rewrote
+  eleven sibling files. The new step module is registered at `steps/mod.rs:17`,
+  and neither side modified that by-name enumeration file, so the branch's step
+  file is neither orphaned nor duplicated by the merge.
+- Candidate: head `aeacb935`; base `252941d4`. PR is open and ready
   (`isDraft=false`), base branch `main`.
 - Branch history at this head, oldest first: `3eb52a42` (plan record of the
   Observability round), `24c6f601` (denied lints in the channel suites),
