@@ -20,6 +20,17 @@ behaviour. See the
 [agent-native policy section in the user's guide][users-guide-policy] for the
 report shape, exceptions, and command-line override.
 
+The policy check writes `policy-report.json` and emits one compact JSON
+document followed by a newline on standard output. With `--check-agent-native`
+alone, this is a report-only operation. When combined with an explicit
+generator format, the report remains the only JSON document on standard output;
+successful checks continue generation and preserve the selected format's
+artefacts, including `agent-context.json` for `--format agent-context` and
+`--format all`. A deny-mode violation emits and retains the policy report, then
+fails before generator artefacts are created. Without the policy check,
+`--format agent-context` and `--format all` continue to emit AgentContext JSON
+on standard output as well as writing `agent-context.json`.
+
 ## Load files from more than one scope
 
 Nothing changes by default: discovery still stops at the first file that loads,

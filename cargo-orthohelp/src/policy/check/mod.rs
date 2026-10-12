@@ -40,8 +40,34 @@ pub struct PolicyCheckOutcome {
 /// # Errors
 ///
 /// Returns a metadata error when the policy table is structurally invalid in
-/// any mode, an I/O error when the report cannot be written, and a
-/// `PolicyViolation` under deny mode with deny findings.
+/// any mode, an I/O error when the report or stdout document cannot be written,
+/// a JSON serialization error, and a `PolicyViolation` under deny mode with
+/// deny findings.
+///
+/// # Examples
+///
+/// This checks the first package in the current Cargo workspace and returns
+/// the path of its emitted report.
+///
+/// ```no_run
+/// use cargo_metadata::MetadataCommand;
+/// use cargo_orthohelp::policy::check::run_policy_check;
+/// use camino::Utf8Path;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let metadata = MetadataCommand::new().no_deps().exec()?;
+///     let Some(package) = metadata.packages.first() else {
+///         return Err(std::io::Error::other("workspace has no package").into());
+///     };
+///     let outcome = run_policy_check(
+///         package,
+///         None,
+///         Utf8Path::new("target/orthohelp"),
+///     )?;
+///     assert!(!outcome.report_path.as_str().is_empty());
+///     Ok(())
+/// }
+/// ```
 pub fn run_policy_check(
     package: &Package,
     mode_override: Option<PolicyMode>,

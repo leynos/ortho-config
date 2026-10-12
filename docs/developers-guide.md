@@ -450,6 +450,18 @@ the latter requires the check flag. The fixture layout above remains the
 canonical policy coverage, and `googletest` plus `pretty_assertions` are
 `cargo-orthohelp` development dependencies used by those tests.
 
+The stdout writers `output::write_agent_context_stdout` and
+`output::write_policy_report_stdout` serialize one compact JSON document,
+append a newline, then write and flush the locked stdout handle. Keep tracing
+on stderr: stdout is a machine-readable channel and must not contain
+diagnostics. The policy check writes and emits its report before deciding
+whether generation may continue. With `--check-agent-native` alone, it returns
+after the report; with an explicit generator format, a successful check
+proceeds to generation. That generation writes `agent-context.json` for
+`agent-context` and `all`, but suppresses AgentContext JSON on stdout whenever
+policy checking is enabled. A deny-mode finding fails after the report is
+retained and emitted, before any generator artefacts are created.
+
 ### Integration test targets
 
 `ortho_config` also carries plain `rstest` integration suites that are distinct

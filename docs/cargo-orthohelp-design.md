@@ -742,8 +742,12 @@ channels; the existing artefact paths and process success/failure contracts
 remain unchanged. `--check-agent-native` emits one compact policy-report JSON
 document to stdout and retains the atomic `<out>/policy-report.json` artefact.
 If an explicit generator format is also requested, the policy report owns
-stdout so the invocation never concatenates multiple JSON documents. Other
-formats do not emit JSON to stdout.
+stdout so the invocation never concatenates multiple JSON documents;
+AgentContext JSON is suppressed from stdout while policy checking is enabled.
+Successful checks continue into generation and retain the selected artefacts,
+including `<out>/agent-context.json` for `agent-context` and `all`. A deny-mode
+finding is reported before the command fails, so generator artefacts are not
+created. Other formats do not emit JSON to stdout.
 
 `Cargo.toml` defaults:
 
@@ -871,15 +875,18 @@ to the output directory, emits the same compact JSON report to stdout followed
 by a newline, and prints a one-line summary to standard error. In `deny` mode,
 deny-level findings return a policy-violation error after the report has been
 written and emitted. When an explicit generator `--format` is also requested,
-the policy report remains the sole JSON document on stdout.
+the policy report remains the sole JSON document on stdout, and AgentContext
+JSON is suppressed. A successful check proceeds to generation and retains the
+selected generator artefacts; a deny-mode finding leaves the policy report
+available but fails before generator artefacts are created.
 
 The evaluation uses the `evaluate(config, inputs) -> PolicyReport` seam; in
 7.1.1 `PolicyInputs` is empty, and roadmap 7.1.2 passes the bridge IR through
 that struct additively. The report embeds the configured exceptions (full shape
 including `reason`) and the canonical vocabulary block. When a generator
-`--format` is explicitly requested in the same invocation, the check runs first
-and the generator pipeline follows; when it is not explicit, the check alone
-writes `policy-report.json` and exits. This mirrors the
+`--format` is explicitly requested in the same invocation, a successful check
+runs first and the generator pipeline follows; when it is not explicit, the
+check alone writes `policy-report.json` and exits. This mirrors the
 `--format agent-context` stage's placement under §6.2 without requiring
 generator preconditions (`root_type`, a library target, or an `ortho_config`
 dependency).

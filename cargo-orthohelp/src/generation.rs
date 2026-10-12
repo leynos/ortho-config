@@ -36,9 +36,17 @@ const fn needs_agent_context(format: OutputFormat) -> bool {
 
 /// Generates the agent-context JSON when the requested format needs it.
 ///
+/// The `agent-context` and `all` formats write `agent-context.json`. The
+/// compact `AgentContext` JSON is also written to stdout only when
+/// `args.check_agent_native` is false. In the CLI pipeline, the policy check
+/// runs before generation; a deny-mode error propagates before this helper is
+/// called, and a successful check keeps its `PolicyReport` as the sole JSON
+/// document on stdout.
+///
 /// # Errors
 ///
-/// Returns an I/O error when the agent-context file cannot be written.
+/// Returns a JSON serialization error or an I/O error when writing the
+/// agent-context file or stdout.
 pub fn generate_agent_context_if_requested(
     args: &Args,
     context: &GenerationContext<'_>,

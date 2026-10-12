@@ -44,6 +44,7 @@ fn emitted_agent_context_has_stable_contract(
     let out_dir = tempfile::tempdir()?;
     let output = run_agent_context(&out_dir, root_type)?;
     ensure_success(&output)?;
+    assert_debug_trace_is_stderr(&output)?;
 
     let context = read_stdout_agent_context(&output)?;
     assert_string_field(&context, "schema_version", EXPECTED_SCHEMA_VERSION)?;
@@ -63,6 +64,8 @@ fn run_agent_context(out_dir: &TempDir, root_type: Option<&str>) -> TestResult<O
         // Isolate Cargo metadata's bridge cache as well as the generated
         // artefact, so parallel test processes cannot rewrite one cache key.
         .env("CARGO_TARGET_DIR", out_dir.path().join("cargo-target"))
+        // Debug tracing must not contaminate the machine-readable stdout.
+        .env("RUST_LOG", "debug")
         .args([
             "orthohelp",
             "--out-dir",
@@ -90,6 +93,15 @@ fn ensure_success(output: &Output) -> TestResult {
             String::from_utf8_lossy(&output.stderr)
         )
         .into())
+    }
+}
+
+fn assert_debug_trace_is_stderr(output: &Output) -> TestResult {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("cargo-orthohelp dispatched via Cargo external-subcommand") {
+        Ok(())
+    } else {
+        Err("RUST_LOG=debug should route tracing events to stderr".into())
     }
 }
 

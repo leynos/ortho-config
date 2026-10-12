@@ -102,6 +102,7 @@ fn emitted_policy_report_has_stable_contract(#[case] case: PolicyCase) -> TestRe
     let output = run_policy_check(&out_dir, case)?;
 
     assert_exit_status(&output, case)?;
+    assert_debug_trace_is_stderr(&output)?;
     assert_one_compact_json_line(&output.stdout)?;
     let report: Value = serde_json::from_slice(&output.stdout)?;
     assert_string_field(&report, "version", EXPECTED_SCHEMA_VERSION)?;
@@ -128,6 +129,8 @@ fn run_policy_check(out_dir: &TempDir, case: PolicyCase) -> TestResult<Output> {
     command
         .current_dir(fixtures::workspace_root()?.as_std_path())
         .env("CARGO_TARGET_DIR", out_dir.path().join("cargo-target"))
+        // Debug tracing must not contaminate the machine-readable stdout.
+        .env("RUST_LOG", "debug")
         .args([
             "orthohelp",
             "--check-agent-native",
@@ -161,6 +164,15 @@ fn assert_exit_status(output: &Output, case: PolicyCase) -> TestResult {
         return Err("deny finding should produce a policy validation failure".into());
     }
     Ok(())
+}
+
+fn assert_debug_trace_is_stderr(output: &Output) -> TestResult {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("cargo-orthohelp dispatched via Cargo external-subcommand") {
+        Ok(())
+    } else {
+        Err("RUST_LOG=debug should route tracing events to stderr".into())
+    }
 }
 
 fn read_policy_report(out_dir: &TempDir) -> TestResult<Value> {

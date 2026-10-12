@@ -248,7 +248,11 @@ summary to standard error. Tests and CI should parse `rule_id` and `code` for
 deterministic handling; prose in `message` is explanatory and may improve
 without changing the machine contract. If an explicit generator format is
 requested at the same time, the policy report owns stdout and remains the
-invocation's only JSON document.
+invocation's only JSON document. A successful check continues into generation
+and retains the selected artefacts, including `agent-context.json` for
+`--format agent-context` and `--format all`; AgentContext JSON is suppressed
+from stdout while policy checking is enabled. A deny-mode finding is reported
+before the command fails, so generator artefacts are not created.
 
 <!-- markdownlint-disable MD013 -->
 ```json
@@ -262,9 +266,7 @@ invocation's only JSON document.
       "severity": "warn",
       "code": "redundant_exception",
       "message": "exception for verb 'get' is redundant: the item is already canonical",
-      "location": {
-        "file": "Cargo.toml"
-      }
+      "location": null
     }
   ],
   "summary": {
@@ -302,13 +304,14 @@ Each result must contain:
   repository-relative or package-relative path, and whose optional `range`
   holds one-based `start`/`end` positions (matching the shipped
   `cargo_orthohelp::policy` types rather than the draft's flat `file`/`range`
-  pair). The behaviour lint runs over agent context, which carries no source
-  spans, so its findings use `null`.
+  pair). The current evaluator carries no source spans, so its findings use
+  `null`.
 
 Mode handling is direct: `off` suppresses checks, `warn` emits findings without
-failing the command, and `deny` exits with code 3 when any deny-level finding
-is present. Runtime errors keep exit code 1 and clap usage errors keep exit
-code 2.
+failing the command, and `deny` returns a policy-validation failure with
+process status 1 when any deny-level finding is present. That status is shared
+with generic tool failures, so `summary.deny` is the authoritative CI signal.
+Clap usage errors keep exit code 2.
 
 The configuration surface is `[package.metadata.ortho_config.policy]` in the
 target package's `Cargo.toml` (see ADR-008). The enforcement default is `off`

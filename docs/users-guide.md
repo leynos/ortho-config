@@ -1033,10 +1033,15 @@ cargo orthohelp --package hello_world --format agent-context
 
 The tool builds a small bridge against the selected package. Keep the root
 configuration type public and ensure its documentation metadata is available
-from the selected library or binary target. `--format agent-context` writes
-`agent-context.json` and emits the same compact JSON document to standard
-output. `--format all` includes agent context as well as IR, man pages, and
-PowerShell output, and emits the agent-context JSON to standard output.
+from the selected library or binary target. Without `--check-agent-native`,
+`--format agent-context` writes `agent-context.json` and emits the same compact
+JSON document to standard output. `--format all` includes agent context as well
+as IR, man pages, and PowerShell output, and emits the agent-context JSON to
+standard output. With `--check-agent-native`, the compact policy report is the
+only JSON document written to standard output for any explicit generator
+format. Successful checks continue generation, including `agent-context.json`
+for `agent-context` and `all`; a deny-mode violation emits the report and fails
+before generator artefacts are created.
 
 ## Offer a compact contract to automation
 
@@ -1086,9 +1091,10 @@ skips generation. Supplying `--format` runs the policy check before generation,
 including an explicit `--format ir`; the default format is treated as implicit
 when the check flag is used alone. When an explicit agent-context format is
 combined with the policy check, the policy report is the sole JSON document on
-standard output; the agent-context file is still generated. The policy is
-configured under `[package.metadata.ortho_config.policy]` in the target
-package's `Cargo.toml`:
+standard output. Generation writes `agent-context.json` only when the policy
+check succeeds; a deny-mode violation emits the report and fails before
+creating generator artefacts. The policy is configured under
+`[package.metadata.ortho_config.policy]` in the target package's `Cargo.toml`:
 
 _Table 2: Agent-native policy configuration keys._
 
