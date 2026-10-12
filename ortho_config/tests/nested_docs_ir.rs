@@ -166,6 +166,10 @@ fn nested_admin_audit_has_inherited_fluent_id_pattern(nested_metadata: DocMetada
     Ok(())
 }
 
+/// An explicit identifier in a nested grant survives the merge unchanged.
+///
+/// The grant overrides some but not all identifiers; the ones it omits must
+/// keep their derived values rather than being blanked by the merge.
 #[rstest]
 fn nested_grant_preserves_explicit_identifier_overrides(
     nested_metadata: DocMetadata,

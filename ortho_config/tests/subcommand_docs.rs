@@ -112,6 +112,11 @@ fn subcommand_docs_regenerate_about_ids() -> Result<()> {
     Ok(())
 }
 
+/// A handwritten `OrthoConfigDocs` impl still answers path-aware queries.
+///
+/// The path-aware method has a default implementation, so a downstream type
+/// that implements only the older entry point must keep compiling and
+/// resolving exactly as before.
 #[rstest]
 fn handwritten_docs_implementations_retain_path_aware_compatibility() -> Result<()> {
     let parent_path = [String::from("root")];

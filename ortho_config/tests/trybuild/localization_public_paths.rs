@@ -25,6 +25,10 @@ impl OrthoConfigLocalization for Cli {
     }];
 }
 
+/// Exercises every public identifier path on the generated impl.
+///
+/// As a `pass` fixture it only has to typecheck, so the constants are bound
+/// rather than compared.
 fn main() {
     let _: &'static str = Cli::LOCALIZATION_BASE;
     let _: &'static str = Cli::ABOUT_ID;

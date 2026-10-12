@@ -9,6 +9,10 @@ use crate::derive::parse::{clap_field_is_flattened, clap_field_is_subcommand};
 
 type ClapFieldPredicate = fn(&syn::Field) -> syn::Result<bool>;
 
+/// Returns the struct's first field, failing on any other input shape.
+///
+/// Every case in this module is a one-field struct, so the marker predicate
+/// is always applied to that field.
 fn first_field(input: &DeriveInput) -> Result<&syn::Field> {
     let syn::Data::Struct(data) = &input.data else {
         return Err(anyhow!("expected struct"));
@@ -19,6 +23,10 @@ fn first_field(input: &DeriveInput) -> Result<&syn::Field> {
         .ok_or_else(|| anyhow!("missing first field"))
 }
 
+/// Asserts `predicate` returns each expected outcome in `cases`.
+///
+/// `marker_name` names the marker under test so a failure identifies which
+/// of the two predicates produced the mismatch.
 fn assert_clap_field_marker_cases(
     marker_name: &str,
     predicate: ClapFieldPredicate,
@@ -35,6 +43,10 @@ fn assert_clap_field_marker_cases(
     Ok(())
 }
 
+/// Covers the field shapes that mark a clap subcommand selector.
+///
+/// Both `command` and `clap` spellings are accepted, including a grouped
+/// form where the marker is one of several keys.
 #[test]
 fn clap_field_is_subcommand_cases() -> Result<()> {
     assert_clap_field_marker_cases(
@@ -58,6 +70,7 @@ fn clap_field_is_subcommand_cases() -> Result<()> {
     )
 }
 
+/// Covers the field shapes that mark a flattened clap struct.
 #[test]
 fn clap_field_is_flattened_cases() -> Result<()> {
     assert_clap_field_marker_cases(

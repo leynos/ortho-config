@@ -8,6 +8,12 @@
 
 use super::*;
 
+/// The derived constants request exactly the identifiers the runtime builds.
+///
+/// The fixture's localizer records every id the generated code looked up; the
+/// expected set is built independently through `message_id_for`, so a drift
+/// between the two derivations shows up as a set difference rather than as a
+/// silently orphaned catalogue entry.
 #[test]
 fn identifier_coverage_matches_message_id_for() {
     let localizer = RecordingLocalizer::default();
@@ -41,6 +47,10 @@ fn identifier_coverage_matches_message_id_for() {
     assert_eq!(localizer.recorded_ids(), expected);
 }
 
+/// A root that would be an invalid Fluent identifier panics at parse time.
+///
+/// The binary name starts with a digit, which the identifier rules forbid, so
+/// the failure must be loud rather than producing an id no catalogue can hold.
 #[test]
 #[should_panic(expected = "Fluent identifier must start with an ASCII letter")]
 fn fluent_unsafe_identifier_panics() {
@@ -87,6 +97,10 @@ enum TreeCommand {
 }
 
 impl Default for TreeCommand {
+    /// The default variant keeps the subcommand tree populated for the walker.
+    ///
+    /// The localizer walks a real `Command`, which requires at least one
+    /// subcommand to visit; this supplies it without constraining the test.
     fn default() -> Self {
         Self::Greet(TreeGreetArgs::default())
     }
@@ -144,6 +158,7 @@ fn assert_arg_ids_match_message_id_for(arg: &ArgLocalizationIds, base: &[&str]) 
     );
 }
 
+/// The flat command's constants equal the runtime's command-level ids.
 #[test]
 fn flat_command_constants_equal_message_id_for() {
     let base = FlatCli::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
@@ -162,6 +177,7 @@ fn flat_command_constants_equal_message_id_for() {
     );
 }
 
+/// The flat command's argument constants equal the runtime's argument ids.
 #[test]
 fn flat_argument_constants_equal_message_id_for() {
     let base = FlatCli::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
@@ -177,6 +193,7 @@ fn flat_argument_constants_equal_message_id_for() {
     assert_arg_ids_match_message_id_for(verbose, &base);
 }
 
+/// The walker records the same id set the derived constants declare.
 #[test]
 fn flat_walker_coverage_equals_derived_constants() {
     let localizer = RecordingLocalizer::default();
@@ -190,6 +207,11 @@ fn flat_walker_coverage_equals_derived_constants() {
     assert_eq!(localizer.recorded_ids(), expected);
 }
 
+/// A flattened subcommand's constants are a subset of the walker's ids.
+///
+/// The remainder is the identifiers the walker visits for the flattened
+/// type's own fields, which the parent does not redeclare. Asserting a subset
+/// plus a named remainder keeps the allowance explicit rather than blanket.
 #[test]
 fn subcommand_flatten_constants_are_subset_with_documented_remainder() {
     let localizer = RecordingLocalizer::default();

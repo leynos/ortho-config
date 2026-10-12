@@ -304,6 +304,11 @@ fn extract_argument(error: &clap::Error) -> String {
     }
 }
 
+/// Installs a catalogue keyed by the derive-generated identifiers.
+///
+/// The resource is built from `LocalizedDemoArgs`'s own constants rather than
+/// hard-coded ids, so the step exercises the generated names end to end. It is
+/// leaked because the localizer outlives the scenario and needs `'static`.
 #[given("a derived configuration struct with a localization catalogue")]
 fn derived_config_localization_catalogue(context: &LocalizerContext) -> Result<()> {
     let recipient = LocalizedDemoArgs::ARG_IDS
@@ -319,6 +324,7 @@ fn derived_config_localization_catalogue(context: &LocalizerContext) -> Result<(
     install_fluent_localizer(context, &[resource], false)
 }
 
+/// Parses a command built with the fluent localizer's translated metadata.
 #[when("the command line is parsed with a Fluent localizer")]
 fn parse_localized_demo_command(context: &LocalizerContext) -> Result<()> {
     let parsed = context
@@ -338,6 +344,10 @@ fn parse_localized_demo_command(context: &LocalizerContext) -> Result<()> {
     Ok(())
 }
 
+/// The parsed command's help text comes from the derived identifier.
+///
+/// This is the assertion that ties the generated `ARG_IDS` entry to what a
+/// user actually sees, rather than merely checking the constant exists.
 #[then("the help text resolves through the derive-generated identifiers")]
 fn help_text_resolves_through_derived_ids(context: &LocalizerContext) -> Result<()> {
     context

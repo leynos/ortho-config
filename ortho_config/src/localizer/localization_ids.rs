@@ -105,6 +105,7 @@ mod tests {
         }];
     }
 
+    /// Every generated command constant matches the runtime `message_id_for`.
     #[rstest]
     fn command_constants_agree_with_message_id_for() {
         let base = HandwrittenCli::LOCALIZATION_BASE
@@ -131,6 +132,7 @@ mod tests {
         );
     }
 
+    /// Every generated argument constant matches the runtime `message_id_for`.
     #[rstest]
     fn argument_constants_agree_with_message_id_for() {
         let base = HandwrittenCli::LOCALIZATION_BASE
@@ -150,6 +152,7 @@ mod tests {
         );
     }
 
+    /// Each constant resolves through a real Fluent bundle round trip.
     #[rstest]
     fn constants_round_trip_through_fluent_localizer() {
         let Some(recipient) = HandwrittenCli::ARG_IDS.first() else {

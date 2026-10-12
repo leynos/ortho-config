@@ -35,6 +35,7 @@ impl TempRoot {
 }
 
 impl Drop for TempRoot {
+    /// Removes the temporary root once the test that owns it finishes.
     fn drop(&mut self) {
         drop(fs::remove_dir_all(&self.0));
     }

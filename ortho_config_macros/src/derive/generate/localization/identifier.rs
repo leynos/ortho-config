@@ -71,6 +71,7 @@ mod tests {
 
     const MARKER: &str = "NORMALIZATION-RULES-VERSION: 1";
 
+    /// Lower-casing and `-`/`_` preservation hold for representable input.
     #[rstest]
     #[case("hello", "hello")]
     #[case("HELLO", "hello")]
@@ -86,6 +87,11 @@ mod tests {
         );
     }
 
+    /// Input a Fluent identifier cannot carry is rejected, not silently cut.
+    ///
+    /// The cases cover whitespace, non-ASCII letters, and the two separator
+    /// characters that are structural elsewhere, so a loosened rule that
+    /// admitted any of them would fail here.
     #[rstest]
     #[case("")]
     #[case("hello world")]
@@ -100,6 +106,7 @@ mod tests {
         );
     }
 
+    /// The normaliser source carries the rules-version marker.
     #[rstest]
     fn marker_version_is_present_in_source() {
         let source = include_str!(concat!(
@@ -112,6 +119,7 @@ mod tests {
         );
     }
 
+    /// The macro twin and the runtime twin declare the same rules version.
     #[rstest]
     fn marker_version_matches_runtime_twin() {
         // Decision D-8 version gate: editing the normalization rules in one
@@ -134,8 +142,10 @@ mod tests {
         );
     }
 
-    /// Extracts the `NORMALIZATION-RULES-VERSION` value from a comment-marked
-    /// source (the marker lives in a `//!` module doc comment in both files).
+    /// Extracts the `NORMALIZATION-RULES-VERSION` value from marked source.
+    ///
+    /// The marker lives in a `//!` module doc comment in both twins, so the
+    /// scan strips the doc-comment prefix before matching.
     fn marker_version_from(source: &str) -> Option<&str> {
         source.lines().find_map(|line| {
             line.trim_start_matches("//!")
@@ -145,15 +155,17 @@ mod tests {
         })
     }
 
-    // A raw identifier segment that may start with any Fluent char.
+    /// A raw identifier segment that may start with any Fluent character.
     prop_compose! {
         fn segment()(
             raw in "[A-Za-z0-9_-]{1,12}",
         ) -> String { raw }
     }
 
-    // A segment that starts with an ASCII letter (the runtime and the macro
-    // twin reject identifiers that do not start with a letter).
+    /// A segment that starts with an ASCII letter.
+    ///
+    /// Both the runtime and the macro twin reject identifiers whose root does
+    /// not start with a letter, so generated roots must respect that bound.
     prop_compose! {
         fn root_segment()(
             first in "[A-Za-z]",
@@ -164,10 +176,11 @@ mod tests {
     }
 
     proptest! {
-        // The macro-side normaliser must agree byte-for-byte with the runtime
-        // `message_id_for` (Decision D-8 dev-dependency cycle). For generated
-        // command paths whose root starts with a letter, and dotted suffixes,
-        // the twin's joined output equals the runtime identifier exactly.
+        /// The macro normaliser agrees byte-for-byte with the runtime lookup.
+        ///
+        /// This is the Decision D-8 dev-dependency cycle check: for generated
+        /// command paths whose root starts with a letter, plus dotted
+        /// suffixes, the twin's joined output must equal `message_id_for`'s.
         #[test]
         fn joined_output_agrees_with_message_id_for(
             root in root_segment(),
@@ -195,6 +208,7 @@ mod tests {
             prop_assert_eq!(joined, expected);
         }
 
+        /// Normalising an already-normalised segment changes nothing.
         #[test]
         fn normalization_is_idempotent(raw in segment()) {
             let span = proc_macro2::Span::call_site();
@@ -203,6 +217,7 @@ mod tests {
             prop_assert_eq!(once, twice);
         }
 
+        /// Any joined identifier satisfies the Fluent identifier grammar.
         #[test]
         fn joined_output_is_a_valid_fluent_identifier(
             root in root_segment(),

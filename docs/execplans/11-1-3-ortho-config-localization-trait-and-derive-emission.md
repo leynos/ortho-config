@@ -1653,8 +1653,18 @@ parent position, which on Unix makes `metadata` report `NotADirectory` — not
 `NotFound` instead, the fragment is correctly treated as stale and skipped, and
 `merge_fragments` returns an empty `Ok`. The assertion then failed with an
 empty error string. The production predicate was never wrong; only the test's
-provocation was platform-specific. `ErrorKind::NotADirectory` has no Windows
-counterpart, so no filesystem layout can provoke it there.
+provocation was platform-specific.
+
+That provocation is not portable, and the reason is narrower than the kind
+being Unix-only. `ErrorKind::NotADirectory` *does* have a Windows mapping:
+`std::io`'s `decode_error_kind` maps `ERROR_DIRECTORY` (267) to it, and
+`std::fs::remove_dir_all` on a regular file raises exactly that code. What the
+Windows loader returns for a *path component* that is a regular file is a
+different code — `ERROR_PATH_NOT_FOUND` — which maps to `NotFound`. So the
+kind is reachable on Windows through other calls; it is this layout, driven
+through `metadata`, that cannot provoke it. A test may rely on a layout only
+where the platform's mapping for that layout is itself the contract, and here
+it is not.
 
 The repair uses an interior NUL in the recorded source path. Rust rejects such
 a path during its own conversion to a C string, before any syscall reaches the

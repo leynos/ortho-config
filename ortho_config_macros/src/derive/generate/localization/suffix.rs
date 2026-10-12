@@ -33,6 +33,7 @@ pub(crate) enum MessageSuffix {
 }
 
 impl AsRef<str> for MessageSuffix {
+    /// Returns the Fluent segment this suffix contributes.
     fn as_ref(&self) -> &str {
         match self {
             Self::About => "about",
@@ -51,6 +52,7 @@ impl AsRef<str> for MessageSuffix {
 }
 
 impl From<MessageSuffix> for String {
+    /// Returns the Fluent segment as an owned string.
     fn from(value: MessageSuffix) -> Self {
         value.as_ref().to_owned()
     }

@@ -11,6 +11,11 @@ use serial_test::serial;
 
 const TARGET_DIR: &str = "target/identifier-e2e";
 
+/// Builds the fixture crate, opting into artefact emission when `emit` is set.
+///
+/// The opt-in variable is removed rather than left unset so an inherited
+/// value from the surrounding environment cannot turn emission on for the
+/// negative case and make it pass vacuously.
 fn build_fixture(emit: bool) -> Result<()> {
     let mut command = Command::new("cargo");
     command
@@ -30,6 +35,7 @@ fn build_fixture(emit: bool) -> Result<()> {
     Ok(())
 }
 
+/// Removes the fixture's build output so the next build starts cold.
 fn clean_fixture() -> Result<()> {
     let status = Command::new("cargo")
         .args([
@@ -45,6 +51,10 @@ fn clean_fixture() -> Result<()> {
     Ok(())
 }
 
+/// Locates the emitted identifier artefact under the fixture's build output.
+///
+/// `None` means no build ran rather than that emission was suppressed; the
+/// caller distinguishes the two when asserting on a negative case.
 fn artefact_path() -> Result<Option<PathBuf>> {
     let build_root = Path::new(TARGET_DIR).join("debug/build");
     if !build_root.exists() {
@@ -60,11 +70,16 @@ fn artefact_path() -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
+/// Returns the emitted artefact's contents, failing when none was produced.
 fn artefact() -> Result<String> {
     let path = artefact_path()?.context("fixture identifier artefact was not emitted")?;
     fs::read_to_string(path).context("read identifier artefact")
 }
 
+/// Removes the fixture target directory so a build starts cold.
+///
+/// A warm build reuses the previous `OUT_DIR`, which would hide a failure to
+/// re-emit the artefact.
 fn reset_target_dir() -> Result<()> {
     let target = Path::new(TARGET_DIR);
     if target.exists() {
