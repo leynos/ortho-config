@@ -64,3 +64,37 @@ pub(super) fn expect_model_error(input: &syn::DeriveInput) -> String {
         .expect_err("model should reject this input")
         .to_string()
 }
+
+/// The two fragments every `localized_default` deferral must quote.
+///
+/// Both spellings of the attribute are refused by the same diagnostic, so the
+/// phrases are named once here rather than restated per spelling.
+const LOCALIZED_DEFAULT_REFUSAL: [&str; 2] = ["`localized_default` is not yet implemented", "§8.2"];
+
+/// Asserts the deferred `localized_default` diagnostic for one `input`.
+///
+/// `spelling` names which placement of the attribute is under test, because
+/// the two placements reach the same diagnostic through different parsers: a
+/// field-level key that is not recognised is discarded in silence and never
+/// reaches a catalogue, so the field spelling needs a rejection of its own.
+/// The spelling is also what the acceptance message quotes when the input is
+/// not rejected at all.
+pub(super) fn assert_localized_default_is_refused(
+    input: &syn::DeriveInput,
+    spelling: &str,
+) -> Result<()> {
+    let Err(error) = parse_input(input) else {
+        return Err(anyhow!(
+            "a {spelling} localized_default must be rejected rather than \
+             discarded as unknown"
+        ));
+    };
+    let message = error.to_string();
+    for expected in LOCALIZED_DEFAULT_REFUSAL {
+        ensure!(
+            message.contains(expected),
+            "the {spelling} deferral message must contain `{expected}`: {message}"
+        );
+    }
+    Ok(())
+}

@@ -48,32 +48,6 @@ fn entry_with_type_name(id: &str, type_name: String) -> Entry {
     }
 }
 
-/// Names one source location as a fixture entry records it.
-///
-/// The three coordinates always travel together — they are one provenance
-/// value, and no caller ever varies one without the others — so grouping them
-/// keeps [`entry_at_source`] to the identity arguments a reader is actually
-/// comparing.
-fn source_at(file: &str, line: usize, column: usize) -> Source {
-    Source {
-        file: file.to_owned(),
-        line,
-        column,
-    }
-}
-
-/// Builds an entry whose provenance is set explicitly.
-///
-/// [`entry_with_type_name`] pins every entry to [`fixture_source`], so it cannot
-/// express the one case the ordering tie-breaker exists for: entries that agree
-/// on `(id, kind, type_name, field)` and differ only in source location.
-fn entry_at_source(id: &str, type_name: String, source: Source) -> Entry {
-    Entry {
-        source,
-        ..entry_with_type_name(id, type_name)
-    }
-}
-
 /// Generates entries that force the renderer through its split-file path.
 fn split_entry_strategy() -> impl Strategy<Value = Entry> {
     (

@@ -5,10 +5,10 @@ use rstest::rstest;
 use syn::parse_quote;
 
 use super::test_helpers::{
-    assert_fluent_message_id, assert_only_visible_arg, expect_model_error, model_for,
+    assert_fluent_message_id, assert_localized_default_is_refused, assert_only_visible_arg,
+    expect_model_error, model_for,
 };
 use super::*;
-use crate::derive::parse::parse_input;
 use anyhow::{Result, anyhow, ensure};
 
 /// A numeric argument id is a valid *fragment*, even though it would be an
@@ -319,62 +319,54 @@ fn rejected_localization_base_reports_its_reason(
     Ok(())
 }
 
+/// Where a deferred `localized_default` has been written.
+///
+/// The two placements reach the same diagnostic through different parsers, so
+/// both are pinned. The field spelling needs its own case because field-level
+/// keys are discarded when unrecognised: without a rejection there, a
+/// `localized_default` on a field would be accepted in silence and never reach
+/// a catalogue. The struct spelling is kept because it is the spelling the
+/// deferral was announced for.
+#[derive(Debug, Clone, Copy)]
+enum LocalizedDefaultPlacement {
+    /// Written as a struct-level `#[ortho_config(...)]` key.
+    Struct,
+    /// Written as a field-level `#[ortho_config(...)]` key.
+    Field,
+}
+
+impl LocalizedDefaultPlacement {
+    /// Builds the minimal input carrying this placement.
+    fn input(self) -> syn::DeriveInput {
+        match self {
+            Self::Struct => parse_quote! {
+                #[ortho_config(localized_default = "Hello")]
+                struct App {
+                    field: String,
+                }
+            },
+            Self::Field => parse_quote! {
+                #[ortho_config(localization_base = "acme")]
+                struct App {
+                    #[ortho_config(localized_default = "Hello")]
+                    field: String,
+                }
+            },
+        }
+    }
+}
+
 /// The deferred `localized_default` attribute fails with a pointer to why.
 ///
 /// The attribute is deliberately unimplemented, so the diagnostic must name
 /// the attribute and cite the design section rather than failing obscurely.
-#[test]
-fn localization_default_attribute_is_rejected_at_parse_time() -> Result<()> {
-    let input: syn::DeriveInput = parse_quote! {
-        #[ortho_config(localized_default = "Hello")]
-        struct App {
-            field: String,
-        }
-    };
-    let Err(error) = parse_input(&input) else {
-        return Err(anyhow!("localized_default must be rejected"));
-    };
-    let message = error.to_string();
-    ensure!(
-        message.contains("`localized_default` is not yet implemented"),
-        "deferral message must name the attribute: {message}"
-    );
-    ensure!(
-        message.contains("§8.2"),
-        "deferral message must point at the design section: {message}"
-    );
-    Ok(())
-}
-
-/// The same deferral is rejected when written on a field.
-///
-/// Field-level keys are discarded when unrecognised, so a `localized_default`
-/// placed on a field would otherwise be accepted in silence and never reach a
-/// catalogue. This pins the rejection at that second spelling: the field-level
-/// parser must recognise the name in order to refuse it.
-#[test]
-fn localization_default_attribute_is_rejected_on_a_field() -> Result<()> {
-    let input: syn::DeriveInput = parse_quote! {
-        #[ortho_config(localization_base = "acme")]
-        struct App {
-            #[ortho_config(localized_default = "Hello")]
-            field: String,
-        }
-    };
-    let Err(error) = parse_input(&input) else {
-        return Err(anyhow!(
-            "a field-level localized_default must be rejected rather than \
-             discarded as unknown"
-        ));
-    };
-    let message = error.to_string();
-    ensure!(
-        message.contains("`localized_default` is not yet implemented"),
-        "deferral message must name the attribute: {message}"
-    );
-    ensure!(
-        message.contains("§8.2"),
-        "deferral message must point at the design section: {message}"
-    );
-    Ok(())
+#[rstest]
+#[case(LocalizedDefaultPlacement::Struct, "struct-level")]
+#[case(LocalizedDefaultPlacement::Field, "field-level")]
+fn localized_default_attribute_is_rejected_wherever_it_is_written(
+    #[case] placement: LocalizedDefaultPlacement,
+    #[case] spelling: &str,
+) -> Result<()> {
+    let input = placement.input();
+    assert_localized_default_is_refused(&input, spelling)
 }

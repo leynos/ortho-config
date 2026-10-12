@@ -39,11 +39,13 @@ fn renderer_sorts_entries_deterministically() -> Result<()> {
 /// that the order came from the input at all.
 #[test]
 fn renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> {
-    let forwarded = entry_at_source("tied", String::from("a::Fixture"), source_at("b.rs", 40, 2));
-    let later = entry_at_source("tied", String::from("a::Fixture"), source_at("b.rs", 80, 2));
-    let reversed = vec![later.clone(), forwarded.clone()];
+    // The two entries agree on every identity field and differ only here, so
+    // the provenance value is written out rather than parameterised.
+    let earlier = tied_fixture("b.rs", 40);
+    let later = tied_fixture("b.rs", 80);
+    let reversed = vec![later.clone(), earlier.clone()];
 
-    let first = render(vec![forwarded.clone(), later.clone()])?;
+    let first = render(vec![earlier, later])?;
     let second = render(reversed)?;
 
     ensure!(
@@ -61,6 +63,24 @@ fn renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> 
     Ok(())
 }
 
+/// Builds the shared tie fixture at one provenance coordinate.
+///
+/// Both entries carry the same id and type name, because a tie is exactly the
+/// case the ordering tie-breaker exists for: entries that agree on
+/// `(id, kind, type_name, field)` and are separated only by where they were
+/// declared.
+fn tied_fixture(file: &str, line: usize) -> Entry {
+    let source = Source {
+        file: file.to_owned(),
+        line,
+        column: 2,
+    };
+    Entry {
+        source,
+        ..entry_with_type_name("tied", String::from("a::Fixture"))
+    }
+}
+
 /// Verifies provenance ties also fix the split-file boundaries.
 ///
 /// The single-file case has one byte sequence to compare; the split case has a
@@ -70,12 +90,11 @@ fn renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> 
 /// forces the split does not also break the tie being tested.
 #[test]
 fn split_renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> {
-    let type_name = format!("Fixture{}", "x".repeat(SPLIT_PAYLOAD_BYTES));
-    let forwarded = entry_at_source("tied", type_name.clone(), source_at("c.rs", 10, 0));
-    let later = entry_at_source("tied", type_name, source_at("c.rs", 70, 0));
-    let reversed = vec![later.clone(), forwarded.clone()];
+    let earlier = split_tied_fixture(10);
+    let later = split_tied_fixture(70);
+    let reversed = vec![later.clone(), earlier.clone()];
 
-    let first = render(vec![forwarded.clone(), later.clone()])?;
+    let first = render(vec![earlier.clone(), later.clone()])?;
     let second = render(reversed)?;
 
     ensure!(
@@ -87,10 +106,29 @@ fn split_renderer_breaks_provenance_ties_independently_of_input_order() -> Resul
         "split filenames and part contents must not vary with input order"
     );
     ensure!(
-        round_trip_entries(&first)? == ordered(vec![forwarded, later]),
+        round_trip_entries(&first)? == ordered(vec![earlier, later]),
         "split output must round-trip the provenance-ordered entries"
     );
     Ok(())
+}
+
+/// Builds the shared tie fixture large enough to force the split path.
+///
+/// The bulk rides on `type_name`, which both entries must nevertheless share:
+/// a payload that also broke the tie would stop testing the tie-breaker.
+fn split_tied_fixture(line: usize) -> Entry {
+    let source = Source {
+        file: String::from("c.rs"),
+        line,
+        column: 0,
+    };
+    Entry {
+        source,
+        ..entry_with_type_name(
+            "tied",
+            format!("Fixture{}", "x".repeat(SPLIT_PAYLOAD_BYTES)),
+        )
+    }
 }
 
 /// Verifies split output round-trips every ordered entry through its index.
