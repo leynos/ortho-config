@@ -1,4 +1,19 @@
 //! Property coverage for documentation IR behaviour metadata round trips.
+//!
+//! Both properties are **value-preservation** checks: they establish that
+//! decoding the encoding of a generated value yields that same value. They are
+//! deliberately *not* described as independent wire-contract checks. A
+//! symmetric change to the wire names would preserve both round trips while
+//! changing the published representation, and adding
+//! `skip_serializing_if = "Option::is_none"` would preserve both while turning
+//! explicit nulls into omitted keys. The independent expected-representation
+//! assertion lives in `ortho_config/tests/docs_ir_behaviour.rs`, which pins the
+//! published JSON directly.
+//!
+//! The properties are also not a check that every combination was *exercised*.
+//! The four optional fields make all sixteen declared/absent combinations
+//! reachable from the generator; that is a statement about the input space, not
+//! about any particular run.
 
 use super::ir::{BehaviourMetadata, InteractionKind, MutationKind};
 use proptest::{option, prelude::*};
@@ -16,8 +31,11 @@ proptest! {
 
     /// The same round trip holds through the untyped `Value` representation.
     ///
-    /// The two routes exercise different serde entry points, so a `rename` or
-    /// `skip_serializing_if` mistake can break one without the other.
+    /// The two routes enter serde differently — through a string versus through
+    /// an already-built `Value` — so each can fail where the other passes. That
+    /// gives complementary value-preservation coverage; it does not make them
+    /// independent checks of the wire representation, for the reasons in the
+    /// module documentation.
     #[test]
     fn behaviour_metadata_value_round_trips(metadata in any_behaviour_metadata()) {
         let value = serde_json::to_value(&metadata).expect("serialize behaviour metadata");
@@ -32,7 +50,20 @@ proptest! {
 ///
 /// Each of the four fields is independently optional, so the strategy reaches
 /// the fully undeclared case, the fully declared case, and every partial
-/// declaration in between.
+/// declaration in between. Those sixteen combinations are *reachable*; the
+/// generator does not prove that a given run sampled each of them.
+///
+/// The generator's domain is deliberately wider than what the derive accepts.
+/// It can pair `NonInteractive` with a bypass, which is a perfectly
+/// constructible serde value but a declaration the derive parser rejects as a
+/// contradiction. That breadth is intended: these properties test serde
+/// fidelity for the type as declared, not the attribute grammar, which the
+/// derive enforces at compile time.
+///
+/// An absent field serializes as an explicit `null` here, because the IR
+/// declares no `skip_serializing_if`. The `"unknown"` state is an agent-context
+/// concept: the bridge maps an absent interaction or mutation onto it, and the
+/// IR never encodes `None` as `"unknown"`.
 fn any_behaviour_metadata() -> impl Strategy<Value = BehaviourMetadata> {
     (
         option::of(any_interaction_kind()),

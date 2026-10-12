@@ -185,9 +185,10 @@ escalation, not workarounds.
   contract with exit 3 iff any deny finding, and default-format artefact
   suppression when the lint runs without an explicit `--format`), rstest unit
   tests, insta snapshot, BDD feature `orthohelp_policy.feature` with 3
-  scenarios, and proptests for totality, no-deny-in-warn/off, and empty-off.
-  All gates green (check-fmt, lint, typecheck, markdownlint), lib tests
-  112/112, BDD 14/14. CodeRabbit review
+  scenarios, and proptests for no-panic sampling (then named for totality; see
+  the 2026-10-12 decision entry), no-deny-in-warn/off, and empty-off. All gates
+  green (check-fmt, lint, typecheck, markdownlint), lib tests 112/112, BDD
+  14/14. CodeRabbit review
   (`coderabbit review --agent --committed --base origin/main`) returned 0
   findings across 79 reviewed files (Milestones B through E), pass clear.
 - [x] (2026-08-14) Post-E P1 fix: explicitly requested output generation is
@@ -375,6 +376,31 @@ escalation, not workarounds.
   findings' repairs also close. See "Review repairs" under Revision 6 for the
   per-finding rationale. Gates and the push are recorded below when they
   complete; this entry covers the source repairs alone.
+- [x] (2026-10-12) Closed the three completeness-assessment gaps as commit
+  `b746a3e6`: the behaviour-report snapshot (named-file, with an
+  `every_rule_context` fixture whose commands each isolate one rule), the
+  ADR-010 goal corrected to
+  library-API-with-deferred-`PolicyInputs`-integration, and the scope exception
+  recorded in the decision log with measured figures. All six gates green; push
+  verified over SSH against the remote head.
+- [x] (2026-10-12) Repaired the proof-assessment findings, with falsification
+  runs rather than restated claims.
+  `cargo-orthohelp/src/agent_context/proptests.rs` now generates **reordered**
+  siblings (`unordered_names`), so `commands_are_sorted_by_path` fails when the
+  bridge's sort is deleted (it previously passed); a new
+  `every_generated_command_survives_the_bridge` derives expected paths in-test
+  and is proven non-vacuous against a first-child-only `walk`.
+  `cargo-orthohelp/src/policy/rules/proptests.rs` gains
+  `findings_match_the_rule_specification` against a handwritten rule oracle,
+  with deliberate matching/unmatched bypass-input arms and
+  `check_behaviour_is_total` renamed to
+  `sampled_contexts_never_panic_the_check`; proven non-vacuous against three
+  mutated implementations. `ortho_config/src/docs/proptests.rs` re-describes
+  both properties as value-preservation checks. Gate repair: the first gate run
+  was RED on `check-fmt` (rustfmt wrapping) and on `markdownlint`'s
+  `spellcheck` sub-step (a hyphenated spelling the gate rejects); both were
+  fixed at source — `cargo fmt --all` and the unhyphenated form — with no
+  `typos.local.toml` exception added.
 
 ## Surprises & discoveries
 
@@ -643,11 +669,11 @@ escalation, not workarounds.
   ADR-010 and the trybuild `.stderr` goldens. Date/Author: 2026-08-06, added
   after expert review.
 - Decision: use `proptest` for serde round-trip invariants of the new types
-  and the totality/severity-monotonicity of `check_behaviour`; skip `kani`/
-  `verus`. Rationale: the invariants are shallow data-shape and classification
-  properties with no unsafe code, no state machine, and no arithmetic — bounded
-  model checking or deductive proof would restate the property without adding
-  assurance. Date/Author: 2026-08-06, planning session.
+  and the sampled no-panic/severity-monotonicity of `check_behaviour`; skip both
+  `kani` and `verus`. Rationale: the invariants are shallow data-shape and
+  classification properties with no unsafe code, no state machine, and no
+  arithmetic — bounded model checking or deductive proof would restate the
+  property without adding assurance. Date/Author: 2026-08-06, planning session.
 - Decision: deferred items recorded for later phases: per-code counts in
   `PolicySummary` (additive, revisit when the report has consumers); advisory
   contradiction detection between an inferred `canonical_verb` of `delete` and
@@ -703,6 +729,55 @@ escalation, not workarounds.
   recorded rather than the threshold silently raised, so a future planner can
   see the original estimate was low by roughly 2x for a metadata-surface item
   of this shape. Date/Author: 2026-10-12, review reconciliation.
+- Decision: repair the proof assessment's four actionable findings rather than
+  restate the property claims more modestly. Rationale: two of the findings
+  were *measurable* weaknesses, not wording, and modulo the earlier claims the
+  repairs are cheap. Measured outcomes:
+
+  - The command-ordering property did not guard command ordering. `btree_set`
+    supplied pre-sorted siblings, and the bridge emits the root ahead of each
+    sorted subtree, so the traversal was path-sorted before the bridge's own
+    `sort_by` ran. Reproduced by deleting the sort and observing the property
+    **pass**; the generator now emits *reordered* deduplicated sibling vectors,
+    and the same deletion makes the property **fail**. The input-name
+    ordering property was probed the same way and did fail, so it was left as
+    generated; its adjacency-based limit is now stated instead.
+  - Command preservation had no assertion at all, so an empty command list
+    satisfied uniqueness and ordering alike. Added
+    `every_generated_command_survives_the_bridge`, which derives the expected
+    path set in the test from the input tree and compares as a set; proven
+    non-vacuous by making `walk` visit only the first subcommand, which fails
+    it.
+  - The three policy properties could not detect a missing finding. Added
+    `findings_match_the_rule_specification`, which compares the report's
+    finding codes against an independent handwritten restatement of the rule
+    contract and asserts severity plus all four summary counters. Proven
+    non-vacuous against three mutated implementations: an always-empty report,
+    a bypass-known rule that matches any non-empty input list, and an
+    always-firing undeclared rule — all three fail it. The bypass-and-inputs
+    generator now chooses the matching/unmatched input relation deliberately
+    instead of leaving it to independent chance, and
+    `check_behaviour_is_total` is renamed to
+    `sampled_contexts_never_panic_the_check` so its name stops claiming
+    totality.
+  - The serde properties are now described as value-preservation checks, with
+    the symmetric-rename and `skip_serializing_if` counterexamples stated as
+    the reason they are not wire-contract checks. The sixteen combinations are
+    recorded as reachable rather than exercised; `None` is recorded as
+    serializing to explicit `null` at the IR layer (the `"unknown"` state is an
+    agent-context concept the bridge maps onto); and the generator's
+    `NonInteractive`-plus-bypass arm is documented as constructible-but-derive-
+    rejected rather than silently permitted.
+
+  Two further assessment claims were *retracted* rather than repaired, because
+  the code already refuted them: the behaviour bridge's equality assertions in
+  `agent_context/behaviour_tests.rs` do reject wrong interaction and mutation
+  outputs, and the literal-generation limitation must not be described as the
+  escape, raw-string, char-literal, and lifetime branches being untested —
+  `agent_context/tests.rs` covers all of those by example. The claimed bridge
+  negative-control omission is therefore removed from the limitation inventory
+  rather than carried as a known gap. Date/Author: 2026-10-12, proof-assessment
+  reconciliation.
 
 ## Outcomes & retrospective
 
@@ -1093,10 +1168,12 @@ values; the mapping turns them green.
    well-formed-report assertion so a crash exiting with a different code cannot
    false-pass. These scenarios exercise the real binary because the lint is an
    externally observable CLI contract.
-6. Proptest: properties over arbitrary `AgentCommand` vectors asserting
-   `check_behaviour` is total, that a report never contains `deny` severity
-   when the mode is `warn` or `off`, and that `off` always yields an empty
-   result list.
+6. Proptest: properties over arbitrary `AgentCommand` vectors asserting that
+   the report's finding codes match an independently restated rule contract
+   (with severity and all summary counters), that sampled contexts never make
+   `check_behaviour` panic, that a report never contains `deny` severity when
+   the mode is `warn` or `off`, and that `off` always yields an empty result
+   list.
 
 Red first: the unit tests and BDD scenarios are written before the rule module
 and flag exist; the flag's absence makes the scenarios fail with a clap usage
