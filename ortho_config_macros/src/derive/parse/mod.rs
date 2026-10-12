@@ -35,9 +35,7 @@ pub(crate) use clap_attrs::{
     clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_is_flattened,
     clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
 };
-pub(crate) use clap_defaults::{
-    ClapDefaultValue, ClapInferredDefault, clap_default_value,
-};
+pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
 pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{

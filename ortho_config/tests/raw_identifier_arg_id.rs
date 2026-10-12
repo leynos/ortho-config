@@ -104,7 +104,7 @@ fn clap_records_the_unrawed_id_and_flag() {
 /// The generated CLI struct records the id clap would record.
 ///
 /// The generated struct derives its own `clap::Parser`, so its ids come from
-/// our attribute rather than from a hand-written one. This is the assertion
+/// our attribute rather than from a handwritten one. This is the assertion
 /// that fails if the resolver ever reverts to `Ident::to_string()`.
 #[test]
 fn generated_cli_records_the_unrawed_id() {

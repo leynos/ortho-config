@@ -39,8 +39,8 @@ fn renderer_sorts_entries_deterministically() -> Result<()> {
 /// that the order came from the input at all.
 #[test]
 fn renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> {
-    let forwarded = entry_at_source("tied", String::from("a::Fixture"), "b.rs", 40, 2);
-    let later = entry_at_source("tied", String::from("a::Fixture"), "b.rs", 80, 2);
+    let forwarded = entry_at_source("tied", String::from("a::Fixture"), source_at("b.rs", 40, 2));
+    let later = entry_at_source("tied", String::from("a::Fixture"), source_at("b.rs", 80, 2));
     let reversed = vec![later.clone(), forwarded.clone()];
 
     let first = render(vec![forwarded.clone(), later.clone()])?;
@@ -55,10 +55,7 @@ fn renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> 
             .into_iter()
             .map(|entry| (entry.source.file, entry.source.line))
             .collect::<Vec<_>>()
-            == [
-                (String::from("b.rs"), 40),
-                (String::from("b.rs"), 80),
-            ],
+            == [(String::from("b.rs"), 40), (String::from("b.rs"), 80),],
         "the earlier declaration must sort first"
     );
     Ok(())
@@ -74,8 +71,8 @@ fn renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> 
 #[test]
 fn split_renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> {
     let type_name = format!("Fixture{}", "x".repeat(SPLIT_PAYLOAD_BYTES));
-    let forwarded = entry_at_source("tied", type_name.clone(), "c.rs", 10, 0);
-    let later = entry_at_source("tied", type_name, "c.rs", 70, 0);
+    let forwarded = entry_at_source("tied", type_name.clone(), source_at("c.rs", 10, 0));
+    let later = entry_at_source("tied", type_name, source_at("c.rs", 70, 0));
     let reversed = vec![later.clone(), forwarded.clone()];
 
     let first = render(vec![forwarded.clone(), later.clone()])?;
