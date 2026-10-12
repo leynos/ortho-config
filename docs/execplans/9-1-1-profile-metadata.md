@@ -1659,15 +1659,15 @@ agent-context test families (ride along with 9.1.2's `redaction` field); the
 scaling and operational-cost design-review lens; profile-aware subcommand
 loading (D11); `inherits` semantics (D5); the 9.1.3 store helpers.
 
-Also deferred, and deliberately *not* repaired in this pull request: the
-blanket `#[allow(dead_code)]` the generated compose helpers carry in
+Also deferred, and deliberately *not* repaired in this pull request: the blanket
+`#[allow(dead_code)]` the generated compose helpers carry in
 `ortho_config_macros/src/derive/load_impl_entry.rs`. The rebase absorbed that
-switch from `#[expect(dead_code)]` because an unfulfilled expectation is a
-hard error once a generated method is used, which is what closed #273. Code
-review flagged the resulting blanket allow as a blunt suppression, and the
-finding is accepted. Removing it does not itself deny dead code; it restores
-the enclosing lint level, so a consumer that denies `dead_code` or warnings
-starts rejecting generated helpers it legitimately never calls. That is a
+switch from `#[expect(dead_code)]` because an unfulfilled expectation is a hard
+error once a generated method is used, which is what closed #273. Code review
+flagged the resulting blanket allow as a blunt suppression, and the finding is
+accepted. Removing it does not itself deny dead code; it restores the enclosing
+lint level, so a consumer that denies `dead_code` or warnings starts rejecting
+generated helpers it legitimately never calls. That is a
 downstream-compatibility break of the same class as #273, in the opposite
 direction, and there is no attribute-only replacement: a generated method can
 be unused in one consumer and used in another, so `#[expect(dead_code)]` can

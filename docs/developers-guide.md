@@ -170,15 +170,15 @@ literal's `profiles` value or construct it with one of those two constructors.
 The constructors keep future *field* additions non-breaking, not this field's
 retype. The derive emits the matching IR `DocMetadata.profiles` only for
 opted-in structs; the `cargo-orthohelp` bridge maps it into the declaration.
-Adding `DocMetadata.profiles` is a second break of the same kind, and it reaches
-two copies of the type — `ortho_config::docs::DocMetadata` and the
-`cargo_orthohelp::schema::DocMetadata` mirror. The field is `#[serde(default)]`,
-so the wire contract stays additive and older JSON still deserializes, but a
-defaulted field is still required in a struct literal: every external literal,
-including the linked Weaver and Netsuke consumers, must name `profiles: None`.
-The runtime "which profile is active" concern is `SelectedProfile`/
-`ProfileLoadOutcome`, deliberately separate from the static agent-context
-contract.
+Adding `DocMetadata.profiles` is a second break of the same kind, and it
+reaches two copies of the type — `ortho_config::docs::DocMetadata` and the
+`cargo_orthohelp::schema::DocMetadata` mirror. The field is
+`#[serde(default)]`, so the wire contract stays additive and older JSON still
+deserializes, but a defaulted field is still required in a struct literal:
+every external literal, including the linked Weaver and Netsuke consumers, must
+name `profiles: None`. The runtime "which profile is active" concern is
+`SelectedProfile` and `ProfileLoadOutcome`, deliberately separate from the
+static agent-context contract.
 
 `localizer::identifier::normalize_segment` is the single source of truth for
 strict runtime and derive-time Fluent identifier segments. Reuse it from
