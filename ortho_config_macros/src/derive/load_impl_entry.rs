@@ -4,6 +4,7 @@
 //! entry points on the CLI and config structs.
 
 use quote::quote;
+use syn::Ident;
 
 use super::load_impl_profiles::build_config_profile_delegates;
 use super::source::{
