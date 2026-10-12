@@ -2227,3 +2227,135 @@ ever failed and the test's own context line — "a dropped observation must be
 recorded" — was the panic. A non-empty *directory* at that path is the
 provocation that works: the rename would have to replace a directory with a
 file, which the kernel refuses.
+
+### The four Observability findings: `ae5c388b`
+
+CodeRabbit's review of `e277e03c` left four findings open under Observability.
+All four were verified against the source at `ba96f84a` before any edit, and
+all four were still valid. Three of them were the same defect wearing different
+clothes: three channel files existed, and the contracts that make them readable
+lived only in prose that had drifted from the code.
+
+#### The acquisition-failure test could not reach its own arm
+
+`a_failed_acquisition_retires_its_wait_marker` blocked the *fragment directory*
+rather than the *lock file*. That failure arrives after the lock has already
+been granted, so the test exercised `Observation::granted`'s retirement and left
+`abandon_wait` unreached — it passed with `abandon_wait` deleted, which is
+exactly the regression it exists to catch.
+
+The repair makes the lock file itself unopenable: a non-empty directory in the
+lock file's place, because opening a directory for writing is refused on every
+supported platform and a regular file would be opened happily, taking a lock
+the publication would then succeed with while the test asserted a failure.
+
+The repair was checked by mutation rather than by inspection. Deleting
+`observation.abandon_wait();` from `publish.rs:108` made the test fail with "a
+terminal publication must not leave a wait marker describing a wait that has
+ended"; restoring the call turned it green. A regression test that has never
+been seen to fail is a regression test of unknown value.
+
+#### Report identity and freshness
+
+`process_file` named reports by PID alone, and `write`'s doc claimed the caller
+held the artefact lock — which the acquisition-failure path demonstrably does
+not. The claim was wrong in a way that mattered: it implied a guarantee the
+code did not need and did not have.
+
+The chosen contract is **latest-report-per-process**. Each publication replaces
+what its process reported before, so the last completed publication is what a
+reader finds. `written_at_ms` is the freshness field, and presence is
+explicitly *not* freshness: PID reuse and a failed replacement both leave a
+stale report in place. The corrected `write` doc says why the temporary is safe
+for a different reason — the destination names exactly one process, and one
+process runs one publication at a time, so two writers of one path cannot occur
+and the lock is irrelevant to this write.
+
+The rejected alternative was a report per publication. It would grow the
+directory without bound as a crate gains derives, and nothing in a build would
+ever remove them.
+
+#### The failure record's format
+
+`write_failure` appended plain text to a `.json` path and bypassed
+`ErrorCategory`. A `.json` file holding non-JSON is a lie in the extension, and
+free text without the shared category defeats the point of having one.
+
+The record is now JSON Lines under `.jsonl`: one JSON value per line, so a
+reader can consume complete records while the build still appends.
+`ChannelRecord` carries `{ pid, operation, error, detail, written_at_ms }` —
+the shared `ErrorCategory` vocabulary plus free-text `detail` for what the
+category cannot say. A failure to record the failure is discarded, and the
+module doc says so: the log is the last observation to be written, and one that
+cannot report itself has nowhere left to report to.
+
+#### The wait marker's lifetime
+
+`developers-guide.md` said the marker exists "only *while*" a publication is
+blocked. That is false in three ways, and all three are now stated as the
+contract: process termination (nothing sweeps another process's marker), failed
+cleanup (recorded in the channel log), and a failed acquisition (closed by the
+repair above, but markers from older builds linger). The guide states plainly
+that **a live process id is not proof of contention** and points a reader at
+`written_at_ms`.
+
+#### The module split
+
+`artefact_report.rs` was 385 lines and the repairs would have pushed it past
+the cap. Growing it was the wrong answer; splitting it by *question* was the
+right one, and the split is cohesion rather than metric gaming:
+
+- `artefact_wait_marker` — "is this publication blocked on the lock?"
+- `artefact_report` — "what did this process's publication do?"
+- `artefact_channel_log` — "did the channel itself lose an observation?"
+
+Each contract now lives beside the code that must honour it. Before moving
+anything, every call site of the channel API was mapped with a repo-wide grep,
+so the split's legality was established rather than hoped for.
+
+#### Test coverage against real publications
+
+`artefact_channel_tests` drives the production `publish::publish` boundary with
+the report destination blocked, and asserts on the *publication's* result: a
+successful build stays successful and still emits its inventory, and a failing
+build reports its own failure rather than one the channel introduced. That is
+the property the best-effort contract is actually about, and the other suites —
+which drive the channel's own functions — cannot reach it.
+
+The contending case is driven by a real peer holding the real lock, so the
+announcement under test is one the production acquisition loop made while
+genuinely blocked. The peer's release is requested by the parent, so the test
+states the ordering rather than racing a sleep.
+
+One of these tests failed on its first run, and the failure was the test's own
+defect: `an_acquisition_failure_still_reports_its_observation` blocked only the
+*lock* path, so the report write **succeeded** and nothing was ever recorded in
+the error log. Blocking both is what makes the attempt observable. The suite
+catching its own author is the reason to write the assertion against the
+production boundary rather than against the helper.
+
+#### The identity suite was split again
+
+Adding the replacement, separation, and dating tests pushed
+`artefact_report_tests.rs` from 310 to 475 lines, over the cap. They moved to
+`artefact_report_identity_tests`, which is a real seam: a channel file's *name*
+decides what a reader may conclude from finding it, and that is a different
+question from what its fields say. The two suites share `report_tests::report`,
+so both describe the same document rather than each holding its own idea of it.
+
+`a_failed_replacement_leaves_the_earlier_report_in_place` was strengthened in
+the move. It now clears the blocker and asserts what the failed replacement
+actually left, rather than asserting that the failure was merely recorded: a
+write that truncated the destination before failing would have satisfied the
+recorded-failure assertion while destroying the document a maintainer was
+trying to read.
+
+#### Commit hygiene
+
+The first commit attempt ran `git commit -F /tmp/commit-msg.txt` with the
+message file written to a *different* path, so the fallback branch fired and a
+stale message from an earlier session was committed. The tree was correct and
+the message was not. `git commit --amend` with the intended file fixed it, and
+`git log -1 --format=%B | tail -3` confirmed the attribution trailer survived
+the amend — an amend replaces the whole message, so a trailer added before it
+is not carried over.
