@@ -1660,11 +1660,10 @@ being Unix-only. `ErrorKind::NotADirectory` *does* have a Windows mapping:
 `std::io`'s `decode_error_kind` maps `ERROR_DIRECTORY` (267) to it, and
 `std::fs::remove_dir_all` on a regular file raises exactly that code. What the
 Windows loader returns for a *path component* that is a regular file is a
-different code — `ERROR_PATH_NOT_FOUND` — which maps to `NotFound`. So the
-kind is reachable on Windows through other calls; it is this layout, driven
-through `metadata`, that cannot provoke it. A test may rely on a layout only
-where the platform's mapping for that layout is itself the contract, and here
-it is not.
+different code — `ERROR_PATH_NOT_FOUND` — which maps to `NotFound`. So the kind
+is reachable on Windows through other calls; it is this layout, driven through
+`metadata`, that cannot provoke it. A test may rely on a layout only where the
+platform's mapping for that layout is itself the contract, and here it is not.
 
 The repair uses an interior NUL in the recorded source path. Rust rejects such
 a path during its own conversion to a C string, before any syscall reaches the
