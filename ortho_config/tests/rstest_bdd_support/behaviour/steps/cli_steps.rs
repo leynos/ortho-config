@@ -1,21 +1,11 @@
 //! Steps verifying CLI precedence over environment variables and files.
 
-use super::common::SlotTakeOrExt;
+use super::common::{SlotTakeOrExt, config_fixture, shared_sources};
 use super::value_parsing::normalize_scalar;
 use crate::rstest_bdd_support::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::OrthoConfig;
+use ortho_config::{MapEnv, OrthoConfig};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
-
-fn with_jail_loader<F>(rules_context: &RulesContext, setup: F) -> Result<()>
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<ortho_config::OrthoResult<RulesConfig>>,
-{
-    let config_result = figment_helpers::with_jail(setup)?;
-    rules_context.result.set(config_result);
-    Ok(())
-}
 
 #[given("the configuration file has rules {value}")]
 fn file_rules(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -37,19 +27,23 @@ fn load_with_cli(rules_context: &RulesContext, cli_rules: String) -> Result<()> 
     let cli_rules = normalize_scalar(&cli_rules);
     let file_val = rules_context.file_value.get();
     let env_val = rules_context.env_value.get();
-    with_jail_loader(rules_context, move |j| {
-        if let Some(value) = file_val.as_ref() {
-            j.create_file(".ddlint.toml", &format!("rules = [\"{value}\"]"))?;
-        }
-        if let Some(value) = env_val.as_ref() {
-            j.set_env("DDLINT_RULES", value);
-        }
-        Ok(RulesConfig::load_from_iter([
-            "prog",
-            "--rules",
-            cli_rules.as_str(),
-        ]))
-    })
+    let file_contents = file_val
+        .map(|value| format!("rules = [\"{value}\"]"))
+        .unwrap_or_default();
+    // The guard stays bound until the loader below has read the fixture.
+    let (_fixture_dir, config_path) = config_fixture(".ddlint.toml", Some(&file_contents))?;
+    let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", config_path);
+    if let Some(value) = env_val.as_ref() {
+        source = source.with_var("DDLINT_RULES", value);
+    }
+    let (discovery, merge) = shared_sources(source);
+    let config_result = RulesConfig::load_from_iter_with_sources(
+        ["prog", "--rules", cli_rules.as_str()],
+        discovery,
+        merge,
+    );
+    rules_context.result.set(config_result);
+    Ok(())
 }
 
 #[then("the loaded rules are {expected}")]

@@ -1,6 +1,6 @@
 //! Steps for scenarios involving flattened CLI structures.
 
-use super::common::{SlotTakeOrExt, set_scalar_once};
+use super::common::{SlotTakeOrExt, config_fixture, set_scalar_once};
 use super::value_parsing::normalize_scalar;
 use crate::rstest_bdd_support::scenario_state::{FlatArgs, FlattenContext};
 use anyhow::{Result, anyhow, ensure};
@@ -10,24 +10,18 @@ use ortho_config::{
     OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
 };
 use rstest_bdd_macros::{given, then, when};
-use std::path::Path;
-use test_helpers::figment as figment_helpers;
 
 fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs>> {
-    figment_helpers::with_jail(|j| {
-        if let Some(contents) = file.as_ref() {
-            j.create_file(".flat.toml", contents)?;
-        }
-        let cli = FlatArgs::parse_from(args);
-        let mut fig = Figment::from(Serialized::defaults(&FlatArgs::default()));
-        if let Some(f) = load_config_file(Path::new(".flat.toml")).to_figment()? {
-            fig = fig.merge(f);
-        }
-        Ok(fig
-            .merge(sanitized_provider(&cli).to_figment()?)
-            .extract()
-            .into_ortho_merge())
-    })
+    let (_fixture_dir, config_path) = config_fixture(".flat.toml", file.as_deref())?;
+    let cli = FlatArgs::parse_from(args);
+    let mut fig = Figment::from(Serialized::defaults(&FlatArgs::default()));
+    if let Some(f) = load_config_file(&config_path).to_figment()? {
+        fig = fig.merge(f);
+    }
+    Ok(fig
+        .merge(sanitized_provider(&cli).to_figment()?)
+        .extract()
+        .into_ortho_merge())
 }
 
 /// Helper to initialise flat_file with given content.

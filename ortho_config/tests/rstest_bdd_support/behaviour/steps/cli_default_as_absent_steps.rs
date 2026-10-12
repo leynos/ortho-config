@@ -4,6 +4,7 @@
 //! as absent when the user did not override them on the CLI, allowing file and
 //! environment configuration to take precedence.
 
+use super::common::{config_fixture, isolated_home_env, shared_sources};
 use super::value_parsing::normalize_scalar;
 use crate::rstest_bdd_support::cli_default_mode::CliDefaultMode;
 use crate::rstest_bdd_support::scenario_state::{
@@ -11,10 +12,12 @@ use crate::rstest_bdd_support::scenario_state::{
 };
 use anyhow::{Result, anyhow, ensure};
 use clap::{CommandFactory, FromArgMatches};
-use ortho_config::subcommand::Prefix;
-use ortho_config::{CliValueExtractor, load_and_merge_subcommand_with_matches};
+use ortho_config::CliValueExtractor;
+use ortho_config::subcommand::{
+    Prefix, SubcommandCliMatches, SubcommandFileContext,
+    load_and_merge_subcommand_with_matches_with_sources_at,
+};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
 
 fn take_sources(ctx: &CliDefaultContext) -> CliDefaultSources {
     ctx.sources.take().unwrap_or_default()
@@ -70,39 +73,53 @@ fn set_explicit_cli_punctuation(
 #[when("the subcommand configuration is merged")]
 fn merge_subcommand(cli_default_context: &CliDefaultContext) -> Result<()> {
     let sources = take_sources(cli_default_context);
-
-    let result = figment_helpers::with_jail(|j| {
-        // Write config file if provided
-        if let Some(file_value) = &sources.file {
-            j.create_file(
-                ".app.toml",
-                &format!("[cmds.greet]\npunctuation = \"{file_value}\""),
-            )?;
-        }
-
-        // Set environment variable if provided
-        if let Some(env_value) = &sources.env {
-            j.set_env("APP_CMDS_GREET_PUNCTUATION", env_value);
-        }
-
-        // Build CLI args
-        let cli_args: Vec<&str> = if let Some(explicit_value) = &sources.explicit_cli {
-            vec!["greet", "--punctuation", explicit_value.as_str()]
-        } else {
-            vec!["greet"]
-        };
-
-        let matches = CliDefaultArgs::command().get_matches_from(cli_args);
-        let args = CliDefaultArgs::from_arg_matches(&matches)
-            .map_err(|err| figment::Error::from(err.to_string()))?;
-        let prefix = Prefix::new("APP_");
-        let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
-            .map_err(|err| figment::Error::from(err.to_string()))?;
-        Ok(merged)
-    });
-
+    let result = merge_from_isolated_sources(&sources)?;
     cli_default_context.merge_result.set(result);
     Ok(())
+}
+
+/// Merges subcommand settings from an isolated fixture directory and injected
+/// sources.
+///
+/// A scenario without a file value deliberately leaves the selected file
+/// absent, so the fixture is created without writing one. `fixture_dir`
+/// stays bound for the whole merge: its guard owns the temporary
+/// directory, and dropping it early would delete the file before the
+/// subcommand loader reads it.
+fn merge_from_isolated_sources(sources: &CliDefaultSources) -> Result<Result<CliDefaultArgs>> {
+    let file_contents = sources
+        .file
+        .as_ref()
+        .map(|file_value| format!("[cmds.greet]\npunctuation = \"{file_value}\""));
+    let (fixture_dir, _config_path) = config_fixture(".app.toml", file_contents.as_deref())?;
+
+    let mut environment = isolated_home_env(fixture_dir.path());
+    if let Some(env_value) = sources.env.as_ref() {
+        environment.insert("APP_CMDS_GREET_PUNCTUATION", env_value);
+    }
+    let (discovery, merge) = shared_sources(environment);
+
+    let cli_args: Vec<&str> = if let Some(explicit_value) = &sources.explicit_cli {
+        vec!["greet", "--punctuation", explicit_value.as_str()]
+    } else {
+        vec!["greet"]
+    };
+    let matches = CliDefaultArgs::command().get_matches_from(cli_args);
+    let result = CliDefaultArgs::from_arg_matches(&matches)
+        .map_err(|err| anyhow::Error::from(err).context("parse CLI default arguments"))
+        .and_then(|args| {
+            let cli_matches = SubcommandCliMatches::new(&args, &matches);
+            let files = SubcommandFileContext::new(fixture_dir.path(), discovery.as_ref());
+            let prefix = Prefix::new("APP_");
+            load_and_merge_subcommand_with_matches_with_sources_at(
+                &prefix,
+                &cli_matches,
+                files,
+                merge,
+            )
+            .map_err(|err| anyhow::Error::from(err).context("merge CLI default sources"))
+        });
+    Ok(result)
 }
 
 #[when("CLI values are extracted")]

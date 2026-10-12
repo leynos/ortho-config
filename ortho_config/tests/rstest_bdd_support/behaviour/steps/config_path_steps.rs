@@ -1,12 +1,12 @@
 //! Steps demonstrating a renamed configuration path flag.
 
-use super::common::{SlotTakeOrExt, set_nonblank_scalar_once};
+use super::common::{SlotTakeOrExt, config_fixture, set_nonblank_scalar_once, shared_sources};
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
 use crate::rstest_bdd_support::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow};
-use ortho_config::OrthoConfig;
+use ortho_config::{MapEnv, OrthoConfig};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use std::ffi::OsString;
 
 #[given("an alternate config file with rule {value}")]
 fn alt_config_file(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -21,11 +21,18 @@ fn load_with_custom_flag(rules_context: &RulesContext, flag: String, path: Strin
     let file_val = rules_context
         .file_value
         .take_or("alternate config file value not provided")?;
-    let config_result = figment_helpers::with_jail(|j| {
-        j.create_file(&path, &format!("rules = [\"{file_val}\"]"))?;
-        let args = ["prog", flag.as_str(), path.as_str()];
-        Ok(RulesConfig::load_from_iter(args))
-    })?;
+    // The guard stays bound until the loader below has read the fixture.
+    let (_fixture_dir, fixture_path) =
+        config_fixture(&path, Some(&format!("rules = [\"{file_val}\"]")))?;
+    let (discovery, merge) = shared_sources(MapEnv::new());
+    // The generated `--config` path is required, so this absolute fixture is
+    // attempted before optional selectors and ambient discovery candidates.
+    let args = [
+        OsString::from("prog"),
+        OsString::from(flag),
+        fixture_path.into_os_string(),
+    ];
+    let config_result = RulesConfig::load_from_iter_with_sources(args, discovery, merge);
     rules_context.result.set(config_result);
     Ok(())
 }

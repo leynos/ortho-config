@@ -1,11 +1,11 @@
 //! Steps that validate the merge composer builder output.
 
+use super::common::{config_fixture, shared_sources};
 use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::rstest_bdd_support::scenario_state::{ComposerContext, RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::{MergeProvenance, OrthoError};
+use ortho_config::{MapEnv, MergeProvenance, OrthoError};
 use rstest_bdd_macros::{then, when};
-use test_helpers::figment as figment_helpers;
 
 #[when("the rule layers are composed with CLI rules {cli_rules}")]
 fn compose_rule_layers(
@@ -17,19 +17,22 @@ fn compose_rule_layers(
     let cli_rules = normalize_scalar(&cli_rules);
     let file_val = rules_context.file_value.get();
     let env_val = rules_context.env_value.get();
-    let composition = figment_helpers::with_jail(|j| {
-        if let Some(value) = file_val.as_ref() {
-            j.create_file(".ddlint.toml", &format!("rules = [\"{value}\"]"))?;
-        }
-        if let Some(value) = env_val.as_ref() {
-            j.set_env("DDLINT_RULES", value);
-        }
-        Ok(RulesConfig::compose_layers_from_iter([
-            binary_name,
-            "--rules",
-            cli_rules.as_str(),
-        ]))
-    })?;
+    // A scenario without a file value leaves the selected file absent; the
+    // guard stays bound until the loader below has finished reading it.
+    let file_contents = file_val
+        .as_ref()
+        .map(|value| format!("rules = [\"{value}\"]"));
+    let (_fixture_dir, config_path) = config_fixture(".ddlint.toml", file_contents.as_deref())?;
+    let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", config_path);
+    if let Some(value) = env_val.as_ref() {
+        source = source.with_var("DDLINT_RULES", value);
+    }
+    let (discovery, merge) = shared_sources(source);
+    let composition = RulesConfig::compose_layers_from_iter_with_sources(
+        [binary_name, "--rules", cli_rules.as_str()],
+        discovery,
+        merge,
+    );
 
     let (layers, errors) = composition.into_parts();
     if let Some(err) = OrthoError::try_aggregate(errors) {

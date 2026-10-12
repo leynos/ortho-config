@@ -3,14 +3,15 @@
 //! This module verifies the precedence of CLI, environment, and configuration
 //! file sources when loading subcommand inputs.
 
-use super::common::SlotTakeOrExt;
+use super::common::{SlotTakeOrExt, config_fixture, isolated_home_env, shared_sources};
 use super::value_parsing::normalize_scalar;
 use crate::rstest_bdd_support::scenario_state::{PrArgs, SubcommandContext, SubcommandSources};
 use anyhow::{Result, ensure};
 use clap::Parser;
-use ortho_config::SubcmdConfigMerge;
+use ortho_config::subcommand::{
+    Prefix, SubcommandFileContext, load_and_merge_subcommand_with_sources_at,
+};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
 
 fn take_sources(subcommand_context: &SubcommandContext) -> SubcommandSources {
     subcommand_context.sources.take().unwrap_or_default()
@@ -107,28 +108,39 @@ fn load_sub(subcommand_context: &SubcommandContext) -> Result<()> {
         let cli = PrArgs {
             reference: sources.cli.clone(),
         };
-        setup_test_environment(&sources, &cli)?
+        load_from_isolated_sources(&sources, &cli)?
     };
     subcommand_context.result.set(result);
     Ok(())
 }
 
-fn setup_test_environment(
+/// Loads a subcommand from an isolated fixture directory and injected sources.
+///
+/// A scenario without a file value deliberately leaves the selected file
+/// absent, so the fixture is created without writing one. `fixture_dir`
+/// stays bound for the whole load: its guard owns the temporary
+/// directory, and dropping it early would delete the file before the
+/// subcommand loader reads it.
+fn load_from_isolated_sources(
     sources: &SubcommandSources,
     cli: &PrArgs,
 ) -> Result<Result<PrArgs, anyhow::Error>> {
-    figment_helpers::with_jail(|j| {
-        if let Some(file_reference) = sources.file.as_ref() {
-            j.create_file(
-                ".app.toml",
-                &format!("[cmds.test]\nreference = \"{file_reference}\""),
-            )?;
-        }
-        if let Some(env_reference) = sources.env.as_ref() {
-            j.set_env("APP_CMDS_TEST_REFERENCE", env_reference);
-        }
-        Ok(cli.load_and_merge().map_err(anyhow::Error::from))
-    })
+    let file_contents = sources
+        .file
+        .as_ref()
+        .map(|file_reference| format!("[cmds.test]\nreference = \"{file_reference}\""));
+    let (fixture_dir, _config_path) = config_fixture(".app.toml", file_contents.as_deref())?;
+
+    let mut environment = isolated_home_env(fixture_dir.path());
+    if let Some(env_reference) = sources.env.as_ref() {
+        environment.insert("APP_CMDS_TEST_REFERENCE", env_reference);
+    }
+    let (discovery, merge) = shared_sources(environment);
+    let files = SubcommandFileContext::new(fixture_dir.path(), discovery.as_ref());
+    let prefix = Prefix::new("APP_");
+    let result = load_and_merge_subcommand_with_sources_at(&prefix, cli, files, merge)
+        .map_err(anyhow::Error::from);
+    Ok(result)
 }
 
 #[then("the merged reference is {expected}")]

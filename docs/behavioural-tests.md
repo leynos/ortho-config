@@ -1,8 +1,8 @@
 # Behavioural Testing Design for `ortho-config`
 
 This document outlines high-level behavioural tests for the `ortho-config`
-crate using the [cucumber] framework. Scenarios follow the **Given/When/Then**
-pattern and reference [`docs/design.md`](design.md) and
+crate. Scenarios follow the **Given/When/Then** pattern and reference
+[`docs/design.md`](design.md) and
 [`docs/ddlint-gap-analysis.md`](ddlint-gap-analysis.md).
 
 ## 1. Goals
@@ -13,19 +13,41 @@ pattern and reference [`docs/design.md`](design.md) and
 - Test behaviours such as the `append` merge strategy on arrays.
 - Cover gaps like comma-separated list parsing and `extends` support.
 
-## 2. Cucumber Setup
+## 2. Scenario harness setup
 
-Scenarios live under `tests/features/`. Step implementations in `tests` share a
-common `World` struct that uses `figment::Jail` for isolation. Each scenario
-executes asynchronously with `tokio`.
+Scenarios live under `tests/features/` and are bound to step definitions by the
+`rstest-bdd` macros, so they run as ordinary integration tests under the
+standard Rust test harness rather than a bespoke runner. The `ortho_config` BDD
+target is rooted at `tests/rstest_bdd.rs`, which declares the shared
+`tests/fixtures/` module and the `tests/rstest_bdd_support/` module;
+`rstest_bdd_support/behaviour/scenarios.rs` binds each `.feature` file with
+`scenarios!(..., fixtures = [...])`, and `rstest_bdd_support/behaviour/steps/`
+holds the `#[given]`, `#[when]`, and `#[then]` implementations.
 
-```rust
-#[derive(Debug, Default, cucumber::World)]
-struct World {
-    jail: Option<figment::Jail>,
-    result: Option<Result<MyConfig, ortho_config::OrthoError>>,
-}
-```
+Each scenario runs against an isolated temporary fixture directory and explicit
+file paths, rather than the process working directory or the process
+environment. Environment values reach the loader through injected sources
+rather than by mutating the process environment. Three shared helpers in
+`rstest_bdd_support/behaviour/steps/common.rs` provide this isolation, and step
+modules must use them rather than re-implementing the boilerplate:
+
+- `config_fixture` writes `contents` into `file_name` inside a fresh temporary
+  directory and returns the `tempfile::TempDir` guard together with the
+  absolute file path. Passing `None` for `contents` derives the path without
+  writing, which preserves scenarios that deliberately leave a selected file
+  absent.
+- `shared_sources` splits one owned `MapEnv` into the `SharedEnvSource` and
+  `SharedScanEnvSource` handles that loader APIs require for their separate
+  discovery and merge roles, both reading that single environment.
+- `isolated_home_env` returns a `MapEnv` pinning `HOME`, `XDG_CONFIG_HOME`, and
+  `XDG_CONFIG_DIRS` under a supplied root, so subcommand scenarios do not read
+  the machine's real directories. It is gated on the `serde_json` feature
+  because only the subcommand step modules use it.
+
+Callers must keep the `tempfile::TempDir` guard returned by `config_fixture`
+alive until the loader has read the fixture, because dropping it deletes the
+directory and the loader would then see a missing file instead of the
+scenario's contents.
 
 ## 3. Scenarios
 
@@ -101,5 +123,3 @@ the subcommand configuration **Then** the CLI value is used without error
 
 The design document lists potential future work such as async loading and
 custom providers. Add scenarios as those features land.
-
-[cucumber]: https://github.com/cucumber-rs/cucumber
