@@ -319,14 +319,15 @@ fn prune_stale_rendered(root: &Path, current: &[ArtefactFile]) -> std::io::Resul
         .iter()
         .map(|file| file.name.as_str())
         .collect::<std::collections::HashSet<_>>();
-    for item in fs::read_dir(root)? {
-        let item = item?;
-        let name = item.file_name();
-        let Some(name) = name.to_str() else {
+    for entry in fs::read_dir(root)? {
+        let candidate = entry?;
+        let raw_name = candidate.file_name();
+        let Some(name) = raw_name.to_str() else {
             continue;
         };
-        if is_rendered_artefact(name) && !keep.contains(name) && item.path().is_file() {
-            fs::remove_file(item.path())?;
+        let path = candidate.path();
+        if is_rendered_artefact(name) && !keep.contains(name) && path.is_file() {
+            fs::remove_file(path)?;
         }
     }
     Ok(())
