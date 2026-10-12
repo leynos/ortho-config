@@ -2,6 +2,7 @@
 
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::{DocMetadata, OrthoConfigDocs, ValueType};
+use ortho_config::message_id_for;
 use rstest::{fixture, rstest};
 
 #[path = "rstest_bdd_support/nested_docs_fixture.rs"]
@@ -168,8 +169,18 @@ fn nested_admin_audit_has_inherited_fluent_id_pattern(nested_metadata: DocMetada
 
 /// An explicit identifier in a nested grant survives the merge unchanged.
 ///
-/// The grant overrides some but not all identifiers; the ones it omits must
-/// keep their derived values rather than being blanked by the merge.
+/// V-M4-3's two branches are asserted side by side, because each alone is
+/// satisfied by a merge that resolves only one: every identifier `principal`
+/// overrides keeps its literal spelling, and its neighbour `audit_note`,
+/// which overrides nothing, still reaches the generated mounted-path id.
+/// Asserting the override alone would pass against a merge that blanked every
+/// unset identifier, and asserting the default alone would pass against one
+/// that discarded all overrides.
+///
+/// The expected default is computed with `message_id_for` over the root
+/// localization base and the clap-resolved labels, not transcribed: the whole
+/// claim is that the generated id agrees with the runtime function, and a
+/// literal expectation would only prove the two were edited together.
 #[rstest]
 fn nested_grant_preserves_explicit_identifier_overrides(
     nested_metadata: DocMetadata,
@@ -177,6 +188,13 @@ fn nested_grant_preserves_explicit_identifier_overrides(
     let admin = command_by_name(&nested_metadata, "admin")?;
     let grant = command_by_name(admin, "grant-access")?;
     let principal = field_by_name(grant, "principal")?;
+    let audit_note = field_by_name(grant, "audit_note")?;
+    // The mounted path uses `grant-access`, the clap-resolved label, rather
+    // than the `Grant` variant name — which is the half of this that would
+    // silently pass under a standalone or dotted base.
+    let mounted = ["nested-app", "admin", "grant-access"];
+    let derived_help = message_id_for(&mounted, "args.audit_note.help");
+    let derived_long_help = message_id_for(&mounted, "args.audit_note.long_help");
 
     ensure!(
         grant.about_id == "nested.grant.about",
@@ -192,6 +210,23 @@ fn nested_grant_preserves_explicit_identifier_overrides(
         principal.help_id == "nested.grant.principal.help",
         "expected literal principal help identifier, got {}",
         principal.help_id,
+    );
+    ensure!(
+        principal.long_help_id.as_deref() == Some("nested.grant.principal.long_help"),
+        "expected literal principal long-help identifier, got {:?}",
+        principal.long_help_id,
+    );
+    ensure!(
+        audit_note.help_id == derived_help,
+        "an unset help_id beside an override must still derive as \
+         {derived_help}, got {}",
+        audit_note.help_id,
+    );
+    ensure!(
+        audit_note.long_help_id.as_deref() == Some(derived_long_help.as_str()),
+        "an unset long_help_id beside an override must still derive as \
+         {derived_long_help}, got {:?}",
+        audit_note.long_help_id,
     );
     Ok(())
 }
