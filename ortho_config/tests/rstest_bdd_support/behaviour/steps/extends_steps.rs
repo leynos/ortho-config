@@ -205,6 +205,11 @@ impl ExtendsScenario {
     }
 }
 
+/// Loads replacement-rule configuration through a freshly prepared fixture.
+///
+/// `setup` writes the scenario's own files into the fixture directory
+/// before the loader runs, which lets each extends scenario describe its
+/// own child configuration without duplicating the loader wiring.
 fn load_replace_with_fixture<F>(setup: F) -> Result<OrthoResult<ReplaceRulesConfig>>
 where
     F: FnOnce(&Dir) -> Result<()>,

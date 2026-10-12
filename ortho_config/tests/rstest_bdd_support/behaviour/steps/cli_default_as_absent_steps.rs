@@ -78,9 +78,15 @@ fn merge_subcommand(cli_default_context: &CliDefaultContext) -> Result<()> {
     Ok(())
 }
 
+/// Merges subcommand settings from an isolated fixture directory and injected
+/// sources.
+///
+/// A scenario without a file value deliberately leaves the selected file
+/// absent, so the fixture is created without writing one. `fixture_dir`
+/// stays bound for the whole merge: its guard owns the temporary
+/// directory, and dropping it early would delete the file before the
+/// subcommand loader reads it.
 fn merge_from_isolated_sources(sources: &CliDefaultSources) -> Result<Result<CliDefaultArgs>> {
-    // A scenario without a file value leaves the selected file absent; the
-    // guard stays bound until the subcommand loader below has finished.
     let file_contents = sources
         .file
         .as_ref()

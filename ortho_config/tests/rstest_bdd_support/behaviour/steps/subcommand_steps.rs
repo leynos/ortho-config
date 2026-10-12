@@ -114,12 +114,17 @@ fn load_sub(subcommand_context: &SubcommandContext) -> Result<()> {
     Ok(())
 }
 
+/// Loads a subcommand from an isolated fixture directory and injected sources.
+///
+/// A scenario without a file value deliberately leaves the selected file
+/// absent, so the fixture is created without writing one. `fixture_dir`
+/// stays bound for the whole load: its guard owns the temporary
+/// directory, and dropping it early would delete the file before the
+/// subcommand loader reads it.
 fn load_from_isolated_sources(
     sources: &SubcommandSources,
     cli: &PrArgs,
 ) -> Result<Result<PrArgs, anyhow::Error>> {
-    // A scenario without a file value leaves the selected file absent; the
-    // guard stays bound until the subcommand loader below has finished.
     let file_contents = sources
         .file
         .as_ref()
