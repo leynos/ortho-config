@@ -3,7 +3,7 @@
 use super::super::*;
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
-use syn::{DeriveInput, parse_quote};
+use syn::DeriveInput;
 
 /// Parse a struct carrying only the given `behaviour(...)` declaration.
 fn parse_behaviour(decl: &str) -> Result<BehaviourAttrs> {
@@ -178,70 +178,36 @@ fn rejects_bad_bypass_grammar(#[case] bypass: &str) -> Result<()> {
     Ok(())
 }
 
-/// A bypass on a non-interactive command is contradictory within one group.
+#[rstest]
+#[case::within_one_group(
+    r#"#[ortho_config(behaviour(interaction = "non_interactive", bypass = "--force"))]"#
+)]
+#[case::across_groups(concat!(
+    r#"#[ortho_config(behaviour(interaction = "non_interactive"))]"#,
+    "\n",
+    r#"#[ortho_config(behaviour(bypass = "--force"))]"#
+))]
+#[case::across_groups_reversed(concat!(
+    r#"#[ortho_config(behaviour(bypass = "--force"))]"#,
+    "\n",
+    r#"#[ortho_config(behaviour(interaction = "non_interactive"))]"#
+))]
+/// A bypass on a non-interactive command is always contradictory.
 ///
 /// A command that never prompts has nothing to bypass, so this must be a hard
-/// error rather than a warning (ADR-010).
-#[test]
-fn rejects_non_interactive_with_bypass() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(behaviour(
-            interaction = "non_interactive",
-            bypass = "--force"
-        ))]
-        struct Demo {
-            value: u8,
-        }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
+/// error rather than a warning (ADR-010). Because `behaviour(...)` may be
+/// repeated, validation runs against the merged state; the contradiction must
+/// therefore survive the keys being split across groups in either order, which
+/// is what the ordering cases pin down.
+fn rejects_non_interactive_with_bypass(#[case] attributes: &str) -> Result<()> {
+    let source = format!("{attributes}\nstruct Demo {{ value: u8, }}");
+    let input: DeriveInput = syn::parse_str(&source).context("failed to parse test input")?;
+    let error = parse_input(&input)
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("expected rejection; source: {source}"))?;
     ensure!(
-        msg.contains("contradictory behaviour"),
-        "unexpected message: {msg}"
-    );
-    Ok(())
-}
-
-/// The contradiction is detected even when the keys sit in separate groups.
-///
-/// Because `behaviour(...)` may be repeated, validation runs against the merged
-/// state rather than each group in isolation.
-#[test]
-fn rejects_non_interactive_with_bypass_across_behaviour_groups() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(behaviour(interaction = "non_interactive"))]
-        #[ortho_config(behaviour(bypass = "--force"))]
-        struct Demo {
-            value: u8,
-        }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
-    ensure!(
-        msg.contains("contradictory behaviour"),
-        "unexpected message: {msg}"
-    );
-    Ok(())
-}
-
-/// The same contradiction is caught when the groups are written in reverse.
-///
-/// Group order must not affect the outcome, which is what testing only the
-/// forward order would leave unproven.
-#[test]
-fn rejects_non_interactive_with_bypass_split_across_groups_reversed() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(behaviour(bypass = "--force"))]
-        #[ortho_config(behaviour(interaction = "non_interactive"))]
-        struct Demo {
-            value: u8,
-        }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
-    ensure!(
-        msg.contains("contradictory behaviour"),
-        "unexpected message: {msg}"
+        error.to_string().contains("contradictory behaviour"),
+        "unexpected message: {error}"
     );
     Ok(())
 }
