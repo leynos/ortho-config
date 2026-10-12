@@ -162,15 +162,28 @@ fn an_unreadable_entry_fails_the_prune_rather_than_being_kept() -> Result<()> {
 /// build-script glob with side effects can still remove a file between the
 /// directory scan and the probe. That entry is not a leftover anyone needs
 /// removed, so `NotFound` is answered `false` and the prune continues.
+///
+/// The disappearance is injected rather than staged by deleting the file:
+/// deleting it before the prune means `read_dir` never yields it, so the
+/// `NotFound` arm this test names is never reached and the test passes
+/// whichever way that arm is written. Injecting the race for an entry that is
+/// still present is what actually exercises it.
 #[test]
 fn an_entry_that_vanishes_mid_prune_is_skipped() -> Result<()> {
     let root = TempRoot::new()?;
-    let vanished = root.path().join("cli-identifiers.7.json");
-    fs::write(&vanished, b"{}").context("write soon-to-vanish fixture")?;
-    fs::remove_file(&vanished).context("remove the fixture before the probe runs")?;
+    let racing = root.path().join("cli-identifiers.7.json");
+    fs::write(&racing, b"{}").context("write the racing fixture")?;
 
-    prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
-        .context("a vanished entry must not fail the prune")?;
+    let outcome = with_entry_probe_error(&racing, std::io::ErrorKind::NotFound, || {
+        prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
+    });
+
+    outcome.context("a vanished entry must not fail the prune")?;
+    ensure!(
+        racing.is_file(),
+        "the injected race must be the only reason the entry was skipped, so \
+         the prune must not have removed a file it could not classify",
+    );
     Ok(())
 }
 
