@@ -320,7 +320,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   Proposed): profile extraction is specified as a consumer of "the ordered
   post-`extends` file values", which is exactly the seam RFC 0002 names
   `FileLayerOutcome`. This plan implements extraction against today's discovery
-  output; ADR-009 records as a design obligation that if RFC 0002 lands,
+  output; ADR-011 records as a design obligation that if RFC 0002 lands,
   `FileLayerOutcome` must expose the ordered file values profile extraction
   needs, and the extraction helper is written against a minimal internal
   interface (ordered `(path, value)` pairs) so it can be re-seated without
@@ -352,11 +352,19 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   mirrors `ProfileSelectionContract`; the derive emits it for opted-in structs;
   `bridge_ir_to_agent_context` maps it into `ProfilesDeclaration`. The field is
   additive-with-default, so `ORTHO_DOCS_IR_VERSION` stays unchanged per the IR
-  compatibility policy; IR golden fixtures are re-baselined in the same
-  milestone. Rationale: the bridge cannot learn about profile support any other
-  way — without this the agent-context milestone is unimplementable; the panel
-  identified this as a missing workstream. Rejected: having `cargo-orthohelp`
-  re-parse source attributes (violates the bridge architecture).
+  compatibility policy as it stood when this was decided; IR golden fixtures
+  are re-baselined in the same milestone. Rationale: the bridge cannot learn
+  about profile support any other way — without this the agent-context
+  milestone is unimplementable; the panel identified this as a missing
+  workstream. Rejected: having `cargo-orthohelp` re-parse source attributes
+  (violates the bridge architecture). **Superseded in part (2026-10-12):** the
+  IR compatibility policy was tightened on `main` during this branch's review
+  to require a minor bump for additive optional fields, so the version moves
+  `"1.2"` → `"2.0"`. This plan originally planned `"1.3"` for the additive
+  `profiles` field; `main`'s 11.1.3 landed the constant at `"2.0"` first, and
+  its hyphenated identifier values make that larger bump subsume this one. The
+  field, its shape, and the bridge mapping are unchanged; only the version
+  clause is superseded. See the 2026-10-13 IR-version observation below.
 
 ## Risks
 
@@ -387,7 +395,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
 - Risk: RFC 0002 later restructures file-layer assembly underneath profile
   extraction. Severity: medium. Likelihood: medium. Mitigation: D13 —
   extraction written against a minimal ordered `(path, value)` interface;
-  ADR-009 records the `FileLayerOutcome` obligation.
+  ADR-011 records the `FileLayerOutcome` obligation.
 - Risk: fixture sprawl — one schema field touches the wire-contract JSON,
   contract-support helpers, round-trip property strategy, the agent-context
   insta snapshot, three `cargo-orthohelp` goldens, and the three
@@ -414,7 +422,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       approved by the maintainer; implementation started.
 - [ ] Optional before approval: run the scaling and operational-cost review
       lens that did not complete.
-- [x] (2026-08-09) Milestone 1: ADR-009 and design documentation. ADR-009
+- [x] (2026-08-09) Milestone 1: ADR-011 and design documentation. ADR-011
       drafted and accepted; `design.md` precedence statements (§3, §4.3,
       §4.10, §4.17), `agent-native-cli-design.md` §6.7/§8.1/§8.2,
       `contents.md`, and `roadmap.md` 9.1.1 updated; the D12 `extends` spike
@@ -494,7 +502,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       `scenario_state_profiles.rs` split.
 - [x] (2026-09-24) Review round on PR #418. Six findings, three failed checks,
       and two warnings addressed:
-      1. `docs/contents.md` — ADR-009 list item rewrapped to 80 columns.
+      1. `docs/contents.md` — ADR-011 list item rewrapped to 80 columns.
       2. `cli_tokens.rs` — the effective config long is registered in
          `used_longs` *before* `build_profile_flag_field`, so a config long of
          `profile` collides at compile time instead of producing two `--profile`
@@ -615,7 +623,11 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       (the enforcement/advertisement defaults discussion) deliberately kept
       their `ADR-008` label. `main`'s `[adr-008]` link definition in
       `contents.md` is untouched. Verified: no `adr-008-profile-selection`
-      reference survives anywhere in the tree.
+      reference survives anywhere in the tree. (This branch's profile ADR was
+      numbered 009 at the time of this entry, and is
+      `adr-012-profile-selection-and-layering.md` after the 2026-10-13 third
+      rebase renumber, which found `main` holding both ADR-010 and the
+      identifier-artefact ADR that claimed 011 first.)
 - [x] (2026-09-25) Rebase verified before gate re-run: `origin/main` is an
       ancestor of the branch head, the tree is clean, no conflict markers
       survive anywhere in the repository, `cargo metadata --locked` exits 0,
@@ -854,7 +866,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       because it never reports an unknown profile. The only scenario that
       requires a parse error and an unknown-profile error to coexist is the
       malformed *flag* case, which has a valid config file and is unaffected,
-      so ADR-009's "parse errors take precedence" rule still holds. Regression
+      so ADR-011's "parse errors take precedence" rule still holds. Regression
       tests `discovery_failure_suppresses_the_unknown_profile_error` and
       `no_discovery_failure_still_reports_the_unknown_profile` pin both sides.
 - [x] (2026-09-28) Rebased onto `origin/main` (`0c498068`) as instructed, then
@@ -1026,7 +1038,7 @@ Progress entries from milestone 1 onward must carry timestamps.
   (`ortho_config/src/discovery/load.rs`) maps each `(value, path)` entry to its
   own `MergeLayer::file` with the source path attached. Impact: D12's rule is
   implementable directly against `DiscoveryLayersOutcome.value`; no escalation
-  per tolerance 6 was needed, and ADR-009 records the confirmed chain order.
+  per tolerance 6 was needed, and ADR-011 records the confirmed chain order.
 - Observation (2026-08-09, milestone 1): the `markdownlint` gate embeds the
       `typos` spelling gate, whose first run over the milestone-1 diff flagged
       `recognize` in this plan (Oxford spelling requires `-ize`). Evidence:
@@ -1132,8 +1144,9 @@ Progress entries from milestone 1 onward must carry timestamps.
       `docs/contents.md` ADR list, which is where it was caught. Impact: an ADR
       list is a weak mutual-exclusion primitive for ADR numbers. The
       unmerged branch yields the number (008 stays with `main`; this branch's
-      record became 009), and a rebase that adds an ADR should re-check the
-      number against the new base rather than trusting a clean merge.
+      record became 009, and is 012 after the 2026-10-13 third rebase), and a
+      rebase that adds an ADR should re-check the number against the new base
+      rather than trusting a clean merge.
 - Observation (2026-09-25, second rebase): `main`'s #416 and this branch both
       grew `any_agent_context()`'s proptest generator tuple and the golden
       snapshot case table, so a rebase conflict there is structural, not
@@ -1302,6 +1315,133 @@ Progress entries from milestone 1 onward must carry timestamps.
       `CHANGES_REQUESTED` still stands from stale `a94c8050` and must be
       superseded by a fresh review, never cleared by hand.
 
+- Observation (2026-10-12, third rebase): replayed the 55-commit series onto
+      `origin/main` (`252941d4`) with the exclusive boundary `0c498068`
+      (validated as an ancestor of both sides with zero merge commits in the
+      range), producing `57c72f11` plus the post-rebase repair `f9987931`.
+      Unlike the first two rebases this one conflicted in **15 of the 55
+      commits** — 14 content conflicts plus one `CONFLICT (file location)` from
+      `main`'s `rstest_bdd/` → `rstest_bdd_support/` rename (#539) reporting
+      that `59f70f01`'s new `profiles_steps.rs` landed inside the renamed
+      directory. The worst single conflict was the final commit `5bc39560`
+      (`40d90a34` after replay), which touched 30 files because `main`'s
+      interim work restructured the same `agent_context`, docs-IR, and derive
+      modules this branch had split. Reflog cross-check: the 15 stops agree
+      with 15 `rebase (continue)` entries one-for-one, and the range-diff lists
+      all 55 commits as paired modifications with none unpaired.
+- Observation (2026-10-12, semantic coupling): `main` authored a **new**
+      producer of the file-discovery tokens that git merged silently. The
+      branch's `355dc457` (replayed as `cb8ae40f`) changed the discovery
+      block's contract from a bare `Vec` to a `(layers, discovery_failed)`
+      tuple; `main`'s `ortho_config_macros/src/derive/policy_impl.rs` (added
+      with #318/#465, absent from the pre-rebase branch) is a third consumer
+      that `main` wrote against the *old* contract. Git saw no textual overlap
+      and merged it cleanly, leaving the policy path emitting a bare `Vec` that
+      the profile extractor would then index as a tuple. Repaired by making
+      `build_policy_based_loading` emit the same tuple. Lesson: a contract
+      change must be propagated into a co-equal producer that the branch has
+      never seen; textual merge success carries no signal about that coupling.
+- Observation (2026-10-12, replay artefacts): the directory rename produced
+      four paths whose name changed rather than whose content conflicted
+      (`scenario_state.rs`, `behaviour/scenarios.rs`,
+      `behaviour/steps/merge_composer_steps.rs`, `behaviour/steps/mod.rs`).
+      They surface in a `TARGET..HEAD` diff as target-only modifications, but
+      the target never saw the branch's content — `steps/mod.rs` is in fact
+      blob-identical to the branch's pre-rename version (`4bd4b9a1`). The
+      remaining three carry branch features grafted onto main's renamed tree:
+      the `scenario_state_cli_default` extraction behind `mod
+      scenario_state_cli_default;`, the `ProfilesContext` scenarios
+      registration, and the `profiles_steps`/`profiles_steps_assertions`
+      module declarations. Every deletion in them maps to branch intent, so the
+      drift is intended and not a replay loss.
+- Observation (2026-10-12, deferred-repair hazard): a resolution that drops an
+      import which nothing *currently* uses can be silently re-broken by any
+      later auto-merged commit. Commit `b6c645fb`'s resolution rebuilt the
+      import block of `ortho_config_macros/src/derive/load_impl_entry.rs` and
+      dropped `use syn::Ident;` because the then-current code took an `&Ident`
+      only in a position that still resolved. A later replayed commit
+      reintroduced `config_ident: &Ident` in a diff that never touched the
+      import block, so the binding was used with no import in scope. The cached
+      `cargo check` reported success because it read a stale macro build;
+      forcing a rebuild surfaced `E0412: cannot find type Ident`. Repaired in
+      `f9987931`. Lesson: the only trustworthy end-of-replay verdict is a
+      **fresh** `cargo check --workspace --all-targets --all-features` on a
+      `touch`ed tree, not an incremental one that may reuse a cached macro.
+- Observation (2026-10-12, ADR numbering): `main` has now claimed **both** 009
+      and 010, so this branch's profile ADR moved 009 → **011**, the third
+      number it has held (008 → 009 → 011). `main`'s
+      `adr-009-linux-build-test-runner-placement.md` landed 2026-09-29
+      (`89996787`, #534) and `adr-010-behavioural-metadata-attribute-surface.md`
+      arrived with the 7.2.1 work, so no number at or below 010 is free. The
+      rename follows the 7.2.1 precedent exactly: the file and H1 moved, every
+      live citation was repointed, and the three in-document notes that
+      *record* the earlier numbering acts were reworded rather than renamed, so
+      they still read truthfully about the number in force at the time. Live
+      citations updated: `docs/roadmap.md`, `docs/contents.md`,
+      `docs/developers-guide.md`, `docs/design.md` (3 sites),
+      `docs/agent-native-cli-design.md` (2 sites), this ExecPlan, and two Rust
+      doc comments (`ortho_config/src/profile/extract.rs` and
+      `.../behaviour/steps/profiles_steps_assertions.rs`). `main`'s `[adr-009]`
+      and `[adr-010]` link definitions are untouched, and the two
+      `agent-native-cli-design.md` mentions of the *policy* ADR keep their
+      original number.
+- Observation (2026-10-12, rename hygiene): the replay left two pre-rename
+      `use` paths behind in the BDD step modules
+      (`crate::scenario_state::…`), because git replays a new file into the
+      directory's *new* name while leaving conflict markers and imports
+      labelled with the old one. Main's own step files all import via
+      `crate::rstest_bdd_support::scenario_state`, so the stale paths were
+      rewrapped to match. An orphaned `use
+      crate::rstest_bdd_support::cli_default_mode::CliDefaultMode;` also
+      survived into `scenario_state.rs` — main's #539 added it before the
+      branch's split moved that type into `scenario_state_cli_default.rs`,
+      which imports it directly, so the re-export is now dead and was removed.
+      With `-D warnings` a dangling import is a hard lint failure, not a
+      warning, so this class of replay artefact must be swept before gating.
+- Observation (2026-10-12, IR version policy tightened on `main`): the third
+      rebase surfaced a semantic coupling the replay could not see. At the
+      branch's base, §12 of the `cargo-orthohelp` design required only
+      *breaking* changes to bump `ORTHO_DOCS_IR_VERSION`, so D15's
+      "stays unchanged" clause was correct when written, and the branch added
+      the optional `profiles` field at `"1.1"`. While this branch was in
+      review, `main`'s 7.2.1 (#564) rewrote that bullet to add "additive
+      optional fields bump the minor version" and applied the new rule to its
+      own `behaviour` block via the isolated commit
+      `1e64195f "Bump documentation IR schema version to 1.2"`. Because the two
+      sides touched different lines, the merge resolved cleanly to `main`'s
+      `"1.2"` — leaving a tree that emits both `behaviour` **and** `profiles`
+      while advertising the version that means "behaviour only". The rebase
+      therefore had to resolve a policy question, not a textual conflict.
+      Resolved (decision D-A) by applying the tightened policy: the two
+      additive optional fields together move the version `"1.1"` → `"1.3"`.
+      Sites updated: both mirrored constants (`ortho_config/src/docs/mod.rs`,
+      `cargo-orthohelp/src/schema/mod.rs`, pinned together by the
+      `ir_version_matches_ortho_config` test), the two `ir_version` field
+      doc-comments, the `docs_ir.feature` scenario literal, and the design
+      document's §2 heading, §6.4.1 example, §12 bullet, and §13.1 worked
+      example. No `.snap` file embeds the version, so golden snapshots are
+      untouched — the same blast radius the precedent reported. The bump is
+      not cosmetic: `cargo-orthohelp`'s cache key hashes `ir_version`
+      (`src/cache.rs`), so one version labelling two IR shapes could reuse a
+      stale artefact across incompatible schemas. Lesson: a replay can inherit
+      a *policy* change from `main` that its own textual merge has no reason
+      to flag, so re-read the governing compatibility rules on the new base,
+      not just the conflicted hunks.
+- Observation (2026-10-13, `"1.3"` superseded by a second `main` bump): the
+      fourth rebase landed `main`'s 11.1.3 (#536) at `3479c735`, which carried
+      a larger bump to `"2.0"`. Its 11.1.3 changed the generated identifier
+      *values* from dotted (`{app}.fields.{field}.help`) to hyphenated
+      (`{mounted-path}-args-{field}-help`), so `"2.0"` records a meaning change
+      for consumers keyed on the old shapes, not merely the additive field
+      above. That major-style bump subsumes both this plan's `"1.3"` and the
+      `"1.2"` intermediate, so the replay resolved every conflicted version
+      site to `main`'s `"2.0"`, and `docs_ir.feature` took `main`'s side whole
+      because the scenario also asserts the new identifier values. `main`'s
+      11-1-3 execplan records the same rule this plan relies on: the landed
+      constant form wins, and its value wins with it. The D15 clause above is
+      therefore superseded in full — the version clause it states was correct
+      for its own rebase and no longer describes the merged tree.
+
 ## Decision log
 
 - Decision: plan drafted with decisions D1–D10; profile-as-overlay design
@@ -1337,8 +1477,8 @@ Progress entries from milestone 1 onward must carry timestamps.
   resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
   was needed. Status moved to APPROVED; milestone work proceeds per the plan.
   Date/Author: 2026-08-07, implementing agent.
-- Decision: milestone 1 (ADR-009 and design documentation) completed and the
-  ADR flipped to Accepted. ADR-009 was verified against the approved plan —
+- Decision: milestone 1 (ADR-011 and design documentation) completed and the
+  ADR flipped to Accepted. ADR-011 was verified against the approved plan —
   decisions D1–D8 and D11–D15, the five-tier merge order, the reserved selector
   projections, the migration and rollback stories — and the docs gates
   (`make markdownlint`, `make nixie`) plus a CodeRabbit review pass clean.
@@ -1541,7 +1681,7 @@ First, run the D12 spike (read-only): confirm in `ortho_config/src/discovery/`
 and the generated layer code that per-file values survive `extends` resolution
 as distinct layers. If not, stop (tolerance 6).
 
-Then write `docs/adr-009-profile-selection-and-layering.md` following the ADR
+Then write `docs/adr-012-profile-selection-and-layering.md` following the ADR
 template in `docs/documentation-style-guide.md`. Author it as Proposed in the
 first commit; flip to Accepted in the same milestone once its text is verified
 against the approved plan. It must capture D1–D8 and D11–D15, including: the
@@ -1821,7 +1961,7 @@ Every milestone is an ordinary commit on `9-1-1-profile-metadata`; recovery is
 `git revert` or resetting to the previous milestone commit. Snapshot updates go
 through `cargo insta review` so accidental acceptance is visible in the diff.
 No step mutates state outside the worktree except `/tmp` logs. The downstream
-rollback story (removing the opt-in attribute) is recorded in ADR-009
+rollback story (removing the opt-in attribute) is recorded in ADR-011
 (milestone 1).
 
 ## Artefacts and notes
@@ -2046,7 +2186,7 @@ Skills to load during implementation: `leta` (navigation/refactoring),
 `rust-router` then `rust-types-and-apis` (newtype and schema shapes),
 `rust-errors` (new error variants), `rust-unit-testing` (rstest/googletest/
 insta discipline), `proptest` (precedence invariant), `arch-crate-design`
-(boundary checks), `arch-decision-records` (ADR-009),
+(boundary checks), `arch-decision-records` (ADR-011),
 `addressing-whitaker-findings` (if the lint gate reports findings),
 `commit-message`, `comenq-coderabbit` (review loop), and `rebase` if `main`
 moves.
@@ -2104,7 +2244,9 @@ keeping both branches' intent; the profile and policy features are orthogonal
 apart from their shared extension points in `agent_context`. The one real
 collision was an ADR number: both branches had created `ADR-008`, which git
 reported as a *clean* merge because the filenames differ. This branch's
-unmerged record yielded and was renumbered to `ADR-009`, with every reference
-repointed and the two policy-ADR mentions in `agent-native-cli-design.md`
-deliberately left at 008. `Cargo.lock` took `main`'s resolution plus this
-branch's two dev dependencies. Details in Progress and Surprises & discoveries.
+unmerged record yielded and was renumbered to `ADR-009` — it is
+`adr-012-profile-selection-and-layering.md` after the 2026-10-13 renumber —
+with every reference repointed and the two policy-ADR mentions in
+`agent-native-cli-design.md` deliberately left at 008. `Cargo.lock` took
+`main`'s resolution plus this branch's two dev dependencies. Details in
+Progress and Surprises & discoveries.

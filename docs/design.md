@@ -114,7 +114,7 @@ The primary data flow for a user calling `AppConfig::load()` will be:
      `[profile.<name>]` tables overlay the file values. Each file in the
      resolved chain that defines the selected profile contributes one profile
      layer, in chain order. See
-     [ADR-009](adr-009-profile-selection-and-layering.md).
+     [ADR-012](adr-012-profile-selection-and-layering.md).
    - **Environment Provider:** An `Env` provider configured with the correct
      prefix and key-mapping rules.
 
@@ -769,7 +769,7 @@ Precedence across all sources becomes:
 3. The selected profile, when profiles are enabled
    (`#[ortho_config(profiles)]`): one overlay layer per file in the chain that
    defines the selected profile, in chain order (base first), per
-   [ADR-009](adr-009-profile-selection-and-layering.md)
+   [ADR-012](adr-012-profile-selection-and-layering.md)
 4. Environment variables
 5. Command‑line arguments
 
@@ -974,7 +974,7 @@ belongs at the command boundary; configuration precedence remains defaults →
 files → selected profile (opt-in) → environment → explicit command-line
 arguments, with the profile tier present only for structs that opt in via
 `#[ortho_config(profiles)]` (see
-[ADR-009](adr-009-profile-selection-and-layering.md)).
+[ADR-012](adr-012-profile-selection-and-layering.md)).
 
 The near-term API is a small `ortho_config::cargo` helper for callers that
 build clap commands by hand. A function such as

@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 009: Profile selection and layering
+# Architectural decision record (ADR) 012: Profile selection and layering
 
 ## Status
 
@@ -52,8 +52,10 @@ profiles with silent fallback on unknown names), config-rs, mise
 - Keep profile support strictly opt-in: derives that do not opt in must
   compile unchanged, keep their four-layer merge order, gain no new flags, and
   keep emitting `profiles: { "supported": false }` byte-for-byte.
-- Keep the agent-context wire schema and documentation IR changes additive
-  within schema version `"1"`.
+- Keep documentation IR and agent-context changes additive. The agent-context
+  wire schema holds at version `"1"`; the documentation IR gains an optional
+  field and takes the minor version bump its policy requires (see
+  "Agent-context exposure and the documentation IR").
 - Keep OrthoConfig generic: no application-specific literals (profile names,
   app names, variable names) may enter the library.
 - Keep provenance honest so roadmap 9.1.2 redaction diagnostics can trace a
@@ -289,9 +291,20 @@ The bridge learns about profile support through the documentation IR:
 `DocMetadata` gains an additive, defaulted field
 `profiles: Option<DocProfilesMeta>` where `DocProfilesMeta { flag, env_var }`
 mirrors `ProfileSelectionContract`. The derive emits it for opted-in structs and
-`bridge_ir_to_agent_context` maps it into `ProfilesDeclaration`. Because the
-field is additive with `#[serde(default)]`, `ORTHO_DOCS_IR_VERSION` stays
-unchanged per the IR compatibility policy.
+`bridge_ir_to_agent_context` maps it into `ProfilesDeclaration`.
+
+The field is additive with `#[serde(default)]`, and when this decision was
+drafted the IR compatibility policy required only *breaking* changes to bump
+`ORTHO_DOCS_IR_VERSION`, so the version was left unchanged. That policy was
+tightened on `main` while this branch was in review: §12 of the
+`cargo-orthohelp` design now states that additive optional fields bump the
+minor version, and roadmap 7.2.1 applied that rule to its own `behaviour` block
+(`"1.1"` → `"1.2"`). The `profiles` field is governed by the new rule, so this
+change bumps the version a second time, `"1.2"` → `"2.0"`, and refreshes the
+design document's version references. The bump is required rather than cosmetic:
+`cargo-orthohelp`'s cache key hashes `ir_version`, so labelling two distinct
+IR shapes with one version would let a stale cached artefact be reused across
+an incompatible schema.
 
 ### Flag-equals-default resolution
 

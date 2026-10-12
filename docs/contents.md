@@ -60,9 +60,9 @@
   `agent-native.behaviour.*` rule set.
 - [ADR-011: Opt-in identifier artefact emission](adr-011-opt-in-identifier-artefact-emission.md):
   review the guarded build-time export for derived CLI identifiers.
-- [ADR-009](adr-009-profile-selection-and-layering.md): review the decision for
-  optional profile overlays, the five-tier merge order, stateless selection,
-  and the opt-in profile contract.
+- [ADR-012: Profile selection and layering](adr-012-profile-selection-and-layering.md):
+  review the decision for optional profile overlays, the five-tier merge order,
+  stateless selection, and the opt-in profile contract.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

@@ -112,7 +112,9 @@ agent-context layer. The IR (`ortho_config::docs::ir::BehaviourMetadata`) owns
 the declared enums without an `Unknown` variant; agent context has `Unknown`.
 `ORTHO_DOCS_IR_VERSION` bumped from `"1.1"` to `"1.2"` for the additive
 `DocMetadata::behaviour` block; `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` stays
-`"1"` under the §8.2 additive-change policy.
+`"1"` under the §8.2 additive-change policy. (The IR version has since moved to
+`"2.0"` for the profile-metadata field added by ADR-012; this paragraph records
+the version this change alone established.)
 
 ## Goals and non-goals
 

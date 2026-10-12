@@ -424,7 +424,7 @@ helpers, while downstream applications own domain behaviour.
 - [x] 9.1.1. Design and implement optional profile metadata.
   - Requires step 6.2.
   - See agent-native-cli-design.md §6.7.
-  - See [ADR-009](adr-009-profile-selection-and-layering.md) for the
+  - See [ADR-012](adr-012-profile-selection-and-layering.md) for the
     approved design: named overlays inside configuration files, stateless
     `--profile` selection, and the five-tier merge order.
   - [x] Standardize `--profile <name>` as the root selection flag.

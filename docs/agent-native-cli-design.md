@@ -598,7 +598,7 @@ roadmap must document the exact merge order and migration impact before code is
 changed.
 
 That documentation requirement is satisfied by
-[ADR-009](adr-009-profile-selection-and-layering.md), recorded before any
+[ADR-012](adr-012-profile-selection-and-layering.md), recorded before any
 behavioural code under roadmap 9.1.1. Profiles are named config overlays:
 `[profile.<name>]` tables inside the resolved configuration file chain,
 selected statelessly by a `--profile <name>` flag with a `<PREFIX>PROFILE`
@@ -613,7 +613,7 @@ opt in keep the four-tier order and keep reporting
 `profiles: { "supported": false }`. An explicitly provided flag beats the
 selected profile even when the flag value equals the built-in default. The
 migration impact, including the Rust-level `AgentContext.profiles` retype and
-the rollback story, is recorded in ADR-009's migration plan.
+the rollback story, is recorded in ADR-012's migration plan.
 
 Agent context should expose whether profiles are supported, how to list them,
 which flag selects one, and which profile fields are redacted or
@@ -817,7 +817,7 @@ Schema v1 history:
   policy, and includes agent-context output in `cargo orthohelp --format all`.
 - `1` (extended by 9.1.1): `profiles` retyped to `ProfilesDeclaration` at the
   Rust level (a pre-approved pre-1.0 break per
-  [ADR-009](adr-009-profile-selection-and-layering.md)); the new optional fields
+  [ADR-012](adr-012-profile-selection-and-layering.md)); the new optional fields
   `selection` and `list_command` follow the omitted-when-absent rule, and the
   unsupported case remains byte-identical to `{ "supported": false }`.
 

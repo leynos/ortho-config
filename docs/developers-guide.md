@@ -563,7 +563,7 @@ Profile support is opt-in at the struct level through the derive attribute
 `#[ortho_config(profiles)]`. A struct that does not opt in keeps the four-tier
 merge order, gains no `--profile` flag, and treats a `[profile.*]` table in a
 shared file as an ordinary key rather than extracting it. The accepted design is
-[ADR-009](adr-009-profile-selection-and-layering.md); the user-facing view is
+[ADR-012](adr-012-profile-selection-and-layering.md); the user-facing view is
 the [Profiles section](users-guide.md#profiles) of the users' guide.
 
 Opted-in structs merge five tiers, lowest to highest: built-in defaults,

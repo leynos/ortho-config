@@ -47,7 +47,7 @@ pub struct ExtractionOutcome {
 ///   configuration file exists or that every candidate failed to load. In the
 ///   second case the profile tables could never be inspected, so the selection
 ///   is reported as unknown only in the first: a file parse error is the root
-///   cause and must not be joined by a false selection error (ADR-009).
+///   cause and must not be joined by a false selection error (ADR-012).
 ///
 /// # Errors
 ///
@@ -86,7 +86,7 @@ pub fn extract_profile_layers(
     // because the only candidate could not be parsed, so it says nothing about
     // whether the profile exists; reporting it as unknown would falsely
     // diagnose the selection while a file parse error is the real root cause
-    // (ADR-009: parse errors take precedence over unknown-profile errors).
+    // (ADR-012: parse errors take precedence over unknown-profile errors).
     let unmatched = selected.filter(|_| !selected_found && !discovery_failed);
     if let Some(selected_profile) = unmatched {
         return Err(unknown_profile_error(

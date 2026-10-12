@@ -170,14 +170,14 @@ Key choices:
   `ortho_config::agent_context`, and policy reports in
   `cargo_orthohelp::policy` until a later extraction is approved.
 
-## 2. Documentation IR (schema v1.2)
+## 2. Documentation IR (schema v2.0)
 
 ### 2.1 Top-level metadata
 
 ```rust
 #[derive(Debug, Serialize)]
 pub struct DocMetadata {
-    pub ir_version: String,            // e.g., "1.2"
+    pub ir_version: String,            // e.g., "2.0"
     pub app_name: String,              // binary or display name
     pub bin_name: Option<String>,      // override for man page or wrapper name
     pub about_id: String,              // Fluent ID for app description
@@ -906,7 +906,7 @@ sentinel so generators can surface gaps during development.
 
 ```json
 {
-  "ir_version": "1.2",
+  "ir_version": "2.0",
   "locale": "en-US",
   "app_name": "my-app",
   "bin_name": "my-app",
@@ -1121,9 +1121,10 @@ installs the executable in a different location.
 
 ## 12. Versioning and compatibility
 
-- IR: `ir_version = "1.2"` (optional `behaviour` metadata added; `1.1` added
-  Windows metadata). Additive optional fields bump the minor version; future
-  breaking schema changes bump the major version.
+- IR: `ir_version = "2.0"` (optional `profiles` metadata added; `1.2` added
+  optional `behaviour` metadata; `1.1` added Windows metadata). Additive
+  optional fields bump the minor version; future breaking schema changes bump
+  the major version.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 
@@ -1187,11 +1188,11 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
 
 ## 13. Worked example (abridged)
 
-### 13.1 IR JSON (excerpt, 1.2)
+### 13.1 IR JSON (excerpt, 2.0)
 
 ```json
 {
-  "ir_version": "1.2",
+  "ir_version": "2.0",
   "app_name": "my-app",
   "bin_name": "my-app",
   "about_id": "my-app.about",
@@ -1238,14 +1239,14 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
   },
   "subcommands": [
     {
-      "ir_version": "1.2",
+      "ir_version": "2.0",
       "app_name": "run",
       "about_id": "run.about",
       "fields": [],
       "windows": null,
       "subcommands": [
         {
-          "ir_version": "1.2",
+          "ir_version": "2.0",
           "app_name": "audit",
           "about_id": "audit.about",
           "fields": [],
