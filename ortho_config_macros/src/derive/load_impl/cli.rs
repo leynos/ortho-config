@@ -88,6 +88,43 @@ fn build_cli_push_tokens() -> proc_macro2::TokenStream {
     }
 }
 
+/// Remove bool fields whose value came from clap's `SetTrue` default.
+///
+/// A `bool` field is emitted with `ArgAction::SetTrue`, so clap fills an absent
+/// flag with a real `false` rather than leaving it unset. `sanitize_value`
+/// strips only `null`, so that `false` survives into the CLI layer, and the CLI
+/// layer outranks the profile layer — an absent `--enabled` would therefore
+/// silently reset a profile's `enabled = true`.
+///
+/// Unlike `cli_default_as_absent`, this must not depend on the author having
+/// opted in: `SetTrue` is what the macro emits for *every* bool field, so the
+/// default-origin value is spurious whether or not the attribute was written.
+/// Value-source is env-aware, so `<PREFIX>ENABLED=true` still reaches the
+/// composer; only an untouched flag is pruned.
+fn build_bool_default_pruning_tokens(
+    cli_bool_fields: &[(String, String)],
+) -> proc_macro2::TokenStream {
+    if cli_bool_fields.is_empty() {
+        return proc_macro2::TokenStream::new();
+    }
+    let bool_pairs = cli_bool_fields.iter().map(|(arg_id, serialized_key)| {
+        let id_lit = syn::LitStr::new(arg_id, proc_macro2::Span::call_site());
+        let key_lit = syn::LitStr::new(serialized_key, proc_macro2::Span::call_site());
+        quote! {
+            if matches.value_source(#id_lit)
+                == Some(clap::parser::ValueSource::DefaultValue)
+            {
+                values.remove(#key_lit);
+            }
+        }
+    });
+    quote! {
+        if let Some(values) = value.as_object_mut() {
+            #( #bool_pairs )*
+        }
+    }
+}
+
 /// Generate the CLI layer for structs that opt into profile support.
 ///
 /// The push is gated on clap value sources rather than on the declarative
@@ -98,10 +135,13 @@ fn build_cli_push_tokens() -> proc_macro2::TokenStream {
 /// the remaining environment-derived fields must keep outranking the profile.
 ///
 /// Fields filled from an inferred clap default are pruned first, so a built-in
-/// default cannot mask a profile value.
+/// default cannot mask a profile value. `cli_bool_fields` extends that pruning
+/// to `SetTrue` bools, which carry a default-origin `false` that
+/// `cli_default_as_absent` cannot describe.
 pub(super) fn build_profile_cli_layer_tokens(
     krate: &proc_macro2::TokenStream,
     cli_arg_ids: &[String],
+    cli_bool_fields: &[(String, String)],
     cli_default_as_absent_fields: &[syn::LitStr],
 ) -> proc_macro2::TokenStream {
     let arg_id_lits: Vec<syn::LitStr> = cli_arg_ids
@@ -109,6 +149,7 @@ pub(super) fn build_profile_cli_layer_tokens(
         .map(|id| syn::LitStr::new(id, proc_macro2::Span::call_site()))
         .collect::<Vec<_>>();
     let prune_defaults = build_default_as_absent_pruning_tokens(cli_default_as_absent_fields);
+    let prune_bool_defaults = build_bool_default_pruning_tokens(cli_bool_fields);
     // `matches` is already `&ArgMatches` here, courtesy of the `if let` above.
     let has_explicitly_provided = quote! {
         let has_explicitly_provided_value = {
@@ -129,6 +170,7 @@ pub(super) fn build_profile_cli_layer_tokens(
             match #krate::sanitize_value(cli) {
                 Ok(mut value) => {
                     #prune_defaults
+                    #prune_bool_defaults
                     #has_explicitly_provided
                     let differs_from_defaults = defaults_value
                         .as_ref()

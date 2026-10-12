@@ -22,6 +22,14 @@ expression: snapshot
           "enum_values": []
         },
         {
+          "name": "profile",
+          "long": "profile",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        },
+        {
           "name": "retries",
           "long": "retries",
           "value_type": "integer",

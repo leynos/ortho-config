@@ -151,6 +151,31 @@ Stop and escalate when any threshold below is reached.
    split point is after milestone 4 (behaviour complete, agent context still
    reporting unsupported): if size pressure appears, propose shipping
    milestones 1–4 as one pull request and 5–6 as a follow-up.
+
+   **Exception granted (2026-10-12).** The delivered change is 8,286 insertions
+   against 884 deletions on `main`, a net growth of 7,402 lines: approximately
+   three times the threshold above. The task owner reviewed the overrun and
+   approved it, so this tolerance is satisfied by an explicit exception rather
+   than by the threshold. The split point above was not taken because the
+   milestones are not independently shippable — the profile layer is inert
+   without the derive opt-in that consumes it (milestone 4), and the
+   agent-context declaration would then describe an unsupported feature. A
+   large share of the growth is test and documentation volume rather than
+   non-test code: the 7,402 net lines split into 2,940 net in non-test source
+   (`ortho_config/src`, `ortho_config_macros/src`, `cargo-orthohelp/src`),
+   2,314 net in tests, and 3,029 net in documentation. The profile suite spans
+   unit, behavioural, property, and compile-fail layers, and the ADR, design,
+   and migration documents are part of the milestone-1 documentation-first
+   order (constraint 6).
+
+   The per-milestone guidance for non-test code is not separately measurable
+   here: the branch history is a single 57-commit series that does not break at
+   the milestone boundaries, and the two rebases recorded below replayed those
+   commits onto a moved `main`, so per-milestone attribution cannot be
+   reconstructed. The 600-net-line figure is therefore reported as unverified
+   rather than as passed. The 2,940 net non-test lines across the whole task
+   are recorded so a later reader can judge the distribution without
+   re-deriving it.
 5. Iterations: if a gate still fails after three fix attempts for the same
    root cause, stop and escalate with the log evidence.
 6. Ambiguity: if profile semantics interact with an existing feature in a way
@@ -205,7 +230,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
 - D4 — Unknown profile names are a hard error with structured diagnostics.
   If a profile is selected but no `[profile.<name>]` table exists in the file
   chain, loading fails with
-  `OrthoError::UnknownProfile { selected, source, available }` where
+  `OrthoError::UnknownProfile { selected, selection_source, available }` where
   `available` is sorted and capped at 16 names (the error display appends "and
   N more" beyond the cap). The error names the selection source so a leaked
   `<PREFIX>PROFILE` in the environment is distinguishable from a typo on the
@@ -971,6 +996,28 @@ Progress entries from milestone 1 onward must carry timestamps.
 
 ## Surprises & discoveries
 
+- Observation: the two `discovery_failed` predicates fixed for finding F1 are
+  not equally load-bearing. The flat-walk form in `load_impl/mod.rs`
+  (`!required_errors.is_empty() || !optional_errors.is_empty()`) really did
+  suppress a genuine unknown-profile error, because discovery retains an
+  optional candidate's error after a later candidate loads. The policy form in
+  `policy_impl.rs` was *equivalent* to its replacement for derive-generated
+  code: `FileLayerOutcome::reportable_errors` is populated only from
+  `DiscoveryLayersOutcome::required_errors`, and the policy branch never calls
+  `builder.add_required_path`, so `reportable_errors` is always empty on that
+  path and both predicates reduce to
+  `selected_error || (layers.is_empty() && !ignorable_errors.is_empty())`. The
+  rewrite is still correct and still matters for direct `ConfigFilePolicy`
+  users, who can populate required paths through the builder; it is simply not
+  a second live instance of the same defect. Evidence:
+  `grep -n add_required_path ortho_config_macros/src/derive/policy_impl.rs`
+  returns nothing, and the reachable constructors of `reportable_errors` are
+  `policy.rs:83` (optional-mode selected-file failure) and `policy.rs:217` (from
+  `required_errors`). Consequence: the flat-walk regression in
+  `ortho_config/tests/load_with_sources.rs` is the load-bearing test for F1; a
+  separate policy-path regression would pass before and after the change and
+  would not be a real guard, so none was added.
+
 - Observation: a long-lived branch can merge *cleanly* and still fail to
   compile, because the target may add code whose structure depends on a change
   the branch makes while sharing none of its text. Evidence: two independent
@@ -1217,7 +1264,7 @@ Progress entries from milestone 1 onward must carry timestamps.
       `recorded_merge_counters()`.
 
 - Observation (2026-09-28, incident): a mutation probe destroyed uncommitted
-      work. To revert a one-line probe I used `git checkout -- <file>` on a
+      work. To revert a one-line probe, `git checkout -- <file>` was used on a
       file whose two new tests and `cap_std` import were *unstaged*, so it
       restored from the index (i.e. from HEAD) and discarded them. Recovery
       via `git fsck` dangling blobs was impossible — the content had never
@@ -1573,6 +1620,17 @@ Progress entries from milestone 1 onward must carry timestamps.
       and about renderers. Profile-opted-in structs emit five tiers; legacy
       structs keep four. Date/Author: 2026-09-24, implementing agent.
 
+- Decision: accept the delivered size as an approved exception to tolerance 4
+  rather than slimming or splitting the change. The delivered diff is 8,286
+  insertions against 884 deletions on `main` (7,402 net lines), roughly three
+  times the ~2,500-line threshold, of which 2,940 net lines are non-test source
+  and 6,343 net lines are tests and documentation. Rationale: the task owner
+  reviewed the overrun and approved it; the milestone split point proposed in
+  tolerance 4 was not taken because the layers are not independently shippable
+  (the profile merge layer is inert without the derive opt-in, and the
+  agent-context declaration would then describe an unsupported feature).
+  Date/Author: 2026-10-12, implementation agent.
+
 ## Outcomes & retrospective
 
 All six milestones completed on 2026-08-09. The feature ships: opt-in
@@ -1600,6 +1658,27 @@ Deferred (recorded, not accidental): the fixture-builder extraction across
 agent-context test families (ride along with 9.1.2's `redaction` field); the
 scaling and operational-cost design-review lens; profile-aware subcommand
 loading (D11); `inherits` semantics (D5); the 9.1.3 store helpers.
+
+Also deferred, and deliberately *not* repaired in this pull request: the
+blanket `#[allow(dead_code)]` the generated compose helpers carry in
+`ortho_config_macros/src/derive/load_impl_entry.rs`. The rebase absorbed that
+switch from `#[expect(dead_code)]` because an unfulfilled expectation is a
+hard error once a generated method is used, which is what closed #273. Code
+review flagged the resulting blanket allow as a blunt suppression, and the
+finding is accepted. Removing it does not itself deny dead code; it restores
+the enclosing lint level, so a consumer that denies `dead_code` or warnings
+starts rejecting generated helpers it legitimately never calls. That is a
+downstream-compatibility break of the same class as #273, in the opposite
+direction, and there is no attribute-only replacement: a generated method can
+be unused in one consumer and used in another, so `#[expect(dead_code)]` can
+become an unfulfilled expectation, and the derive macro cannot know the
+downstream use. It therefore needs its own prerequisite pull request underneath
+this one, changing the generated attributes and the assertion at
+`ortho_config_macros/src/tests.rs` together — that assertion pins three
+occurrences in the legacy output, not every emitting site — and validating both
+that an unused helper under a denying consumer still compiles and that a used
+helper does not trip `unfulfilled_lint_expectations`. Landing it here would
+append an unrelated compatibility change to a profile-metadata diff.
 
 Post-completion review left the delivered profile contract unchanged while
 consolidating repeated test setup and assertions. The current pull-request head
@@ -1764,9 +1843,9 @@ Green: implement in a new module `ortho_config/src/profile/` (split per the
 vocabulary to three names), `SelectedProfile`/`ProfileSource` (D14, serde-
 free), the extraction helper over ordered `(path, value)` pairs (D13), and new
 `#[non_exhaustive]`-friendly variants on `OrthoError`:
-`UnknownProfile { selected, source, available }`, `InvalidProfileName { name }`,
-`ReservedProfileName { name }`, and `ProfileForbiddenKey { profile, key }`,
-each with localizer message IDs.
+`UnknownProfile { selected, selection_source, available }`,
+`InvalidProfileName { name }`, `ReservedProfileName { name }`, and
+`ProfileForbiddenKey { profile, key }`, each with localizer message IDs.
 
 Refactor: consolidate with discovery types; keep RFC 0002's boundary — no
 application literals; extraction stays a library helper so
@@ -2122,7 +2201,7 @@ pub struct ProfileLoadOutcome<T> { /* private fields */ }
 // accessors: config(), into_config(), selection() -> &[SelectedProfile]
 
 // ortho_config/src/error/types.rs (variants on #[non_exhaustive] OrthoError)
-// UnknownProfile { selected, source, available /* sorted, capped at 16 */ },
+// UnknownProfile { selected, selection_source, available /* sorted, capped at 16 */ },
 // InvalidProfileName { name },
 // ReservedProfileName { name },
 // ProfileForbiddenKey { profile, key }

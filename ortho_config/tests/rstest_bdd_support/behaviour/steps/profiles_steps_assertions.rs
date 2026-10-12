@@ -28,6 +28,11 @@ fn merged_value_is(profiles_context: &ProfilesContext, key: String, value: Strin
             "unexpected retries {}; expected {expected}",
             config.retries
         ),
+        "verbose" => ensure!(
+            config.verbose.to_string() == expected,
+            "unexpected verbose {}; expected {expected}",
+            config.verbose
+        ),
         other => {
             return Err(anyhow!(
                 "unsupported key {other:?} in merged-value assertion"
@@ -57,7 +62,7 @@ fn selected_profile_is(
         selected.name
     );
     ensure!(
-        selected.source == parse_source(&source),
+        selected.source == parse_source(&source)?,
         "unexpected selection source {:?}; expected {source}",
         selected.source
     );
@@ -71,7 +76,7 @@ fn loading_fails_naming(
     profile: String,
     source: String,
 ) -> Result<()> {
-    assert_unknown_profile(profiles_context, &profile, parse_source(&source), &source)
+    assert_unknown_profile(profiles_context, &profile, parse_source(&source)?, &source)
 }
 
 /// Asserts a failed load names the profile and the selector environment source.
@@ -190,10 +195,24 @@ fn loading_fails_forbidden_key(
     );
     Ok(())
 }
-fn parse_source(source: &str) -> ProfileSource {
+/// Parse a feature-file selection-source name into its contract value.
+///
+/// An unrecognized name is an error rather than a default: the step wording is
+/// the only thing distinguishing a flag-selected run from an environment-
+/// selected one, so a misspelling such as `"flgs"` must not silently assert the
+/// environment source and pass.
+///
+/// # Errors
+///
+/// Returns an error naming the offending value when it is neither `flag` nor an
+/// environment spelling.
+fn parse_source(source: &str) -> Result<ProfileSource> {
     match normalize_scalar(source).as_str() {
-        "flag" => ProfileSource::Flag,
-        _ => ProfileSource::Environment,
+        "flag" => Ok(ProfileSource::Flag),
+        "environment" | "env" => Ok(ProfileSource::Environment),
+        other => Err(anyhow!(
+            "unknown selection source {other:?}; expected \"flag\" or \"environment\""
+        )),
     }
 }
 

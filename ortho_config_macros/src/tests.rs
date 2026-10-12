@@ -292,6 +292,7 @@ fn build_legacy_load_impl() -> anyhow::Result<proc_macro2::TokenStream> {
         profiles: false,
         profile_env_var: String::from("PROFILE"),
         cli_arg_ids: Vec::new(),
+        cli_bool_fields: Vec::new(),
     }))
 }
 

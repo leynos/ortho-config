@@ -23,6 +23,7 @@ pub(crate) fn build_profile_compose_layers_impl(
         tokens,
         profile_env_var,
         cli_arg_ids,
+        cli_bool_fields,
         ..
     } = args;
     let krate = tokens.krate;
@@ -32,7 +33,12 @@ pub(crate) fn build_profile_compose_layers_impl(
     let defaults = build_profile_defaults(args);
     let file_layers = build_profile_file_layers(krate, file_discovery);
     let environment_layer = build_profile_environment_layer(krate, env_section);
-    let cli_push = build_profile_cli_layer_tokens(krate, cli_arg_ids, cli_default_as_absent_fields);
+    let cli_push = build_profile_cli_layer_tokens(
+        krate,
+        cli_arg_ids,
+        cli_bool_fields,
+        cli_default_as_absent_fields,
+    );
 
     quote! {
         // Keep this path anchored under the resolved crate so derive users
@@ -97,22 +103,43 @@ fn build_profile_parse_setup(krate: &proc_macro2::TokenStream) -> proc_macro2::T
 /// When the caller injected a discovery source, the selector is read through
 /// that source so selection honours the same environment the file discovery
 /// saw. Only the process-backed entry points fall back to `std::env::var`.
+///
+/// The two reads handle a non-Unicode value differently, and deliberately.
+/// `std::env::var` returns `Err`, so the process path already treats the value
+/// as absent — the mutator supplied bytes that cannot be a profile name, and
+/// there is no diagnostic channel to report that on. A [`crate::EnvSource`]
+/// hands back an `OsString`, which the injected path must convert; discarding
+/// the conversion failure would let a caller who passed a malformed selector
+/// watch the load proceed as though nothing were selected. That is a silently
+/// wrong configuration, so the injected path records a selection error instead.
+/// It cannot mask a clap diagnostic: the selector never reaches the command
+/// line, so there is no parse error for it to outrank.
 fn build_profile_selection(
     krate: &proc_macro2::TokenStream,
     profile_env_var: &str,
     sources: Option<&LoadSourceTokens<'_>>,
 ) -> proc_macro2::TokenStream {
     let selector_env = syn::LitStr::new(profile_env_var, proc_macro2::Span::call_site());
-    // `into_string` mirrors `std::env::var` by treating a non-Unicode value as
-    // absent rather than as a selection error.
     let read_env = sources.map_or_else(
         || quote! { std::env::var(#selector_env).ok() },
         |injected| {
             let discovery_source = injected.discovery;
             quote! {
-                #discovery_source
-                    .get(#selector_env)
-                    .and_then(|value| value.into_string().ok())
+                match #discovery_source.get(#selector_env) {
+                    Some(value) => match value.into_string() {
+                        Ok(text) => Some(text),
+                        Err(_) => {
+                            errors.push(std::sync::Arc::new(#krate::OrthoError::Validation {
+                                key: format!("profile:{}", #selector_env),
+                                message: String::from(
+                                    "profile selector value is not valid Unicode",
+                                ),
+                            }));
+                            None
+                        }
+                    },
+                    None => None,
+                }
             }
         },
     );

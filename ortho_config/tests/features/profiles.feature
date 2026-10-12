@@ -69,3 +69,16 @@ Feature: Profile selection and precedence
     When the CLI loads
     Then the merged value of "retries" is "7"
     And no composed layer contains a "profile" key
+
+  Scenario: An absent bool flag does not clear a profile value
+    Given a config file with key "retries" set to "3"
+    And the same file defines profile "ci" with "verbose" set to "true"
+    When the CLI loads with "--profile ci"
+    Then the merged value of "verbose" is "true"
+
+  Scenario: An explicitly supplied bool flag beats the profile
+    Given a config file with key "retries" set to "3"
+    And the same file defines profile "ci" with "verbose" set to "false"
+    When the CLI loads with the "--verbose" flag
+    Then the merged value of "verbose" is "true"
+    And the merged value of "retries" is "3"

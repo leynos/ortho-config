@@ -35,7 +35,12 @@ pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     option_inner(ty).map_or_else(|| quote! { Option<#ty> }, |inner| quote! { Option<#inner> })
 }
 
-fn is_bool_type(ty: &Type) -> bool {
+/// Whether a declared field type is `bool`, unwrapping a single `Option`.
+///
+/// Exposed to the derive's CLI-info builder so the bool-ness recorded there is
+/// the same predicate that decides `ArgAction::SetTrue` when the CLI struct is
+/// emitted. Deriving it twice from the type would let the two disagree.
+pub(crate) fn is_bool_type(ty: &Type) -> bool {
     let inner = option_inner(ty).unwrap_or(ty);
     matches!(
         inner,

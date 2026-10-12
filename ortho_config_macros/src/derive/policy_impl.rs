@@ -231,15 +231,31 @@ pub(crate) fn build_policy_based_loading(
             .explicit_mode(#explicit_mode).automatic_mode(#automatic_mode) #scope_order_call;
         #project_root
         let outcome = policy.resolve_layers();
-        // Collect into a scratch vector so the discovery-failure flag can be
-        // read before the errors join the shared collection. Profile extraction
-        // asks whether discovery recorded any error only when no layer loaded,
-        // and the visibility rule appends every recorded error in that case, so
-        // the scratch contents answer that question exactly.
-        let mut discovery_errors = Vec::new();
-        let layers = outcome.into_layers_and_errors(&mut discovery_errors);
-        let discovery_failed = !discovery_errors.is_empty();
-        errors.append(&mut discovery_errors);
+        // Whether the resolved chain could be inspected, which is not the same
+        // question as whether any error was recorded. `FileLayerOutcome`
+        // surfaces ignorable errors only when no layer loaded, so "nothing
+        // loaded and some candidate failed" is the policy path's shape of the
+        // flat walk's empty-chain rejection. A required-file failure and a
+        // filled fatal slot both leave the profile tables unread too. Profile
+        // extraction suppresses the unknown-profile error in those cases and no
+        // others, so a chain that loaded after an unrelated optional failure
+        // still reports a selection the files do not define (ADR-011).
+        //
+        // An empty chain with nothing recorded is deliberately *not* a
+        // failure: no candidate failed, so the selection is reported as
+        // unknown and the operator learns that no profiles were found rather
+        // than being sent after a parse error that never happened.
+        //
+        // `reportable_errors` is either a required candidate's error, or the
+        // single optional-mode selected-file error; `ignorable_errors` is the
+        // optional-candidate tail. Both are read here because `drain_errors`
+        // decides their visibility from `layers`, and that question has to be
+        // answered while the outcome is still owned by this scope.
+        let failures_recorded = !outcome.reportable_errors().is_empty()
+            || !outcome.ignorable_errors().is_empty();
+        let discovery_failed = outcome.selected_error().is_some()
+            || (outcome.layers_are_empty() && failures_recorded);
+        let layers = outcome.into_layers_and_errors(&mut errors);
         (layers, discovery_failed)
     }}
 }

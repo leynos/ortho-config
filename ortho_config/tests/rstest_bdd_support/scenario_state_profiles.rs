@@ -60,9 +60,20 @@ pub fn profiles_context() -> ProfilesContext {
 /// and `load_with_profile` entry point. The `retries` default of 3 drives the
 /// flag-equals-default scenario: an explicit `--retries 3` equals the default
 /// and must still beat the profile.
+///
+/// `verbose` is a `bool`, so the generated CLI emits it with
+/// [`clap::ArgAction::SetTrue`]. An absent `--verbose` therefore reaches clap as
+/// a real `false` rather than an unset `None`, which is what the two
+/// bool-precedence scenarios pin: the spurious default must be pruned, while a
+/// flag the operator actually typed must survive. Its declared default of
+/// `false` is what makes the first scenario observable — a profile setting
+/// `verbose = true` is exactly the case an unpruned `false` would silently
+/// reset.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
 #[ortho_config(prefix = "APP_", profiles)]
 pub struct ProfilesConfig {
     #[ortho_config(default = 3)]
     pub retries: u32,
+    #[ortho_config(default = false)]
+    pub verbose: bool,
 }

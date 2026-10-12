@@ -380,6 +380,16 @@ falling back; `Optional` accepts an absent selected path. The policy returns a
 replayable `FileLayerOutcome`, allowing callers to inspect scalar file values
 early and then add the same layers to a `MergeComposer`.
 
+The selector vocabulary lives in
+`ortho_config/src/discovery/policy_selector.rs`, which owns
+`ConfigPathSelector`, `ExplicitMode`, and `ResolvedSelection`; `policy.rs` owns
+`ConfigFilePolicy` and `FileLayerOutcome`. The split keeps the selector's
+ordering rules — where a value came from and which selector wins — separate
+from the policy's decision about whether a failed selected file is tolerated.
+Callers reach the selector types through the `discovery` re-export; do not push
+policy decisions into the selector module, and do not duplicate the ordering
+rules at a call site.
+
 The project scope is rooted at the working directory by default. A policy that
 needs it elsewhere replaces every automatic project root with one
 caller-selected directory, either by calling `ConfigFilePolicy::project_root`

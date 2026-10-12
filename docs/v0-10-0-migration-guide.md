@@ -320,6 +320,26 @@ match `AgentContext` by struct literal. Build those values with the
 constructors instead. The wire contract is unchanged: a struct that did not opt
 in still serializes as `{ "supported": false }`.
 
+### Review documentation-metadata consumers
+
+The bridge IR's `DocMetadata` gains a `profiles` field, and it is an additive
+change to the *wire* contract but a breaking one to the *Rust* contract. Both
+copies of the type gain it:
+
+- `ortho_config::docs::DocMetadata`, the library-side type.
+- `cargo_orthohelp::schema::DocMetadata`, the bridge-side mirror.
+
+The field is `#[serde(default)]`, so JSON written against the previous release
+still deserializes and a struct that did not opt in still omits it. An external
+crate that builds the type by struct literal is different: a defaulted field is
+still required in a literal, so every literal needs the field named. Adding
+`profiles: None` preserves the previous behaviour, and the derive only ever
+produces `Some` for a struct declared with `#[ortho_config(profiles)]`.
+
+This release also adds the `DocProfilesMeta` type that the field carries. It
+holds the selector's `flag` and `env_var` as plain strings, so a consumer
+reading the IR needs no new dependency to interpret it.
+
 ### Handle unknown profile errors
 
 Selecting a profile that no file defines fails with
@@ -413,9 +433,14 @@ Profile support and the Cargo helper are additive. Existing configuration
 loading, derive usage, and subcommand merging continue unchanged. Add the
 `profiles` attribute only when an application wants profile overlays, and add
 the helper only when adopting the Cargo external-subcommand entry-point shape.
-The one Rust-level change in this release is the `AgentContext.profiles`
-retype, which affects only consumers that build or match `AgentContext` by
-struct literal.
+
+Two Rust-level changes affect consumers that build the affected types by struct
+literal; neither changes the serialized form. `AgentContext.profiles` is
+retyped, and `DocMetadata` gains a `profiles` field in both its library and
+bridge copies. Build the first with the `ProfilesDeclaration` constructors and
+name the second as `profiles: None`. Both are described above under
+[Review agent-context consumers](#review-agent-context-consumers) and
+[Review documentation-metadata consumers](#review-documentation-metadata-consumers).
 
 [users-guide-policy]: users-guide.md#agent-native-policy-checking
 [users-guide-discovery]: users-guide.md#choose-the-file-discovery-source

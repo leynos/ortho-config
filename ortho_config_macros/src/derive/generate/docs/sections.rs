@@ -215,7 +215,7 @@ fn build_precedence_metadata(
     } else {
         order_values
             .iter()
-            .map(|value| source_kind_tokens(value, krate))
+            .map(|value| source_kind_tokens(value, profiles, krate))
             .collect::<Result<Vec<_>, _>>()?
     };
 
@@ -244,18 +244,50 @@ fn is_source_kind(value: &str) -> Option<&'static str> {
     }
 }
 
-fn source_kind_tokens(value: &str, krate: &TokenStream) -> syn::Result<TokenStream> {
+/// Resolve one explicit `precedence(order = [...])` spelling to a source kind.
+///
+/// The `profile` tier is meaningful only for a struct that opted in via
+/// `#[ortho_config(profiles)]`. Every other spelling is accepted for every
+/// struct, so the automatic order — which already omits the tier when
+/// `profiles` is false — and the explicit order agree on which tiers the
+/// loader actually builds. Accepting it here would let a non-opted-in struct
+/// publish a precedence layer that the generated loader never pushes, and the
+/// resulting man pages, `PowerShell` help, and agent context would describe a
+/// tier that does not exist.
+///
+/// The rejection is a compile-time error rather than a silent drop: dropping
+/// the tier would leave the declared order quietly wrong, and the author
+/// cannot fix what is never reported.
+fn source_kind_tokens(
+    value: &str,
+    profiles: bool,
+    krate: &TokenStream,
+) -> syn::Result<TokenStream> {
     let variant: syn::Ident = is_source_kind(value)
+        .filter(|kind| profiles || *kind != "Profile")
         .map(|v| syn::Ident::new(v, proc_macro2::Span::call_site()))
         .ok_or_else(|| {
             syn::Error::new(
                 proc_macro2::Span::call_site(),
-                format!(
-                    "unknown precedence source '{value}'; expected defaults, file, profile, env, or cli",
-                ),
+                source_kind_error(value, profiles),
             )
         })?;
     Ok(quote! { #krate::docs::SourceKind::#variant })
+}
+
+/// Build the diagnostic for an unusable explicit precedence spelling.
+///
+/// A non-opted-in struct gets its own message for the profile tier: the
+/// spelling is real, so reporting it as unknown would send the author hunting
+/// for a misspelling when the actual remedy is the `profiles` attribute.
+fn source_kind_error(value: &str, profiles: bool) -> String {
+    if !profiles && is_source_kind(value) == Some("Profile") {
+        return format!(
+            "precedence source '{value}' requires #[ortho_config(profiles)]; \
+             drop the tier or opt the struct into profile support",
+        );
+    }
+    format!("unknown precedence source '{value}'; expected defaults, file, profile, env, or cli")
 }
 
 fn build_discovery_metadata(

@@ -75,8 +75,10 @@ profiles with silent fallback on unknown names), config-rs, mise
   layer, below environment variables and flags.
 - Selection happens through a `--profile <name>` flag with a
   `<PREFIX>PROFILE` environment-variable fallback; the flag wins.
-- Unknown, invalid, and reserved profile selections produce structured errors
-  that name the selection source and list available profiles.
+- Unknown, invalid, and reserved profile selections produce structured errors.
+  Only an unknown selection names the selection source and lists the available
+  profiles; an invalid or reserved name is rejected before that diagnostic can
+  describe it.
 - Agent context reports whether profiles are supported and how they are
   selected.
 - After loading, an application can report which profile is selected and why.

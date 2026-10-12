@@ -2,7 +2,6 @@
 //! per-file layers, chain order, base-layer stripping (milestone 3).
 
 use camino::Utf8PathBuf;
-use googletest::prelude::*;
 use pretty_assertions::assert_eq;
 use rstest::rstest;
 use serde_json::{Value, json};
@@ -186,89 +185,22 @@ fn forbidden_key_in_a_non_selected_profile_table_is_rejected() {
     }
 }
 
-#[test]
-fn unknown_profile_reports_structured_payload() {
-    let layers = vec![file_layer(
-        json!({ "profile": { "local": {}, "ci": { "retries": 7 } } }),
-        "app.toml",
-    )];
-    let err = extract_profile_layers(
-        layers,
-        Some(&selection("staging").expect("valid test name")),
-        false,
-    )
-    .expect_err("unknown profile must error");
-    match *err {
-        OrthoError::UnknownProfile {
-            ref selected,
-            ref selection_source,
-            ref available,
-        } => {
-            assert_eq!(selected, "staging");
-            assert_eq!(*selection_source, ProfileSource::Flag);
-            let expected = vec!["ci".to_owned(), "local".to_owned()];
-            assert_eq!(available.as_slice(), expected.as_slice());
-        }
-        ref other => panic!("expected UnknownProfile, got {other:?}"),
-    }
-}
-
-#[test]
-fn no_files_discovered_reports_clear_error() {
-    let err = extract_profile_layers(
-        Vec::new(),
-        Some(&selection("ci").expect("valid test name")),
-        false,
-    )
-    .expect_err("unknown profile with no files must error");
-    let message = err.to_string();
-    assert_that!(message, contains_substring("ci"));
-    assert_that!(
-        message,
-        contains_substring("no configuration files were found")
-    );
-}
-
-/// A discovery failure suppresses the unknown-profile error (the P2 repair).
+/// A profile body that is not a table is rejected, selected or not.
 ///
-/// The chain is empty because the only candidate failed to parse, so the
-/// profile tables were never inspected and no claim about the selection is
-/// supportable. The complement — that an empty chain with no discovery failure
-/// still reports the unknown profile — is pinned by
-/// `no_files_discovered_reports_clear_error` above.
-#[test]
-fn discovery_failure_suppresses_the_unknown_profile_error() {
-    let selected = selection("ci").expect("valid test name");
-    let outcome = extract_profile_layers(Vec::new(), Some(&selected), true)
-        .expect("a parse error must not be joined by a false selection error");
-    assert!(outcome.file_layers.is_empty() && outcome.profile_layers.is_empty());
-}
-
-#[test]
-fn chain_without_profile_tables_reports_no_profiles_found() {
-    let layers = vec![
-        file_layer(json!({ "retries": 3 }), "base.toml"),
-        file_layer(json!({ "retries": 4 }), "app.toml"),
-    ];
-    let err = extract_profile_layers(
-        layers,
-        Some(&selection("ci").expect("valid test name")),
-        false,
-    )
-    .expect_err("unknown profile against a real file chain must error");
-    let message = err.to_string();
-    assert_that!(message, contains_substring("ci"));
-    assert_that!(message, contains_substring("no profiles were found"));
-    assert_that!(
-        message,
-        not(contains_substring("no configuration files were found"))
-    );
-}
-
-#[test]
-fn chain_with_an_unrelated_profile_names_that_profile() {
+/// A profile contributes a map of configuration values, so a scalar or array
+/// body has no keys to contribute. Left unchecked it would reach the merge as
+/// an opaque value that no field can consume, which reads as a type error
+/// against an unrelated key rather than as a malformed profile. The rows use a
+/// non-selected table as well, so the check cannot be gated on selection.
+#[rstest]
+#[case::selected_scalar(json!("nope"), true)]
+#[case::selected_array(json!([1, 2]), true)]
+#[case::non_selected_scalar(json!("nope"), false)]
+#[case::non_selected_array(json!([1, 2]), false)]
+fn non_table_profile_body_is_rejected(#[case] body: Value, #[case] selected: bool) {
+    let profile = if selected { "ci" } else { "staging" };
     let layers = vec![file_layer(
-        json!({ "retries": 3, "profile": { "local": { "retries": 9 } } }),
+        json!({ "retries": 3, "profile": { "ci": { "retries": 7 }, profile: body } }),
         "app.toml",
     )];
     let err = extract_profile_layers(
@@ -276,12 +208,17 @@ fn chain_with_an_unrelated_profile_names_that_profile() {
         Some(&selection("ci").expect("valid test name")),
         false,
     )
-    .expect_err("unknown profile with an unrelated profile defined must error");
-    let message = err.to_string();
-    // The chain defines a profile, so the message names it instead of
-    // claiming no profiles exist.
-    assert_that!(message, contains_substring("local"));
-    assert_that!(message, not(contains_substring("no profiles were found")));
+    .expect_err("a non-table profile body must be rejected");
+    match *err {
+        OrthoError::Validation {
+            ref key,
+            ref message,
+        } => {
+            assert_eq!(key, &format!("profile.{profile}"));
+            assert_eq!(message, "must be an object");
+        }
+        ref other => panic!("expected Validation, got {other:?}"),
+    }
 }
 
 /// The selected body is carried through verbatim, whatever it holds.
@@ -311,64 +248,4 @@ fn selected_body_flows_through_to_merge_unfiltered(#[case] body: Value) {
         .expect("one profile layer")
         .value();
     assert_eq!(profile_value, &body);
-}
-
-#[test]
-fn available_list_display_caps_at_sixteen() {
-    let mut profiles = serde_json::Map::new();
-    for i in 0..20 {
-        profiles.insert(format!("profile_{i}"), json!({}));
-    }
-    let layers = vec![file_layer(json!({ "profile": profiles }), "app.toml")];
-    let err = extract_profile_layers(
-        layers,
-        Some(&selection("staging").expect("valid test name")),
-        false,
-    )
-    .expect_err("unknown profile must error");
-    let OrthoError::UnknownProfile { ref available, .. } = *err else {
-        panic!("expected UnknownProfile error");
-    };
-    assert_eq!(available.as_slice().len(), 16);
-    let message = err.to_string();
-    assert_that!(message, contains_substring("and 4 more"));
-    assert_that!(message, contains_substring("profile_0"));
-    assert_that!(message, contains_substring("profile_15"));
-}
-
-#[test]
-fn available_list_deduplicates_before_capping() {
-    let mut layers: Vec<_> = (0..20)
-        .map(|index| {
-            file_layer(
-                json!({ "profile": { "shared": {} } }),
-                &format!("shared-{index}.toml"),
-            )
-        })
-        .collect();
-    layers.extend((0..16).map(|index| {
-        file_layer(
-            json!({ "profile": { format!("profile_{index}"): {} } }),
-            &format!("unique-{index}.toml"),
-        )
-    }));
-    let err = extract_profile_layers(
-        layers,
-        Some(&selection("staging").expect("valid test name")),
-        false,
-    )
-    .expect_err("unknown profile must error");
-    let OrthoError::UnknownProfile { ref available, .. } = *err else {
-        panic!("expected UnknownProfile error");
-    };
-    assert_eq!(available.as_slice().len(), 16);
-    assert_eq!(
-        available
-            .as_slice()
-            .iter()
-            .filter(|name| *name == "shared")
-            .count(),
-        0
-    );
-    assert_that!(err.to_string(), contains_substring("and 1 more"));
 }

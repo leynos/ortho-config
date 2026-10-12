@@ -32,3 +32,5 @@ mod tests_names;
 mod tests_precedence;
 #[cfg(test)]
 mod tests_selection;
+#[cfg(test)]
+mod tests_unknown_profile;

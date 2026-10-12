@@ -71,6 +71,16 @@ pub(crate) struct LoadImplArgs<'a> {
     /// `profile` and `config_path` fields), used for value-source gating of
     /// the CLI layer push.
     pub cli_arg_ids: Vec<String>,
+    /// `(arg_id, serialized_key)` for every bool config field.
+    ///
+    /// A bool field is emitted with `clap::ArgAction::SetTrue`, so clap supplies
+    /// `false` for an absent flag and the value survives sanitisation — unlike
+    /// every other type, whose absent form is a `null` that is stripped. The
+    /// profile layer sits *below* the CLI layer, so an unpruned `false` would
+    /// silently override a profile that sets the field true. Both halves of the
+    /// pair are needed: the arg ID answers `value_source`, the serialized key
+    /// names the JSON member to remove.
+    pub cli_bool_fields: Vec<(String, String)>,
 }
 
 /// CLI parsing is performed outside the generated method.
@@ -129,6 +139,22 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
 ///
 /// The block evaluates to `(layers, discovery_failed)`. Callers that only need
 /// the layers bind the flag with a leading underscore so it stays warning-free.
+///
+/// `discovery_failed` means "the profile tables could not be inspected", which
+/// is not the same question as "did any candidate fail". Discovery retains the
+/// errors of optional candidates it walked past on the way to a later success,
+/// so an error vector can be non-empty while the resolved chain is complete.
+/// Only two situations leave the chain un-inspected: a required candidate
+/// failed and stopped the fallback walk, or every candidate was tried and none
+/// produced a layer. Suppressing the unknown-profile error in any other case
+/// would hide a genuine selection error behind an unrelated parse complaint
+/// (ADR-011).
+///
+/// The test is "no layer loaded *and* the walk recorded a failure", not "no
+/// layer loaded". A chain that is empty because no candidate *existed* was
+/// searched and found wanting, so the selection is still reported as unknown;
+/// collapsing the two would silence the no-configuration-files diagnostic that
+/// tells an operator which of the two problems they have.
 fn build_discovery_loading_block(
     krate: &proc_macro2::TokenStream,
     builder_init: &proc_macro2::TokenStream,
@@ -145,10 +171,10 @@ fn build_discovery_loading_block(
             mut required_errors,
             mut optional_errors,
         } = discovery.compose_layers();
-        // Read before `append` drains the vectors. An empty chain means either
-        // that no candidate existed or that every candidate failed to load;
-        // profile extraction needs the distinction to report the right cause.
-        let discovery_failed = !required_errors.is_empty() || !optional_errors.is_empty();
+        // Read before `append` drains the vectors, and before the empty-chain
+        // append below moves the optional errors out.
+        let discovery_failed = !required_errors.is_empty()
+            || (layers.is_empty() && !optional_errors.is_empty());
         errors.append(&mut required_errors);
         if layers.is_empty() {
             errors.append(&mut optional_errors);

@@ -8,117 +8,11 @@ use serde_json::{Map, Value};
 
 use crate::{MergeComposer, MergeLayer, OrthoError, OrthoResult, load_config_file_as_chain};
 
+use super::policy_selector::{ConfigPathSelector, ExplicitMode, ResolvedSelection};
 use super::{
     AutomaticMode, ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryScope,
     telemetry,
 };
-
-/// An ordered explicit configuration-path selector.
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct ConfigPathSelector {
-    path: Option<PathBuf>,
-    environment_variable: Option<String>,
-    label: String,
-    legacy: bool,
-    /// The constructor family this selector came from, for telemetry: a
-    /// `&'static str` from the closed `SELECTOR_CLASS_*` set, never the
-    /// caller-supplied [`label`](Self::label) or variable name.
-    class: &'static str,
-}
-
-impl ConfigPathSelector {
-    /// Select a path supplied by a CLI adapter.
-    #[must_use]
-    pub fn cli(path: Option<PathBuf>) -> Self {
-        Self {
-            path,
-            environment_variable: None,
-            label: String::from("cli"),
-            legacy: false,
-            class: telemetry::SELECTOR_CLASS_CLI,
-        }
-    }
-
-    /// Select a path named by an environment variable.
-    #[must_use]
-    pub fn env(variable_name: impl Into<String>) -> Self {
-        let environment_variable = variable_name.into();
-        Self {
-            path: None,
-            environment_variable: Some(environment_variable.clone()),
-            label: environment_variable,
-            legacy: false,
-            class: telemetry::SELECTOR_CLASS_ENVIRONMENT,
-        }
-    }
-
-    /// Give the selector a diagnostics label.
-    #[must_use]
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = label.into();
-        self
-    }
-
-    /// Mark the selector as a legacy compatibility rung.
-    #[must_use]
-    pub const fn legacy_alias(mut self) -> Self {
-        self.legacy = true;
-        self
-    }
-
-    fn resolve(&self, discovery: &ConfigDiscovery) -> Option<PathBuf> {
-        self.path.clone().or_else(|| {
-            self.environment_variable.as_ref().and_then(|name| {
-                discovery
-                    .env_source
-                    .get(name)
-                    .filter(|value| !value.is_empty())
-                    .map(PathBuf::from)
-            })
-        })
-    }
-}
-
-/// Behaviour when an explicit selector yields a path.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum ExplicitMode {
-    /// A selected path is required and suppresses automatic discovery.
-    #[default]
-    RequiredExclusive,
-    /// A missing selected path is ignored, while still suppressing automatic discovery.
-    Optional,
-}
-
-/// The selector that won ordered explicit resolution.
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct ResolvedSelection {
-    label: String,
-    path: PathBuf,
-    legacy: bool,
-}
-
-impl ResolvedSelection {
-    /// Returns the winning selector label.
-    #[must_use]
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-
-    /// Returns the selected path.
-    #[must_use]
-    pub fn path(&self) -> &std::path::Path {
-        &self.path
-    }
-
-    /// Returns whether the selector is a legacy alias.
-    #[must_use]
-    pub const fn legacy(&self) -> bool {
-        self.legacy
-    }
-}
 
 /// Replayable result of resolving file layers.
 #[derive(Debug, Default)]
@@ -143,7 +37,7 @@ impl FileLayerOutcome {
     /// decides what a failure means: `optional_failure` under
     /// [`ExplicitMode::Optional`], `required_failure` otherwise.
     fn selected(selection: ResolvedSelection, mode: ExplicitMode) -> Self {
-        let selected_path = selection.path.clone();
+        let selected_path = selection.path_buf();
         let (outcome, this) = match load_config_file_as_chain(&selected_path) {
             Ok(Some(chain)) => (
                 telemetry::OUTCOME_SUCCESS,
@@ -235,10 +129,34 @@ impl FileLayerOutcome {
         self.selected_error.as_ref()
     }
 
+    /// Returns whether resolution produced no file layer at all.
+    ///
+    /// Public because a consumer must be able to ask this *before* consuming
+    /// the outcome: [`Self::into_layers_and_errors`] takes `self` and returns
+    /// the layers, so the emptiness of the chain is not otherwise observable
+    /// once the errors have been routed. Profile extraction needs it to tell a
+    /// chain that was searched and found wanting from one that never loaded.
+    #[must_use]
+    pub const fn layers_are_empty(&self) -> bool {
+        self.layers.is_empty()
+    }
+
     /// Returns non-fatal errors that should always be reported.
     #[must_use]
     pub fn reportable_errors(&self) -> &[Arc<OrthoError>] {
         &self.reportable_errors
+    }
+
+    /// Returns failures that are only surfaced when no layer loaded.
+    ///
+    /// A consumer asking "did anything fail" has to consult this alongside
+    /// [`Self::reportable_errors`]: an optional candidate that failed on the
+    /// way to a later success lands here, and its presence is what
+    /// distinguishes an empty chain that was searched from one where no
+    /// candidate existed at all.
+    #[must_use]
+    pub fn ignorable_errors(&self) -> &[Arc<OrthoError>] {
+        &self.ignorable_errors
     }
 
     /// Returns scopes that contributed automatic file layers, in scope order.
@@ -378,13 +296,13 @@ impl ConfigFilePolicy {
                 .map(|path| (selector, path))
         }) {
             telemetry::attempt(telemetry::OPERATION_POLICY_RESOLVE);
-            telemetry::policy_resolution(Some(selector.class));
+            telemetry::policy_resolution(Some(selector.class()));
             return FileLayerOutcome::selected(
-                ResolvedSelection {
-                    label: selector.label.clone(),
+                ResolvedSelection::new(
+                    selector.label_text().to_owned(),
                     path,
-                    legacy: selector.legacy,
-                },
+                    selector.is_legacy(),
+                ),
                 self.explicit_mode,
             );
         }

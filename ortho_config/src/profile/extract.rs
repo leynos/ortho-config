@@ -42,12 +42,16 @@ pub struct ExtractionOutcome {
 ///
 /// - `layers`: the resolved file layers, in precedence order.
 /// - `selected`: the winning selection, if any.
-/// - `discovery_failed`: whether file discovery recorded an error for the
-///   chain that produced `layers`. An empty chain means either that no
-///   configuration file exists or that every candidate failed to load. In the
-///   second case the profile tables could never be inspected, so the selection
-///   is reported as unknown only in the first: a file parse error is the root
-///   cause and must not be joined by a false selection error (ADR-012).
+/// - `discovery_failed`: whether the profile tables in `layers` could not be
+///   trusted to be a complete view of the files the operator named. Callers
+///   set this when a file the operator required could not be parsed, or when
+///   no candidate produced a layer at all — never merely because some
+///   candidate failed somewhere in the walk. An empty chain means either that
+///   no configuration file exists or that every candidate failed to load. In
+///   the second case the profile tables could never be inspected, so the
+///   selection is reported as unknown only in the first: a file parse error is
+///   the root cause and must not be joined by a false selection error
+///   (ADR-012).
 ///
 /// # Errors
 ///
@@ -82,11 +86,12 @@ pub fn extract_profile_layers(
     }
 
     // A selection error is only meaningful when the profile tables could
-    // actually be inspected. When discovery already failed, the chain is empty
-    // because the only candidate could not be parsed, so it says nothing about
-    // whether the profile exists; reporting it as unknown would falsely
-    // diagnose the selection while a file parse error is the real root cause
-    // (ADR-012: parse errors take precedence over unknown-profile errors).
+    // actually be inspected. When discovery could not inspect them, the chain
+    // says nothing about whether the profile exists; reporting it as unknown
+    // would falsely diagnose the selection while a file parse error is the real
+    // root cause (ADR-012: parse errors take precedence over unknown-profile
+    // errors). A chain that loaded after an unrelated optional failure is
+    // inspected and complete, so it does not reach this suppression.
     let unmatched = selected.filter(|_| !selected_found && !discovery_failed);
     if let Some(selected_profile) = unmatched {
         return Err(unknown_profile_error(
@@ -176,14 +181,25 @@ fn collect_profile_tables<'a>(
     Ok((selected_body, found))
 }
 
-/// Reject profile-body keys `OrthoConfig` reserves for future work.
+/// Reject a profile whose body is not a table, or that uses a reserved key.
+///
+/// A body must be a table because a profile contributes a map of configuration
+/// values; a scalar or array body has no keys to contribute and would otherwise
+/// reach the merge as an opaque value that no field can consume. The check runs
+/// for every table in every file, so a malformed profile is a hard error even
+/// when the operator selected a different one — see
+/// `invalid_name_is_rejected_regardless_of_selection` for the same contract
+/// applied to names.
 ///
 /// `cmds` is forbidden because subcommand loading ignores profiles (decision
 /// D11); `inherits` is reserved for future single-parent inheritance (decision
 /// D5). Both are checked so no configuration is silently dead.
 fn validate_profile_body(profile: &super::ProfileName, body: &Value) -> OrthoResult<()> {
     let Some(map) = body.as_object() else {
-        return Ok(());
+        return Err(Arc::new(OrthoError::Validation {
+            key: format!("profile.{profile}"),
+            message: String::from("must be an object"),
+        }));
     };
     for key in ["cmds", "inherits"] {
         if map.contains_key(key) {

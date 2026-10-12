@@ -279,6 +279,26 @@ fn transform_maps_profile_metadata_into_supported_declaration() {
         .expect("selection contract");
     assert_eq!(selection.flag, "profile");
     assert_eq!(selection.env_var, "APP_PROFILE");
+    // The contract is useless if it names a flag no command accepts: an agent
+    // would be told which flag selects a profile and then find it absent from
+    // every invocable surface. Assert the resolution rather than the presence
+    // of a particular input, so a consumer that models the selector as an
+    // ordinary field satisfies this too.
+    assert!(
+        !context.commands.is_empty(),
+        "the bridge must emit at least a root command to assert against"
+    );
+    for command in &context.commands {
+        assert!(
+            command
+                .inputs
+                .iter()
+                .any(|input| input.name == selection.flag),
+            "command {:?} does not expose the contract's selector flag `{}`",
+            command.path,
+            selection.flag
+        );
+    }
 }
 
 /// The bridge leaves the declaration unsupported for legacy IR.

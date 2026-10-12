@@ -83,6 +83,7 @@ pub fn bridge_ir_to_agent_context(
         });
     }
     walk(meta, &[], &mut context.commands, localizer);
+    expose_profile_selector(&context.profiles, &mut context.commands);
     context
         .commands
         .sort_by(|left, right| left.path.cmp(&right.path));
@@ -97,6 +98,56 @@ pub fn bridge_ir_to_agent_context(
         "bridge IR to agent-context transformation complete",
     );
     context
+}
+
+/// Exposes the profile selector as an input on every command.
+///
+/// The selector is emitted with `hide = true`, so it is deliberately absent
+/// from the IR's field metadata and therefore never becomes an [`AgentInput`]
+/// through [`build_input`]. An agent reading `profiles.selection` would still
+/// be told which flag selects a profile while no command admitted accepting
+/// it, which is the contradiction this closes: the contract and the invocable
+/// surface are made to agree.
+///
+/// The input is added to every command because the selector is global — the
+/// flag is accepted at each level of the command tree, and the profile applies
+/// to the whole load rather than to one subcommand. A command that already
+/// carries an input of the same name keeps its own, so a consumer that models
+/// the selector as an ordinary field is not duplicated; the contract assertion
+/// below then checks the invariant holds either way.
+fn expose_profile_selector(profiles: &ProfilesDeclaration, commands: &mut [AgentCommand]) {
+    let Some(selection) = profiles.selection.as_ref() else {
+        return;
+    };
+    let flag = selection.flag.as_str();
+    for command in commands.iter_mut() {
+        if !command.inputs.iter().any(|input| input.name == flag) {
+            command.inputs.push(profile_selector_input(flag));
+        }
+    }
+    debug_assert!(
+        commands
+            .iter()
+            .all(|command| command.inputs.iter().any(|input| input.name == flag)),
+        "a supported profile declaration must expose its selector on every command",
+    );
+}
+
+/// Builds the agent-context input describing the profile selector.
+///
+/// The value type is `string` rather than an enum: the profile names live in
+/// the operator's configuration files, not in the command surface, so the IR
+/// cannot enumerate them. Declaring a closed set here would be a lie an agent
+/// might act on.
+fn profile_selector_input(flag: &str) -> AgentInput {
+    AgentInput {
+        name: flag.to_owned(),
+        long: Some(flag.to_owned()),
+        value_type: Some(String::from("string")),
+        required: false,
+        default: None,
+        enum_values: Vec::new(),
+    }
 }
 
 /// Recursively transforms a `DocMetadata` node into `AgentCommand` entries.

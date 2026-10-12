@@ -43,6 +43,7 @@ fn build_source_aware_compose_layers(args: &LoadImplArgs<'_>) -> proc_macro2::To
         profiles: args.profiles,
         profile_env_var: args.profile_env_var.clone(),
         cli_arg_ids: args.cli_arg_ids.clone(),
+        cli_bool_fields: args.cli_bool_fields.clone(),
     };
     build_compose_layers_impl(&source_aware_args)
 }

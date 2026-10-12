@@ -6,7 +6,7 @@
 use crate::CliFieldInfo;
 use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
-    effective_config_cli_long,
+    effective_config_cli_long, is_bool_type,
 };
 use crate::derive::parse::{SerdeRenameAll, clap_arg_id_or_field_name, serde_serialized_field_key};
 
@@ -39,6 +39,7 @@ fn build_cli_field_info(
     Ok(CliFieldInfo {
         serialized_key,
         arg_id,
+        is_bool: is_bool_type(&field.ty),
         is_default_as_absent: attrs.cli_default_as_absent,
     })
 }

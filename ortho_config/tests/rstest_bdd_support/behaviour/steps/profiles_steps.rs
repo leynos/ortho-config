@@ -150,6 +150,23 @@ fn profiles_load(profiles_context: &ProfilesContext) -> Result<()> {
         .set(profile_load(profiles_context, &[]));
     Ok(())
 }
+
+/// Runs the profile-aware load with one value-less flag.
+///
+/// A `SetTrue` bool takes no value, so the phrase has to be distinct from the
+/// general `{flags}` form: `the CLI loads with "--verbose"` would parse just as
+/// well, but the scenario reads more clearly stating that the flag carries no
+/// argument.
+#[when("the CLI loads with the {flag} flag")]
+fn profiles_load_with_bare_flag(profiles_context: &ProfilesContext, flag: String) -> Result<()> {
+    let flag = normalize_scalar(&flag);
+    let name = flag.strip_prefix("--").unwrap_or(&flag).to_owned();
+    let parsed = vec![(name, String::new())];
+    profiles_context
+        .result
+        .set(profile_load(profiles_context, &parsed));
+    Ok(())
+}
 /// Names the `OrthoError` variant carried by `err`.
 ///
 /// The name identifies the variant without rendering its payload, so a
@@ -331,11 +348,19 @@ fn parse_flags(flags: &str) -> Vec<(String, String)> {
     parsed
 }
 
-/// Converts a scalar placeholder to a JSON value, preserving numbers.
+/// Converts a scalar placeholder to a JSON value, preserving its type.
+///
+/// Numbers and booleans become their native JSON forms so the file written for
+/// a scenario deserializes into the field's declared type; a bool written as a
+/// TOML string would fail to deserialize rather than exercising precedence.
 fn scalar_value(value: &str) -> Value {
     let value = unquote(value);
     if let Ok(number) = value.parse::<u64>() {
         return Value::from(number);
     }
-    Value::String(value.to_owned())
+    match value {
+        "true" => Value::Bool(true),
+        "false" => Value::Bool(false),
+        _ => Value::String(value.to_owned()),
+    }
 }
