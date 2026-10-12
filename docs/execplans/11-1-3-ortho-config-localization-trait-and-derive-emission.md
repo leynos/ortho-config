@@ -315,6 +315,37 @@ review's findings are folded into the Decision Log and milestones below.
     The roadmap's 11.1.3 checkboxes and validation checklist are ticked, and
     the final workspace gates plus Markdown lint pass.
 
+### Delivery ledger (PR #536, 2026-10-12)
+
+- Candidate: head `0f1d259b`; base `9664641a`. PR is open and ready
+  (`isDraft=false`), base branch `main`.
+- Branch history at this head, oldest first: `3eb52a42` (plan record of the
+  Observability round), `24c6f601` (denied lints in the channel suites),
+  `d860541d` (three regression-test repairs), `0f1d259b` (plan record of those
+  repairs). `ortho_config_macros` subtree is identical between `d860541d` and
+  `0f1d259b`.
+- CI: run `38243359678` on `0f1d259b`; `build-test (linux)` and
+  `build-test (windows)` are the two required checks for `main` (ruleset
+  `main-required-checks`). Run `38237911062` on `24c6f601` passed both legs. Run
+  `38242777604` on `cad9c0cb` failed `Check formatting` because the first
+  `mdtablefix --check` invocation omitted the rule flags; the reflow is in
+  `0f1d259b`.
+- Review surfaces: CodeRabbit check SUCCESS; CodeScene SUCCESS (was approving
+  since `ba96f84a`); Gecko Security Review SUCCESS. The one unresolved review
+  thread (`PRRT_kwDOO4Fx5c6rZGlL`) is an already-dispositioned CodeScene
+  finding, not a live defect. `reviewDecision` is `CHANGES_REQUESTED` from
+  review `5487254255` at `e277e03c`; that decision is stale and does not block
+  by ruleset — only the two required checks do.
+- Findings: all three Observability test findings confirmed addressed by
+  CodeRabbit at `cad9c0cb`
+  (`https://github.com/leynos/ortho-config/pull/536#issuecomment-6123387818`).
+  The disposition comment is issue comment `6123366973`.
+- Assessment: ExecPlan completeness/correctness question posted on
+  `0f1d259b`. The proof-scrutiny question is `not applicable` — Decision D-6
+  records that the normalization invariant is carried by `proptest` properties
+  and no Kani, Verus, CrossHair, or LemmaScript harness exists in the
+  repository or the delta.
+
 ## Surprises & discoveries
 
 - Observation: `OUT_DIR` is not set during proc-macro expansion unless the
@@ -2344,11 +2375,16 @@ question from what its fields say. The two suites share `report_tests::report`,
 so both describe the same document rather than each holding its own idea of it.
 
 `a_failed_replacement_leaves_the_earlier_report_in_place` was strengthened in
-the move. It now clears the blocker and asserts what the failed replacement
-actually left, rather than asserting that the failure was merely recorded: a
-write that truncated the destination before failing would have satisfied the
-recorded-failure assertion while destroying the document a maintainer was
-trying to read.
+the move. It asserted what the failed replacement actually left rather than
+only that the failure was recorded: a write that truncated the destination
+before failing would have satisfied a recorded-failure assertion while
+destroying the document a maintainer was trying to read.
+
+That strengthening was still not enough, and the third observability round
+below records why. Putting a blocker in the destination's place required
+deleting the earlier report first, so the test destroyed the evidence and then
+asserted its absence. The current form blocks the write's *temporary* instead,
+which needs no deletion and lets the assertion be byte-for-byte preservation.
 
 #### Commit hygiene
 
@@ -2359,3 +2395,128 @@ the message was not. `git commit --amend` with the intended file fixed it, and
 `git log -1 --format=%B | tail -3` confirmed the attribution trailer survived
 the amend — an amend replaces the whole message, so a trailer added before it
 is not carried over.
+
+### Observability, third round: three tests that did not test their guarantees
+
+CodeRabbit's pre-merge reconciliation kept Observability open while closing
+Unit Architecture and User-Facing Documentation, on the ground that *the
+production repairs are present, but three tests do not establish their stated
+guarantees*. All three were verified against the source before any repair, and
+each named a real defect.
+
+Verification followed the standing rule that a returned repair prompt is
+evidence, not an approved plan. CodeRabbit's prompt also asked that an existing
+write/rename injection seam be searched for before a new one was added. That
+search was the most useful part of the round: **both seams already existed**,
+so no production hook was introduced at all.
+
+#### The failed-replacement test deleted its own evidence
+
+`a_failed_replacement_leaves_the_earlier_report_in_place` removed the report at
+line 144 before placing a blocking directory at its path, so the earlier
+document was gone before the failed replacement was attempted. The test then
+asserted that the destination held nothing — which a *deleted* file also
+satisfies. Deleting the evidence and then asserting its absence is not a test
+of preservation.
+
+The repair came from reading `atomic_write` rather than from adding a seam:
+
+```rust
+fn atomic_write(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let temporary = path.with_extension("tmp");
+    fs::write(&temporary, contents)?;
+    fs::rename(temporary, path)
+}
+```
+
+Writing the sibling is what can fail; the rename is what makes the write
+atomic. Blocking the **temporary** with a non-empty directory therefore fails
+the replacement before the rename, leaving the destination untouched throughout
+— exactly the state under test, with no deletion and no new production seam.
+The assertion is now byte-for-byte preservation (`fs::read` compared as bytes)
+plus a structured record read as parsed JSON Lines, not by substring.
+
+#### The one-shot test bypassed the guard it named
+
+`a_failed_observation_is_recorded_once_per_publication` called
+`artefact_report::write` directly, so `Observation::finish` was never involved
+and removing its `finished` guard would not have failed the test.
+
+The repair drives the production boundary with a merge failure, using the
+`with_metadata_outcome` seam that `artefact_probe` already documents.
+`merge_fragments` propagates the injected `fs::metadata` error as a `String`
+through `republish`, so the failure unwinds through the inner `observe` in
+`republish` *and* the outer one in `publish` — which is the nesting the guard
+exists to collapse.
+
+The prompt's premise that the record's category distinguishes the layers was
+**wrong**, and the first run proved it: the channel log's `error` field
+classifies the *channel's* failure to write (always `io`, from `write`), not
+the publication's failure to merge. The count is the assertion; the category is
+now asserted as `io` for the reason it actually has.
+
+**The guard was proven load-bearing by mutation.** Neutralizing
+`self.finished.replace(true)` so `finish` rewrites on every call made the test
+fail with two records where one is required:
+
+```text
+Error: one lost observation must leave exactly one record, not 2; got
+[Object {"operation": String("cannot write the build report"), ...},
+ Object {"operation": String("cannot write the build report"), ...}]
+```
+
+The production file was restored from a `cp` backup and confirmed identical by
+both `sha256sum` and `git diff` — the `git checkout --` trap avoided, since
+that would have reverted to the index rather than to the probe's pre-state.
+
+#### The isolation test fabricated its peer
+
+`separate_processes_keep_separate_reports` computed a peer path from
+`std::process::id() + 1` and wrote a literal `{"pid":0}` document to it. That
+shows two *paths* differ; it says nothing about two processes publishing
+concurrently into one root, which is the property.
+
+It now spawns two **real** observed publishers through the helper-process
+infrastructure, each with its own variant label, and parses both reports to
+assert each carries the spawning child's own pid and its own expansion
+identity. Two supporting changes made that possible: the helper's announcement
+files are keyed per helper (a shared name would let the later parent's poll be
+satisfied by the earlier child's file), and the key doubles as the variant
+label so each publisher writes its own fragment rather than rewriting its
+peer's.
+
+#### The helper scaffolding outgrew the cap
+
+Adding the keyed spawns and observed variant pushed `artefact_lock_support.rs`
+to 437 lines, past the 400-line cap. The helper *mode bodies* moved to a new
+`artefact_lock_modes` module, 282 and 172 lines respectively.
+
+The split is a child of `lock_support`
+(`#[path = "artefact_lock_modes.rs"] mod lock_modes;`) rather than a sibling
+under `artefact`, and that choice is deliberate: a Rust child module can read
+its parent's private items, so the mode bodies keep using the constants the
+parent defines — `SENTINEL_FILE`, `POLL_INTERVAL`, `LOCK_VARIANT_ENV` and the
+rest — without widening any of them to every suite in the tree. Sibling paths
+inside the new module need `super::super::`. `lock_helper_entry_point` remains
+the single re-entry point and now delegates the whole dispatch, so the mode
+list lives in exactly one place and cannot drift between the parent and the
+child.
+
+#### Result
+
+262 macros tests pass, repeated three times with no flakiness — the two new
+tests spawn real processes, so stability was checked rather than assumed.
+`cargo fmt --all -- --check` and
+`cargo clippy -p ortho_config_macros --all-targets --all-features` are both
+clean; the clippy run initially failed on the denied `shadow_reuse` lint in a
+`map_or_else` closure and was fixed by the established rename idiom. Every
+touched file is under the 400-line cap.
+
+Hosted CI run `38237911062` on the parent commit `24c6f601` completed
+**success** on both legs — the first fully green hosted run on this branch. Its
+Windows leg reached and passed `Lint (Clippy only)`,
+`Test and Measure Coverage (with serde_saphyr)`, Markdown lint, and Spelling,
+which is the evidence that no platform-asymmetric defect hides behind the
+previous cascade: the spelling failure had been skipping lint and both coverage
+steps on *both* legs, so the 11 clippy errors this branch carried were never
+reachable on any hosted run until the syntax repair landed.
