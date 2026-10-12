@@ -370,13 +370,20 @@ fn build_arg_models(
 /// Normalizes a (possibly dotted) clap argument id into its joined form plus
 /// its per-segment parts. Mirrors the runtime `message_id_for` suffix handling:
 /// `args.<arg_id>.help` is split on `.`, with each segment normalized.
+///
+/// The returned key is used only to detect collisions between argument ids in
+/// one derived struct, so it is joined without the command-root check. Here
+/// the argument is a *fragment* of the final identifier, not a root: clap
+/// treats `#[arg(id = "123")]` as an argument name, and the runtime accepts
+/// the complete `acme-args-123-help` because it validates only the first
+/// character of the joined id. Applying the standalone-root rule here would
+/// reject an identifier the runtime is happy to build.
 fn normalize_arg_id(
     arg_id: &ClapArgId,
     span: Span,
 ) -> syn::Result<(FluentMessageId, FluentSegments)> {
     let segments = arg_id.normalize(span)?;
-    let joined = segments.join(span)?;
-    Ok((joined, segments))
+    Ok((FluentMessageId(segments.0.join("-")), segments))
 }
 
 /// Builds an argument identifier: base + `args` + arg segments + suffix.

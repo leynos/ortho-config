@@ -51,6 +51,55 @@ fn expect_model_error(input: &syn::DeriveInput) -> String {
         .to_string()
 }
 
+/// A numeric argument id is a valid *fragment*, even though it would be an
+/// invalid root. Clap allows `#[arg(id = "123")]`, and the runtime builds
+/// `acme-args-123-help` because it validates only the joined id's first
+/// character. The derive must not be stricter than the lookup it mirrors.
+#[test]
+fn numeric_argument_id_composes_with_the_base_root() -> Result<()> {
+    let input: syn::DeriveInput = parse_quote! {
+        #[ortho_config(localization_base = "acme")]
+        struct App {
+            #[arg(id = "123")]
+            moment: String,
+        }
+    };
+    let model = model_for(&input)?;
+    let arg = model
+        .args
+        .first()
+        .ok_or_else(|| anyhow!("numeric argument id must produce an arg model"))?;
+    ensure!(
+        arg.help_id.as_ref() == "acme-args-123-help",
+        "numeric argument id must compose with the base root, got `{}`",
+        arg.help_id.as_ref()
+    );
+    ensure!(
+        arg.long_help_id.as_ref() == "acme-args-123-long_help",
+        "numeric argument id must compose its long-help id, got `{}`",
+        arg.long_help_id.as_ref()
+    );
+    Ok(())
+}
+
+/// A numeric base is still rejected: there the segment *is* the root, and a
+/// Fluent message id cannot start with a digit.
+#[test]
+fn numeric_localization_root_is_still_rejected() -> Result<()> {
+    let input: syn::DeriveInput = parse_quote! {
+        #[ortho_config(localization_base = "123")]
+        struct App {
+            field: String,
+        }
+    };
+    let message = expect_model_error(&input);
+    ensure!(
+        message.contains("Fluent identifier must start with an ASCII letter"),
+        "numeric root must still be rejected: {message}"
+    );
+    Ok(())
+}
+
 #[test]
 fn dotted_localization_base_normalizes_to_fluent_segments() -> Result<()> {
     let base = LocalizationBase("Acme.CLI".to_owned());
