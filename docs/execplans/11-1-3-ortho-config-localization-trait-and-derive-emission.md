@@ -2087,21 +2087,20 @@ conflict resolution.
 
 ### The docstring batch and the Windows correction: `0cb49bec` … `e277e03c`
 
-CodeRabbit's pre-merge table measured docstring coverage at 78.17% over
-"197 functions across 55 files" against a base, `0a41054d`, that is no longer an
+CodeRabbit's pre-merge table measured docstring coverage at 78.17% over "197
+functions across 55 files" against a base, `0a41054d`, that is no longer an
 ancestor of the branch. Re-measured against the current base, `9664641a`, over
 the head's own added signature lines, coverage is **232 of 232, 100.00%**.
 
 The batch that closed it touched four files. `identifier_artefact_e2e.rs`,
 `clap_field_markers.rs` and `localization_public_paths.rs` gained doc comments
 on their fixtures and helpers; `tests/fixtures/orthohelp_fixture/build.rs`
-gained
-a module doc and a `main` doc, because the artefact tests need Cargo to set
-`OUT_DIR`. A first attempt at the insertion used a blank-line collapse script
-that appended the remainder of each file inside its own loop, duplicating three
-files to 1217, 229 and 49 lines. `cargo fmt` caught it as an unexpected closing
-delimiter. All three were restored from `HEAD` and the doc additions re-applied
-with a script that only ever inserts whole lines.
+gained a module doc and a `main` doc, because the artefact tests need Cargo to
+set `OUT_DIR`. A first attempt at the insertion used a blank-line collapse
+script that appended the remainder of each file inside its own loop,
+duplicating three files to 1217, 229 and 49 lines. `cargo fmt` caught it as an
+unexpected closing delimiter. All three were restored from `HEAD` and the doc
+additions re-applied with a script that only ever inserts whole lines.
 
 Two clippy diagnostics followed from the batch, and both are worth recording as
 rules. A `///` block above a `prop_compose!` invocation is an
@@ -2112,8 +2111,8 @@ unless it is backticked inside prose that is not itself already code.
 
 The plan also carried a **false claim** about Windows, caught when the hosted
 Windows leg failed on a Unix-only test premise. The claim was that
-`ErrorKind::NotADirectory` has no Windows counterpart. It does:
-`std::io`'s `decode_error_kind` maps `ERROR_DIRECTORY` (267) to it, and
+`ErrorKind::NotADirectory` has no Windows counterpart. It does: `std::io`'s
+`decode_error_kind` maps `ERROR_DIRECTORY` (267) to it, and
 `std::fs::remove_dir_all` on a regular file raises exactly that code. What
 differs is narrower and is layout-driven: a regular file in a *path-component*
 position, reached through `metadata`, yields `ERROR_PATH_NOT_FOUND` and so
@@ -2144,7 +2143,7 @@ settled it in one step; line-oriented searching beat the state machines.
 The second was real, and my initial reading of it was wrong in a way worth
 recording. `lock` is **not** test-only: `publish.rs:213` calls it on the
 production path when the observation channel is off, and an early `rg` that
-piped through a localising filter hid that call site. Deleting `lock` on the
+piped through a localizing filter hid that call site. Deleting `lock` on the
 strength of that grep produced a live `E0432 unresolved import` from
 `publish.rs:28`. The lesson is that a grep for "callers of X" must not be
 filtered before its output is read.
