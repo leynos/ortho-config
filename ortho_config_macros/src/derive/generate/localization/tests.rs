@@ -299,14 +299,6 @@ fn dotted_arg_id_is_normalized_per_segment() -> Result<()> {
     "Fluent identifier must start with an ASCII letter",
     "numeric root"
 )]
-/// A base is rejected with a diagnostic that names the rule it broke.
-///
-/// The two cases cover the two ways a base can be unusable as a Fluent root,
-/// and they are asymmetric on purpose. An empty segment fails the empty-segment
-/// rule. A numeric base fails the ASCII-letter rule, because there the segment
-/// *is* the root and a Fluent message id cannot start with a digit. Contrast
-/// `numeric_argument_id_composes_with_the_base_root`, where the same `123` is
-/// a valid argument *fragment* under an alphabetic root.
 fn rejected_localization_base_reports_its_reason(
     #[case] base: &str,
     #[case] expected: &str,
