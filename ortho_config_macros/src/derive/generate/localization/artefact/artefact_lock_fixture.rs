@@ -23,13 +23,35 @@ use super::publish;
 use super::schema::Source;
 use crate::derive::generate::localization::{CommandIds, FluentMessageId, LocalizationBase};
 
+/// The label and crate a fixture publication records.
+///
+/// Every call site passes the same value for both, and the pair is what makes
+/// a publication's fragment distinct from a neighbour's. Carrying them as one
+/// value keeps that coupling visible instead of relying on two adjacent
+/// strings happening to agree.
+#[derive(Clone, Copy)]
+pub(super) struct Identity<'a> {
+    label: &'a str,
+    crate_name: &'a str,
+}
+
+impl<'a> Identity<'a> {
+    /// An identity whose label and crate name are both `name`.
+    pub(super) const fn named(name: &'a str) -> Self {
+        Self {
+            label: name,
+            crate_name: name,
+        }
+    }
+}
+
 /// Runs a full fragment publication so the lock wraps real emission work.
 ///
 /// This drives the production `publish` boundary rather than re-implementing
 /// the sequence, so the exclusivity and release assertions observe exactly the
 /// code the compiler runs.
 pub(super) fn publish(root: &Path) -> Result<()> {
-    publish_as(root, "fixture", "fixture")
+    publish_as(root, Identity::named("fixture"))
 }
 
 /// Publishes one fixture fragment under an explicit observation configuration.
@@ -39,7 +61,7 @@ pub(super) fn publish(root: &Path) -> Result<()> {
 /// through the process environment, and a test that set the opt-in variable
 /// would change it for every test running concurrently in this binary.
 pub(super) fn publish_fixture(root: &Path, report: ReportConfig) -> Result<()> {
-    publish_configured(root, "fixture", "fixture", report)
+    publish_configured(root, Identity::named("fixture"), report)
 }
 
 /// Publishes one fragment under a crate-specific identity.
@@ -47,29 +69,24 @@ pub(super) fn publish_fixture(root: &Path, report: ReportConfig) -> Result<()> {
 /// Each identity writes a distinct fragment filename and records a distinct
 /// crate name, so the merged inventory shows whether a later publication
 /// retained an earlier publication's entries.
-pub(super) fn publish_as(root: &Path, label: &str, crate_name: &str) -> Result<()> {
-    publish_configured(root, label, crate_name, ReportConfig::quiet())
+pub(super) fn publish_as(root: &Path, identity: Identity<'_>) -> Result<()> {
+    publish_configured(root, identity, ReportConfig::quiet())
 }
 
 /// Publishes one named variant of the fixture source.
 pub(super) fn publish_variant(root: &Path, variant: &str) -> Result<()> {
-    publish_as(root, variant, variant)
+    publish_as(root, Identity::named(variant))
 }
 
 /// Publishes one fragment with an explicit observation configuration.
-fn publish_configured(
-    root: &Path,
-    label: &str,
-    crate_name: &str,
-    report: ReportConfig,
-) -> Result<()> {
+fn publish_configured(root: &Path, identity: Identity<'_>, report: ReportConfig) -> Result<()> {
     let ident = Ident::new("Config", Span::call_site());
     // The fragment filename mixes the source path and the line, so keying the
     // path by label keeps every identity's fragment distinct. The file has to
     // exist: `merge_fragments` treats a vanished source as a stale fragment
     // and drops its entries, which would silently empty this fixture.
     let source = Source {
-        file: fixture_source_path(root, label)?,
+        file: fixture_source_path(root, identity.label)?,
         line: 1,
         column: 0,
     };
@@ -79,7 +96,7 @@ fn publish_configured(
             root,
             ident: &ident,
             source: &source,
-            crate_name,
+            crate_name: identity.crate_name,
             model: &model,
             report,
         },

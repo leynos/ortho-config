@@ -8,6 +8,8 @@ mod identifier;
 mod model;
 pub(crate) mod suffix;
 #[cfg(test)]
+mod test_helpers;
+#[cfg(test)]
 mod tests;
 
 use std::collections::HashMap;

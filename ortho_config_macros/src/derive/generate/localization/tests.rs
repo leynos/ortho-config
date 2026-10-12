@@ -4,54 +4,12 @@
 use rstest::rstest;
 use syn::parse_quote;
 
+use super::test_helpers::{
+    assert_fluent_message_id, assert_only_visible_arg, expect_model_error, model_for,
+};
 use super::*;
 use crate::derive::parse::parse_input;
 use anyhow::{Result, anyhow, ensure};
-
-fn model_for(input: &syn::DeriveInput) -> Result<LocalizationIds> {
-    let (ident, fields, struct_attrs, field_attrs) =
-        parse_input(input).map_err(|err| anyhow!(err))?;
-    generate_localization_ids(&struct_attrs, &ident, &fields, &field_attrs)
-        .map_err(|err| anyhow!(err))
-}
-
-fn assert_fluent_message_id(
-    segments: &FluentSegments,
-    expected: &str,
-    context: &str,
-) -> Result<()> {
-    let id = segments.join(proc_macro2::Span::call_site())?;
-    ensure!(
-        id.as_ref() == expected,
-        "{context}: expected `{expected}`, got `{}`",
-        id.as_ref()
-    );
-    Ok(())
-}
-
-fn assert_only_visible_arg(input: &syn::DeriveInput, context: &str) -> Result<()> {
-    let model = model_for(input)?;
-    ensure!(
-        model.args.len() == 1,
-        "{context}: expected 1 arg model, got {}",
-        model.args.len()
-    );
-    let visible = model
-        .args
-        .first()
-        .ok_or_else(|| anyhow!("{context}: args length was checked above"))?;
-    ensure!(
-        visible.name.as_ref() == "visible",
-        "{context}: only the visible field should be in ARG_IDS"
-    );
-    Ok(())
-}
-
-fn expect_model_error(input: &syn::DeriveInput) -> String {
-    model_for(input)
-        .expect_err("model should reject this input")
-        .to_string()
-}
 
 /// A numeric argument id is a valid *fragment*, even though it would be an
 /// invalid root. Clap allows `#[arg(id = "123")]`, and the runtime builds
@@ -84,6 +42,10 @@ fn numeric_argument_id_composes_with_the_base_root() -> Result<()> {
     Ok(())
 }
 
+/// A dotted base splits on `.` and each segment normalizes separately.
+///
+/// The dots are structural, not literal: `Acme.CLI` becomes the two Fluent
+/// segments `acme` and `cli`, joined with `-` rather than kept verbatim.
 #[test]
 fn dotted_localization_base_normalizes_to_fluent_segments() -> Result<()> {
     let base = LocalizationBase("Acme.CLI".to_owned());
@@ -95,6 +57,10 @@ fn dotted_localization_base_normalizes_to_fluent_segments() -> Result<()> {
     )
 }
 
+/// A dotted `clap` argument id splits and normalizes the same way as a base.
+///
+/// Both identifier producers share `normalize_segment`, so this case guards
+/// against the two paths drifting apart on dotted input.
 #[test]
 fn dotted_clap_arg_id_normalizes_to_fluent_segments() -> Result<()> {
     let arg_id = ClapArgId("Kebab.TAIL".to_owned());
@@ -106,6 +72,10 @@ fn dotted_clap_arg_id_normalizes_to_fluent_segments() -> Result<()> {
     )
 }
 
+/// The suffix vocabulary converts to the wire spellings the runtime looks up.
+///
+/// `LongAbout` and `ValueName` are sampled because they are the two suffixes
+/// where the Rust variant name and the Fluent segment differ most.
 #[test]
 fn message_suffixes_convert_to_their_fluent_segments() -> Result<()> {
     ensure!(
@@ -119,6 +89,11 @@ fn message_suffixes_convert_to_their_fluent_segments() -> Result<()> {
     Ok(())
 }
 
+/// The two invalid-base diagnostics keep their exact wording.
+///
+/// An empty segment and a non-letter root are distinct failures and must stay
+/// distinguishable: pinning both messages stops a refactor from collapsing
+/// them into one less specific error.
 #[test]
 fn domain_types_preserve_invalid_segment_and_root_diagnostics() -> Result<()> {
     let invalid = LocalizationBase("acme..cli".to_owned())
@@ -144,6 +119,10 @@ fn domain_types_preserve_invalid_segment_and_root_diagnostics() -> Result<()> {
     Ok(())
 }
 
+/// An explicit dot-free base names the root exactly as written.
+///
+/// The base is not run through the segment normalizer when it contains no
+/// dots, so a snake_case root such as `hello_world` survives unchanged.
 #[test]
 fn explicit_localization_base_is_used_verbatim() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
@@ -181,6 +160,10 @@ fn explicit_localization_base_is_used_verbatim() -> Result<()> {
     Ok(())
 }
 
+/// With no `localization_base`, the struct name kebabed becomes the root.
+///
+/// `AppConfig` resolves to `app-config`, which is the documented fallback and
+/// the value every generated id is then composed under.
 #[test]
 fn default_base_resolves_to_kebab_struct_name() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
@@ -202,6 +185,10 @@ fn default_base_resolves_to_kebab_struct_name() -> Result<()> {
     Ok(())
 }
 
+/// `skip_cli` and subcommand fields produce no argument identifiers.
+///
+/// Neither field reaches the CLI, so neither has help text to localize; only
+/// the plain field should appear in the generated argument model.
 #[test]
 fn subcommand_and_skip_cli_fields_are_excluded() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
@@ -217,6 +204,10 @@ fn subcommand_and_skip_cli_fields_are_excluded() -> Result<()> {
     assert_only_visible_arg(&input, "skip_cli and subcommand fields")
 }
 
+/// A `#[command(flatten)]` field produces no argument identifiers.
+///
+/// The flattened struct owns its own fields' ids, so emitting one here would
+/// duplicate identifiers the flattened type already defines.
 #[test]
 fn flattened_fields_are_excluded() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
@@ -230,6 +221,12 @@ fn flattened_fields_are_excluded() -> Result<()> {
     assert_only_visible_arg(&input, "flattened field")
 }
 
+/// Two argument ids that normalize alike are rejected, with remediation.
+///
+/// The collision is real rather than assumed: normalization only lowercases,
+/// so a plain field name and an explicitly upper-cased `arg(id = ...)` are the
+/// only way to reach it. The message must name the shared id, both fields, and
+/// how to rename out of the clash.
 #[test]
 fn colliding_normalized_arg_ids_fail_with_pinned_message() -> Result<()> {
     // The collision must be genuine, not assumed. `normalize_segment` only
@@ -264,6 +261,10 @@ fn colliding_normalized_arg_ids_fail_with_pinned_message() -> Result<()> {
     Ok(())
 }
 
+/// An argument id containing dots normalizes each segment independently.
+///
+/// `kebab.tail` becomes `kebab-tail`, which is what the runtime builds when it
+/// looks the help id up, so the derive must produce the same spelling.
 #[test]
 fn dotted_arg_id_is_normalized_per_segment() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
@@ -298,6 +299,14 @@ fn dotted_arg_id_is_normalized_per_segment() -> Result<()> {
     "Fluent identifier must start with an ASCII letter",
     "numeric root"
 )]
+/// A base is rejected with a diagnostic that names the rule it broke.
+///
+/// The two cases cover the two ways a base can be unusable as a Fluent root,
+/// and they are asymmetric on purpose. An empty segment fails the empty-segment
+/// rule. A numeric base fails the ASCII-letter rule, because there the segment
+/// *is* the root and a Fluent message id cannot start with a digit. Contrast
+/// `numeric_argument_id_composes_with_the_base_root`, where the same `123` is
+/// a valid argument *fragment* under an alphabetic root.
 fn rejected_localization_base_reports_its_reason(
     #[case] base: &str,
     #[case] expected: &str,
@@ -318,6 +327,10 @@ fn rejected_localization_base_reports_its_reason(
     Ok(())
 }
 
+/// The deferred `localized_default` attribute fails with a pointer to why.
+///
+/// The attribute is deliberately unimplemented, so the diagnostic must name
+/// the attribute and cite the design section rather than failing obscurely.
 #[test]
 fn localization_default_attribute_is_rejected_at_parse_time() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
