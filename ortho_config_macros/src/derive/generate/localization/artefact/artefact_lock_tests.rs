@@ -19,8 +19,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
+use syn::Ident;
 
+use super::artefact_lock::lock;
+use super::publish;
 use super::*;
+use crate::derive::generate::localization::{CommandIds, FluentMessageId, LocalizationBase};
 
 /// Names the environment variable that turns this test binary into a helper.
 const LOCK_HELPER_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_HELPER";
@@ -30,6 +34,16 @@ const LOCK_MODE_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_MODE";
 
 /// Names the environment variable carrying the helper's artefact root.
 const LOCK_ROOT_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_ROOT";
+
+/// Names the environment variable selecting a publishing helper's variant.
+///
+/// Separate publishers must differ in both fragment filename and recorded
+/// crate, so the merge sees two distinct contributions rather than one
+/// fragment rewritten twice.
+const LOCK_VARIANT_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_VARIANT";
+
+/// Names the crate a variant helper records against its entries.
+const VARIANT_CRATES: [&str; 2] = ["alpha", "beta"];
 
 /// Filters libtest down to the single helper entry point.
 ///
@@ -117,17 +131,30 @@ impl Drop for TempRoot {
 /// argv: libtest consumes any extra positional argument as an additional name
 /// filter, which silently selects zero tests and still exits successfully.
 fn spawn_helper(root: &Path, mode: &str) -> Result<Child> {
+    spawn_variant(root, mode, None)
+}
+
+/// Spawns a helper, optionally recording a variant crate against its entries.
+///
+/// Variant helpers exist for the concurrent-publication test, where the two
+/// children must contribute distinguishable entries and therefore distinct
+/// fragment files.
+fn spawn_variant(root: &Path, mode: &str, label: Option<&str>) -> Result<Child> {
     let executable = std::env::current_exe().context("locate the test executable")?;
-    let child = Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .args(["--exact", "--nocapture", LOCK_HELPER_FILTER])
         .env(LOCK_HELPER_ENV, "1")
         .env(LOCK_MODE_ENV, mode)
         .env(LOCK_ROOT_ENV, root)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    if let Some(variant) = label {
+        command.env(LOCK_VARIANT_ENV, variant);
+    }
+    command
         .spawn()
-        .context("spawn artefact lock helper process")?;
-    Ok(child)
+        .context("spawn artefact lock helper process")
 }
 
 /// Waits for a helper child and reports the exit status with its diagnostics.
@@ -192,6 +219,47 @@ fn artefact_lock_is_released_after_publication_returns() -> Result<()> {
     Ok(())
 }
 
+/// Verifies each publication merges the fragments already on disk.
+///
+/// This is the read-modify-write the lock exists for. Every child writes only
+/// its own fragment, so an inventory that retained a second publisher's
+/// entries can only have been produced by re-reading the fragment directory
+/// after that peer's fragment landed. That is exactly the merge behaviour a
+/// lock-less implementation would lose.
+///
+/// The children run in sequence rather than concurrently, and deliberately so.
+/// The exclusion that makes concurrent publication safe is proved
+/// deterministically by `artefact_lock_is_exclusive_across_processes`; racing
+/// two children here would add a timing-dependent check whose failure also
+/// depends on machine load, so a green run would prove less. Sequenced
+/// spawning asserts only what this test is responsible for: that the merge
+/// reads the live directory instead of caching a snapshot from before the
+/// first write.
+#[test]
+fn each_publication_merges_the_fragments_already_published() -> Result<()> {
+    if std::env::var_os(LOCK_HELPER_ENV).is_some() {
+        return Ok(());
+    }
+    let root = TempRoot::new()?;
+    for variant in VARIANT_CRATES {
+        let writer = spawn_variant(root.path(), "publish-variant", Some(variant))?;
+        wait_for(writer, &format!("{variant} publishing helper"))?;
+    }
+
+    let combined = fs::read_to_string(root.path().join("cli-identifiers.json"))
+        .context("read the merged inventory published by both children")?;
+    for variant in VARIANT_CRATES {
+        ensure!(
+            combined.contains(&format!("{variant}::Config")),
+            "merged inventory must retain every publisher's entries, but the \
+             {variant} entries are missing; a publication that read the \
+             fragment directory before its peer wrote would drop them. \
+             Inventory: {combined}",
+        );
+    }
+    Ok(())
+}
+
 /// Re-enters the test binary as a lock helper in a separate process.
 ///
 /// Normal test runs return immediately: the helper body only executes when
@@ -211,6 +279,11 @@ fn lock_helper_entry_point() -> Result<()> {
         "hold" => hold(&root),
         "contend" => contend(&root),
         "publish" => publish(&root),
+        "publish-variant" => {
+            let variant = std::env::var(LOCK_VARIANT_ENV)
+                .context("variant publisher requires a variant name")?;
+            publish_variant(&root, &variant)
+        }
         "probe" => probe(&root),
         other => Err(anyhow::anyhow!("unknown helper mode {other}")),
     }
@@ -253,33 +326,73 @@ fn probe(root: &Path) -> Result<()> {
 }
 
 /// Runs a full fragment publication so the lock wraps real emission work.
+///
+/// This drives the production `publish` boundary rather than re-implementing
+/// the sequence, so the exclusivity and release assertions observe exactly the
+/// code the compiler runs. The entry set comes from a real identifier model,
+/// built here through the same public builder the derive uses.
 fn publish(root: &Path) -> Result<()> {
-    let entry = Entry {
-        id: String::from("lock-helper-about"),
-        kind: String::from("about"),
-        type_name: String::from("fixture::Config"),
-        field: None,
-        path_scope: String::from("standalone"),
-        source: Source {
-            file: String::from("fixture.rs"),
-            line: 1,
-            column: 0,
+    publish_as(root, "fixture", "fixture")
+}
+
+/// Publishes one fragment under a crate-specific identity.
+///
+/// Each identity writes a distinct fragment filename and records a distinct
+/// crate name, so the merged inventory shows whether a later publication
+/// retained an earlier publication's entries.
+fn publish_as(root: &Path, label: &str, crate_name: &str) -> Result<()> {
+    let ident = Ident::new("Config", proc_macro2::Span::call_site());
+    // The fragment filename mixes the source path and the line, so keying the
+    // path by label keeps every identity's fragment distinct. The file has to
+    // exist: `merge_fragments` treats a vanished source as a stale fragment
+    // and drops its entries, which would silently empty this fixture.
+    let source = Source {
+        file: fixture_source_path(root, label)?,
+        line: 1,
+        column: 0,
+    };
+    let model = helper_model();
+    publish::publish(
+        &publish::Publication {
+            root,
+            ident: &ident,
+            source: &source,
+            crate_name,
+            model: &model,
         },
-        embedded_default: None,
-    };
-    let fragment = Fragment {
-        source_file: String::from("fixture.rs"),
-        entries: vec![entry],
-    };
-    let _guard = lock(root)?;
-    fs::create_dir_all(root.join(FRAGMENT_DIR)).context("create fragment directory")?;
-    fs::write(
-        root.join(FRAGMENT_DIR).join("helper.json"),
-        json(&fragment)?,
+        proc_macro2::Span::call_site(),
     )
-    .context("write helper fragment")?;
-    for file in render(merge_fragments(root).map_err(anyhow::Error::msg)?)? {
-        atomic_write(&root.join(file.name), &file.contents).context("publish rendered artefact")?;
+    .map_err(|error| anyhow::anyhow!(error.to_string()))
+}
+
+/// Creates a stand-in source file and returns its absolute path.
+///
+/// The path must be absolute because the merge probes it from whatever working
+/// directory the test binary happens to run in.
+fn fixture_source_path(root: &Path, label: &str) -> Result<String> {
+    let path = root.join(format!("{label}-source.rs"));
+    fs::write(&path, "// fixture source\n").context("create fixture source file")?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Publishes one named variant of the fixture source.
+fn publish_variant(root: &Path, variant: &str) -> Result<()> {
+    publish_as(root, variant, variant)
+}
+
+/// Builds a minimal identifier model for the helper's publication.
+fn helper_model() -> LocalizationIds {
+    LocalizationIds {
+        base: LocalizationBase(String::from("fixture")),
+        command: CommandIds {
+            about_id: FluentMessageId(String::from("fixture-about")),
+            long_about_id: FluentMessageId(String::from("fixture-long_about")),
+            usage_id: FluentMessageId(String::from("fixture-usage")),
+            version_id: FluentMessageId(String::from("fixture-version")),
+            long_version_id: FluentMessageId(String::from("fixture-long_version")),
+            after_help_id: FluentMessageId(String::from("fixture-after_help")),
+            after_long_help_id: FluentMessageId(String::from("fixture-after_long_help")),
+        },
+        args: Vec::new(),
     }
-    Ok(())
 }

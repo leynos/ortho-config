@@ -179,26 +179,39 @@ representations never leaves a stale file where a reader would find it.
 
 `OUT_DIR` is package-scoped, so every writer holds an exclusive
 `cli-identifiers.lock` across the complete fragment-write, merge, prune, and
-publication sequence; the unit tests in `artefact_lock_tests.rs` spawn two real
-processes to prove the exclusion and the release, rather than relying on an
-in-process mutex.
+publication sequence; the unit tests in `artefact/artefact_lock_tests.rs` spawn
+two real processes to prove the exclusion and the release, rather than relying
+on an in-process mutex.
 
-`artefact_probe.rs` owns the stale-fragment policy: `source_still_exists` is
-its only entry point, `probe_metadata` is the only `std::fs::metadata` call
-site for it, and `classify_metadata` is the only copy of the rule that
-`NotFound` alone means stale while every other metadata error aborts the merge.
-`merge_fragments` is the single production caller; the identity artefact's
-merge and the merge-level regression tests are its only call sites. For
+`artefact/publish.rs` owns that whole write path. It takes the lock, writes the
+fragment, merges, renders, prunes, and publishes — one function,
+`publish::publish`, called by `emit` and by the lock tests alike, so the
+exclusivity the tests observe is the exclusivity the compiler runs. `emit` is
+correspondingly the **only** reader of the ambient environment (`OUT_DIR`,
+`CARGO_CRATE_NAME`, and the opt-in flag); everything below it takes a
+`publish::Publication` of explicit values. That boundary is what lets a test
+publish into a temporary root without mutating the process environment, which
+matters because build scripts and tests share one `OUT_DIR` per package and an
+unset variable would otherwise be indistinguishable from a stale one.
+
+`artefact/artefact_probe.rs` owns the stale-fragment policy:
+`source_still_exists` is its only entry point, `probe_metadata` is the only
+`std::fs::metadata` call site for it, and `classify_metadata` is the only copy
+of the rule that `NotFound` alone means stale while every other metadata error
+aborts the merge. `merge_fragments` is the single production caller; the
+identity artefact's merge and the merge-level regression tests are its only
+call sites. For
 OS-independent policy tests, `with_metadata_outcome` is a test-only,
 thread-local injection that matches one exact probe path and is compiled out of
 non-test builds. It exists because no filesystem layout provokes the same
 metadata error portably: a regular file in a parent position yields
 `NotADirectory` on Unix and `NotFound` on Windows, and
 `ErrorKind::NotADirectory` has no Windows counterpart at all. The policy tests
-in `artefact_probe_tests.rs` inject the outcome and drive the shared
-classification, while the merge-level tests in `artefact_fragment_tests.rs`
-inject through the same boundary and assert the diagnostic retains the path and
-the injected error marker. It is **not** a general-purpose filesystem
+in `artefact/artefact_probe_tests.rs` inject the outcome and drive the shared
+classification, while the merge-level tests in
+`artefact/artefact_fragment_tests.rs` inject through the same boundary and
+assert the diagnostic retains the path and the injected error marker. It is
+**not** a general-purpose filesystem
 abstraction and must not grow readers, an enumeration capability, or call sites
 beyond this probe.
 
