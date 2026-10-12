@@ -918,6 +918,13 @@ with hyphens. The generated command constants are `ABOUT_ID`, `LONG_ABOUT_ID`,
 time. Flattened, subcommand, and `skip_cli` fields do not receive argument
 constants.
 
+Per-field localized defaults are not yet available. The
+`#[ortho_config(localized_default = "...")]` attribute is recognized so that
+its absence from the implementation is reported rather than silently ignored,
+but using it fails the build with a deferral diagnostic. Embedding default
+messages is deferred to roadmap task 11.5.1; until it lands, the
+`embedded_default` field of every emitted artefact entry is `null`.
+
 Documentation IR version 2.0 derives default command and eligible field ids
 from the mounted command path, replacing the older dotted defaults. To export
 standalone derived ids for tooling, run
@@ -935,9 +942,15 @@ rebuild. A publication that waits for the lock longer than five seconds leaves
 `cli-identifiers.lock-wait.<pid>.json` in the artefact directory, which proves
 the build is waiting rather than deadlocked; the file disappears once the lock
 is granted. Each finished publication also writes
-`cli-identifiers.build-report.json`, naming the stage it reached and how long
-it waited. The report is best effort: it explains a build and never fails one,
-and neither file is part of the identifier inventory.
+`cli-identifiers.build-report.<pid>.json`, naming the process, the expansion,
+the stage it reached, and how long it waited. Both names carry the process id,
+so a directory shared by several compiler processes keeps one file per
+publication rather than letting the last write replace the others. A channel
+that cannot write its observations appends a line naming the lost operation to
+`cli-identifiers.observation-errors.<pid>.json`, so a build with no report is
+distinguishable from one that could not write it. These files are best effort:
+they explain a build and never fail one, and none of them is part of the
+identifier inventory.
 
 Localization is most reliable when the command metadata is translated before
 parsing and any resulting error goes through the same localizer.

@@ -118,3 +118,99 @@ fn prune_removes_single_file_superseded_by_parts() -> Result<()> {
     );
     Ok(())
 }
+
+/// Verifies an unreadable entry fails the prune instead of being kept.
+///
+/// The classification asks a question — "is this file superseded?" — and an
+/// unreadable entry does not answer it. Reporting `false` would leave the
+/// stale file in place while `prune_stale_rendered` returned `Ok`, so the
+/// caller would publish a directory that still holds a layout it believed it
+/// had removed. The probe error has to reach the caller.
+///
+/// The failure is injected rather than provoked through filesystem topology:
+/// no portable layout yields the same error kind on every platform, which is
+/// the constraint `artefact_probe` documents for the same reason. A
+/// `PermissionDenied` probe stands in for any failure that is not `NotFound`.
+#[test]
+fn an_unreadable_entry_fails_the_prune_rather_than_being_kept() -> Result<()> {
+    let root = TempRoot::new()?;
+    let superseded = root.path().join("cli-identifiers.0.json");
+    fs::write(&superseded, b"{}").context("write superseded fixture")?;
+
+    let outcome = with_entry_probe_error(&superseded, std::io::ErrorKind::PermissionDenied, || {
+        prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
+    });
+
+    let error = outcome
+        .err()
+        .context("an unreadable entry must fail the prune, not be silently kept")?;
+    ensure!(
+        error.kind() == std::io::ErrorKind::PermissionDenied,
+        "the probe's error must reach the caller unchanged; got {error}",
+    );
+    ensure!(
+        superseded.is_file(),
+        "the prune must not claim to have removed an entry it could not classify",
+    );
+    Ok(())
+}
+
+/// Verifies an entry that vanishes mid-prune is skipped, not failed.
+///
+/// The prune runs while the artefact lock is held, so no *publisher* races it.
+/// The lock is cooperative, though, and a concurrent `cargo clean` or a
+/// build-script glob with side effects can still remove a file between the
+/// directory scan and the probe. That entry is not a leftover anyone needs
+/// removed, so `NotFound` is answered `false` and the prune continues.
+#[test]
+fn an_entry_that_vanishes_mid_prune_is_skipped() -> Result<()> {
+    let root = TempRoot::new()?;
+    let vanished = root.path().join("cli-identifiers.7.json");
+    fs::write(&vanished, b"{}").context("write soon-to-vanish fixture")?;
+    fs::remove_file(&vanished).context("remove the fixture before the probe runs")?;
+
+    prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
+        .context("a vanished entry must not fail the prune")?;
+    Ok(())
+}
+
+/// Verifies a kept file is never probed, so the prune asks only about candidates.
+///
+/// The injection matches one exact path, so a prune that probed a file the
+/// current render keeps would fail here. This pins the short-circuit: the
+/// render's own output must not be classified, because an unreadable *current*
+/// artefact is not a reason to fail a publication that is about to rewrite it.
+#[test]
+fn a_file_the_render_keeps_is_not_probed() -> Result<()> {
+    let root = TempRoot::new()?;
+    let kept = root.path().join("cli-identifiers.json");
+    fs::write(&kept, b"{}").context("write current fixture")?;
+
+    with_entry_probe_error(&kept, std::io::ErrorKind::PermissionDenied, || {
+        prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
+    })
+    .context("a file the current render keeps is not a prune candidate")?;
+
+    ensure!(kept.is_file(), "the current render must survive the prune");
+    Ok(())
+}
+
+/// Verifies a non-rendered entry is never probed either.
+///
+/// Fragments, the lock, and the channel files all live in this directory and
+/// none is a prune candidate. Probing them would make an unreadable lock file
+/// fail a publication that does not need to read it.
+#[test]
+fn a_non_rendered_entry_is_not_probed() -> Result<()> {
+    let root = TempRoot::new()?;
+    let lock = root.path().join("cli-identifiers.lock");
+    fs::write(&lock, b"").context("write lock fixture")?;
+
+    with_entry_probe_error(&lock, std::io::ErrorKind::PermissionDenied, || {
+        prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
+    })
+    .context("a non-rendered entry is not a prune candidate")?;
+
+    ensure!(lock.is_file(), "the lock file must survive the prune");
+    Ok(())
+}

@@ -1,9 +1,11 @@
 //! Regression tests for the opt-in build-time observation channel.
 //!
 //! The channel exists because a procedural macro has no subscriber a build
-//! maintainer can configure, so these tests check the two properties that make
-//! it usable: a quiet build writes nothing at all, and an opted-in build
-//! records the stage, durations, and outcome of the publication it observed.
+//! maintainer can configure, so these tests check the properties that make it
+//! usable: a quiet build writes nothing at all, an opted-in build records the
+//! stage, durations, and outcome of the publication it observed, and an
+//! opted-in build that cannot write its observations says so instead of
+//! looking like a build with nothing to report.
 //!
 //! No assertion here depends on how long anything took. A duration overrun is
 //! reported, not asserted, and the wait marker is driven through its own
@@ -16,18 +18,26 @@ use std::time::Duration;
 use anyhow::{Context, Result, ensure};
 
 use super::artefact_report::{
-    Outcome, PublicationReport, REPORT_ENV, REPORT_FILE, ReportConfig, Reporting, Stage, WAIT_STEM,
-    WAIT_WARN_THRESHOLD, wait_marker, write,
+    ErrorCategory, Outcome, PublicationReport, REPORT_ENV, REPORT_STEM, ReportConfig, Reporting,
+    Stage, WAIT_STEM, WAIT_WARN_THRESHOLD, errors_path, report_path, wait_marker, write,
 };
 use super::fragment_tests::TempRoot;
 use super::lock_support::publish_fixture;
 
 /// Builds a report for one stage and outcome.
-fn report(stage: Stage, outcome: Outcome) -> PublicationReport<'static> {
+///
+/// Shared with the failure-record suite as `super::report_tests::report`, so
+/// both describe the same document rather than each holding its own idea of
+/// what a report looks like.
+pub(super) fn report(stage: Stage, outcome: Outcome) -> PublicationReport<'static> {
     PublicationReport {
+        pid: std::process::id(),
         crate_name: "fixture",
+        ident: "Config",
+        source_file: "/fixture-source.rs",
         stage,
         outcome,
+        error: None,
         lock_wait: Duration::from_millis(3),
         elapsed: Duration::from_millis(9),
     }
@@ -63,7 +73,7 @@ fn the_report_records_its_stage_durations_and_outcome() -> Result<()> {
     let root = TempRoot::new()?;
     write(root.path(), &report(Stage::Merge, Outcome::Failed));
 
-    let raw = fs::read_to_string(root.path().join(REPORT_FILE)).context("read the build report")?;
+    let raw = fs::read_to_string(report_path(root.path())).context("read the build report")?;
     ensure!(
         raw.contains("\"stage\":\"merge\""),
         "the report must name the stage the publication reached; got {raw}",
@@ -83,6 +93,67 @@ fn the_report_records_its_stage_durations_and_outcome() -> Result<()> {
     ensure!(
         raw.contains("\"crate_name\":\"fixture\""),
         "the report must name the crate whose expansion published; got {raw}",
+    );
+    Ok(())
+}
+
+/// Verifies a report names the process and expansion it describes.
+///
+/// `OUT_DIR` is package-scoped, so one artefact directory can hold reports
+/// from several compiler processes compiling several targets. A report that
+/// named only its crate would leave a maintainer unable to tell which
+/// publication it belongs to, or whether the file is stale output from an
+/// earlier build that never got cleaned.
+#[test]
+fn the_report_names_the_process_and_expansion_it_describes() -> Result<()> {
+    let root = TempRoot::new()?;
+    write(root.path(), &report(Stage::Prune, Outcome::Completed));
+
+    let raw = fs::read_to_string(report_path(root.path())).context("read the build report")?;
+    let pid = std::process::id();
+    ensure!(
+        raw.contains(&format!("\"pid\":{pid}")),
+        "the report must name the publishing process; got {raw}",
+    );
+    ensure!(
+        raw.contains("\"ident\":\"Config\""),
+        "the report must name the deriving type; got {raw}",
+    );
+    ensure!(
+        raw.contains("\"source_file\":\"/fixture-source.rs\""),
+        "the report must name the expansion's source file; got {raw}",
+    );
+    Ok(())
+}
+
+/// Verifies a failed report carries a bounded failure category.
+///
+/// The stage says where a build died and the category says what went wrong
+/// there, so a harness can group failures without parsing compiler prose. A
+/// successful publication carries neither: an always-present field would
+/// invite a reader to treat it as meaningful on every row.
+#[test]
+fn only_a_failed_report_carries_an_error_category() -> Result<()> {
+    let root = TempRoot::new()?;
+    write(
+        root.path(),
+        &PublicationReport {
+            error: Some(ErrorCategory::Serialization),
+            ..report(Stage::Merge, Outcome::Failed)
+        },
+    );
+    let failed = fs::read_to_string(report_path(root.path())).context("read the failed report")?;
+    ensure!(
+        failed.contains("\"error\":\"serialization\""),
+        "a failed report must carry its bounded category; got {failed}",
+    );
+
+    write(root.path(), &report(Stage::Publish, Outcome::Completed));
+    let completed =
+        fs::read_to_string(report_path(root.path())).context("read the completed report")?;
+    ensure!(
+        !completed.contains("\"error\""),
+        "a completed report must omit the failure category entirely; got {completed}",
     );
     Ok(())
 }
@@ -118,23 +189,22 @@ fn every_stage_serializes_to_a_distinct_name() -> Result<()> {
 ///
 /// Pruning deletes rendered files the current render does not produce, so a
 /// channel filename that matched the artefact matcher would be deleted on the
-/// next publication and the report would silently vanish. Both names therefore
-/// have to sit outside that matcher.
+/// next publication and the report would silently vanish. Every name the
+/// channel writes therefore has to sit outside that matcher.
 #[test]
 fn channel_files_are_not_rendered_artefacts() -> Result<()> {
-    ensure!(
-        !super::is_rendered_artefact(REPORT_FILE),
-        "the build report must not be pruned as superseded inventory",
-    );
-    let wait_name = format!("{WAIT_STEM}.1234.json");
-    ensure!(
-        !super::is_rendered_artefact(&wait_name),
-        "a wait marker must not be pruned as superseded inventory",
-    );
-    ensure!(
-        !super::is_rendered_artefact(WAIT_STEM),
-        "the bare wait stem must not be treated as inventory either",
-    );
+    for name in [
+        format!("{REPORT_STEM}.1234.json"),
+        format!("{WAIT_STEM}.1234.json"),
+        "cli-identifiers.observation-errors.1234.json".to_owned(),
+        REPORT_STEM.to_owned(),
+        WAIT_STEM.to_owned(),
+    ] {
+        ensure!(
+            !super::is_rendered_artefact(&name),
+            "{name} must not be pruned as superseded inventory",
+        );
+    }
     Ok(())
 }
 
@@ -161,12 +231,16 @@ fn a_quiet_build_writes_no_report() -> Result<()> {
     publish_fixture(root.path(), quiet)?;
 
     ensure!(
-        !root.path().join(REPORT_FILE).exists(),
+        !report_path(root.path()).exists(),
         "a quiet build must not write a build report",
     );
     ensure!(
         !wait_marker(root.path()).exists(),
         "a quiet build must not write a wait marker",
+    );
+    ensure!(
+        !errors_path(root.path()).exists(),
+        "a quiet build must not write an observation-error record",
     );
     Ok(())
 }
@@ -183,7 +257,7 @@ fn an_opted_in_publication_reports_completion() -> Result<()> {
     let observed = ReportConfig::observed(Reporting::On);
     publish_fixture(root.path(), observed)?;
 
-    let raw = fs::read_to_string(root.path().join(REPORT_FILE)).context("read the build report")?;
+    let raw = fs::read_to_string(report_path(root.path())).context("read the build report")?;
     ensure!(
         raw.contains("\"outcome\":\"completed\""),
         "an uninterrupted publication must report completion; got {raw}",
@@ -208,25 +282,29 @@ fn an_opted_in_publication_reports_completion() -> Result<()> {
 fn the_report_is_written_atomically() -> Result<()> {
     let root = TempRoot::new()?;
     write(root.path(), &report(Stage::Prune, Outcome::Completed));
-    let temporary = root.path().join(REPORT_FILE).with_extension("tmp");
+    let temporary = report_path(root.path()).with_extension("tmp");
     ensure!(
         !temporary.exists(),
         "the temporary used for the atomic write must not be left behind",
     );
-    let raw = fs::read_to_string(root.path().join(REPORT_FILE)).context("read the build report")?;
+    let raw = fs::read_to_string(report_path(root.path())).context("read the build report")?;
     serde_json::from_str::<serde_json::Value>(&raw).context("the report must be whole JSON")?;
     Ok(())
 }
 
-/// Verifies the channel's opt-in name is the documented one.
+/// Verifies the channel's opt-in name and every file stem are documented ones.
 ///
-/// The name is the channel's whole interface for a build maintainer, so a
-/// rename that no test noticed would silently make the documented variable do
+/// These names are the channel's whole interface for a build maintainer, so a
+/// rename that no test noticed would silently make the documented globs match
 /// nothing.
 #[test]
-fn the_opt_in_variable_is_the_documented_name() -> Result<()> {
+fn the_channel_names_are_the_documented_ones() -> Result<()> {
     ensure!(REPORT_ENV == "ORTHO_CONFIG_ARTEFACT_REPORT");
-    ensure!(REPORT_FILE == "cli-identifiers.build-report.json");
+    ensure!(REPORT_STEM == "cli-identifiers.build-report");
     ensure!(WAIT_STEM == "cli-identifiers.lock-wait");
+    ensure!(
+        super::artefact_report::ERRORS_STEM == "cli-identifiers.observation-errors",
+        "the observation-error stem must be the documented one",
+    );
     Ok(())
 }

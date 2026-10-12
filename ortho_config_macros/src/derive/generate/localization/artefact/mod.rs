@@ -12,6 +12,7 @@
 //! is not sufficient.
 
 mod artefact_lock;
+mod artefact_observation;
 mod artefact_probe;
 mod artefact_report;
 mod publish;
@@ -93,14 +94,86 @@ fn is_rendered_artefact(name: &str) -> bool {
         .is_some_and(|index| index == "index" || index.parse::<usize>().is_ok())
 }
 
+/// Names the message a test-injected directory-entry probe failure carries.
+///
+/// The prune returns the probe error, so a regression test can prove the
+/// reported failure came from the injection rather than from a real
+/// filesystem condition.
+#[cfg(test)]
+pub(super) const INJECTED_ENTRY_PROBE_MESSAGE: &str = "injected directory-entry probe failure";
+
+// Records one metadata error kind to inject for one exact directory entry.
+//
+// This mirrors the injection `artefact_probe` documents: a failed probe that
+// is not `NotFound` cannot be provoked portably through filesystem topology,
+// so test builds name the failure they want. Only failures are injectable
+// here; a test that wants the success path creates the file.
+#[cfg(test)]
+thread_local! {
+    static INJECTED_ENTRY_PROBE: std::cell::RefCell<Option<(PathBuf, std::io::ErrorKind)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `body` with `kind` injected as the probe outcome for `path`.
+#[cfg(test)]
+pub(super) fn with_entry_probe_error<T>(
+    path: &Path,
+    kind: std::io::ErrorKind,
+    body: impl FnOnce() -> T,
+) -> T {
+    INJECTED_ENTRY_PROBE.with(|cell| *cell.borrow_mut() = Some((path.to_path_buf(), kind)));
+    let result = body();
+    INJECTED_ENTRY_PROBE.with(|cell| *cell.borrow_mut() = None);
+    result
+}
+
+/// Reads one directory entry's metadata, honouring an injected failure.
+///
+/// This asks about the entry the prune would unlink, so it uses
+/// `symlink_metadata`: a symlink must be classified as the link it is, not as
+/// whatever its target happens to be.
+fn probe_entry(path: &Path) -> std::io::Result<fs::Metadata> {
+    #[cfg(test)]
+    if let Some(kind) = INJECTED_ENTRY_PROBE.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .filter(|(recorded, _)| recorded == path)
+            .map(|(_, kind)| *kind)
+    }) {
+        return Err(std::io::Error::new(kind, INJECTED_ENTRY_PROBE_MESSAGE));
+    }
+    fs::symlink_metadata(path)
+}
+
 /// Returns whether a directory entry is a superseded rendered artefact.
 ///
 /// Only a regular file that is rendered output and is absent from the current
-/// render is superseded. Splitting the three tests out of the prune loop keeps
-/// the directory scan reading as "for each entry: drop it when superseded",
-/// rather than as a single conjunct that a reader must unpack.
-fn is_superseded(name: &str, keep: &std::collections::HashSet<&str>, path: &Path) -> bool {
-    is_rendered_artefact(name) && !keep.contains(name) && path.is_file()
+/// render is superseded. Splitting the tests out of the prune loop keeps the
+/// directory scan reading as "for each entry: drop it when superseded", rather
+/// than as a single conjunct that a reader must unpack.
+///
+/// The probe reports failure rather than answering `false`. An unreadable
+/// entry says nothing about whether the file is superseded, so reading the
+/// failure as "keep it" would leave stale rendered output in the directory
+/// while the declared [`std::io::Result`] promised the caller a diagnostic.
+/// Only an entry that has genuinely vanished is answered `false`: it cannot be
+/// a leftover the prune still needs to remove.
+fn is_superseded(
+    name: &str,
+    keep: &std::collections::HashSet<&str>,
+    path: &Path,
+) -> std::io::Result<bool> {
+    if !is_rendered_artefact(name) || keep.contains(name) {
+        // Neither the fragments, nor the lock, nor any file the current
+        // render keeps is a stale candidate, so none of them pays a metadata
+        // call.
+        return Ok(false);
+    }
+    match probe_entry(path) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 /// Removes rendered artefact files left over from a previous layout.
@@ -118,6 +191,10 @@ fn is_superseded(name: &str, keep: &std::collections::HashSet<&str>, path: &Path
 /// directory, say — can still observe the transition between the prune and the
 /// writes that follow it. Atomic per-file writes keep each file whole; the
 /// directory as a whole is not swapped atomically.
+///
+/// A failure to classify an entry, or to unlink it, is returned rather than
+/// skipped. Both would otherwise leave a stale file in place while the caller
+/// reported success.
 fn prune_stale_rendered(root: &Path, current: &[ArtefactFile]) -> std::io::Result<()> {
     let keep = current
         .iter()
@@ -130,7 +207,7 @@ fn prune_stale_rendered(root: &Path, current: &[ArtefactFile]) -> std::io::Resul
             continue;
         };
         let path = candidate.path();
-        if is_superseded(name, &keep, &path) {
+        if is_superseded(name, &keep, &path)? {
             fs::remove_file(path)?;
         }
     }
@@ -253,6 +330,12 @@ mod prune_tests;
 #[cfg(test)]
 #[path = "artefact_report_tests.rs"]
 mod report_tests;
+
+// The channel's own failure record, split from `report_tests` so neither suite
+// outgrows the file-length cap; `report_tests::report` is shared between them.
+#[cfg(test)]
+#[path = "artefact_report_failure_tests.rs"]
+mod report_failure_tests;
 
 // Shared by `lock_tests` and `publication_tests`, so it is neither suite's own.
 #[cfg(test)]

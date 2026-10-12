@@ -42,12 +42,36 @@ pub(super) struct LockGuard {
 /// build does not spin.
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
+/// Creates the lock file if absent and opens it without truncating.
+///
+/// `create` rather than `write`/`create_new` so a re-run does not clear a
+/// lock file a peer is currently holding: the file carries no contents, only
+/// the lock.
+fn create_lock_file(path: &Path) -> std::io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(path)
+}
+
+/// Opens an existing lock file without creating or truncating it.
+///
+/// A read-only handle can take a shared or exclusive lock, so acquiring
+/// through it mutates nothing. A caller that only reports the lock's state
+/// therefore stays a pure query: it cannot bring a lock file into existence,
+/// which an exclusive acquisition would then hold.
+#[cfg(test)]
+fn open_existing_lock_file(path: &Path) -> std::io::Result<fs::File> {
+    fs::OpenOptions::new().read(true).open(path)
+}
+
 /// Opens the lock file, mapping an open failure to a spanned diagnostic.
 ///
 /// Opening is separated from acquiring because the acquisition paths differ
 /// while the path resolution and the failure message they must preserve do not.
 fn open_lock_file(path: &Path) -> syn::Result<fs::File> {
-    fs::File::create(path).map_err(|error| {
+    create_lock_file(path).map_err(|error| {
         syn::Error::new(
             Span::call_site(),
             format!(
@@ -63,7 +87,7 @@ fn open_lock_file(path: &Path) -> syn::Result<fs::File> {
 /// Every acquirer and the test probe resolve through here, so [`LOCK_FILE`] is
 /// named once. The acquisition paths differ in how they take the lock and what
 /// they report, not in which file they contend for.
-fn lock_path(root: &Path) -> PathBuf {
+pub(super) fn lock_path(root: &Path) -> PathBuf {
     root.join(LOCK_FILE)
 }
 
@@ -117,20 +141,42 @@ pub(super) fn lock_while(root: &Path, mut on_wait: impl FnMut(Duration)) -> syn:
     }
 }
 
+/// Brings the lock file into existence without taking the lock.
+///
+/// Ordinary acquisition creates the file as a side effect of opening it for
+/// writing. A test-only probe must not rely on that: it opens the existing
+/// file, so the file has to be created deliberately, and doing so here keeps
+/// that creation an explicit command rather than a mutation hidden inside a
+/// query.
+#[cfg(test)]
+pub(super) fn create_lock(root: &Path) -> std::io::Result<()> {
+    drop(create_lock_file(&lock_path(root))?);
+    Ok(())
+}
+
 /// Reports whether the publication lock is currently free.
 ///
 /// Never blocks: a held lock is reported as `false` rather than waited for, so
 /// callers can surface a stuck peer instead of hanging. This exists so lock
 /// regression tests can observe the lock's state through the same path the
 /// production code locks, rather than duplicating the filename.
+///
+/// The probe is read-only by construction. It opens without create or
+/// truncate and its non-blocking acquisition is dropped before returning, so
+/// an observation cannot create the file, clear its contents, or keep the
+/// lock it just took. It answers with the raw I/O error rather than
+/// `open_lock_file`'s spanned diagnostic, and a missing lock file is
+/// `NotFound` — call [`create_lock`] to set the probe up.
 #[cfg(test)]
 pub(super) fn is_free(root: &Path) -> std::io::Result<bool> {
-    // The probe is test-only and answers with the raw I/O error, so it takes
-    // the shared path resolution but not `open_lock_file`'s spanned diagnostic.
-    let file = fs::File::create(lock_path(root))?;
-    match file.try_lock() {
-        Ok(()) => Ok(true),
-        Err(fs::TryLockError::WouldBlock) => Ok(false),
-        Err(fs::TryLockError::Error(error)) => Err(error),
-    }
+    let file = open_existing_lock_file(&lock_path(root))?;
+    let free = match file.try_lock() {
+        Ok(()) => true,
+        Err(fs::TryLockError::WouldBlock) => false,
+        Err(fs::TryLockError::Error(error)) => return Err(error),
+    };
+    // The probe's own acquisition is released with this handle, exactly as
+    // `LockGuard` releases the production lock.
+    drop(file);
+    Ok(free)
 }

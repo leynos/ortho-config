@@ -20,6 +20,7 @@ use std::fs;
 
 use anyhow::{Context, Result, ensure};
 
+use super::artefact_lock::{create_lock, is_free, lock_path};
 use super::fragment_tests::TempRoot;
 use super::lock_support::{
     SENTINEL_RELEASED, VARIANT_CRATES, sentinel, spawn_helper, spawn_variant, wait_for,
@@ -97,5 +98,75 @@ fn each_publication_merges_the_fragments_already_published() -> Result<()> {
              Inventory: {combined}",
         );
     }
+    Ok(())
+}
+
+/// Verifies the lock probe does not create the file it reports on.
+///
+/// The probe answers a question — "is the publication lock held?" — and a
+/// query that brings its subject into existence is not answering it. Creating
+/// the file also mutates what the next acquirer contends for, and the caller
+/// cannot tell the probe's own creation from a peer's.
+#[test]
+fn probing_a_free_lock_does_not_create_the_lock_file() -> Result<()> {
+    let root = TempRoot::new()?;
+    let outcome = is_free(root.path());
+    ensure!(
+        outcome
+            .as_ref()
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound),
+        "a probe over a directory with no lock file must report NotFound rather \
+         than create one; got {outcome:?}",
+    );
+    ensure!(
+        !lock_path(root.path()).exists(),
+        "the probe must leave no lock file behind",
+    );
+    Ok(())
+}
+
+/// Verifies the probe leaves the lock as free as it found it.
+///
+/// The probe takes the lock to answer its question, so it must release it
+/// before returning. A probe that kept what it acquired would deadlock the
+/// next acquirer while reporting the directory free.
+#[test]
+fn probing_releases_the_lock_it_takes() -> Result<()> {
+    let root = TempRoot::new()?;
+    create_lock(root.path()).context("create the lock file for the probe")?;
+
+    ensure!(
+        is_free(root.path()).context("probe a free lock")?,
+        "an unheld lock must be reported free",
+    );
+    ensure!(
+        is_free(root.path()).context("probe the lock a second time")?,
+        "a probe must release the lock it took, so a second probe still finds \
+         it free",
+    );
+    Ok(())
+}
+
+/// Verifies the probe reports a held lock as held.
+///
+/// This is the answer the release tests depend on, so it is pinned directly: a
+/// probe that always said `false` would make every "the lock was released"
+/// assertion fail loudly, but one that always said `true` would make them pass
+/// vacuously.
+#[test]
+fn probing_reports_a_held_lock_as_held() -> Result<()> {
+    let root = TempRoot::new()?;
+    create_lock(root.path()).context("create the lock file for the holder")?;
+    let held = super::artefact_lock::lock(root.path())?;
+
+    ensure!(
+        !is_free(root.path()).context("probe the lock this process holds")?,
+        "a lock held by this process must be reported as held",
+    );
+    drop(held);
+    ensure!(
+        is_free(root.path()).context("probe after releasing the lock")?,
+        "releasing the guard must make the lock free again",
+    );
     Ok(())
 }

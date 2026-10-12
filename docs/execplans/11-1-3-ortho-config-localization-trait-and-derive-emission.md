@@ -2167,3 +2167,63 @@ if that call did not actually block;
 `publication_proceeds_once_the_holder_releases` cover the exclusion and the
 progress halves. The report suite continues to cover the polling path's wait
 announcement.
+
+### The walkthrough's three unresolved rows
+
+CodeRabbit's walkthrough for `e277e03c` (issue comment 5861199603) carried
+three unresolved pre-merge rows. All three were re-verified against the source
+at `de1d5117` rather than trusted from their recorded line anchors, and all
+three were still valid.
+
+Row one: `prune_stale_rendered` classified a directory entry with
+`metadata.is_file()` inside a `map_err(|_| false)`. Any metadata failure other
+than `NotFound` therefore answered "not superseded", so the prune left a stale
+rendered file in place and reported success — the declared `std::io::Result`
+promised the caller a diagnostic the body discarded. The repair propagates
+every non-`NotFound` error and answers `false` only for an entry that has
+genuinely vanished, which cannot be a leftover the prune still needs to remove.
+A test-only probe injects the failure: no filesystem layout provokes the same
+metadata error portably, and this mirrors the injection `artefact_probe`
+already documents and `developers-guide.md` already scopes. The probe uses
+`symlink_metadata`, because the entry under test is the one the prune would
+unlink and a symlink must be classified as the link it is.
+
+Row one, part B: `artefact_lock::is_free` was documented as a non-blocking
+*query* but called `File::create`. A query that brings a lock file into
+existence is not a query, and the file it creates is one an exclusive
+acquisition would then hold. Creation and observation are now separate commands:
+`create_lock` creates, and `is_free` opens the existing file read-only, takes
+a non-blocking lock, and releases it before returning.
+
+Row two: the users' guide did not state that `localized_default` is recognized
+but unimplemented. It now records the deferral to roadmap task 11.5.1 and that
+`embedded_default` is `null` until then. The same section's description of the
+report files was also stale — it still named
+`cli-identifiers.build-report.json` after the report channel became per-process.
+
+Row three: four sub-points, all repaired. `write_all` now enters the fragment
+stage *before* creating the directory, so a directory failure is reported as
+`fragment_write` rather than as a lock wait that had already been granted. Both
+terminal paths retire the wait marker, including a failed acquisition, which
+never reaches the grant. Reports are per-process and carry the pid, deriving
+type, and source file, so several compiler processes publishing into one
+`OUT_DIR` no longer overwrite each other's report. Channel write failures are
+appended to `cli-identifiers.observation-errors.<pid>.json` naming the lost
+operation, because an opted-in build with no report is otherwise
+indistinguishable from one whose report was dropped.
+
+`publish.rs` reached 413 lines with the observation state added, over the
+400-line cap, so the stage and duration tracking moved to
+`artefact_observation.rs`. That extraction also produced the repair's only real
+design change: `Observation::observe` wraps each step, and `finish` is
+idempotent through a `finished` flag, so the nested layers an escaping error
+unwinds through write one terminal report rather than one per layer.
+
+The first run of the new tests failed one case, and the failure was worth
+keeping. `a_channel_write_failure_is_recorded_rather_than_dropped` provoked the
+write failure with a regular file at the report path, reasoning that the rename
+could not replace it. A rename replaces a regular file happily, so no write
+ever failed and the test's own context line — "a dropped observation must be
+recorded" — was the panic. A non-empty *directory* at that path is the
+provocation that works: the rename would have to replace a directory with a
+file, which the kernel refuses.

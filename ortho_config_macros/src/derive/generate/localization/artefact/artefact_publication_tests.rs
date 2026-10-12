@@ -25,10 +25,14 @@ use std::fs;
 
 use anyhow::{Context, Result, ensure};
 
+use super::artefact_report::{
+    ReportConfig, Reporting, WAIT_WARN_THRESHOLD, note_wait, report_path, wait_marker,
+};
 use super::fragment_tests::TempRoot;
 use super::lock_support::{
     ACQUIRE_TIMEOUT, BLOCKED_WINDOW, PUBLISH_FINISHED_FILE, PUBLISH_STARTED_FILE,
-    RELEASE_REQUEST_FILE, request_release, spawn_helper, wait_for, wait_for_file, wait_for_holder,
+    RELEASE_REQUEST_FILE, publish_fixture, request_release, spawn_helper, wait_for, wait_for_file,
+    wait_for_holder,
 };
 
 /// Verifies publication takes the lock before it writes anything.
@@ -137,6 +141,94 @@ fn publication_proceeds_once_the_holder_releases() -> Result<()> {
         inventory.contains("fixture::Config"),
         "the publisher's entries must reach the merged inventory after the \
          holder releases, but the inventory holds: {inventory}",
+    );
+    Ok(())
+}
+
+/// Verifies an unwritable fragment directory is reported as the fragment stage.
+///
+/// Creating the fragment directory is part of writing the fragment. Reporting
+/// it as [`Stage::LockWait`] would tell a maintainer the build was blocked on a
+/// peer when the lock had already been granted and the failure was local. The
+/// stage is recorded before the directory is created precisely so this path
+/// cannot be misattributed.
+#[test]
+fn a_fragment_directory_failure_reports_the_fragment_stage() -> Result<()> {
+    let root = TempRoot::new()?;
+    let fragment_dir = root.path().join(super::FRAGMENT_DIR);
+    // A regular file where the fragment directory belongs makes `create_dir_all`
+    // fail with `AlreadyExists` on every supported platform, so the provoked
+    // failure is the same one a maintainer would see from a layout clash.
+    fs::write(&fragment_dir, b"not a directory").context("place a file in the directory's path")?;
+
+    publish_fixture(root.path(), ReportConfig::observed(Reporting::On))
+        .expect_err("a publication must fail when its fragment directory cannot be created");
+
+    let raw = fs::read_to_string(report_path(root.path()))
+        .context("the failed publication must still record its report")?;
+    ensure!(
+        raw.contains("\"stage\":\"fragment_write\""),
+        "a fragment-directory failure must be reported as the fragment stage, \
+         not as a lock wait; got {raw}",
+    );
+    ensure!(
+        raw.contains("\"outcome\":\"failed\""),
+        "the report must record the failure; got {raw}",
+    );
+    ensure!(
+        raw.contains("\"error\":\"io\""),
+        "the report must classify a directory failure as I/O; got {raw}",
+    );
+    Ok(())
+}
+
+/// Verifies a completed publication leaves no wait marker behind.
+///
+/// The marker means "this process is blocked on the lock right now". One that
+/// outlives its wait makes the next maintainer diagnose a stall that has
+/// already ended, and the file is process-scoped so nothing else will clear it.
+#[test]
+fn a_completed_publication_retires_its_wait_marker() -> Result<()> {
+    let root = TempRoot::new()?;
+    // The marker is written directly because a real threshold-length stall
+    // would make this test take the production five seconds; what is under test
+    // is the retirement, not the announcement.
+    note_wait(root.path(), WAIT_WARN_THRESHOLD);
+    ensure!(
+        wait_marker(root.path()).exists(),
+        "the fixture must place the marker before the publication runs",
+    );
+
+    publish_fixture(root.path(), ReportConfig::observed(Reporting::On))?;
+
+    ensure!(
+        !wait_marker(root.path()).exists(),
+        "a publication that acquired the lock must retire the marker it wrote",
+    );
+    Ok(())
+}
+
+/// Verifies a failed acquisition retires the wait marker too.
+///
+/// Acquisition failure is the other terminal path, and it never reaches the
+/// grant that normally retires the marker. Leaving it would make a build that
+/// could not take the lock look like a build still waiting for it — the
+/// opposite of what happened, and the failure a maintainer most needs stated
+/// plainly.
+#[test]
+fn a_failed_acquisition_retires_its_wait_marker() -> Result<()> {
+    let root = TempRoot::new()?;
+    let fragment_dir = root.path().join(super::FRAGMENT_DIR);
+    fs::write(&fragment_dir, b"not a directory").context("place a file in the directory's path")?;
+    note_wait(root.path(), WAIT_WARN_THRESHOLD);
+
+    publish_fixture(root.path(), ReportConfig::observed(Reporting::On))
+        .expect_err("the publication must fail");
+
+    ensure!(
+        !wait_marker(root.path()).exists(),
+        "a terminal publication must not leave a wait marker describing a wait \
+         that has ended",
     );
     Ok(())
 }

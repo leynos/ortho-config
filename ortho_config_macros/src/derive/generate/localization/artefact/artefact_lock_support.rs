@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
 
-use super::artefact_lock::{is_free, lock};
+use super::artefact_lock::{create_lock, is_free, lock};
 use super::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
 use super::lock_fixture::fixture_source_path;
 
@@ -211,7 +211,6 @@ fn lock_helper_entry_point() -> Result<()> {
         "publish-announced" => publish_announced(&root),
         "publish-then-probe" => publish_then_probe(&root),
         "publish-failing-then-probe" => publish_failing_then_probe(&root),
-        "probe" => ensure_free(&root, "after the publisher returned"),
         other => Err(anyhow::anyhow!("unknown helper mode {other}")),
     }
 }
@@ -261,7 +260,14 @@ fn contend(root: &Path) -> Result<()> {
 }
 
 /// Fails unless the lock is free, naming the moment being checked.
+///
+/// The lock file is created first, as an explicit command. The probe opens the
+/// file that exists rather than bringing one into being, so without this a
+/// missing file would be indistinguishable from a released lock. Every probed
+/// path has already published, so the file is normally there; creating it
+/// keeps the check about the lock rather than about the directory's contents.
 fn ensure_free(root: &Path, moment: &str) -> Result<()> {
+    create_lock(root).context("create the artefact lock file before probing it")?;
     let free = is_free(root).context("probe the artefact lock")?;
     ensure!(
         free,

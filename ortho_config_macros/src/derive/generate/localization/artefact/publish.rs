@@ -17,7 +17,6 @@
 //! acquisition announces itself while it waits, and the finished publication
 //! records its stage, durations, and outcome. See `artefact_report`.
 
-use std::cell::Cell;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -26,9 +25,8 @@ use proc_macro2::Span;
 use syn::Ident;
 
 use super::artefact_lock::{LockGuard, lock, lock_while};
-use super::artefact_report::{
-    Outcome, PublicationReport, ReportConfig, Stage, clear_wait, note_wait, write,
-};
+use super::artefact_observation::{Observation, Subject, observe};
+use super::artefact_report::{ErrorCategory, Outcome, ReportConfig, Stage, note_wait};
 use super::{
     ARTEFACT_DIR, FRAGMENT_DIR, Fragment, Source, atomic_write, fragment_path, json,
     merge_fragments, prune_stale_rendered, render,
@@ -52,98 +50,6 @@ pub(super) struct Publication<'a> {
     pub(super) model: &'a super::LocalizationIds,
     /// Opt-in and threshold for the build-time observation channel.
     pub(super) report: ReportConfig,
-}
-
-/// Records how far one publication got and how long it took.
-///
-/// Every step routes both its success and its failure through here, so the
-/// stage a failing build reports is set by the step that actually failed rather
-/// than by the caller's position in a `?` chain.
-struct Observation<'a> {
-    /// Artefact root the report is written below.
-    root: &'a Path,
-    /// Crate whose expansion published.
-    crate_name: &'a str,
-    /// Observation inputs the entry boundary resolved.
-    config: ReportConfig,
-    /// When this publication first attempted the lock.
-    started: Instant,
-    /// Stage most recently entered, shared so a step's closure can set it
-    /// without holding a mutable borrow of the whole observation.
-    stage: Cell<Stage>,
-    /// When the lock was granted, once it has been.
-    granted: Cell<Option<Instant>>,
-}
-
-impl<'a> Observation<'a> {
-    /// Starts observing one publication before it attempts the lock.
-    fn begin(root: &'a Path, crate_name: &'a str, config: ReportConfig) -> Self {
-        Self {
-            root,
-            crate_name,
-            config,
-            started: Instant::now(),
-            stage: Cell::new(Stage::LockWait),
-            granted: Cell::new(None),
-        }
-    }
-
-    /// Records the stage a step is about to run.
-    fn enter(&self, stage: Stage) {
-        self.stage.set(stage);
-    }
-
-    /// Records when the lock was granted and retires the wait marker.
-    fn granted(&self, at: Instant) {
-        self.granted.set(Some(at));
-        if self.config.reporting.is_on() {
-            clear_wait(self.root);
-        }
-    }
-
-    /// Writes the finished observation for the stage the run reached.
-    ///
-    /// Called on both the success and failure paths, so a build that never
-    /// reached the merge records the stage it died at rather than a generic
-    /// failure — the difference between a report that names the fault and one
-    /// that only confirms something went wrong.
-    fn finish(&self, outcome: Outcome) {
-        if !self.config.reporting.is_on() {
-            return;
-        }
-        let lock_wait = self
-            .granted
-            .get()
-            .map_or_else(|| self.started.elapsed(), |at| at - self.started);
-        write(
-            self.root,
-            &PublicationReport {
-                crate_name: self.crate_name,
-                stage: self.stage.get(),
-                outcome,
-                lock_wait,
-                elapsed: self.started.elapsed(),
-            },
-        );
-    }
-}
-
-/// Runs one observed publication step, recording a failure before it escapes.
-///
-/// Routing every step through here is what makes the reported stage the one
-/// that actually failed: a `?` chain alone would leave `publish` recording
-/// whatever stage the caller last set.
-fn observe<T>(
-    observation: &Observation<'_>,
-    step: impl FnOnce() -> syn::Result<T>,
-) -> syn::Result<T> {
-    match step() {
-        Ok(value) => Ok(value),
-        Err(error) => {
-            observation.finish(Outcome::Failed);
-            Err(error)
-        }
-    }
 }
 
 /// Reports the artefact directory for one `OUT_DIR`, creating it if needed.
@@ -179,16 +85,33 @@ pub(super) fn artefact_root(out_dir: &Path, span: Span) -> syn::Result<std::path
 /// longer compiles.
 pub(super) fn publish(publication: &Publication<'_>, span: Span) -> syn::Result<()> {
     let root = publication.root;
-    let observation = Observation::begin(root, publication.crate_name, publication.report);
+    // The deriving type is recorded by its source spelling, which is what the
+    // fragment filename and the compiler diagnostic already call it.
+    let ident = publication.ident.to_string();
+    let observation = Observation::begin(
+        Subject {
+            root,
+            crate_name: publication.crate_name,
+            ident: &ident,
+            source_file: &publication.source.file,
+        },
+        publication.report,
+    );
     let held = match acquire(&observation) {
         Ok(held) => held,
         Err(error) => {
+            // A failed acquisition is one of the two terminal paths that never
+            // reaches `Observation::granted`, so the wait marker this
+            // publication wrote is retired here. Leaving it behind would make a
+            // later build look blocked on a lock nobody holds.
+            observation.abandon_wait();
+            observation.failed(ErrorCategory::Io);
             observation.finish(Outcome::Failed);
             return Err(error);
         }
     };
     observation.granted(Instant::now());
-    let outcome = observe(&observation, || {
+    let outcome = observe(&observation, ErrorCategory::Io, || {
         write_all(&held, &observation, publication, span)
     });
     if outcome.is_ok() {
@@ -209,13 +132,13 @@ pub(super) fn publish(publication: &Publication<'_>, span: Span) -> syn::Result<
 /// read the marker, and polling would make the common case pay for a channel
 /// it never enabled.
 fn acquire(observation: &Observation<'_>) -> syn::Result<LockGuard> {
-    if !observation.config.reporting.is_on() {
-        return lock(observation.root);
+    if !observation.is_on() {
+        return lock(observation.root());
     }
-    let refresh = observation.config.refresh;
+    let refresh = observation.refresh();
     let mut announced: Option<Duration> = None;
-    lock_while(observation.root, |waited| {
-        if waited < observation.config.threshold {
+    lock_while(observation.root(), |waited| {
+        if waited < observation.threshold() {
             return;
         }
         // Announce once the threshold is crossed, then refresh on the slow
@@ -223,12 +146,18 @@ fn acquire(observation: &Observation<'_>) -> syn::Result<LockGuard> {
         // per poll.
         if announced.is_none_or(|last| waited.saturating_sub(last) >= refresh) {
             announced = Some(waited);
-            note_wait(observation.root, waited);
+            note_wait(observation.root(), waited);
         }
     })
 }
 
 /// Runs the locked part of one publication, recording the stage it reaches.
+///
+/// The stage is entered *before* the fragment directory is created. Creating
+/// it is part of writing the fragment, not part of waiting for the lock, and
+/// the lock has already been granted by the time this runs. Recording
+/// [`Stage::LockWait`] for a directory failure would tell a maintainer the
+/// build was blocked on a peer when it was not.
 fn write_all(
     held: &LockGuard,
     observation: &Observation<'_>,
@@ -236,6 +165,7 @@ fn write_all(
     span: Span,
 ) -> syn::Result<()> {
     let root = publication.root;
+    observation.enter(Stage::FragmentWrite);
     fs::create_dir_all(root.join(FRAGMENT_DIR)).map_err(|error| {
         syn::Error::new(
             span,
@@ -245,7 +175,6 @@ fn write_all(
             ),
         )
     })?;
-    observation.enter(Stage::FragmentWrite);
     write_fragment(held, publication, span)?;
     republish(held, observation, root, span)
 }
@@ -293,11 +222,11 @@ fn republish(
     span: Span,
 ) -> syn::Result<()> {
     observation.enter(Stage::Merge);
-    let merged = observe(observation, || {
+    let merged = observe(observation, ErrorCategory::Serialization, || {
         merge_fragments(root).map_err(|error| syn::Error::new(span, error))
     })?;
     observation.enter(Stage::Render);
-    let rendered = observe(observation, || {
+    let rendered = observe(observation, ErrorCategory::Serialization, || {
         render(merged).map_err(|error| {
             syn::Error::new(
                 span,
@@ -311,7 +240,7 @@ fn republish(
     // Prune before publishing so a reader never observes a directory holding
     // both the new layout's files and unpruned leftovers from the old one.
     observation.enter(Stage::Prune);
-    observe(observation, || {
+    observe(observation, ErrorCategory::Io, || {
         prune_stale_rendered(root, &rendered).map_err(|error| {
             syn::Error::new(
                 span,
@@ -323,7 +252,7 @@ fn republish(
         })
     })?;
     observation.enter(Stage::Publish);
-    observe(observation, || {
+    observe(observation, ErrorCategory::Io, || {
         for file in rendered {
             let path = root.join(&file.name);
             atomic_write(&path, &file.contents).map_err(|error| {

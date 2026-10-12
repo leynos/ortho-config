@@ -193,24 +193,32 @@ reader that must be consistent has to take the same lock or retry.
 
 A second opt-in, `ORTHO_CONFIG_ARTEFACT_REPORT=1`, turns on the observation
 channel that explains the same sequence when a build is slow or fails. It
-writes two files below the artefact root, neither of which is part of the
-inventory and neither of which the prune matches:
+writes three files below the artefact root, none of which is part of the
+inventory and none of which the prune matches:
 `cli-identifiers.lock-wait.<pid>.json` exists only *while* a publication is
 blocked on the lock, so a build that appears hung can be diagnosed as waiting
-rather than deadlocked, and `cli-identifiers.build-report.json` records the
-stage the publication reached — `lock_wait`, `fragment_write`, `merge`,
-`render`, `prune`, or `publish` — with its lock-wait and total durations in
-whole milliseconds and a bounded `completed`/`failed` outcome. Both writes are
-best effort: the channel explains builds and must not be able to fail one, so
-an unwritable directory leaves the publication's own result untouched and the
-absent file is itself the observation. `artefact/artefact_report.rs` owns the
-channel's vocabulary, serialization, and both writers; `artefact/publish.rs` is
-its only producer. A build that did not opt in takes the plain blocking `lock`,
-so the common case pays no polling cost for a channel it never enabled. Because
-a blocked publisher does not hold the lock, the wait marker is per-process and
-written through `write_private_atomic`, whose temporary derives from the
-already-unique destination; the shared `atomic_write` temporary would let two
-blocked publishers collide.
+rather than deadlocked. `cli-identifiers.build-report.<pid>.json` records the
+process, the expansion, the stage the publication reached — `lock_wait`,
+`fragment_write`, `merge`, `render`, `prune`, or `publish` — with its lock-wait
+and total durations in whole milliseconds, a bounded `completed`/`failed`
+outcome, and, on failure, a bounded `io`/`serialization` error category.
+`cli-identifiers.observation-errors.<pid>.json` is the channel's own failure
+record: it appends one line per observation that could not be written, naming
+the operation and the underlying error. All three are per-process because
+`OUT_DIR` is package-scoped and several compiler processes may publish into one
+directory; the error record is what makes the best-effort contract safe, since
+a build with no report at all is otherwise indistinguishable from one whose
+report was dropped. Every write is best effort: the channel explains builds and
+must not be able to fail one, so an unwritable directory leaves the
+publication's own result untouched. `artefact/artefact_report.rs` owns the
+channel's vocabulary, serialization, and writers;
+`artefact/artefact_observation.rs` owns the stage and duration state one
+publication accumulates; `artefact/publish.rs` is its only producer. A build
+that did not opt in takes the plain blocking `lock`, so the common case pays no
+polling cost for a channel it never enabled. Because a blocked publisher does
+not hold the lock, the wait marker is written through `write_private_atomic`,
+whose temporary derives from the already-unique destination; the shared
+`atomic_write` temporary would let two blocked publishers collide.
 
 `artefact/publish.rs` owns that whole write path. It takes the lock, writes the
 fragment, merges, renders, prunes, and publishes — one function,
