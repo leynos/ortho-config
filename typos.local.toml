@@ -39,6 +39,11 @@ ignore = [
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",
+  # Commit short hashes are written in inline code throughout the plans. Hex
+  # letters can begin a token that reads as a misspelling, so a backticked hash
+  # is ignored rather than corrected. Requiring at least one digit keeps that
+  # exemption narrow: a word spelled only in hex letters is still checked.
+  "`[0-9a-f]{0,40}[0-9][0-9a-f]{0,40}`",
 ]
 
 [files]
