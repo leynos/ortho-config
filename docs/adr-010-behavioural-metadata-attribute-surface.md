@@ -120,8 +120,9 @@ the declared enums without an `Unknown` variant; agent context has `Unknown`.
   - Let authors declare interaction and mutation boundaries at the derive site.
   - Populate the reserved agent-context fields without a schema version bump.
   - Add the optional `bypass_flag` and `dry_run_flag` fields.
-  - Provide the behaviour rule set behind the shipped `--check-agent-native`
-    lint.
+  - Provide the behaviour rule set as a library API over a compiled
+    `AgentContext`, leaving its integration with the `--check-agent-native`
+    lint to the reserved 7.1.2 `PolicyInputs` seam.
 - Non-goals:
   - Infer any semantics from command names or flags.
   - Grow the `behaviour(...)` group beyond runtime execution semantics.

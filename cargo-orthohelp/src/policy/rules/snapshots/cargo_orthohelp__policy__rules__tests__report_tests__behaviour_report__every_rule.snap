@@ -1,0 +1,90 @@
+---
+source: cargo-orthohelp/src/policy/rules/report_tests.rs
+expression: json
+---
+{
+  "version": "1",
+  "tool": "cargo-orthohelp",
+  "mode": "warn",
+  "results": [
+    {
+      "rule_id": "agent-native.behaviour.bypass-unknown",
+      "code": "bypass_flag_unknown",
+      "severity": "warn",
+      "message": "command `admin grant-access` declares bypass flag `--yes` but no input exposes it; add a field with `#[ortho_config(cli_long = \"yes\")]` or change the declared bypass",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.destructive-bypass",
+      "code": "destructive_bypass_missing",
+      "severity": "warn",
+      "message": "command `admin purge` is destructive but declares no bypass flag; add `behaviour(bypass = \"--force\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.prompt-bypass",
+      "code": "prompt_bypass_missing",
+      "severity": "warn",
+      "message": "command `admin purge` may prompt but declares no bypass flag; add `behaviour(bypass = \"--force\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "interaction_unknown",
+      "severity": "warn",
+      "message": "command `prune` has undeclared interaction behaviour; add `behaviour(interaction = \"non_interactive\")` or `behaviour(interaction = \"interactive\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "mutation_unknown",
+      "severity": "warn",
+      "message": "command `prune` has undeclared mutation boundary; add `behaviour(mutation = \"read_only\")`, `behaviour(mutation = \"write\")`, `behaviour(mutation = \"delete\")`, or `behaviour(mutation = \"submit\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "interaction_unknown",
+      "severity": "warn",
+      "message": "command `sync` has undeclared interaction behaviour; add `behaviour(interaction = \"non_interactive\")` or `behaviour(interaction = \"interactive\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "mutation_unknown",
+      "severity": "warn",
+      "message": "command `version` has undeclared mutation boundary; add `behaviour(mutation = \"read_only\")`, `behaviour(mutation = \"write\")`, `behaviour(mutation = \"delete\")`, or `behaviour(mutation = \"submit\")` to its arguments struct",
+      "location": null
+    }
+  ],
+  "summary": {
+    "off": 0,
+    "warn": 7,
+    "deny": 0,
+    "total": 7
+  },
+  "exceptions": [],
+  "vocabulary": {
+    "verbs": [
+      "get",
+      "list",
+      "create",
+      "update",
+      "delete",
+      "jobs",
+      "profile",
+      "feedback"
+    ],
+    "flags": [
+      "--json",
+      "--no-input",
+      "--force",
+      "--dry-run",
+      "--limit",
+      "--cursor",
+      "--wait",
+      "--profile",
+      "--deliver"
+    ]
+  }
+}

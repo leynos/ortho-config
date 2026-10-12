@@ -5,7 +5,8 @@
 //! the advertised vocabulary, and the remedy text a reader is expected to act
 //! on. Rule-by-rule decision behaviour lives in the sibling `tests` module.
 
-use ortho_config::{InteractionMode, MutationEffect};
+use insta::assert_snapshot;
+use ortho_config::{AgentContext, InteractionMode, MutationEffect};
 use rstest::rstest;
 use serde_json::Value;
 
@@ -159,6 +160,81 @@ fn bypass_flag_unknown_remedy_names_the_cli_long_attribute() {
         !message.contains("#[arg(long"),
         "remedy must not advise the `#[arg(long = ...)]` attribute, got {message}"
     );
+}
+
+/// Builds a context whose commands reach every rule and both undeclared codes.
+///
+/// Each command isolates the rule it is meant to provoke, so the summary counts
+/// in the snapshot below are explainable from the fixture rather than merely
+/// recorded. Commands are pushed out of path order to prove the report sorts by
+/// path; `greet` stays deliberately clean so a finding-free command between
+/// noisy ones cannot shift a neighbour's results.
+fn every_rule_context() -> AgentContext {
+    let mut context = AgentContext::new("fixture");
+
+    // `interaction_unknown` alone: declared mutation, undeclared interaction.
+    context.commands.push(command(
+        &["sync"],
+        InteractionMode::Unknown,
+        MutationEffect::ReadOnly,
+    ));
+    // `mutation_unknown` alone: the two undeclared codes are independent.
+    context.commands.push(command(
+        &["version"],
+        InteractionMode::NonInteractive,
+        MutationEffect::Unknown,
+    ));
+    // Both undeclared codes at once.
+    context.commands.push(command(
+        &["prune"],
+        InteractionMode::Unknown,
+        MutationEffect::Unknown,
+    ));
+    // Compliant: declared non-interactive, declared read-only, no bypass needed.
+    context.commands.push(command(
+        &["greet"],
+        InteractionMode::NonInteractive,
+        MutationEffect::ReadOnly,
+    ));
+    // `destructive_bypass_missing` *and* `prompt_bypass_missing`.
+    context.commands.push(command(
+        &["admin", "purge"],
+        InteractionMode::Interactive,
+        MutationEffect::Delete,
+    ));
+    // `bypass_flag_unknown`: the declared flag matches no declared input. The
+    // bypass is present, so neither bypass-requirement rule fires.
+    let mut grant = command(
+        &["admin", "grant-access"],
+        InteractionMode::Interactive,
+        MutationEffect::Submit,
+    );
+    grant.bypass_flag = Some("--yes".to_owned());
+    grant.inputs.push(input("force", "bool"));
+    context.commands.push(grant);
+
+    context
+}
+
+/// The whole report is one document, locked as a snapshot.
+///
+/// The execplan promises that a finding's message is the entire operator
+/// experience, so this snapshot is the contract for that experience: rule ids,
+/// codes, severity, message wording, `null` locations, summary counts, and the
+/// advertised vocabulary all move together, and a reworded remedy fails here
+/// rather than passing a substring assertion. It complements
+/// `report_serializes_as_a_single_json_document`, which pins only the header.
+///
+/// `mode` is `warn` because that is the mode the execplan names for this
+/// snapshot; deny differs only in severity and counts, which the severity case
+/// above already pins.
+#[test]
+fn behaviour_report_snapshot_locks_the_full_document() {
+    let context = every_rule_context();
+    let report = check_behaviour(&context, PolicyMode::Warn);
+    let json = serde_json::to_string_pretty(&report).expect("serialize behaviour report");
+
+    assert_snapshot!("behaviour_report__every_rule", json);
 }
 
 /// The report serializes to one flat JSON document with stable header fields.
