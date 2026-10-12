@@ -261,9 +261,17 @@ catalogue base; when omitted, the application name supplies the default.
 
 The derive normalizes dotted base and argument segments to Fluent-safe,
 hyphen-joined identifiers. Normalized argument-ID collisions within one derived
-struct are compile-time errors. Update catalogues to use the generated IDs,
-including `long-help`, and retain any hand-built command-tree validation
-because those trees keep the runtime panic contract.
+struct are compile-time errors. Update catalogues to use the generated IDs and
+retain any hand-built command-tree validation because those trees keep the
+runtime panic contract.
+
+Re-spell catalogues carefully: the separators are load-bearing. Roots and clap
+flag-style names are hyphen-joined, but an argument's own segment keeps the raw
+Rust field name, so an underscored field yields `is_dry_run`, not `is-dry-run`.
+The fixed suffixes `long_help` and `value_name` are underscore-separated for the
+same reason. `normalize_segment` preserves both `-` and `_`, so the two
+spellings normalize to *distinct* keys and a respelled entry becomes
+unreachable — it translates cleanly and is simply never looked up.
 
 Documentation IR version rises from `1.1` to `2.0` because the identifier
 *values* change meaning for consumers keyed on the old shapes. The old dotted

@@ -159,9 +159,9 @@ configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
 `#[ortho_config(localization_base = "…")]` (or the normalized application-name
 default), while the command-level constants and `ARG_IDS` use the normalized,
 hyphen-joined Fluent ids. Each `ArgLocalizationIds` entry records the Clap
-argument name and its help, long-help, and value-name ids. Argument ids are
-validated for normalized collisions during expansion; flattened, subcommand, and
-`skip_cli` fields are excluded from `ARG_IDS`. Set
+argument name and its `help`, `long_help`, and `value_name` ids. Argument ids
+are validated for normalized collisions during expansion; flattened, subcommand,
+and `skip_cli` fields are excluded from `ARG_IDS`. Set
 `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` for an opt-in standalone inventory at
 `${OUT_DIR}/ortho-config/cli-identifiers.json`; the derive writes this file
 through per-expansion fragments and merges them deterministically. Mounted
