@@ -282,6 +282,56 @@ fn atomic_write(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     fs::rename(temporary, path)
 }
 
+/// Returns whether a directory entry is a rendered artefact file.
+///
+/// Rendered files are the single `cli-identifiers.json`, the
+/// `cli-identifiers.index.json` manifest, and the numbered
+/// `cli-identifiers.<n>.json` parts. Fragments live in `FRAGMENT_DIR` and the
+/// lock file is not JSON, so neither is matched.
+fn is_rendered_artefact(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("cli-identifiers") else {
+        return false;
+    };
+    // The unsuffixed file is the whole single-file layout.
+    if rest == ".json" {
+        return true;
+    }
+    let Some(tail) = rest.strip_prefix('.') else {
+        return false;
+    };
+    tail.strip_suffix(".json")
+        .is_some_and(|index| index == "index" || index.parse::<usize>().is_ok())
+}
+
+/// Removes rendered artefact files left over from a previous layout.
+///
+/// `render` returns only the files the current entry set needs, so switching
+/// between the single-file and index-plus-parts layouts would otherwise leave
+/// the superseded files in place. A reader cannot tell them from current
+/// output, and a stale index would keep pointing at parts that no longer
+/// describe the inventory. Pruning keeps the directory equal to exactly what
+/// the latest render produced.
+///
+/// The caller holds the artefact lock, so no concurrent process can be reading
+/// or rewriting these files while they are removed.
+fn prune_stale_rendered(root: &Path, current: &[ArtefactFile]) -> std::io::Result<()> {
+    let keep = current
+        .iter()
+        .map(|file| file.name.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    for item in fs::read_dir(root)? {
+        let item = item?;
+        let name = item.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if is_rendered_artefact(name) && !keep.contains(name) && item.path().is_file() {
+            fs::remove_file(item.path())?;
+        }
+    }
+    Ok(())
+}
+
 /// Hashes a source path for a stable per-expansion fragment name.
 fn hash(value: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -360,9 +410,20 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
         )
     })?;
     atomic_write(&path, &contents).map_err(|error| syn::Error::new(span, format!("cannot write identifier artefact {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions", path.display())))?;
-    for file in render(merge_fragments(&root).map_err(|error| syn::Error::new(span, error))?)
-        .map_err(|error| syn::Error::new(span, error.to_string()))?
-    {
+    let rendered = render(merge_fragments(&root).map_err(|error| syn::Error::new(span, error))?)
+        .map_err(|error| syn::Error::new(span, error.to_string()))?;
+    // Prune before publishing so a reader never observes a directory holding
+    // both the new layout's files and unpruned leftovers from the old one.
+    prune_stale_rendered(&root, &rendered).map_err(|error| {
+        syn::Error::new(
+            span,
+            format!(
+                "cannot prune superseded identifier artefacts in {}: {error}",
+                root.display()
+            ),
+        )
+    })?;
+    for file in rendered {
         atomic_write(&root.join(file.name), &file.contents)
             .map_err(|error| syn::Error::new(span, error.to_string()))?;
     }
