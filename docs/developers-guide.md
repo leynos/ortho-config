@@ -169,7 +169,7 @@ path-aware documentation IR.
 
 The rendered layout depends on the inventory size. Up to 1 MiB the whole
 inventory is written to `${OUT_DIR}/ortho-config/cli-identifiers.json`. Above
-that cap — measured on the serialised document, and never splitting a batch
+that cap — measured on the serialized document, and never splitting a batch
 below one entry, so a single oversized entry stays in one part — the output
 becomes `cli-identifiers.index.json` plus the numbered
 `cli-identifiers.<n>.json` parts it lists. Read the index rather than assuming
