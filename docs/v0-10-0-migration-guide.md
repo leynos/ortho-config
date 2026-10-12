@@ -268,8 +268,8 @@ runtime panic contract.
 Re-spell catalogues carefully: the separators are load-bearing. Roots and clap
 flag-style names are hyphen-joined, but an argument's own segment keeps the raw
 Rust field name, so an underscored field yields `is_dry_run`, not `is-dry-run`.
-The fixed suffixes `long_help` and `value_name` are underscore-separated for the
-same reason. `normalize_segment` preserves both `-` and `_`, so the two
+The fixed suffixes `long_help` and `value_name` are underscore-separated for
+the same reason. `normalize_segment` preserves both `-` and `_`, so the two
 spellings normalize to *distinct* keys and a respelled entry becomes
 unreachable — it translates cleanly and is simply never looked up.
 

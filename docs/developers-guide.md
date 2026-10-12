@@ -160,14 +160,25 @@ configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
 default), while the command-level constants and `ARG_IDS` use the normalized,
 hyphen-joined Fluent ids. Each `ArgLocalizationIds` entry records the Clap
 argument name and its `help`, `long_help`, and `value_name` ids. Argument ids
-are validated for normalized collisions during expansion; flattened, subcommand,
-and `skip_cli` fields are excluded from `ARG_IDS`. Set
-`ORTHO_CONFIG_EMIT_IDENTIFIERS=1` for an opt-in standalone inventory at
-`${OUT_DIR}/ortho-config/cli-identifiers.json`; the derive writes this file
-through per-expansion fragments and merges them deterministically. Mounted
-command-tree identifiers remain owned by the path-aware documentation IR.
+are validated for normalized collisions during expansion; flattened,
+subcommand, and `skip_cli` fields are excluded from `ARG_IDS`. Set
+`ORTHO_CONFIG_EMIT_IDENTIFIERS=1` for an opt-in standalone inventory; the
+derive writes it through per-expansion fragments and merges them
+deterministically. Mounted command-tree identifiers remain owned by the
+path-aware documentation IR.
+
+The rendered layout depends on the inventory size. Up to 1 MiB the whole
+inventory is written to `${OUT_DIR}/ortho-config/cli-identifiers.json`. Above
+that cap — measured on the serialised document, and never splitting a batch
+below one entry, so a single oversized entry stays in one part — the output
+becomes `cli-identifiers.index.json` plus the numbered
+`cli-identifiers.<n>.json` parts it lists. Read the index rather than assuming
+the single-file path when the cap may be exceeded. A render prunes every file
+of the *other* layout before publishing, so a build that switches
+representations never leaves a stale file where a reader would find it.
+
 `OUT_DIR` is package-scoped, so every writer holds an exclusive
-`cli-identifiers.lock` across the complete fragment-write, merge, and
+`cli-identifiers.lock` across the complete fragment-write, merge, prune, and
 publication sequence; the unit tests in `artefact_lock_tests.rs` spawn two real
 processes to prove the exclusion and the release, rather than relying on an
 in-process mutex.
