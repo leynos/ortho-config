@@ -17,52 +17,91 @@ pub(super) const CAP_BYTES: usize = 1_048_576;
 /// Schema revision recorded in every rendered document.
 pub(super) const SCHEMA_VERSION: u8 = 1;
 
+/// Records where one derive expansion was written.
+///
+/// Read back by the merge: a fragment whose source file no longer exists is
+/// treated as stale and dropped, so this has to be the path the compiler
+/// itself reported rather than a normalized one.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct Source {
+    /// Source file the expansion came from.
     pub(super) file: String,
+    /// One-based line of the deriving type.
     pub(super) line: usize,
+    /// Zero-based column of the deriving type.
     pub(super) column: usize,
 }
 
+/// Describes one generated Fluent identifier in the rendered inventory.
+///
+/// This is the artefact's unit of meaning: `id` is the catalogue key a
+/// translator resolves, and the remaining fields say which declaration
+/// produced it so tooling can map an inventory entry back to the Rust source.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct Entry {
+    /// Fully normalized Fluent identifier.
     pub(super) id: String,
+    /// Identifier category, such as `command` or `argument`.
     pub(super) kind: String,
+    /// Rust type the identifier was generated for.
     #[serde(rename = "type")]
     pub(super) type_name: String,
+    /// Configuration field that produced an argument id, when there is one.
     pub(super) field: Option<String>,
+    /// Whether the identifier belongs to a standalone or mounted command tree.
     pub(super) path_scope: String,
+    /// Where the deriving type is declared.
     pub(super) source: Source,
+    /// Embedded default text, always `None` while `localized_default` is
+    /// deferred.
     pub(super) embedded_default: Option<String>,
 }
 
 /// Borrows shared schema fields while building entries for one derive expansion.
 pub(super) struct EntryContext<'a> {
+    /// Rust type every entry of this expansion was generated for.
     pub(super) type_name: &'a str,
+    /// Source location shared by every entry of this expansion.
     pub(super) source: &'a Source,
 }
 
+/// Renders one whole inventory as the single-file layout.
 #[derive(Debug, Deserialize, Serialize)]
 pub(super) struct Document {
+    /// Schema revision, so a reader can reject a document it cannot parse.
     pub(super) schema_version: u8,
+    /// Every entry in the inventory, in deterministic order.
     pub(super) entries: Vec<Entry>,
 }
 
+/// Lists the numbered parts of a split inventory.
 #[derive(Debug, Deserialize, Serialize)]
 pub(super) struct Index {
+    /// Schema revision of the parts this index names.
     schema_version: u8,
+    /// Filenames of the parts, in the order they were rendered.
     pub(super) parts: Vec<String>,
 }
 
+/// Carries one expansion's contribution between write and merge.
+///
+/// A fragment is deliberately not a `Document`: it records the source file
+/// that produced it so the merge can drop contributions whose source has since
+/// been deleted, which is what keeps a stale `OUT_DIR` from resurrecting ids.
 #[derive(Debug, Deserialize, Serialize)]
 pub(super) struct Fragment {
+    /// Source file whose expansion wrote this fragment.
     pub(super) source_file: String,
+    /// Entries this expansion contributed.
     pub(super) entries: Vec<Entry>,
 }
 
+/// Pairs one rendered filename with its bytes, before publication.
 #[derive(Debug)]
 pub(super) struct ArtefactFile {
+    /// Filename to publish below the artefact root.
     pub(super) name: String,
+    /// Serialized contents to write.
     pub(super) contents: Vec<u8>,
 }
 

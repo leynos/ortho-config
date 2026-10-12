@@ -928,6 +928,17 @@ When the output exceeds 1 MiB, the index lists `cli-identifiers.<n>.json`
 parts; read those listed parts rather than expecting all entries in the single
 index file.
 
+Concurrent compiler processes for one package serialize their writes behind an
+exclusive lock, so a build that looks stuck may be waiting for a peer. To see
+that, add `ORTHO_CONFIG_ARTEFACT_REPORT=1` alongside the emission variable and
+rebuild. A publication that waits for the lock longer than five seconds leaves
+`cli-identifiers.lock-wait.<pid>.json` in the artefact directory, which proves
+the build is waiting rather than deadlocked; the file disappears once the lock
+is granted. Each finished publication also writes
+`cli-identifiers.build-report.json`, naming the stage it reached and how long
+it waited. The report is best effort: it explains a build and never fails one,
+and neither file is part of the identifier inventory.
+
 Localization is most reliable when the command metadata is translated before
 parsing and any resulting error goes through the same localizer.
 `LocalizedParse` provides that path for the common case:

@@ -183,16 +183,51 @@ publication sequence; the unit tests in `artefact/artefact_lock_tests.rs` spawn
 two real processes to prove the exclusion and the release, rather than relying
 on an in-process mutex.
 
+That lock serializes *writers among themselves*. It is cooperative, so it does
+not exclude a process that never takes it: a reader — a build script listing
+the directory, or any other tool — can observe an intermediate state between
+the prune and the writes that follow it, and can read the fragments before a
+render. Atomic per-file writes keep each file whole, but the directory as a
+whole is not replaced atomically and the layout may change between renders. A
+reader that must be consistent has to take the same lock or retry.
+
+A second opt-in, `ORTHO_CONFIG_ARTEFACT_REPORT=1`, turns on the observation
+channel that explains the same sequence when a build is slow or fails. It
+writes two files below the artefact root, neither of which is part of the
+inventory and neither of which the prune matches:
+`cli-identifiers.lock-wait.<pid>.json` exists only *while* a publication is
+blocked on the lock, so a build that appears hung can be diagnosed as waiting
+rather than deadlocked, and `cli-identifiers.build-report.json` records the
+stage the publication reached — `lock_wait`, `fragment_write`, `merge`,
+`render`, `prune`, or `publish` — with its lock-wait and total durations in
+whole milliseconds and a bounded `completed`/`failed` outcome. Both writes are
+best effort: the channel explains builds and must not be able to fail one, so
+an unwritable directory leaves the publication's own result untouched and the
+absent file is itself the observation. `artefact/artefact_report.rs` owns the
+channel's vocabulary, serialization, and both writers; `artefact/publish.rs`
+is its only producer. A build that did not opt in takes the plain blocking
+`lock`, so the common case pays no polling cost for a channel it never
+enabled. Because a blocked publisher does not hold the lock, the wait marker
+is per-process and written through `write_private_atomic`, whose temporary
+derives from the already-unique destination; the shared `atomic_write`
+temporary would let two blocked publishers collide.
+
 `artefact/publish.rs` owns that whole write path. It takes the lock, writes the
 fragment, merges, renders, prunes, and publishes — one function,
 `publish::publish`, called by `emit` and by the lock tests alike, so the
-exclusivity the tests observe is the exclusivity the compiler runs. `emit` is
-correspondingly the **only** reader of the ambient environment (`OUT_DIR`,
-`CARGO_CRATE_NAME`, and the opt-in flag); everything below it takes a
-`publish::Publication` of explicit values. That boundary is what lets a test
-publish into a temporary root without mutating the process environment, which
-matters because build scripts and tests share one `OUT_DIR` per package and an
-unset variable would otherwise be indistinguishable from a stale one.
+exclusivity the tests observe is the exclusivity the compiler runs. The guard
+is threaded by reference into each step rather than merely bound in `publish`:
+a local that is never read can be dropped early by a later edit while every
+test still passes, because a publisher that acquires and immediately releases
+still *blocks* on acquisition and is therefore indistinguishable to an outside
+observer. Passing `&LockGuard` makes releasing it early a borrow-check error
+instead of a silent regression. `emit` is correspondingly the **only** reader
+of the ambient environment (`OUT_DIR`, `CARGO_CRATE_NAME`, and the opt-in
+flag); everything below it takes a `publish::Publication` of explicit values.
+That boundary is what lets a test publish into a temporary root without
+mutating the process environment, which matters because build scripts and tests
+share one `OUT_DIR` per package and an unset variable would otherwise be
+indistinguishable from a stale one.
 
 `artefact/artefact_probe.rs` owns the stale-fragment policy:
 `source_still_exists` is its only entry point, `probe_metadata` is the only
@@ -204,9 +239,11 @@ call sites. For OS-independent policy tests, `with_metadata_outcome` is a
 test-only, thread-local injection that matches one exact probe path and is
 compiled out of non-test builds. It exists because no filesystem layout
 provokes the same metadata error portably: a regular file in a parent position
-yields `NotADirectory` on Unix and `NotFound` on Windows, and
-`ErrorKind::NotADirectory` has no Windows counterpart at all. The policy tests
-in `artefact/artefact_probe_tests.rs` inject the outcome and drive the shared
+yields `NotADirectory` on Unix and `NotFound` on Windows. Which `ErrorKind` a
+platform reports for a given layout is an implementation mapping, not a
+portability guarantee, so a policy test built on a real layout would assert a
+different kind per platform. The policy tests in
+`artefact/artefact_probe_tests.rs` inject the outcome and drive the shared
 classification, while the merge-level tests in
 `artefact/artefact_fragment_tests.rs` inject through the same boundary and
 assert the diagnostic retains the path and the injected error marker. It is

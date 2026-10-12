@@ -196,8 +196,10 @@ fn merge_fragments_reports_malformed_json() -> Result<()> {
 
     let error = merge_fragments(root.path()).expect_err("malformed JSON must fail merging");
     ensure!(
-        !error.is_empty(),
-        "malformed JSON error must retain diagnostics"
+        error.contains("malformed.json") && error.contains("cannot parse"),
+        "malformed JSON error must name the fragment path and the failed \
+         operation, because the merge runs inside a macro and the text reaches \
+         the build log verbatim; got {error:?}",
     );
     Ok(())
 }
@@ -210,7 +212,11 @@ fn merge_fragments_reports_unreadable_fragment_path() -> Result<()> {
         .context("create unreadable fragment directory")?;
 
     let error = merge_fragments(root.path()).expect_err("directory fragment must fail reading");
-    ensure!(!error.is_empty(), "read failure must retain diagnostics");
+    ensure!(
+        error.contains("unreadable.json") && error.contains("cannot read"),
+        "a read failure must name the fragment path and the failed operation; \
+         got {error:?}",
+    );
     Ok(())
 }
 
@@ -220,8 +226,10 @@ fn merge_fragments_reports_missing_fragment_directory() -> Result<()> {
     let root = TempRoot::new()?;
     let error = merge_fragments(root.path()).expect_err("missing fragment directory must fail");
     ensure!(
-        !error.is_empty(),
-        "missing directory error must retain diagnostics"
+        error.contains(FRAGMENT_DIR) && error.contains("cannot list"),
+        "a missing fragment directory must name the directory it could not \
+         list, so the maintainer reads which artefact root the macro used; \
+         got {error:?}",
     );
     Ok(())
 }
@@ -276,7 +284,7 @@ fn merge_fragments_propagates_non_not_found_metadata_errors() -> Result<()> {
     })
     .expect_err("non-NotFound metadata failure must abort merging instead of dropping entries");
     ensure!(
-        error.contains("cannot probe fragment source"),
+        error.contains("cannot probe") && error.contains("guarded.rs"),
         "error must identify the probe failure, got: {error}"
     );
     ensure!(

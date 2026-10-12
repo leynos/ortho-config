@@ -8,16 +8,27 @@
 /// lookup and its documented identifier from drifting apart.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum MessageSuffix {
+    /// The command's one-line about text.
     About,
+    /// The command's long about text.
     LongAbout,
+    /// The command's usage string.
     Usage,
+    /// The command's short version.
     Version,
+    /// The command's long version.
     LongVersion,
+    /// Text shown after the command's help.
     AfterHelp,
+    /// Text shown after the command's long help.
     AfterLongHelp,
+    /// The intermediate segment grouping an argument's identifiers.
     Args,
+    /// An argument's one-line help.
     Help,
+    /// An argument's long help.
     LongHelp,
+    /// An argument's displayed value name.
     ValueName,
 }
 

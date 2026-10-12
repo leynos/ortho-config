@@ -4,8 +4,10 @@
 //! other metadata failure aborts merging — must hold on every platform, but
 //! no filesystem layout provokes the same metadata error portably: a regular
 //! file in a parent position yields `NotADirectory` on Unix and `NotFound`
-//! on Windows, and `ErrorKind::NotADirectory` has no Windows counterpart at
-//! all. These tests therefore inject metadata outcomes and drive the shared
+//! on Windows. Which `ErrorKind` a platform reports for a given layout is an
+//! implementation mapping rather than a portability guarantee, so a policy
+//! test built on a real layout would assert a different kind per platform.
+//! These tests therefore inject metadata outcomes and drive the shared
 //! classification directly. The merge-level regression tests in
 //! `artefact_fragment_tests.rs` exercise the same injection through the full
 //! merge path.

@@ -15,6 +15,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use proc_macro2::Span;
 
@@ -31,12 +32,31 @@ pub(super) struct LockGuard {
     _file: fs::File,
 }
 
+/// How long a waiting acquirer sleeps between attempts.
+///
+/// The wait is polled rather than blocking on `File::lock` so a publisher can
+/// report its own wait *while* it is still waiting — the property an
+/// after-the-fact duration cannot supply. The interval is short enough that a
+/// released lock is noticed promptly and long enough that a blocked build does
+/// not spin.
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+
 /// Acquires the exclusive publication lock for one artefact directory.
 ///
 /// Blocks until a peer process releases the lock. Returns the held guard; the
 /// caller must keep it alive for the whole fragment-write, merge, and
 /// publication sequence.
 pub(super) fn lock(root: &Path) -> syn::Result<LockGuard> {
+    lock_while(root, |_| ())
+}
+
+/// Acquires the lock, reporting each observed wait to `on_wait`.
+///
+/// `on_wait` receives the time spent waiting so far, once per [`POLL_INTERVAL`]
+/// while the lock stays contended, so a caller can surface a prolonged wait
+/// before the lock is ever granted. It is called only when the lock is not
+/// immediately free.
+pub(super) fn lock_while(root: &Path, mut on_wait: impl FnMut(Duration)) -> syn::Result<LockGuard> {
     let path = root.join(LOCK_FILE);
     let file = fs::File::create(&path).map_err(|error| {
         syn::Error::new(
@@ -47,16 +67,25 @@ pub(super) fn lock(root: &Path) -> syn::Result<LockGuard> {
             ),
         )
     })?;
-    file.lock().map_err(|error| {
-        syn::Error::new(
-            Span::call_site(),
-            format!(
-                "cannot lock identifier artefact directory {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions",
-                root.display()
-            ),
-        )
-    })?;
-    Ok(LockGuard { _file: file })
+    let started = Instant::now();
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(LockGuard { _file: file }),
+            Err(fs::TryLockError::WouldBlock) => {
+                on_wait(started.elapsed());
+                std::thread::sleep(POLL_INTERVAL);
+            }
+            Err(fs::TryLockError::Error(error)) => {
+                return Err(syn::Error::new(
+                    Span::call_site(),
+                    format!(
+                        "cannot lock identifier artefact directory {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions",
+                        root.display()
+                    ),
+                ));
+            }
+        }
+    }
 }
 
 /// Reports whether the publication lock is currently free.

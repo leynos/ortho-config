@@ -5,6 +5,7 @@
 
 mod artefact;
 mod identifier;
+mod model;
 pub(crate) mod suffix;
 #[cfg(test)]
 mod tests;
@@ -17,137 +18,11 @@ use syn::Ident;
 
 use crate::derive::parse::{FieldAttrs, StructAttrs, clap_arg_id, clap_field_is_flattened};
 
-pub(crate) use identifier::{join_identifier, normalize_segment};
+pub(crate) use model::{
+    ArgIdsModel, ClapArgId, CommandIds, FluentMessageId, FluentSegments, LocalizationBase,
+    LocalizationIds,
+};
 use suffix::MessageSuffix;
-
-#[derive(Debug, Clone)]
-pub(crate) struct LocalizationBase(String);
-
-impl LocalizationBase {
-    /// Normalizes each dotted catalogue-base segment for Fluent.
-    fn normalize(&self, span: Span) -> syn::Result<FluentSegments> {
-        self.0
-            .split('.')
-            .map(|segment| normalize_segment(segment, span))
-            .collect::<Result<Vec<_>, _>>()
-            .map(FluentSegments)
-    }
-}
-
-impl AsRef<str> for LocalizationBase {
-    /// Returns the original dotted catalogue base.
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ClapArgId(String);
-
-impl ClapArgId {
-    /// Normalizes each dotted Clap argument-id segment for Fluent.
-    fn normalize(&self, span: Span) -> syn::Result<FluentSegments> {
-        self.0
-            .split('.')
-            .map(|segment| normalize_segment(segment, span))
-            .collect::<Result<Vec<_>, _>>()
-            .map(FluentSegments)
-    }
-}
-
-impl AsRef<str> for ClapArgId {
-    /// Returns the raw Clap argument id for code emission.
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct FluentSegments(Vec<String>);
-
-impl FluentSegments {
-    /// Ensures the first normalized segment starts with an ASCII letter.
-    fn ensure_leading_ascii_letter(&self, span: Span) -> syn::Result<()> {
-        let Some(first) = self.0.first() else {
-            return Err(syn::Error::new(
-                span,
-                "Fluent identifier must start with an ASCII letter: missing command root",
-            ));
-        };
-        let Some(ch) = first.chars().next() else {
-            return Err(syn::Error::new(
-                span,
-                "Fluent identifier must start with an ASCII letter: empty command root",
-            ));
-        };
-        if ch.is_ascii_alphabetic() {
-            Ok(())
-        } else {
-            Err(syn::Error::new(
-                span,
-                format!("Fluent identifier must start with an ASCII letter: {first:?}"),
-            ))
-        }
-    }
-
-    /// Returns a copy with one additional segment.
-    fn with_segment(&self, segment: impl Into<String>) -> Self {
-        let mut segments = self.0.clone();
-        segments.push(segment.into());
-        Self(segments)
-    }
-
-    /// Returns a copy with one fixed message suffix.
-    fn with_suffix(&self, suffix: MessageSuffix) -> Self {
-        self.with_segment(suffix.as_ref())
-    }
-
-    /// Joins the segments into a validated Fluent message id.
-    fn join(&self, span: Span) -> syn::Result<FluentMessageId> {
-        join_identifier(&self.0, span).map(FluentMessageId)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct FluentMessageId(String);
-
-impl AsRef<str> for FluentMessageId {
-    /// Returns the joined Fluent message id.
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ArgIdsModel {
-    pub field_name: String,
-    pub name: ClapArgId,
-    pub help_id: FluentMessageId,
-    pub long_help_id: FluentMessageId,
-    pub value_name_id: FluentMessageId,
-}
-
-#[derive(Debug, Clone)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "each field is a distinct identifier constant; the `_id` postfix is the point"
-)]
-pub(crate) struct CommandIds {
-    pub about_id: FluentMessageId,
-    pub long_about_id: FluentMessageId,
-    pub usage_id: FluentMessageId,
-    pub version_id: FluentMessageId,
-    pub long_version_id: FluentMessageId,
-    pub after_help_id: FluentMessageId,
-    pub after_long_help_id: FluentMessageId,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct LocalizationIds {
-    pub base: LocalizationBase,
-    pub command: CommandIds,
-    pub args: Vec<ArgIdsModel>,
-}
 
 /// Resolves the dotted catalogue base for a deriving struct (Decision D-5).
 ///

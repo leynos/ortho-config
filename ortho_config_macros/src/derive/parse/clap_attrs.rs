@@ -110,7 +110,9 @@ pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<sy
 /// subcommand selectors and flattened argument groups.
 #[derive(Clone, Copy)]
 enum ClapFieldMarker {
+    /// Marks the field that selects a subcommand.
     Subcommand,
+    /// Marks a field whose arguments are flattened into the parent command.
     Flatten,
 }
 

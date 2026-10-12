@@ -26,6 +26,11 @@ fn default_headings() -> HeadingOverrides {
     }
 }
 
+/// Resolves the application name the documentation IR records.
+///
+/// An explicit `app_name` wins; otherwise the name is derived from the
+/// struct's own attributes and identifier, so a deriving type that declares
+/// nothing still publishes a stable root.
 pub(crate) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> String {
     struct_attrs
         .discovery
@@ -34,6 +39,11 @@ pub(crate) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
         .unwrap_or_else(|| default_app_name(struct_attrs, ident))
 }
 
+/// Builds the tokens for the command's `about` identifier.
+///
+/// An explicit `about_id` is emitted as-is; without one the expression asks
+/// the runtime to compose the default from `command_path`, which keeps a
+/// mounted tree's identifier agreed with the lookup that resolves it.
 pub(super) fn about_id_tokens(doc: &DocStructAttrs, krate: &TokenStream) -> TokenStream {
     doc.about_id.as_deref().map_or_else(
         || quote! { #krate::message_id_for(command_path, "about") },
@@ -41,6 +51,11 @@ pub(super) fn about_id_tokens(doc: &DocStructAttrs, krate: &TokenStream) -> Toke
     )
 }
 
+/// Builds the tokens for the command's `synopsis` identifier.
+///
+/// Mirrors [`about_id_tokens`], including its fallback: the default is
+/// composed from `command_path` rather than hard-coded here, so the emitted
+/// constant and the runtime lookup cannot drift.
 pub(super) fn synopsis_id_tokens(doc: &DocStructAttrs, krate: &TokenStream) -> TokenStream {
     doc.synopsis_id.as_deref().map_or_else(
         || quote! { Some(#krate::message_id_for(command_path, "usage")) },
@@ -149,6 +164,7 @@ fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> Toke
     }
 }
 
+/// Emits one string literal as an owned `String` expression.
 pub(super) fn string_tokens(value: &str) -> TokenStream {
     let lit = syn::LitStr::new(value, proc_macro2::Span::call_site());
     quote! { String::from(#lit) }

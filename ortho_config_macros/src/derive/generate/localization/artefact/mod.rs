@@ -13,6 +13,7 @@
 
 mod artefact_lock;
 mod artefact_probe;
+mod artefact_report;
 mod publish;
 mod schema;
 
@@ -24,8 +25,6 @@ use std::path::{Path, PathBuf};
 use proc_macro2::Span;
 use syn::Ident;
 
-#[cfg(test)]
-use self::artefact_lock::is_free;
 use self::artefact_probe::source_still_exists;
 #[cfg(test)]
 use self::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
@@ -43,7 +42,13 @@ use super::LocalizationIds;
 #[cfg(test)]
 use super::suffix::MessageSuffix;
 
+/// Names the directory below `OUT_DIR` holding every artefact and channel file.
 const ARTEFACT_DIR: &str = "ortho-config";
+
+/// Names the subdirectory holding one JSON fragment per derive expansion.
+///
+/// A subdirectory rather than a filename prefix, so the merge can enumerate
+/// exactly the fragments and the renderer's artefact matcher never sees them.
 const FRAGMENT_DIR: &str = "cli-identifiers.d";
 
 /// Returns whether an artefact-emission environment value explicitly opts in.
@@ -107,8 +112,12 @@ fn is_superseded(name: &str, keep: &std::collections::HashSet<&str>, path: &Path
 /// describe the inventory. Pruning keeps the directory equal to exactly what
 /// the latest render produced.
 ///
-/// The caller holds the artefact lock, so no concurrent process can be reading
-/// or rewriting these files while they are removed.
+/// The caller holds the artefact lock, so no other *writer* participates while
+/// these files are removed. The lock excludes publishers only: it is
+/// cooperative, so a reader that never takes it — a build script globbing the
+/// directory, say — can still observe the transition between the prune and the
+/// writes that follow it. Atomic per-file writes keep each file whole; the
+/// directory as a whole is not swapped atomically.
 fn prune_stale_rendered(root: &Path, current: &[ArtefactFile]) -> std::io::Result<()> {
     let keep = current
         .iter()
@@ -146,21 +155,52 @@ fn fragment_path(root: &Path, ident: &Ident, source: &Source) -> PathBuf {
 }
 
 /// Reads JSON fragments and drops fragments for removed source files.
+///
+/// Every failure names both the operation and the path it was attempted on.
+/// The bare `io::Error` text says only what went wrong, and the merge runs
+/// inside a procedural macro, so a message without the fragment path leaves
+/// the build maintainer to guess which of several expansions or targets wrote
+/// the file that could not be read. The returned text reaches the compiler
+/// diagnostic verbatim through `publish::republish`, so it is the whole of what
+/// a failing build shows.
 fn merge_fragments(root: &Path) -> Result<Vec<Entry>, String> {
     let fragments = root.join(FRAGMENT_DIR);
     let mut output = Vec::new();
-    for item in fs::read_dir(&fragments).map_err(|error| error.to_string())? {
-        let path = item.map_err(|error| error.to_string())?.path();
+    let entries = fs::read_dir(&fragments).map_err(|error| {
+        format!(
+            "cannot list identifier artefact fragments in {}: {error}",
+            fragments.display()
+        )
+    })?;
+    for item in entries {
+        let path = item
+            .map_err(|error| {
+                format!(
+                    "cannot read an entry of the fragment directory {}: {error}",
+                    fragments.display()
+                )
+            })?
+            .path();
         if path.extension().is_none_or(|extension| extension != "json") {
             continue;
         }
-        let bytes = fs::read(&path).map_err(|error| error.to_string())?;
-        let fragment: Fragment =
-            serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+        let bytes = fs::read(&path).map_err(|error| {
+            format!(
+                "cannot read identifier artefact fragment {}: {error}",
+                path.display()
+            )
+        })?;
+        let fragment: Fragment = serde_json::from_slice(&bytes).map_err(|error| {
+            format!(
+                "cannot parse identifier artefact fragment {}: {error}; delete it and rebuild",
+                path.display()
+            )
+        })?;
         if source_still_exists(Path::new(&fragment.source_file)).map_err(|error| {
             format!(
-                "cannot probe fragment source {}: {error}",
-                fragment.source_file
+                "cannot probe the source {} recorded by fragment {}: {error}",
+                fragment.source_file,
+                path.display()
             )
         })? {
             output.extend(fragment.entries);
@@ -182,6 +222,9 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
     let root = publish::artefact_root(Path::new(&out_dir), span)?;
     let source = source(span);
     let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| String::from("unknown"));
+    let report = artefact_report::ReportConfig::observed(artefact_report::Reporting::requested(
+        std::env::var(artefact_report::REPORT_ENV).ok().as_deref(),
+    ));
     publish::publish(
         &publish::Publication {
             root: &root,
@@ -189,6 +232,7 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
             source: &source,
             crate_name: &crate_name,
             model,
+            report,
         },
         span,
     )
@@ -207,5 +251,24 @@ mod fragment_tests;
 mod prune_tests;
 
 #[cfg(test)]
+#[path = "artefact_report_tests.rs"]
+mod report_tests;
+
+// Shared by `lock_tests` and `publication_tests`, so it is neither suite's own.
+#[cfg(test)]
+#[path = "artefact_lock_support.rs"]
+mod lock_support;
+
+// The fixture publications the lock suites drive the production boundary with,
+// split out so neither support module outgrows the file-length cap.
+#[cfg(test)]
+#[path = "artefact_lock_fixture.rs"]
+mod lock_fixture;
+
+#[cfg(test)]
 #[path = "artefact_lock_tests.rs"]
 mod lock_tests;
+
+#[cfg(test)]
+#[path = "artefact_publication_tests.rs"]
+mod publication_tests;
