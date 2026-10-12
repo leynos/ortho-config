@@ -83,8 +83,12 @@ fn any_behaviour_metadata() -> impl Strategy<Value = BehaviourMetadata> {
 
 /// Generates both declared interaction kinds.
 ///
-/// `Unknown` is deliberately absent: it is the wire representation of an
-/// undeclared field, produced by `None` rather than by a value.
+/// [`InteractionKind`] has no `Unknown` variant to omit: the IR represents an
+/// absent declaration by the field being `None`, which serializes as an
+/// explicit `null` (see [`any_behaviour_metadata`]). `Unknown` is an
+/// agent-context state that the bridge maps that `None` onto; it is not a value
+/// this type can hold, so it is unreachable here by construction rather than by
+/// a deliberate exclusion.
 fn any_interaction_kind() -> impl Strategy<Value = InteractionKind> {
     prop_oneof![
         Just(InteractionKind::NonInteractive),
@@ -94,7 +98,8 @@ fn any_interaction_kind() -> impl Strategy<Value = InteractionKind> {
 
 /// Generates all four declared mutation boundaries.
 ///
-/// `Unknown` is omitted for the same reason as in [`any_interaction_kind`].
+/// [`MutationKind`] likewise has no `Unknown` variant; see
+/// [`any_interaction_kind`] for how absence is represented at this layer.
 fn any_mutation_kind() -> impl Strategy<Value = MutationKind> {
     prop_oneof![
         Just(MutationKind::ReadOnly),

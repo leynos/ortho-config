@@ -401,6 +401,19 @@ escalation, not workarounds.
   `spellcheck` sub-step (a hyphenated spelling the gate rejects); both were
   fixed at source — `cargo fmt --all` and the unhyphenated form — with no
   `typos.local.toml` exception added.
+- [x] (2026-10-12) Second proof-assessment round. CodeRabbit verified the main
+  repairs substantive and returned three residual discrepancies; all three were
+  confirmed against the source and repaired. The bypass relation generator now
+  excludes the bypass name from the unrelated inputs (measured: 10 collisions
+  in 20,000 draws before the fix), the mode dimension is checked exhaustively
+  rather than sampled, and the two IR generator comments no longer claim
+  `Unknown` is a wire representation the IR can hold. The completeness
+  assessment `ortho-721-completeness-2026-10-12-a` was **closed** in the same
+  exchange: all three of its gaps verified. CodeScene's two new hosted findings
+  on the previous commit (`Complex Method`, `Bumpy Road Ahead`, both on the
+  oracle) were reproduced locally at `6e2e7b79` (score 9.53) and cleared by
+  decomposition at the repair (10.00, no warnings) — no suppression, no
+  threshold change. See the 2026-10-12 second-round decision entry.
 
 ## Surprises & discoveries
 
@@ -778,6 +791,51 @@ escalation, not workarounds.
   negative-control omission is therefore removed from the limitation inventory
   rather than carried as a known gap. Date/Author: 2026-10-12, proof-assessment
   reconciliation.
+
+- Decision: close the three residual proof-assessment discrepancies and the
+  CodeScene delta on the same candidate, in one commit. Rationale: all four
+  touch the same property file, and the CodeScene finding is a direct
+  consequence of the oracle this round was already rewriting, so separating
+  them would produce two overlapping edits to one file with an unusable
+  intermediate.
+
+  - *Unmatched bypass arms now exclude the bypass name.* `bypass_and_inputs`
+    drew `name` and `others` from the same `slug()` strategy, so an element of
+    `others` could equal `name`; arms 2 and 3 then carried a matching long flag
+    while claiming to match nothing, silently collapsing into arm 1. Measured
+    before the fix at 20,000 draws: 10 collisions (0.05%), so a default
+    256-case run has roughly a one-in-eight chance of drawing at least one —
+    rare enough to survive review, common enough to matter. `others` is now
+    filtered with `other != name`. The oracle agreed with the rule even under
+    maximum collision pressure (a probe collapsing `slug()` to a constant left
+    the property passing), which confirms this was a guarantee-strength defect
+    rather than a false expected result; the strengthening is the repair, and
+    it is not mutation-demonstrable.
+  - *The mode dimension is now exhaustive, not sampled.* The module doc claimed
+    severity and counter arithmetic were asserted exhaustively by mode, but
+    `prop_oneof!` gave each context one sampled mode. The property now loops
+    over both enforcing modes per context, via an extracted
+    `assert_report_matches_specification` helper returning `Result<(), TestCaseError>`
+    so the `?` operator propagates into the `proptest!` body.
+  - *The IR `Unknown` description is corrected.* Both generator comments
+    claimed `Unknown` is "the wire representation of an undeclared field,
+    produced by `None`", contradicting the corrected module doc and the enum
+    itself: [`InteractionKind`] and [`MutationKind`] have no `Unknown` variant
+    at all, the absent declaration is the field's `None` serializing as an
+    explicit `null`, and `Unknown` is the agent-context state the bridge maps
+    that onto. The comments now state that, and note the variant is unreachable
+    by construction rather than deliberately excluded.
+  - *CodeScene, not suppressed.* Both hosted findings (`Complex Method` cc=9,
+    `Bumpy Road Ahead` bumps=2) targeted the oracle added by the previous
+    commit. `expected_codes` was decomposed into the three rule groups it
+    already restated — `expected_requirement_codes`, `expected_bypass_known_codes`,
+    `expected_undeclared_codes` — with the two requirement predicates named.
+    Reproduced locally at the flagged revision (`cs check 6e2e7b79:…` reports
+    score 9.53 with both warnings) and cleared at the repair (10.00, no
+    warnings). No threshold was raised, no rule disabled, and no suppression
+    used.
+
+  Date/Author: 2026-10-12, second proof-assessment round.
 
 ## Outcomes & retrospective
 

@@ -15,9 +15,10 @@
 //!   rules that would otherwise fire produce nothing. It asserts on the
 //!   externally visible output, not on whether rules were internally skipped.
 //!
-//! Severity and counter arithmetic are asserted exhaustively by mode in the
-//! first property rather than sampled, because they have no input dependence
-//! beyond the mode itself.
+//! Within the first property the *mode* dimension is exhaustive rather than
+//! sampled: every generated context is checked in both `Warn` and `Deny`, so
+//! severity and counter arithmetic are covered for each mode instead of being
+//! split across runs.
 
 use proptest::collection::vec;
 use proptest::prelude::*;
@@ -108,10 +109,16 @@ fn agent_input(name: &str, long: Option<String>) -> AgentInput {
 /// 2. a bypass matching nothing declared;
 /// 3. a bypass whose name appears only on an input with *no* long flag, which
 ///    the rule's `long`-only lookup must not treat as a match.
+///
+/// Arms 2 and 3 are only *unmatched* if no other input happens to carry the
+/// same fast flag, and `slug()` can generate `name` twice. Clearing `name` from
+/// the unrelated inputs is what makes those arms mean what they claim rather
+/// than silently collapsing into arm 1.
 fn bypass_and_inputs() -> impl Strategy<Value = (Option<String>, Vec<AgentInput>)> {
     (slug(), 0..4u8, vec(slug(), 0..=2)).prop_map(|(name, arm, others)| {
         let unrelated = others
             .into_iter()
+            .filter(|other| other != &name)
             .map(|other| agent_input(&other, Some(other.clone())))
             .collect::<Vec<_>>();
         match arm {
@@ -170,35 +177,76 @@ fn context() -> impl Strategy<Value = AgentContext> {
 /// The finding codes the rules are specified to emit for one command.
 ///
 /// This restates the contract from ADR-010 and the `behaviour` module
-/// documentation: a bypass present suppresses *both* requirement findings; a
-/// destructive command means `MutationEffect::Delete` with an interaction other
-/// than `NonInteractive`; the bypass-known check compares the declaration's
-/// name (leading `--` removed) against declared long flags only; and undeclared
-/// interaction and mutation are independent findings. Codes come back in the
-/// order the report emits them.
+/// documentation. The three helpers below are the three rule groups the report
+/// walks a command through, and they are concatenated in that same order so the
+/// codes come back in the order the report emits them.
 fn expected_codes(command: &AgentCommand) -> Vec<&'static str> {
+    let mut codes = expected_requirement_codes(command);
+    codes.extend(expected_bypass_known_codes(command));
+    codes.extend(expected_undeclared_codes(command));
+    codes
+}
+
+/// Codes for the two requirements a *missing* bypass flag triggers.
+///
+/// The rule reads one declaration and derives both findings from it, so this
+/// group is a single unit rather than two independent checks.
+fn expected_requirement_codes(command: &AgentCommand) -> Vec<&'static str> {
+    if command.bypass_flag.is_some() {
+        return Vec::new();
+    }
     let mut codes = Vec::new();
-    if command.bypass_flag.is_none() {
-        if command.mutation_effect == MutationEffect::Delete
-            && command.interaction_mode != InteractionMode::NonInteractive
-        {
-            codes.push("destructive_bypass_missing");
-        }
-        if command.interaction_mode == InteractionMode::Interactive {
-            codes.push("prompt_bypass_missing");
-        }
+    if is_destructive_without_exemption(command) {
+        codes.push("destructive_bypass_missing");
     }
-    if let Some(bypass) = command.bypass_flag.as_deref() {
-        let declared = bypass.strip_prefix("--").unwrap_or(bypass);
-        let is_known = command
-            .inputs
-            .iter()
-            .filter_map(|input| input.long.as_deref())
-            .any(|long| long == declared);
-        if !is_known {
-            codes.push("bypass_flag_unknown");
-        }
+    if is_interactive(command) {
+        codes.push("prompt_bypass_missing");
     }
+    codes
+}
+
+/// Whether the command deletes data while free to prompt for confirmation.
+///
+/// A `non_interactive` declaration is the exemption: such a command cannot
+/// prompt, so declaring it is itself the approved non-interactive path.
+fn is_destructive_without_exemption(command: &AgentCommand) -> bool {
+    command.mutation_effect == MutationEffect::Delete
+        && command.interaction_mode != InteractionMode::NonInteractive
+}
+
+/// Whether the command may prompt the operator for input.
+fn is_interactive(command: &AgentCommand) -> bool {
+    command.interaction_mode == InteractionMode::Interactive
+}
+
+/// The code for a declared bypass that names no declared input.
+///
+/// The comparison is against declared *long* flags only, with the leading `--`
+/// removed from the declaration. It is contradiction detection between two
+/// declarations, not name inference, so a short flag or a value name cannot
+/// satisfy it.
+fn expected_bypass_known_codes(command: &AgentCommand) -> Vec<&'static str> {
+    let Some(bypass) = command.bypass_flag.as_deref() else {
+        return Vec::new();
+    };
+    let declared = bypass.strip_prefix("--").unwrap_or(bypass);
+    let declared_longs = command
+        .inputs
+        .iter()
+        .filter_map(|input| input.long.as_deref())
+        .collect::<Vec<_>>();
+    if declared_longs.contains(&declared) {
+        return Vec::new();
+    }
+    vec!["bypass_flag_unknown"]
+}
+
+/// Codes for metadata the command never declared.
+///
+/// Interaction and mutation are independent: either can be absent while the
+/// other is present, so both codes can fire together.
+fn expected_undeclared_codes(command: &AgentCommand) -> Vec<&'static str> {
+    let mut codes = Vec::new();
     if command.interaction_mode == InteractionMode::Unknown {
         codes.push("interaction_unknown");
     }
@@ -221,6 +269,47 @@ fn expected_code_multiset(context: &AgentContext) -> Vec<String> {
     codes
 }
 
+/// Asserts one context's report matches the specification in one mode.
+///
+/// Split out so the property can run it for *both* enforcing modes on the same
+/// generated context. Sampling the mode would leave each context checked in
+/// only one of them, which is weaker than the module's claim that severity and
+/// counter arithmetic have no input dependence beyond the mode itself.
+fn assert_report_matches_specification(
+    context: &AgentContext,
+    mode: PolicyMode,
+) -> Result<(), TestCaseError> {
+    let report = check_behaviour(context, mode);
+
+    let mut actual = report
+        .results
+        .iter()
+        .map(|result| result.code.clone())
+        .collect::<Vec<_>>();
+    actual.sort();
+
+    prop_assert_eq!(actual, expected_code_multiset(context));
+    prop_assert_eq!(report.mode, mode);
+
+    let expected_severity = match mode {
+        PolicyMode::Warn => PolicySeverity::Warn,
+        _ => PolicySeverity::Deny,
+    };
+    for result in &report.results {
+        prop_assert_eq!(&result.severity, &expected_severity);
+    }
+
+    prop_assert_eq!(report.summary.off, 0);
+    prop_assert_eq!(report.summary.total, report.results.len());
+    let (expected_warn, expected_deny) = match mode {
+        PolicyMode::Warn => (report.results.len(), 0),
+        _ => (0, report.results.len()),
+    };
+    prop_assert_eq!(report.summary.warn, expected_warn);
+    prop_assert_eq!(report.summary.deny, expected_deny);
+    Ok(())
+}
+
 proptest! {
     /// Every finding the rules are specified to emit appears, and no others do.
     ///
@@ -228,40 +317,14 @@ proptest! {
     /// emission order: the report orders by command path using an unstable
     /// sort, so two commands sharing a path have no defined relative order,
     /// while the multiset is fully defined either way.
+    ///
+    /// Both enforcing modes are checked for every generated context, so this is
+    /// exhaustive in the mode dimension rather than sampled across it.
     #[test]
-    fn findings_match_the_rule_specification(
-        context in context(),
-        mode in prop_oneof![Just(PolicyMode::Warn), Just(PolicyMode::Deny)],
-    ) {
-        let requested = mode;
-        let report = check_behaviour(&context, mode);
-
-        let mut actual = report
-            .results
-            .iter()
-            .map(|result| result.code.clone())
-            .collect::<Vec<_>>();
-        actual.sort();
-
-        prop_assert_eq!(actual, expected_code_multiset(&context));
-        prop_assert_eq!(report.mode, requested);
-
-        let expected_severity = match requested {
-            PolicyMode::Warn => PolicySeverity::Warn,
-            _ => PolicySeverity::Deny,
-        };
-        for result in &report.results {
-            prop_assert_eq!(&result.severity, &expected_severity);
+    fn findings_match_the_rule_specification(context in context()) {
+        for mode in [PolicyMode::Warn, PolicyMode::Deny] {
+            assert_report_matches_specification(&context, mode)?;
         }
-
-        prop_assert_eq!(report.summary.off, 0);
-        prop_assert_eq!(report.summary.total, report.results.len());
-        let (expected_warn, expected_deny) = match requested {
-            PolicyMode::Warn => (report.results.len(), 0),
-            _ => (0, report.results.len()),
-        };
-        prop_assert_eq!(report.summary.warn, expected_warn);
-        prop_assert_eq!(report.summary.deny, expected_deny);
     }
 
     /// Sampled no-panic check: every mode over every generated context returns
