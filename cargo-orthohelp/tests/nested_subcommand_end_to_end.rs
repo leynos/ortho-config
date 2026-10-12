@@ -153,7 +153,103 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
         array_field(admin, "subcommands")?,
         &["audit", "grant-access", "purge", "prune"],
     )?;
+    assert_no_respelled_identifier_misses(&value)?;
     Ok(())
+}
+
+/// Asserts that no lookup misses an id the catalogue declares under a
+/// different `-`/`_` spelling.
+///
+/// The runtime preserves `-` and `_` in identifier segments, so a catalogue
+/// key whose separator case drifts from the generated id becomes a *silent*
+/// miss: the lookup falls back to `[missing: id]` and no test notices, because
+/// nothing else reads the fixture catalogue. `clap_derive` keeps the raw Rust
+/// field name as the argument id and the metadata suffixes are
+/// underscore-separated, so the expected spelling is not derivable from the
+/// command line.
+///
+/// Only the respelling case is reported. An id with no catalogue key at all is
+/// deliberate: `usage` has no fixture translation and is expected to fall
+/// back, so flagging every miss would demand keys the fixture does not intend
+/// to ship.
+fn assert_no_respelled_identifier_misses(root: &Value) -> Result<(), TestError> {
+    let declared = catalogue_identifier_keys("en-US")?;
+    let mut misses = Vec::new();
+    collect_missing_ids(root, &mut misses);
+
+    let respelled = misses
+        .into_iter()
+        .filter(|id| {
+            let kebab = id.replace('_', "-");
+            let underscored = id.replace('-', "_");
+            [kebab, underscored]
+                .iter()
+                .any(|variant| variant != id && declared.contains(variant))
+        })
+        .collect::<Vec<_>>();
+    if respelled.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "localized IR missed catalogue keys respecified under a different \
+         separator spelling: {respelled:?}",
+    )
+    .into())
+}
+
+/// Collects every `[missing: <id>]` placeholder in a localized IR tree.
+///
+/// Both the `about`/`synopsis` metadata and each field's `help`/`long_help`
+/// carry these placeholders, at every depth of the nested command tree.
+fn collect_missing_ids(value: &Value, misses: &mut Vec<String>) {
+    const PLACEHOLDER_PREFIX: &str = "[missing: ";
+
+    let mut record = |text: Option<&str>| {
+        if let Some(id) = text
+            .and_then(|text| text.strip_prefix(PLACEHOLDER_PREFIX))
+            .and_then(|id| id.strip_suffix(']'))
+        {
+            misses.push(id.to_owned());
+        }
+    };
+
+    if let Some(object) = value.as_object() {
+        for key in ["about", "synopsis", "help", "long_help", "value_name"] {
+            record(object.get(key).and_then(Value::as_str));
+        }
+    }
+    if let Some(children) = value.get("fields").and_then(Value::as_array) {
+        for child in children {
+            collect_missing_ids(child, misses);
+        }
+    }
+    if let Some(children) = value.get("subcommands").and_then(Value::as_array) {
+        for child in children {
+            collect_missing_ids(child, misses);
+        }
+    }
+}
+
+/// Reads the identifier keys declared by a fixture catalogue.
+///
+/// The lookup keys are Fluent message ids, so the table is the text before the
+/// first `=`. Attribute lines (indented continuations) and blank lines are
+/// skipped.
+fn catalogue_identifier_keys(
+    locale: &str,
+) -> Result<std::collections::BTreeSet<String>, TestError> {
+    let workspace_root = fixtures::workspace_root()?;
+    let relative = Utf8PathBuf::from(format!(
+        "tests/fixtures/{FIXTURE_PACKAGE}/locales/{locale}/messages.ftl",
+    ));
+    let catalogue = read_output(&workspace_root, relative.as_path())?;
+    Ok(catalogue
+        .lines()
+        .filter(|line| !line.starts_with([' ', '\t']))
+        .filter_map(|line| line.split_once('='))
+        .map(|(key, _)| key.trim().to_owned())
+        .filter(|key| !key.is_empty())
+        .collect())
 }
 
 /// Asserts that split man pages include the nested admin command sections.
