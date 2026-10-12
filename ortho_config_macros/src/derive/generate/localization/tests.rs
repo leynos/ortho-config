@@ -122,7 +122,7 @@ fn domain_types_preserve_invalid_segment_and_root_diagnostics() -> Result<()> {
 /// An explicit dot-free base names the root exactly as written.
 ///
 /// The base is not run through the segment normalizer when it contains no
-/// dots, so a snake_case root such as `hello_world` survives unchanged.
+/// dots, so a `snake_case` root such as `hello_world` survives unchanged.
 #[test]
 fn explicit_localization_base_is_used_verbatim() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {

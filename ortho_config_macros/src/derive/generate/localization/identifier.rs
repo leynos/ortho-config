@@ -155,17 +155,17 @@ mod tests {
         })
     }
 
-    /// A raw identifier segment that may start with any Fluent character.
+    // A raw identifier segment that may start with any Fluent character.
     prop_compose! {
         fn segment()(
             raw in "[A-Za-z0-9_-]{1,12}",
         ) -> String { raw }
     }
 
-    /// A segment that starts with an ASCII letter.
-    ///
-    /// Both the runtime and the macro twin reject identifiers whose root does
-    /// not start with a letter, so generated roots must respect that bound.
+    // A segment that starts with an ASCII letter.
+    //
+    // Both the runtime and the macro twin reject identifiers whose root does
+    // not start with a letter, so generated roots must respect that bound.
     prop_compose! {
         fn root_segment()(
             first in "[A-Za-z]",
