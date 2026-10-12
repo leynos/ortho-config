@@ -14,7 +14,7 @@
 //! sequence: fragment write, merge, and rendered-file publication.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use proc_macro2::Span;
@@ -32,22 +32,68 @@ pub(super) struct LockGuard {
     _file: fs::File,
 }
 
-/// How long a waiting acquirer sleeps between attempts.
+/// How long a reporting acquirer sleeps between attempts.
 ///
-/// The wait is polled rather than blocking on `File::lock` so a publisher can
-/// report its own wait *while* it is still waiting — the property an
-/// after-the-fact duration cannot supply. The interval is short enough that a
-/// released lock is noticed promptly and long enough that a blocked build does
-/// not spin.
+/// Only the reporting path polls. It must surface its own wait *while* it is
+/// still waiting, and a blocking [`fs::File::lock`] cannot say anything until
+/// the lock has already been granted — the difference between explaining a
+/// hung build and describing a completed one. The interval is short enough
+/// that a released lock is noticed promptly and long enough that a blocked
+/// build does not spin.
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+/// Opens the lock file, mapping an open failure to a spanned diagnostic.
+///
+/// Opening is separated from acquiring because the acquisition paths differ
+/// while the path resolution and the failure message they must preserve do not.
+fn open_lock_file(path: &Path) -> syn::Result<fs::File> {
+    fs::File::create(path).map_err(|error| {
+        syn::Error::new(
+            Span::call_site(),
+            format!(
+                "cannot open identifier artefact lock {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions",
+                path.display()
+            ),
+        )
+    })
+}
+
+/// Resolves the lock file's path inside an artefact directory.
+///
+/// Every acquirer and the test probe resolve through here, so [`LOCK_FILE`] is
+/// named once. The acquisition paths differ in how they take the lock and what
+/// they report, not in which file they contend for.
+fn lock_path(root: &Path) -> PathBuf {
+    root.join(LOCK_FILE)
+}
+
+/// Builds the diagnostic for a lock that could not be acquired.
+///
+/// Both acquisition paths report the same failure, so the wording lives in one
+/// place rather than being restated per path and drifting apart.
+fn lock_error(root: &Path, error: &std::io::Error) -> syn::Error {
+    syn::Error::new(
+        Span::call_site(),
+        format!(
+            "cannot lock identifier artefact directory {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions",
+            root.display()
+        ),
+    )
+}
 
 /// Acquires the exclusive publication lock for one artefact directory.
 ///
-/// Blocks until a peer process releases the lock. Returns the held guard; the
-/// caller must keep it alive for the whole fragment-write, merge, and
-/// publication sequence.
+/// Blocks in the kernel until a peer process releases the lock. Returns the
+/// held guard; the caller must keep it alive for the whole fragment-write,
+/// merge, and publication sequence.
+///
+/// This is the quiet counterpart to [`lock_while`], taken when the observation
+/// channel is off. Nothing would read a wait announcement there, so a real
+/// blocking wait is both cheaper than polling and sufficient.
 pub(super) fn lock(root: &Path) -> syn::Result<LockGuard> {
-    lock_while(root, |_| ())
+    let file = open_lock_file(&lock_path(root))?;
+    file.lock().map_err(|error| lock_error(root, &error))?;
+    Ok(LockGuard { _file: file })
 }
 
 /// Acquires the lock, reporting each observed wait to `on_wait`.
@@ -57,16 +103,7 @@ pub(super) fn lock(root: &Path) -> syn::Result<LockGuard> {
 /// before the lock is ever granted. It is called only when the lock is not
 /// immediately free.
 pub(super) fn lock_while(root: &Path, mut on_wait: impl FnMut(Duration)) -> syn::Result<LockGuard> {
-    let path = root.join(LOCK_FILE);
-    let file = fs::File::create(&path).map_err(|error| {
-        syn::Error::new(
-            Span::call_site(),
-            format!(
-                "cannot open identifier artefact lock {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions",
-                path.display()
-            ),
-        )
-    })?;
+    let file = open_lock_file(&lock_path(root))?;
     let started = Instant::now();
     loop {
         match file.try_lock() {
@@ -75,15 +112,7 @@ pub(super) fn lock_while(root: &Path, mut on_wait: impl FnMut(Duration)) -> syn:
                 on_wait(started.elapsed());
                 std::thread::sleep(POLL_INTERVAL);
             }
-            Err(fs::TryLockError::Error(error)) => {
-                return Err(syn::Error::new(
-                    Span::call_site(),
-                    format!(
-                        "cannot lock identifier artefact directory {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions",
-                        root.display()
-                    ),
-                ));
-            }
+            Err(fs::TryLockError::Error(error)) => return Err(lock_error(root, &error)),
         }
     }
 }
@@ -96,7 +125,9 @@ pub(super) fn lock_while(root: &Path, mut on_wait: impl FnMut(Duration)) -> syn:
 /// production code locks, rather than duplicating the filename.
 #[cfg(test)]
 pub(super) fn is_free(root: &Path) -> std::io::Result<bool> {
-    let file = fs::File::create(root.join(LOCK_FILE))?;
+    // The probe is test-only and answers with the raw I/O error, so it takes
+    // the shared path resolution but not `open_lock_file`'s spanned diagnostic.
+    let file = fs::File::create(lock_path(root))?;
     match file.try_lock() {
         Ok(()) => Ok(true),
         Err(fs::TryLockError::WouldBlock) => Ok(false),
