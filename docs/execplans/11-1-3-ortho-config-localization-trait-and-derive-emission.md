@@ -2084,3 +2084,87 @@ line was kept and the branch's dropped as redundant.
 Every resolution is textual and confined to documentation and version strings;
 no runtime behaviour, test expectation, or public contract was changed by a
 conflict resolution.
+
+### The docstring batch and the Windows correction: `0cb49bec` … `e277e03c`
+
+CodeRabbit's pre-merge table measured docstring coverage at 78.17% over
+"197 functions across 55 files" against a base, `0a41054d`, that is no longer an
+ancestor of the branch. Re-measured against the current base, `9664641a`, over
+the head's own added signature lines, coverage is **232 of 232, 100.00%**.
+
+The batch that closed it touched four files. `identifier_artefact_e2e.rs`,
+`clap_field_markers.rs` and `localization_public_paths.rs` gained doc comments
+on their fixtures and helpers; `tests/fixtures/orthohelp_fixture/build.rs`
+gained
+a module doc and a `main` doc, because the artefact tests need Cargo to set
+`OUT_DIR`. A first attempt at the insertion used a blank-line collapse script
+that appended the remainder of each file inside its own loop, duplicating three
+files to 1217, 229 and 49 lines. `cargo fmt` caught it as an unexpected closing
+delimiter. All three were restored from `HEAD` and the doc additions re-applied
+with a script that only ever inserts whole lines.
+
+Two clippy diagnostics followed from the batch, and both are worth recording as
+rules. A `///` block above a `prop_compose!` invocation is an
+`unused_doc_comments` error, because rustdoc generates no documentation for a
+macro invocation; the same file's `proptest!` block had already used `//` for
+exactly this reason. And `` `snake_case` `` in prose trips `doc_markdown`
+unless it is backticked inside prose that is not itself already code.
+
+The plan also carried a **false claim** about Windows, caught when the hosted
+Windows leg failed on a Unix-only test premise. The claim was that
+`ErrorKind::NotADirectory` has no Windows counterpart. It does:
+`std::io`'s `decode_error_kind` maps `ERROR_DIRECTORY` (267) to it, and
+`std::fs::remove_dir_all` on a regular file raises exactly that code. What
+differs is narrower and is layout-driven: a regular file in a *path-component*
+position, reached through `metadata`, yields `ERROR_PATH_NOT_FOUND` and so
+`NotFound` on Windows where Unix yields `NotADirectory`. The production
+predicate was never wrong; only the test's provocation was platform-specific.
+The paragraph now states the narrow version.
+
+Gate evidence at `e277e03c`, all sequential: `make check-fmt` green,
+`make markdownlint` green (80 files, 0 errors, spelling gate `current:`),
+`make nixie` green (all diagrams validated), `make lint` green.
+
+### Both pre-merge findings closed: `e7bc2a0e`, `cbe55389`
+
+CodeRabbit's review of `e277e03c` (review 5487254255) raised two inline
+findings, and both were verified against the current source before any edit.
+
+The first was self-inflicted: my documentation batch had inserted the
+explanation for `rejected_localization_base_reports_its_reason` twice, once
+above `#[rstest]` and again between the last `#[case(...)]` and the `fn`. The
+second copy is the one a reader reaches while scanning the attribute stack, so
+the first was kept and the duplicate removed. Three separate scripts written to
+find the duplicate all returned wrong answers — one matched nothing because it
+expected the `fn` keyword on a specific line, one returned 24 false positives
+by treating every doc line as a fresh run start, and one was defeated by the
+multi-line `#[case(...)]` form. A plain `grep -n` plus a line-numbered render
+settled it in one step; line-oriented searching beat the state machines.
+
+The second was real, and my initial reading of it was wrong in a way worth
+recording. `lock` is **not** test-only: `publish.rs:213` calls it on the
+production path when the observation channel is off, and an early `rg` that
+piped through a localising filter hid that call site. Deleting `lock` on the
+strength of that grep produced a live `E0432 unresolved import` from
+`publish.rs:28`. The lesson is that a grep for "callers of X" must not be
+filtered before its output is read.
+
+The correct repair was the opposite of deletion. `lock` now opens the file and
+takes it with a blocking `File::lock` (stable since Rust 1.89.0, which this
+toolchain is), while `lock_while` keeps its `try_lock` polling loop. Only the
+reporting path needs to poll: it must announce its own wait *while* it is still
+waiting, and a blocking acquisition cannot say anything until the lock is
+already granted. The quiet path has no observer, so a kernel wait is both
+cheaper and sufficient. `POLL_INTERVAL`'s doc was rewritten to record that
+split instead of the blanket claim that the wait is polled. The path
+resolution, the open, and both acquisition diagnostics were extracted
+(`lock_path`, `open_lock_file`, `lock_error`) so each is stated once.
+
+Both block-relevant paths stay guarded. The
+`publication_waits_for_a_peer_holding_the_lock` test drives the boundary with
+`ReportConfig::quiet()`, so it exercises the new blocking `lock` and would fail
+if that call did not actually block;
+`artefact_lock_is_exclusive_across_processes` and
+`publication_proceeds_once_the_holder_releases` cover the exclusion and the
+progress halves. The report suite continues to cover the polling path's wait
+announcement.
