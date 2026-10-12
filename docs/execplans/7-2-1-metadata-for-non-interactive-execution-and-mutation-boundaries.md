@@ -1891,3 +1891,75 @@ before the push and `mergeable: true` / `mergeable_state: blocked` against
 `89cffbd3` after it. `blocked` here is the review gate, not a content conflict:
 the last review on this branch is still the `CHANGES_REQUESTED` recorded above,
 which predates both the repairs and the rebase.
+
+#### CodeScene advisory repair (2026-10-12)
+
+The hosted `CodeScene Code Health Review (main)` check reached a terminal
+`failure` on head `aa9244b8`. Its review body names exactly one gate,
+`Enforce advisory code health rules`, with one violation and a Code Health
+Impact of 9.39:
+
+- `ortho_config_macros/src/derive/parse/tests/behaviour_attrs.rs`: 1 advisory
+  rule, Code Duplication. The inline diagnostic identifies the functions as
+  `rejects_non_interactive_with_bypass`,
+  `rejects_non_interactive_with_bypass_across_behaviour_groups`, and
+  `rejects_non_interactive_with_bypass_split_across_groups_reversed`.
+
+The finding is genuine rather than a false positive: the three tests differed
+only in the `#[ortho_config(behaviour(...))]` attributes they fed to
+`parse_input`, which is precisely the shape an `rstest` case table collapses.
+It is also a direct conflict with this repository's own guidance, which asks
+for duplicated tests to be replaced with parameterized cases. Suppressing the
+rule via CodeScene, raising a threshold, or diluting the average with trivial
+functions would all have defeated the gate rather than satisfied it.
+
+**Repair.** The three tests were replaced by one `rstest` table named
+`rejects_non_interactive_with_bypass`, with cases `within_one_group`,
+`across_groups`, and `across_groups_reversed`. Each case carries an
+attribute-list string, and the test parses
+`"<attributes>\nstruct Demo { value: u8, }"`, so the scaffolding that was
+previously triplicated now exists once. `parse_quote` is no longer used in this
+module, so its import was dropped with it.
+
+No assertion was weakened. Every case still asserts the same
+`contradictory behaviour` diagnostic, and the two split-group cases still pin
+that group order does not change the outcome. The two longer original test
+names survive as case labels. The module shrank from 247 to 213 lines, which
+also widens the margin under the 400-line module cap.
+
+**Verification.** `cs review` on the edited file reports a score of `10.0` with
+an empty `review` array, and `cs delta` between the comparison base `89cffbd3`
+and the working tree reports no findings for the file. The preceding `cs delta`
+against committed `HEAD` had reported it as `introduced` at 9.38, which is what
+confirmed the local reproduction matched the hosted diagnostic before any edit
+was made.
+
+All six commit gates were then run sequentially against the repaired tree:
+`make check-fmt`, `make lint` (rustdoc, clippy, and Whitaker), `make typecheck`,
+`make markdownlint` (including the `typos-config-builder` spelling gate),
+`make nixie`, and `make test`, each exiting zero. The focused parse suite
+`cargo test -p ortho_config_macros --lib behaviour` exercised the new table
+directly, with all three cases and all sixteen tests in the module passing.
+
+**Two banner findings confirmed already repaired.** The CodeRabbit pre-merge
+walkthrough on this branch, last refreshed at `52f38`, still carries one failed
+check and one warning. Both were checked against the current head rather than
+assumed:
+
+- `Testing (Overall)` errors that `MutationKind::Submit` is accepted and
+  emitted but unguarded. `ortho_config/tests/docs_ir_behaviour.rs` now has the
+  `submit_boundary` case asserting `Some(MutationKind::Submit)`, and
+  `cargo-orthohelp/src/agent_context/behaviour_tests.rs` has the
+  `non_interactive_submit` bridge row expecting `MutationEffect::Submit`. The
+  repair landed in `3410d402`.
+- `Developer Documentation` warns that the extracted
+  `normalize_default_display` helper is undocumented.
+  `docs/developers-guide.md` now carries an "Internal default-display
+  normalizer" section stating the `pub(crate)` boundary and the display-only
+  contract explicitly.
+
+The banner's own text explains the review pause that left the branch without a
+current formal review: `reviews.auto_review.auto_pause_after_reviewed_commits`
+paused reviews automatically after an influx of new commits. It is not a rate
+limit, so no `comenq` enqueue is warranted; the paused walkthrough is stale
+evidence, not a service blocker.
