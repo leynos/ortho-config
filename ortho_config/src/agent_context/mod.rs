@@ -115,6 +115,18 @@ pub struct AgentCommand {
     /// Mutation boundary declared for the command.
     #[serde(default)]
     pub mutation_effect: MutationEffect,
+    /// Confirmation or prompt bypass flag, for example `--force`.
+    ///
+    /// Serialized as explicit `null` when absent, matching the schema-v1
+    /// optional-field convention.
+    #[serde(default)]
+    pub bypass_flag: Option<String>,
+    /// Dry-run flag name, for example `--dry-run`.
+    ///
+    /// Serialized as explicit `null` when absent, matching the schema-v1
+    /// optional-field convention.
+    #[serde(default)]
+    pub dry_run_flag: Option<String>,
     /// Asynchronous submission contract for commands that enqueue work.
     #[serde(default)]
     pub async_submission: Option<AsyncSubmission>,

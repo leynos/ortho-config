@@ -104,6 +104,7 @@ fn transform_maps_visible_cli_fields_and_sorts_inputs() {
             non_cli_field("file_only"),
         ],
         subcommands: Vec::new(),
+        behaviour: None,
     });
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
@@ -136,6 +137,7 @@ fn transform_recovers_enum_values_from_cli_metadata_for_custom_types() {
             ["Debug", "Info", "Warn", "Error"],
         )],
         subcommands: Vec::new(),
+        behaviour: None,
     });
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
@@ -173,6 +175,7 @@ fn transform_normalizes_default_path_separators() {
             required: false,
         })],
         subcommands: Vec::new(),
+        behaviour: None,
     });
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
@@ -255,3 +258,6 @@ use support::*;
 #[path = "tests_nested_support.rs"]
 mod nested_support;
 use nested_support::*;
+
+#[path = "behaviour_tests.rs"]
+mod behaviour_tests;

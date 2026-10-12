@@ -9,7 +9,9 @@ use cargo_orthohelp::ir::{
     LocalizedSectionsMetadata,
 };
 use cargo_orthohelp::roff::{RoffConfig, generate_to_string};
-use cargo_orthohelp::schema::{CliMetadata, DefaultValue, EnvMetadata, SourceKind, ValueType};
+use cargo_orthohelp::schema::{
+    CliMetadata, DefaultValue, EnvMetadata, ORTHO_DOCS_IR_VERSION, SourceKind, ValueType,
+};
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -41,7 +43,7 @@ fn make_test_metadata(
     about: &str,
 ) -> LocalizedDocMetadata {
     LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
         locale: "en-US".to_owned(),
         app_name: name.to_owned(),
         bin_name: None,
