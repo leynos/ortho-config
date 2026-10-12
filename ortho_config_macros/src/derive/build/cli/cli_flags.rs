@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use heck::ToKebabCase;
 use quote::{quote, quote_spanned};
+use syn::ext::IdentExt;
 use syn::{Ident, Type};
 
 use crate::derive::parse::{ClapInferredDefault, FieldAttrs, option_inner};
@@ -229,10 +230,14 @@ fn resolve_cli_field(
 
     let field_name = name.to_string();
 
+    // `clap_derive` unraws the identifier *before* casing it, so `r#type`
+    // yields the flag `--type`. `heck` splits words on any non-alphanumeric
+    // character, so kebab-casing the raw spelling would give `--r-type` and
+    // disagree with the flag clap renders for the same field.
     let long = attrs
         .cli_long
         .clone()
-        .unwrap_or_else(|| field_name.to_kebab_case());
+        .unwrap_or_else(|| name.unraw().to_string().to_kebab_case());
     validate_cli_long(name, &long)?;
 
     if !context.used_longs.insert(long.clone()) {

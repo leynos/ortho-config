@@ -1,19 +1,31 @@
-//! Agreement between the derived clap argument id and clap's own id for a
+//! Agreement between generated clap identifiers and clap's own for a
 //! raw-identifier field.
 //!
-//! `clap_derive` derives the argument id for a field with no explicit
-//! `id = "..."` from `ident.unraw().to_string()`, so a field written as
-//! `r#type` is recorded by clap under the id `type`. The `OrthoConfig` derive
-//! must build the same string, because it looks the argument up again in
-//! `ArgMatches`: `CliValueExtractor` queries `value_source(#arg_id)` for every
-//! `cli_default_as_absent` field.
+//! A field whose name collides with a Rust keyword must be written raw, so
+//! `r#type` and `r#match` are ordinary spellings in a real configuration
+//! struct rather than contrived shapes. For such a field `clap_derive` builds
+//! the argument id from `ident.unraw().to_string()` and kebab-cases only the
+//! *long flag*, so clap records the id `type` and renders the flag `--type`.
 //!
-//! If the derive derived the fallback from `Ident::to_string()` instead, it
-//! would emit `r#type`, `ArgMatches::value_source` would return `None` for a
-//! flag the user did supply, and a value the user typed on the command line
-//! would be silently dropped in favour of the file layer. That failure is
-//! invisible without a test that actually parses a raw-identifier flag, which
-//! is what this module provides.
+//! The `OrthoConfig` derive has to agree with that on three paths, and all
+//! three are load-bearing:
+//!
+//! - `CliValueExtractor` queries `ArgMatches::value_source(#arg_id)` for every
+//!   `cli_default_as_absent` field. An id of `r#type` never matches the
+//!   argument clap recorded as `type`, so the lookup reports `None` for a flag
+//!   the user actually supplied and the command-line value is silently
+//!   dropped in favour of the file layer.
+//! - The generated CLI struct declares its own `#[arg(long = ...)]`, so the
+//!   derive computes the flag text itself. `heck` splits `r#type` at the `#`,
+//!   giving `--r-type` unless the identifier is unrawed first.
+//! - The serialized key feeds the generated file-key metadata, which rejects
+//!   any segment outside ASCII alphanumeric plus `_` and `-`. A key of
+//!   `r#type` therefore fails the derive outright, so the crate cannot compile
+//!   at all rather than misreporting one field.
+//!
+//! All three are invisible without a test that parses a raw-identifier flag,
+//! because the wrong id and the wrong flag each fail quietly at runtime while
+//! the wrong key fails at compile time.
 
 use anyhow::{Context, Result, ensure};
 use clap::{CommandFactory, FromArgMatches, Parser};
@@ -25,12 +37,9 @@ mod default_punct;
 
 /// A clap-only raw-identifier field, with no `OrthoConfig` derive.
 ///
-/// This fixture isolates upstream behaviour from anything this crate derives.
-/// `r#type` is the spelling a struct needs when a field name collides with a
-/// Rust keyword, so it is expected in real configuration structs rather than
-/// being a contrived shape: `clap_derive` builds the id from
-/// `ident.unraw().to_string()` and kebab-cases only the *long flag*, giving
-/// the id `type` and the flag `--type`.
+/// This fixture isolates upstream behaviour from anything this crate derives,
+/// so the expected id and flag are pinned to clap rather than to a snapshot of
+/// our own output.
 #[derive(Debug, Parser)]
 #[command(name = "raw-ident-upstream")]
 struct UpstreamRawIdent {
@@ -39,12 +48,22 @@ struct UpstreamRawIdent {
 }
 
 /// A raw-identifier field carrying a clap default, through the full derive.
+///
+/// The user's own `#[arg]` writes the flag clap's `Parser` derive would give
+/// this field, so the extractor is driven by the command a user would really
+/// get. The generated CLI struct computes its *own* `long` from the field
+/// name, which is the path [`generated_cli_renders_the_unrawed_flag`] covers.
+///
+/// The field deliberately carries no `#[serde(rename = "type")]`. Serde's own
+/// unrawing makes it serialize under `type` regardless, and leaving the
+/// attribute off keeps the derive's computed key on the tested path: the
+/// generated file-key metadata rejects a raw segment, so a key of `r#type`
+/// would stop this file from compiling rather than fail an assertion.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
 #[command(name = "raw-ident")]
 #[ortho_config(prefix = "APP_")]
 struct RawIdentArgs {
     /// Punctuation "type" is a Rust keyword, so the field is written raw.
-    #[serde(rename = "type")]
     #[arg(long, default_value_t = default_punct::default_punct())]
     #[ortho_config(cli_default_as_absent)]
     r#type: String,
@@ -66,30 +85,63 @@ impl Default for RawIdentArgs {
 /// would say so at the point of the change rather than through a silently
 /// dropped CLI value.
 #[test]
-fn clap_records_the_unrawed_id_for_a_raw_identifier_field() {
-    let ids = UpstreamRawIdent::command()
-        .get_arguments()
-        .map(|arg| arg.get_id().to_string())
-        .collect::<Vec<_>>();
+fn clap_records_the_unrawed_id_and_flag() {
+    let mut command = UpstreamRawIdent::command();
+    let ids = arg_ids(&command);
+    let help = command.render_long_help().to_string();
 
     ensure_contains(&ids, "type");
     assert!(
         !ids.iter().any(|id| id.starts_with("r#")),
         "clap must not record the raw spelling; got {ids:?}",
     );
-
-    let mut command = UpstreamRawIdent::command();
-    let help = command.render_long_help().to_string();
     assert!(
         help.contains("--type"),
         "clap must derive the unrawed long flag; help was:\n{help}",
     );
 }
 
+/// The generated CLI struct records the id clap would record.
+///
+/// The generated struct derives its own `clap::Parser`, so its ids come from
+/// our attribute rather than from a hand-written one. This is the assertion
+/// that fails if the resolver ever reverts to `Ident::to_string()`.
+#[test]
+fn generated_cli_records_the_unrawed_id() {
+    let ids = arg_ids(&__RawIdentArgsCli::command());
+
+    ensure_contains(&ids, "type");
+    assert!(
+        !ids.iter().any(|id| id.starts_with("r#")),
+        "the generated CLI must not record the raw spelling; got {ids:?}",
+    );
+}
+
+/// The generated CLI struct renders the flag clap would render.
+///
+/// `heck` kebab-cases by splitting on non-alphanumeric characters, so `r#type`
+/// becomes `r-type` unless the identifier is unrawed first. Asserting the
+/// rendered help rather than the computed string keeps the check on what a
+/// user actually sees.
+#[test]
+fn generated_cli_renders_the_unrawed_flag() {
+    let mut command = __RawIdentArgsCli::command();
+    let help = command.render_long_help().to_string();
+
+    assert!(
+        help.contains("--type"),
+        "the generated CLI must render the unrawed flag; help was:\n{help}",
+    );
+    assert!(
+        !help.contains("--r-type"),
+        "the generated CLI must not leak the raw spelling; help was:\n{help}",
+    );
+}
+
 /// An explicit raw-identifier flag is attributed to the command line.
 ///
 /// This is the derive/runtime agreement assertion: `--type` is parsed by clap
-/// under the id `type`, and the generated extractor finds it there. A fallback
+/// under the id `type`, and the generated extractor finds it there. A resolver
 /// built from `Ident::to_string()` fails here, because `value_source("r#type")`
 /// returns `None` for an argument clap recorded as `type`.
 #[test]
@@ -107,10 +159,9 @@ fn explicit_raw_identifier_flag_is_extracted() -> Result<()> {
 /// An absent raw-identifier flag keeps clap's default out of the CLI layer.
 ///
 /// `cli_default_as_absent` exists so file and environment layers can win over
-/// a clap default. A resolver that matched the *wrong* id would be caught here
-/// as well: matching nothing is indistinguishable from matching a default, so
-/// the pair of tests is what separates "found the caller's value" from "found
-/// nothing at all".
+/// a clap default. This case matters as much as the one above: an extractor
+/// that matched *nothing at all* would also report the field absent, so the
+/// pair is what separates "found the caller's value" from "found nothing".
 #[test]
 fn absent_raw_identifier_flag_leaves_the_clap_default_out() -> Result<()> {
     let extracted = parse_and_extract(["raw-ident"])?;
@@ -123,8 +174,8 @@ fn absent_raw_identifier_flag_leaves_the_clap_default_out() -> Result<()> {
     Ok(())
 }
 
-/// Parses `cli_args` into [`RawIdentArgs`] and extracts the caller-supplied
-/// fields.
+/// Parses `cli_args` with the user-visible command and extracts the
+/// caller-supplied fields.
 fn parse_and_extract<I, S>(cli_args: I) -> Result<serde_json::Value>
 where
     I: IntoIterator<Item = S>,
@@ -134,6 +185,14 @@ where
     let args = RawIdentArgs::from_arg_matches(&matches).context("parse CLI args")?;
     args.extract_user_provided(&matches)
         .context("extract user provided")
+}
+
+/// Collects the argument ids a command records, as owned strings.
+fn arg_ids(command: &clap::Command) -> Vec<String> {
+    command
+        .get_arguments()
+        .map(|arg| arg.get_id().to_string())
+        .collect()
 }
 
 /// Asserts `ids` contains `expected`, naming the observed ids on failure.
