@@ -119,10 +119,13 @@ fn domain_types_preserve_invalid_segment_and_root_diagnostics() -> Result<()> {
     Ok(())
 }
 
-/// An explicit dot-free base names the root exactly as written.
+/// An explicit base is stored as written while its ids are normalized.
 ///
-/// The base is not run through the segment normalizer when it contains no
-/// dots, so a `snake_case` root such as `hello_world` survives unchanged.
+/// The stored base keeps the author's spelling, so diagnostics can quote the
+/// source; every assembled Fluent id is built from the base's normalized
+/// segments instead. A `snake_case` root such as `hello_world` survives that
+/// normalization unchanged because `_` and lowercase ASCII are valid segment
+/// characters, not because normalization is skipped for it.
 #[test]
 fn explicit_localization_base_is_used_verbatim() -> Result<()> {
     let input: syn::DeriveInput = parse_quote! {
