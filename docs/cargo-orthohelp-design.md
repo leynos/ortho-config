@@ -715,11 +715,8 @@ Clap parsing before generation begins. `--check-agent-native` is implemented as
 the early policy pipeline stage described in §6.3.2, and generated artefacts
 continue to report success or failure through process exit status.
 `--policy-mode <off|warn|deny>` overrides the report mode and requires
-`--check-agent-native`. `--json` remains a planned agent-native addition; when
-it is provided in a future migration, success must emit exactly one JSON result
-document to stdout and nothing to stderr. Failure must emit no stdout, unless a
-non-JSON artefact was explicitly delivered earlier, and exactly one JSON
-diagnostic document to stderr.
+`--check-agent-native`. `--json` remains planned for general command results
+and diagnostics; the agent-native formats have dedicated stdout contracts.
 
 The existing format behaviours are compatibility contracts until a versioned
 migration is explicitly approved:
@@ -734,17 +731,23 @@ migration is explicitly approved:
   help, about topics, and default `en-US` support unless `--ensure-en-us false`
   is supplied.
 - `--format agent-context` writes one compact JSON document at
-  `<out>/agent-context.json`.
+  `<out>/agent-context.json` and emits the same document to stdout, followed by
+  a newline.
 - `--format all` generates the agent-context document, IR, man pages, and
-  PowerShell artefacts in a single invocation. It reports success or failure
-  through process exit status.
+  PowerShell artefacts in a single invocation. It also emits the agent-context
+  JSON to stdout and reports success or failure through process exit status.
 
-Agent-context output is added beside the human documentation formats. Policy
-output and JSON status output must also be added beside these contracts when
-implemented. They may not change the accepted `ir`, `man`, `ps`,
-`agent-context`, or `all` spellings, the default format, the generated file
-paths, or the process success/failure contract without a separate approved
-migration.
+Agent-context stdout and policy-report stdout are additive machine-readable
+channels; the existing artefact paths and process success/failure contracts
+remain unchanged. `--check-agent-native` emits one compact policy-report JSON
+document to stdout and retains the atomic `<out>/policy-report.json` artefact.
+If an explicit generator format is also requested, the policy report owns
+stdout so the invocation never concatenates multiple JSON documents;
+AgentContext JSON is suppressed from stdout while policy checking is enabled.
+Successful checks continue into generation and retain the selected artefacts,
+including `<out>/agent-context.json` for `agent-context` and `all`. A deny-mode
+finding is reported before the command fails, so generator artefacts are not
+created. Other formats do not emit JSON to stdout.
 
 `Cargo.toml` defaults:
 
@@ -840,8 +843,10 @@ help structures. The adapter emits a positional input only when
 `CliMetadata.positional.index` and leaving `AgentInput.long` absent. A field
 with CLI metadata but no flag spelling or `positional` metadata is
 non-invocable configuration surface and is not emitted. The output is written
-as exactly one file at `<out>/agent-context.json`. `--format all` includes the
-same agent-context document beside IR, man pages, and PowerShell artefacts.
+as exactly one file at `<out>/agent-context.json` and is also emitted as one
+compact JSON document to stdout, followed by a newline. `--format all` includes
+the same agent-context document beside IR, man pages, and PowerShell artefacts
+and emits that JSON to stdout.
 
 `AgentInput.default` is a best-effort display string, not a normative or
 machine-parseable value. The generator normalizes unstable Rust token spacing
@@ -866,17 +871,22 @@ bridge crate (Decision D11). It resolves the target package and parses
 `[package.metadata.ortho_config]` only, applies the `--policy-mode` override to
 the report's effective mode, evaluates the resolved
 `cargo_orthohelp::policy::PolicyConfig`, writes `policy-report.json` atomically
-to the output directory, and prints a one-line summary to standard error. In
-`deny` mode, deny-level findings return a policy-violation error after the
-report has been written.
+to the output directory, emits the same compact JSON report to stdout followed
+by a newline, and prints a one-line summary to standard error. In `deny` mode,
+deny-level findings return a policy-violation error after the report has been
+written and emitted. When an explicit generator `--format` is also requested,
+the policy report remains the sole JSON document on stdout, and AgentContext
+JSON is suppressed. A successful check proceeds to generation and retains the
+selected generator artefacts; a deny-mode finding leaves the policy report
+available but fails before generator artefacts are created.
 
 The evaluation uses the `evaluate(config, inputs) -> PolicyReport` seam; in
 7.1.1 `PolicyInputs` is empty, and roadmap 7.1.2 passes the bridge IR through
 that struct additively. The report embeds the configured exceptions (full shape
 including `reason`) and the canonical vocabulary block. When a generator
-`--format` is explicitly requested in the same invocation, the check runs first
-and the generator pipeline follows; when it is not explicit, the check alone
-writes `policy-report.json` and exits. This mirrors the
+`--format` is explicitly requested in the same invocation, a successful check
+runs first and the generator pipeline follows; when it is not explicit, the
+check alone writes `policy-report.json` and exits. This mirrors the
 `--format agent-context` stage's placement under §6.2 without requiring
 generator preconditions (`root_type`, a library target, or an `ortho_config`
 dependency).

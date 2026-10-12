@@ -2,10 +2,11 @@
 //!
 //! Implements Decisions D5, D6, D11 and D13: evaluate the package's policy
 //! configuration (no bridge build), write `policy-report.json` atomically,
-//! print a human summary to standard error, and return a `PolicyViolation`
-//! error when deny-mode findings are present. The package is resolved by the
-//! caller using the light `metadata` selection, so this module stays free of
-//! the generator's `cli`/`metadata` dependencies.
+//! emit the report as one compact stdout JSON document, print a human summary
+//! to standard error, and return a `PolicyViolation` error when deny-mode
+//! findings are present. The package is resolved by the caller using the light
+//! `metadata` selection, so this module stays free of the generator's
+//! `cli`/`metadata` dependencies.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cargo_metadata::Package;
@@ -30,17 +31,43 @@ pub struct PolicyCheckOutcome {
 ///
 /// Reads the optional policy table from the package's Cargo metadata, applies
 /// the `--policy-mode` override to the *report* mode, evaluates, writes the
-/// report atomically (Decision D5), and attempts a human summary after the
-/// write. Summary output is advisory, so a stderr failure never prevents the
-/// machine-readable artefact. In `deny` mode
+/// report atomically (Decision D5), emits the report on stdout, and attempts a
+/// human summary on stderr. Summary output is advisory, so a stderr failure
+/// never prevents the machine-readable report. In `deny` mode
 /// with at least one deny finding, a [`OrthohelpError::PolicyViolation`] is
 /// returned after the report has been written (Decision D6).
 ///
 /// # Errors
 ///
 /// Returns a metadata error when the policy table is structurally invalid in
-/// any mode, an I/O error when the report cannot be written, and a
-/// `PolicyViolation` under deny mode with deny findings.
+/// any mode, an I/O error when the report or stdout document cannot be written,
+/// a JSON serialization error, and a `PolicyViolation` under deny mode with
+/// deny findings.
+///
+/// # Examples
+///
+/// This checks the first package in the current Cargo workspace and returns
+/// the path of its emitted report.
+///
+/// ```no_run
+/// use cargo_metadata::MetadataCommand;
+/// use cargo_orthohelp::policy::check::run_policy_check;
+/// use camino::Utf8Path;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let metadata = MetadataCommand::new().no_deps().exec()?;
+///     let Some(package) = metadata.packages.first() else {
+///         return Err(std::io::Error::other("workspace has no package").into());
+///     };
+///     let outcome = run_policy_check(
+///         package,
+///         None,
+///         Utf8Path::new("target/orthohelp"),
+///     )?;
+///     assert!(!outcome.report_path.as_str().is_empty());
+///     Ok(())
+/// }
+/// ```
 pub fn run_policy_check(
     package: &Package,
     mode_override: Option<PolicyMode>,
@@ -55,6 +82,7 @@ pub fn run_policy_check(
     }
     let report = evaluate(&config, &PolicyInputs::default());
     let report_path = output::write_policy_report(out_dir, &report)?;
+    output::write_policy_report_stdout(&report)?;
     if let Err(error) = write_summary(&report, &report_path, table_found, &package.name) {
         tracing::debug!(error = %error, "failed to write advisory policy summary");
     }

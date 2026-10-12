@@ -97,6 +97,11 @@ All notable changes to this project will be documented in this file.
   `cargo-orthohelp` PowerShell fixture under `tests/golden/` and restructuring
   the BDD support modules around top-level integration-test entry points (closes
   [#292](https://github.com/leynos/ortho-config/issues/292)).
+- Emit compact agent-context JSON to stdout for `--format agent-context` and
+  `--format all`, and compact policy-report JSON for `--check-agent-native`,
+  while retaining both JSON artefacts. When policy checking and an explicit
+  generator format are combined, the policy report is the sole JSON document on
+  stdout (closes #329).
 - Adopt `sha2` 0.11 in `cargo-orthohelp` and render cache digests through a new
   crate-internal lowercase hexadecimal encoder, because `sha2` 0.11 returns
   `hybrid_array::Array<u8, _>` from `finalize`, which no longer implements

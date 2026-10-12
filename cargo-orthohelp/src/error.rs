@@ -100,6 +100,10 @@ pub enum OrthohelpError {
         source: std::io::Error,
     },
 
+    /// Failed to write a machine-readable JSON document to standard output.
+    #[error("failed to write JSON document to stdout: {0}")]
+    StdoutIo(#[source] std::io::Error),
+
     /// Deny-mode policy findings caused the check to fail.
     #[error("policy violation: {deny_count} deny finding(s); report: {report_path}")]
     PolicyViolation {
