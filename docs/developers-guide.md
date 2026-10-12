@@ -204,13 +204,13 @@ whole milliseconds and a bounded `completed`/`failed` outcome. Both writes are
 best effort: the channel explains builds and must not be able to fail one, so
 an unwritable directory leaves the publication's own result untouched and the
 absent file is itself the observation. `artefact/artefact_report.rs` owns the
-channel's vocabulary, serialization, and both writers; `artefact/publish.rs`
-is its only producer. A build that did not opt in takes the plain blocking
-`lock`, so the common case pays no polling cost for a channel it never
-enabled. Because a blocked publisher does not hold the lock, the wait marker
-is per-process and written through `write_private_atomic`, whose temporary
-derives from the already-unique destination; the shared `atomic_write`
-temporary would let two blocked publishers collide.
+channel's vocabulary, serialization, and both writers; `artefact/publish.rs` is
+its only producer. A build that did not opt in takes the plain blocking `lock`,
+so the common case pays no polling cost for a channel it never enabled. Because
+a blocked publisher does not hold the lock, the wait marker is per-process and
+written through `write_private_atomic`, whose temporary derives from the
+already-unique destination; the shared `atomic_write` temporary would let two
+blocked publishers collide.
 
 `artefact/publish.rs` owns that whole write path. It takes the lock, writes the
 fragment, merges, renders, prunes, and publishes — one function,

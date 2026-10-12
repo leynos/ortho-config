@@ -90,7 +90,7 @@ fn the_report_records_its_stage_durations_and_outcome() -> Result<()> {
 /// Verifies every stage has a distinct serialized name.
 ///
 /// A reader that has to interpret the report mechanically cannot afford two
-/// stages collapsing to one token, which is exactly what a hand-written
+/// stages collapsing to one token, which is exactly what a handwritten
 /// `Display` would risk; deriving the spelling from the enum keeps the wire
 /// contract and the code in step.
 #[test]
