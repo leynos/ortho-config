@@ -1,0 +1,5 @@
+error: `localized_default` is not yet implemented; see cli-localization-design.md §8.2
+  --> tests/ui/localized_default_on_field.rs:15:20
+   |
+15 |     #[ortho_config(localized_default = "Hello")]
+   |                    ^^^^^^^^^^^^^^^^^

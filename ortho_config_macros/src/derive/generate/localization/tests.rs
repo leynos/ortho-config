@@ -345,3 +345,36 @@ fn localization_default_attribute_is_rejected_at_parse_time() -> Result<()> {
     );
     Ok(())
 }
+
+/// The same deferral is rejected when written on a field.
+///
+/// Field-level keys are discarded when unrecognised, so a `localized_default`
+/// placed on a field would otherwise be accepted in silence and never reach a
+/// catalogue. This pins the rejection at that second spelling: the field-level
+/// parser must recognise the name in order to refuse it.
+#[test]
+fn localization_default_attribute_is_rejected_on_a_field() -> Result<()> {
+    let input: syn::DeriveInput = parse_quote! {
+        #[ortho_config(localization_base = "acme")]
+        struct App {
+            #[ortho_config(localized_default = "Hello")]
+            field: String,
+        }
+    };
+    let Err(error) = parse_input(&input) else {
+        return Err(anyhow!(
+            "a field-level localized_default must be rejected rather than \
+             discarded as unknown"
+        ));
+    };
+    let message = error.to_string();
+    ensure!(
+        message.contains("`localized_default` is not yet implemented"),
+        "deferral message must name the attribute: {message}"
+    );
+    ensure!(
+        message.contains("§8.2"),
+        "deferral message must point at the design section: {message}"
+    );
+    Ok(())
+}

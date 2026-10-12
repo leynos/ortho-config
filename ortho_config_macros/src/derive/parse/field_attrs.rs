@@ -8,6 +8,7 @@
 use syn::Token;
 
 use super::literals::{lit_char, lit_str};
+use super::localization::reject_localized_default;
 use super::{
     FieldAttrs, MergeStrategy, apply_field_doc_attr, clap_default_value, clap_field_is_subcommand,
     discard_unknown, parse_ortho_config, reject_subcommand_ortho_config_attrs,
@@ -58,6 +59,12 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
 /// whether it recognised the key; a `false` there leaves the caller to
 /// discard the value.
 ///
+/// `localized_default` is recognised only to be rejected: it is deferred
+/// (Decision D-4), and a key that is discarded as unknown would leave an
+/// author who placed it on a field with no diagnostic at all — the value would
+/// simply never appear in the catalogue. Rejecting here means the deferral is
+/// reported wherever it is written, not only at struct level.
+///
 /// # Examples
 ///
 /// ```rust,ignore
@@ -79,6 +86,7 @@ fn apply_field_attr(
     };
     let key = ident.to_string();
     match key.as_str() {
+        "localized_default" => Err(reject_localized_default(&meta.path)),
         "cli_long" => {
             let s = lit_str(meta, "cli_long")?;
             out.cli_long = Some(s.value());

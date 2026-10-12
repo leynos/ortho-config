@@ -9,6 +9,22 @@ use syn::meta::ParseNestedMeta;
 use super::StructAttrs;
 use super::literals::lit_str;
 
+/// Builds the deferral diagnostic for `localized_default`.
+///
+/// The attribute is deliberately unimplemented (Decision D-4), and it is
+/// rejected wherever it appears rather than silently discarded. Both the
+/// struct-level parser and the field-level one call this, so the two rejection
+/// sites cannot drift apart as the design section moves.
+pub(super) fn reject_localized_default(path: &syn::Path) -> syn::Error {
+    syn::Error::new_spanned(
+        path,
+        concat!(
+            "`localized_default` is not yet implemented; see ",
+            "cli-localization-design.md §8.2",
+        ),
+    )
+}
+
 /// Applies a struct-level localization attribute to `out`.
 ///
 /// Returns `Ok(true)` when `meta` named a key owned by this module, and
@@ -33,13 +49,7 @@ pub(super) fn parse_localization_attr(
             out.localization_base = Some(lit.value());
             Ok(true)
         }
-        "localized_default" => Err(syn::Error::new_spanned(
-            &meta.path,
-            concat!(
-                "`localized_default` is not yet implemented; see ",
-                "cli-localization-design.md §8.2",
-            ),
-        )),
+        "localized_default" => Err(reject_localized_default(&meta.path)),
         _ => Ok(false),
     }
 }
