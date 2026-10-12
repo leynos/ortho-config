@@ -6,6 +6,7 @@
 use std::fs;
 
 use anyhow::{Context, Result, ensure};
+use rstest::rstest;
 
 use super::fragment_tests::TempRoot;
 use super::*;
@@ -187,43 +188,32 @@ fn an_entry_that_vanishes_mid_prune_is_skipped() -> Result<()> {
     Ok(())
 }
 
-/// Verifies a kept file is never probed, so the prune asks only about candidates.
+/// Verifies the prune probes only the entries it might actually remove.
 ///
-/// The injection matches one exact path, so a prune that probed a file the
-/// current render keeps would fail here. This pins the short-circuit: the
-/// render's own output must not be classified, because an unreadable *current*
-/// artefact is not a reason to fail a publication that is about to rewrite it.
-#[test]
-fn a_file_the_render_keeps_is_not_probed() -> Result<()> {
+/// The injection matches one exact path, so a prune that probed an entry it
+/// must keep fails here whichever reason kept it. The two rows cover both
+/// reasons the short-circuit exists. A file the current render keeps must not
+/// be classified, because an unreadable *current* artefact is not a reason to
+/// fail a publication that is about to rewrite it. An entry the matcher never
+/// considers — the lock, the fragments, the channel files — must not be
+/// classified either, or an unreadable lock would fail a publication that
+/// never needs to read it.
+#[rstest]
+#[case("cli-identifiers.json", "the current render keeps")]
+#[case("cli-identifiers.lock", "is not rendered output")]
+fn a_file_the_prune_must_keep_is_not_probed(
+    #[case] name: &str,
+    #[case] reason: &str,
+) -> Result<()> {
     let root = TempRoot::new()?;
-    let kept = root.path().join("cli-identifiers.json");
-    fs::write(&kept, b"{}").context("write current fixture")?;
+    let path = root.path().join(name);
+    fs::write(&path, b"{}").context("write the fixture")?;
 
-    with_entry_probe_error(&kept, std::io::ErrorKind::PermissionDenied, || {
+    with_entry_probe_error(&path, std::io::ErrorKind::PermissionDenied, || {
         prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
     })
-    .context("a file the current render keeps is not a prune candidate")?;
+    .with_context(|| format!("a file that {reason} is not a prune candidate"))?;
 
-    ensure!(kept.is_file(), "the current render must survive the prune");
-    Ok(())
-}
-
-/// Verifies a non-rendered entry is never probed either.
-///
-/// Fragments, the lock, and the channel files all live in this directory and
-/// none is a prune candidate. Probing them would make an unreadable lock file
-/// fail a publication that does not need to read it.
-#[test]
-fn a_non_rendered_entry_is_not_probed() -> Result<()> {
-    let root = TempRoot::new()?;
-    let lock = root.path().join("cli-identifiers.lock");
-    fs::write(&lock, b"").context("write lock fixture")?;
-
-    with_entry_probe_error(&lock, std::io::ErrorKind::PermissionDenied, || {
-        prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
-    })
-    .context("a non-rendered entry is not a prune candidate")?;
-
-    ensure!(lock.is_file(), "the lock file must survive the prune");
+    ensure!(path.is_file(), "the fixture must survive the prune");
     Ok(())
 }
