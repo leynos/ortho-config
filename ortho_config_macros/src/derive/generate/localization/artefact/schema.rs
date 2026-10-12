@@ -22,7 +22,7 @@ pub(super) const SCHEMA_VERSION: u8 = 1;
 /// Read back by the merge: a fragment whose source file no longer exists is
 /// treated as stale and dropped, so this has to be the path the compiler
 /// itself reported rather than a normalized one.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(super) struct Source {
     /// Source file the expansion came from.
     pub(super) file: String,
@@ -37,7 +37,7 @@ pub(super) struct Source {
 /// This is the artefact's unit of meaning: `id` is the catalogue key a
 /// translator resolves, and the remaining fields say which declaration
 /// produced it so tooling can map an inventory entry back to the Rust source.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(super) struct Entry {
     /// Fully normalized Fluent identifier.
     pub(super) id: String,
@@ -225,14 +225,41 @@ pub(super) fn json<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error
 }
 
 /// Sorts entries so repeated builds produce deterministic output.
+///
+/// The identity fields alone are not a total order. Two same-named types in
+/// different modules are distinguishable by nothing in
+/// `(id, kind, type_name, field)` yet are distinct declarations that must both
+/// survive, so a tie there would leave the order of those equal-key entries to
+/// fragment-directory enumeration. That is not guaranteed to repeat, and it
+/// decides both the byte sequence of a document and where the split-file
+/// boundaries fall.
+///
+/// Source provenance breaks such a tie on data that is itself a property of
+/// the declaration rather than of the traversal, which is what makes the
+/// resulting order reproducible rather than merely stable within one run.
+/// `embedded_default` is deliberately excluded: it is rendered text, not
+/// identity, so letting it affect the order would make the sort depend on a
+/// value that translation may legitimately change without renaming anything.
 pub(super) fn ordered(mut entries: Vec<Entry>) -> Vec<Entry> {
     entries.sort_by(|left, right| {
-        (&left.id, &left.kind, &left.type_name, &left.field).cmp(&(
-            &right.id,
-            &right.kind,
-            &right.type_name,
-            &right.field,
-        ))
+        (
+            &left.id,
+            &left.kind,
+            &left.type_name,
+            &left.field,
+            &left.source.file,
+            left.source.line,
+            left.source.column,
+        )
+            .cmp(&(
+                &right.id,
+                &right.kind,
+                &right.type_name,
+                &right.field,
+                &right.source.file,
+                right.source.line,
+                right.source.column,
+            ))
     });
     entries
 }

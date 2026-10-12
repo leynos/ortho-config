@@ -29,6 +29,73 @@ fn renderer_sorts_entries_deterministically() -> Result<()> {
     Ok(())
 }
 
+/// Verifies equal sort keys fall back to provenance rather than input order.
+///
+/// Two same-named types in different modules agree on every identity field the
+/// renderer historically compared, so they are a genuine tie rather than a
+/// contrived one: both declarations must survive, and only their source
+/// locations separate them. Permuting the input is what exposes the tie — the
+/// pre-existing determinism test renders one `Vec` twice and so cannot observe
+/// that the order came from the input at all.
+#[test]
+fn renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> {
+    let forwarded = entry_at_source("tied", String::from("a::Fixture"), "b.rs", 40, 2);
+    let later = entry_at_source("tied", String::from("a::Fixture"), "b.rs", 80, 2);
+    let reversed = vec![later.clone(), forwarded.clone()];
+
+    let first = render(vec![forwarded.clone(), later.clone()])?;
+    let second = render(reversed)?;
+
+    ensure!(
+        file_bytes(&first) == file_bytes(&second),
+        "equal-key entries must not take their order from the input"
+    );
+    ensure!(
+        round_trip_entries(&first)?
+            .into_iter()
+            .map(|entry| (entry.source.file, entry.source.line))
+            .collect::<Vec<_>>()
+            == [
+                (String::from("b.rs"), 40),
+                (String::from("b.rs"), 80),
+            ],
+        "the earlier declaration must sort first"
+    );
+    Ok(())
+}
+
+/// Verifies provenance ties also fix the split-file boundaries.
+///
+/// The single-file case has one byte sequence to compare; the split case has a
+/// part count, a set of filenames, and a per-part assignment, each of which the
+/// tie would otherwise leave to enumeration order. The payload rides on
+/// `type_name`, which both entries must nevertheless share, so the bulk that
+/// forces the split does not also break the tie being tested.
+#[test]
+fn split_renderer_breaks_provenance_ties_independently_of_input_order() -> Result<()> {
+    let type_name = format!("Fixture{}", "x".repeat(SPLIT_PAYLOAD_BYTES));
+    let forwarded = entry_at_source("tied", type_name.clone(), "c.rs", 10, 0);
+    let later = entry_at_source("tied", type_name, "c.rs", 70, 0);
+    let reversed = vec![later.clone(), forwarded.clone()];
+
+    let first = render(vec![forwarded.clone(), later.clone()])?;
+    let second = render(reversed)?;
+
+    ensure!(
+        first.len() > 1,
+        "the fixture must be large enough to exercise the split path"
+    );
+    ensure!(
+        file_bytes(&first) == file_bytes(&second),
+        "split filenames and part contents must not vary with input order"
+    );
+    ensure!(
+        round_trip_entries(&first)? == ordered(vec![forwarded, later]),
+        "split output must round-trip the provenance-ordered entries"
+    );
+    Ok(())
+}
+
 /// Verifies split output round-trips every ordered entry through its index.
 #[test]
 fn split_renderer_round_trips_ordered_entries() -> Result<()> {

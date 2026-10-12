@@ -48,6 +48,28 @@ fn entry_with_type_name(id: &str, type_name: String) -> Entry {
     }
 }
 
+/// Builds an entry whose provenance is set explicitly.
+///
+/// [`entry_with_type_name`] pins every entry to [`fixture_source`], so it cannot
+/// express the one case the ordering tie-breaker exists for: entries that agree
+/// on `(id, kind, type_name, field)` and differ only in source location.
+fn entry_at_source(
+    id: &str,
+    type_name: String,
+    file: &str,
+    line: usize,
+    column: usize,
+) -> Entry {
+    Entry {
+        source: Source {
+            file: file.to_owned(),
+            line,
+            column,
+        },
+        ..entry_with_type_name(id, type_name)
+    }
+}
+
 /// Generates entries that force the renderer through its split-file path.
 fn split_entry_strategy() -> impl Strategy<Value = Entry> {
     (
