@@ -13,6 +13,7 @@
 
 mod artefact_channel_log;
 mod artefact_lock;
+mod artefact_merge_error;
 mod artefact_observation;
 mod artefact_probe;
 mod artefact_report;
@@ -28,9 +29,12 @@ use std::path::{Path, PathBuf};
 use proc_macro2::Span;
 use syn::Ident;
 
+use self::artefact_merge_error::MergeError;
 use self::artefact_probe::source_still_exists;
 #[cfg(test)]
 use self::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
+#[cfg(test)]
+use self::artefact_report::ErrorCategory;
 // Named re-exports keep the schema items reachable from `publish` and the test
 // modules as `super::Name`, exactly as they were before the split. The
 // test-only names are listed under `cfg(test)` so a release build does not
@@ -242,45 +246,45 @@ fn fragment_path(root: &Path, ident: &Ident, source: &Source) -> PathBuf {
 /// the file that could not be read. The returned text reaches the compiler
 /// diagnostic verbatim through `publish::republish`, so it is the whole of what
 /// a failing build shows.
-fn merge_fragments(root: &Path) -> Result<Vec<Entry>, String> {
+fn merge_fragments(root: &Path) -> Result<Vec<Entry>, MergeError> {
     let fragments = root.join(FRAGMENT_DIR);
     let mut output = Vec::new();
     let entries = fs::read_dir(&fragments).map_err(|error| {
-        format!(
+        MergeError::io(format!(
             "cannot list identifier artefact fragments in {}: {error}",
             fragments.display()
-        )
+        ))
     })?;
     for item in entries {
         let path = item
             .map_err(|error| {
-                format!(
+                MergeError::io(format!(
                     "cannot read an entry of the fragment directory {}: {error}",
                     fragments.display()
-                )
+                ))
             })?
             .path();
         if path.extension().is_none_or(|extension| extension != "json") {
             continue;
         }
         let bytes = fs::read(&path).map_err(|error| {
-            format!(
+            MergeError::io(format!(
                 "cannot read identifier artefact fragment {}: {error}",
                 path.display()
-            )
+            ))
         })?;
         let fragment: Fragment = serde_json::from_slice(&bytes).map_err(|error| {
-            format!(
+            MergeError::serialization(format!(
                 "cannot parse identifier artefact fragment {}: {error}; delete it and rebuild",
                 path.display()
-            )
+            ))
         })?;
         if source_still_exists(Path::new(&fragment.source_file)).map_err(|error| {
-            format!(
+            MergeError::io(format!(
                 "cannot probe the source {} recorded by fragment {}: {error}",
                 fragment.source_file,
                 path.display()
-            )
+            ))
         })? {
             output.extend(fragment.entries);
         }
@@ -345,6 +349,13 @@ mod report_identity_tests;
 #[cfg(test)]
 #[path = "artefact_report_failure_tests.rs"]
 mod report_failure_tests;
+
+// The categories a *failing publication* produces for the two merge faults,
+// which `report_failure_tests` cannot show: it hands the channel a category it
+// built itself rather than one a real merge classified.
+#[cfg(test)]
+#[path = "artefact_merge_report_tests.rs"]
+mod merge_report_tests;
 
 // Shared by `lock_tests` and `publication_tests`, so it is neither suite's own.
 #[cfg(test)]

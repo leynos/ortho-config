@@ -197,7 +197,13 @@ fn merge_fragments_reports_malformed_json() -> Result<()> {
 
     let error = merge_fragments(root.path()).expect_err("malformed JSON must fail merging");
     ensure!(
-        error.contains("malformed.json") && error.contains("cannot parse"),
+        error.category == ErrorCategory::Serialization,
+        "a fragment that is not valid JSON is a serialization failure, not an \
+         I/O one; got {:?}",
+        error.category,
+    );
+    ensure!(
+        error.detail.contains("malformed.json") && error.detail.contains("cannot parse"),
         "malformed JSON error must name the fragment path and the failed \
          operation, because the merge runs inside a macro and the text reaches \
          the build log verbatim; got {error:?}",
@@ -214,7 +220,12 @@ fn merge_fragments_reports_unreadable_fragment_path() -> Result<()> {
 
     let error = merge_fragments(root.path()).expect_err("directory fragment must fail reading");
     ensure!(
-        error.contains("unreadable.json") && error.contains("cannot read"),
+        error.category == ErrorCategory::Io,
+        "reading a fragment the filesystem refuses is an I/O failure; got {:?}",
+        error.category,
+    );
+    ensure!(
+        error.detail.contains("unreadable.json") && error.detail.contains("cannot read"),
         "a read failure must name the fragment path and the failed operation; \
          got {error:?}",
     );
@@ -227,7 +238,12 @@ fn merge_fragments_reports_missing_fragment_directory() -> Result<()> {
     let root = TempRoot::new()?;
     let error = merge_fragments(root.path()).expect_err("missing fragment directory must fail");
     ensure!(
-        error.contains(FRAGMENT_DIR) && error.contains("cannot list"),
+        error.category == ErrorCategory::Io,
+        "an absent fragment directory is an I/O failure; got {:?}",
+        error.category,
+    );
+    ensure!(
+        error.detail.contains(FRAGMENT_DIR) && error.detail.contains("cannot list"),
         "a missing fragment directory must name the directory it could not \
          list, so the maintainer reads which artefact root the macro used; \
          got {error:?}",
@@ -285,15 +301,20 @@ fn merge_fragments_propagates_non_not_found_metadata_errors() -> Result<()> {
     })
     .expect_err("non-NotFound metadata failure must abort merging instead of dropping entries");
     ensure!(
-        error.contains("cannot probe") && error.contains("guarded.rs"),
+        error.category == ErrorCategory::Io,
+        "a metadata probe failure is an I/O failure; got {:?}",
+        error.category,
+    );
+    ensure!(
+        error.detail.contains("cannot probe") && error.detail.contains("guarded.rs"),
         "error must identify the probe failure, got: {error}"
     );
     ensure!(
-        error.contains(&probe_path),
+        error.detail.contains(&probe_path),
         "error must retain the probed source path, got: {error}"
     );
     ensure!(
-        error.contains(INJECTED_PROBE_MESSAGE),
+        error.detail.contains(INJECTED_PROBE_MESSAGE),
         "error must carry the underlying metadata error, got: {error}"
     );
     Ok(())

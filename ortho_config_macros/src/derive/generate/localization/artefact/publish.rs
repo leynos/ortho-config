@@ -25,11 +25,12 @@ use proc_macro2::Span;
 use syn::Ident;
 
 use super::artefact_lock::{LockGuard, lock, lock_while};
+use super::artefact_merge_error::MergeError;
 use super::artefact_observation::{Observation, Subject, observe};
 use super::artefact_report::{ErrorCategory, Outcome, ReportConfig, Stage};
 use super::artefact_wait_marker::note_wait;
 use super::{
-    ARTEFACT_DIR, FRAGMENT_DIR, Fragment, Source, atomic_write, fragment_path, json,
+    ARTEFACT_DIR, Entry, FRAGMENT_DIR, Fragment, Source, atomic_write, fragment_path, json,
     merge_fragments, prune_stale_rendered, render,
 };
 
@@ -212,6 +213,34 @@ fn write_fragment(_held: &LockGuard, publication: &Publication<'_>, span: Span) 
     })
 }
 
+/// Merges the fragments, reporting the category the failure belongs to.
+///
+/// The merge is the one step that cannot name a single category up front: it
+/// enumerates, reads, and probes the filesystem, and parses one fragment, so a
+/// `PermissionDenied` while reading and a malformed fragment both fail this
+/// step yet call for different responses. [`observe`] takes the category as an
+/// argument, which is right when a step has exactly one; here the category is
+/// a property of the failure.
+///
+/// The category therefore has to be read from the error *before* the
+/// observation records it, because `Observation::failed` keeps the first value
+/// it is given: a later corrected call is silently ignored. Merging first and
+/// observing only the failure is equivalent to observing the call, since
+/// [`observe`] does nothing on success.
+fn merge_observed(
+    observation: &Observation<'_>,
+    root: &Path,
+    span: Span,
+) -> syn::Result<Vec<Entry>> {
+    match merge_fragments(root) {
+        Ok(merged) => Ok(merged),
+        Err(error) => {
+            let MergeError { category, detail } = error;
+            observe(observation, category, || Err(syn::Error::new(span, detail)))
+        }
+    }
+}
+
 /// Renders the merged inventory and makes the directory match it exactly.
 ///
 /// `_held` carries the same proof obligation as in [`write_fragment`]: the
@@ -223,9 +252,7 @@ fn republish(
     span: Span,
 ) -> syn::Result<()> {
     observation.enter(Stage::Merge);
-    let merged = observe(observation, ErrorCategory::Serialization, || {
-        merge_fragments(root).map_err(|error| syn::Error::new(span, error))
-    })?;
+    let merged = merge_observed(observation, root, span)?;
     observation.enter(Stage::Render);
     let rendered = observe(observation, ErrorCategory::Serialization, || {
         render(merged).map_err(|error| {
