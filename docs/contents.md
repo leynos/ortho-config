@@ -58,7 +58,7 @@
   review the accepted 7.2.1 `behaviour(...)` derive attribute, the no-inference
   rule, the pinned bypass and dry-run flag grammar, and the
   `agent-native.behaviour.*` rule set.
-- [ADR-010: Opt-in identifier artefact emission](adr-010-opt-in-identifier-artefact-emission.md):
+- [ADR-011: Opt-in identifier artefact emission](adr-011-opt-in-identifier-artefact-emission.md):
   review the guarded build-time export for derived CLI identifiers.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
