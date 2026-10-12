@@ -18,7 +18,9 @@ use heck::ToKebabCase;
 use proc_macro2::Span;
 use syn::Ident;
 
-use crate::derive::parse::{FieldAttrs, StructAttrs, clap_arg_id, clap_field_is_flattened};
+use crate::derive::parse::{
+    FieldAttrs, StructAttrs, clap_arg_id_or_field_name, clap_field_is_flattened,
+};
 
 pub(crate) use model::{
     ArgIdsModel, ClapArgId, CommandIds, FluentMessageId, FluentSegments, LocalizationBase,
@@ -191,12 +193,10 @@ fn build_arg_models(
             ));
         };
 
-        // Clap's derived arg id is the raw field name: `clap_derive` emits
-        // `Name::Derived(ident)` as `ident.unraw().to_string()` and only
-        // kebab-cases the *long flag*, not the id. Deriving from the
-        // kebab-cased spelling here would therefore emit a key that no
-        // runtime lookup ever requests for an underscored field.
-        let arg_id = ClapArgId(clap_arg_id(field)?.unwrap_or_else(|| name_ident.to_string()));
+        // Both the generated `clap` attribute and every runtime lookup share
+        // one resolver, so the id a reader sees here is the id clap records
+        // and `ArgMatches` is later queried with.
+        let arg_id = ClapArgId(clap_arg_id_or_field_name(field)?);
         let (normalized, arg_segments) = normalize_arg_id(&arg_id, name_ident.span())?;
 
         if let Some((first_span, first_name)) = seen.get(&normalized) {
