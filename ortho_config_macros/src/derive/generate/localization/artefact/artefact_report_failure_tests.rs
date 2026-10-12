@@ -31,7 +31,11 @@ use super::report_tests::report;
 /// A reader consumes the file while a build may still be appending to it, so
 /// the parse is per line and a trailing blank line is tolerated; anything else
 /// that does not parse is a defect in the format, not in the test.
-fn records(root: &std::path::Path) -> Result<Vec<serde_json::Value>> {
+///
+/// Shared with the identity and channel suites: each asserts on the same log, so
+/// they read it through one parse rather than three that could disagree about
+/// what a malformed line means.
+pub(super) fn records(root: &std::path::Path) -> Result<Vec<serde_json::Value>> {
     let raw = fs::read_to_string(errors_path(root)).context("read the failure record")?;
     raw.lines()
         .filter(|line| !line.trim().is_empty())

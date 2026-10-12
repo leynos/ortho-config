@@ -13,20 +13,18 @@
 //!
 //! `lock_helper_entry_point` is the single re-entry point every helper mode
 //! dispatches through, so a mode cannot be reachable from one suite and
-//! silently missing from the other.
+//! silently missing from the other. The mode bodies themselves live in
+//! [`lock_modes`], which this module re-enters through that point.
 
 use std::fs;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
 
-use super::artefact_lock::{create_lock, is_free, lock};
-use super::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
-use super::artefact_report::{ReportConfig, Reporting};
-use super::lock_fixture::fixture_source_path;
+#[path = "artefact_lock_modes.rs"]
+mod lock_modes;
 
 /// Names the environment variable that turns this test binary into a helper.
 const LOCK_HELPER_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_HELPER";
@@ -43,6 +41,15 @@ const LOCK_ROOT_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_ROOT";
 /// crate, so the merge sees two distinct contributions rather than one
 /// fragment rewritten twice.
 const LOCK_VARIANT_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_VARIANT";
+
+/// Names the environment variable keying an announcing helper's files.
+///
+/// Concurrently running publishers must not share `PUBLISH_STARTED_FILE`, which
+/// is a fixed name: the second would find the first's announcement already
+/// there and report itself started before it was. The key travels through the
+/// environment rather than argv for the reason [`spawn_variant`] records —
+/// libtest reads an extra positional argument as another name filter.
+const LOCK_KEY_ENV: &str = "ORTHO_CONFIG_ARTEFACT_LOCK_KEY";
 
 /// Names the crate each variant helper records against its entries.
 pub(super) const VARIANT_CRATES: [&str; 2] = ["alpha", "beta"];
@@ -150,6 +157,14 @@ pub(super) fn request_release(root: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Returns the completion file one keyed helper writes under a root.
+///
+/// The key is what keeps two concurrently announced publishers apart: a shared
+/// name would let one parent's poll be satisfied by the other child's file.
+pub(super) fn finished_file(root: &Path, key: &str) -> PathBuf {
+    root.join(format!("{PUBLISH_FINISHED_FILE}.{key}"))
+}
+
 /// Spawns this test binary in helper mode against one artefact root.
 pub(super) fn spawn_helper(root: &Path, mode: &str) -> Result<Child> {
     spawn_variant(root, mode, None)
@@ -157,12 +172,43 @@ pub(super) fn spawn_helper(root: &Path, mode: &str) -> Result<Child> {
 
 /// Spawns a helper, optionally recording a variant crate against its entries.
 ///
+/// A one-shot helper needs no announcement key: only one runs at a time, so the
+/// shared name cannot collide with a peer.
+pub(super) fn spawn_variant(root: &Path, mode: &str, label: Option<&str>) -> Result<Child> {
+    spawn_keyed_variant(root, mode, label, None)
+}
+
+/// Spawns an observed publisher announcing under a key of its own.
+///
+/// Two of these run against one artefact root in the report-isolation test, so
+/// each needs both a distinct fragment identity — the label — and a distinct
+/// announcement name. Without the key the second parent poll would be satisfied
+/// by the first child's file.
+pub(super) fn spawn_observed_variant(root: &Path, label: &str) -> Result<Child> {
+    spawn_keyed_variant(root, "publish-observed", Some(label), Some(label))
+}
+
+/// Spawns the observed publisher that announces under no key.
+///
+/// One real publisher is enough for a test that reads the report it wrote, so
+/// the shared announcement name is unambiguous there.
+pub(super) fn spawn_observed_publisher(root: &Path) -> Result<Child> {
+    spawn_keyed_variant(root, "publish-observed", None, None)
+}
+
+/// Spawns a helper with its optional variant label and announcement key.
+///
 /// The child re-enters through the helper's own test name, so it runs in a
 /// genuinely separate process and therefore contends on a genuinely separate
-/// lock handle. The mode travels through the environment rather than argv:
-/// libtest consumes any extra positional argument as an additional name filter,
-/// which silently selects zero tests and still exits successfully.
-pub(super) fn spawn_variant(root: &Path, mode: &str, label: Option<&str>) -> Result<Child> {
+/// lock handle. The mode, label, and key travel through the environment rather
+/// than argv: libtest consumes any extra positional argument as an additional
+/// name filter, which silently selects zero tests and still exits successfully.
+fn spawn_keyed_variant(
+    root: &Path,
+    mode: &str,
+    label: Option<&str>,
+    key: Option<&str>,
+) -> Result<Child> {
     let executable = std::env::current_exe().context("locate the test executable")?;
     let mut command = Command::new(executable);
     command
@@ -174,6 +220,9 @@ pub(super) fn spawn_variant(root: &Path, mode: &str, label: Option<&str>) -> Res
         .stderr(std::process::Stdio::piped());
     if let Some(variant) = label {
         command.env(LOCK_VARIANT_ENV, variant);
+    }
+    if let Some(announcement) = key {
+        command.env(LOCK_KEY_ENV, announcement);
     }
     command
         .spawn()
@@ -215,157 +264,11 @@ fn lock_helper_entry_point() -> Result<()> {
         .map(PathBuf::from)
         .context("helper requires the artefact lock root")?;
     let mode = std::env::var(LOCK_MODE_ENV).context("helper requires a lock mode")?;
-    match mode.as_str() {
-        "hold" => hold(&root),
-        "hold-until-asked" => hold_until_asked(&root),
-        "contend" => contend(&root),
-        "publish" => publish(&root),
-        "publish-variant" => {
-            let variant = std::env::var(LOCK_VARIANT_ENV)
-                .context("variant publisher requires a variant name")?;
-            publish_variant(&root, &variant)
-        }
-        "publish-announced" => publish_announced(&root),
-        "publish-observed" => publish_observed(&root),
-        "publish-then-probe" => publish_then_probe(&root),
-        "publish-failing-then-probe" => publish_failing_then_probe(&root),
-        other => Err(anyhow::anyhow!("unknown helper mode {other}")),
-    }
+    lock_modes::run(&root, &mode)
 }
 
-/// Acquires the lock, advertises ownership, then releases it.
-fn hold(root: &Path) -> Result<()> {
-    let guard = lock(root)?;
-    fs::write(root.join(SENTINEL_FILE), SENTINEL_ACQUIRED).context("record lock ownership")?;
-    std::thread::sleep(HOLD_PERIOD);
-    // Write the release marker while the guard is still held, so every later
-    // acquirer is guaranteed to observe it.
-    fs::write(root.join(SENTINEL_FILE), SENTINEL_RELEASED).context("record lock release")?;
-    drop(guard);
-    Ok(())
-}
-
-/// Acquires the lock and holds it until the parent permits its release.
-fn hold_until_asked(root: &Path) -> Result<()> {
-    let guard = lock(root)?;
-    fs::write(root.join(SENTINEL_FILE), SENTINEL_ACQUIRED).context("record lock ownership")?;
-    let deadline = Instant::now() + ACQUIRE_TIMEOUT;
-    while Instant::now() < deadline {
-        if root.join(RELEASE_REQUEST_FILE).exists() {
-            fs::write(root.join(SENTINEL_FILE), SENTINEL_RELEASED)
-                .context("record lock release")?;
-            drop(guard);
-            return Ok(());
-        }
-        std::thread::sleep(POLL_INTERVAL);
-    }
-    Err(anyhow::anyhow!(
-        "parent never requested the release within {ACQUIRE_TIMEOUT:?}"
-    ))
-}
-
-/// Acquires the lock and fails when a holder was still advertising ownership.
-fn contend(root: &Path) -> Result<()> {
-    let _guard = lock(root)?;
-    let observed = fs::read_to_string(root.join(SENTINEL_FILE))
-        .context("contender requires the holder's sentinel")?;
-    ensure!(
-        observed == SENTINEL_RELEASED,
-        "contender acquired the lock while the holder still reported it owned it; \
-         observed {observed:?}, which shows no inter-process exclusion held",
-    );
-    Ok(())
-}
-
-/// Fails unless the lock is free, naming the moment being checked.
-///
-/// The lock file is created first, as an explicit command. The probe opens the
-/// file that exists rather than bringing one into being, so without this a
-/// missing file would be indistinguishable from a released lock. Every probed
-/// path has already published, so the file is normally there; creating it
-/// keeps the check about the lock rather than about the directory's contents.
-fn ensure_free(root: &Path, moment: &str) -> Result<()> {
-    create_lock(root).context("create the artefact lock file before probing it")?;
-    let free = is_free(root).context("probe the artefact lock")?;
-    ensure!(
-        free,
-        "the lock was still held {moment}, so a later compiler process would \
-         block indefinitely",
-    );
-    Ok(())
-}
-
-/// Announces the publication call, publishes, then records completion.
-///
-/// The announcement precedes the lock acquisition, so a parent that sees it
-/// knows the child is about to try the lock. That lets the parent bound the
-/// child's opportunity deterministically instead of racing a sleep.
-fn publish_announced(root: &Path) -> Result<()> {
-    fs::write(root.join(PUBLISH_STARTED_FILE), "started")
-        .context("announce the publication call")?;
-    publish(root)?;
-    fs::write(root.join(PUBLISH_FINISHED_FILE), "finished")
-        .context("record publication completion")?;
-    Ok(())
-}
-
-/// Announces, then publishes with the channel on and a prompt threshold.
-///
-/// The parent needs a publisher that is *genuinely* blocked while a peer holds
-/// the lock, so that the wait marker it observes was written by the production
-/// acquisition path. The threshold is shortened through the explicit
-/// configuration rather than the environment, which would change it for every
-/// test running concurrently in this binary. The announcement is written before
-/// the publication call, so a parent that sees it knows the child is about to
-/// contend rather than about to start.
-fn publish_observed(root: &Path) -> Result<()> {
-    fs::write(root.join(PUBLISH_STARTED_FILE), "started")
-        .context("announce the observed publication call")?;
-    publish_fixture(
-        root,
-        ReportConfig::with_timing(Reporting::On, SHORT_WAIT_THRESHOLD, SHORT_WAIT_REFRESH),
-    )?;
-    fs::write(root.join(PUBLISH_FINISHED_FILE), "finished")
-        .context("record observed publication completion")?;
-    Ok(())
-}
-
-/// Publishes successfully and then probes, within one process.
-///
-/// The probe must share the publisher's process: one that waits for the child
-/// to exit cannot distinguish a released guard from process exit closing the
-/// handle, so it passes even if publication leaked its lock for its lifetime.
-fn publish_then_probe(root: &Path) -> Result<()> {
-    publish(root)?;
-    ensure_free(root, "after a successful publication returned")
-}
-
-/// Fails a publication after the lock is taken, then probes in-process.
-///
-/// The metadata injection makes `merge_fragments` fail, which happens after the
-/// fragment write and therefore after the lock is held, so this drives the
-/// error path with the guard already acquired. The assertion on the injected
-/// marker proves the failure came from the injection rather than from an
-/// incidental filesystem condition that would make the fixture vacuous.
-fn publish_failing_then_probe(root: &Path) -> Result<()> {
-    let source = fixture_source_path(root, "fixture")?;
-    let outcome =
-        with_metadata_outcome(Path::new(&source), Err(ErrorKind::PermissionDenied), || {
-            publish(root)
-        });
-    let reported = outcome
-        .as_ref()
-        .err()
-        .map(ToString::to_string)
-        .unwrap_or_default();
-    ensure!(
-        reported.contains(INJECTED_PROBE_MESSAGE),
-        "the failing-publication fixture must fail because of the injected \
-         metadata outcome, but it reported {reported:?}",
-    );
-    ensure_free(root, "after a failed publication returned")
-}
-
-// The fixture publications live in `lock_fixture`; re-exported so every suite
-// reaches them as `lock_support::publish*`, keeping one import per suite.
-pub(super) use super::lock_fixture::{publish, publish_fixture, publish_variant};
+// The fixture publication lives in `lock_fixture`; re-exported so a suite that
+// already imports this module's markers reaches the publisher here too, keeping
+// one import per suite. The mode bodies in `lock_modes` and the observed
+// variants take it from `lock_fixture` directly.
+pub(super) use super::lock_fixture::publish_fixture;

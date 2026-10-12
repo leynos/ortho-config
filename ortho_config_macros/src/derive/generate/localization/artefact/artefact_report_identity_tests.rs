@@ -22,12 +22,13 @@ use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
 
-use super::artefact_channel_log::errors_path;
 use super::artefact_report::{
     Outcome, PublicationReport, Stage, epoch_millis, report_path, report_path_for, write,
 };
 use super::artefact_wait_marker::wait_marker_for;
 use super::fragment_tests::TempRoot;
+use super::lock_support::{spawn_observed_publisher, spawn_observed_variant, wait_for};
+use super::report_failure_tests::records;
 use super::report_tests::report;
 
 /// Verifies a second publication in one process replaces the first report.
@@ -74,30 +75,101 @@ fn a_later_publication_replaces_this_process_s_report() -> Result<()> {
     Ok(())
 }
 
-/// Verifies two compiler processes publishing into one root keep both reports.
+/// Verifies one observed publisher's report records its own process and expansion.
+///
+/// This is the foundation the isolation test builds on: the report has to carry
+/// a process id a parent can compare against the child it spawned, and an
+/// expansion identity that says which publication the file describes. Without
+/// both, "the peer's report survived" would be a claim about file *names*
+/// rather than about the documents behind them.
+///
+/// The publisher is a real process running the production boundary, so the
+/// `pid` is the child's rather than this test's, which is what a fabricated
+/// report cannot establish.
+#[test]
+fn an_observed_publisher_records_its_own_process_and_expansion() -> Result<()> {
+    let root = TempRoot::new()?;
+    let publisher = spawn_observed_publisher(root.path())?;
+    let child_pid = publisher.id();
+    wait_for(publisher, "observed publisher")?;
+
+    let parsed = read_report(root.path(), child_pid)?;
+    ensure_pid(&parsed, child_pid)?;
+    ensure!(
+        string_field(&parsed, "ident") == Some("Config")
+            && string_field(&parsed, "crate_name") == Some("fixture"),
+        "the report must name the expansion its publisher derived; got {parsed}",
+    );
+    Ok(())
+}
+
+/// Verifies two real publishers into one root keep both reports.
 ///
 /// `OUT_DIR` is package-scoped, so a package with several compilation targets
 /// has several compiler processes writing here at once. Nothing serialises
-/// them: the two publications in this test run from one process id each, which
-/// is exactly the collision the filename has to prevent.
+/// them, so each runs the production publication boundary in its own process
+/// and the assertion is on what survived: two process-scoped reports, each
+/// naming its own pid and its own expansion.
+///
+/// A report written by this process on a peer's behalf would prove only that
+/// the two *paths* differ, which is not the property — several processes
+/// publishing concurrently into one directory is, and only real processes
+/// exercise it. The expansions are made distinct by giving each publisher its
+/// own variant label, because two publications sharing one identity would
+/// legitimately produce one fragment and one described expansion.
 #[test]
 fn separate_processes_keep_separate_reports() -> Result<()> {
     let root = TempRoot::new()?;
-    let here = report_path(root.path());
-    let peer = report_path_for(root.path(), std::process::id() + 1);
+    let first = spawn_observed_variant(root.path(), "alpha")?;
+    let first_pid = first.id();
+    let second = spawn_observed_variant(root.path(), "beta")?;
+    let second_pid = second.id();
+    wait_for(first, "first observed publisher")?;
+    wait_for(second, "second observed publisher")?;
+
+    let here = report_path_for(root.path(), first_pid);
+    let peer = report_path_for(root.path(), second_pid);
     ensure!(
         here != peer,
         "two processes must not be told to write one report path",
     );
-
-    write(root.path(), &report(Stage::Merge, Outcome::Completed));
-    fs::write(&peer, b"{\"pid\":0}").context("write the peer's report")?;
-
     ensure!(
         here.is_file() && peer.is_file(),
-        "a peer process's report must survive this process's publication",
+        "each publisher's process-scoped report must survive the other's publication",
+    );
+
+    let first_report = read_report(root.path(), first_pid)?;
+    let second_report = read_report(root.path(), second_pid)?;
+    ensure_pid(&first_report, first_pid)?;
+    ensure_pid(&second_report, second_pid)?;
+    ensure!(
+        string_field(&first_report, "crate_name") == Some("alpha")
+            && string_field(&second_report, "crate_name") == Some("beta"),
+        "each report must name the expansion its own process derived; got \
+         {first_report} and {second_report}",
     );
     Ok(())
+}
+
+/// Reads the report one process wrote, parsed rather than matched as text.
+fn read_report(root: &Path, pid: u32) -> Result<serde_json::Value> {
+    let raw = fs::read_to_string(report_path_for(root, pid))
+        .with_context(|| format!("read the report process {pid} wrote"))?;
+    serde_json::from_str(&raw).with_context(|| format!("the report for {pid} must be whole JSON"))
+}
+
+/// Requires a parsed report to name the process that wrote it.
+fn ensure_pid(parsed: &serde_json::Value, pid: u32) -> Result<()> {
+    ensure!(
+        parsed.get("pid").and_then(serde_json::Value::as_u64) == Some(u64::from(pid)),
+        "the report must carry the writing process's own id {pid}; got {parsed}",
+    );
+    Ok(())
+}
+
+/// Returns one string field of a parsed report, if it is a string.
+fn string_field<'a>(parsed: &'a serde_json::Value, name: &str) -> Option<&'a str> {
+    parsed.get(name).and_then(serde_json::Value::as_str)
 }
 
 /// Verifies the wait marker's own naming keeps two waiters apart.
@@ -121,11 +193,14 @@ fn separate_processes_keep_separate_wait_markers() -> Result<()> {
 /// report after a failed publication sees a *stale* report rather than no
 /// report, and `written_at_ms` is the only field that says so.
 ///
-/// The earlier report is read back after the failed replacement as well as
-/// before, because the point of the test is what a reader finds afterwards. A
-/// write that truncated the destination before failing would satisfy the
-/// recorded-failure assertion while destroying the document a maintainer is
-/// trying to read.
+/// The failure is placed on the write's temporary rather than on its
+/// destination, and that is the whole point. `atomic_write` writes a sibling
+/// and then renames it over the destination, so blocking the temporary fails
+/// the replacement while the earlier report sits untouched throughout — the
+/// state the test exists to observe. Blocking the destination would first
+/// require deleting the report to put a directory in its place, which destroys
+/// the evidence and leaves an assertion that the old document is absent
+/// standing in for one that it survives.
 #[test]
 fn a_failed_replacement_leaves_the_earlier_report_in_place() -> Result<()> {
     let root = TempRoot::new()?;
@@ -136,14 +211,15 @@ fn a_failed_replacement_leaves_the_earlier_report_in_place() -> Result<()> {
             ..report(Stage::Merge, Outcome::Completed)
         },
     );
-    let before = fs::read_to_string(report_path(root.path())).context("read the first report")?;
-
-    // Block the atomic write the same way the failure-record suite does: a
-    // non-empty directory in the destination's path defeats the final rename.
     let destination = report_path(root.path());
-    fs::remove_file(&destination).context("clear the report for the blocker")?;
-    fs::create_dir(&destination).context("place a directory where the report must go")?;
-    fs::write(destination.join("occupant"), b"non-empty").context("keep the blocker non-empty")?;
+    let before = fs::read(&destination).context("read the first report")?;
+
+    // The temporary is a non-empty directory, so writing the replacement into
+    // it fails outright and the rename is never reached.
+    let temporary = destination.with_extension("tmp");
+    fs::create_dir(&temporary).context("place a directory where the temporary must go")?;
+    fs::write(temporary.join("occupant"), b"keeps the directory non-empty")
+        .context("keep the blocking directory non-empty")?;
     write(
         root.path(),
         &PublicationReport {
@@ -152,24 +228,25 @@ fn a_failed_replacement_leaves_the_earlier_report_in_place() -> Result<()> {
         },
     );
 
-    let recorded = fs::read_to_string(errors_path(root.path()))
-        .context("the discarded replacement must be recorded")?;
+    let recorded = records(root.path()).context("the discarded replacement must be recorded")?;
     ensure!(
-        recorded.contains("cannot write the build report"),
-        "the failed replacement must be reported; got {recorded}",
+        recorded.iter().any(|record| {
+            string_field(record, "operation") == Some("cannot write the build report")
+                && string_field(record, "error") == Some("io")
+        }),
+        "the failed replacement must leave a structured record of what was lost; got {recorded:?}",
     );
 
-    // Remove the blocker so the surviving document can be read back; the
-    // removal does not write a report, so what it exposes is still what the
-    // failed replacement left behind.
-    fs::remove_dir_all(&destination).context("clear the blocker to read the survivor")?;
+    let after = fs::read(&destination)
+        .context("the earlier report must still be at its own destination")?;
     ensure!(
-        !destination.exists(),
-        "clearing the blocker must reveal that the failed replacement wrote nothing",
+        after == before,
+        "a failed replacement must leave the earlier report byte for byte; got {}",
+        String::from_utf8_lossy(&after),
     );
     ensure!(
-        before.contains("\"ident\":\"Kept\""),
-        "the first report must be the one that dates and identifies itself; got {before}",
+        String::from_utf8_lossy(&after).contains("\"ident\":\"Kept\""),
+        "the document that survives must be the one written before the failure",
     );
     Ok(())
 }

@@ -78,6 +78,19 @@ pub(super) fn publish_variant(root: &Path, variant: &str) -> Result<()> {
     publish_as(root, Identity::named(variant))
 }
 
+/// Publishes one named variant under an explicit observation configuration.
+///
+/// The observed publisher must take this path when it runs alongside another:
+/// an identity of its own is what keeps its fragment, and therefore the
+/// expansion its report names, distinct from its peer's.
+pub(super) fn publish_variant_observed(
+    root: &Path,
+    variant: &str,
+    report: ReportConfig,
+) -> Result<()> {
+    publish_configured(root, Identity::named(variant), report)
+}
+
 /// Publishes one fragment with an explicit observation configuration.
 fn publish_configured(root: &Path, identity: Identity<'_>, report: ReportConfig) -> Result<()> {
     let ident = Ident::new("Config", Span::call_site());

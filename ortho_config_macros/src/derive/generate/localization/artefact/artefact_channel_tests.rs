@@ -21,20 +21,24 @@
 //! the ordering rather than racing a sleep.
 
 use std::fs;
+use std::io::ErrorKind;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
 
 use super::artefact_channel_log::errors_path;
 use super::artefact_lock::lock_path;
-use super::artefact_report::{Outcome, ReportConfig, Reporting, Stage, report_path, write};
+use super::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
+use super::artefact_report::{ReportConfig, Reporting, report_path};
 use super::fragment_tests::TempRoot;
+use super::lock_fixture::fixture_source_path;
 use super::lock_support::{
     ACQUIRE_TIMEOUT, PUBLISH_FINISHED_FILE, PUBLISH_STARTED_FILE, SHORT_WAIT_REFRESH,
     SHORT_WAIT_THRESHOLD, publish_fixture, request_release, spawn_helper, wait_for, wait_for_file,
     wait_for_holder,
 };
-use super::report_tests::report;
+use super::report_failure_tests::records;
 
 /// Blocks the report's destination so the channel's atomic write must fail.
 ///
@@ -260,28 +264,66 @@ fn wait_for_growth(root: &std::path::Path, previous: u64, timeout: Duration) -> 
     ))
 }
 
-/// Verifies a channel failure on the completion path is recorded once.
+/// Verifies a publication whose observation cannot be written records it once.
 ///
 /// `Observation::finish` is reached by the success path and by every layer an
 /// error unwinds through, and its one-shot guard is what keeps one publication
-/// from leaving several records of the same lost observation. The guard is
-/// already asserted for successful writes; here the write *fails*, which is
-/// when a missing guard would multiply the record.
+/// from leaving several records of the same lost observation. Driving the
+/// production boundary is what makes that guard load-bearing here: the merge
+/// failure unwinds through the inner `observe` in `republish` *and* the outer
+/// one in `publish`, so a `finish` without its guard attempts the report write
+/// at both layers and leaves one log record per attempt.
+///
+/// The count is therefore the assertion. The injected metadata error is what
+/// makes the first layer fail, and it is asserted too, so an incidental empty
+/// directory cannot stand in for the merge failure and leave the fixture
+/// vacuous. The record's own category is `io` because it classifies the
+/// *channel's* failure — the rename the blocker refuses — rather than the
+/// publication's, which is why the category is not what distinguishes the
+/// layers.
 #[test]
 fn a_failed_observation_is_recorded_once_per_publication() -> Result<()> {
     let root = TempRoot::new()?;
     block_report_destination(root.path())?;
-    write(root.path(), &report(Stage::Prune, Outcome::Completed));
+    let source = fixture_source_path(root.path(), "fixture")?;
+    let injected = Path::new(&source);
 
-    let recorded =
-        fs::read_to_string(errors_path(root.path())).context("read the failure record")?;
-    let count = recorded
-        .lines()
-        .filter(|line| line.contains("cannot write the build report"))
-        .count();
+    let outcome = with_metadata_outcome(injected, Err(ErrorKind::PermissionDenied), || {
+        publish_fixture(root.path(), ReportConfig::observed(Reporting::On))
+    });
+    let reported = outcome
+        .as_ref()
+        .err()
+        .map(ToString::to_string)
+        .unwrap_or_default();
     ensure!(
-        count == 1,
-        "one lost observation must leave exactly one record, not {count}; got {recorded}",
+        reported.contains(INJECTED_PROBE_MESSAGE),
+        "the fixture must fail because of the injected metadata outcome, but it reported \
+         {reported:?}",
+    );
+
+    let recorded = records(root.path()).context("read the failure record")?;
+    let lost = recorded
+        .iter()
+        .filter(|record| string_field(record, "operation") == Some("cannot write the build report"))
+        .collect::<Vec<_>>();
+    ensure!(
+        lost.len() == 1,
+        "one lost observation must leave exactly one record, not {}; got {recorded:?}",
+        lost.len(),
+    );
+    let category = lost
+        .first()
+        .and_then(|record| string_field(record, "error"))
+        .context("the record must classify the failure it carries")?;
+    ensure!(
+        category == "io",
+        "the record must classify the channel's own write failure as an I/O one; got {category}",
     );
     Ok(())
+}
+
+/// Returns one string field of a parsed failure record, if it is a string.
+fn string_field<'a>(record: &'a serde_json::Value, name: &str) -> Option<&'a str> {
+    record.get(name).and_then(serde_json::Value::as_str)
 }
