@@ -174,6 +174,52 @@ fn source_aware_profile_load_reports_the_injected_selection() -> Result<()> {
     Ok(())
 }
 
+/// A non-UTF-8 injected selector is reported rather than silently ignored.
+///
+/// The injected selector arrives as an `OsString`, so the loader can read it
+/// successfully and still fail to transcode it. Treating that as "no selector"
+/// would return the base configuration while the caller believed a profile had
+/// been applied, so the load must fail instead.
+///
+/// Gated to Unix because building a non-UTF-8 `OsString` from raw bytes needs
+/// `std::os::unix::ffi::OsStringExt`; there is no portable constructor.
+#[cfg(unix)]
+#[test]
+fn a_non_utf8_injected_selector_is_reported_not_ignored() -> Result<()> {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt as _};
+
+    let fixture_dir = tempfile::tempdir().context("create profiled loading fixture")?;
+    let config_path = write_profiled_fixture(fixture_dir.path())?;
+    // The fixture defines profile `ci`, so a loader that dropped the selector
+    // would still succeed with the base value of 3. Pushing 0xFF makes the
+    // value non-representable however the preceding bytes happen to decode.
+    let mut raw = b"ci".to_vec();
+    raw.push(0xFF);
+    let selector = OsString::from_vec(raw);
+
+    let source = Arc::new(
+        MapEnv::new()
+            .with_var("PROFILED_CONFIG_CONFIG_PATH", &config_path)
+            .with_var("PROFILED_CONFIG_PROFILE", &selector),
+    );
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+
+    let error = ProfiledConfig::load_with_profile_from_iter_with_sources(
+        ["profiled-config"],
+        discovery,
+        merge,
+    )
+    .map(|outcome| outcome.config().retries)
+    .expect_err("a non-Unicode selector must be reported, not ignored");
+    let message = error.to_string();
+    ensure!(
+        message.contains("not valid Unicode"),
+        "the diagnostic must name the encoding fault, got: {message}"
+    );
+    Ok(())
+}
+
 /// One map drives both the selector lookup and the complete merge layer.
 ///
 /// The process-backed selector path is covered by the `profiles.feature` BDD
