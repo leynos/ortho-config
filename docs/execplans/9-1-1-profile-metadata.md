@@ -1488,6 +1488,38 @@ Progress entries from milestone 1 onward must carry timestamps.
       constant form wins, and its value wins with it. The D15 clause above is
       therefore superseded in full — the version clause it states was correct
       for its own rebase and no longer describes the merged tree.
+- Observation (2026-10-13, a review repair breached the 400-line cap): the
+      commit that closed the first review round, `8be079fc`, grew
+      `ortho_config_macros/src/derive/generate/docs/sections.rs` from 382 to
+      414 lines, so `make lint` failed with `Module sections spans 414 lines,
+      exceeding the allowed 400`. Hosted `build-test (linux)` reproduced it
+      identically. This is the one class of regression the earlier rebases
+      could not surface: `sections.rs` *is* a `mod`-declared file, so unlike
+      the integration-test crate roots discussed above the cap genuinely
+      measures it, and the file was 387 lines at the reviewed head where Lint
+      passed. Evidence: the same file is 372 lines on `origin/main`, and the
+      failure text matches between the local gate and CI step 20. Repaired by
+      extraction rather than suppression, following the splits at `3a27a649`,
+      `a9e1cc1c`, and `77464d31`; `dylint.toml` still carries no
+      `module-max-lines` exclusion. The whole config-discovery vocabulary —
+      the resolved file names, the extensions-derived formats, and the
+      override flag and environment variable — moved to a sibling
+      `discovery.rs`, leaving `sections.rs` at 292 lines. Lesson: a repair
+      made to satisfy a review finding is a change like any other and needs
+      the same gates; the review round that prompted it was not itself
+      gate-checked.
+- Observation (2026-10-13, a documented diagnostic had no test): the injected
+      selector path reads an `OsString` and can therefore fail to transcode
+      it. The `Err(_)` arm added in `8be079fc` reported a validation error
+      that no test ever reached, and the failure mode is silent rather than
+      loud — the loader returns the base configuration while the caller
+      believes a profile was applied. A regression test now injects a
+      selector ending in `0xFF` against a fixture whose base value differs
+      from the profile value, so a dropped selector still loads successfully
+      with the wrong result. Verified non-vacuous by deleting the diagnostic:
+      the test then fails with `must be reported, not ignored: 3`. Gated to
+      Unix, as `std::os::unix::ffi::OsStringExt` is the only way to build a
+      non-UTF-8 `OsString`.
 
 ## Decision log
 
