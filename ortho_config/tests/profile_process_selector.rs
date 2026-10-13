@@ -7,7 +7,7 @@
 //! received base values would have no signal that the profile was skipped.
 //!
 //! These cases exercise the process path, which reaches the selector through
-//! clap's generated `env = ...` binding rather than a hand-written read. They
+//! clap's generated `env = ...` binding rather than a handwritten read. They
 //! deliberately avoid `load_with_profile()`: that entry point consumes
 //! `std::env::args_os()`, so a test harness's own flags would reach clap and the
 //! load would fail for an unrelated parse error. Passing the program name
