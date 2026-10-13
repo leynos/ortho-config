@@ -1080,6 +1080,48 @@ Progress entries from milestone 1 onward must carry timestamps.
       ADR-012.
       Both dispositions (CodeScene and Domain Architecture) were posted to
       their threads and to the PR as reconciliation comments.
+- [x] (2026-10-13) Reconciled the pre-merge walkthrough (comment 5861267343,
+      refreshed 10:11Z) against the current head. It still renders
+      "Pre-merge checks failed" and is still anchored to `7d7e3fff`
+      (`change_assessment_commit`), so all four actionable rows were
+      re-verified against live code rather than accepted or dismissed. All
+      four are **closed**:
+      - *Testing (Overall)* — `Error`, but the requested test already exists:
+        `a_non_utf8_injected_selector_is_reported_not_ignored` is `#[cfg(unix)]`
+        at `ortho_config/tests/load_with_sources.rs:186-221`, calls
+        `load_with_profile_from_iter_with_sources`, and asserts the
+        `"not valid Unicode"` diagnostic. Landed in `b9b476ae`. This is the
+        second time this row has been reported against a stale checkout.
+      - *Developer Documentation* — `Warning`. The guide no longer calls the
+        primitive a "two-argument form"; it now separates the return types at
+        `docs/developers-guide.md:621-622`, naming `ProfileLoadOutcome<Config>`
+        on the CLI struct and `ProfileLoadOutcome<Self>` on the config
+        delegate. Landed in `9220689d`. Correction found and fixed as a
+        by-catch: the same stale phrasing survived in this plan at line 2371,
+        describing a three-argument function as "two-argument". It arrived
+        with `2ccbd9d3` and the guide's half was corrected while the plan's
+        was missed, so this round corrects it. That the row's own line
+        reference (`developers-guide.md:504-506`) and this plan both numbered
+        the parameters wrongly is worth noting as a pattern: prose that
+        restates a signature drifts from it, and the fix is to state the
+        return-type split explicitly, which the guide now does.
+      - *Testing (Compile-Time / Ui)* — `Warning`. The fixture and its
+        snapshot both exist:
+        `ortho_config/tests/ui/profile_serialized_key_collision.rs` and
+        `.stderr`. Landed in `9c22a1b7`.
+      - *Domain Architecture* — `Warning`. Dispositioned as no-go on the
+        proposed remedy; see the dedicated entry above. The row is a warning,
+        which the walkthrough itself marks optional, and the remedy is
+        declined on evidence rather than deferred.
+      Not ticked: the walkthrough's `Ignore` checkbox is a suppression
+      control. All four rows instead carry an explicit evidence-backed
+      disposition, and the reconciliation was posted to the PR so the
+      reasoning is visible on the surface that raised it — against CodeRabbit's
+      own preference for a focused follow-up over a reflexive full review.
+- [x] (2026-10-13) Corrected the stale "two-argument primitive" phrasing in
+      this plan (line 2371), a by-catch of the Developer Documentation
+      reconciliation. The function takes three arguments; the guide's half of
+      the same inaccuracy had already been repaired, and this closes the plan's.
 - [x] (2026-10-13) Re-gated and published `6887a970`. Six gates ran
       sequentially against a frozen HEAD with a clean tree after the commit:
       `check-fmt`, `lint`, `typecheck`, `test`, `markdownlint`, `nixie` —
@@ -2368,7 +2410,7 @@ and a `load_with_profile()` convenience. The injected pair, added so profile
 resolution can be exercised hermetically, is
 `load_with_profile_from_iter_with_sources(iter, discovery_source, merge_source)`
 and `load_with_profile_with_sources(discovery_source, merge_source)`, plus the
-two-argument primitive
+three-argument primitive
 `compose_layers_with_selection_from_iter_with_sources(iter, discovery_source,
 merge_source) -> (LayerComposition, Vec<SelectedProfile>)`
 that the injected `from_iter` form is built on; the config struct receives
