@@ -28,6 +28,11 @@ use crate::fixtures;
     Some("orthohelp_policy_warn_fixture::SimplePolicyConfig"),
     "agent_context__policy_warn_fixture.json"
 )]
+#[case::profile(
+    "orthohelp_fixture",
+    Some("orthohelp_fixture::ProfileFixtureConfig"),
+    "agent_context__profile_fixture.json"
+)]
 fn fixture_agent_context_matches_snapshot(
     #[case] package_name: &str,
     #[case] root_type: Option<&str>,

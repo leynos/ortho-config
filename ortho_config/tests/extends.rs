@@ -5,8 +5,11 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+#[path = "support/profile_chain_assertions.rs"]
+mod profile_chain_assertions;
 #[path = "test_utils.rs"]
 mod test_utils;
+use profile_chain_assertions::ensure_eq;
 use test_utils::with_jail;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -127,17 +130,6 @@ fn setup_multi_level_test_files(j: &mut figment::Jail) -> Result<()> {
     j.create_file("grandparent.toml", GRANDPARENT_TOML)?;
     j.create_file("parent.toml", PARENT_TOML)?;
     j.create_file(".config.toml", CHILD_TOML)?;
-    Ok(())
-}
-
-fn ensure_eq<T>(actual: &T, expected: &T, label: &str) -> Result<()>
-where
-    T: PartialEq + std::fmt::Debug,
-{
-    ensure!(
-        actual == expected,
-        "unexpected {label} {actual:?}; expected {expected:?}"
-    );
     Ok(())
 }
 

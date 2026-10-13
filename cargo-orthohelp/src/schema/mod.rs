@@ -36,6 +36,9 @@ pub struct DocMetadata {
     /// names or flags.
     #[serde(default)]
     pub behaviour: Option<BehaviourMetadata>,
+    /// Profile selection metadata for opted-in structs (roadmap 9.1.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<DocProfilesMeta>,
 }
 
 /// Declared execution behaviour for a command (agent-native metadata).
@@ -89,6 +92,15 @@ pub enum MutationKind {
     Delete,
     /// Command submits asynchronous work.
     Submit,
+}
+
+/// Profile selection metadata (decision D15).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DocProfilesMeta {
+    /// The generated flag name (no leading `--`).
+    pub flag: String,
+    /// The selector environment variable name.
+    pub env_var: String,
 }
 
 /// Section-level metadata and supporting content.
@@ -310,12 +322,18 @@ pub struct PrecedenceMeta {
 }
 
 /// Kinds of configuration sources.
+///
+/// Mirrors `ortho_config::docs::SourceKind`; keep the two in sync. Variants
+/// run from lowest to highest precedence, with `Profile` between `File` and
+/// `Env` because a profile overlay is selected configuration data.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SourceKind {
     /// Defaults supplied by the application.
     Defaults,
     /// Values loaded from configuration files.
     File,
+    /// Values loaded from a selected profile overlay.
+    Profile,
     /// Values loaded from environment variables.
     Env,
     /// Values loaded from CLI arguments.

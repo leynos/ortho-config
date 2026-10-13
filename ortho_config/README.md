@@ -114,7 +114,8 @@ ______________________________________________________________________
   `--log-level`, `APP_LOG_LEVEL`, and `log_level`, then customize the public
   names that matter.
 - **Practical file support:** discover configuration across platforms, extend
-  base files, and choose how collections merge.
+  base files, select a named profile with structured unknown-profile errors,
+  and choose how collections merge.
 - **CLI-shaped configuration:** support subcommands, localized help, and rich
   source-aware errors without building a second settings model.
 - **Cargo external subcommands:** wrap a hand-built `clap::Command` with
@@ -131,15 +132,18 @@ ______________________________________________________________________
 
 **Now:** the configuration foundation is in place, from layered loading and
 file inheritance to subcommands, Fluent localization, generated help, recursive
-command metadata, and compact agent context.
+command metadata, and compact agent context. Profile layers are supported too:
+a struct opts in with `#[ortho_config(profiles)]`, selection resolves through a
+flag with an environment fallback, and the agent-context declaration reports
+that selection contract.
 
 **Next:** make agent-driven CLIs harder to misunderstand and safer to operate.
 Skill manifests will be checked against the real command tree, while opt-in
 policy flags inconsistent vocabulary, missing machine-readable results, unsafe
 mutation surfaces, and unbounded list commands. `cargo-orthohelp` will dogfood
 those contracts with structured results, actionable errors, and atomic output;
-later metadata will describe profiles, delivery targets, and long-running jobs
-so agents can reuse predictable workflows instead of inventing integration glue.
+later metadata will describe delivery targets and long-running jobs, so agents
+can reuse predictable workflows instead of inventing integration glue.
 
 See the [completed v0.8.0 roadmap][archived-roadmap] for the foundation and the
 [active roadmap][roadmap] for the detailed sequence.

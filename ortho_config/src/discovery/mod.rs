@@ -17,15 +17,15 @@ mod candidates;
 mod load;
 mod outcome;
 mod policy;
+mod policy_selector;
 mod scope;
 mod scoped;
 mod telemetry;
 mod telemetry_counters;
 
 pub use builder::ConfigDiscoveryBuilder;
-pub use policy::{
-    ConfigFilePolicy, ConfigPathSelector, ExplicitMode, FileLayerOutcome, ResolvedSelection,
-};
+pub use policy::{ConfigFilePolicy, FileLayerOutcome};
+pub use policy_selector::{ConfigPathSelector, ExplicitMode, ResolvedSelection};
 pub use scope::{AutomaticMode, DiscoveryScope};
 
 /// Cross-platform configuration discovery helper mirroring the `hello_world` example.

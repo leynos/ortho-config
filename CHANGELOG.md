@@ -93,6 +93,28 @@ All notable changes to this project will be documented in this file.
   `tests/workflow_contracts/release_workflow_test.py`, and a pull-request
   packaging dry run on Linux, macOS, and Windows.
 
+- Add opt-in profile support (`#[ortho_config(profiles)]`, roadmap 9.1.1):
+  `[profile.<name>]` config tables, a first-class profile merge layer between
+  the file and environment tiers, stateless `--profile`/`<PREFIX>PROFILE`
+  selection, structured unknown/invalid/reserved profile errors, and the
+  `load_with_profile()` entry point returning `ProfileLoadOutcome`.
+- Add `ProfilesDeclaration` and `ProfileSelectionContract` to the
+  agent-context schema and the matching `DocMetadata.profiles` IR field.
+- Add an integration test pinning that a non-Unicode `<PREFIX>PROFILE` selector
+  fails a process-backed profile load with an encoding diagnostic, rather than
+  silently loading the unprofiled configuration.
+
+### Breaking
+
+- Retype `AgentContext.profiles` from `SupportDeclaration` to
+  `ProfilesDeclaration` (decision D7 of execplan 9-1-1). A struct literal or
+  pattern that named the old type no longer type-checks, so consumers must
+  update the `profiles` value itself — for example by constructing it with
+  `ProfilesDeclaration::unsupported()` or `ProfilesDeclaration::supported()`.
+  Those constructors protect *future* field additions, not the retype. The wire
+  JSON for non-opted-in applications is unchanged: the unsupported case still
+  serializes as `{ "supported": false }`.
+
 ### Changed
 
 - Remove the remaining fixture `#[path]` attributes by moving the

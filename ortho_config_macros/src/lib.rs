@@ -28,7 +28,7 @@ use derive::build::cli_tokens::build_cli_struct_tokens;
 use derive::build::{
     CollectionStrategies, DefaultStructInit, build_config_env_var, build_default_struct_fields,
     build_default_struct_init, build_env_provider, collect_collection_strategies,
-    compute_config_env_var, compute_dotfile_name, default_app_name,
+    compute_config_env_var, compute_dotfile_name, compute_profile_env_var, default_app_name,
 };
 use derive::generate::declarative::generate_declarative_impl;
 use derive::generate::docs::{DocsArgs, generate_docs_impl};
@@ -159,6 +159,13 @@ pub(crate) struct CliFieldInfo {
     /// This is the `id = "..."` override from `#[arg(...)]`/`#[clap(...)]` when
     /// present, otherwise the field identifier (`snake_case`).
     pub arg_id: String,
+    /// Whether the field's declared type is `bool` (or `Option<bool>`).
+    ///
+    /// Recorded because a `bool` field is emitted with
+    /// `clap::ArgAction::SetTrue`, whose absent default is a usable `false`
+    /// rather than `None`. Callers that must decide whether a value came from
+    /// the user have to treat bools differently from every other type.
+    pub is_bool: bool,
     /// Whether this field has the `cli_default_as_absent` attribute.
     pub is_default_as_absent: bool,
 }
@@ -237,11 +244,19 @@ fn build_discovery_tokens(
 /// Bundles the struct-level attributes, optional discovery settings, and
 /// whether a `config_path` field was supplied so helper functions can reason
 /// about discovery without a long parameter list.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct LoadImplConfig<'a> {
     struct_attrs: &'a derive::parse::StructAttrs,
     discovery_tokens: Option<&'a DiscoveryTokens>,
     has_config_path: bool,
+    cli_arg_ids: Vec<String>,
+    /// `(arg_id, serialized_key)` for every bool config field.
+    ///
+    /// Both halves are needed: the arg ID is what `ArgMatches::value_source`
+    /// is keyed by, while the serialized key is what the sanitized CLI JSON
+    /// object is keyed by. A field with `#[serde(rename)]` differs between the
+    /// two, and removing the wrong key would leave the default in place.
+    cli_bool_fields: Vec<(String, String)>,
 }
 
 struct LoadImplResult<'a> {
@@ -306,11 +321,34 @@ fn build_load_impl_args<'a>(
         idents,
         tokens,
         has_config_path: config.has_config_path,
+        profiles: config.struct_attrs.profiles,
+        profile_env_var: compute_profile_env_var(config.struct_attrs),
+        cli_arg_ids: config.cli_arg_ids,
+        cli_bool_fields: config.cli_bool_fields,
     };
     LoadImplResult {
         args,
         legacy_app_name_storage,
     }
+}
+
+/// Derives the CLI layer's lookup keys from the emitted field metadata.
+///
+/// The first element lists every argument ID for the "was this supplied
+/// explicitly" test. The second lists `(arg_id, serialized_key)` for bool
+/// fields alone: those are emitted with `ArgAction::SetTrue`, so clap reports a
+/// usable `false` for an absent flag and the value cannot be distinguished from
+/// an explicit input by its payload. The profile-enabled CLI layer prunes those
+/// defaults, and needs both halves — the arg ID answers `value_source`, the
+/// serialized key names the JSON member to remove.
+fn build_cli_layer_keys(field_info: &[CliFieldInfo]) -> (Vec<String>, Vec<(String, String)>) {
+    let cli_arg_ids = field_info.iter().map(|info| info.arg_id.clone()).collect();
+    let cli_bool_fields = field_info
+        .iter()
+        .filter(|info| info.is_bool)
+        .map(|info| (info.arg_id.clone(), info.serialized_key.clone()))
+        .collect();
+    (cli_arg_ids, cli_bool_fields)
 }
 
 /// Build all components required for macro output.
@@ -350,10 +388,13 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
         config_env_var: &config_env_var,
         dotfile_name: &dotfile_name,
     };
+    let (cli_arg_ids, cli_bool_fields) = build_cli_layer_keys(&cli_build_result.field_info);
     let load_impl_config = LoadImplConfig {
         struct_attrs,
         discovery_tokens: discovery_tokens.as_ref(),
         has_config_path,
+        cli_arg_ids,
+        cli_bool_fields,
     };
     let LoadImplResult {
         args: load_impl_args,

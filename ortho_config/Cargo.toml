@@ -16,7 +16,7 @@ workspace = true
 ortho_config_macros = { path = "../ortho_config_macros", version = "0.9.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-clap = { version = "4", features = ["derive", "string"] }
+clap = { version = "4", features = ["derive", "env", "string"] }
 clap-dispatch = "0.1"
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
 fluent-bundle = "0.16.0"
@@ -58,6 +58,8 @@ metrics = ["dep:metrics"]
 [dev-dependencies]
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
+googletest.workspace = true
+pretty_assertions.workspace = true
 trybuild = "1"
 rstest = "0.26.1"
 rstest-bdd.workspace = true

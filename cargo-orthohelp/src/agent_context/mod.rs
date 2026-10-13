@@ -5,6 +5,7 @@
 
 use ortho_config::{
     AgentCommand, AgentContext, AgentInput, InteractionMode, Localizer, MutationEffect,
+    ProfileSelectionContract, ProfilesDeclaration,
 };
 
 use crate::policy::vocabulary::CANONICAL_VERBS;
@@ -56,6 +57,7 @@ pub use policy::apply_policy_to_context;
 ///     subcommands: Vec::new(),
 ///     windows: None,
 ///     behaviour: None,
+///     profiles: None,
 /// };
 ///
 /// let context = bridge_ir_to_agent_context(&metadata, "example", None);
@@ -74,7 +76,14 @@ pub fn bridge_ir_to_agent_context(
         "starting bridge IR to agent-context transformation",
     );
     let mut context = AgentContext::new(package);
+    if let Some(profiles) = &meta.profiles {
+        context.profiles = ProfilesDeclaration::supported(ProfileSelectionContract {
+            flag: profiles.flag.clone(),
+            env_var: profiles.env_var.clone(),
+        });
+    }
     walk(meta, &[], &mut context.commands, localizer);
+    expose_profile_selector(&context.profiles, &mut context.commands);
     context
         .commands
         .sort_by(|left, right| left.path.cmp(&right.path));
@@ -89,6 +98,76 @@ pub fn bridge_ir_to_agent_context(
         "bridge IR to agent-context transformation complete",
     );
     context
+}
+
+/// Exposes the profile selector as an input on every command.
+///
+/// The selector is emitted with `hide = true`, so it is deliberately absent
+/// from the IR's field metadata and therefore never becomes an [`AgentInput`]
+/// through [`build_input`]. An agent reading `profiles.selection` would still
+/// be told which flag selects a profile while no command admitted accepting
+/// it, which is the contradiction this closes: the contract and the invocable
+/// surface are made to agree.
+///
+/// The input is added to every command because the selector is global — the
+/// flag is accepted at each level of the command tree, and the profile applies
+/// to the whole load rather than to one subcommand.
+///
+/// Presence is decided by the *long option*, not the name. A selector is only
+/// usable if the command surface actually carries `--<flag>`, and an input can
+/// share the flag's name while exposing a different long option. Treating that
+/// input as the selector would leave the declared selection contract pointing
+/// at a flag the command does not accept. An existing input that already
+/// exposes the long option is left untouched, so a consumer that models the
+/// selector as an ordinary field is not duplicated; the contract assertion
+/// below then checks the invariant holds either way.
+fn expose_profile_selector(profiles: &ProfilesDeclaration, commands: &mut [AgentCommand]) {
+    let Some(selection) = profiles.selection.as_ref() else {
+        return;
+    };
+    let flag = selection.flag.as_str();
+    for command in commands.iter_mut() {
+        if !command
+            .inputs
+            .iter()
+            .any(|input| exposes_long_option(input, flag))
+        {
+            command.inputs.push(profile_selector_input(flag));
+        }
+    }
+    debug_assert!(
+        commands.iter().all(|command| command
+            .inputs
+            .iter()
+            .any(|input| exposes_long_option(input, flag))),
+        "a supported profile declaration must expose its selector on every command",
+    );
+}
+
+/// Reports whether `input` is available to callers as the long option `long`.
+///
+/// The name is not consulted: `AgentInput` carries the invocation spelling in
+/// `long`, so that field is what decides whether the selector's flag exists on
+/// the command.
+fn exposes_long_option(input: &AgentInput, long: &str) -> bool {
+    input.long.as_deref() == Some(long)
+}
+
+/// Builds the agent-context input describing the profile selector.
+///
+/// The value type is `string` rather than an enum: the profile names live in
+/// the operator's configuration files, not in the command surface, so the IR
+/// cannot enumerate them. Declaring a closed set here would be a lie an agent
+/// might act on.
+fn profile_selector_input(flag: &str) -> AgentInput {
+    AgentInput {
+        name: flag.to_owned(),
+        long: Some(flag.to_owned()),
+        value_type: Some(String::from("string")),
+        required: false,
+        default: None,
+        enum_values: Vec::new(),
+    }
 }
 
 /// Recursively transforms a `DocMetadata` node into `AgentCommand` entries.

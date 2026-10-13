@@ -1,0 +1,6 @@
+error: duplicate `env` value 'APP_PROFILE' conflicts with the generated profile environment binding
+  --> tests/ui/profile_env_binding_bare_collision.rs:18:5
+   |
+18 | /     #[arg(long, env)]
+19 | |     app_profile: Option<String>,
+   | |_______________________________^

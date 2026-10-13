@@ -1,0 +1,6 @@
+error: generated profile field conflicts with a field serialized as 'profile'
+  --> tests/ui/profile_serialized_key_collision.rs:16:5
+   |
+16 | /     #[serde(rename = "profile")]
+17 | |     selected: Option<String>,
+   | |____________________________^

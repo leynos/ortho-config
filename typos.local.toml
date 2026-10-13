@@ -39,11 +39,16 @@ ignore = [
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",
-  # Commit short hashes are written in inline code throughout the plans. Hex
-  # letters can begin a token that reads as a misspelling, so a backticked hash
-  # is ignored rather than corrected. Requiring at least one digit keeps that
-  # exemption narrow: a word spelled only in hex letters is still checked.
-  "`[0-9a-f]{0,40}[0-9][0-9a-f]{0,40}`",
+  # Commit hashes are written in inline code throughout the plans. Hex letters
+  # can begin a token that reads as a misspelling, so a backticked hash is
+  # ignored rather than corrected. The 7-to-40 span bound keeps that exemption
+  # narrow: a shorter all-hex span, such as a one- or two-character token, is
+  # still checked. Requiring a digit as well cannot be expressed here: the
+  # pinned regex engine has no lookaround, so length and digit presence cannot
+  # be conjoined, and a digit-bearing shape drops the total-length bound. Every
+  # excerpt in the corpus is 7 to 40 characters, and an all-letter abbreviation
+  # is legitimate, so the bound alone is what keeps the exemption narrow.
+  "`[0-9a-f]{7,40}`",
 ]
 
 [files]

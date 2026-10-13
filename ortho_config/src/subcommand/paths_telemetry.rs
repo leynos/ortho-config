@@ -68,6 +68,13 @@ const CATEGORY_CLI: &str = "cli";
 const CATEGORY_DEFAULT_VALUE_CONVERSION: &str = "default_value_conversion";
 /// A configuration `extends` cycle prevented loading.
 const CATEGORY_CYCLIC_EXTENDS: &str = "cyclic_extends";
+/// Profile selection or profile-table validation prevented loading.
+///
+/// Subcommand loading ignores profiles (decision D11 of the 9.1.1 execplan),
+/// so this category should not arise on the discovery path. It is named
+/// rather than folded into a catch-all because the vocabulary is closed, and
+/// an unlisted category here would be a silent leak of an unknown class.
+const CATEGORY_PROFILE: &str = "profile";
 /// Several loading errors were retained for reporting together.
 const CATEGORY_AGGREGATE: &str = "aggregate";
 
@@ -236,6 +243,10 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::Gathering(_) => CATEGORY_GATHERING,
         OrthoError::Merge { .. } => CATEGORY_MERGE,
         OrthoError::Validation { .. } => CATEGORY_VALIDATION,
+        OrthoError::UnknownProfile { .. }
+        | OrthoError::InvalidProfileName { .. }
+        | OrthoError::ReservedProfileName { .. }
+        | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
     }
 }

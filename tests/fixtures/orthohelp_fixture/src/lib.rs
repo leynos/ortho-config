@@ -259,3 +259,19 @@ pub struct NestedPruneCommand {
     #[ortho_config(default = 30)]
     pub older_than_days: u32,
 }
+
+/// Profile-enabled configuration schema for the profile agent-context golden.
+///
+/// Opts into `#[ortho_config(profiles)]` so the bridge emits a supported
+/// `ProfilesDeclaration` with the selection contract.
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "PROFILE_FIXTURE", profiles)]
+pub struct ProfileFixtureConfig {
+    /// Endpoint host used by the profile fixture.
+    #[ortho_config(default = String::from("localhost"))]
+    pub host: String,
+
+    /// Retry count for profile fixture requests.
+    #[ortho_config(default = 3)]
+    pub retries: u8,
+}

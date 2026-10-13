@@ -1,0 +1,274 @@
+//! Assertion steps for profile selection and layering scenarios
+//! (`profiles.feature`).
+//!
+//! The `then` steps read the structured result and error slots recorded by
+//! [`profiles_steps`]' load steps.
+//!
+//! Most of them consume their slot, which is correct for a value a scenario
+//! reads once and which keeps an accidental double-read visible. The merged
+//! value step is the exception: it reads by reference because
+//! `profiles.feature` asserts two merged values against the one load it
+//! performed, so consuming the slot would leave the second assertion reporting
+//! an unavailable result rather than checking the value it named.
+
+use crate::rstest_bdd_support::scenario_state::ProfilesContext;
+use anyhow::{Result, anyhow, ensure};
+use ortho_config::ProfileSource;
+use rstest_bdd_macros::then;
+
+use super::profile_placeholders::{ConfigKey, ConfigValue, ProfileName, SourceName};
+
+/// Asserts the merged value of a key.
+///
+/// Reads the stored outcome by reference rather than taking it. A scenario may
+/// assert several merged values against the one load it performed, so
+/// consuming the slot would leave every assertion after the first reporting an
+/// unavailable result instead of checking the value it named.
+#[then("the merged value of {key} is {value}")]
+fn merged_value_is(
+    profiles_context: &ProfilesContext,
+    key: ConfigKey,
+    value: ConfigValue,
+) -> Result<()> {
+    let expected = value.as_str();
+    let actual = profiles_context
+        .result
+        .with_ref(|result| {
+            let outcome = result.as_ref().map_err(|err| anyhow!(err.to_string()))?;
+            match key.as_str() {
+                "retries" => Ok(outcome.config().retries.to_string()),
+                "verbose" => Ok(outcome.config().verbose.to_string()),
+                "strict" => Ok(outcome.config().strict.to_string()),
+                other => Err(anyhow!(
+                    "unsupported key {other:?} in merged-value assertion"
+                )),
+            }
+        })
+        .ok_or_else(|| anyhow!("profile load result unavailable"))??;
+    ensure!(
+        actual == expected,
+        "unexpected {key} {actual}; expected {expected}"
+    );
+    Ok(())
+}
+
+/// Asserts the winning selection and its source.
+#[then("the selected profile is {profile} with source {source}")]
+fn selected_profile_is(
+    profiles_context: &ProfilesContext,
+    profile: ProfileName,
+    source: SourceName,
+) -> Result<()> {
+    let selection = profiles_context
+        .selection
+        .take()
+        .ok_or_else(|| anyhow!("selection unavailable"))?;
+    let selected = selection
+        .first()
+        .ok_or_else(|| anyhow!("expected a selected profile, got none"))?;
+    ensure!(
+        selected.name.as_str() == profile.as_str(),
+        "unexpected selected profile {:?}; expected {profile}",
+        selected.name
+    );
+    ensure!(
+        selected.source == parse_source(&source)?,
+        "unexpected selection source {:?}; expected {source}",
+        selected.source
+    );
+    Ok(())
+}
+
+/// Asserts a failed load names the profile and its flag selection source.
+#[then("loading fails naming {profile} from source {source}")]
+fn loading_fails_naming(
+    profiles_context: &ProfilesContext,
+    profile: ProfileName,
+    source: SourceName,
+) -> Result<()> {
+    assert_unknown_profile(profiles_context, &profile, parse_source(&source)?, &source)
+}
+
+/// Asserts a failed load names the profile and the selector environment source.
+#[then("loading fails naming {profile} from the selector environment variable")]
+fn loading_fails_naming_env(
+    profiles_context: &ProfilesContext,
+    profile: ProfileName,
+) -> Result<()> {
+    assert_unknown_profile(
+        profiles_context,
+        &profile,
+        ProfileSource::Environment,
+        "the selector environment variable",
+    )
+}
+
+/// Asserts the structured payload of an unknown-profile error.
+fn assert_unknown_profile(
+    profiles_context: &ProfilesContext,
+    profile: &ProfileName,
+    expected_source: ProfileSource,
+    expected_source_description: &str,
+) -> Result<()> {
+    let selected = profiles_context
+        .error_selected
+        .take()
+        .ok_or_else(|| anyhow!("unknown-profile error not recorded"))?;
+    let error_source = profiles_context
+        .error_source
+        .take()
+        .ok_or_else(|| anyhow!("unknown-profile error source not recorded"))?;
+    ensure!(
+        selected == profile.as_str(),
+        "unexpected unknown profile {selected:?}; expected {profile}"
+    );
+    ensure!(
+        error_source == expected_source,
+        "expected {expected_source_description} as the source, got {error_source:?}"
+    );
+    Ok(())
+}
+
+/// Asserts the unknown-profile error lists the available profiles.
+#[then("the error lists available profiles {first} and {second}")]
+fn error_lists_available(
+    profiles_context: &ProfilesContext,
+    first: ProfileName,
+    second: ProfileName,
+) -> Result<()> {
+    let available = profiles_context
+        .error_available
+        .take()
+        .ok_or_else(|| anyhow!("unknown-profile error not recorded"))?;
+    let expected = vec![first.as_str().to_owned(), second.as_str().to_owned()];
+    ensure!(
+        available == expected,
+        "unexpected available profiles {available:?}; expected {expected:?}"
+    );
+    Ok(())
+}
+
+/// Asserts the load failed because no configuration files were found.
+#[then("the error states that no configuration files were found")]
+fn error_states_no_files(profiles_context: &ProfilesContext) -> Result<()> {
+    let message = profiles_context
+        .error_message
+        .take()
+        .ok_or_else(|| anyhow!("load error message not recorded"))?;
+    ensure!(
+        message.contains("no configuration files were found"),
+        "error should state that no configuration files were found: {message}"
+    );
+    Ok(())
+}
+
+/// Asserts the load found files but none of them define a profile.
+///
+/// Distinct from the no-files case: the chain discovered real configuration,
+/// so the message must not send the operator looking for missing files.
+#[then("the error states that no profiles were found")]
+fn error_states_no_profiles(profiles_context: &ProfilesContext) -> Result<()> {
+    let message = profiles_context
+        .error_message
+        .take()
+        .ok_or_else(|| anyhow!("load error message not recorded"))?;
+    ensure!(
+        message.contains("no profiles were found"),
+        "error should state that no profiles were found: {message}"
+    );
+    ensure!(
+        !message.contains("no configuration files were found"),
+        "error must not claim no configuration files were found when files exist: {message}"
+    );
+    Ok(())
+}
+
+/// Asserts the load failed identifying the forbidden key in a profile.
+#[then("loading fails identifying the forbidden {key} key in {profile}")]
+fn loading_fails_forbidden_key(
+    profiles_context: &ProfilesContext,
+    key: ConfigKey,
+    profile: ProfileName,
+) -> Result<()> {
+    let offending = profiles_context
+        .error_profile
+        .take()
+        .ok_or_else(|| anyhow!("forbidden-key error not recorded"))?;
+    let offending_key = profiles_context
+        .error_key
+        .take()
+        .ok_or_else(|| anyhow!("forbidden-key error not recorded"))?;
+    ensure!(
+        offending == profile.as_str(),
+        "unexpected profile {offending:?}; expected {profile}"
+    );
+    ensure!(
+        offending_key == key.as_str(),
+        "unexpected key {offending_key:?}; expected {key}"
+    );
+    Ok(())
+}
+
+/// Parse a feature-file selection-source name into its contract value.
+///
+/// An unrecognized name is an error rather than a default: the step wording is
+/// the only thing distinguishing a flag-selected run from an environment-
+/// selected one, so a misspelling such as `"flgs"` must not silently assert the
+/// environment source and pass.
+///
+/// # Errors
+///
+/// Returns an error naming the offending value when it is neither `flag` nor an
+/// environment spelling.
+fn parse_source(source: &SourceName) -> Result<ProfileSource> {
+    match source.as_str() {
+        "flag" => Ok(ProfileSource::Flag),
+        "environment" | "env" => Ok(ProfileSource::Environment),
+        other => Err(anyhow!(
+            "unknown selection source {other:?}; expected \"flag\" or \"environment\""
+        )),
+    }
+}
+
+/// Asserts a failed load retained both a parse error and an unknown-profile
+/// error, in that order.
+///
+/// A parse failure must not mask the selector error, nor the reverse: when the
+/// CLI cannot be parsed *and* the selector names a profile no file defines,
+/// dropping either error would hide a root cause. The parse error is reported
+/// first because it is the reason clap could not supply the flag value. This
+/// is the CLI-side counterpart to ADR-012's rule that a file parse error must
+/// not be masked by an unknown-profile error.
+#[then("loading fails reporting parse and unknown-profile errors")]
+fn loading_fails_reporting_parse_and_unknown(profiles_context: &ProfilesContext) -> Result<()> {
+    let variants = profiles_context
+        .error_variants
+        .take()
+        .ok_or_else(|| anyhow!("load error variants not recorded"))?;
+    ensure!(
+        variants.first().map(String::as_str) == Some("CliParsing"),
+        "expected the parse error to be reported first, got {variants:?}"
+    );
+    ensure!(
+        variants.iter().any(|name| name == "UnknownProfile"),
+        "expected the unknown-profile error to be retained alongside the parse error, got {variants:?}"
+    );
+    Ok(())
+}
+
+/// Asserts no composed layer leaks the reserved selector key.
+#[then("no composed layer contains a {key} key")]
+fn no_layer_contains_key(profiles_context: &ProfilesContext, key: ConfigKey) -> Result<()> {
+    let layers = profiles_context
+        .layers
+        .take()
+        .ok_or_else(|| anyhow!("composed layers not recorded"))?;
+    for layer in layers {
+        ensure!(
+            layer.value().get(key.as_str()).is_none(),
+            "layer {:?} leaks the reserved key {key:?}",
+            layer.value()
+        );
+    }
+    Ok(())
+}

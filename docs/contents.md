@@ -60,6 +60,9 @@
   `agent-native.behaviour.*` rule set.
 - [ADR-011: Opt-in identifier artefact emission](adr-011-opt-in-identifier-artefact-emission.md):
   review the guarded build-time export for derived CLI identifiers.
+- [ADR-012: Profile selection and layering](adr-012-profile-selection-and-layering.md):
+  review the decision for optional profile overlays, the five-tier merge order,
+  stateless selection, and the opt-in profile contract.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -102,8 +105,9 @@
 - [v0.9.0 migration guide](v0-9-0-migration-guide.md): identify required,
   recommended, and optional changes when upgrading from v0.8.0.
 - [v0.10.0 migration guide](v0-10-0-migration-guide.md): adopt injected
-  environment sources, parser-faithful clap defaults, or the Cargo
-  external-subcommand helper while preserving process-backed defaults.
+  environment sources, parser-faithful clap defaults, optional profile
+  overlays, or the Cargo external-subcommand helper while preserving
+  process-backed defaults.
 
 ## Testing and documentation references
 
@@ -171,6 +175,8 @@
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
+  - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
+    item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Prepare the v0.9.0 user documentation](execplans/prepare-v0-9-0-user-documentation.md):

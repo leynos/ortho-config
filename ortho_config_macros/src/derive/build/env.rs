@@ -26,6 +26,16 @@ pub(crate) fn compute_config_env_var(struct_attrs: &StructAttrs) -> String {
     )
 }
 
+/// The selector environment variable name for profile support (decision D8).
+///
+/// Derived from the existing `prefix` exactly as other environment keys are:
+/// prefix `APP_` gives `APP_PROFILE`; no prefix gives `PROFILE`.
+pub(crate) fn compute_profile_env_var(struct_attrs: &StructAttrs) -> String {
+    struct_attrs.prefix.as_deref().map_or_else(
+        || String::from("PROFILE"),
+        |prefix| format!("{prefix}PROFILE"),
+    )
+}
 pub(crate) fn build_config_env_var(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
     let var = compute_config_env_var(struct_attrs);
     quote! { #var }
@@ -86,6 +96,44 @@ mod tests {
             ts.to_string()
                 == "ortho_config :: CsvEnv :: prefixed (\"CFG_\") . uppercase (true) . split (\"__\")",
             "unexpected env provider tokens"
+        );
+        Ok(())
+    }
+
+    /// An unprefixed struct names its selector `PROFILE`, not `PROFILE` with a
+    /// stray prefix fragment (decision D8).
+    #[test]
+    fn unprefixed_profile_env_var_is_bare() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            #[ortho_config(profiles)]
+            struct Demo {
+                field1: Option<u32>,
+            }
+        };
+        let (_, _, struct_attrs, _) =
+            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        ensure!(
+            compute_profile_env_var(&struct_attrs) == "PROFILE",
+            "an unprefixed struct should bind the bare PROFILE selector"
+        );
+        ensure!(
+            compute_config_env_var(&struct_attrs) == "CONFIG_PATH",
+            "an unprefixed struct should bind the bare CONFIG_PATH variable"
+        );
+        Ok(())
+    }
+
+    /// A prefix is echoed verbatim, so `CFG_` gives `CFG_PROFILE`.
+    #[test]
+    fn prefixed_profile_env_var_appends_to_the_prefix() -> Result<()> {
+        let (_, _, struct_attrs) = demo_input()?;
+        ensure!(
+            compute_profile_env_var(&struct_attrs) == "CFG_PROFILE",
+            "a prefixed struct should bind <PREFIX>PROFILE"
+        );
+        ensure!(
+            compute_config_env_var(&struct_attrs) == "CFG_CONFIG_PATH",
+            "a prefixed struct should bind <PREFIX>CONFIG_PATH"
         );
         Ok(())
     }
