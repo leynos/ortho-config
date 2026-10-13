@@ -142,7 +142,7 @@ Skill manifests will be checked against the real command tree, while opt-in
 policy flags inconsistent vocabulary, missing machine-readable results, unsafe
 mutation surfaces, and unbounded list commands. `cargo-orthohelp` will dogfood
 those contracts with structured results, actionable errors, and atomic output;
-later metadata will describe delivery targets and long-running jobs so agents
+later metadata will describe delivery targets and long-running jobs, so agents
 can reuse predictable workflows instead of inventing integration glue.
 
 See the [completed v0.8.0 roadmap][archived-roadmap] for the foundation and the

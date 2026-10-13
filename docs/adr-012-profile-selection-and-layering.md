@@ -260,11 +260,10 @@ and the `compose_layers_with_selection_from_iter_with_sources` primitive they
 build on. The injected members keep discovery's lookup-only `SharedEnvSource`
 separate from the merge layer's scanning `SharedScanEnvSource`, so a
 profile-aware load can be driven hermetically without a process environment
-that discovery is able to enumerate. `ProfileLoadOutcome<T>` has private fields
-with accessors `config()`, `into_config()`, and
-`selection() -> &[SelectedProfile]` (empty or singleton today; a slice so
-multiple simultaneous profiles can arrive additively later).
-`SelectedProfile { name, source }` and
+that discovery can enumerate. `ProfileLoadOutcome<T>` has private fields with
+accessors `config()`, `into_config()`, and `selection() -> &[SelectedProfile]`
+(empty or singleton today; a slice so multiple simultaneous profiles can arrive
+additively later). `SelectedProfile { name, source }` and
 `#[non_exhaustive] ProfileSource { Flag, Environment }` are plain runtime types
 without serde implementations: downstream `context --json` commands own their
 JSON mapping per ADR-003's ownership split, and the users' guide shows the

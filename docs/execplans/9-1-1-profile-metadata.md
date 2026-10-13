@@ -152,30 +152,30 @@ Stop and escalate when any threshold below is reached.
    reporting unsupported): if size pressure appears, propose shipping
    milestones 1–4 as one pull request and 5–6 as a follow-up.
 
-   **Exception granted (2026-10-12).** The delivered change is 8,286 insertions
-   against 884 deletions on `main`, a net growth of 7,402 lines: approximately
-   three times the threshold above. The task owner reviewed the overrun and
-   approved it, so this tolerance is satisfied by an explicit exception rather
-   than by the threshold. The split point above was not taken because the
-   milestones are not independently shippable — the profile layer is inert
-   without the derive opt-in that consumes it (milestone 4), and the
-   agent-context declaration would then describe an unsupported feature. A
-   large share of the growth is test and documentation volume rather than
-   non-test code: the 7,402 net lines split into 2,940 net in non-test source
-   (`ortho_config/src`, `ortho_config_macros/src`, `cargo-orthohelp/src`),
-   2,314 net in tests, and 3,029 net in documentation. The profile suite spans
-   unit, behavioural, property, and compile-fail layers, and the ADR, design,
-   and migration documents are part of the milestone-1 documentation-first
-   order (constraint 6).
+   **Exception granted (2026-10-12).** The delivered change is a net growth of
+   8,695 lines: approximately three times the threshold above. The task owner
+   reviewed the overrun and approved it, so this tolerance is satisfied by an
+   explicit exception rather than by the threshold. The split point above was
+   not taken because the milestones are not independently shippable — the
+   profile layer is inert without the derive opt-in that consumes it (milestone
+   4), and the agent-context declaration would then describe an unsupported
+   feature. A large share of the growth is test and documentation volume rather
+   than non-test code. Partitioning the diff by path (a file belongs to exactly
+   one of the four categories, so they sum to the total) gives 3,319 net lines
+   in the three source directories (`ortho_config/src`,
+   `ortho_config_macros/src`, `cargo-orthohelp/src`), 2,114 net in test files,
+   3,245 net in Markdown, and 17 net in manifests, lockfile, and Fluent
+   catalogues. The profile suite spans unit, behavioural, property, and
+   compile-fail layers, and the ADR, design, and migration documents are part
+   of the milestone-1 documentation-first order (constraint 6).
 
    The per-milestone guidance for non-test code is not separately measurable
    here: the branch history is a single 57-commit series that does not break at
    the milestone boundaries, and the two rebases recorded below replayed those
    commits onto a moved `main`, so per-milestone attribution cannot be
    reconstructed. The 600-net-line figure is therefore reported as unverified
-   rather than as passed. The 2,940 net non-test lines across the whole task
-   are recorded so a later reader can judge the distribution without
-   re-deriving it.
+   rather than as passed. The 3,319 net source lines across the whole task are
+   recorded so a later reader can judge the distribution without re-deriving it.
 5. Iterations: if a gate still fails after three fix attempts for the same
    root cause, stop and escalate with the log evidence.
 6. Ambiguity: if profile semantics interact with an existing feature in a way
@@ -1621,15 +1621,16 @@ Progress entries from milestone 1 onward must carry timestamps.
       structs keep four. Date/Author: 2026-09-24, implementing agent.
 
 - Decision: accept the delivered size as an approved exception to tolerance 4
-  rather than slimming or splitting the change. The delivered diff is 8,286
-  insertions against 884 deletions on `main` (7,402 net lines), roughly three
-  times the ~2,500-line threshold, of which 2,940 net lines are non-test source
-  and 6,343 net lines are tests and documentation. Rationale: the task owner
-  reviewed the overrun and approved it; the milestone split point proposed in
-  tolerance 4 was not taken because the layers are not independently shippable
-  (the profile merge layer is inert without the derive opt-in, and the
-  agent-context declaration would then describe an unsupported feature).
-  Date/Author: 2026-10-12, implementation agent.
+  rather than slimming or splitting the change. The delivered diff is 9,588
+  insertions against 893 deletions on `main` (8,695 net lines), roughly three
+  times the ~2,500-line threshold, of which 3,319 net lines are in the three
+  source directories and 5,359 net lines are tests, Markdown, and the remaining
+  manifests and catalogues. Rationale: the task owner reviewed the overrun and
+  approved it; the milestone split point proposed in tolerance 4 was not taken
+  because the layers are not independently shippable (the profile merge layer
+  is inert without the derive opt-in, and the agent-context declaration would
+  then describe an unsupported feature). Date/Author: 2026-10-12,
+  implementation agent.
 
 ## Outcomes & retrospective
 
