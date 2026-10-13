@@ -994,6 +994,108 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
 
 Progress entries from milestone 1 onward must carry timestamps.
 
+- [x] (2026-10-13) Dispositioned all 16 open review threads at `59d79faf` and
+      repaired the one live finding. Every code finding in the round was
+      verified against HEAD rather than against its anchor, and all five
+      CodeRabbit rows plus the CodeScene row are closed with evidence:
+      - *Long-option selector* (4253415118) — `exposes_long_option`
+        (`cargo-orthohelp/src/agent_context/mod.rs:152`) compares
+        `input.long`, not `input.name`; the conflicting-input case is
+        `transform_injects_selector_when_a_same_named_input_has_another_long`
+        (`tests.rs:313`). Fixed in `b2a23ea7`.
+      - *"is able to"* (4253415124) — removed tree-wide; the ADR the finding
+        anchored at has been renumbered `docs/adr-011-…` → `adr-012-…`.
+        Fixed in `8308fc61`.
+      - *`EnvVariable` retention* (4253415129) — `retain_environment_values`
+        splits the two call sites (`cli.rs:43` `false`, `cli.rs:173` `true`),
+        with the regression scenario at
+        `profiles.feature:86-91`. Fixed in `b2a23ea7`. Recorded a correction:
+        no generated configuration-field argument carries a clap `env`
+        binding today, so the arm is latent, not live.
+      - *README comma* (4253415135, 4253415144) — both READMEs now carry it
+        and `cmp` exits 0. Fixed in `8308fc61`.
+      - *Hex-pattern narrowing* (4253415151) — `"`[0-9a-f]{7,40}`"`
+        (`typos.local.toml:51`). Deliberately deviated from the suggested
+        diff: the pinned regex engine has no lookaround, so a digit
+        requirement and a total-length bound cannot be conjoined, and the
+        suggested shape matches spans up to 79 characters — wider, not
+        narrower. Fixed in `b2a23ea7`.
+      - *CodeScene Code Duplication* (4255681475) — repaired, not
+        dispositioned. The row was **live**, not stale: CodeScene had
+        regenerated it against `59d79faf` (`commit_id` matched HEAD). Both
+        reported groups were real. A local `cs review` (CLI 1.0.52, same
+        tool the hosted check runs) confirmed and then cleared it: score
+        went from 9.38 to **10.0 with no findings**. See the `6887a970`
+        entry below.
+      - The three CodeRabbit "verification did not confirm" verdicts
+        (4250903083, 4250903088, 4250903097) are stale-checkout false
+        negatives: each analysis script ran against `e5053838` or
+        `7d7e3fff`, both superseded. Replied naming `6887a970` as the
+        revision to re-inspect.
+- [x] (2026-10-13) Repaired the CodeScene Code Duplication finding at
+      `6887a970`. Two private helpers: `record_key_pair`
+      (`profiles_steps.rs:22-31`) for the `Slot<Vec<(String, String)>>`
+      shaping shared by `config_file_key` and `env_key`, and
+      `run_profile_load` (`:170-179`) for the store-the-outcome tail shared
+      by all three `when` steps — including the no-flag `profiles_load`,
+      which CodeScene did not list but which had the identical body. The
+      step signatures are untouched because `rstest-bdd` binds the Gherkin
+      placeholders against them. Module is 396 lines, three clear of
+      Whitaker's 400-line cap. All 14 `profiles.feature` scenarios still
+      bind and pass.
+- [x] (2026-10-13) Dispositioned the Domain Architecture pre-merge row as
+      **no-go on the proposed remedy**, with the reasoning recorded rather
+      than the row silently dropped. The row asked that document parsing and
+      layer conversion be moved into an adapter boundary so that
+      `ExtractionOutcome` exposes no `MergeLayer`, `serde_json::Value`, or
+      `Utf8Path`. Five facts decide it:
+      1. Only 1 of 6 production files in `ortho_config/src/profile/` is
+         coupled. `name.rs`, `selection.rs`, `outcome.rs` and `mod.rs` are
+         all at zero; `extract.rs` is the sole instance, so this is not a
+         systematic boundary violation.
+      2. `origin/main` already couples the same types far more heavily —
+         `composer.rs` 16, `discovery/load.rs` 6, `declarative/merge.rs` 6.
+         `extract.rs` follows the established architecture rather than
+         departing from it, and a boundary introduced only here would be an
+         isolated local convention.
+      3. The coupling is not removable by re-seating. `MergeLayer` is
+         definitionally `Cow<Value>` plus `Utf8PathBuf`
+         (`declarative/layer.rs`), and `serde_json` is a default feature, so
+         any type carrying the merge layers carries those types.
+      4. RFC 0002 has landed and `FileLayerOutcome`
+         (`discovery/policy.rs:21-28`) itself carries
+         `Vec<MergeLayer<'static>>`. Re-seating `extract.rs` under
+         `FileLayerOutcome`, which the module doc names as the intended
+         re-seat point, would therefore not remove the dependency the row
+         objects to.
+      5. `ExtractionOutcome` is never re-exported — `profile/mod.rs` keeps
+         `mod extract;` private and re-exports only
+         `extract::extract_profile_layers` — so the type is unnameable from
+         outside the crate and the "profile domain API" the row names does
+         not exist at the crate boundary.
+      The D13 re-seat obligation is already recorded in ADR-012 and the
+      helper is written against the minimal ordered `(path, value)` view, so
+      the eventual re-seat is tracked rather than lost. No new issue raised:
+      filing one against a documented, tracked obligation would duplicate
+      ADR-012.
+      Both dispositions (CodeScene and Domain Architecture) were posted to
+      their threads and to the PR as reconciliation comments.
+- [x] (2026-10-13) Re-gated and published `6887a970`. Six gates ran
+      sequentially against a frozen HEAD with a clean tree after the commit:
+      `check-fmt`, `lint`, `typecheck`, `test`, `markdownlint`, `nixie` —
+      all exit 0. `make test` **1814 passed, 0 failed**: the
+      `probing_releases_the_lock_it_takes` flake that failed at `59d79faf`
+      did not recur, and the scrutineer confirmed the file has zero bytes of
+      diff against both `8308fc61` and `origin/main`, so the earlier failure
+      is a pre-existing flake and not a regression.
+      `make lint` ran all three stages (cargo doc, cargo clippy, whitaker)
+      with no diagnostics and zero `module-max-lines` occurrences. All 14
+      `profiles.feature` scenarios bound and passed. Pushed over SSH; the
+      remote head, refreshed tracking ref, and local HEAD all read
+      `6887a9702779b1027e9ff64883bbfa2857583592`. Fourteen disposition
+      replies posted as pool account `pandalump` (not `leynos`), the
+      configured route for manual comments.
+
 ## Surprises & discoveries
 
 - Observation: the two `discovery_failed` predicates fixed for finding F1 are
