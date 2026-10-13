@@ -4,6 +4,7 @@
 //! `DocMetadata` IR used by `cargo-orthohelp`.
 
 mod behaviour;
+mod discovery;
 mod fields;
 pub(crate) mod sections;
 mod types;
