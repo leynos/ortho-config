@@ -16,7 +16,7 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::ProfileSource;
 use rstest_bdd_macros::then;
 
-use super::value_parsing::normalize_scalar;
+use super::profile_placeholders::{ConfigKey, ConfigValue, ProfileName, SourceName};
 
 /// Asserts the merged value of a key.
 ///
@@ -25,13 +25,17 @@ use super::value_parsing::normalize_scalar;
 /// consuming the slot would leave every assertion after the first reporting an
 /// unavailable result instead of checking the value it named.
 #[then("the merged value of {key} is {value}")]
-fn merged_value_is(profiles_context: &ProfilesContext, key: String, value: String) -> Result<()> {
-    let expected = normalize_scalar(&value);
+fn merged_value_is(
+    profiles_context: &ProfilesContext,
+    key: ConfigKey,
+    value: ConfigValue,
+) -> Result<()> {
+    let expected = value.as_str();
     let actual = profiles_context
         .result
         .with_ref(|result| {
             let outcome = result.as_ref().map_err(|err| anyhow!(err.to_string()))?;
-            match normalize_scalar(&key).as_str() {
+            match key.as_str() {
                 "retries" => Ok(outcome.config().retries.to_string()),
                 "verbose" => Ok(outcome.config().verbose.to_string()),
                 other => Err(anyhow!(
@@ -51,8 +55,8 @@ fn merged_value_is(profiles_context: &ProfilesContext, key: String, value: Strin
 #[then("the selected profile is {profile} with source {source}")]
 fn selected_profile_is(
     profiles_context: &ProfilesContext,
-    profile: String,
-    source: String,
+    profile: ProfileName,
+    source: SourceName,
 ) -> Result<()> {
     let selection = profiles_context
         .selection
@@ -62,7 +66,7 @@ fn selected_profile_is(
         .first()
         .ok_or_else(|| anyhow!("expected a selected profile, got none"))?;
     ensure!(
-        selected.name.as_str() == normalize_scalar(&profile),
+        selected.name.as_str() == profile.as_str(),
         "unexpected selected profile {:?}; expected {profile}",
         selected.name
     );
@@ -78,15 +82,18 @@ fn selected_profile_is(
 #[then("loading fails naming {profile} from source {source}")]
 fn loading_fails_naming(
     profiles_context: &ProfilesContext,
-    profile: String,
-    source: String,
+    profile: ProfileName,
+    source: SourceName,
 ) -> Result<()> {
     assert_unknown_profile(profiles_context, &profile, parse_source(&source)?, &source)
 }
 
 /// Asserts a failed load names the profile and the selector environment source.
 #[then("loading fails naming {profile} from the selector environment variable")]
-fn loading_fails_naming_env(profiles_context: &ProfilesContext, profile: String) -> Result<()> {
+fn loading_fails_naming_env(
+    profiles_context: &ProfilesContext,
+    profile: ProfileName,
+) -> Result<()> {
     assert_unknown_profile(
         profiles_context,
         &profile,
@@ -98,7 +105,7 @@ fn loading_fails_naming_env(profiles_context: &ProfilesContext, profile: String)
 /// Asserts the structured payload of an unknown-profile error.
 fn assert_unknown_profile(
     profiles_context: &ProfilesContext,
-    profile: &str,
+    profile: &ProfileName,
     expected_source: ProfileSource,
     expected_source_description: &str,
 ) -> Result<()> {
@@ -111,7 +118,7 @@ fn assert_unknown_profile(
         .take()
         .ok_or_else(|| anyhow!("unknown-profile error source not recorded"))?;
     ensure!(
-        selected == normalize_scalar(profile),
+        selected == profile.as_str(),
         "unexpected unknown profile {selected:?}; expected {profile}"
     );
     ensure!(
@@ -125,14 +132,14 @@ fn assert_unknown_profile(
 #[then("the error lists available profiles {first} and {second}")]
 fn error_lists_available(
     profiles_context: &ProfilesContext,
-    first: String,
-    second: String,
+    first: ProfileName,
+    second: ProfileName,
 ) -> Result<()> {
     let available = profiles_context
         .error_available
         .take()
         .ok_or_else(|| anyhow!("unknown-profile error not recorded"))?;
-    let expected = vec![normalize_scalar(&first), normalize_scalar(&second)];
+    let expected = vec![first.as_str().to_owned(), second.as_str().to_owned()];
     ensure!(
         available == expected,
         "unexpected available profiles {available:?}; expected {expected:?}"
@@ -179,8 +186,8 @@ fn error_states_no_profiles(profiles_context: &ProfilesContext) -> Result<()> {
 #[then("loading fails identifying the forbidden {key} key in {profile}")]
 fn loading_fails_forbidden_key(
     profiles_context: &ProfilesContext,
-    key: String,
-    profile: String,
+    key: ConfigKey,
+    profile: ProfileName,
 ) -> Result<()> {
     let offending = profiles_context
         .error_profile
@@ -191,15 +198,16 @@ fn loading_fails_forbidden_key(
         .take()
         .ok_or_else(|| anyhow!("forbidden-key error not recorded"))?;
     ensure!(
-        offending == normalize_scalar(&profile),
+        offending == profile.as_str(),
         "unexpected profile {offending:?}; expected {profile}"
     );
     ensure!(
-        offending_key == normalize_scalar(&key),
+        offending_key == key.as_str(),
         "unexpected key {offending_key:?}; expected {key}"
     );
     Ok(())
 }
+
 /// Parse a feature-file selection-source name into its contract value.
 ///
 /// An unrecognized name is an error rather than a default: the step wording is
@@ -211,8 +219,8 @@ fn loading_fails_forbidden_key(
 ///
 /// Returns an error naming the offending value when it is neither `flag` nor an
 /// environment spelling.
-fn parse_source(source: &str) -> Result<ProfileSource> {
-    match normalize_scalar(source).as_str() {
+fn parse_source(source: &SourceName) -> Result<ProfileSource> {
+    match source.as_str() {
         "flag" => Ok(ProfileSource::Flag),
         "environment" | "env" => Ok(ProfileSource::Environment),
         other => Err(anyhow!(
@@ -249,15 +257,14 @@ fn loading_fails_reporting_parse_and_unknown(profiles_context: &ProfilesContext)
 
 /// Asserts no composed layer leaks the reserved selector key.
 #[then("no composed layer contains a {key} key")]
-fn no_layer_contains_key(profiles_context: &ProfilesContext, key: String) -> Result<()> {
+fn no_layer_contains_key(profiles_context: &ProfilesContext, key: ConfigKey) -> Result<()> {
     let layers = profiles_context
         .layers
         .take()
         .ok_or_else(|| anyhow!("composed layers not recorded"))?;
-    let key = normalize_scalar(&key);
     for layer in layers {
         ensure!(
-            layer.value().get(&key).is_none(),
+            layer.value().get(key.as_str()).is_none(),
             "layer {:?} leaks the reserved key {key:?}",
             layer.value()
         );

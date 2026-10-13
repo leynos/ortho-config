@@ -13,27 +13,39 @@ use ortho_config::{OrthoError, OrthoResult};
 use rstest_bdd_macros::{given, when};
 use serde_json::{Map, Value};
 
-use super::value_parsing::{normalize_scalar, unquote};
+use super::profile_placeholders::{
+    BareFlagName, ConfigKey, ConfigValue, FlagSpec, ProfileName, TABLE_SENTINEL,
+};
+use super::value_parsing::unquote;
 
 /// Records a base file key for the profile scenario's configuration file.
 #[given("a config file with key {key} set to {value}")]
-fn config_file_key(profiles_context: &ProfilesContext, key: String, value: String) -> Result<()> {
+fn config_file_key(
+    profiles_context: &ProfilesContext,
+    key: ConfigKey,
+    value: ConfigValue,
+) -> Result<()> {
     profiles_context
         .base_keys
         .get_or_insert_with(Vec::new)
-        .push((normalize_scalar(&key), normalize_scalar(&value)));
+        .push((key.as_str().to_owned(), value.as_str().to_owned()));
     Ok(())
 }
 
 /// Records one normalized profile key for the active scenario.
-fn record_profile_key(profiles_context: &ProfilesContext, profile: &str, key: &str, value: &str) {
+fn record_profile_key(
+    profiles_context: &ProfilesContext,
+    profile: &ProfileName,
+    key: &ConfigKey,
+    value: &ConfigValue,
+) {
     profiles_context
         .profile_keys
         .get_or_insert_with(Vec::new)
         .push((
-            normalize_scalar(profile),
-            normalize_scalar(key),
-            normalize_scalar(value),
+            profile.as_str().to_owned(),
+            key.as_str().to_owned(),
+            value.as_str().to_owned(),
         ));
 }
 
@@ -41,9 +53,9 @@ fn record_profile_key(profiles_context: &ProfilesContext, profile: &str, key: &s
 #[given("the same file defines profile {profile} with {key} set to {value}")]
 fn same_file_profile_key(
     profiles_context: &ProfilesContext,
-    profile: String,
-    key: String,
-    value: String,
+    profile: ProfileName,
+    key: ConfigKey,
+    value: ConfigValue,
 ) -> Result<()> {
     record_profile_key(profiles_context, &profile, &key, &value);
     Ok(())
@@ -53,9 +65,9 @@ fn same_file_profile_key(
 #[given("a config file defining profile {profile} with {key} set to {value}")]
 fn config_file_profile_key(
     profiles_context: &ProfilesContext,
-    profile: String,
-    key: String,
-    value: String,
+    profile: ProfileName,
+    key: ConfigKey,
+    value: ConfigValue,
 ) -> Result<()> {
     same_file_profile_key(profiles_context, profile, key, value)
 }
@@ -64,11 +76,16 @@ fn config_file_profile_key(
 #[given("a config file defining profiles {first} and {second}")]
 fn config_file_profiles(
     profiles_context: &ProfilesContext,
-    first: String,
-    second: String,
+    first: ProfileName,
+    second: ProfileName,
 ) -> Result<()> {
     for profile in [first, second] {
-        record_profile_key(profiles_context, &profile, "", "");
+        record_profile_key(
+            profiles_context,
+            &profile,
+            &ConfigKey::default(),
+            &ConfigValue::default(),
+        );
     }
     Ok(())
 }
@@ -77,10 +94,13 @@ fn config_file_profiles(
 #[given("a config file defining profile {profile} containing a {key} table")]
 fn config_file_forbidden_key(
     profiles_context: &ProfilesContext,
-    profile: String,
-    key: String,
+    profile: ProfileName,
+    key: ConfigKey,
 ) -> Result<()> {
-    record_profile_key(profiles_context, &profile, &key, "__table__");
+    // The sentinel tells `build_file_value` to emit an empty table rather
+    // than a scalar, so the profile defines the named key as a table without
+    // the scenario claiming a value for it.
+    record_profile_key(profiles_context, &profile, &key, &TABLE_SENTINEL.parse()?);
     Ok(())
 }
 
@@ -89,20 +109,23 @@ fn config_file_forbidden_key(
 /// `ProfilesConfig` bakes its `retries` default in at compile time, so the
 /// recorded value must match it for the scenario to be meaningful.
 #[given("a struct default of {value} for {key}")]
-fn struct_default(profiles_context: &ProfilesContext, value: String, key: String) -> Result<()> {
-    ensure!(
-        !normalize_scalar(&key).is_empty(),
-        "struct default key must not be empty"
-    );
+fn struct_default(
+    profiles_context: &ProfilesContext,
+    value: ConfigValue,
+    key: ConfigKey,
+) -> Result<()> {
+    ensure!(!key.is_empty(), "struct default key must not be empty");
     ensure!(
         profiles_context.struct_default.is_empty(),
         "struct default already initialised"
     );
     ensure!(
-        normalize_scalar(&value) == "3",
+        value.as_str() == "3",
         "ProfilesConfig retries default is baked in at compile time; expected 3, got {value:?}"
     );
-    profiles_context.struct_default.set(value);
+    profiles_context
+        .struct_default
+        .set(value.as_str().to_owned());
     Ok(())
 }
 
@@ -115,27 +138,27 @@ fn no_config_files(profiles_context: &ProfilesContext) -> Result<()> {
 
 /// Records the `APP_PROFILE` selector environment value.
 #[given("the selector environment variable names profile {profile}")]
-fn selector_env(profiles_context: &ProfilesContext, profile: String) -> Result<()> {
+fn selector_env(profiles_context: &ProfilesContext, profile: ProfileName) -> Result<()> {
     profiles_context
         .selector_env
-        .set(normalize_scalar(&profile));
+        .set(profile.as_str().to_owned());
     Ok(())
 }
 
 /// Records an `APP_`-prefixed environment override.
 #[given("the environment sets the {key} key to {value}")]
-fn env_key(profiles_context: &ProfilesContext, key: String, value: String) -> Result<()> {
+fn env_key(profiles_context: &ProfilesContext, key: ConfigKey, value: ConfigValue) -> Result<()> {
     profiles_context
         .env_keys
         .get_or_insert_with(Vec::new)
-        .push((normalize_scalar(&key), normalize_scalar(&value)));
+        .push((key.as_str().to_owned(), value.as_str().to_owned()));
     Ok(())
 }
 
 /// Runs the profile-aware load with the given flags.
 #[when("the CLI loads with {flags}")]
-fn profiles_load_with_flags(profiles_context: &ProfilesContext, flags: String) -> Result<()> {
-    let parsed = parse_flags(&normalize_scalar(&flags));
+fn profiles_load_with_flags(profiles_context: &ProfilesContext, flags: FlagSpec) -> Result<()> {
+    let parsed = parse_flags(flags.as_str());
     profiles_context
         .result
         .set(profile_load(profiles_context, &parsed));
@@ -158,10 +181,11 @@ fn profiles_load(profiles_context: &ProfilesContext) -> Result<()> {
 /// well, but the scenario reads more clearly stating that the flag carries no
 /// argument.
 #[when("the CLI loads with the {flag} flag")]
-fn profiles_load_with_bare_flag(profiles_context: &ProfilesContext, flag: String) -> Result<()> {
-    let flag = normalize_scalar(&flag);
-    let name = flag.strip_prefix("--").unwrap_or(&flag).to_owned();
-    let parsed = vec![(name, String::new())];
+fn profiles_load_with_bare_flag(
+    profiles_context: &ProfilesContext,
+    flag: BareFlagName,
+) -> Result<()> {
+    let parsed = vec![(flag.as_str().to_owned(), String::new())];
     profiles_context
         .result
         .set(profile_load(profiles_context, &parsed));
@@ -316,7 +340,7 @@ fn build_file_value(profiles_context: &ProfilesContext) -> Value {
             if key.is_empty() {
                 continue;
             }
-            if value == "__table__" {
+            if value == TABLE_SENTINEL {
                 table_map.insert(key, Value::Object(Map::new()));
             } else {
                 table_map.insert(key, scalar_value(&value));
