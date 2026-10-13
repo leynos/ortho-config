@@ -44,6 +44,12 @@ pub(crate) use field_attrs::parse_field_attrs;
 pub(crate) use input::parse_input;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
+/// Re-exported for the `lit` tests, which reach the helpers through this
+/// module's glob import. The production callers of `lit_char` now live in
+/// [`struct_attrs`] and [`doc_attrs`], so without this the test-only path
+/// would depend on an incidental private import surviving future splits.
+#[cfg(any(test, doctest))]
+pub(crate) use literals::lit_char;
 pub(crate) use literals::lit_crate_path;
 pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
