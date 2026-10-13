@@ -38,6 +38,7 @@ fn merged_value_is(
             match key.as_str() {
                 "retries" => Ok(outcome.config().retries.to_string()),
                 "verbose" => Ok(outcome.config().verbose.to_string()),
+                "strict" => Ok(outcome.config().strict.to_string()),
                 other => Err(anyhow!(
                     "unsupported key {other:?} in merged-value assertion"
                 )),

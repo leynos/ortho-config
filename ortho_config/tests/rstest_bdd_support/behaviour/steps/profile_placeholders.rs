@@ -8,9 +8,9 @@
 //! means.
 //!
 //! The four plain placeholders share one definition because their parsing rule
-//! is identical — trim and unquote the Gherkin value. [`BareFlagName`] is hand
-//! written because a value-less flag carries its own extra rule: the leading
-//! `--` is part of the CLI spelling, not part of the flag's name.
+//! is identical — trim and unquote the Gherkin value. [`BareFlagName`] is
+//! handwritten because a value-less flag carries its own extra rule: the
+//! leading `--` is part of the CLI spelling, not part of the flag's name.
 
 use std::fmt;
 use std::ops::Deref;
@@ -26,7 +26,7 @@ use super::value_parsing::normalize_scalar;
 /// need a `&str` stay unadorned, while the type itself still prevents a
 /// value, a key, and a profile name from being passed in each other's place.
 /// It renders as that same string, so an assertion message can name the
-/// placeholder it received without a hand-written `as_str()` at every site.
+/// placeholder it received without a handwritten `as_str()` at every site.
 macro_rules! placeholder_newtype {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*

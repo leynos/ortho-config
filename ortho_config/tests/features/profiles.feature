@@ -82,3 +82,10 @@ Feature: Profile selection and precedence
     When the CLI loads with the "--verbose" flag
     Then the merged value of "verbose" is "true"
     And the merged value of "retries" is "3"
+
+  Scenario: The environment beats the profile for a cli_default_as_absent field
+    Given a config file defining profile "ci" with "strict" set to "false"
+    And the environment sets the "strict" key to "true"
+    When the CLI loads with "--profile ci --retries 5"
+    Then the merged value of "strict" is "true"
+    And the merged value of "retries" is "5"

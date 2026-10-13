@@ -111,9 +111,15 @@ pub fn bridge_ir_to_agent_context(
 ///
 /// The input is added to every command because the selector is global — the
 /// flag is accepted at each level of the command tree, and the profile applies
-/// to the whole load rather than to one subcommand. A command that already
-/// carries an input of the same name keeps its own, so a consumer that models
-/// the selector as an ordinary field is not duplicated; the contract assertion
+/// to the whole load rather than to one subcommand.
+///
+/// Presence is decided by the *long option*, not the name. A selector is only
+/// usable if the command surface actually carries `--<flag>`, and an input can
+/// share the flag's name while exposing a different long option. Treating that
+/// input as the selector would leave the declared selection contract pointing
+/// at a flag the command does not accept. An existing input that already
+/// exposes the long option is left untouched, so a consumer that models the
+/// selector as an ordinary field is not duplicated; the contract assertion
 /// below then checks the invariant holds either way.
 fn expose_profile_selector(profiles: &ProfilesDeclaration, commands: &mut [AgentCommand]) {
     let Some(selection) = profiles.selection.as_ref() else {
@@ -121,16 +127,30 @@ fn expose_profile_selector(profiles: &ProfilesDeclaration, commands: &mut [Agent
     };
     let flag = selection.flag.as_str();
     for command in commands.iter_mut() {
-        if !command.inputs.iter().any(|input| input.name == flag) {
+        if !command
+            .inputs
+            .iter()
+            .any(|input| exposes_long_option(input, flag))
+        {
             command.inputs.push(profile_selector_input(flag));
         }
     }
     debug_assert!(
-        commands
+        commands.iter().all(|command| command
+            .inputs
             .iter()
-            .all(|command| command.inputs.iter().any(|input| input.name == flag)),
+            .any(|input| exposes_long_option(input, flag))),
         "a supported profile declaration must expose its selector on every command",
     );
+}
+
+/// Reports whether `input` is available to callers as the long option `long`.
+///
+/// The name is not consulted: `AgentInput` carries the invocation spelling in
+/// `long`, so that field is what decides whether the selector's flag exists on
+/// the command.
+fn exposes_long_option(input: &AgentInput, long: &str) -> bool {
+    input.long.as_deref() == Some(long)
 }
 
 /// Builds the agent-context input describing the profile selector.

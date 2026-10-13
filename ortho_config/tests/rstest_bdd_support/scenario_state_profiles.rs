@@ -69,6 +69,18 @@ pub fn profiles_context() -> ProfilesContext {
 /// `false` is what makes the first scenario observable — a profile setting
 /// `verbose = true` is exactly the case an unpruned `false` would silently
 /// reset.
+/// `strict` is the `cli_default_as_absent` probe. The attribute exists to stop
+/// a clap-supplied default from outranking a file or environment value, which
+/// is only observable when a value arrives from a layer beneath the CLI. The
+/// scenario pairing a profile value with an `APP_STRICT` environment value
+/// therefore pins the documented tier order for such a field: the environment
+/// layer outranks the profile layer, and the CLI layer must not prune the
+/// environment's contribution out from under it.
+///
+/// A `bool` is the probe's shape because `SetTrue` gives it a clap-supplied
+/// default on the generated argument without needing `#[arg(...)]`, which this
+/// fixture cannot carry: it derives only `OrthoConfig`, and only clap's own
+/// derive registers that helper attribute.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
 #[ortho_config(prefix = "APP_", profiles)]
 pub struct ProfilesConfig {
@@ -76,4 +88,6 @@ pub struct ProfilesConfig {
     pub retries: u32,
     #[ortho_config(default = false)]
     pub verbose: bool,
+    #[ortho_config(default = false, cli_default_as_absent)]
+    pub strict: bool,
 }
