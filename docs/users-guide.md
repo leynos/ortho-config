@@ -49,6 +49,14 @@ profiles. Selecting an unknown profile fails with a structured error that names
 the profile, states whether it came from the flag or the selector environment
 variable, and lists the available names.
 
+A selector value that is not valid Unicode is also an error, never a silent
+fallback to the unprofiled configuration. The process-backed entry points
+report it as a command-line parse failure naming the invalid encoding, because
+clap resolves the `<PREFIX>PROFILE` binding; the injected-source entry points
+report it as a profile validation error instead. Either way the load fails, so
+a caller cannot mistake a skipped profile for a configuration that simply had
+no profile to apply.
+
 Opted-in structs gain a `load_with_profile()` entry point (and
 `load_with_profile_from_iter`) returning `ProfileLoadOutcome` with the loaded
 configuration and the selected profile. Downstream `context --json` commands

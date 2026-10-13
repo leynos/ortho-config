@@ -1902,6 +1902,27 @@ unknown-profile payload as well as its display text. The 20-profile extraction
 test keeps both the 16-name payload bound and the omitted-count diagnostic
 observable.
 
+A pre-merge row later claimed the process-backed selector read "hides an
+environmental conversion failure", because `build_profile_selection` emits
+`std::env::var(...).ok()` and would therefore treat a non-Unicode selector as
+unset. The premise is false, and the file that stated it invited the reading:
+the doc comment said the process path "already treats the value as absent" and
+that "there is no diagnostic channel". That is true of the fallback read in
+isolation and false of the loading path as a whole. The generated `--profile`
+flag carries `env = <PREFIX>PROFILE`, so clap resolves the variable itself and
+rejects a value it cannot transcode as `ErrorKind::InvalidUtf8`; the parse
+error is recorded and the load fails. The `std::env::var` read still runs, but
+a non-Unicode value makes it return `Err`, indistinguishable from an unset
+variable — safe only because clap has already recorded the fault. A focused
+experiment settled it rather than argument:
+`ortho_config/tests/profile_process_selector.rs` pins a control (a valid
+selector reaches profile `ci` and yields 7, distinguishing it from the struct
+default 1 and the file base 3) and then a case with a `0xFF`-suffixed selector,
+which fails with "invalid UTF-8" rather than returning the base value. The doc
+comment and ADR-012's known-risks list now record why the two paths report
+through different channels on purpose, so the same misreading does not
+regenerate the row.
+
 ## Context and orientation
 
 The workspace (`/` is the repository root) contains:

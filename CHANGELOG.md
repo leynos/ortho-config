@@ -100,6 +100,9 @@ All notable changes to this project will be documented in this file.
   `load_with_profile()` entry point returning `ProfileLoadOutcome`.
 - Add `ProfilesDeclaration` and `ProfileSelectionContract` to the
   agent-context schema and the matching `DocMetadata.profiles` IR field.
+- Add an integration test pinning that a non-Unicode `<PREFIX>PROFILE` selector
+  fails a process-backed profile load with an encoding diagnostic, rather than
+  silently loading the unprofiled configuration.
 
 ### Breaking
 

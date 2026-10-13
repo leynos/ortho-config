@@ -416,6 +416,16 @@ unknown keys. Downstream rollback notes should say both things.
   ordered `MergeLayer` chain, so the extraction helper needs no change on
   either discovery path. A later change to that shape would still require a
   re-seat; the vector-based helper bounds that work.
+- The two selector reads reject a non-Unicode value through different channels,
+  and the difference is deliberate rather than an inconsistency to repair. On
+  the process path the generated `--profile` flag's `env = ...` binding lets
+  clap resolve the variable, so clap rejects a value it cannot transcode as
+  `ErrorKind::InvalidUtf8` and the load fails on that recorded parse error; the
+  direct `std::env::var` read still runs, but a non-Unicode value makes it
+  return `Err`, indistinguishable from an unset variable. That is safe because
+  clap has already recorded the fault. On the injected path there is no parse
+  step, so the loader converts the `OsString` itself and records
+  `OrthoError::Validation`. Both fail; only the diagnostic differs.
 
 ## Consequences
 

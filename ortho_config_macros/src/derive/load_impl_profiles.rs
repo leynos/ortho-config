@@ -105,15 +105,24 @@ fn build_profile_parse_setup(krate: &proc_macro2::TokenStream) -> proc_macro2::T
 /// saw. Only the process-backed entry points fall back to `std::env::var`.
 ///
 /// The two reads handle a non-Unicode value differently, and deliberately.
-/// `std::env::var` returns `Err`, so the process path already treats the value
-/// as absent — the mutator supplied bytes that cannot be a profile name, and
-/// there is no diagnostic channel to report that on. A [`crate::EnvSource`]
-/// hands back an `OsString`, which the injected path must convert; discarding
-/// the conversion failure would let a caller who passed a malformed selector
-/// watch the load proceed as though nothing were selected. That is a silently
-/// wrong configuration, so the injected path records a selection error instead.
-/// It cannot mask a clap diagnostic: the selector never reaches the command
-/// line, so there is no parse error for it to outrank.
+///
+/// On the process path a non-Unicode value never reaches the selection. The
+/// generated `--profile` flag carries an `env = ...` binding, so clap resolves
+/// the variable itself and rejects a value it cannot transcode as
+/// `ErrorKind::InvalidUtf8`; [`build_profile_parse_setup`] records that parse
+/// error and drops the matches, and the load fails on the recorded error. The
+/// `std::env::var` read below still runs, but a non-Unicode value makes it
+/// return `Err`, which is indistinguishable from an unset variable. Treating it
+/// as absent is safe precisely because clap has already recorded the
+/// diagnostic, so the fault is reported rather than hidden.
+///
+/// A [`crate::EnvSource`] hands back an `OsString` and the injected path has no
+/// parse step to reject it, so it must convert the value itself. Discarding the
+/// conversion failure would let a caller who passed a malformed selector watch
+/// the load proceed as though nothing were selected. That is a silently wrong
+/// configuration, so the injected path records a selection error instead. It
+/// cannot mask a clap diagnostic: the selector never reaches the command line,
+/// so there is no parse error for it to outrank.
 fn build_profile_selection(
     krate: &proc_macro2::TokenStream,
     profile_env_var: &str,
