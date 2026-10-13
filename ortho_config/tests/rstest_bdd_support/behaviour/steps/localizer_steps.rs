@@ -1,12 +1,14 @@
 //! Steps covering the localisation helper surfaces.
 
 use super::value_parsing::{normalize_scalar, strip_isolates};
-use crate::rstest_bdd_support::scenario_state::LocalizerContext;
+use crate::rstest_bdd_support::scenario_state::{LocalizedDemoArgs, LocalizerContext};
 use anyhow::{Result, anyhow, ensure};
+use clap::CommandFactory;
 use fluent_bundle::FluentValue;
 use ortho_config::{
-    FluentLocalizer, FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer, langid,
-    localize_clap_error, localize_clap_error_with_command,
+    FluentLocalizer, FormattingIssue, LocalizationArgs, LocalizeCmd, Localizer, NoOpLocalizer,
+    OrthoConfigLocalization, langid, localize_clap_error, localize_clap_error_with_command,
+    parse_localized_command,
 };
 use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
@@ -300,4 +302,70 @@ fn extract_argument(error: &clap::Error) -> String {
         Some(other) => other.to_string(),
         None => "<missing>".to_owned(),
     }
+}
+
+/// Installs a catalogue keyed by the derive-generated identifiers.
+///
+/// The resource is built from `LocalizedDemoArgs`'s own constants rather than
+/// hard-coded ids, so the step exercises the generated names end to end. It is
+/// leaked because the localizer outlives the scenario and needs `'static`.
+#[given("a derived configuration struct with a localization catalogue")]
+fn derived_config_localization_catalogue(context: &LocalizerContext) -> Result<()> {
+    let recipient = LocalizedDemoArgs::ARG_IDS
+        .iter()
+        .find(|arg| arg.name == "recipient")
+        .ok_or_else(|| anyhow!("recipient argument id missing from derived constants"))?;
+    let resource = format!(
+        "{} = Localised demo about\n{} = Localised recipient help\n",
+        LocalizedDemoArgs::ABOUT_ID,
+        recipient.help_id
+    );
+    let resource: &'static str = Box::leak(resource.into_boxed_str());
+    install_fluent_localizer(context, &[resource], false)
+}
+
+/// Parses a command built with the fluent localizer's translated metadata.
+#[when("the command line is parsed with a Fluent localizer")]
+fn parse_localized_demo_command(context: &LocalizerContext) -> Result<()> {
+    let parsed = context
+        .localizer
+        .with_ref(|localizer| {
+            let command = LocalizedDemoArgs::command()
+                .with_base(LocalizedDemoArgs::LOCALIZATION_BASE)
+                .localize(localizer.as_ref());
+            parse_localized_command::<LocalizedDemoArgs, _, _>(
+                command,
+                ["localized-demo", "--recipient", "Ada"],
+                localizer.as_ref(),
+            )
+        })
+        .ok_or_else(|| anyhow!("localizer must be initialised before localisation"))?;
+    let _parsed = parsed.map_err(|error| anyhow!("localized parse failed: {error}"))?;
+    Ok(())
+}
+
+/// The parsed command's help text comes from the derived identifier.
+///
+/// This is the assertion that ties the generated `ARG_IDS` entry to what a
+/// user actually sees, rather than merely checking the constant exists.
+#[then("the help text resolves through the derive-generated identifiers")]
+fn help_text_resolves_through_derived_ids(context: &LocalizerContext) -> Result<()> {
+    context
+        .localizer
+        .with_ref(|localizer| {
+            let command = LocalizedDemoArgs::command()
+                .with_base(LocalizedDemoArgs::LOCALIZATION_BASE)
+                .localize(localizer.as_ref());
+            let recipient = command
+                .get_arguments()
+                .find(|argument| argument.get_id() == "recipient")
+                .ok_or_else(|| anyhow!("recipient argument missing from localized command"))?;
+            let help = recipient.get_help().map(ToString::to_string);
+            ensure!(
+                help.as_deref() == Some("Localised recipient help"),
+                "expected localized recipient help, got {help:?}"
+            );
+            Ok(())
+        })
+        .ok_or_else(|| anyhow!("localizer must be initialised before localisation"))?
 }

@@ -85,13 +85,13 @@ file carries both. nextest resolves each override field from the **first**
 matching entry that sets it, so the Windows entry above, being first, decides
 the four binaries it names; the wider entry below is second and supplies the
 rest of the class. The four therefore keep both 600 s *and* run alone, while
-`env_source_trybuild`, `generated_lint_trybuild`, `localized_parse_trybuild` and
-`subcommand_trybuild` take the 960 s entry, and Linux takes 960 s for all
-eight. Merging the two would have to choose between running alone and the
-larger allowance; leaving both keeps each measured remedy at the binaries it
-was measured on. `trybuild_tier_test.py` reads the widening and
-`windows_trybuild_isolation_test.py` the reservation, so neither remedy can be
-removed by editing the other's entry.
+`env_source_trybuild`, `generated_lint_trybuild`, `localization_trybuild`,
+`localized_parse_trybuild` and `subcommand_trybuild` take the 960 s entry, and
+Linux takes 960 s for all nine. Merging the two would have to choose between
+running alone and the larger allowance; leaving both keeps each measured remedy
+at the binaries it was measured on. `trybuild_tier_test.py` reads the widening
+and `windows_trybuild_isolation_test.py` the reservation, so neither remedy can
+be removed by editing the other's entry.
 
 The reservation costs Windows wall time. On run 36195916343 the job took 53.5
 min, against a 38 min median over the preceding pull-request runs, and
@@ -154,6 +154,142 @@ duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
 resource ids such as dotted catalogue keys before Fluent parses them, and must
 not be used to validate generated command ids.
 
+`#[derive(OrthoConfig)]` emits `OrthoConfigLocalization` for the deriving
+configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
+`#[ortho_config(localization_base = "…")]` (or the normalized application-name
+default), while the command-level constants and `ARG_IDS` use the normalized,
+hyphen-joined Fluent ids. Each `ArgLocalizationIds` entry records the Clap
+argument name and its `help`, `long_help`, and `value_name` ids. Argument ids
+are validated for normalized collisions during expansion; flattened,
+subcommand, and `skip_cli` fields are excluded from `ARG_IDS`. Set
+`ORTHO_CONFIG_EMIT_IDENTIFIERS=1` for an opt-in standalone inventory; the
+derive writes it through per-expansion fragments and merges them
+deterministically. Mounted command-tree identifiers remain owned by the
+path-aware documentation IR.
+
+The rendered layout depends on the inventory size. Up to 1 MiB the whole
+inventory is written to `${OUT_DIR}/ortho-config/cli-identifiers.json`. Above
+that cap — measured on the serialized document, and never splitting a batch
+below one entry, so a single oversized entry stays in one part — the output
+becomes `cli-identifiers.index.json` plus the numbered
+`cli-identifiers.<n>.json` parts it lists. Read the index rather than assuming
+the single-file path when the cap may be exceeded. A render prunes every file
+of the *other* layout before publishing, so a build that switches
+representations never leaves a stale file where a reader would find it.
+
+`OUT_DIR` is package-scoped, so every writer holds an exclusive
+`cli-identifiers.lock` across the complete fragment-write, merge, prune, and
+publication sequence; the unit tests in `artefact/artefact_lock_tests.rs` spawn
+two real processes to prove the exclusion and the release, rather than relying
+on an in-process mutex.
+
+That lock serializes *writers among themselves*. It is cooperative, so it does
+not exclude a process that never takes it: a reader — a build script listing
+the directory, or any other tool — can observe an intermediate state between
+the prune and the writes that follow it, and can read the fragments before a
+render. Atomic per-file writes keep each file whole, but the directory as a
+whole is not replaced atomically and the layout may change between renders. A
+reader that must be consistent has to take the same lock or retry.
+
+A second opt-in, `ORTHO_CONFIG_ARTEFACT_REPORT=1`, turns on the observation
+channel that explains the same sequence when a build is slow or fails. It
+writes three files below the artefact root, none of which is part of the
+inventory and none of which the prune matches.
+`cli-identifiers.lock-wait.<pid>.json` is written once a publication has been
+blocked on the lock for five seconds, and refreshed every second while the wait
+continues, so a build that appears hung can be diagnosed as waiting rather than
+deadlocked. `cli-identifiers.build-report.<pid>.json` records the process, the
+expansion, the stage the publication reached — `lock_wait`, `fragment_write`,
+`merge`, `render`, `prune`, or `publish` — with its lock-wait and total
+durations in whole milliseconds, a bounded `completed`/`failed` outcome, a
+`written_at_ms` timestamp, and, on failure, a bounded `io`/`serialization`
+error category. `cli-identifiers.observation-errors.<pid>.jsonl` is the
+channel's own failure record: it appends one JSON Lines record per observation
+that could not be written, carrying the operation, the same bounded category,
+and the underlying error's text.
+
+All three are per-process because `OUT_DIR` is package-scoped and several
+compiler processes may publish into one directory; the error record is what
+makes the best-effort contract safe, since a build with no report at all is
+otherwise indistinguishable from one whose report was dropped. Every write is
+best effort: the channel explains builds and must not be able to fail one, so
+an unwritable directory leaves the publication's own result untouched — the
+report write on the acquisition-failure path is attempted even though no lock
+was taken, precisely so that the build which could not start is still explained.
+
+**A marker's presence is not evidence of contention now.** The wait marker is a
+snapshot, not a lock: a process killed mid-wait never retires its marker,
+failed cleanup leaves one behind and records that in the error log, and process
+ids are reused, so a live pid does not prove the writing process is still
+running. Read `written_at_ms` against the build's own timeline; a marker older
+than the build under investigation is a leftover, not a clue. This is why the
+filename carries the pid *and* the body carries a timestamp — neither alone
+establishes freshness.
+
+**A report describes the last publication its process completed.** A report is
+named for the process, and each publication replaces what that process reported
+before, so a crate with several derives leaves the report of its last one
+rather than a file per derive per build. A replacement that fails leaves the
+*earlier* report in place — the write is atomic, so a failed rename never
+truncates the destination — which is the other reason `written_at_ms` and the
+recorded expansion are load-bearing rather than decorative.
+
+`artefact/artefact_report.rs` owns the channel's vocabulary, serialization, and
+the build report; `artefact/artefact_wait_marker.rs` owns the announcement and
+its retirement; `artefact/artefact_channel_log.rs` owns the failure record;
+`artefact/artefact_observation.rs` owns the stage and duration state one
+publication accumulates; `artefact/publish.rs` is its only producer. A build
+that did not opt in takes the plain blocking `lock`, so the common case pays no
+polling cost for a channel it never enabled. Because a blocked publisher does
+not hold the lock, the wait marker is written through `write_private_atomic`,
+whose temporary derives from the already-unique destination; the shared
+`atomic_write` temporary would let two blocked publishers collide.
+
+`artefact/publish.rs` owns that whole write path. It takes the lock, writes the
+fragment, merges, renders, prunes, and publishes — one function,
+`publish::publish`, called by `emit` and by the lock tests alike, so the
+exclusivity the tests observe is the exclusivity the compiler runs. The guard
+is threaded by reference into each step rather than merely bound in `publish`:
+a local that is never read can be dropped early by a later edit while every
+test still passes, because a publisher that acquires and immediately releases
+still *blocks* on acquisition and is therefore indistinguishable to an outside
+observer. Passing `&LockGuard` makes releasing it early a borrow-check error
+instead of a silent regression. `emit` is correspondingly the **only** reader
+of the ambient environment (`OUT_DIR`, `CARGO_CRATE_NAME`, and the opt-in
+flag); everything below it takes a `publish::Publication` of explicit values.
+That boundary is what lets a test publish into a temporary root without
+mutating the process environment, which matters because build scripts and tests
+share one `OUT_DIR` per package and an unset variable would otherwise be
+indistinguishable from a stale one.
+
+`artefact/artefact_probe.rs` owns the stale-fragment policy:
+`source_still_exists` is its only entry point, `probe_metadata` is the only
+`std::fs::metadata` call site for it, and `classify_metadata` is the only copy
+of the rule that `NotFound` alone means stale while every other metadata error
+aborts the merge. `merge_fragments` is the single production caller; the
+identity artefact's merge and the merge-level regression tests are its only
+call sites. For OS-independent policy tests, `with_metadata_outcome` is a
+test-only, thread-local injection that matches one exact probe path and is
+compiled out of non-test builds. It exists because no filesystem layout
+provokes the same metadata error portably: a regular file in a parent position
+yields `NotADirectory` on Unix and `NotFound` on Windows. Which `ErrorKind` a
+platform reports for a given layout is an implementation mapping, not a
+portability guarantee, so a policy test built on a real layout would assert a
+different kind per platform. The policy tests in
+`artefact/artefact_probe_tests.rs` inject the outcome and drive the shared
+classification, while the merge-level tests in
+`artefact/artefact_fragment_tests.rs` inject through the same boundary and
+assert the diagnostic retains the path and the injected error marker. It is
+**not** a general-purpose filesystem abstraction and must not grow readers, an
+enumeration capability, or call sites beyond this probe.
+
+Normalized argument-ID collisions within one derived struct fail at compile
+time. Hand-built and dynamic command trees retain the runtime panic contract.
+Cargo does not include proc-macro environment reads in its rebuild fingerprint;
+after changing the opt-in variable or source, refresh the artefact with
+`cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`.
+Do not rely on a warm build to observe changed artefact output.
+
 Use `LocalizedParse` for default-base localized clap parsing and
 `parse_localized_command` when callers need to pass a command that has already
 been localized with `LocalizeCmd::with_base`. Keep the two parse-error paths in
@@ -168,6 +304,13 @@ command identifiers are still a documented runtime panic contract owned by
 `message_id_for` and `LocalizeCmd::localize`, so keep that coverage in ordinary
 runtime panic tests until derive-emitted identifiers move validation to compile
 time.
+
+The runtime and macro normalizers are deliberate twins, locked by their shared
+version marker and property tests against `message_id_for`. Generated docs IR
+receives mounted paths through path-aware trait methods; handwritten trait
+implementations use their provided fallback. The optional identifier artefact
+uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
+schema has standalone scope until a downstream consumer joins it to docs IR.
 
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
@@ -1798,13 +1941,14 @@ than hung.*
 
 The allowance is now 960 s, eight warning periods of 120 s, which is 1.68 times
 the 572.5 s worst observed — the same headroom the base allowance was sized
-with against its own 364.8 s. The filter names all eight trybuild binaries
-rather than the two it used to; six end in `trybuild` and `compile_fail` and
+with against its own 364.8 s. The filter names all nine trybuild binaries
+rather than the two it used to; seven end in `trybuild` and `compile_fail` and
 `compile_time` do not, so no single glob covers the class and the names are
-enumerated instead. Eight is the count `trybuild_tier_test.py` enforces, so a
-trybuild binary that lands on `main` after the enumeration is written is
-reported by the contract rather than silently left on the base allowance:
-`subcommand_trybuild` arrived that way, and the contract is what caught it.
+enumerated instead. Nine is the count `trybuild_tier_test.py` enforces, so a
+trybuild binary that arrives after the enumeration is written is reported by
+the contract rather than silently left on the base allowance:
+`subcommand_trybuild` arrived that way on `main`, and `localization_trybuild`
+arrived that way from a branch, and the contract is what caught both.
 
 The 960 s allowance is lower than the 1,800 s whole-run budget, which the
 ordering contract asserts. That comparison does not by itself guarantee a test

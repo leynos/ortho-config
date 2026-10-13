@@ -116,9 +116,45 @@ pub struct NestedAuditArgs {
 }
 
 /// Access-grant command that exercises `#[command(name = ...)]` overrides.
+///
+/// Each override is paired with a neighbouring identifier left unset, so a
+/// test in `nested_docs_ir` can assert both resolution branches at once: the
+/// literal value survives, and the derived one still reaches its generated id
+/// rather than being blanked, derived from the literal base, or resolved at a
+/// standalone path. Overriding every identifier in the command would leave
+/// only the first branch observable, which is exactly the vacuous case that
+/// pairing exists to rule out.
 #[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "NESTED_APP_")]
+#[ortho_config(
+    prefix = "NESTED_APP_",
+    about_id = "nested.grant.about",
+    synopsis_id = "nested.grant.usage"
+)]
 pub struct NestedGrantArgs {
+    /// Overrides both of its sibling's identifiers, and is the *only* field
+    /// here that does: `audit_note` below is the generated default it is
+    /// compared against.
     #[arg(long)]
+    #[ortho_config(
+        help_id = "nested.grant.principal.help",
+        long_help_id = "nested.grant.principal.long_help"
+    )]
     pub principal: String,
+    /// Carries no identifier override, so `help_id` and `long_help_id` must
+    /// both derive through the mounted `nested-app admin grant-access` path.
+    #[arg(long)]
+    pub audit_note: Option<String>,
+}
+
+/// Flat derived configuration struct used to prove that Fluent help text
+/// resolves through the derive-generated identifier constants (Milestone 3's
+/// behavioural contract: `LOCALIZATION_BASE`, `ABOUT_ID`, and the per-argument
+/// ids drive the runtime localizer).
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
+#[command(name = "localized-demo", bin_name = "localized-demo")]
+#[ortho_config(prefix = "L10N", localization_base = "l10n.demo")]
+pub struct LocalizedDemoArgs {
+    /// Recipient of the localised greeting.
+    #[arg(long)]
+    pub recipient: Option<String>,
 }

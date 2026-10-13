@@ -10,6 +10,7 @@ use heck::{
     ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
     ToUpperCamelCase,
 };
+use syn::ext::IdentExt;
 use syn::meta::ParseNestedMeta;
 use syn::{Attribute, Field, LitStr, Token};
 
@@ -137,7 +138,12 @@ pub(crate) fn serde_serialized_field_key(
     if let Some(rename) = serde_field_rename(&field.attrs)? {
         return Ok(rename);
     }
-    let field_name = ident.to_string();
+    // `serde_derive` unraws the identifier before applying `rename_all` and
+    // before using it as the serialized key, so `r#type` serializes under
+    // `type`. Keeping the raw spelling here would both break the rename rule
+    // (`heck` splits words on the `#`) and produce a key the serialized data
+    // does not carry.
+    let field_name = ident.unraw().to_string();
     Ok(rename_all
         .map(|rule| rule.apply(&field_name))
         .unwrap_or(field_name))

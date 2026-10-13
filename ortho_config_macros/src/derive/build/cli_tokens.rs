@@ -7,7 +7,7 @@ use crate::CliFieldInfo;
 use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
 };
-use crate::derive::parse::{SerdeRenameAll, clap_arg_id, serde_serialized_field_key};
+use crate::derive::parse::{SerdeRenameAll, clap_arg_id_or_field_name, serde_serialized_field_key};
 
 /// Result of building CLI struct tokens.
 pub(crate) struct CliStructBuildResult {
@@ -28,12 +28,10 @@ fn build_cli_field_info(
     attrs: &crate::derive::parse::FieldAttrs,
     serde_rename_all: Option<SerdeRenameAll>,
 ) -> syn::Result<CliFieldInfo> {
-    let name = field
-        .ident
-        .clone()
-        .ok_or_else(|| syn::Error::new_spanned(field, "unnamed fields are not supported"))?;
-    let field_name = name.to_string();
-    let arg_id = clap_arg_id(field)?.unwrap_or_else(|| field_name.clone());
+    // The arg id is resolved by the shared helper so `CliValueExtractor` looks
+    // the field up under the same id the generated `clap` attribute declares,
+    // including the `r#`-stripping fallback for raw identifiers.
+    let arg_id = clap_arg_id_or_field_name(field)?;
     let serialized_key = serde_serialized_field_key(field, serde_rename_all)?;
     Ok(CliFieldInfo {
         serialized_key,

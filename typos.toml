@@ -54,6 +54,7 @@ extend-ignore-re = [
     "`Artifacts`",
     "`Invoke-ScriptAnalyzer`",
     "`PSScriptAnalyzer`",
+    "`[0-9a-f]{0,40}[0-9][0-9a-f]{0,40}`",
     "`[^`\\n]*cli::tests::localisation[^`\\n]*`",
     "`[^`\\n]*localised_help[^`\\n]*`",
     "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",

@@ -902,6 +902,61 @@ explicit at integration boundaries.
 
 ## Localize help and parse failures together
 
+Derived configurations implement `OrthoConfigLocalization`. Use
+`CommandLine::LOCALIZATION_BASE` with `LocalizeCmd::with_base` and the
+generated command and argument constants rather than repeating identifier
+strings; this prevents catalogue and command declarations from drifting. Set
+the catalogue root explicitly with
+`#[ortho_config(localization_base = "acme.cli")]`; when it is omitted, the
+derived application name supplies the default base. `ARG_IDS` contains one
+`ArgLocalizationIds` record per eligible argument, with its Clap name and
+`help_id`, `long_help_id`, and `value_name_id` constants. Identifiers normalize
+each dotted base or argument segment to a Fluent-safe form and join segments
+with hyphens. The generated command constants are `ABOUT_ID`, `LONG_ABOUT_ID`,
+`USAGE_ID`, `VERSION_ID`, `LONG_VERSION_ID`, `AFTER_HELP_ID`, and
+`AFTER_LONG_HELP_ID`. Duplicate normalized argument ids are rejected at compile
+time. Flattened, subcommand, and `skip_cli` fields do not receive argument
+constants.
+
+Per-field localized defaults are not yet available. The
+`#[ortho_config(localized_default = "...")]` attribute is recognized so that
+its absence from the implementation is reported rather than silently ignored,
+but using it fails the build with a deferral diagnostic. Embedding default
+messages is deferred to roadmap task 11.5.1; until it lands, the
+`embedded_default` field of every emitted artefact entry is `null`.
+
+Documentation IR version 2.0 derives default command and eligible field ids
+from the mounted command path, replacing the older dotted defaults. To export
+standalone derived ids for tooling, run
+`cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`.
+The resulting `${OUT_DIR}/ortho-config/cli-identifiers.json` is opt-in and
+provisional; do not set the variable globally, and use docs IR for mounted ids.
+When the output exceeds 1 MiB, the index lists `cli-identifiers.<n>.json`
+parts; read those listed parts rather than expecting all entries in the single
+index file.
+
+Concurrent compiler processes for one package serialize their writes behind an
+exclusive lock, so a build that looks stuck may be waiting for a peer. To see
+that, add `ORTHO_CONFIG_ARTEFACT_REPORT=1` alongside the emission variable and
+rebuild. A publication that waits for the lock longer than five seconds writes
+`cli-identifiers.lock-wait.<pid>.json` in the artefact directory, and refreshes
+it while the wait continues, so the build can be diagnosed as waiting rather
+than deadlocked; the file is removed once the lock is granted. Read its
+`written_at_ms` before acting on it: a process killed mid-wait, or one whose
+cleanup failed, can leave a marker behind, and process ids are reused, so a
+marker that is not recent describes a wait that has ended. Each finished
+publication also writes `cli-identifiers.build-report.<pid>.json`, naming the
+process, the expansion, the stage it reached, how long it waited, and when. A
+report is named for the process, so a crate with several derives leaves the
+report of its last publication rather than one file per derive; if a later
+publication could not replace it, the file still holds the earlier report, and
+its timestamp is what says so. A channel that cannot write its observations
+appends a JSON Lines record naming the lost operation to
+`cli-identifiers.observation-errors.<pid>.jsonl`, so a build with no report is
+distinguishable from one that could not write it. These files are best effort:
+they explain a build and never fail one, and none of them is part of the
+identifier inventory.
+
 Localization is most reliable when the command metadata is translated before
 parsing and any resulting error goes through the same localizer.
 `LocalizedParse` provides that path for the common case:

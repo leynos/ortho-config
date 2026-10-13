@@ -1,11 +1,13 @@
 //! Integration coverage for localised clap parsing helpers.
 
-use clap::{CommandFactory, Parser};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use ortho_config::{
-    LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer, langid,
-    message_id_for, parse_localized_command,
+    ArgLocalizationIds, LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer,
+    OrthoConfig, OrthoConfigLocalization, OrthoConfigSubcommandDocs, langid, message_id_for,
+    parse_localized_command,
 };
 use rstest::{fixture, rstest};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -356,44 +358,8 @@ fn missing_clap_error_translation_emits_warning_fields(fallback_localizer: Trans
     );
 }
 
-#[test]
-fn identifier_coverage_matches_message_id_for() {
-    let localizer = RecordingLocalizer::default();
-    drop(Fixture::command().localize(&localizer));
-
-    let expected = [
-        message_id_for(&["fixture"], "about"),
-        message_id_for(&["fixture"], "long_about"),
-        message_id_for(&["fixture"], "usage"),
-        message_id_for(&["fixture"], "version"),
-        message_id_for(&["fixture"], "long_version"),
-        message_id_for(&["fixture"], "after_help"),
-        message_id_for(&["fixture"], "after_long_help"),
-        message_id_for(&["fixture"], "args.config.help"),
-        message_id_for(&["fixture"], "args.config.long_help"),
-        message_id_for(&["fixture"], "args.config.value_name"),
-        message_id_for(&["fixture", "greet"], "about"),
-        message_id_for(&["fixture", "greet"], "long_about"),
-        message_id_for(&["fixture", "greet"], "usage"),
-        message_id_for(&["fixture", "greet"], "version"),
-        message_id_for(&["fixture", "greet"], "long_version"),
-        message_id_for(&["fixture", "greet"], "after_help"),
-        message_id_for(&["fixture", "greet"], "after_long_help"),
-        message_id_for(&["fixture", "greet"], "args.name.help"),
-        message_id_for(&["fixture", "greet"], "args.name.long_help"),
-        message_id_for(&["fixture", "greet"], "args.name.value_name"),
-    ]
-    .into_iter()
-    .collect::<BTreeSet<_>>();
-
-    assert_eq!(localizer.recorded_ids(), expected);
-}
-
-#[test]
-#[should_panic(expected = "Fluent identifier must start with an ASCII letter")]
-fn fluent_unsafe_identifier_panics() {
-    drop(UnsafeFixture::try_parse_localized_from(
-        ["123-fixture", "--bad", "value"],
-        &NoOpLocalizer::new(),
-    ));
-}
+// Agreement coverage lives in a shared module below `support/` so Cargo does
+// not also discover it as a standalone integration test, and this file stays
+// within the repository's 400-line limit.
+#[path = "support/localized_parse_agreement.rs"]
+mod agreement;
