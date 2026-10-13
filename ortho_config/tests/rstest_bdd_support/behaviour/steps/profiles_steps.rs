@@ -10,6 +10,7 @@
 use crate::rstest_bdd_support::scenario_state::{ProfilesConfig, ProfilesContext};
 use anyhow::{Result, ensure};
 use ortho_config::{OrthoError, OrthoResult};
+use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, when};
 use serde_json::{Map, Value};
 
@@ -18,6 +19,17 @@ use super::profile_placeholders::{
 };
 use super::value_parsing::unquote;
 
+/// Appends one `(key, value)` pair to a slot that accumulates them.
+///
+/// Base-file keys and environment overrides share this
+/// `Slot<Vec<(String, String)>>` shape; a step's only choice is which slot it
+/// records into.
+fn record_key_pair(pairs: &Slot<Vec<(String, String)>>, key: &ConfigKey, value: &ConfigValue) {
+    pairs
+        .get_or_insert_with(Vec::new)
+        .push((key.as_str().to_owned(), value.as_str().to_owned()));
+}
+
 /// Records a base file key for the profile scenario's configuration file.
 #[given("a config file with key {key} set to {value}")]
 fn config_file_key(
@@ -25,10 +37,7 @@ fn config_file_key(
     key: ConfigKey,
     value: ConfigValue,
 ) -> Result<()> {
-    profiles_context
-        .base_keys
-        .get_or_insert_with(Vec::new)
-        .push((key.as_str().to_owned(), value.as_str().to_owned()));
+    record_key_pair(&profiles_context.base_keys, &key, &value);
     Ok(())
 }
 
@@ -148,30 +157,31 @@ fn selector_env(profiles_context: &ProfilesContext, profile: ProfileName) -> Res
 /// Records an `APP_`-prefixed environment override.
 #[given("the environment sets the {key} key to {value}")]
 fn env_key(profiles_context: &ProfilesContext, key: ConfigKey, value: ConfigValue) -> Result<()> {
+    record_key_pair(&profiles_context.env_keys, &key, &value);
+    Ok(())
+}
+
+/// Runs the profile-aware load and retains its outcome for later assertions.
+///
+/// The three `when` steps differ only in how they spell the flags, so the
+/// record-the-outcome tail lives here rather than being repeated in each.
+fn run_profile_load(profiles_context: &ProfilesContext, flags: &[(String, String)]) -> Result<()> {
     profiles_context
-        .env_keys
-        .get_or_insert_with(Vec::new)
-        .push((key.as_str().to_owned(), value.as_str().to_owned()));
+        .result
+        .set(profile_load(profiles_context, flags));
     Ok(())
 }
 
 /// Runs the profile-aware load with the given flags.
 #[when("the CLI loads with {flags}")]
 fn profiles_load_with_flags(profiles_context: &ProfilesContext, flags: FlagSpec) -> Result<()> {
-    let parsed = parse_flags(flags.as_str());
-    profiles_context
-        .result
-        .set(profile_load(profiles_context, &parsed));
-    Ok(())
+    run_profile_load(profiles_context, &parse_flags(flags.as_str()))
 }
 
 /// Runs the profile-aware load with no flags.
 #[when("the CLI loads")]
 fn profiles_load(profiles_context: &ProfilesContext) -> Result<()> {
-    profiles_context
-        .result
-        .set(profile_load(profiles_context, &[]));
-    Ok(())
+    run_profile_load(profiles_context, &[])
 }
 
 /// Runs the profile-aware load with one value-less flag.
@@ -186,10 +196,7 @@ fn profiles_load_with_bare_flag(
     flag: BareFlagName,
 ) -> Result<()> {
     let parsed = vec![(flag.as_str().to_owned(), String::new())];
-    profiles_context
-        .result
-        .set(profile_load(profiles_context, &parsed));
-    Ok(())
+    run_profile_load(profiles_context, &parsed)
 }
 /// Names the `OrthoError` variant carried by `err`.
 ///
