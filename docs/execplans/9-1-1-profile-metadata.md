@@ -347,19 +347,22 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   `FileLayerOutcome`. This plan implements extraction against today's discovery
   output; ADR-012 records as a design obligation that if RFC 0002 lands,
   `FileLayerOutcome` must expose the ordered file values profile extraction
-  needs, and the extraction helper is written against a minimal internal
-  interface (an ordered layer vector) so it can be re-seated without semantic
-  change. Rationale: sequencing 9.1.1 behind an unaccepted RFC was unacceptable
+  needs, and the extraction helper is written against the ordered layer vector
+  so the two can be joined without a change to extraction's own semantics.
+  Rationale: sequencing 9.1.1 behind an unaccepted RFC was unacceptable
   schedule risk, but ignoring the collision would force the RFC to work around
   shipped code. Rejected: building profiles as the first RFC 0002 policy now
   (blocked on RFC acceptance); ignoring the overlap (rework trap).
   **Resolved:** RFC 0002 has since landed as Implemented, and
   `FileLayerOutcome` does expose the ordered `MergeLayer` chain, so the
-  obligation is discharged at the type level. The re-seat is not required: the
-  generated loader still resolves through `ConfigDiscovery::compose_layers`
-  rather than the policy engine, and routing extraction through
-  `ConfigFilePolicy::resolve_layers` would change resolution semantics rather
-  than perform a mechanical re-seat. ADR-012's "Relationship with RFC 0002"
+  obligation is discharged in the generated loader. The re-seat question
+  resolves differently on the two discovery paths: a policy-configured struct
+  already resolves through `ConfigFilePolicy::resolve_layers` and feeds
+  extraction from `FileLayerOutcome`, while a struct without policy attributes
+  keeps the ordinary candidate walk through `ConfigDiscovery::compose_layers`.
+  Routing that walk through the policy engine would change resolution semantics
+  rather than perform a mechanical re-seat, so it is left as is; both paths
+  emit the same ordered layer vector. ADR-012's "Relationship with RFC 0002"
   section records the reconciliation.
 - D14 — Post-load selection surfacing: opted-in structs gain a generated
   associated function
@@ -427,8 +430,8 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   pins base-file profile tables being overridden by the extending file's.
 - Risk: RFC 0002 later restructures file-layer assembly underneath profile
   extraction. Severity: medium. Likelihood: medium. Mitigation: D13 —
-  extraction written against a minimal ordered layer interface; ADR-012 records
-  the `FileLayerOutcome` obligation, now discharged.
+  extraction written against the ordered layer vector, which both discovery
+  paths emit; ADR-012 records the `FileLayerOutcome` obligation, now discharged.
 - Risk: fixture sprawl — one schema field touches the wire-contract JSON,
   contract-support helpers, round-trip property strategy, the agent-context
   insta snapshot, three `cargo-orthohelp` goldens, and the three
@@ -1078,16 +1081,17 @@ Progress entries from milestone 1 onward must carry timestamps.
          `FileLayerOutcome`, which the module doc names as the intended
          re-seat point, would therefore not remove the dependency the row
          objects to.
-      5. `ExtractionOutcome` is never re-exported — `profile/mod.rs` keeps
-         `mod extract;` private and re-exports only
-         `extract::extract_profile_layers` — so the type is unnameable from
-         outside the crate and the "profile domain API" the row names does
-         not exist at the crate boundary.
+      5. `ExtractionOutcome` is not re-exported by name — `profile/mod.rs`
+         keeps `mod extract;` private and re-exports only
+         `extract::extract_profile_layers` — but it is not absent from the
+         public surface: the publicly re-exported function returns it, so
+         downstream code can consume the result and its public fields through
+         type inference. The qualification is about nameability, not access,
+         and it does not establish a need for the proposed refactor.
       The D13 re-seat obligation is already recorded in ADR-012 and the
-      helper is written against the minimal ordered `(path, value)` view, so
-      the eventual re-seat is tracked rather than lost. No new issue raised:
-      filing one against a documented, tracked obligation would duplicate
-      ADR-012.
+      helper is written against the ordered layer vector, so the eventual
+      re-seat is tracked rather than lost. No new issue raised: filing one
+      against a documented, tracked obligation would duplicate ADR-012.
       Both dispositions (CodeScene and Domain Architecture) were posted to
       their threads and to the PR as reconciliation comments.
 - [x] (2026-10-13) Reconciled the pre-merge walkthrough (comment 5861267343,
@@ -1147,6 +1151,23 @@ Progress entries from milestone 1 onward must carry timestamps.
       `6887a9702779b1027e9ff64883bbfa2857583592`. Fourteen disposition
       replies posted as pool account `pandalump` (not `leynos`), the
       configured route for manual comments.
+- [x] (2026-10-13) Re-gated and published `8ff4db98` (six gates, exit 0,
+      1814 Rust tests plus 115 pytest, zero failures), then corrected the RFC
+      0002 reconciliation the same review round required. The first pass
+      described the generated loader as resolving through
+      `ConfigDiscovery::compose_layers` without qualification, but
+      `build_discovery_based_loading` (`load_impl/mod.rs:192`) branches on
+      `policy_enabled`, and the policy branch already feeds extraction from
+      `FileLayerOutcome`: `load_impl_profiles.rs:205` destructures
+      `(file_layers, discovery_failed)` from whichever branch was emitted.
+      The two paths differ only in how the ordered vector is produced, and
+      both hand `extract_profile_layers` the same shape. The ADR, the D13
+      record, and the risk bullet now state both paths, and the
+      `ExtractionOutcome` qualification was tightened to "not re-exported by
+      name" rather than absent from the public surface. `profile/extract.rs`'s
+      module doc also still said "if that lands" for a landed RFC and named a
+      `(path, value)` view the helper does not use; both corrected. No
+      behaviour changed: docs and one module doc only.
 
 ## Surprises & discoveries
 
@@ -2010,14 +2031,14 @@ review clean.
 
 Red: unit tests (rstest, googletest matchers, pretty_assertions) in the
 pre-planned `profile/tests_*.rs` modules for: extraction of `[profile.<name>]`
-tables from an ordered `(path, value)` file chain (per-file layers, chain
-order, D2/D12); base-layer stripping (profile keys never leak into unselected
-loads, and stripping runs for opted-in structs whether or not a profile is
-selected); selection resolution (flag beats environment; empty selector means
-unset, D3); name-grammar acceptance and rejection (property test over the
-grammar); reserved-name rules (`[profile.default]` errors; selecting `default`
-reports no selection; `inherits` inside a body errors; `cmds` inside a body
-errors, D11); unknown-profile errors carrying structured `selected`/`source`/
+tables from an ordered file-layer chain (per-file layers, chain order, D2/D12);
+base-layer stripping (profile keys never leak into unselected loads, and
+stripping runs for opted-in structs whether or not a profile is selected);
+selection resolution (flag beats environment; empty selector means unset, D3);
+name-grammar acceptance and rejection (property test over the grammar);
+reserved-name rules (`[profile.default]` errors; selecting `default` reports no
+selection; `inherits` inside a body errors; `cmds` inside a body errors, D11);
+unknown-profile errors carrying structured `selected`, `source`, and
 `available` payloads with sorted, capped listings; the no-files-discovered
 error text; parse-error precedence over unknown-profile; and unknown keys
 inside a profile table behaving exactly as base-config unknown keys (pinned,
@@ -2029,7 +2050,7 @@ Green: implement in a new module `ortho_config/src/profile/` (split per the
 400-line rule): `ProfileName` (validated newtype), selection resolution
 (`SelectedProfile::resolve(...)` — no separate helper type, keeping the
 vocabulary to three names), `SelectedProfile`/`ProfileSource` (D14, serde-
-free), the extraction helper over ordered `(path, value)` pairs (D13), and new
+free), the extraction helper over the ordered layer vector (D13), and new
 `#[non_exhaustive]`-friendly variants on `OrthoError`:
 `UnknownProfile { selected, selection_source, available }`,
 `InvalidProfileName { name }`, `ReservedProfileName { name }`, and

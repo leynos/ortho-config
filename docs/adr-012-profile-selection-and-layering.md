@@ -247,8 +247,8 @@ as `FileLayerOutcome`. This decision implemented profile extraction against the
 then-current discovery output rather than sequencing behind an unaccepted RFC,
 and recorded a design obligation: `FileLayerOutcome` must expose the ordered
 file values profile extraction needs, and the extraction helper is written
-against a minimal internal interface (an ordered layer vector) so it can be
-re-seated without semantic change.
+against the ordered layer vector so the two can be joined without a change to
+extraction's own semantics.
 
 That precondition is now satisfied. `FileLayerOutcome` carries the ordered
 `MergeLayer` chain and exposes it through `into_layers_and_errors`, and its
@@ -258,16 +258,21 @@ Together those are exactly what `extract_profile_layers` needs: the layer
 vector itself, and the distinction between a chain that was searched and found
 wanting and one that never loaded.
 
-The re-seat itself has not been performed, and this decision does not require
-it. The generated loader still resolves through
-`ConfigDiscovery::compose_layers`, yielding `DiscoveryLayersOutcome`, and
-`extract_profile_layers` still consumes the layer vector directly. Routing
-extraction through `ConfigFilePolicy::resolve_layers` would substitute the
-policy engine's explicit-selector and automatic-scope resolution for the
-ordinary candidate walk, which is a change of resolution semantics rather than
-the mechanical re-seat the obligation anticipated. The obligation is therefore
-discharged at the type level; the re-seat stays a bounded option only if the
-policy engine later becomes the single discovery path.
+The re-seat question resolves differently on the two generated discovery paths,
+and the obligation is met on the path it spoke to. A policy-configured struct
+already resolves through `ConfigFilePolicy::resolve_layers`, and its
+`FileLayerOutcome` feeds extraction exactly as the obligation anticipated: the
+generated code reads `layers_are_empty` and the classified error buckets to
+compute its discovery-failure flag, then takes the chain from
+`into_layers_and_errors`. A struct without policy attributes still resolves
+through `ConfigDiscovery::compose_layers`, yielding `DiscoveryLayersOutcome`,
+and that is deliberate rather than pending: routing the ordinary candidate walk
+through the policy engine would substitute explicit-selector and
+automatic-scope resolution for it, a change of resolution semantics rather than
+the mechanical re-seat the obligation anticipated. Both paths emit the same
+ordered layer vector, so `extract_profile_layers` serves both unchanged. The
+obligation is therefore discharged in the generated loader, and no follow-up
+re-seat is required.
 
 ### Post-load selection surfacing
 
@@ -405,9 +410,9 @@ unknown keys. Downstream rollback notes should say both things.
   goldens, and the `hello_world` example surfaces); the execution plan lands
   them atomically.
 - RFC 0002 has landed without retyping the seam: `FileLayerOutcome` carries the
-  ordered `MergeLayer` chain, so the extraction helper needs no change. A later
-  change to that shape would still require a re-seat; the minimal-interface
-  design bounds that work.
+  ordered `MergeLayer` chain, so the extraction helper needs no change on
+  either discovery path. A later change to that shape would still require a
+  re-seat; the vector-based helper bounds that work.
 
 ## Consequences
 

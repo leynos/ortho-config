@@ -1,8 +1,10 @@
 //! Profile-table extraction from the resolved file chain.
 //!
-//! Extraction is written against the minimal ordered `(path, value)` view of
-//! each file layer (decision D13), so it can be re-seated unchanged under RFC
-//! 0002's `FileLayerOutcome` if that lands.
+//! Extraction consumes the ordered file-layer vector (decision D13). RFC 0002
+//! has since landed as Implemented, and its `FileLayerOutcome` already yields
+//! that vector through `into_layers_and_errors`, so a policy-configured struct
+//! feeds extraction from the policy engine rather than from the ordinary
+//! candidate walk.
 
 use std::borrow::Cow;
 use std::sync::Arc;
