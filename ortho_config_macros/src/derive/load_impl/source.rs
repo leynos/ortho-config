@@ -56,7 +56,7 @@ pub(crate) fn build_source_aware_compose_layers_impl(
     if args.profiles {
         // The profile compose body opens with `use` items, which only a block
         // can contain, so the tuple's composition half is projected via a
-        // braced block rather than a parenthesised expression.
+        // braced block rather than a parenthesized expression.
         quote! {{ #composition }.0 }
     } else {
         composition

@@ -20,7 +20,7 @@ where
     Ok(())
 }
 
-/// Consumes an unrecognised key-value or list without recording it.
+/// Consumes an unrecognized key-value or list without recording it.
 pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     if meta.input.peek(Token![=]) {
         meta.value()?.parse::<proc_macro2::TokenStream>()?;

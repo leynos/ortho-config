@@ -18,7 +18,7 @@ fn profile_layer_rules(composer_context: &ComposerContext, value: String) -> Res
     );
     ensure!(
         composer_context.profile_value.is_empty(),
-        "profile rule value already initialised"
+        "profile rule value already initialized"
     );
     composer_context.profile_value.set(value);
     Ok(())

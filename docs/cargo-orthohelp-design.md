@@ -1121,10 +1121,13 @@ installs the executable in a different location.
 
 ## 12. Versioning and compatibility
 
-- IR: `ir_version = "2.0"` (optional `profiles` metadata added; `1.2` added
-  optional `behaviour` metadata; `1.1` added Windows metadata). Additive
-  optional fields bump the minor version; future breaking schema changes bump
-  the major version.
+- IR: `ir_version = "2.0"`. Generated default identifiers now use mounted
+  command paths rather than dotted ones, so 2.0 is a major bump for consumers
+  keyed on the old identifier values; the optional `profiles` metadata rides
+  the same version. `1.2` added optional `behaviour` metadata and `1.1` added
+  Windows metadata, both additive minor bumps. Additive optional fields bump
+  the minor version; future breaking schema changes bump the major version.
+  All three versions are unreleased: `v0.9.1` still carries `"1.1"`.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 

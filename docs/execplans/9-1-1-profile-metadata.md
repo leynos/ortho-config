@@ -1111,14 +1111,15 @@ Progress entries from milestone 1 onward must carry timestamps.
         `docs/developers-guide.md:621-622`, naming `ProfileLoadOutcome<Config>`
         on the CLI struct and `ProfileLoadOutcome<Self>` on the config
         delegate. Landed in `9220689d`. Correction found and fixed as a
-        by-catch: the same stale phrasing survived in this plan at line 2371,
-        describing a three-argument function as "two-argument". It arrived
-        with `2ccbd9d3` and the guide's half was corrected while the plan's
-        was missed, so this round corrects it. That the row's own line
-        reference (`developers-guide.md:504-506`) and this plan both numbered
-        the parameters wrongly is worth noting as a pattern: prose that
-        restates a signature drifts from it, and the fix is to state the
-        return-type split explicitly, which the guide now does.
+        by-catch: the same stale phrasing survived in this plan's "Interfaces
+        and dependencies" section, describing a three-argument function as
+        "two-argument". It arrived with `2ccbd9d3` and the guide's half was
+        corrected while the plan's was missed, so this round corrects it. That
+        the row's own line reference (`developers-guide.md:504-506`) and this
+        plan both numbered the parameters wrongly is worth noting as a
+        pattern: prose that restates a signature drifts from it, and the fix
+        is to state the return-type split explicitly, which the guide now
+        does.
       - *Testing (Compile-Time / Ui)* — `Warning`. The fixture and its
         snapshot both exist:
         `ortho_config/tests/ui/profile_serialized_key_collision.rs` and
@@ -1133,9 +1134,10 @@ Progress entries from milestone 1 onward must carry timestamps.
       reasoning is visible on the surface that raised it — against CodeRabbit's
       own preference for a focused follow-up over a reflexive full review.
 - [x] (2026-10-13) Corrected the stale "two-argument primitive" phrasing in
-      this plan (line 2371), a by-catch of the Developer Documentation
-      reconciliation. The function takes three arguments; the guide's half of
-      the same inaccuracy had already been repaired, and this closes the plan's.
+      this plan's "Interfaces and dependencies" section, a by-catch of the
+      Developer Documentation reconciliation. The function takes three
+      arguments; the guide's half of the same inaccuracy had already been
+      repaired, and this closes the plan's.
 - [x] (2026-10-13) Re-gated and published `6887a970`. Six gates ran
       sequentially against a frozen HEAD with a clean tree after the commit:
       `check-fmt`, `lint`, `typecheck`, `test`, `markdownlint`, `nixie` —

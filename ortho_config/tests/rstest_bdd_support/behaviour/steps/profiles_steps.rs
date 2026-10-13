@@ -126,7 +126,7 @@ fn struct_default(
     ensure!(!key.is_empty(), "struct default key must not be empty");
     ensure!(
         profiles_context.struct_default.is_empty(),
-        "struct default already initialised"
+        "struct default already initialized"
     );
     ensure!(
         value.as_str() == "3",
@@ -315,7 +315,7 @@ fn profile_load(
 ///
 /// An empty value marks a valueless flag, so only the flag itself is pushed.
 /// The malformed-flag scenario needs clap to see `--bogus` with nothing after
-/// it, which is what makes the argument unrecognised.
+/// it, which is what makes the argument unrecognized.
 fn build_cli_args(flags: &[(String, String)]) -> Vec<String> {
     let mut args = vec!["profile-cli".to_owned()];
     for (flag, value) in flags {

@@ -104,9 +104,11 @@ All notable changes to this project will be documented in this file.
 ### Breaking
 
 - Retype `AgentContext.profiles` from `SupportDeclaration` to
-  `ProfilesDeclaration` (decision D7 of execplan 9-1-1). Consumers that
-  construct or match `AgentContext` by struct literal must use the
-  `ProfilesDeclaration::unsupported()`/`supported()` constructors. The wire
+  `ProfilesDeclaration` (decision D7 of execplan 9-1-1). A struct literal or
+  pattern that named the old type no longer type-checks, so consumers must
+  update the `profiles` value itself — for example by constructing it with
+  `ProfilesDeclaration::unsupported()` or `ProfilesDeclaration::supported()`.
+  Those constructors protect *future* field additions, not the retype. The wire
   JSON for non-opted-in applications is unchanged: the unsupported case still
   serializes as `{ "supported": false }`.
 

@@ -253,7 +253,7 @@ struct LoadImplConfig<'a> {
     /// `(arg_id, serialized_key)` for every bool config field.
     ///
     /// Both halves are needed: the arg ID is what `ArgMatches::value_source`
-    /// is keyed by, while the serialized key is what the sanitised CLI JSON
+    /// is keyed by, while the serialized key is what the sanitized CLI JSON
     /// object is keyed by. A field with `#[serde(rename)]` differs between the
     /// two, and removing the wrong key would leave the default in place.
     cli_bool_fields: Vec<(String, String)>,

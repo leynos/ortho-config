@@ -74,7 +74,7 @@ pub(crate) struct LoadImplArgs<'a> {
     /// `(arg_id, serialized_key)` for every bool config field.
     ///
     /// A bool field is emitted with `clap::ArgAction::SetTrue`, so clap supplies
-    /// `false` for an absent flag and the value survives sanitisation — unlike
+    /// `false` for an absent flag and the value survives sanitization — unlike
     /// every other type, whose absent form is a `null` that is stripped. The
     /// profile layer sits *below* the CLI layer, so an unpruned `false` would
     /// silently override a profile that sets the field true. Both halves of the

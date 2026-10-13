@@ -1483,8 +1483,14 @@ downstream `context --json` commands embed the selection as
 `{"name": "<name>", "source": "flag"}` or
 `{"name": "<name>", "source": "environment"}`.
 
-Compatibility caveats: retyping `profiles` from the old
-`{ "supported": false }` shape to `ProfilesDeclaration` is a Rust-level change
-for struct-literal construction (mitigated by the `unsupported()`/`supported()`
-constructors), but the wire JSON for non-opted-in applications is unchanged.
-Consumers should ignore unknown fields.
+Compatibility caveats: `profiles` was previously a `SupportDeclaration` (the
+`{ "supported": false }` shape). It is now a `ProfilesDeclaration`, and that
+retype is a source-level change: a struct literal that fed a
+`SupportDeclaration` into `AgentContext.profiles` no longer type-checks, and
+the callers must update the `profiles` value itself — constructing a
+`ProfilesDeclaration` in its place, or using the
+`ProfilesDeclaration::unsupported()`/`supported()` constructors for new code.
+Those constructors keep *future* field additions from breaking a caller; they
+cannot re-type a value that already exists in a struct literal. The wire JSON
+for non-opted-in applications is unchanged. Consumers should ignore unknown
+fields.

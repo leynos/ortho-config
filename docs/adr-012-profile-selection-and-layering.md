@@ -54,7 +54,8 @@ profiles with silent fallback on unknown names), config-rs, mise
   keep emitting `profiles: { "supported": false }` byte-for-byte.
 - Keep documentation IR and agent-context changes additive. The agent-context
   wire schema holds at version `"1"`; the documentation IR gains an optional
-  field and takes the minor version bump its policy requires (see
+  field that rides the unreleased `"2.0"` version `main` had already taken for
+  its changed identifier values, rather than prompting a bump of its own (see
   "Agent-context exposure and the documentation IR").
 - Keep OrthoConfig generic: no application-specific literals (profile names,
   app names, variable names) may enter the library.
@@ -324,18 +325,20 @@ The bridge learns about profile support through the documentation IR:
 mirrors `ProfileSelectionContract`. The derive emits it for opted-in structs and
 `bridge_ir_to_agent_context` maps it into `ProfilesDeclaration`.
 
-The field is additive with `#[serde(default)]`, and when this decision was
-drafted the IR compatibility policy required only *breaking* changes to bump
-`ORTHO_DOCS_IR_VERSION`, so the version was left unchanged. That policy was
-tightened on `main` while this branch was in review: §12 of the
-`cargo-orthohelp` design now states that additive optional fields bump the
-minor version, and roadmap 7.2.1 applied that rule to its own `behaviour` block
-(`"1.1"` → `"1.2"`). The `profiles` field is governed by the new rule, so this
-change bumps the version a second time, `"1.2"` → `"2.0"`, and refreshes the
-design document's version references. The bump is required rather than cosmetic:
-`cargo-orthohelp`'s cache key hashes `ir_version`, so labelling two distinct
-IR shapes with one version would let a stale cached artefact be reused across
-an incompatible schema.
+The field is additive with `#[serde(default)]`, so at the time this decision was
+drafted a minor bump was enough and the branch carried the version `"1.2"` →
+`"1.3"`. `main` meanwhile took the constant further, to `"2.0"`, for a reason of
+its own: roadmap 11.1.3 changed the generated identifier *values* from dotted
+(`{app}.fields.{field}.help`) to hyphenated
+(`{mounted-path}-args-{field}-help`), so `"2.0"` records a meaning change for
+any consumer keyed on the old shapes. That bump subsumes this branch's, and
+both remain **unreleased** — `v0.9.1` still carries `"1.1"` — so `"2.0"` is not
+a version that ever labelled a `behaviour`-only IR. The `profiles` field
+therefore ships inside `"2.0"` rather than moving it. The distinction matters
+because `cargo-orthohelp`'s cache key hashes `ir_version` (`src/cache.rs`): a
+version assigned for the identifier change must not be re-attributed to an
+additive field, and any *future* identifier change needs its own bump, not this
+one's.
 
 ### Flag-equals-default resolution
 

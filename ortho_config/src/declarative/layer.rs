@@ -13,7 +13,7 @@ pub enum MergeProvenance {
     Defaults,
     /// Values loaded from configuration files.
     File,
-    /// Values overlayed by a selected profile (roadmap 9.1.1).
+    /// Values overlaid by a selected profile (roadmap 9.1.1).
     Profile,
     /// Values collected from environment variables.
     Environment,
