@@ -342,17 +342,25 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   `extends` pre-merges values before layering, escalate per tolerance 6 before
   the ADR is finalized.
 - D13 — Relationship to RFC 0002 (file-layer resolution policy, status
-  Proposed): profile extraction is specified as a consumer of "the ordered
+  Implemented): profile extraction is specified as a consumer of "the ordered
   post-`extends` file values", which is exactly the seam RFC 0002 names
   `FileLayerOutcome`. This plan implements extraction against today's discovery
-  output; ADR-011 records as a design obligation that if RFC 0002 lands,
+  output; ADR-012 records as a design obligation that if RFC 0002 lands,
   `FileLayerOutcome` must expose the ordered file values profile extraction
   needs, and the extraction helper is written against a minimal internal
-  interface (ordered `(path, value)` pairs) so it can be re-seated without
-  semantic change. Rationale: sequencing 9.1.1 behind an unaccepted RFC is
-  unacceptable schedule risk, but ignoring the collision would force the RFC to
-  work around shipped code. Rejected: building profiles as the first RFC 0002
-  policy now (blocked on RFC acceptance); ignoring the overlap (rework trap).
+  interface (an ordered layer vector) so it can be re-seated without semantic
+  change. Rationale: sequencing 9.1.1 behind an unaccepted RFC was unacceptable
+  schedule risk, but ignoring the collision would force the RFC to work around
+  shipped code. Rejected: building profiles as the first RFC 0002 policy now
+  (blocked on RFC acceptance); ignoring the overlap (rework trap).
+  **Resolved:** RFC 0002 has since landed as Implemented, and
+  `FileLayerOutcome` does expose the ordered `MergeLayer` chain, so the
+  obligation is discharged at the type level. The re-seat is not required: the
+  generated loader still resolves through `ConfigDiscovery::compose_layers`
+  rather than the policy engine, and routing extraction through
+  `ConfigFilePolicy::resolve_layers` would change resolution semantics rather
+  than perform a mechanical re-seat. ADR-012's "Relationship with RFC 0002"
+  section records the reconciliation.
 - D14 — Post-load selection surfacing: opted-in structs gain a generated
   associated function
   `load_with_profile_from_iter(iter) -> OrthoResult<ProfileLoadOutcome<Self>>`
@@ -419,8 +427,8 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   pins base-file profile tables being overridden by the extending file's.
 - Risk: RFC 0002 later restructures file-layer assembly underneath profile
   extraction. Severity: medium. Likelihood: medium. Mitigation: D13 —
-  extraction written against a minimal ordered `(path, value)` interface;
-  ADR-011 records the `FileLayerOutcome` obligation.
+  extraction written against a minimal ordered layer interface; ADR-012 records
+  the `FileLayerOutcome` obligation, now discharged.
 - Risk: fixture sprawl — one schema field touches the wire-contract JSON,
   contract-support helpers, round-trip property strategy, the agent-context
   insta snapshot, three `cargo-orthohelp` goldens, and the three
@@ -447,11 +455,12 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       approved by the maintainer; implementation started.
 - [ ] Optional before approval: run the scaling and operational-cost review
       lens that did not complete.
-- [x] (2026-08-09) Milestone 1: ADR-011 and design documentation. ADR-011
-      drafted and accepted; `design.md` precedence statements (§3, §4.3,
-      §4.10, §4.17), `agent-native-cli-design.md` §6.7/§8.1/§8.2,
-      `contents.md`, and `roadmap.md` 9.1.1 updated; the D12 `extends` spike
-      confirmed; docs gates and CodeRabbit review clean.
+- [x] (2026-08-09) Milestone 1: ADR-012 and design documentation. The ADR
+      (then numbered 011) drafted and accepted; `design.md` precedence
+      statements (§3, §4.3, §4.10, §4.17),
+      `agent-native-cli-design.md` §6.7/§8.1/§8.2, `contents.md`, and
+      `roadmap.md` 9.1.1 updated; the D12 `extends` spike confirmed; docs gates
+      and CodeRabbit review clean.
       - [x] (2026-08-07) D12 spike (read-only): confirmed. See Surprises &
             discoveries.
 - [x] (2026-08-09) Milestone 2: profile merge layer in the composer.
@@ -527,7 +536,8 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       `scenario_state_profiles.rs` split.
 - [x] (2026-09-24) Review round on PR #418. Six findings, three failed checks,
       and two warnings addressed:
-      1. `docs/contents.md` — ADR-011 list item rewrapped to 80 columns.
+      1. `docs/contents.md` — the profile ADR (then 011, now 012) list item
+         rewrapped to 80 columns.
       2. `cli_tokens.rs` — the effective config long is registered in
          `used_longs` *before* `build_profile_flag_field`, so a config long of
          `profile` collides at compile time instead of producing two `--profile`
@@ -891,7 +901,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       because it never reports an unknown profile. The only scenario that
       requires a parse error and an unknown-profile error to coexist is the
       malformed *flag* case, which has a valid config file and is unaffected,
-      so ADR-011's "parse errors take precedence" rule still holds. Regression
+      so ADR-012's "parse errors take precedence" rule still holds. Regression
       tests `discovery_failure_suppresses_the_unknown_profile_error` and
       `no_discovery_failure_still_reports_the_unknown_profile` pin both sides.
 - [x] (2026-09-28) Rebased onto `origin/main` (`0c498068`) as instructed, then
@@ -1229,7 +1239,7 @@ Progress entries from milestone 1 onward must carry timestamps.
   (`ortho_config/src/discovery/load.rs`) maps each `(value, path)` entry to its
   own `MergeLayer::file` with the source path attached. Impact: D12's rule is
   implementable directly against `DiscoveryLayersOutcome.value`; no escalation
-  per tolerance 6 was needed, and ADR-011 records the confirmed chain order.
+  per tolerance 6 was needed, and ADR-012 records the confirmed chain order.
 - Observation (2026-08-09, milestone 1): the `markdownlint` gate embeds the
       `typos` spelling gate, whose first run over the milestone-1 diff flagged
       `recognize` in this plan (Oxford spelling requires `-ize`). Evidence:
@@ -1700,13 +1710,13 @@ Progress entries from milestone 1 onward must carry timestamps.
   resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
   was needed. Status moved to APPROVED; milestone work proceeds per the plan.
   Date/Author: 2026-08-07, implementing agent.
-- Decision: milestone 1 (ADR-011 and design documentation) completed and the
-  ADR flipped to Accepted. ADR-011 was verified against the approved plan —
-  decisions D1–D8 and D11–D15, the five-tier merge order, the reserved selector
-  projections, the migration and rollback stories — and the docs gates
-  (`make markdownlint`, `make nixie`) plus a CodeRabbit review pass clean.
-  Rationale: constraint 6's documentation-first requirement is now satisfied;
-  behavioural work (milestone 2) may begin. Date/Author: 2026-08-09,
+- Decision: milestone 1 (ADR-012 and design documentation) completed and the
+  ADR (then numbered 011) flipped to Accepted. The ADR was verified against the
+  approved plan — decisions D1–D8 and D11–D15, the five-tier merge order, the
+  reserved selector projections, the migration and rollback stories — and the
+  docs gates (`make markdownlint`, `make nixie`) plus a CodeRabbit review pass
+  clean. Rationale: constraint 6's documentation-first requirement is now
+  satisfied; behavioural work (milestone 2) may begin. Date/Author: 2026-08-09,
   implementing agent.
 - Decision: the milestone-2 refactor finalizes the `MergeLayer` value-access
   mechanism as a borrowing `value()` accessor rather than the `into_parts()`/
@@ -1910,7 +1920,8 @@ The workspace (`/` is the repository root) contains:
   including the null-versus-omitted asymmetry paragraph that milestone 1
   amends), `docs/design.md` §3, §4.10 and §4.17 (current four-tier precedence
   statements), `docs/roadmap.md` §9.1, ADR-003 (schema ownership), ADR-007
-  (`context --json` naming), RFC 0002 (file-layer resolution policy, Proposed).
+  (`context --json` naming), RFC 0002 (file-layer resolution policy,
+  Implemented).
 
 Environment-variable-dependent tests must use the guards in `test_helpers`
 (`ortho_config_test_helpers`) — raw environment mutation in tests is forbidden
@@ -2217,7 +2228,7 @@ Every milestone is an ordinary commit on `9-1-1-profile-metadata`; recovery is
 `git revert` or resetting to the previous milestone commit. Snapshot updates go
 through `cargo insta review` so accidental acceptance is visible in the diff.
 No step mutates state outside the worktree except `/tmp` logs. The downstream
-rollback story (removing the opt-in attribute) is recorded in ADR-011
+rollback story (removing the opt-in attribute) is recorded in ADR-012
 (milestone 1).
 
 ## Artefacts and notes
@@ -2461,7 +2472,7 @@ Skills to load during implementation: `leta` (navigation/refactoring),
 `rust-router` then `rust-types-and-apis` (newtype and schema shapes),
 `rust-errors` (new error variants), `rust-unit-testing` (rstest/googletest/
 insta discipline), `proptest` (precedence invariant), `arch-crate-design`
-(boundary checks), `arch-decision-records` (ADR-011),
+(boundary checks), `arch-decision-records` (ADR-012),
 `addressing-whitaker-findings` (if the lint gate reports findings),
 `commit-message`, `comenq-coderabbit` (review loop), and `rebase` if `main`
 moves.

@@ -241,14 +241,33 @@ independently discovered files.
 
 ### Relationship with RFC 0002
 
-RFC 0002 (file-layer resolution policy, status Proposed) names the seam this
+RFC 0002 (file-layer resolution policy, status Implemented) names the seam this
 feature consumes: the ordered post-`extends` file values, which RFC 0002 models
-as `FileLayerOutcome`. This decision implements profile extraction against
-today's discovery output rather than sequencing behind an unaccepted RFC, but
-records a design obligation: if RFC 0002 lands, `FileLayerOutcome` must expose
-the ordered file values profile extraction needs, and the extraction helper is
-written against a minimal internal interface (ordered `(path, value)` pairs) so
-it can be re-seated without semantic change.
+as `FileLayerOutcome`. This decision implemented profile extraction against the
+then-current discovery output rather than sequencing behind an unaccepted RFC,
+and recorded a design obligation: `FileLayerOutcome` must expose the ordered
+file values profile extraction needs, and the extraction helper is written
+against a minimal internal interface (an ordered layer vector) so it can be
+re-seated without semantic change.
+
+That precondition is now satisfied. `FileLayerOutcome` carries the ordered
+`MergeLayer` chain and exposes it through `into_layers_and_errors`, and its
+`layers_are_empty` probe documents profile extraction as the reason the
+emptiness of the chain must be observable before the outcome is consumed.
+Together those are exactly what `extract_profile_layers` needs: the layer
+vector itself, and the distinction between a chain that was searched and found
+wanting and one that never loaded.
+
+The re-seat itself has not been performed, and this decision does not require
+it. The generated loader still resolves through
+`ConfigDiscovery::compose_layers`, yielding `DiscoveryLayersOutcome`, and
+`extract_profile_layers` still consumes the layer vector directly. Routing
+extraction through `ConfigFilePolicy::resolve_layers` would substitute the
+policy engine's explicit-selector and automatic-scope resolution for the
+ordinary candidate walk, which is a change of resolution semantics rather than
+the mechanical re-seat the obligation anticipated. The obligation is therefore
+discharged at the type level; the re-seat stays a bounded option only if the
+policy engine later becomes the single discovery path.
 
 ### Post-load selection surfacing
 
@@ -385,8 +404,10 @@ unknown keys. Downstream rollback notes should say both things.
   support helpers, round-trip strategy, insta snapshots, `cargo-orthohelp`
   goldens, and the `hello_world` example surfaces); the execution plan lands
   them atomically.
-- If RFC 0002 lands with a different `FileLayerOutcome` shape, the extraction
-  helper must be re-seated; the minimal-interface design bounds that work.
+- RFC 0002 has landed without retyping the seam: `FileLayerOutcome` carries the
+  ordered `MergeLayer` chain, so the extraction helper needs no change. A later
+  change to that shape would still require a re-seat; the minimal-interface
+  design bounds that work.
 
 ## Consequences
 

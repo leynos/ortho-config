@@ -617,10 +617,11 @@ methods take their environment from the caller.
 The process-backed pair, generated on both the CLI struct and the config struct:
 
 - `load_with_profile_from_iter(iter)` composes the five tiers from an argument
-  iterator plus the live process environment. The outcome wraps the struct that
-  owns the method: `ProfileLoadOutcome<Config>` on the CLI struct, which
-  performs the load, and `ProfileLoadOutcome<Self>` on the config struct, whose
-  delegate returns whatever the CLI loader produced; and
+  iterator plus the live process environment. Both surfaces return the
+  configuration type rather than the type that owns the method:
+  `ProfileLoadOutcome<Config>` on the CLI struct, which performs the load, and
+  `ProfileLoadOutcome<Self>` on the config struct, whose delegate returns
+  whatever the CLI loader produced; and
 - `load_with_profile()` is its convenience form over `std::env::args_os()`.
 
 The injected pair, which mirror the source-aware loaders described under the

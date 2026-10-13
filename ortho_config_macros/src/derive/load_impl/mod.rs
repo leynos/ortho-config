@@ -148,7 +148,7 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
 /// failed and stopped the fallback walk, or every candidate was tried and none
 /// produced a layer. Suppressing the unknown-profile error in any other case
 /// would hide a genuine selection error behind an unrelated parse complaint
-/// (ADR-011).
+/// (ADR-012).
 ///
 /// The test is "no layer loaded *and* the walk recorded a failure", not "no
 /// layer loaded". A chain that is empty because no candidate *existed* was
