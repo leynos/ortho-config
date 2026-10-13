@@ -1490,7 +1490,7 @@ retype is a source-level change: a struct literal that fed a
 the callers must update the `profiles` value itself — constructing a
 `ProfilesDeclaration` in its place, or using the
 `ProfilesDeclaration::unsupported()`/`supported()` constructors for new code.
-Those constructors keep *future* field additions from breaking a caller; they
+Those constructors keep _future_ field additions from breaking a caller; they
 cannot re-type a value that already exists in a struct literal. The wire JSON
 for non-opted-in applications is unchanged. Consumers should ignore unknown
 fields.

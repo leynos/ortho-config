@@ -325,10 +325,10 @@ The bridge learns about profile support through the documentation IR:
 mirrors `ProfileSelectionContract`. The derive emits it for opted-in structs and
 `bridge_ir_to_agent_context` maps it into `ProfilesDeclaration`.
 
-The field is additive with `#[serde(default)]`, so at the time this decision was
-drafted a minor bump was enough and the branch carried the version `"1.2"` →
-`"1.3"`. `main` meanwhile took the constant further, to `"2.0"`, for a reason of
-its own: roadmap 11.1.3 changed the generated identifier *values* from dotted
+The field is additive with `#[serde(default)]`, so at the time this decision
+was drafted a minor bump was enough and the branch carried the version `"1.2"` →
+`"1.3"`. `main` meanwhile took the constant further, to `"2.0"`, for a reason
+of its own: roadmap 11.1.3 changed the generated identifier *values* from dotted
 (`{app}.fields.{field}.help`) to hyphenated
 (`{mounted-path}-args-{field}-help`), so `"2.0"` records a meaning change for
 any consumer keyed on the old shapes. That bump subsumes this branch's, and

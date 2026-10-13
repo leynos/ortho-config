@@ -1126,8 +1126,8 @@ installs the executable in a different location.
   keyed on the old identifier values; the optional `profiles` metadata rides
   the same version. `1.2` added optional `behaviour` metadata and `1.1` added
   Windows metadata, both additive minor bumps. Additive optional fields bump
-  the minor version; future breaking schema changes bump the major version.
-  All three versions are unreleased: `v0.9.1` still carries `"1.1"`.
+  the minor version; future breaking schema changes bump the major version. All
+  three versions are unreleased: `v0.9.1` still carries `"1.1"`.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 
