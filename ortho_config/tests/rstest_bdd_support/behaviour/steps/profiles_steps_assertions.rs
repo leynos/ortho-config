@@ -2,8 +2,14 @@
 //! (`profiles.feature`).
 //!
 //! The `then` steps read the structured result and error slots recorded by
-//! [`profiles_steps`]' load steps, so one scenario can assert both the
-//! selection and the unknown-profile error without consuming the result.
+//! [`profiles_steps`]' load steps.
+//!
+//! Most of them consume their slot, which is correct for a value a scenario
+//! reads once and which keeps an accidental double-read visible. The merged
+//! value step is the exception: it reads by reference because
+//! `profiles.feature` asserts two merged values against the one load it
+//! performed, so consuming the slot would leave the second assertion reporting
+//! an unavailable result rather than checking the value it named.
 
 use crate::rstest_bdd_support::scenario_state::ProfilesContext;
 use anyhow::{Result, anyhow, ensure};
@@ -13,32 +19,31 @@ use rstest_bdd_macros::then;
 use super::value_parsing::normalize_scalar;
 
 /// Asserts the merged value of a key.
+///
+/// Reads the stored outcome by reference rather than taking it. A scenario may
+/// assert several merged values against the one load it performed, so
+/// consuming the slot would leave every assertion after the first reporting an
+/// unavailable result instead of checking the value it named.
 #[then("the merged value of {key} is {value}")]
 fn merged_value_is(profiles_context: &ProfilesContext, key: String, value: String) -> Result<()> {
-    let result = profiles_context
-        .result
-        .take()
-        .ok_or_else(|| anyhow!("profile load result unavailable"))?;
-    let outcome = result.map_err(anyhow::Error::from)?;
-    let config = outcome.config();
     let expected = normalize_scalar(&value);
-    match normalize_scalar(&key).as_str() {
-        "retries" => ensure!(
-            config.retries.to_string() == expected,
-            "unexpected retries {}; expected {expected}",
-            config.retries
-        ),
-        "verbose" => ensure!(
-            config.verbose.to_string() == expected,
-            "unexpected verbose {}; expected {expected}",
-            config.verbose
-        ),
-        other => {
-            return Err(anyhow!(
-                "unsupported key {other:?} in merged-value assertion"
-            ));
-        }
-    }
+    let actual = profiles_context
+        .result
+        .with_ref(|result| {
+            let outcome = result.as_ref().map_err(|err| anyhow!(err.to_string()))?;
+            match normalize_scalar(&key).as_str() {
+                "retries" => Ok(outcome.config().retries.to_string()),
+                "verbose" => Ok(outcome.config().verbose.to_string()),
+                other => Err(anyhow!(
+                    "unsupported key {other:?} in merged-value assertion"
+                )),
+            }
+        })
+        .ok_or_else(|| anyhow!("profile load result unavailable"))??;
+    ensure!(
+        actual == expected,
+        "unexpected {key} {actual}; expected {expected}"
+    );
     Ok(())
 }
 
