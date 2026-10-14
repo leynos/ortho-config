@@ -137,6 +137,8 @@
   doctests.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md):
   structure shared fixtures and parameterized Rust tests.
+- [Scripting standards](scripting-standards.md): write project scripts with
+  Cyclopts, cuprum, and `pathlib`.
 - [Whitaker user's guide](whitaker-users-guide.md):
   usage of the Whitaker lint suite
 
