@@ -30,7 +30,7 @@ tracing = "0.1"
 anyhow = "1"
 assert_cmd = "2.1"
 insta = { version = "1.41", features = ["filters"] }
-rstest = "0.26"
+rstest = "0.27"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
 shlex = "2.0.1"
