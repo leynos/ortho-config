@@ -173,6 +173,10 @@
 
 ## Execution plans
 
+- [Ship the en-US clap error matrix](execplans/11-2-1-ship-en-us-translations-for-clap-stable-error-matrix.md):
+  approval-gated plan for roadmap task 11.2.1, exhaustive translation coverage,
+  and the mechanical clap variant-count gate.
+
 - [Import Kani and Verus tooling](execplans/import-prover-tools.md): review
   the proposed pinned prover integration and its feature-adoption boundary.
 
