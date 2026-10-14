@@ -175,6 +175,9 @@
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
+  - [Dual-renderer metadata](execplans/7-2-2-dual-renderer-metadata.md):
+    review the approval-gated plan for renderer support, presentation policies,
+    and stable protocol fields in roadmap 7.2.2.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
