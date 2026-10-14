@@ -93,8 +93,9 @@ prerequisite.
 - [x] (2026-10-14) Drafted the contracts, verification scope, and milestones.
 - [x] (2026-10-14) Reviewed with six expert perspectives and reconciled
   runner prerequisites, tracing dependencies, and helper ownership sequencing.
-- [ ] Validate, commit, push, configure the requested upstream, and publish
-  the draft plan pull request (PR).
+- [x] (2026-10-14) Validated documentation gates, committed `527822d6`,
+  pushed, configured the requested upstream, and published draft pull request
+  (PR) [#590](https://github.com/leynos/ortho-config/pull/590).
 - [ ] Receive explicit implementation approval.
 - [ ] M1: publish and exercise both derive examples.
 - [ ] M2: reconcile documentation and mark 8.3.2 done after final gates.
@@ -126,10 +127,21 @@ commands, and any later script proposal must first resolve the missing guide.
 
 ## Outcomes & retrospective
 
-Planning is in progress. No implementation is approved or delivered. Record
-review findings, actual gate results, commit identifiers, and PR publication
-here as they become available. At completion of implementation, reconcile the
-upstream documents and acceptance evidence before marking the plan COMPLETE.
+The reviewed plan and index were published in draft PR
+[#590](https://github.com/leynos/ortho-config/pull/590), initially at commit
+`527822d6`. The requested branch tracks its matching `origin` branch. No
+implementation is approved or delivered; P0 remains an implementation
+validation prerequisite.
+
+Planning validation passed: `make fmt`, `make check-fmt`, `make markdownlint`
+including spelling, `make nixie`, and `git diff --check`. Logs are under `/tmp`
+with names `check-fmt-ortho-config-8-3-2-plan.out`,
+`markdownlint-ortho-config-8-3-2-plan.out`, and
+`nixie-ortho-config-8-3-2-plan.out`. Spelling regeneration produced no tracked
+change. Rust lint and runtime tests were not run for this plan-only change. The
+publication-record update receives the same documentation gates before its
+commit. At implementation completion, reconcile upstream documents and
+acceptance evidence before marking the plan COMPLETE.
 
 ## Context and orientation
 
@@ -331,18 +343,19 @@ spelling. Keep existing binary-level tracing and diagnostic obligations visible.
 For M2, record the template naming distinction in design §4.17 and add a
 cross-reference to the guide. The accepted ADR needs no new architectural
 decision; if the text implies the amendment covers all derive templates, add a
-narrow clarification rather than changing the accepted helper. Document the new
-fence IDs and test module ownership in the developer's guide. Reconcile links
-and record the implementation evidence. Mark roadmap 8.3.2 and all four
-acceptance bullets done using checked boxes only after R1–R4 pass. Do not mark
-8.3.3 or 8.3.4 done.
+narrow clarification rather than changing the accepted helper. Finalize the
+developer-guide cross-references to the fence IDs and ownership recorded in M1.
+Reconcile links and record the implementation evidence. Mark roadmap 8.3.2 and
+all four acceptance bullets done using checked boxes only after R1–R4 pass. Do
+not mark 8.3.3 or 8.3.4 done.
 
 ## Milestones and plateaus
 
 M1 delivers both complete documented templates and their exact-source tests.
 Its acceptance is V1–V4, the negative control, and all required gates. Review
 scope against R1–R4 and the accepted entry-point design before committing. The
-repository should remain usable with no runtime or dependency changes.
+repository should remain usable with no runtime API or workspace dependency
+changes; the generated example manifest includes its documented tracing crate.
 Remaining work is final design/developer cross-references and completion
 recording. Recovery is a focused revert of the milestone commit if needed; no
 compatibility layer or persisted-data migration is needed.
@@ -468,3 +481,7 @@ prerequisite. No expert review constitutes user approval to implement.
 Revision note (2026-10-14): the reviewed draft ties the four roadmap
 requirements to published-source tests, records the help-name distinction and
 runner prerequisite, and reserves all implementation for explicit approval.
+
+Revision note (2026-10-14): recorded passed documentation gates, initial plan
+commit, upstream tracking, and draft PR publication. Implementation approval
+and the P0 runner prerequisite remain outstanding.
