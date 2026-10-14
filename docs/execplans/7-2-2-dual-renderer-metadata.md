@@ -97,7 +97,8 @@ source failures. There is no time limit; queued compiler work is not a hang.
   renamed the local branch to `7-2-2-dual-renderer-metadata`.
 - [x] (2026-10-14) Wyvern reconnaissance verified prerequisite 7.2.1, schema
   ownership, extension points, source compatibility, and nearby test seams.
-- [x] (2026-10-14) Firecrawl checked NO_COLOR and assertion-library prior art.
+- [x] (2026-10-14) Firecrawl checked colour-suppression and assertion-library
+      prior art.
 - [x] (2026-10-14) Community-of-experts review covered all six perspectives;
   revised inheritance, width encoding, nested defaults, and gate fail-fast
   behaviour in response.
@@ -136,8 +137,9 @@ compatibility. The next release must acknowledge the new source requirement.
   tests and generated-input tests provide appropriate evidence. No Verus
   milestone is warranted for mere field transport; no speculative proof source
   will be added. See the proof selection decision in Verification plan.
-- 2026-10-14, research: NO_COLOR disables colour when non-empty, not other
-  styling. It cannot stand in for plain output, emoji, or accessibility policy.
+- 2026-10-14, research: the colour-suppression environment variable disables
+  colour when non-empty, not other styling. It cannot stand in for plain
+  output, emoji, or accessibility policy.
 
 ## Outcomes & retrospective
 
@@ -600,15 +602,15 @@ evidence in `pk_ks47tdca`, including exact paths and line references. The
 repository paths above remain the durable source of truth if the temporary pack
 expires.
 
-Firecrawl research on 2026-10-14 checked the [NO_COLOR convention][no-color]: a
-non-empty variable suppresses colour, not bold/underline/italics; explicit user
-configuration or command-line choices may override it. This plan records
-metadata only and does not implement that precedence. It also checked
-[googletest documentation][googletest]. Use fatal `assert_that!` assertions with
-`rstest`; non-fatal assertions need the framework's test context and should
-not be introduced casually.
+Firecrawl research on 2026-10-14 checked the
+[colour-suppression convention][no-colour]: a non-empty variable suppresses
+colour, not bold/underline/italics; explicit user configuration or command-line
+choices may override it. This plan records metadata only and does not implement
+that precedence. It also checked [googletest documentation][googletest]. Use
+fatal `assert_that!` assertions with `rstest`; non-fatal assertions need the
+framework's test context and should not be introduced casually.
 
-[no-color]: https://no-color.org/
+[no-colour]: https://no-color.org/
 [googletest]: https://docs.rs/googletest/latest/googletest/
 
 ## Revision note
@@ -628,3 +630,7 @@ clarifications constrain M1 and its E1/E2 cases without expanding scope.
 2026-10-14 validation revision: Recorded successful documentation gates and
 expert re-review. Final publication remains the next action; no implementation
 work is authorized by these checks.
+
+2026-10-14 spelling revision: Reworded the external colour-suppression
+reference and its link label after the post-turn spelling gate rejected the
+unquoted upstream spelling. The source URL and planned behaviour are unchanged.
