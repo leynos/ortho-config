@@ -1150,7 +1150,80 @@ standard output. With `--check-agent-native`, the compact policy report is the
 only JSON document written to standard output for any explicit generator
 format. Successful checks continue generation, including `agent-context.json`
 for `agent-context` and `all`; a deny-mode violation emits the report and fails
-before generator artefacts are created.
+before generator artefacts are created. The
+[Generate every format at once](#generate-every-format-at-once) section below
+documents the full output layout of that combined format.
+
+## Generate every format at once
+
+Passing `--format all` runs the IR, man-page, PowerShell, and agent-context
+generators in a single invocation. Use it when one release build has to supply
+human help and agent context together:
+
+<!-- tested-example: guide-orthohelp-format-all -->
+```console
+cargo orthohelp --format all --package hello_world --locale en-US
+```
+
+Every artefact is written below the output root, which defaults to
+`<target_dir>/orthohelp/out` and can be redirected with `--out-dir`. For a
+single locale the tree is:
+
+<!-- tested-example: guide-orthohelp-format-all-tree -->
+```plaintext
+<out>/
+├── agent-context.json
+├── ir/
+│   └── en-US.json
+├── man/
+│   └── man1/
+│       └── hello_world.1
+└── powershell/
+    └── HelloWorld/
+        ├── HelloWorld.psd1
+        ├── HelloWorld.psm1
+        └── en-US/
+            ├── HelloWorld-help.xml
+            └── about_HelloWorld.help.txt
+```
+
+The IR generator writes one `ir/<locale>.json` per resolved locale. Man pages
+live under `man/man<N>/<bin>.<N>`, where `N` is the section number: the
+`--man-section` option defaults to `1`, accepts `1` to `8`, and names both the
+directory and the file extension. The PowerShell generator writes its module
+under `powershell/<ModuleName>/`, with a culture subdirectory per resolved
+locale holding `<ModuleName>-help.xml` and `about_<ModuleName>.help.txt`.
+`ModuleName` comes from `--ps-module-name`, then the `windows.module_name` key
+in package metadata, then the binary name. Agent context is not locale-scoped:
+`agent-context.json` sits at the output root rather than under a locale
+directory, so a run with several locales still writes exactly one such
+document, which is also written to standard output unless
+`--check-agent-native` owns that channel. Command summaries inside it are
+resolved from the package's `en-US` resources rather than from a requested
+`--locale`, and are omitted when no such resource exists.
+
+`--locale` is repeatable, and repeated values are deduplicated while keeping
+the order in which they were first given. With more than one locale the IR
+gains one JSON file per locale, the man tree nests each locale as
+`<locale>/man/man<N>/<bin>.<N>`, and the PowerShell module gains one culture
+subdirectory per locale. Without any `--locale` value the command falls back to
+`en-US`.
+
+The PowerShell `en-US` fallback is separate from that default. When the
+requested locales omit `en-US`, the generator also writes an `en-US` help set
+built from the first locale, because PowerShell culture probing strongly
+prefers an `en-US` culture to be present. `--ensure-en-us` controls this and is
+on by default; pass `--ensure-en-us false` to suppress the extra culture. The
+fallback copies text rather than translating it: with `--locale ja` the `en-US`
+directory holds the Japanese help, so do not read its name as a language
+guarantee.
+
+`--format all` is additive. It writes the same artefacts, at the same paths, as
+running `--format ir`, `--format man`, `--format ps`, and
+`--format agent-context` one after another, and each format keeps its own
+output paths as a compatibility contract. The
+[cargo-orthohelp design](cargo-orthohelp-design.md) records those per-format
+paths and the versioning rule that protects them.
 
 ## Offer a compact contract to automation
 
