@@ -183,6 +183,8 @@
     plan for the public guides and executable documentation-example contract.
   - [Cargo helper for hand-built clap commands](execplans/8-3-1-ortho-config-cargo-helper-for-hand-built-clap-commands.md):
     plan and implementation record for the Cargo external-subcommand helper.
+  - [Derive-friendly Cargo subcommand template](execplans/8-3-2-document-derive-friendly-cargo-subcommand-template.md):
+    plan for roadmap item 8.3.2 and its approval-gated documentation examples.
   - [Address review findings on PR #509](execplans/harden-lint-subcommand-environment-replay-r2-20260923.md):
     plan and review record for the injected subcommand file-discovery sources
     and their documentation.
