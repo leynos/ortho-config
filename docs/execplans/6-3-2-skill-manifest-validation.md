@@ -46,7 +46,7 @@ explicitly approves it and the prerequisites below are complete.
 - Structural findings are independent of policy mode. `off` may suppress
   vocabulary findings, but it cannot suppress unknown paths, unknown flags,
   malformed/ambiguous normalized inputs, or duplicate manifest IDs. Exceptions
-  can never legalize a nonexistent command or flag.
+  can never authorize a nonexistent command or flag.
 - Validate supplied claims only. Do not promise exhaustive discovery from
   arbitrary prose, general Markdown or shell parsing, executable command
   validity, option arity, quoting, side effects, or example runtime success.
@@ -544,7 +544,7 @@ command produce findings; normalized example names resolve against the owning
 reference and effective options, while values are preserved and checked only by
 applicable 7.1 value-sensitive policy rules; policy applies canonical
 vocabulary/global-option rules. Structural findings remain visible in all
-policy modes. Exceptions cannot legalize absent paths or flags. A prose-only
+policy modes. Exceptions cannot authorize absent paths or flags. A prose-only
 skill succeeds with zero checked references and examples.
 
 Use `rstest` for finite cases, `googletest` and `pretty_assertions` for clear
@@ -665,5 +665,9 @@ OrthoConfig format mandate.
 - 2026-10-14: Reconciled final expert findings, specified fixture extraction
   and partial-validation reporting, and recorded passing planning gates.
   Implementation scope and prerequisite/approval gates remain unchanged.
+
+- 2026-10-14: Reworded two policy-exception statements after the publication
+  spelling check rejected their wording. Meaning and remaining work are
+  unchanged.
 
 [adr-008]: ../adr-008-opt-in-agent-native-policy-configuration.md
