@@ -1,7 +1,8 @@
 //! Tests focused on direct CLI parsing and merging behaviour.
 
 use super::common::{
-    ExpectedConfig, TestConfig, ToAnyhow, assert_config_eq, assert_config_values, run_config_case,
+    ExpectedConfig, TestConfig, ToAnyhow, assert_config_eq, assert_config_values,
+    assert_is_excited, run_config_case,
 };
 use anyhow::Result;
 use rstest::rstest;
@@ -106,6 +107,24 @@ struct BoolCase {
     cli_args: &["prog"],
     expected_is_excited: true,
 })]
+// The file value must also survive when an *unrelated* flag pushes the CLI
+// layer. The rows above pass with no CLI layer at all, so they cannot see the
+// `SetTrue` default: with any other argument typed, that absent-flag `false`
+// reaches the layer and outranks the file.
+#[case::file_true_with_unrelated_flag(BoolCase {
+    files: &[(".config.toml", "is_excited = true")],
+    env: &[],
+    cli_args: &["prog", "--sample-value", "hello"],
+    expected_is_excited: true,
+})]
+// As above, for an environment value: the CLI layer outranks the environment
+// layer, so the same spurious `false` would clobber it.
+#[case::env_true_with_unrelated_flag(BoolCase {
+    files: &[],
+    env: &[("IS_EXCITED", "true")],
+    cli_args: &["prog", "--sample-value", "hello"],
+    expected_is_excited: true,
+})]
 // The CLI clears a file that set true.
 #[case::cli_false_clears_file_true(BoolCase {
     files: &[(".config.toml", "is_excited = true")],
@@ -128,12 +147,10 @@ struct BoolCase {
     expected_is_excited: false,
 })]
 fn boolean_flags_control_precedence(#[case] case: BoolCase) -> Result<()> {
-    let expected = ExpectedConfig {
-        is_excited: case.expected_is_excited,
-        ..ExpectedConfig::default()
-    };
+    // Only the boolean is asserted: the rows that push a CLI layer do so with
+    // an unrelated argument, which legitimately changes another field.
     run_config_case::<TestConfig, _>(case.files, case.env, case.cli_args, |cfg| {
-        assert_config_eq(cfg, &expected).to_anyhow()
+        assert_is_excited(cfg, case.expected_is_excited).to_anyhow()
     })?;
     Ok(())
 }

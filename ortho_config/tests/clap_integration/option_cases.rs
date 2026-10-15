@@ -1,7 +1,7 @@
 //! Tests exercising optional flag handling and short-flag collisions.
 
 use super::common::{
-    ConflictConfig, OptionBoolConfig, OptionConfig, OrthoConfig, ToAnyhow, with_jail,
+    ConflictConfig, OptionBoolConfig, OptionConfig, OrthoConfig, ToAnyhow, run_config_case,
 };
 use anyhow::{Result, ensure};
 use rstest::rstest;
@@ -70,9 +70,13 @@ struct OptionBoolCase {
 })]
 // A file value alone must survive, still distinguishable from an explicit
 // CLI false.
+//
+// The file case names its selector rather than relying on the default-dotfile
+// branch of the harness: `OptionBoolConfig` is prefixed, so discovery reads the
+// derived dotfile `.optl.toml`.
 #[case::file_true_without_flag(OptionBoolCase {
     files: &[(".optl.toml", "flag = true")],
-    env: &[],
+    env: &[("OPTL_CONFIG_PATH", ".optl.toml")],
     cli_args: &["prog"],
     expected: Some(true),
 })]
@@ -86,7 +90,7 @@ struct OptionBoolCase {
 // The CLI clears a file that set true.
 #[case::cli_false_clears_file_true(OptionBoolCase {
     files: &[(".optl.toml", "flag = true")],
-    env: &[],
+    env: &[("OPTL_CONFIG_PATH", ".optl.toml")],
     cli_args: &["prog", "--flag=false"],
     expected: Some(false),
 })]
@@ -99,19 +103,12 @@ struct OptionBoolCase {
 })]
 fn parses_option_bool_across_sources(#[case] case: OptionBoolCase) -> Result<()> {
     let expected = case.expected;
-    with_jail(|jail| {
-        for (path, contents) in case.files {
-            jail.create_file(path, contents)?;
-        }
-        for (key, value) in case.env {
-            jail.set_env(key, value);
-        }
-        let config = OptionBoolConfig::load_from_iter(case.cli_args.iter().copied()).to_anyhow()?;
+    run_config_case::<OptionBoolConfig, _>(case.files, case.env, case.cli_args, |cfg| {
         ensure!(
-            config.flag == expected,
+            cfg.flag == expected,
             "expected flag {:?}, got {:?}",
             expected,
-            config.flag
+            cfg.flag
         );
         Ok(())
     })?;

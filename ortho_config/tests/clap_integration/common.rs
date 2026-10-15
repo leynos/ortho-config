@@ -138,29 +138,48 @@ fn write_fixtures(root: &Path, files: &[(&str, &str)]) -> Result<()> {
     Ok(())
 }
 
+/// The suffix the derive gives the configuration-path selector.
+///
+/// The selector is `CONFIG_PATH` for an unprefixed struct and
+/// `<PREFIX>CONFIG_PATH` otherwise, so the prefix itself is the only thing that
+/// varies. Matching the suffix rather than the exact name lets one case name
+/// the selector its own struct actually reads.
+const CONFIG_PATH_SUFFIX: &str = "CONFIG_PATH";
+
 /// Build the injected environment for one case.
 ///
-/// A `CONFIG_PATH` entry names a fixture file, so its value is resolved
-/// against `root`; every other variable is passed through untouched. When the
-/// fixtures include the default dotfile and no selector was supplied, the
-/// selector is pointed at that file so the case does not depend on the
-/// process working directory. [`with_host_overrides`] then pins the XDG bases,
-/// closing the platform default that would otherwise reach `/etc/xdg`.
+/// A selector entry — `CONFIG_PATH`, or `<PREFIX>CONFIG_PATH` for a prefixed
+/// struct — names a fixture file, so its value is resolved against `root`;
+/// every other variable is passed through untouched. When the fixtures include
+/// the default dotfile and no selector was supplied, the selector is pointed at
+/// that file so the case does not depend on the process working directory.
+/// [`with_host_overrides`] then pins the XDG bases, closing the platform
+/// default that would otherwise reach `/etc/xdg`.
+///
+/// A prefixed struct cannot rely on the default-dotfile branch: it reads
+/// `.config.toml` only for the unprefixed case, while `prefix = "OPTL_"` derives
+/// the dotfile `.optl.toml`. Such a case names its selector in `env` instead,
+/// which keeps the fixture's path in the case rather than in this helper.
 fn build_env(root: &Path, files: &[(&str, &str)], env: &[(&str, &str)]) -> MapEnv {
     let mut env_map = MapEnv::new();
     for (key, value) in env {
-        if *key == "CONFIG_PATH" {
+        if key.ends_with(CONFIG_PATH_SUFFIX) {
             env_map.insert(*key, fixture_path(root, value));
         } else {
             env_map.insert(*key, value);
         }
     }
     if files.iter().any(|(name, _)| *name == ".config.toml")
-        && !env.iter().any(|(name, _)| *name == "CONFIG_PATH")
+        && !env.iter().any(|(name, _)| is_config_selector(name))
     {
         env_map.insert("CONFIG_PATH", root.join(".config.toml"));
     }
     with_host_overrides(env_map, root)
+}
+
+/// Whether `name` is the configuration-path selector for some struct.
+fn is_config_selector(name: &str) -> bool {
+    name.ends_with(CONFIG_PATH_SUFFIX)
 }
 
 /// Resolve a case's relative path against the temporary fixture root.
@@ -273,6 +292,19 @@ pub(crate) fn assert_config_eq(config: &TestConfig, expected: &ExpectedConfig) -
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
 pub(crate) struct OptionConfig {
     pub(crate) maybe: Option<u32>,
+}
+
+/// Compare only the boolean field of a `TestConfig`.
+///
+/// The boolean-precedence matrix varies a second, unrelated argument in some
+/// rows, so asserting the whole struct there would report that argument rather
+/// than the boolean the row is about. The focused check keeps a failure
+/// message pointing at the field under test.
+pub(crate) fn assert_is_excited(config: &TestConfig, expected: bool) -> OrthoResult<()> {
+    if config.is_excited != expected {
+        return validation_mismatch("is_excited", &expected.to_string(), config.is_excited);
+    }
+    Ok(())
 }
 
 /// An `Option<bool>` field, the shape that distinguishes "supplied nowhere"
