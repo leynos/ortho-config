@@ -37,8 +37,8 @@ fn context_json_writes_only_to_stdout(mut hello_world_command: Command) {
 
     // This depends on no global tracing subscriber or logger being installed
     // before `Commands::Context` returns early in `main::run`.
-    assert!(output.stderr.is_empty());
-    assert!(!output.stdout.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
+    assert_ne!(output.stdout, [] as [u8; 0]);
 }
 
 #[rstest]

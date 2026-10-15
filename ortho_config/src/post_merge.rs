@@ -211,7 +211,7 @@ mod tests {
     fn context_new_creates_empty_context() {
         let ctx = PostMergeContext::new("TEST_");
         assert_eq!(ctx.prefix(), "TEST_");
-        assert!(ctx.loaded_files().is_empty());
+        assert_eq!(ctx.loaded_files(), [] as [String; 0]);
         assert!(!ctx.has_cli_input());
     }
 

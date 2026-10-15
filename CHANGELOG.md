@@ -171,3 +171,9 @@ All notable changes to this project will be documented in this file.
   parsing.
 - Add doc comments to generated `OrthoConfig` support structs so crates with
   strict `missing_docs` linting build without broad suppressions (closes #253).
+- Resolve the Rust 1.99 beta Clippy lints across the workspace —
+  `assert_is_empty`, `trivially_copy_pass_by_ref`, `byte_char_slices`,
+  `string_lit_as_bytes`, and the byte-order lints — by changing the code rather
+  than suppressing the lints, and extend the advisory `clippy-beta` job to
+  Windows, where `cfg(windows)` code a Linux-only leg never compiles had been
+  reaching the beta channel unseen.

@@ -108,7 +108,7 @@ fn skill_manifest_default_is_empty_list() {
     }))
     .expect("deserialize context without skill manifests");
 
-    assert!(context.skill_manifests.is_empty());
+    assert_eq!(context.skill_manifests, [] as [SkillManifest; 0]);
 }
 
 #[rstest]
@@ -155,7 +155,7 @@ fn skill_command_ref_defaults_flags_to_empty() {
     }))
     .expect("deserialize command ref without flags");
 
-    assert!(command.flags.is_empty());
+    assert_eq!(command.flags, [] as [String; 0]);
 }
 
 #[rstest]
@@ -271,7 +271,7 @@ fn unknown_top_level_fields_are_ignored_for_forward_compatibility() {
         .expect("unknown fields should be ignored within the same major version");
 
     assert_eq!(context.package, "future-cli");
-    assert!(context.commands.is_empty());
+    assert_eq!(context.commands, [] as [AgentCommand; 0]);
 }
 
 #[rstest]

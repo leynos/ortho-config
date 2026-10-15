@@ -12,7 +12,7 @@ fn empty_report_uses_tool_owned_schema_version() {
     assert_eq!(report.version, ORTHO_POLICY_REPORT_SCHEMA_VERSION);
     assert_eq!(report.tool, "cargo-orthohelp");
     assert_eq!(report.mode, PolicyMode::Warn);
-    assert!(report.results.is_empty());
+    assert_eq!(report.results, [] as [PolicyResult; 0]);
     assert_eq!(report.summary, PolicySummary::default());
 }
 

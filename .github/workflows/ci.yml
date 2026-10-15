@@ -305,14 +305,34 @@ jobs:
   # remains required. `CARGO="cargo +beta"` overrides the Makefile default
   # with an explicit `+beta` selection, which bypasses the rust-toolchain.toml
   # directory override that would otherwise pin this job to stable.
+  #
+  # Both operating systems are covered, under `fail-fast: false`, because
+  # `make lint-clippy` on Linux and on Windows compile materially
+  # different source. `powershell_windows.rs` is gated on `cfg(windows)`
+  # and is not compiled at all elsewhere, and the same is true of
+  # `cargo_runner.rs`'s MSVC environment decoding. On 2026-09-28 this job
+  # failed on four lints in the former — a `Result` predicate and three
+  # constant-size chunk iterators — that a Linux-only leg cannot see. One
+  # beta is shared by both legs, so the second costs a matrix entry and a
+  # machine, not a toolchain download.
   clippy-beta:
-    name: Clippy (beta, advisory)
-    runs-on: ubuntu-latest
+    name: Clippy (beta, advisory, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+    # Job-level, so either leg being red leaves the other's result intact
+    # and both report. A step-level `continue-on-error` would also swallow
+    # a genuine success, and `fail-fast` decides only whether a failing
+    # leg cancels its siblings, not whether this job blocks the merge.
     continue-on-error: true
     env:
       CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -322,6 +342,18 @@ jobs:
         with:
           toolchain: beta
           components: clippy
+
+      # The header gate above installs the toolchain this job lints with;
+      # it does not install the tool that runs the lint. The windows-latest
+      # image does currently ship `make` — `build-test`'s Clippy leg calls
+      # the same target there — but this job should not read as a lint
+      # failure if that stops being true. Chocolatey is the image's own
+      # package manager, so the install takes seconds and is a no-op when
+      # the package is already present.
+      - name: Provision make
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: choco install make --yes --no-progress
 
       - name: Clippy (beta)
         env:

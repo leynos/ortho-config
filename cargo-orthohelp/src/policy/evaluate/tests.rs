@@ -26,8 +26,8 @@ fn empty_config_produces_empty_report_with_vocabulary() {
     let report = evaluate(&PolicyConfig::default(), &PolicyInputs::default());
 
     assert_eq!(report.mode, crate::policy::PolicyMode::Off);
-    assert!(report.results.is_empty());
-    assert!(report.exceptions.is_empty());
+    assert_eq!(report.results, [] as [PolicyResult; 0]);
+    assert_eq!(report.exceptions, [] as [PolicyException; 0]);
     assert_eq!(report.vocabulary, crate::policy::Vocabulary::canonical());
     assert_eq!(report.summary.total, 0);
 }
@@ -46,8 +46,9 @@ fn explicit_off_mode_suppresses_all_findings() {
     let report = evaluate(&config, &PolicyInputs::default());
 
     assert_eq!(report.mode, crate::policy::PolicyMode::Off);
-    assert!(
-        report.results.is_empty(),
+    assert_eq!(
+        report.results,
+        [] as [PolicyResult; 0],
         "off mode must suppress malformed, redundant, and duplicate findings"
     );
     assert_eq!(report.summary.total, 0);
@@ -91,7 +92,7 @@ fn non_canonical_exception_is_not_warned(#[case] kind: ExceptionKind, #[case] na
         &PolicyInputs::default(),
     );
 
-    assert!(report.results.is_empty());
+    assert_eq!(report.results, [] as [PolicyResult; 0]);
 }
 
 #[rstest]

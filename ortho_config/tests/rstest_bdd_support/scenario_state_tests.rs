@@ -23,5 +23,5 @@ fn take_issues_recovers_from_poisoned_mutex() {
     assert!(poisoning_thread.join().is_err());
 
     assert_eq!(context.take_issues(), vec!["captured issue"]);
-    assert!(context.take_issues().is_empty());
+    assert_eq!(context.take_issues(), [] as [String; 0]);
 }
