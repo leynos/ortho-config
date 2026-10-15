@@ -41,11 +41,20 @@ JOB_NAME: typ.Final[str] = "clippy-beta"
 LINT_TARGET: typ.Final[str] = "lint-clippy"
 
 #: Both platforms, exactly. Windows is the whole point: it is the only
-#: runner that compiles the ``cfg(windows)`` code the 2026-09-28 lints
+#: leg that compiles the ``cfg(windows)`` code the 2026-09-28 lints
 #: lived in.
-REQUIRED_OSES: typ.Final[frozenset[str]] = frozenset(
-    {"ubuntu-latest", "windows-latest"}
-)
+#:
+#: The matrix pairs each platform with its runner label, because the
+#: display name must be spelt from the platform: ``build-test`` names its
+#: legs ``build-test (${{ matrix.platform }})``, and
+#: ``runner_placement_test.py`` forbids a job name that interpolates a
+#: runner label. A name built from ``matrix.os`` exists only while that
+#: label does, so a required context could not follow it.
+REQUIRED_LEGS: typ.Final[dict[str, str]] = {
+    "linux": "ubuntu-latest",
+    "windows": "windows-latest",
+}
+REQUIRED_OSES: typ.Final[frozenset[str]] = frozenset(REQUIRED_LEGS.values())
 
 #: The Makefile variable carrying the lint invocation's strictness, and
 #: the exact value every caller depends on. ``--workspace`` because a
@@ -142,12 +151,23 @@ def makefile_variable(makefile: str, name: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-def _matrix_oses(job: dict[str, object]) -> frozenset[str]:
-    """Return the operating systems one job's matrix names."""
+def _matrix_legs(job: dict[str, object]) -> dict[str, str]:
+    """Return one job's matrix legs as ``{platform: runner label}``.
+
+    The matrix is written as an ``include`` list of
+    ``{platform, runner}`` mappings. That shape is deliberate: it is what
+    lets the display name name the platform while ``runs-on`` names the
+    label, so the two cannot be conflated the way a single ``os`` key
+    conflates them.
+    """
     strategy = job.get("strategy")
     matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
-    declared = matrix.get("os") if isinstance(matrix, dict) else None
-    return frozenset(str(name) for name in declared or [])
+    include = matrix.get("include") if isinstance(matrix, dict) else None
+    return {
+        str(entry["platform"]): str(entry["runner"])
+        for entry in (include or [])
+        if isinstance(entry, dict) and "platform" in entry and "runner" in entry
+    }
 
 
 def test_the_lane_covers_both_operating_systems(beta_job: dict[str, object]) -> None:
@@ -157,14 +177,35 @@ def test_the_lane_covers_both_operating_systems(beta_job: dict[str, object]) -> 
     leave every ``cfg(windows)`` file uncompiled on beta, which is
     exactly the gap the 2026-09-28 failure came through.
     """
-    assert _matrix_oses(beta_job) == REQUIRED_OSES, (
-        f"{JOB_NAME} must run on {sorted(REQUIRED_OSES)}; it runs on "
-        f"{sorted(_matrix_oses(beta_job))}"
+    assert _matrix_legs(beta_job) == REQUIRED_LEGS, (
+        f"{JOB_NAME} must run on {sorted(REQUIRED_LEGS)}; it runs on "
+        f"{sorted(_matrix_legs(beta_job))}"
     )
-    assert beta_job.get("runs-on") == "${{ matrix.os }}", (
-        f"{JOB_NAME} must run on the matrix's operating system; it runs on "
+    assert beta_job.get("runs-on") == "${{ matrix.runner }}", (
+        f"{JOB_NAME} must run on the matrix's runner; it runs on "
         f"{beta_job.get('runs-on')!r}"
     )
+
+
+def test_the_display_name_names_the_platform_not_the_runner(
+    beta_job: dict[str, object],
+) -> None:
+    """The job is named from the platform, matching ``build-test``.
+
+    ``runner_placement_test.py`` holds every ``ci.yml`` job name clear of
+    a runner label, because a name that interpolates one exists only
+    while that label does and a required context cannot follow it. This
+    job is advisory today, but the naming rule is the repository's, not
+    this job's.
+    """
+    name = str(beta_job.get("name", ""))
+    assert "matrix.platform" in name, (
+        f"{JOB_NAME} must spell its legs from the platform; its name is {name!r}"
+    )
+    for runner_reference in ("matrix.os", "matrix.runner", "runner.os"):
+        assert runner_reference not in name, (
+            f"{JOB_NAME}'s name {name!r} interpolates {runner_reference}"
+        )
 
 
 def test_a_failing_leg_does_not_cancel_its_sibling(

@@ -316,8 +316,8 @@ jobs:
   # beta is shared by both legs, so the second costs a matrix entry and a
   # machine, not a toolchain download.
   clippy-beta:
-    name: Clippy (beta, advisory, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Clippy (beta, advisory, ${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     # Job-level, so either leg being red leaves the other's result intact
@@ -329,10 +329,15 @@ jobs:
       CARGO_TERM_COLOR: always
     strategy:
       fail-fast: false
+      # Named for the platform, not the runner: the display name has to
+      # spell the leg the same way `build-test` does, and a name built
+      # from a runner label is one a required context cannot follow.
       matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+          - platform: windows
+            runner: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -351,7 +356,7 @@ jobs:
       # package manager, so the install takes seconds and is a no-op when
       # the package is already present.
       - name: Provision make
-        if: ${{ matrix.os == 'windows-latest' }}
+        if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
         run: choco install make --yes --no-progress
 
