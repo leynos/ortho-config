@@ -23,11 +23,29 @@ pub(crate) enum Endianness {
     Big,
 }
 
+impl Endianness {
+    /// The byte-order mark this order announces itself with.
+    ///
+    /// The mark is the code unit `U+FEFF`, so its bytes differ only in
+    /// which comes first. Pairing the two here keeps a byte-order
+    /// argument and its mark from being passed to [`decode_utf16`] in
+    /// disagreement.
+    pub(crate) const fn bom(self) -> [u8; 2] {
+        match self {
+            Self::Little => [0xFF, 0xFE],
+            Self::Big => [0xFE, 0xFF],
+        }
+    }
+}
+
 /// Decodes `bytes` as UTF-16 of the given byte order, after verifying a BOM.
 ///
 /// A missing or different BOM means the bytes are not UTF-16 in the order
 /// the caller asked for, and the answer is `None` rather than a decoding
-/// of whatever they are.
+/// of whatever they are. That includes a `bom` that is a valid mark but
+/// not the one `endian` implies: decoding little-endian bytes as
+/// big-endian does not fail on its own, it silently yields byte-swapped
+/// text, so the pair has to agree before any of the payload is trusted.
 ///
 /// Trailing bytes that do not complete a code unit are discarded, and a
 /// code unit with no valid decoding becomes `U+FFFD`. That is the policy a
@@ -35,6 +53,9 @@ pub(crate) enum Endianness {
 /// parsed, so a damaged glyph is preferable to losing the surrounding
 /// text to an error.
 pub(crate) fn decode_utf16(bytes: &[u8], bom: [u8; 2], endian: Endianness) -> Option<String> {
+    if bom != endian.bom() {
+        return None;
+    }
     let rest = bytes.strip_prefix(&bom)?;
     let decoded = rest
         .as_chunks::<2>()
@@ -105,11 +126,7 @@ mod tests {
 
     /// Encodes text as UTF-16 in the given byte order, with a BOM.
     fn with_bom(text: &str, endian: Endianness) -> Vec<u8> {
-        let bom: [u8; 2] = match endian {
-            Endianness::Little => [0xFF, 0xFE],
-            Endianness::Big => [0xFE, 0xFF],
-        };
-        let mut bytes = bom.to_vec();
+        let mut bytes = endian.bom().to_vec();
         bytes.extend(encoded_units(text, endian));
         bytes
     }
@@ -148,6 +165,12 @@ mod tests {
         );
     }
 
+    /// A BOM that is a real mark but not this order's mark is refused.
+    ///
+    /// The first case is the one that needs pinning: reading little-endian
+    /// bytes as big-endian does not fail on its own, so while the mark was
+    /// checked for presence but not for agreement with the order, this
+    /// returned byte-swapped text behind a `U+FFFE` instead of `None`.
     #[rstest]
     #[case::little_bom_read_as_big([0xFF, 0xFE], Endianness::Big)]
     #[case::big_bom_read_as_little([0xFE, 0xFF], Endianness::Little)]
@@ -161,13 +184,16 @@ mod tests {
     fn a_missing_bom_is_refused() {
         let bytes = without_bom("Get-Help", Endianness::Little);
 
-        assert_eq!(decode_utf16(&bytes, [0xFF, 0xFE], Endianness::Little), None);
+        assert_eq!(
+            decode_utf16(&bytes, Endianness::Little.bom(), Endianness::Little),
+            None
+        );
     }
 
     #[test]
     fn an_empty_payload_after_the_bom_decodes_to_nothing() {
         assert_eq!(
-            decode_utf16(&[0xFF, 0xFE], [0xFF, 0xFE], Endianness::Little).as_deref(),
+            decode_utf16(&[0xFF, 0xFE], Endianness::Little.bom(), Endianness::Little).as_deref(),
             Some("")
         );
     }
@@ -178,7 +204,7 @@ mod tests {
         bytes.push(b'x');
 
         assert_eq!(
-            decode_utf16(&bytes, [0xFF, 0xFE], Endianness::Little).as_deref(),
+            decode_utf16(&bytes, Endianness::Little.bom(), Endianness::Little).as_deref(),
             Some("ok")
         );
     }
@@ -189,7 +215,7 @@ mod tests {
         // A high surrogate with no low surrogate after it.
         bytes.extend([0x00, 0xD8]);
 
-        let decoded = decode_utf16(&bytes, [0xFF, 0xFE], Endianness::Little);
+        let decoded = decode_utf16(&bytes, Endianness::Little.bom(), Endianness::Little);
 
         assert_eq!(decoded.as_deref(), Some("\u{FFFD}"));
     }

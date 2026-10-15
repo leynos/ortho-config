@@ -110,10 +110,10 @@ mod tests {
         // announce themselves, then the BOM-less guess, then UTF-8. The
         // decoders live in the shared fixture module so their buffering
         // rules stay tested on every platform, not only on Windows.
-        if let Some(decoded) = decode_utf16(bytes, [0xFF, 0xFE], Endianness::Little) {
+        if let Some(decoded) = decode_utf16(bytes, Endianness::Little.bom(), Endianness::Little) {
             return decoded;
         }
-        if let Some(decoded) = decode_utf16(bytes, [0xFE, 0xFF], Endianness::Big) {
+        if let Some(decoded) = decode_utf16(bytes, Endianness::Big.bom(), Endianness::Big) {
             return decoded;
         }
         if let Some(decoded) = decode_probable_utf16le_without_bom(bytes) {

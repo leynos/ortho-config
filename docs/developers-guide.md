@@ -993,8 +993,9 @@ declares `mod fixtures` unconditionally — `agent_context_contract`,
 `powershell_windows` compiles to nothing at all, the decoders are still
 compiled and still tested, with no shell involved. Suites must reach the
 decoders here rather than re-deriving byte-order detection, because the
-zero-high-byte threshold and the two different trailing-byte policies are the
-behaviour under test and a second copy would drift in exactly the cases that
+zero-high-byte threshold, the two different trailing-byte policies, and the
+rule that a byte-order mark must be the mark its order implies are the
+behaviour under test, and a second copy would drift in exactly the cases that
 are hard to see.
 
 ## Isolated filesystem tests
