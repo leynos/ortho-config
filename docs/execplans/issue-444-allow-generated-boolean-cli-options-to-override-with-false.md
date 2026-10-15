@@ -190,7 +190,7 @@ Observable success: a config file that sets `enabled = true` combined with
       `[=<BOOL>]`. The roff renderer does not wrap, and its golden confirms
       `\fI[=BOOL]\fR`. The docs had been describing *man-page* output in
       *clap's* notation. The finding named one site; the same false claim
-      appeared in four, all fixed: the users' guide, two passages of ADR-009,
+      appeared in four, all fixed: the users' guide, two passages of ADR-013,
       and the migration guide. The two IR field doc comments were left alone —
       they say renderers bracket the placeholder without asserting a spelling,
       which remains true.
@@ -236,7 +236,7 @@ Observable success: a config file that sets `enabled = true` combined with
       non-vacuous by reverting the fix and watching the two fallback tests
       fail. The second finding was the `require_equals` rationale, and
       re-measuring it falsified a claim this branch had already written into
-      the user's guide, ADR-009, and the derive macro's own comment; see the
+      the user's guide, ADR-013, and the derive macro's own comment; see the
       first entry under `Surprises & discoveries` for the full reversal.
 - [x] (2026-09-25) The round-7 fixes then exposed a gate-ordering lesson. The
       new test lines pushed `roff/escape.rs` to 445 lines against the 400-line
@@ -263,7 +263,7 @@ Observable success: a config file that sets `enabled = true` combined with
       were verified and applied, and both are the kind of defect a reader
       notices but a gate cannot: the rustdoc on `replay.rs` broke the
       hyphenated compound `per-argument` across a line, which Markdown renders
-      as "per- argument", and ADR-009 wrote the plural possessive "users'
+      as "per- argument", and ADR-013 wrote the plural possessive "users'
       guide" where the project's own style guide and the document's title both
       use the singular "user's guide". Notably, none of the round-7 fixes drew
       a finding — the `--flag[=]` render fix, its three tests, and the
@@ -394,6 +394,56 @@ Observable success: a config file that sets `enabled = true` combined with
       a single-Markdown-file delta would spend minutes to re-prove what
       `07e6ea53` already proved, since no Rust input changed.
 
+- [x] (2026-10-16) Rebase #2 onto the `origin/main` of `f99d9234` replayed the
+      33-commit series onto the current target. The replay produced 32 commits:
+      `88463dc0` ("Drop a stray trailing blank line from `default_display`")
+      became a proven no-op, because `main` had already rewritten that file
+      without the blank line. Every other commit replayed, none became empty,
+      and the series contains no merges. Conflicts were resolved per site on
+      evidence rather than by side — most consequentially in
+      `ortho_config/tests/support/docs_ir_config.rs`, where the branch's
+      `docs_ir.rs` split moved `field_by_name` into a *different*
+      integration-test binary than `main`'s new
+      `support/docs_ir_runtime_agreement.rs` expects, so neither side alone is
+      broken and only the combination is. The helper moved into the
+      `#[path]`-declared shared support module that both binaries include.
+      The repairs that needed to change replayed content were performed *inside*
+      the replay, so the series still has exactly 32 commits and none dated
+      after the replay: the ADR-013 rename and its ExecPlan, `contents.md`, and
+      Surprises records all ride in one replayed commit, and the round-5 roff
+      correction rides in the round-5 fixes commit. Only the renumber commit's
+      *message* was repaired afterwards, by an interactive rebase that rewrote
+      that one message and left its tree and parent byte-identical. Intermediate
+      replays therefore carry the ADR-008 filename up to the renumber and 013
+      from it onward; the final HEAD shows 013 alone.
+
+- [x] (2026-10-16) Post-rebase repair of the second cross-branch breakage. The
+      `clap_integration` target did not compile after the replay, because
+      `main`'s PR #518 removed the `with_jail` re-export this branch's
+      `Option<bool>` matrix imported. The matrix now uses main's injected-source
+      harness (`run_config_case`), and `build_env` matches the `CONFIG_PATH`
+      suffix instead of the exact name so a prefixed struct's selector is
+      resolved too. The boolean matrix's assertion was narrowed to the field
+      under test (`assert_is_excited`), because two of its rows deliberately
+      type an unrelated argument and so legitimately change another field; the
+      whole-struct assertion reported that field rather than the boolean.
+      Both suites were then shown non-vacuous by seeded fault: `default_value =
+      "false"` on the generated boolean argument fails exactly
+      `file_true_with_unrelated_flag` and `env_true_with_unrelated_flag`, and
+      flipping the `Option<bool>` fixture to `false` fails exactly
+      `file_true_without_flag`. Both probes were reverted byte-identically.
+      The whole target passes: 45 passed, 0 failed.
+
+- [x] (2026-10-16) Post-rebase repair of the third cross-branch breakage, in
+      the Markdown tree. Re-formatting with `make fmt` rewrote the migration
+      guide's opening paragraph and two passages in ADR-013, all of which were
+      well-formatted under the `mdtablefix` this branch was last formatted
+      with and are rejected by the newer one on `main`. Every hunk was read
+      back and confirmed to change no word: the edits re-wrap prose and
+      normalise one emphasised table caption. The Markdown lanes therefore
+      belong in the post-rebase gate set for these files even though the
+      replay did not touch their content.
+
 ## Surprises & discoveries
 
 - **`coderabbit review findings` reports stale findings, not the latest
@@ -473,17 +523,58 @@ Observable success: a config file that sets `enabled = true` combined with
 
 - **Then ADR-010, 011, and 012 were all taken.** Renumbering to 010 was
   correct only against the `origin/main` of 2026-09-25. The rebase onto the
-  `origin/main` of 2026-10-16 found `docs/adr-010-behavioural-metadata-attribute-surface.md`,
+  `origin/main` of 2026-10-16 found
+  `docs/adr-010-behavioural-metadata-attribute-surface.md`,
   `docs/adr-011-opt-in-identifier-artefact-emission.md`, and
   `docs/adr-012-profile-selection-and-layering.md` already landed, so 010 was
   the third number to collide. Numbering still follows landing order and the
   unpublished ADR takes the next free number, **ADR-013**. This is the third
   renumber (008 → 009 → 010 → 013), and the replayed commit performs it
   directly so no intermediate number appears in the new series. ADR-012 also
-  narrows the earlier claim that `"2.0"` belongs to the identifier change
-  alone: `profiles` rides the unreleased version rather than moving it, so
+  narrows the earlier claim that `"2.0"` belongs to the identifier change alone:
+  `profiles` rides the unreleased version rather than moving it, so
   `value_optional` is versioned the same way. The ADR records that reasoning
   and points at ADR-012.
+
+- **A second cross-branch breakage: `clap_integration` no longer exports
+  `with_jail`.** The rebase's conflict resolutions were clean in
+  `ortho_config/tests/clap_integration/option_cases.rs` and `common.rs`, yet
+  the test target would not compile:
+  `unresolved import super::common::with_jail`. Neither side is broken alone.
+  This branch's `c91038d3` wrote the `Option<bool>` matrix against a
+  `with_jail` re-export that `common.rs` still had, while `main`'s PR #518
+  (`962f174f`, "Migrate further integration tests off Jail") deleted that
+  re-export and moved the suite to an injected-source harness,
+  `run_config_case`. The same shape as the `field_by_name` breakage: a fact
+  that is true on each side and false in the combination. The fix converts the
+  matrix to `run_config_case`, which also removes the process-environment
+  mutation the old harness implied. Two details the harness does not cover had
+  to be supplied by the call site. First, `build_env` recognised only the bare
+  `CONFIG_PATH`, but the matrix's struct is prefixed, so discovery reads
+  `OPTL_CONFIG_PATH`; the helper now matches the `CONFIG_PATH` *suffix*, which
+  serves both spellings without hard-coding either prefix. Second,
+  `build_env`'s default-dotfile branch keys on `.config.toml`, whereas
+  `prefix = "OPTL_"` derives the dotfile `.optl.toml`, so the two file-backed
+  rows name their selector explicitly. Both facts were checked rather than
+  assumed: flipping the fixture's value to `false` fails exactly the one row
+  that reads it, which is what proves the selector reaches the file layer
+  instead of the row passing vacuously.
+- **The planned "declarative bool pruning" fix was already delivered.** The
+  playbook carried a pending change to call `build_bool_default_pruning_tokens`
+  from the declarative path, on the premise that a `bool` field is emitted with
+  `ArgAction::SetTrue` and therefore receives a real `false` for an absent
+  flag. Measurement falsifies the premise: this branch emits a hybrid argument
+  (`num_args = 0..=1`, `require_equals = true`,
+  `default_missing_value = "true"`) with no `default_value`, so an absent flag
+  stays `None` and the spurious `false` that motivated the pruning no longer
+  exists. The profile-only pruning at `cli.rs:188` remains correct for the
+  value it was written against, and the two regression rows added to
+  `parsing.rs` pass at HEAD without any macro change. Non-vacuity was still
+  established rather than assumed: seeding `default_value = "false"` onto the
+  generated argument fails exactly those two rows and no others, then reverts
+  byte-identically. The lesson mirrors the `-ffalse` entry above — a premise
+  recorded before a fix must be re-measured before the fix is applied, because
+  the branch may have made it moot.
 
 - **`-ffalse` is rejected.** With `require_equals(true)`, an attached short
   value raises `clap::error::ErrorKind::ArgumentConflict`; only `-f=false`
@@ -622,6 +713,23 @@ Observable success: a config file that sets `enabled = true` combined with
   `InvalidValue`, and `-ffalse` raises `ArgumentConflict` as this plan already
   said.
 
+- **The replay broke the Markdown tree in a third place, and only a *fixer*
+  could show it.** Replaying onto the current `main` left two documents failing
+  `make check-fmt`: the migration guide's opening paragraph and ADR-013's prose
+  and table caption. Both sides were individually well-formatted; `main` had
+  moved to a newer `mdtablefix`, whose wrap rules differ from the version this
+  branch was last formatted under, so lines that were correct when written are
+  now rejected. Neither file is semantically changed — `make fmt` re-wrapped
+  prose and normalised `_Table 1:_` to `*Table 1:*`, changing no word. This is
+  the same *combination* shape as the two Rust breakages: an ambient-toolchain
+  change on `main` that only becomes visible when the branch's own text is
+  re-checked against it. The practical consequence is that a post-rebase gate
+  run must include the Markdown lanes for *any* changed `.md`, including files
+  the replay did not touch, because a stale formatting baseline is invisible
+  until a fixer runs. Taking a formatter's diff on faith is not enough either:
+  `make fmt` is not a checker, so each hunk it wrote was read back and
+  confirmed to be a re-wrap.
+
 - **A doctest fails, and no gate can see it.** `cargo test --doc` fails on
   `ortho_config/src/cargo/mod.rs - cargo::external_subcommand (line 90)` with
   `ErrorKind::InvalidValue` on `--all <all>`: the example declares
@@ -693,7 +801,7 @@ Governing documents this plan conforms to:
 - `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` — the
   documentation IR and the `cargo-orthohelp` schema mirror move together; new
   fields need an explicit default so older derives keep parsing.
-- `docs/adr-010-optional-value-boolean-cli-metadata.md` — added by this branch;
+- `docs/adr-013-optional-value-boolean-cli-metadata.md` — added by this branch;
   records the `value_optional` marker, the IR version bump, and the rejected
   alternatives.
 - `AGENTS.md` — 400-line code files, 80-column Markdown prose, en-GB-oxendict
@@ -749,14 +857,20 @@ The trace chain from requirement to evidence runs:
 
 ## Outcomes & retrospective
 
-Status: **complete, pending review.** Every acceptance criterion in issue #444
-is implemented and covered, all six gates have been green on the rebased tree,
-and draft PR #532 is open against `main`. A CodeRabbit `--agent` review has
-been requested at each milestone and every finding dispositioned. The
-round-by-round log — including the two findings declined on evidence and the
-one later re-opened and applied after re-measurement — lives in `Progress` and
-is not restated here, so that a per-round count cannot drift out of step with
-the log it summarizes.
+Status: **rebased and repaired, pending re-gate and review.** Every acceptance
+criterion in issue #444 is implemented and covered, and draft PR #532 is open
+against `main`. The tree has since been replayed onto `main` at `f99d9234`, and
+the three cross-branch breakages the replay exposed are repaired — the
+`field_by_name` split, the `with_jail` removal, and the Markdown re-flow. All
+three repairs were established as *combination* failures: each side passes its
+own gates alone, so none would have been caught by validating either branch in
+isolation. A CodeRabbit `--agent` review has been requested at each milestone
+and every finding dispositioned; the gates must be re-run against the replayed
+tree before the review evidence can be considered current, because the earlier
+certificates belong to the pre-rebase candidate. The round-by-round log —
+including the two findings declined on evidence and the one later re-opened and
+applied after re-measurement — lives in `Progress` and is not restated here, so
+that a per-round count cannot drift out of step with the log it summarizes.
 
 What was achieved, in the order the work forced it:
 
@@ -782,9 +896,32 @@ doctest failure was shown to reproduce with this branch's changes stashed, and
 `make test` uses `--all-targets`, which is why no gate sees it. **Read the
 build system rather than assuming its behaviour**: the plan asserted
 `make lint` short-circuits before whitaker; `Makefile:99` says otherwise, and
-that claim had been used to explain a false green it did not cause.
+that claim had been used to explain a false green it did not cause. **A premise
+recorded before a fix must be re-measured before the fix is applied**: the
+pending change to prune default-origin booleans from the declarative CLI layer
+rested on the macro emitting `ArgAction::SetTrue`, which by the time the fix
+was attempted this branch no longer did. Applying it would have added pruning
+for a state that can no longer arise, and the regression rows that justified it
+passed without it.
+
+The rebase added a fourth lesson, which is about what a merge can hide. All
+three post-rebase breakages were *combination* failures — `field_by_name`,
+`with_jail`, and the two Markdown re-flows are each correct on their own branch
+and only break once the two are replayed together — and all three were silent
+to every gate that had been run on either side. The Markdown one broadens the
+rule usefully: a combination failure need not be a *conflict*, and need not
+even be a semantic difference, because a toolchain the target moved forward can
+invalidate text the branch never touched. A rebase's conflict count is
+therefore not a measure of its correctness: this replay reported no conflicts
+in the two files that would not compile, or in the two documents that would not
+pass their formatter. Only gating the replayed tree can see it, and the gate
+set must follow the *file classes actually present*, not the classes the
+replay's own diff happened to touch.
 
 The codebase was left healthy with respect to this change: `make clippy` and
 the Whitaker suite are green, no lint or type violations remain on branch
 lines, and the two latent Clippy violations the boolean work would have masked
-(`shadow_reuse`, `too_many_arguments`) were cleared rather than suppressed.
+(`shadow_reuse`, `too_many_arguments`) were cleared rather than suppressed. The
+post-rebase repairs were validated against the replayed tree rather than the
+pre-rebase one, so their evidence is current; the full gate set still has to be
+re-run to replace the pre-rebase certificates.
