@@ -987,8 +987,9 @@ because of where the test can run. `powershell_windows` is gated on
 `powershell.exe` nor `pwsh` is on the machine, so a copy of the decoders inside
 it would be untested everywhere except a Windows host with a shell installed.
 As a module of `fixtures`, it rides along in every integration target that
-declares `mod fixtures` unconditionally — `cli_dispatch`, `golden_tests`,
-`nested_subcommand_end_to_end`, and `rstest_bdd` — so on Linux, where
+declares `mod fixtures` unconditionally — `agent_context_contract`,
+`cli_dispatch`, `golden_tests`, `nested_subcommand_end_to_end`,
+`policy_report_contract`, and `rstest_bdd` — so on Linux, where
 `powershell_windows` compiles to nothing at all, the decoders are still
 compiled and still tested, with no shell involved. Suites must reach the
 decoders here rather than re-deriving byte-order detection, because the
