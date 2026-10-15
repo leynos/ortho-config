@@ -64,12 +64,34 @@ fn format_flag_combinations(
 
 #[rstest]
 #[case(
+    Some("port"),
+    Some('p'),
+    "\\fB\\-\\-port\\fR \\fINUM\\fR, \\fB\\-p\\fR \\fINUM\\fR"
+)]
+#[case(Some("port"), None, "\\fB\\-\\-port\\fR \\fINUM\\fR")]
+#[case(None, Some('p'), "\\fB\\-p\\fR \\fINUM\\fR")]
+#[case(None, None, "\\fINUM\\fR")]
+fn required_value_placeholder_follows_the_flag(
+    #[case] long: Option<&str>,
+    #[case] short: Option<char>,
+    #[case] expected: &str,
+) {
+    // The required form separates the flag from its placeholder with a space,
+    // which is what distinguishes it from the optional form below. When neither
+    // flag is present the separator has no flag to follow, so the bare
+    // placeholder is returned alone.
+    assert_eq!(format_flag_with_value(long, short, "NUM"), expected);
+}
+
+#[rstest]
+#[case(
     Some("is-excited"),
     Some('i'),
     "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR, \\fB\\-i\\fR\\fI[=BOOL]\\fR"
 )]
 #[case(Some("is-excited"), None, "\\fB\\-\\-is-excited\\fR\\fI[=BOOL]\\fR")]
 #[case(None, Some('E'), "\\fB\\-E\\fR\\fI[=BOOL]\\fR")]
+#[case(None, None, "\\fI[=BOOL]\\fR")]
 fn optional_value_placeholder_joins_the_flag(
     #[case] long: Option<&str>,
     #[case] short: Option<char>,

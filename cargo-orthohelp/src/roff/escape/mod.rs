@@ -198,6 +198,23 @@ pub fn format_flag(long: Option<&str>, short: Option<char>) -> String {
     }
 }
 
+/// Appends a preformatted `suffix` to each present flag.
+///
+/// `suffix` carries whatever separates a flag from the text that follows it, so
+/// [`format_flag_with_value`] passes a leading space while
+/// [`format_flag_with_optional_value`] passes none. When neither flag is
+/// present there is no flag for a separator to follow, so a leading space is
+/// dropped and the suffix alone is returned: the bare placeholder both public
+/// functions have always produced for that combination.
+fn format_flag_with_suffix(long: Option<&str>, short: Option<char>, suffix: &str) -> String {
+    match (long, short) {
+        (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR{suffix}, \\fB\\-{s}\\fR{suffix}"),
+        (Some(l), None) => format!("\\fB\\-\\-{l}\\fR{suffix}"),
+        (None, Some(s)) => format!("\\fB\\-{s}\\fR{suffix}"),
+        (None, None) => suffix.strip_prefix(' ').unwrap_or(suffix).to_owned(),
+    }
+}
+
 /// Formats a CLI flag with a value placeholder.
 ///
 /// # Examples
@@ -213,12 +230,7 @@ pub fn format_flag(long: Option<&str>, short: Option<char>) -> String {
 #[must_use]
 pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_name: &str) -> String {
     let value = italic(value_name);
-    match (long, short) {
-        (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR {value}, \\fB\\-{s}\\fR {value}"),
-        (Some(l), None) => format!("\\fB\\-\\-{l}\\fR {value}"),
-        (None, Some(s)) => format!("\\fB\\-{s}\\fR {value}"),
-        (None, None) => value,
-    }
+    format_flag_with_suffix(long, short, &format!(" {value}"))
 }
 
 /// Formats a CLI flag whose value is optional, as in `--flag[=BOOL]`.
@@ -250,12 +262,7 @@ pub fn format_flag_with_optional_value(
     value_name: &str,
 ) -> String {
     let value = italic(&format!("[={value_name}]"));
-    match (long, short) {
-        (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR{value}, \\fB\\-{s}\\fR{value}"),
-        (Some(l), None) => format!("\\fB\\-\\-{l}\\fR{value}"),
-        (None, Some(s)) => format!("\\fB\\-{s}\\fR{value}"),
-        (None, None) => value,
-    }
+    format_flag_with_suffix(long, short, &value)
 }
 
 /// Returns a human-readable placeholder for a `ValueType`.
