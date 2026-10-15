@@ -26,15 +26,15 @@ struct Cfg {
 fn parses_lists(#[case] raw: &str, #[case] expected: Vec<&str>) -> Result<()> {
     let want: Vec<String> = expected.into_iter().map(str::to_owned).collect();
     let source = Arc::new(MapEnv::new().with_var("VALUES", raw));
+    let cfg: Cfg = Figment::from(CsvEnv::raw().with_source(source))
+        .extract()
+        .context("failed to extract Cfg from CsvEnv")?;
     ensure!(
         cfg.values == want,
         "expected {:?}, got {:?}",
         want,
         cfg.values
     );
-    let cfg: Cfg = Figment::from(CsvEnv::raw().with_source(source))
-        .extract()
-        .context("failed to extract Cfg from CsvEnv")?;
     Ok(())
 }
 
