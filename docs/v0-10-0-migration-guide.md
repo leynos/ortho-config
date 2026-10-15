@@ -5,11 +5,10 @@
 Read this guide when adopting source-aware environment merging and layer
 composition, parser-faithful clap string defaults, agent-native behaviour
 metadata, the optional-value boolean flags, optional profile overlays, or the
-Cargo external-subcommand helper.
-Existing callers can upgrade without changing their loading code:
-process-backed behaviour remains the default, profile support is opt-in, and
-applications that do not use the new opt-in metadata, profiles, or the Cargo
-helper require no changes.
+Cargo external-subcommand helper. Existing callers can upgrade without changing
+their loading code: process-backed behaviour remains the default, profile
+support is opt-in, and applications that do not use the new opt-in metadata,
+profiles, or the Cargo helper require no changes.
 
 ## Impact at a glance
 

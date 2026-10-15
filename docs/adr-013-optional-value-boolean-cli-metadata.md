@@ -50,8 +50,8 @@ placeholder.
 ### Option B: Add an optional-value marker to `CliMetadata`
 
 `CliMetadata` gains `value_optional: bool`, `ORTHO_DOCS_IR_VERSION` moves to
-"2.0", and the mirrored schema definition changes in step. Boolean
-flags are reported with `takes_value: true`, `value_name: Some("BOOL")`,
+"2.0", and the mirrored schema definition changes in step. Boolean flags are
+reported with `takes_value: true`, `value_name: Some("BOOL")`,
 `possible_values: ["true", "false"]`, and `value_optional: true`. Renderers
 print the optional-value form when the marker is set: the roff renderer emits
 `--flag[=BOOL]` with an italic placeholder, following clap's `require_equals`
@@ -79,13 +79,13 @@ existing documents without a migration step, per
 `ORTHO_DOCS_IR_VERSION` becomes "2.0". The marker alone is additive, so on its
 own it would ride the unreleased version rather than move it, exactly as
 [ADR-012](adr-012-profile-selection-and-layering.md) records for `profiles`.
-What forces the version here is the accompanying change to *existing* fields:
-a boolean flag's `takes_value`, `value_name`, and `possible_values` all differ
+What forces the version here is the accompanying change to *existing* fields: a
+boolean flag's `takes_value`, `value_name`, and `possible_values` all differ
 after this change, so a 1.1 reader and a 2.0 reader see different CLI surfaces
 for the same field. That is a change of shape, not an addition, and it shares
 the single "2.0" already minted for the identifier-value change rather than
-claiming a version of its own. Consumers should read
-`ORTHO_DOCS_IR_VERSION` rather than hard-code either value.
+claiming a version of its own. Consumers should read `ORTHO_DOCS_IR_VERSION`
+rather than hard-code either value.
 
 `cargo-orthohelp::schema::CliMetadata` and `ORTHO_DOCS_IR_VERSION` are updated
 in step with the `ortho_config::docs` definitions. The repository's
@@ -101,7 +101,7 @@ Table 1 compares the accepted option with the rejected alternatives.
 | B      | New `value_optional` marker   | Accepted                                        |
 | C      | Separate `--no-flag` argument | Rejected: breaks one-identifier-per-field model |
 
-_Table 1: Comparison of optional-value boolean metadata options._
+*Table 1: Comparison of optional-value boolean metadata options.*
 
 ## Goals and non-goals
 
