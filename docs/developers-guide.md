@@ -931,8 +931,10 @@ nested fixture paths with parents created first, and the discovery suites use
 Unit tests under `ortho_config/src/file` stage their configuration trees in a
 per-test temporary root rather than changing the process working directory or
 using Figment Jail. The generic fixture shape is documented under
-[temporary-file fixtures](rust-testing-with-rstest-fixtures.md#a-fixtures-for-temporary-files-and-directories);
-the rules below are specific to these tests.
+[temporary-file fixtures][temporary-fixture-guide]; the rules below are
+specific to these tests.
+
+[temporary-fixture-guide]: rust-testing-with-rstest-fixtures.md#a-fixtures-for-temporary-files-and-directories
 
 `ortho_config/src/file/tests/mod.rs` owns the convention and consolidates the
 ambient-filesystem ceremony into two entry points, imported by submodules as
@@ -954,10 +956,16 @@ dropping it deletes the directory that `root` points into.
 
 Fixture files are written through the capability
 (`dir.write("config.yaml", b"...")`) and passed to production helpers as
-canonical absolute paths. `load_config_file`, `process_extends`, and
-`resolve_base_path` canonicalize their input before reading it, so a test that
-speaks in `Dir`-relative names still observes absolute, symlink-resolved paths
-in merge results and error messages.
+canonical absolute paths. `load_config_file` canonicalizes the file it is
+given, and `process_extends` canonicalizes `current_path`'s parent before
+joining a relative `extends` base to it, so a test that speaks in
+`Dir`-relative names still observes absolute, symlink-resolved paths in merge
+results and error messages.
+
+`resolve_base_path` canonicalizes the base, not `current_path`; the
+missing-file error interpolates `current_path` as supplied. Pass a canonical
+`current_path` when a test asserts absolute paths in that error; a relative
+value appears as supplied.
 
 Do not destructure `TestRoot` with `..`: the `TempDir` guard drops at the end
 of the `let` statement, deleting the root before the test body runs, and the
