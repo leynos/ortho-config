@@ -181,6 +181,7 @@ fn transform_reports_boolean_flags_without_enum_values() {
             ["true", "false"],
         )],
         subcommands: Vec::new(),
+        behaviour: None,
     });
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
