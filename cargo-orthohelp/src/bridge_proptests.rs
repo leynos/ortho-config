@@ -24,6 +24,19 @@
 //! behaviour rather than to the generator: no choice of inputs makes a later
 //! timestamp available sooner. The wait is therefore polled with a bound, and
 //! exceeding the bound is reported as a test failure rather than a panic.
+//!
+//! # Assumption
+//!
+//! These properties assume a file timestamp granularity finer than the poll
+//! budget, which the filesystems this repository builds and tests on all
+//! provide. An mtime is stamped when the write happens and never revised
+//! afterwards, so two writes that land in the same timestamp bucket cannot be
+//! told apart by any amount of polling: the later one's timestamp is already
+//! fixed. The sibling `tests` module handles the same limit by waiting for the
+//! system clock to clear a whole second before its replacement write, which is
+//! affordable for its single literal pair. That wait is deliberately not
+//! repeated here, because it would add about a second to each of 256 generated
+//! cases to defend a case no supported filesystem exhibits.
 
 use std::time::{Duration, Instant, SystemTime};
 
@@ -143,11 +156,13 @@ fn write_cache(paths: &BridgePaths, json: &str) -> std::result::Result<(), TestC
         .map_err(|error| TestCaseError::fail(format!("write ir.json cache: {error:?}")))
 }
 
-/// How long to wait for the filesystem to timestamp a write.
+/// How long to wait for a replacement's timestamp to diverge from the previous
+/// one.
 ///
-/// Generous, because a coarse timestamp granularity can place the next legal
-/// value a full second away, while polling keeps the wait near zero whenever
-/// the filesystem has already moved on.
+/// Reaching the sibling `tests` module's value, which allows for a filesystem
+/// that places the next legal timestamp a full second away. Polling keeps the
+/// usual wait at one interval, since the read that follows a replacement
+/// normally differs at once.
 const MTIME_TIMEOUT: Duration = Duration::from_millis(1_500);
 
 /// How often the mtime poll re-reads the file.
@@ -156,33 +171,30 @@ const POLL_INTERVAL: Duration = Duration::from_millis(5);
 proptest! {
     /// Re-offering identical content leaves the file, and its mtime, alone.
     ///
-    /// The mtime is asserted stable twice. The immediate read catches a rewrite
-    /// that crossed a timestamp tick, which is the case a filesystem with fine
-    /// granularity reveals at once — and which the sibling unit test's single
-    /// literal pair can miss for the same reason. The poll that follows then
-    /// holds the property on a filesystem whose metadata settles late, so
-    /// neither shape of clock can let a rewrite through unnoticed.
+    /// A rewrite moves the mtime and a correct implementation does not rewrite,
+    /// so the two disagree at once; the read is therefore immediate, with no
+    /// poll to wait out. Asserting the read *and* the unchanged bytes together
+    /// keeps this non-vacuous even where a clock tick could hide the mtime
+    /// alone: a short circuit that compared the wrong thing would still have to
+    /// rewrite the document, and the bytes it wrote would have to match.
     #[test]
     fn rewriting_identical_content_preserves_mtime(content in generated_content()) {
         let (_temp, dir, paths) = scratch_bridge()?;
 
         write_cache(&paths, &content.original)?;
-        let first = poll_mtime_until(&dir, |_| true)?;
+        let first = cache_mtime(&dir)?;
 
         write_cache(&paths, &content.original)?;
-        let immediately_after = cache_mtime(&dir)?;
         prop_assert_eq!(
-            immediately_after,
+            cache_mtime(&dir)?,
             first,
             "rewriting an identical document moved the mtime of {}",
             content.original
         );
-
-        let settled = poll_mtime_until(&dir, |mtime| mtime == first)?;
         prop_assert_eq!(
-            settled,
-            first,
-            "mtime settled away from its original value for an identical rewrite"
+            cached_bytes(&dir)?,
+            content.original.clone().into_bytes(),
+            "an identical rewrite disturbed the cached document"
         );
     }
 
@@ -194,7 +206,7 @@ proptest! {
         let (_temp, dir, paths) = scratch_bridge()?;
 
         write_cache(&paths, &content.original)?;
-        let first = poll_mtime_until(&dir, |_| true)?;
+        let first = cache_mtime(&dir)?;
 
         write_cache(&paths, &content.differing)?;
         let second = poll_mtime_until(&dir, |mtime| mtime > first)?;
@@ -210,13 +222,16 @@ proptest! {
         );
     }
 
-    /// An identical write after a replacement preserves the newer mtime.
+    /// An identical write after a replacement leaves the newer file alone.
     ///
-    /// This composes both halves across a state change the other properties
-    /// leave unvisited: the replacement must advance the mtime, and the write
-    /// after it must recognise the replacement and leave it alone. A short
-    /// circuit still comparing against the pre-replacement content would rewrite
-    /// here and move the mtime a second time.
+    /// This visits a state change the other properties do not: a cache that has
+    /// already been replaced. An implementation that recognised identical
+    /// content only while the file still held the *original* document would
+    /// rewrite here, and the rewrite would be caught by the mtime and the bytes
+    /// together. That the replacement itself moved the mtime is asserted by
+    /// [`differing_content_advances_mtime_and_replaces_the_file`]; this property
+    /// deliberately waits only on the second write, so it does not need to win
+    /// the tick race that the first one sets up.
     #[test]
     fn an_identical_write_after_a_replacement_preserves_the_new_mtime(
         content in generated_content(),
@@ -225,13 +240,11 @@ proptest! {
 
         write_cache(&paths, &content.original)?;
         write_cache(&paths, &content.differing)?;
-        let replaced = poll_mtime_until(&dir, |_| true)?;
+        let replaced = cache_mtime(&dir)?;
 
         write_cache(&paths, &content.differing)?;
-        let settled = poll_mtime_until(&dir, |mtime| mtime == replaced)?;
-
         prop_assert_eq!(
-            settled,
+            cache_mtime(&dir)?,
             replaced,
             "an identical rewrite moved the mtime of a replaced cache"
         );
