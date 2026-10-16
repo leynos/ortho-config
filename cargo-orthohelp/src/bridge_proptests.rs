@@ -174,9 +174,9 @@ proptest! {
     /// A rewrite moves the mtime and a correct implementation does not rewrite,
     /// so the two disagree at once; the read is therefore immediate, with no
     /// poll to wait out. The bytes are read as well, to catch a short circuit
-    /// that leaves the document other than it found it — a rewrite of identical
-    /// content writes identical bytes and so satisfies this second assertion,
-    /// which is why the mtime remains the signal for that case.
+    /// that leaves the document other than it found it. A rewrite of identical
+    /// content writes identical bytes, so that second assertion passes under
+    /// this mutation; the mtime is the signal for it, as `# Assumption` notes.
     #[test]
     fn rewriting_identical_content_preserves_mtime(content in generated_content()) {
         let (_temp, dir, paths) = scratch_bridge()?;

@@ -7,30 +7,23 @@
 //! module pins the spellings somebody thought to write down; these properties
 //! generate flag sequences from a token model and hold both sanitizers to it.
 //!
-//! The model, not the implementation, decides what survives. Each generated
-//! element states the tokens it contributes and whether sanitisation must drop
-//! them, so every expectation is built from the generator rather than read back
-//! out of the code under test; a change that dropped or kept the wrong token
-//! has to contradict the model in order to pass.
+//! The model, not the implementation, decides what survives. Each element
+//! states the tokens it contributes and whether sanitisation must drop them, so
+//! expectations come from the generator rather than from the code under test; a
+//! change that kept or dropped the wrong token contradicts the model.
 //!
 //! # Scope
 //!
-//! Generated token text comes from a hyphen-free alphabet, and the hyphenated
-//! tokens are either audited literals in [`CANONICAL_KEPT_TOKENS`] or built from
-//! [`KEPT_PREFIXES`]. Neither class can spell coverage. A bare fragment cannot
-//! spell `-C`, and cannot spell the hyphen inside `instrument-coverage`. A
-//! prefixed token either carries `-C` before an option name that is not
-//! `instrument-coverage`, or does not carry `-C` at all, in which case the whole
-//! token is compared against the coverage option and misses. No prefix is
-//! exactly `-C`, so a prefix plus a fragment cannot complete a coverage name
-//! either. The kept and coverage classes are therefore disjoint by construction,
-//! with no filtering anywhere in the generator.
+//! Generated token text comes from a hyphen-free alphabet, so no fragment can
+//! spell `-C` or complete `instrument-coverage`; the other hyphenated tokens
+//! are audited literals in [`CANONICAL_KEPT_TOKENS`] or [`KEPT_PREFIXES`] with
+//! a fragment appended, and no prefix carries a coverage option or is `-C`
+//! alone. Kept and coverage stay disjoint by construction, never filtered.
 //!
 //! Two shapes of the real input space stay out of reach. Empty segments between
 //! encoded separators cannot be generated, though the wholly empty input can,
 //! and no generated token contains whitespace, since the plain form would split
-//! it in two. Both remain in the example table in the sibling `tests` module,
-//! which these properties extend rather than replace.
+//! it in two. Both remain in the sibling `tests` module's example table.
 
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
