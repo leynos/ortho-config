@@ -574,37 +574,33 @@ Observable success: a config file that sets `enabled = true` combined with
       `.txt`, so both the Rust lanes and the Markdown lanes are in scope.
 
 - [x] (2026-10-16) **Two defects surfaced by the first gate pass, both
-      introduced by this branch and both now repaired.** They are the exact
-      class the post-replay re-gate exists to catch, and neither was visible
-      to any pre-rebase certificate.
-
-      1. `cargo doc` failed with three `rustdoc::private-intra-doc-links`
-         errors in `cargo-orthohelp/src/schema/mod.rs`. The split's new module
-         doc described the families as `[`field`]`, `[`behaviour`]`, and
-         `[`content`]` — but those submodules are private, and the module
-         itself is public. The identical prose in
-         `ortho_config/src/docs/ir/mod.rs` is *not* an error: `ir` is a
-         private module, so rustdoc never renders or link-checks it. That
-         asymmetry is why only `cargo-orthohelp` failed, and it is worth
-         recording: mirroring prose between the two trees does not mirror its
-         lint exposure. The fix keeps the submodules private (making them
-         `pub` would add public paths the upstream tree does not expose, and
-         would break the ADR-010 mirror alignment) and demotes the three
-         module names to code spans, with the reason stated inline. Because
-         `cargo doc` aborts `lint-clippy` before `cargo clippy` runs, this one
-         failure also means Clippy and Whitaker were never reached in that
-         pass.
-
-      2. The spellcheck gate rejected one US spelling in this plan's own
-         prose. Rewritten as en-GB "artefact". A repository-wide sweep
-         confirmed the plan was the only file with a bare instance. The
-         surviving occurrences elsewhere sit inside inline code spans naming
-         upstream identifiers, and the overlay's `typos.local.toml` pattern
-         list already covers the ones this project quotes; those are correct
-         as-is under the quoted-API rule and must not be "corrected". Do not
-         name the remaining upstream literals here — the gate reads inline
-         code spans, so writing an unlisted one into this entry would
-         reintroduce the very failure it describes.
+      introduced by this branch and both now repaired.** The first was a
+      `cargo doc` failure: three `rustdoc::private-intra-doc-links` errors in
+      `cargo-orthohelp/src/schema/mod.rs`. The split's new module doc
+      described the families as intra-doc links to `field`, `behaviour`, and
+      `content`, but those submodules are private while the module holding
+      the doc is public. The identical prose in
+      `ortho_config/src/docs/ir/mod.rs` is *not* an error, because `ir` is
+      itself a private module and rustdoc never renders or link-checks it.
+      That asymmetry is the lesson worth recording: mirroring prose between
+      the two trees does not mirror its lint exposure. The fix keeps the
+      submodules private — making them `pub` would expose public paths the
+      upstream tree does not have, breaking the mirror alignment recorded in
+      ADR-010 — and demotes the three names to code spans with the reason
+      stated inline. Because `cargo doc` aborts the lint target before
+      `cargo clippy` runs, this single failure also hid every Clippy and
+      Whitaker result for that pass. The second was a spellcheck rejection:
+      one US spelling in this plan's own prose, rewritten as en-GB
+      "artefact". A repository-wide sweep confirmed the plan was the only
+      file with a bare instance; the surviving occurrences elsewhere sit
+      inside inline code spans naming upstream identifiers, and the overlay's
+      `typos.local.toml` pattern list already covers the ones this project
+      quotes, so those are correct under the quoted-API rule. Deliberately
+      not named here: the gate reads inline code spans, so writing an
+      unlisted upstream spelling into this entry would reintroduce the very
+      failure it describes. Both repairs are in commit `2882993e`, and
+      `cargo doc -p cargo-orthohelp --no-deps` under
+      `RUSTDOCFLAGS="-D warnings"` now exits 0.
 
 ## Surprises & discoveries
 
