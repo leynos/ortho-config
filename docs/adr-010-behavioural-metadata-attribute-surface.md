@@ -158,9 +158,11 @@ The phases were implemented as milestones B–F of the 7.2.1 execplan:
   tri-state boolean's "declared absent" state; absence of declaration means
   unknown, and an explicit declared-absent marker is deferred until a consumer
   needs it.
-- The hand-maintained IR mirror in `cargo-orthohelp/src/schema/mod.rs` must be
-  kept in sync with `ortho_config::docs::ir`; the schema-pin test and the
-  golden bridge tests catch drift.
+- The hand-maintained IR mirror in `cargo-orthohelp/src/schema/` must be kept
+  in sync with `ortho_config::docs::ir`; the two trees are split into the same
+  families (`behaviour`, `content`, `field`, and the root), and each file is
+  kept aligned with its namesake. The schema-pin test and the golden bridge
+  tests catch drift.
 
 ## Outstanding decisions
 
