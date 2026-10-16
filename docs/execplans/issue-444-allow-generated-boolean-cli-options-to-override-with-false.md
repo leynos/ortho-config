@@ -376,12 +376,14 @@ Observable success: a config file that sets `enabled = true` combined with
       and the gate is the superset.
       Note on the 400-line rule, since it was raised as a risk for this commit:
       `cli_flags/mod.rs` is now 381 lines, and the six added lines were checked
-      against it. The rule is not gate-enforced here (`dylint.toml` carries
-      only `[no_std_fs_operations]`, and `module_max_lines` appears nowhere in
-      the repository), so the file's 19-line headroom is a convention the gate
-      will not defend. It was left at 381 rather than split, because the added
-      doc comment explains the exact tokens it sits beside, and moving the
-      token generation away from that explanation would cost more than the
+      against it. **This note was wrong about enforcement and is superseded by
+      the 2026-10-16 entry under `Progress`.** The rule *is* gate-enforced:
+      `dylint.toml` carries no `[module_max_lines]` key, which selects the
+      lint's default of 400 rather than disabling the lint, and
+      `make lint-whitaker` fails on a breach. The `cli_flags/mod.rs` decision
+      itself stands on its own reasoning — the added doc comment explains the
+      exact tokens it sits beside, and moving the token generation away from
+      that explanation would cost more than the
       convention's headroom is worth.
 
 - [x] (2026-09-25) CodeRabbit round 15 reviewed `25acc1ca` (53 files) and
@@ -459,7 +461,7 @@ Observable success: a config file that sets `enabled = true` combined with
       well-formatted under the `mdtablefix` this branch was last formatted
       with and are rejected by the newer one on `main`. Every hunk was read
       back and confirmed to change no word: the edits re-wrap prose and
-      normalise one emphasised table caption. The Markdown lanes therefore
+      normalize one emphasized table caption. The Markdown lanes therefore
       belong in the post-rebase gate set for these files even though the
       replay did not touch their content.
 
@@ -475,6 +477,66 @@ Observable success: a config file that sets `enabled = true` combined with
       `src/agent_context/tests.rs:166:24` — and reported no other site, so the
       cruder text scan that had flagged four neighbours was false-positive.
       The fix is the same `behaviour: None` the four sibling literals use.
+
+- [x] (2026-10-16) Post-rebase repair of the fifth cross-branch breakage, and
+      the same failing lint that round 7 met, met twice over. This entry
+      corrects the round-15 note recorded above, which asserted that
+      `module_max_lines` "appears nowhere in the repository" and that the
+      400-line rule "is not gate-enforced here". Both claims are false:
+      `dylint.toml` has a `[no_std_fs_operations]` section and no
+      `[module_max_lines]` key, and the absence of that key means the lint's
+      *default* of 400 applies rather than that the lint is absent. The rule
+      is enforced by `make lint-whitaker`, which `make lint` runs.
+      `whitaker --all` reported one error,
+      `ortho_config/src/docs/ir.rs` at 405 lines, because dylint aborts at a
+      crate's first failing module and never evaluated `cargo-orthohelp` at
+      all. Auditing every declared module in the tree against the lint's own
+      source found three more breaches that the single reported error hid:
+      `cargo-orthohelp/src/schema/mod.rs` (405),
+      `cargo-orthohelp/src/agent_context/mod.rs` (404), and
+      `cargo-orthohelp/src/agent_context/tests.rs` (406). All four are
+      cross-branch combination failures: 386, 386, 392, and 362 lines on
+      `main`, and 321, 327, 263, and 301 before the rebase, so neither side
+      reached the limit alone. Crate roots are exempt — `lib.rs` and `main.rs`
+      are never visited as module items, which is why
+      `ortho_config_macros/src/lib.rs` sits at 427 on `main` and passes.
+      All four are split: `docs/ir/` and `schema/` into `mod.rs` plus
+      `behaviour.rs`, `content.rs`, and `field.rs` apiece, keeping the two
+      mirrors aligned family by family. `docs/ir` is a private module that
+      re-exports every type, so `ortho_config::docs::*` is byte-identical as a
+      public surface; `cargo-orthohelp`'s schema re-exports likewise, so
+      `schema/tests/mod.rs`'s `use super::*` still resolves;
+      `agent_context/mod.rs` by extracting the input-projection helpers into
+      `input.rs`; and `agent_context/tests.rs` by extracting the three profile
+      cases into `tests_profiles.rs`, following the existing
+      `behaviour_tests.rs` pattern.
+
+- [ ] (2026-10-16) Round-16 replies posted. Both findings are repaired at
+      HEAD — `format_flag_with_suffix` for the roff duplication and the
+      `CliLayerCase` parameterization for the composition tests — and the
+      replies are recorded in-thread against comment ids `4288826576` and
+      `4288826580`. The reply route is
+      `POST repos/{owner}/{repo}/pulls/{n}/comments/{id}/replies`: the
+      `/pulls/{n}/comments/{id}` read route 404s for a review comment, and the
+      working single-comment read is `repos/{owner}/{repo}/pulls/comments/{id}`
+      without the pull number. Each posted body was read back and length
+      checked, because a reply is exactly the artifact where a silent stub
+      would look like success.
+
+- [ ] (2026-10-16) **Third replay required: `origin/main` advanced to
+      `568a3907` after the second replay landed on `f99d9234`.** The delta is
+      three commits (`2421ed97` CLI-localization docs, `ff416e12` a
+      `setup-uv` bump, `568a3907` the #452 Figment-Jail-file-test migration),
+      eight files, 380 insertions and 172 deletions. `f99d9234` remains an
+      ancestor of `568a3907`, so the second replay's boundary is intact and
+      this is a straight restack, not a re-derivation. Two of the eight
+      files need care: `docs/developers-guide.md` is also modified on this
+      branch (the `agent_context::input` paragraph), and
+      `ortho_config/src/file/tests/*` sits directly beside this branch's own
+      `ortho_config/src/docs/ir/` split. The plan's own standing rule applies
+      unchanged — *every gate certificate so far belongs to a pre-rebase
+      candidate* — so the four splits' verification must be re-confirmed
+      against the third replay before any review evidence is called current.
 
 ## Surprises & discoveries
 
@@ -581,7 +643,7 @@ Observable success: a config file that sets `enabled = true` combined with
   that is true on each side and false in the combination. The fix converts the
   matrix to `run_config_case`, which also removes the process-environment
   mutation the old harness implied. Two details the harness does not cover had
-  to be supplied by the call site. First, `build_env` recognised only the bare
+  to be supplied by the call site. First, `build_env` recognized only the bare
   `CONFIG_PATH`, but the matrix's struct is prefixed, so discovery reads
   `OPTL_CONFIG_PATH`; the helper now matches the `CONFIG_PATH` *suffix*, which
   serves both spellings without hard-coding either prefix. Second,
@@ -752,7 +814,7 @@ Observable success: a config file that sets `enabled = true` combined with
   moved to a newer `mdtablefix`, whose wrap rules differ from the version this
   branch was last formatted under, so lines that were correct when written are
   now rejected. Neither file is semantically changed — `make fmt` re-wrapped
-  prose and normalised `_Table 1:_` to `*Table 1:*`, changing no word. This is
+  prose and normalized `_Table 1:_` to `*Table 1:*`, changing no word. This is
   the same *combination* shape as the two Rust breakages: an ambient-toolchain
   change on `main` that only becomes visible when the branch's own text is
   re-checked against it. The practical consequence is that a post-rebase gate
@@ -775,36 +837,34 @@ Observable success: a config file that sets `enabled = true` combined with
   defect is owned elsewhere and is reported here rather than duplicated.
 
 - **A shared test fixture grew a required field under a branch-owned
-  literal.** This is the fourth *combination* breakage and the cleanest
-  example of the shape. `main`'s PR #564 added
-  `behaviour: Option<BehaviourMetadata>` to `DocSpec` in
-  `cargo-orthohelp/src/agent_context/tests_support.rs` and filled it in at
-  every literal that file and its sibling own. This branch's
+  literal.** This is the fourth *combination* breakage and the cleanest example
+  of the shape. `main`'s PR #564 added `behaviour: Option<BehaviourMetadata>` to
+  `DocSpec` in `cargo-orthohelp/src/agent_context/tests_support.rs` and filled
+  it in at every literal that file and its sibling own. This branch's
   `transform_reports_boolean_flags_without_enum_values` was written before the
   field existed, so the merge produced one literal without it. Both sides
   compile alone; only the union does not. The lesson recorded for the next
-  replays is the same one the other three taught, with a sharper edge: a
-  helper struct that lives in `main` and is *constructed* by branch code is a
-  conflict surface even when no hunk of it is conflicted, because adding a
-  required field is not a text conflict at the construction site. Nothing in
-  the replay warns; only a compile of the affected crate does. The earlier
-  text scan that flagged four neighbouring literals was wrong, and the
-  compiler's single-site report was right: reason from the diagnostic, not
-  from the pattern match.
+  replays is the same one the other three taught, with a sharper edge: a helper
+  struct that lives in `main` and is *constructed* by branch code is a conflict
+  surface even when no hunk of it is conflicted, because adding a required
+  field is not a text conflict at the construction site. Nothing in the replay
+  warns; only a compile of the affected crate does. The earlier text scan that
+  flagged four neighbouring literals was wrong, and the compiler's single-site
+  report was right: reason from the diagnostic, not from the pattern match.
 
 - **A CodeRabbit finding was live at HEAD and stale in the same round.** The
   round-15 review raised two duplication findings. The first, against the roff
   flag-suffix formatting, was already satisfied by local commit `e60d343b`,
   which postdates the reviewed head and had not been pushed: the extraction
-  exists under the name `format_flag_with_suffix` and both public functions
-  are thin wrappers, so the finding is correct as written and answered by the
+  exists under the name `format_flag_with_suffix` and both public functions are
+  thin wrappers, so the finding is correct as written and answered by the
   unpushed work rather than by a new change. The second, against the two
   `compose_layers` CLI-layer tests, was still live at HEAD and is fixed by
   parameterizing them into one `#[rstest]` over a `CliLayerCase` table. The
   general lesson is that a review read after a rebase must be re-measured
   against the new head rather than trusted or dismissed wholesale: one finding
-  had been fixed without being pushed, the other had not been fixed at all,
-  and only re-running the check tells them apart.
+  had been fixed without being pushed, the other had not been fixed at all, and
+  only re-running the check tells them apart.
 
 ## Decision log
 
@@ -826,8 +886,10 @@ Observable success: a config file that sets `enabled = true` combined with
 - One clap argument per field; do not change `CliFieldInfo` or the single
   `arg_id` model.
 - Do not refactor the merge composer beyond the ticket need.
-- `cargo-orthohelp/src/schema/mod.rs` must stay byte-for-byte aligned with
-  `ortho_config/src/docs` (guarded by `ir_version_matches_ortho_config`).
+- `cargo-orthohelp/src/schema/` must stay aligned with `ortho_config/src/docs`
+  (guarded by `ir_version_matches_ortho_config` and the round-trip case in
+  `schema/tests/mod.rs`). Both trees are split into the same families, so the
+  alignment is file-for-file as well as type-for-type.
 - ADR-003: new optional metadata fields need explicit defaults for older
   derives.
 - Code files stay within 400 lines; 80-column Markdown prose; en-GB-oxendict
@@ -849,6 +911,12 @@ Observable success: a config file that sets `enabled = true` combined with
   value-taking boolean becomes localizable for `value_name`.
 - Downstream struct-literal consumers of `CliMetadata` face a source break
   until roadmap item 13.1.1 (constructors) lands.
+- `make lint-whitaker` enforces `module_max_lines` at its default of 400 via
+  `dylint.toml`'s silence on the key, and it aborts at a crate's first failing
+  module — so one reported breach can hide others in crates it never reached.
+  Rebase combinations erode the headroom that keeps existing modules under the
+  limit, as happened four times on this rebase; see the 2026-10-16 entry under
+  `Progress`.
 
 ## Conformance basis
 
@@ -921,20 +989,23 @@ The trace chain from requirement to evidence runs:
 
 ## Outcomes & retrospective
 
-Status: **rebased and repaired, pending re-gate and review.** Every acceptance
-criterion in issue #444 is implemented and covered, and draft PR #532 is open
-against `main`. The tree has since been replayed onto `main` at `f99d9234`, and
-the three cross-branch breakages the replay exposed are repaired — the
-`field_by_name` split, the `with_jail` removal, and the Markdown re-flow. All
-three repairs were established as *combination* failures: each side passes its
-own gates alone, so none would have been caught by validating either branch in
-isolation. A CodeRabbit `--agent` review has been requested at each milestone
-and every finding dispositioned; the gates must be re-run against the replayed
-tree before the review evidence can be considered current, because the earlier
-certificates belong to the pre-rebase candidate. The round-by-round log —
-including the two findings declined on evidence and the one later re-opened and
-applied after re-measurement — lives in `Progress` and is not restated here, so
-that a per-round count cannot drift out of step with the log it summarizes.
+Status: **rebased and repaired, re-gating.** Every acceptance criterion in
+issue #444 is implemented and covered, and PR #532 is open against `main` at
+`f99d9234` with its draft flag cleared. The replay exposed four *cross-branch*
+breakages, all repaired — the `field_by_name` split, the `with_jail` removal,
+the Markdown re-flow, and the `DocSpec` literal missing `main`'s new
+`behaviour` field. Every one was established as a combination failure: each
+side passes its own gates alone, so none would have been caught by validating
+either branch in isolation. Two of the four were invisible to the replay itself
+and surfaced only when the affected target was actually compiled, which is why
+the post-rebase gate set is mandatory rather than confirmatory. The round-16
+CodeRabbit findings are dispositioned and the fixes are committed; the gates
+must now be re-run against this replayed-and-repaired tree before any review
+evidence can be considered current, because every certificate so far belongs to
+a pre-rebase candidate. The round-by-round log — including the two findings
+declined on evidence and the one later re-opened and applied after
+re-measurement — lives in `Progress` and is not restated here, so that a
+per-round count cannot drift out of step with the log it summarizes.
 
 What was achieved, in the order the work forced it:
 
