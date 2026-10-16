@@ -7,6 +7,14 @@ use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
 use std::path::{Path, PathBuf};
 
+/// Assert a resolvable base comes back canonical, either spelling.
+///
+/// The fixture writes `base.toml` under the isolation root while `current`
+/// lives at that same root, so the relative case must anchor on
+/// `current.parent()`. Success is asserted by comparing against the
+/// *canonical* root join, which also pins the symlink resolution: a path that
+/// merely concatenated the root would compare unequal on a host whose
+/// temporary directory is itself a symlink.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
@@ -45,6 +53,13 @@ fn resolve_base_path_errors_when_no_parent() -> Result<()> {
     Ok(())
 }
 
+/// Assert a missing base yields a diagnosable, correctly typed error.
+///
+/// The message must name both the base that was not found and the current
+/// file that referenced it, because `current_path` is interpolated exactly as
+/// supplied rather than canonicalized. The typed assertion then checks the
+/// error is `OrthoError::File` wrapping `io::ErrorKind::NotFound`, so a caller
+/// can distinguish "absent" from "unreadable" instead of matching on text.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]

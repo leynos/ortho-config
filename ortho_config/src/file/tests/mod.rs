@@ -17,6 +17,11 @@ pub(super) mod path_tests;
 #[cfg(feature = "yaml")]
 pub(super) mod yaml_tests;
 
+/// Derive a canonical `(root, current)` pair from an arbitrary root path.
+///
+/// The canonicalizer is a parameter rather than a direct call to
+/// [`canonicalise`] so a test can substitute a failing implementation and
+/// assert on the resulting error chain; production callers use the real one.
 fn canonical_root_and_current_with<F>(
     root_path: &Path,
     canonicalise_fn: F,
@@ -40,7 +45,7 @@ where
 /// before the test body runs.
 ///
 /// Keeping the root canonical matters because
-/// `load_config_file` canonicalises paths before reading them, so tests that
+/// `load_config_file` canonicalizes paths before reading them, so tests that
 /// speak in `Dir`-relative names still observe absolute, symlink-resolved
 /// paths in errors and merge results.
 pub(super) struct TestRoot {
@@ -91,6 +96,11 @@ where
     )
 }
 
+/// Bridge the crate's typed error into the suite's `anyhow::Result`.
+///
+/// The file-module tests assert on context and source chains, so they run on
+/// `anyhow`; this adapts production helpers without discarding the typed
+/// [`crate::OrthoError`] that those assertions inspect.
 pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {
     result.map_err(anyhow::Error::new)
 }
@@ -151,6 +161,12 @@ fn sample_file_error(path: &str) -> Arc<crate::OrthoError> {
     })
 }
 
+/// Assert the canonicalization context survives onto the typed error.
+///
+/// A bare `?` on the canonicalizer would still fail, but would drop the
+/// "canonicalise configuration root directory" context that tells a caller
+/// which step failed. This guards that context, and the underlying
+/// `OrthoError::File` chain beneath it, against a refactor that flattens it.
 #[test]
 fn canonical_root_and_current_preserves_error_chain() -> Result<()> {
     let err =

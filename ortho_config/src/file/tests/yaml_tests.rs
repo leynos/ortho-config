@@ -46,6 +46,13 @@ fn yaml_respects_boolean_scalars(#[case] literal: &str, #[case] expected: bool) 
     Ok(())
 }
 
+/// Assert the file loader reads a real YAML file from disk, end to end.
+///
+/// The sibling tests above build a `Figment` from an in-memory string, which
+/// exercises the provider but never the path handling. Writing the fixture
+/// through the isolation root's `Dir` and loading its absolute path covers
+/// the read, and would catch a loader that opened the path relative to the
+/// process working directory.
 #[rstest]
 fn yaml_loader_reads_files_via_saphyr(test_root: Result<TestRoot>) -> Result<()> {
     let root = test_root?;
@@ -59,6 +66,12 @@ fn yaml_loader_reads_files_via_saphyr(test_root: Result<TestRoot>) -> Result<()>
     Ok(())
 }
 
+/// Assert a malformed file's error names the file it came from.
+///
+/// `load_config_file` canonicalizes the path before reading, so without the
+/// name in the message a caller holding several candidate files could not
+/// tell which one failed to parse. The fixture is deliberately truncated
+/// mid-flow-sequence so the failure is a parse error, not a read error.
 #[rstest]
 fn yaml_loader_reports_parse_errors_with_paths(test_root: Result<TestRoot>) -> Result<()> {
     let root = test_root?;
