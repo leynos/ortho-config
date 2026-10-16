@@ -53,6 +53,17 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # The explicit exclusion of the development build standard (the parallel
+      # frontend and mold in `.cargo/config.toml`) from every step that is not
+      # a Make gate. Cargo takes RUSTFLAGS in preference to every `rustflags`
+      # table in that file, so this value is what keeps the standard out of
+      # the coverage builds: cargo-llvm-cov appends `-Cinstrument-coverage` to
+      # it, and coverage is measured on the LLVM backend with the platform
+      # linker. The Make gates assign RUSTFLAGS themselves and restate the
+      # standard, so they ignore this value. It also shields
+      # `cargo +1.95.0 install merman-cli`, which reads this checkout's
+      # configuration and runs on a stable compiler that refuses `-Zthreads`.
+      # Never set it to `''`: an empty value leaves the configuration in force.
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
@@ -104,7 +115,18 @@ jobs:
         uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@6cec89bac47a21cf756d68d638a9a510998e57f8
 
       - name: Setup Rust
+        # `install-mold` puts the pinned, digest-verified mold on PATH on a
+        # Linux runner and is a notice-only no-op on Windows, so no `if` is
+        # needed and none is allowed: it must precede every step that can
+        # reach `make check-build-tools` or run the suite, and the coverage
+        # builds below run tests that need it even though their own flags
+        # exclude it. The action sets no linker flag; `.cargo/config.toml`
+        # selects mold. `mold-version` is held equal to tools/mold/VERSION by
+        # tests/workflow_contracts/build_tools_provisioning_test.py.
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          install-mold: 'true'
+          mold-version: '2.41.0'
 
       # The Windows coverage action uses Bash, which prepends Git's /usr/bin
       # ahead of Visual Studio. Pin the linker and export its SDK search paths
@@ -419,7 +441,45 @@ jobs:
       - name: Clippy (beta)
         env:
           CARGO: cargo +beta
+          # Beta refuses the nightly-only flag the standard restates (the
+          # parallel frontend), so this lane turns the standard off for the
+          # whole invocation. That also makes the build-tools
+          # preflight a no-op, so the job installs neither mold nor the
+          # pinned nightly.
+          BUILD_STANDARD: '0'
         run: make lint-clippy
+
+  # Exercises the declared MSRV (`rust-version` in Cargo.toml) and nothing more.
+  # The estate's cost rule for this lane is `cargo check --all-targets` on the
+  # MSRV toolchain and never a second test run: a test run proves behaviour the
+  # `build-test` job has already established on the pinned toolchain, while a
+  # check proves that the code still compiles for the oldest compiler the
+  # crates promise to support. Version quoted so YAML does not read 1.89.0 as
+  # a number. tests/workflow_contracts/build_exclusions_test.py holds it equal
+  # to the manifest.
+  msrv:
+    name: msrv (cargo check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Install the MSRV toolchain
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f  # master
+        with:
+          toolchain: "1.89.0"
+
+      # `make msrv-check` assigns RUSTFLAGS, which displaces the nightly-only
+      # flags in `.cargo/config.toml` that a stable compiler refuses, and
+      # selects the toolchain with `+1.89.0`, which bypasses the pinned
+      # nightly in rust-toolchain.toml.
+      - name: Check every target on the MSRV
+        run: make msrv-check
 
   binstall-packaging:
     name: Packaging dry run (${{ matrix.target }})
@@ -428,6 +488,14 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # Packaging builds what the release workflow builds, so it takes the
+      # release route: production flags only. Assigning RUSTFLAGS displaces
+      # the development standard in `.cargo/config.toml` (the parallel
+      # frontend and mold). setup-rust would export this same value
+      # by default; it is written out so the exclusion does not depend on an
+      # action default. Never set it to `''`: an empty value leaves the
+      # configuration in force.
+      RUSTFLAGS: -D warnings
       # sccache. The shared Rust setup action installs it and, from this
       # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
       # installed. Before this pin it installed sccache and exported
