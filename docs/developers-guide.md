@@ -2304,14 +2304,16 @@ integration (CI) environments.
 
 Dependabot owns scheduled dependency updates through `.github/dependabot.yml`:
 
-- Root GitHub Actions updates run weekly and use the `dependencies` and
+- Root GitHub Actions updates run daily and use the `dependencies` and
   `github-actions` labels.
 - Root Cargo workspace updates run daily and use the `dependencies` and
   `cargo` labels.
 - Python test requirements in `scripts/` update daily and use the
   `dependencies` and `python` labels.
-- The root `rust-toolchain.toml` updates weekly through the independent
+- The root `rust-toolchain.toml` updates daily through the independent
   `rust-toolchain` route, using the `dependencies` and `rust-toolchain` labels.
+  [Toolchain pin and freshness](#toolchain-pin-and-freshness)
+  explains why the interval is daily and carries no cooldown.
 
 GitHub Actions updates include calls into `leynos/shared-actions`. Contract
 tests that assert a caller's exact commit SHA create a lockstep dependency:
@@ -2516,6 +2518,14 @@ reference). The workflow contract `whitaker_install_test.py` asserts exactly one
 `Install Whitaker` step, using the action at a full commit hash, with no
 script of its own, on the Linux leg only.
 
+Whitaker takes none of the
+[development build standard](#development-build-standard). `make lint-whitaker`
+deliberately assigns `RUSTFLAGS="-D warnings"` alone and never
+`GATE_RUSTFLAGS`, because Whitaker runs on the toolchain its installer manages
+rather than on this repository's pinned nightly, and `mold` is not a
+prerequisite it can rely on. `build_standard_routing_test.py` holds the
+assignment to exactly `-D warnings`.
+
 ### The advisory Clippy-on-beta lane
 
 `clippy-beta` is the early-warning job for lints that have landed on the Rust
@@ -2543,6 +2553,321 @@ Makefile's `CLIPPY_FLAGS`
 strictness once, in the Makefile, and
 `tests/workflow_contracts/clippy_beta_test.py` asserts both ends: the job's
 platforms and advisory scope, and the target it calls.
+
+The beta step also sets `BUILD_STANDARD: '0'`. Beta refuses the nightly-only
+flags the [development build standard](#development-build-standard) restates,
+`-Zthreads=8` among them, so the lane turns the standard off for the whole
+invocation. That also makes the build-tools preflight a no-op, so the job
+installs neither `mold` nor the pinned nightly. `clippy_beta_test.py` asserts
+that the step selecting beta sets the switch to `0`.
+
+## Development build standard
+
+The development build standard is what a contributor's builds, tests, lints and
+type checks use unless a route opts out. It is the parallel `rustc` frontend
+(`-Zthreads=8`) on every host, plus the `mold` linker on Linux. The parallel
+frontend is nightly-only, which is why the repository pins a dated nightly; see
+[Toolchain pin and freshness](#toolchain-pin-and-freshness).
+Cranelift is not part of the standard; the measurement and the reasons are
+recorded in the "Cranelift qualification" section of this guide.
+
+The maintainer has made three decisions that this section records and does not
+reopen: development and formatting use a dated nightly, the parallel frontend
+and `mold` are adopted, and Dependabot keeps the pin fresh.
+
+### Where the flags live
+
+For a bare `cargo` invocation, `.cargo/config.toml` is the whole statement of
+the standard:
+
+```toml
+[build]
+rustflags = ["-Zthreads=8"]
+
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
+```
+
+`mold` ships for Linux only, so it appears under the Linux target table alone.
+It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
+match. macOS and Windows get the parallel frontend only and keep the platform
+linker.
+
+Cargo selects one `rustflags` source and does not merge them. A matching
+`[target.*]` table replaces `[build] rustflags` outright, and an assigned
+`RUSTFLAGS` outranks every table. `-Zthreads=8` is therefore repeated in each
+source, and each Makefile recipe that assigns `RUSTFLAGS` restates the standard
+through four variables:
+
+- `STANDARD_RUSTFLAGS` is the standard for the host: `-Zthreads=8`, plus
+  `-Clink-arg=-fuse-ld=mold` when `BUILD_HOST_OS` is `Linux`. It is empty when
+  `BUILD_STANDARD` is not `1`.
+- `GATE_RUSTFLAGS` is `-D warnings` followed by `STANDARD_RUSTFLAGS`. Every
+  gate recipe that runs Cargo through the standard uses it.
+- `DEBUG_RUSTFLAGS` is `STANDARD_RUSTFLAGS` alone, so a debug build keeps the
+  caller's warning policy rather than imposing one.
+- `RELEASE_RUSTFLAGS` is an empty assignment, which displaces the configuration
+  and so gives release builds none of the standard.
+
+`BUILD_HOST_OS` is the output of `uname -s`, or `Windows_NT` on Windows.
+Recipes invoke Cargo as `$(CARGO)`, so the executable is injectable.
+
+A gate that assigned only `-D warnings` would silently lose the standard and
+still be green. `build_standard_routing_test.py` therefore holds the Make
+variables equal to the configuration file for each host it names; change one
+without the other and that contract fails.
+
+### Routing matrix
+
+Which flags reach Cargo depends on the route, and three things must not be
+blurred:
+
+- Bare Cargo behaviour is the configuration file. A bare `cargo build`,
+  `cargo test` or `cargo check` reads `.cargo/config.toml` and nothing else.
+- Make restates the flags, because an assigned `RUSTFLAGS` displaces the file.
+  The restatement is what keeps `make test` and `cargo test` building the same
+  way on the same host.
+- Explicit non-development routes assign `RUSTFLAGS` on purpose, and say so in a
+  comment where they do. Release, coverage, packaging and the Whitaker suite
+  are not development builds and take none of the standard.
+
+The table lists, for each invocation, the flags that reach Cargo and the route
+they take.
+
+| Invocation                                           | Flags that reach Cargo                                                       | Route                |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------- |
+| Bare `cargo` build, test or check (Linux)            | `-Zthreads=8 -Clink-arg=-fuse-ld=mold`, from the Linux table                 | Development          |
+| Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8`, from `[build]`                                                | Development          |
+| `make test`, `make typecheck`                        | `-D warnings` and the host's standard, restated                              | Development          |
+| `make lint-clippy`: the `cargo doc` line             | `-D warnings` and the host's standard, restated                              | Development          |
+| `make lint-clippy`: the `cargo clippy` line          | `-D warnings` and the host's standard, restated                              | Development          |
+| `make build`                                         | The host's standard, restated; no `-D warnings`                              | Development          |
+| `make release`                                       | None: an empty assignment displaces the configuration                        | Production           |
+| `make lint-whitaker`                                 | `-D warnings` alone                                                          | Whitaker's toolchain |
+| `make msrv-check`                                    | `-D warnings` alone, on the stable MSRV compiler                             | MSRV                 |
+| `clippy-beta` lane                                   | `-D warnings` alone, with `BUILD_STANDARD=0` on `cargo +beta`                | Advisory beta        |
+| Coverage in CI                                       | `-D warnings` from the job; `cargo llvm-cov` appends `-Cinstrument-coverage` | Coverage             |
+| Release builds and packaging in CI                   | `-D warnings` from an explicit job-level `RUSTFLAGS`                         | Production           |
+| `cargo +1.95.0 install merman-cli` in CI             | `-D warnings` from the job-level `RUSTFLAGS`                                 | Shielded             |
+| Mutation testing                                     | `-D warnings` from the shared action's default                               | Shared workflow      |
+
+*Table: How each invocation obtains its Cargo flags, and whether it takes the
+development standard.*
+
+Notes on individual rows:
+
+- `make lint-clippy` runs two Cargo commands, `cargo doc` and `cargo clippy`,
+  and the routing contract proves each separately. `make build` omits
+  `-D warnings` by design.
+- `make lint-whitaker` assigns `RUSTFLAGS="-D warnings"` alone. Whitaker runs on
+  its installer-managed toolchain and takes none of the standard.
+- `make msrv-check` runs on a stable compiler, which refuses the nightly-only
+  flags, so it assigns `-D warnings` alone to displace the configuration.
+- Coverage is `generate-coverage` in the `build-test` job and in
+  `coverage-main.yml`. The job-level `RUSTFLAGS: -D warnings` displaces the
+  configuration, so a coverage build has neither `mold` nor the parallel
+  frontend.
+- Release builds (`release.yml`, job `build-assets`) and packaging (`ci.yml`,
+  job `binstall-packaging`) set the same explicit job-level value and take the
+  production route.
+- `cargo +1.95.0 install merman-cli` reads this checkout's configuration on a
+  stable compiler that refuses `-Zthreads`. The job-level `RUSTFLAGS` shields
+  it.
+- Mutation testing is a shared reusable workflow whose `setup-rust` default
+  exports `RUSTFLAGS=-D warnings`, so the configuration is displaced. This
+  repository does not set that value and no repository contract covers it; the
+  route depends on the shared action's default.
+
+An empty `RUSTFLAGS` assignment displaces the configuration, which is how
+`RELEASE_RUSTFLAGS` works. An empty `rustflags` input to the shared
+`setup-rust` action is different: it leaves `RUSTFLAGS` unset and so leaves the
+configuration in force. `build_exclusions_test.py` refuses that in the excluded
+jobs.
+
+Installed tooling need not be active in every job. The coverage publisher
+installs `mold` although its flags exclude it, because the suite that runs
+under coverage is the suite the Linux leg runs, and that suite needs the pinned
+linker.
+
+### Installing and checking the build tools
+
+The standard needs two things on a Linux host: the pinned `mold` release and
+the pinned toolchain. Two targets provision and verify them:
+
+- `make install-build-tools` runs `scripts/install-build-tools.sh`. It downloads
+  the pinned `mold` release (`tools/mold/VERSION`) for the host architecture
+  and verifies it against `tools/mold/SHA256SUMS`. It refuses an unlisted
+  artefact, an ambiguous file and a mismatch, and installs nothing in any of
+  those cases. It then unpacks the release under `BUILD_TOOLS_PREFIX` (default
+  `~/.local`) and runs `rustup toolchain install` in the repository root, which
+  reads `rust-toolchain.toml` for the channel, profile and components. Only
+  binary releases are fetched; there is no source-build fallback.
+- `make check-build-tools` runs `scripts/check-build-tools.sh`. On Linux,
+  `mold` must be on `PATH`, must run, and must equal the pin; `rustup` and the
+  pinned toolchain must be present. Every failure names
+  `make install-build-tools`, and all failures are reported in one pass. Off
+  Linux the linker half prints a note and passes.
+
+The check runs before `test`, `typecheck`, `lint-clippy` (and therefore `lint`)
+and the debug `build`. It never runs before `release`, `lint-whitaker` or
+`msrv-check`, so a release build does not fail for want of a linker it will not
+use. Under `BUILD_STANDARD=0` it is a no-op.
+
+The Makefile puts `$(BUILD_TOOLS_PREFIX)/bin` first on `PATH` on every host
+except Windows, because `-fuse-ld=mold` resolves by `PATH` order and the pinned
+release must outrank any distribution `mold`. Running the scripts outside Make
+means arranging that order separately.
+
+In CI, `build-test` and the coverage publisher job `coverage-upload` call the
+shared `setup-rust` action, pinned by SHA, with `install-mold: 'true'` and a
+`mold-version` equal to `tools/mold/VERSION`. The call is unconditional, in the
+same job, and before the first step that reaches the suite. The action is a
+notice-only no-op on Windows, so no platform guard exists or is allowed. It
+sets no linker flag; `.cargo/config.toml` does. The Windows leg installs
+nothing because the action does nothing there, and `clippy-beta`, `msrv`,
+packaging and release do not call the installer.
+
+### Opting out with `BUILD_STANDARD`
+
+`BUILD_STANDARD=0` turns the standard off for one invocation: the recipes then
+assign no standard flags, and the build-tools check prints a note and checks
+nothing. Only the advisory `clippy-beta` lane uses it, because beta refuses the
+nightly-only flags. Use it for any toolchain that is not the pinned nightly,
+together with `CARGO`:
+
+```bash
+make lint-clippy BUILD_STANDARD=0 CARGO="cargo +beta"
+```
+
+### Contract tests
+
+`make test-workflow-contracts` (see
+[Workflow contract gate](#workflow-contract-gate)) holds the standard in place
+with four contracts, a case in a fifth, and two support modules under
+`tests/workflow_contracts/`. Their method is a dry run:
+
+```bash
+make --dry-run <target> CARGO=probe-cargo
+```
+
+Make expands every variable and conditional as a real run would, and the
+contract judges the command line that would have reached Cargo. Case
+identifiers are distinct, so each appears by name in `pytest --collect-only`.
+
+- `build_standard_routing_test.py` compares each development route with the
+  configuration for each of four named hosts: Linux on x86_64, Linux on
+  aarch64, macOS and Windows. It proves that release, Whitaker, MSRV and the
+  `BUILD_STANDARD=0` opt-out are excluded, and that every standard route
+  reaches the preflight before its first Cargo line. A real `make` run proves
+  that a failing preflight stops the build before Cargo runs.
+- `build_tools_provisioning_test.py` derives the Linux jobs that reach the suite
+  from the workflows and from Make's dry run rather than listing them. Each
+  must install the pinned tools first, unconditionally, without
+  `continue-on-error`, with the pinned version.
+- `build_exclusions_test.py` requires the coverage, release and packaging jobs
+  to set a non-empty `RUSTFLAGS` with none of the standard, and requires that
+  nothing re-empties it. It also holds the MSRV job; see
+  [The MSRV lane](#the-msrv-lane).
+- `build_tools_scripts_test.py` drives both scripts with fixture tools standing
+  in for the network, the linker and `rustup`, and observes every refusal.
+- `clippy_beta_test.py` carries a case that the beta step sets
+  `BUILD_STANDARD` to `0`.
+- `build_standard_make.py` and `workflow_legs.py` are support code: the first
+  evaluates the Makefile and reads the Cargo configuration, and the second
+  derives a job's legs and the steps that reach the suite.
+
+These contracts judge this repository's own invocations. Estate-wide policy is
+audited by Concordat (`concordat artefact rule run rust-build-defaults`,
+`rust-toolchain-policy` and `dependabot-update-shape`, each with `--repo .`),
+which this repository does not replicate.
+
+## Toolchain pin and freshness
+
+### The pin
+
+`rust-toolchain.toml` pins a dated nightly. The file is authoritative, and this
+guide does not copy its date. The profile is `minimal` and the components are
+`rustfmt`, `clippy`, `rust-analyzer`, `rustc-codegen-cranelift-preview` and
+`llvm-tools-preview`. The pin is the newest nightly for which every component
+exists on Linux (x86_64 and aarch64), Windows MSVC and macOS, checked against
+the published rustup manifests.
+
+- The nightly is needed because `-Zthreads=8`, the parallel `rustc` frontend, is
+  nightly-only.
+- `llvm-tools-preview` is for local `cargo llvm-cov`.
+- `rustc-codegen-cranelift-preview` stays installed so that re-measuring
+  Cranelift needs no toolchain edit. The standard does not use it.
+
+`scripts/build-tools-common.sh` reads the channel from `rust-toolchain.toml`,
+so the installer and the check follow the pin and no second copy exists.
+
+### Dependabot keeps the pin fresh
+
+`.github/dependabot.yml` carries a `rust-toolchain` entry on `/`. It runs
+daily, sits in the catch-all `minor-and-patch` group (patterns `*`, update types
+`minor` and `patch`), uses the `dependencies` and `rust-toolchain` labels, and
+has no cooldown. The reasoning is:
+
+- The estate audit requires a Dependabot `rust-toolchain` entry that is daily or
+  weekly (RT-024), and a pinned dated nightly no older than 56 days (RT-023).
+- The estate Dependabot-shape rule requires every entry to be daily with a final
+  catch-all group (DB-005). Daily is the one interval that satisfies both
+  interval rules.
+- No rule asks for a cooldown, and a nightly's age is its date, so a cooldown
+  would spend part of the 56-day window before the bump pull request opened.
+
+### Bumping the pin
+
+Dependabot proposes the bump. A human reviewing the pull request must:
+
+1. Regenerate the trybuild `.stderr` snapshots from the compiler, never by
+   hand, then re-run with `TRYBUILD` unset to confirm. Nine test binaries use
+   trybuild, and they share one project directory under
+   `target/tests/trybuild`, so run them one at a time (`cargo test` does; a
+   parallel runner must serialize them):
+
+   ```bash
+   for t in compile_fail crate_path_trybuild declarative_merge_trybuild \
+     env_source_trybuild generated_lint_trybuild localization_trybuild \
+     localized_parse_trybuild subcommand_trybuild; do
+     TRYBUILD=overwrite cargo test -p ortho_config --test "$t"
+   done
+   TRYBUILD=overwrite cargo test -p cargo-orthohelp --test compile_time
+   ```
+
+   See [Testing these diagnostics](#testing-these-diagnostics).
+2. Confirm from the diff that only compiler wording changed.
+3. Re-read the re-measurement instruction in the "Cranelift qualification"
+   section of this guide.
+4. Run `make install-build-tools` and `make check-build-tools` locally to pick
+   up and verify the new channel.
+
+### The MSRV lane
+
+The workspace `rust-version` is 1.89.0 and CI exercises it. The `msrv` job in
+`ci.yml` installs `"1.89.0"`, quoted in YAML so that it is not read as a
+number, through the pinned `dtolnay/rust-toolchain` action, and runs
+`make msrv-check`. That target is:
+
+```bash
+RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) check --workspace --all-targets --all-features
+```
+
+The Makefile reads `MSRV` from the manifest, so the check cannot drift from the
+promise. The estate cost rule is a check, never a second test run: a test run
+would repeat what `build-test` has established on the pinned toolchain.
+`RUSTFLAGS` is assigned so that the nightly-only flags in the Cargo
+configuration are displaced, because a stable compiler refuses them.
+`build_exclusions_test.py` holds the job's installed version equal to the
+manifest's and its only step to `make msrv-check`.
+
+### The workspace-package warning
+
+On the pinned nightly, Cargo warns `cargo::unused_workspace_package_fields` for
+`version`, `readme`, `keywords` and `categories` in `[workspace.package]`,
+because no member inherits them. They cannot simply be removed:
+`scripts/bump_version.py` and `scripts/release_archive_naming.py` read
+`workspace.package.version`.
 
 ## Publish dry run
 
@@ -3451,13 +3776,35 @@ passing.
 
 ## Command checklist
 
-Run from repository root:
+Run from repository root.
+
+For first-time setup, install the pinned `mold` linker and the pinned
+toolchain, then confirm them (see
+[Installing and checking the build tools](#installing-and-checking-the-build-tools)):
+
+```bash
+make install-build-tools
+make check-build-tools
+```
+
+Then run the gates:
 
 ```bash
 set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
 set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
 set -o pipefail; make markdownlint 2>&1 | tee /tmp/make-markdownlint.log
 set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
+```
+
+Two further targets complete the set. `make msrv-check` checks every target on
+the declared MSRV toolchain without running tests (see
+[The MSRV lane](#the-msrv-lane)), and `make test-workflow-contracts` runs the
+workflow and build-standard contracts (see
+[Workflow contract gate](#workflow-contract-gate)):
+
+```bash
+set -o pipefail; make msrv-check 2>&1 | tee /tmp/make-msrv-check.log
+set -o pipefail; make test-workflow-contracts 2>&1 | tee /tmp/make-test-workflow-contracts.log
 ```
 
 For targeted behavioural debugging:
