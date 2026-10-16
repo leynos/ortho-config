@@ -12,14 +12,14 @@ use serde_json::Value;
 
 use super::super::behaviour::check_behaviour;
 use super::*;
-use crate::policy::{PolicyMode, PolicySeverity, Vocabulary};
+use crate::policy::{PolicyMode, PolicyResult, PolicySeverity, Vocabulary};
 
 /// A package with no commands is vacuously compliant.
 #[test]
 fn empty_command_list_yields_empty_report() {
     let context = ortho_config::AgentContext::new("empty");
     let report = check_behaviour(&context, PolicyMode::Warn);
-    assert!(report.results.is_empty());
+    assert_eq!(report.results, [] as [PolicyResult; 0]);
 }
 
 /// `off` suppresses every rule but still reports the mode it was asked for.
@@ -34,7 +34,7 @@ fn off_mode_returns_empty_report_without_evaluating_rules() {
         MutationEffect::Unknown,
     ));
     let report = check_behaviour(&context, PolicyMode::Off);
-    assert!(report.results.is_empty());
+    assert_eq!(report.results, [] as [PolicyResult; 0]);
     assert_eq!(report.mode, PolicyMode::Off);
 }
 

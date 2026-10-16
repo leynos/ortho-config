@@ -106,11 +106,11 @@ fn try_aggregate_none_on_empty() {
 
 #[test]
 fn both_aggregate_behaviours() {
+    // `expect` rather than `map_or_else(|| panic!(..), ..)`: that shape trips
+    // `unnecessary_option_map_or_else`, and the `unwrap_or_else` it suggests
+    // trips `or_fun_call`. `expect_used` is allowed in tests workspace-wide.
     run_aggregate_tests("try_aggregate", |v| {
-        OrthoError::try_aggregate(v).map_or_else(
-            || panic!("expected error aggregation to yield a value"),
-            |err| err,
-        )
+        OrthoError::try_aggregate(v).expect("expected error aggregation to yield a value")
     });
     run_aggregate_tests("aggregate", OrthoError::aggregate);
 }

@@ -148,10 +148,6 @@ pub(crate) fn build_plan_variant(
     }
 }
 
-#[expect(
-    clippy::result_large_err,
-    reason = "figment::Error originates upstream and remains unboxed elsewhere"
-)]
 fn plan_from_inputs(
     config: HelloWorldCli,
     greet: &GreetCommand,

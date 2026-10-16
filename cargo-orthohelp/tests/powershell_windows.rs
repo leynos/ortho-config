@@ -7,6 +7,9 @@ mod fixtures;
 mod tests {
     //! Windows integration tests that validate generated `PowerShell` help output.
 
+    use super::fixtures::powershell_decoding::{
+        Endianness, decode_probable_utf16le_without_bom, decode_utf16,
+    };
     use camino::Utf8PathBuf;
     use rstest::rstest;
     use std::error::Error;
@@ -63,8 +66,7 @@ mod tests {
             .arg("-Command")
             .arg("$PSVersionTable.PSVersion.Major")
             .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
+            .is_ok_and(|output| output.status.success())
     }
 
     fn run_get_help(
@@ -104,69 +106,20 @@ mod tests {
     }
 
     fn decode_help_output(bytes: &[u8]) -> String {
-        if let Some(decoded) = decode_utf16(bytes, [0xFF, 0xFE], Endianness::Little) {
+        // BOM-carrying UTF-16 first, in the order the byte-order marks
+        // announce themselves, then the BOM-less guess, then UTF-8. The
+        // decoders live in the shared fixture module so their buffering
+        // rules stay tested on every platform, not only on Windows.
+        if let Some(decoded) = decode_utf16(bytes, Endianness::Little.bom(), Endianness::Little) {
             return decoded;
         }
-        if let Some(decoded) = decode_utf16(bytes, [0xFE, 0xFF], Endianness::Big) {
+        if let Some(decoded) = decode_utf16(bytes, Endianness::Big.bom(), Endianness::Big) {
             return decoded;
         }
         if let Some(decoded) = decode_probable_utf16le_without_bom(bytes) {
             return decoded;
         }
         String::from_utf8_lossy(bytes).to_string()
-    }
-
-    fn decode_probable_utf16le_without_bom(bytes: &[u8]) -> Option<String> {
-        // Windows PowerShell 5.1 can emit UTF-16LE output without a BOM when
-        // piping `Get-Help ... | Out-String` through `-Command`. This fallback
-        // only activates for ASCII-heavy output (many zero high-bytes) and
-        // still validates the resulting UTF-16 sequence before accepting it.
-        if bytes.is_empty() || !bytes.len().is_multiple_of(2) {
-            return None;
-        }
-
-        let odd_byte_count = bytes.chunks_exact(2).len();
-        let odd_zero_count = bytes
-            .iter()
-            .skip(1)
-            .step_by(2)
-            .filter(|byte| **byte == 0)
-            .count();
-        if odd_zero_count * 2 < odd_byte_count {
-            return None;
-        }
-
-        let decoded = bytes
-            .chunks_exact(2)
-            .map(|pair| to_u16(pair, Endianness::Little))
-            .collect::<Vec<_>>();
-        String::from_utf16(&decoded).ok()
-    }
-
-    fn decode_utf16(bytes: &[u8], bom: [u8; 2], endian: Endianness) -> Option<String> {
-        let rest = bytes.strip_prefix(&bom)?;
-        let decoded = rest
-            .chunks_exact(2)
-            .map(|pair| to_u16(pair, endian))
-            .collect::<Vec<_>>();
-        Some(String::from_utf16_lossy(&decoded))
-    }
-
-    #[derive(Clone, Copy)]
-    enum Endianness {
-        Little,
-        Big,
-    }
-
-    const fn to_u16(pair: &[u8], endian: Endianness) -> u16 {
-        let (first, second) = match pair {
-            [first, second] => (*first as u16, *second as u16),
-            _ => return 0,
-        };
-        match endian {
-            Endianness::Little => first | (second << 8),
-            Endianness::Big => (first << 8) | second,
-        }
     }
 
     fn ensure_contains(

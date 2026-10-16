@@ -34,7 +34,7 @@ fn empty_policy_table_defaults_to_off() {
         .expect("empty policy table should parse")
         .expect("policy table should be present");
     assert_eq!(parsed.mode, PolicyMode::Off);
-    assert!(parsed.exceptions.is_empty());
+    assert_eq!(parsed.exceptions, [] as [PolicyException; 0]);
 }
 
 #[rstest]
@@ -167,7 +167,7 @@ fn resolved_config_apply_override_and_defaults() {
 
     let default_config = PolicyConfig::default();
     assert_eq!(default_config.mode, PolicyMode::Off);
-    assert!(default_config.exceptions.is_empty());
+    assert_eq!(default_config.exceptions, [] as [PolicyException; 0]);
 }
 
 proptest! {

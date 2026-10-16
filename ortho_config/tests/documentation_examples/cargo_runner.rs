@@ -180,18 +180,18 @@ fn vcvars_environment(state_directory: &Path, vcvars: &Path) -> Result<Vec<(Stri
 
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn decode_utf16le(output: &[u8]) -> Result<String> {
-    let mut chunks = output.chunks_exact(2);
-    let code_units = chunks
-        .by_ref()
-        .filter_map(|pair| match pair {
-            [low, high] => Some(u16::from(*low) | (u16::from(*high) << 8)),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
+    let (pairs, remainder) = output.as_chunks::<2>();
     ensure!(
-        chunks.remainder().is_empty(),
+        remainder.is_empty(),
         "MSVC environment output should contain complete UTF-16 code units"
     );
+    let code_units = pairs
+        .iter()
+        .map(|pair| {
+            let [low, high] = pair;
+            u16::from(*low) | (u16::from(*high) << 8)
+        })
+        .collect::<Vec<_>>();
     String::from_utf16(&code_units).context("MSVC environment output should be valid UTF-16")
 }
 

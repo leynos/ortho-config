@@ -972,6 +972,32 @@ particular, `basic.rs` retains a private `write_config` because its cases need
 nested fixture paths with parents created first, and the discovery suites use
 `discovery_with`, which owns no temporary root.
 
+The decoding fixture module,
+`cargo-orthohelp/tests/fixtures/powershell_decoding.rs`, owns the
+byte-order-mark aware decoders `decode_utf16` and
+`decode_probable_utf16le_without_bom`, their `Endianness` selector, and the
+`to_u16` code-unit join. It is owned by the `powershell_windows` integration
+target, which reaches it as `super::fixtures::powershell_decoding` and whose
+`decode_help_output` composes the two decoders in the order it wants to try
+them.
+
+The module lives in the shared fixture tree rather than beside that test
+because of where the test can run. `powershell_windows` is gated on
+`cfg(windows)`, and it declines to exercise the decoders at all when neither
+`powershell.exe` nor `pwsh` is on the machine, so a copy of the decoders inside
+it would be untested everywhere except a Windows host with a shell installed.
+As a module of `fixtures`, it rides along in every integration target that
+declares `mod fixtures` unconditionally — `agent_context_contract`,
+`cli_dispatch`, `golden_tests`, `nested_subcommand_end_to_end`,
+`policy_report_contract`, and `rstest_bdd` — so on Linux, where
+`powershell_windows` compiles to nothing at all, the decoders are still
+compiled and still tested, with no shell involved. Suites must reach the
+decoders here rather than re-deriving byte-order detection, because the
+zero-high-byte threshold, the two different trailing-byte policies, and the
+rule that a byte-order mark must be the mark its order implies are the
+behaviour under test, and a second copy would drift in exactly the cases that
+are hard to see.
+
 ## Isolated filesystem tests
 
 Unit tests under `ortho_config/src/file` stage their configuration trees in a
@@ -1852,6 +1878,34 @@ reference). The workflow contract `whitaker_install_test.py` asserts exactly one
 `Install Whitaker` step, using the action at a full commit hash, with no
 script of its own, on the Linux leg only.
 
+### The advisory Clippy-on-beta lane
+
+`clippy-beta` is the early-warning job for lints that have landed on the Rust
+beta channel but not yet on the pinned toolchain. It is advisory at the *job*
+level, through `continue-on-error: true` next to `runs-on` rather than inside
+the lint step. Job scope is what keeps a new beta lint from blocking a merge
+while still leaving each leg's own result visible; the pinned-toolchain
+`build-test` job remains the required one, and `clippy-beta`'s own
+`fail-fast: false` is what stops a failing Linux leg from cancelling the
+Windows one before it reports.
+
+The job runs on `ubuntu-latest` and `windows-latest`, and the Windows leg earns
+its machine. `make lint-clippy` compiles materially different source on the two
+platforms: `cargo-orthohelp/tests/powershell_windows.rs` is gated behind
+`cfg(windows)` and is not compiled anywhere else, and the same is true of the
+MSVC branch of `ortho_config/tests/documentation_examples/cargo_runner.rs`. On
+2026-09-28 the job failed on four lints in the first of those — a `Result`
+predicate and three constant-size chunk iterators — none of which a Linux-only
+leg can see.
+
+The lane's strictness is not written into the workflow. Both this job and the
+pinned `build-test` job call `make lint-clippy`, whose flags come from the
+Makefile's `CLIPPY_FLAGS`
+(`--workspace --all-targets --all-features -- -D warnings`). CI states the
+strictness once, in the Makefile, and
+`tests/workflow_contracts/clippy_beta_test.py` asserts both ends: the job's
+platforms and advisory scope, and the target it calls.
+
 ## Publish dry run
 
 `make publish-check` runs `lading publish` over the workspace. lading copies
@@ -2226,6 +2280,42 @@ action twice.
 measurements and named the constraint they had to satisfy, that each coverage
 job invokes the action twice so raising the watchdog costs twice as much
 ceiling here. It is answered above.
+
+### The in-process bound on a documentation subprocess
+
+The four tiers above are not the only timer on a test. The executable
+documentation tests run their subject through
+`ortho_config/tests/documentation_examples/process_runner.rs`, which kills a
+child that outlives `DEFAULT_TIMEOUT`. The child is a nested `cargo run` in a
+target directory of its own, so it pays a cold dependency build, and on a
+developer host that build is admitted to the same shared compiler pool as every
+other agent's, which is what its duration actually tracks.
+
+The figure was 600 s and is now 1,200 s, doubled to twice the worst run that
+finished. The measurements that set it:
+
+| Where                     | Duration | Of its budget |
+| ------------------------- | -------- | ------------- |
+| `build-test` runner       | 56.5 s   | 0.09 of 600 s |
+| `build-test` runner       | 120.7 s  | 0.20 of 600 s |
+| developer host            | 588.0 s  | 0.98 of 600 s |
+| developer host            | 593.6 s  | 0.99 of 600 s |
+| developer host, saturated | 600.5 s  | killed        |
+
+*Table: the durations `documented_orthohelp_command_generates_agent_context`
+took, read from the run logs. The runner figures come from run 36405408699; the
+developer-host ones from three local runs of the same code.*
+
+The two populations differ by an order of magnitude, and it is the shared host
+that reaches the ceiling. At 0.99 of budget the old figure was already too
+small by the same reading applied to the trybuild allowance above, so it was
+measuring host load rather than catching a hang. Doubling it leaves the tiers
+sound rather than inverted: the coverage lane runs nextest, where the base
+`slow-timeout` is 600 s and bounds the test more tightly than this does, and
+its runners are not shared, so on the lane that gates a merge the outer timer
+still fires first. Under `make test`, which invokes `cargo test` with no
+nextest bounds at all, this is the only timer on the child, which is why it has
+to carry the host's variance rather than the runner's.
 
 ### What the ceilings are sized against
 

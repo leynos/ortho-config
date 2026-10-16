@@ -4,8 +4,8 @@ use anyhow::{Result, ensure};
 
 use super::{field, first_array_item};
 use crate::agent_context::{
-    AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, InteractionMode, MutationEffect,
-    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PolicyMode,
+    AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, AgentInput, InteractionMode,
+    MutationEffect, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PolicyException, PolicyMode, SkillManifest,
 };
 use crate::docs::ORTHO_DOCS_IR_VERSION;
 use serde_json::Value;
@@ -49,15 +49,15 @@ fn assert_legacy_default_identity(context: &AgentContext) {
 }
 
 fn assert_legacy_default_support_declarations(context: &AgentContext) {
-    assert!(context.commands.is_empty());
+    assert_eq!(context.commands, [] as [AgentCommand; 0]);
     assert!(!context.profiles.supported);
     assert!(!context.feedback.supported);
 }
 
 fn assert_legacy_default_policy_and_skills(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.policy.exceptions.is_empty());
-    assert!(context.skill_manifests.is_empty());
+    assert_eq!(context.policy.exceptions, [] as [PolicyException; 0]);
+    assert_eq!(context.skill_manifests, [] as [SkillManifest; 0]);
 }
 
 /// Asserts the schema-v1 serialization contract for absent optional command,
@@ -126,7 +126,7 @@ fn assert_legacy_command_optional_metadata(command: &AgentCommand) {
 }
 
 fn assert_legacy_command_collections(command: &AgentCommand) {
-    assert!(command.inputs.is_empty());
+    assert_eq!(command.inputs, [] as [AgentInput; 0]);
 }
 
 fn assert_legacy_context_support_defaults(context: &AgentContext) {
@@ -136,8 +136,8 @@ fn assert_legacy_context_support_defaults(context: &AgentContext) {
 
 fn assert_legacy_context_policy_defaults(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.policy.exceptions.is_empty());
-    assert!(context.skill_manifests.is_empty());
+    assert_eq!(context.policy.exceptions, [] as [PolicyException; 0]);
+    assert_eq!(context.skill_manifests, [] as [SkillManifest; 0]);
 }
 
 /// Canonical pretty-printed schema-v1 JSON used by the wire-contract test.
