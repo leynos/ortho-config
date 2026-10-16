@@ -2,6 +2,24 @@
 //!
 //! This module owns time and capture limits only. Callers remain responsible
 //! for command construction, environment isolation, and exit-status policy.
+//!
+//! The timeout is sized from this repository's own runs rather than chosen.
+//! The callers that dominate it spawn a child `cargo` in a target directory
+//! kept to itself, so they pay a cold dependency build that no in-process
+//! test pays, and on a shared build host that build queues behind every
+//! other compiler running there. On a `build-test` runner the test took
+//! 56.5 s and 120.7 s; on a developer host it took 588.0 s and 593.6 s in
+//! two runs, then crossed the old 600 s bound while still building. That
+//! is 0.99 of its budget, past the 0.95 that "Test timeouts" in
+//! `docs/developers-guide.md` calls already too small rather than merely
+//! unlucky. A bound a legitimate build reaches is measuring host load
+//! rather than catching a hang, so it is doubled now, to twice the worst
+//! run that finished.
+//!
+//! Under `make test` this is the only timer on the child. The coverage lane
+//! runs nextest instead, where the per-test `slow-timeout` bounds the whole
+//! test more tightly than this does and its runners are not shared by other
+//! builds, which is why the two runner figures above stay under this one.
 
 use anyhow::{Context, Result, anyhow};
 use std::io::Read;
@@ -10,7 +28,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1_200);
 const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy)]

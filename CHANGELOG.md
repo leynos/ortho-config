@@ -177,3 +177,8 @@ All notable changes to this project will be documented in this file.
   than suppressing the lints, and extend the advisory `clippy-beta` job to
   Windows, where `cfg(windows)` code a Linux-only leg never compiles had been
   reaching the beta channel unseen.
+- Raise the documentation tests' subprocess bound from 600 s to 1,200 s. The
+  child is a nested `cargo run` paying a cold build, and on a developer host
+  that build shares the machine's compiler pool; three local runs of unchanged
+  code took 588.0 s, 593.6 s and 600.5 s, the last killed at the old bound
+  while the same test takes 56.5 s on a `build-test` runner.

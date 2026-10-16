@@ -2281,6 +2281,42 @@ measurements and named the constraint they had to satisfy, that each coverage
 job invokes the action twice so raising the watchdog costs twice as much
 ceiling here. It is answered above.
 
+### The in-process bound on a documentation subprocess
+
+The four tiers above are not the only timer on a test. The executable
+documentation tests run their subject through
+`ortho_config/tests/documentation_examples/process_runner.rs`, which kills a
+child that outlives `DEFAULT_TIMEOUT`. The child is a nested `cargo run` in a
+target directory of its own, so it pays a cold dependency build, and on a
+developer host that build is admitted to the same shared compiler pool as every
+other agent's, which is what its duration actually tracks.
+
+The figure was 600 s and is now 1,200 s, doubled to twice the worst run that
+finished. The measurements that set it:
+
+| Where                     | Duration | Of its budget |
+| ------------------------- | -------- | ------------- |
+| `build-test` runner       | 56.5 s   | 0.09 of 600 s |
+| `build-test` runner       | 120.7 s  | 0.20 of 600 s |
+| developer host            | 588.0 s  | 0.98 of 600 s |
+| developer host            | 593.6 s  | 0.99 of 600 s |
+| developer host, saturated | 600.5 s  | killed        |
+
+*Table: the durations `documented_orthohelp_command_generates_agent_context`
+took, read from the run logs. The runner figures come from run 36405408699; the
+developer-host ones from three local runs of the same code.*
+
+The two populations differ by an order of magnitude, and it is the shared host
+that reaches the ceiling. At 0.99 of budget the old figure was already too
+small by the same reading applied to the trybuild allowance above, so it was
+measuring host load rather than catching a hang. Doubling it leaves the tiers
+sound rather than inverted: the coverage lane runs nextest, where the base
+`slow-timeout` is 600 s and bounds the test more tightly than this does, and
+its runners are not shared, so on the lane that gates a merge the outer timer
+still fires first. Under `make test`, which invokes `cargo test` with no
+nextest bounds at all, this is the only timer on the child, which is why it has
+to carry the host's variance rather than the runner's.
+
 ### What the ceilings are sized against
 
 The allowance for work outside the watchdogs is per lane, because the two
