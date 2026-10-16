@@ -688,7 +688,91 @@ Observable success: a config file that sets `enabled = true` combined with
       workflow's concurrency group cancels each in-flight `pull_request` run on
       a new push, and three rapid pushes had already cancelled two runs.
 
+- [x] (2026-10-16) Repaired the four live CodeRabbit pre-merge rows. Three were
+      genuine coverage gaps still true of the tree and each gained a test; the
+      fourth was refuted by ancestry. The repairs are described under
+      `Surprises & discoveries` below; the trybuild pass fixture they add also
+      required an integration change, recorded there.
+
 ## Surprises & discoveries
+
+- **A new trybuild binary is an integration change, not a test-file change.**
+  Adding `ortho_config/tests/boolean_cli_trybuild.rs` looked like adding one
+  integration test. `.config/nextest.toml` enumerates the trybuild class by
+  name in a timing override, because no single glob covers it: eight names end
+  in `trybuild`, and `compile_fail` and `compile_time` do not. The enumeration
+  is what puts those binaries on the 960 s allowance; a binary absent from it
+  runs on the 600 s base allowance instead. A trybuild binary spawns a child
+  `cargo` and pays a cold dependency build, so the base allowance is the wrong
+  size for it by construction. `trybuild_tier_test.py` reads both the Rust
+  sources and the filter and fails when the two sets drift apart, and it failed
+  here with
+  `['boolean_cli_trybuild'] are trybuild binaries … but the
+  override's filter does not select them`.
+  This is the third arrival of the same class and the same omission:
+  `subcommand_trybuild` from `main`, `localization_trybuild` from another
+  branch, and now this one. The contract caught all three, and it is the reason
+  the enumeration is safer than it looks — but the cost is that any new
+  trybuild fixture carries a required edit to `.config/nextest.toml` and an
+  update to the counts stated in `docs/developers-guide.md`. The Windows
+  exclusivity entry was deliberately *not* extended: it pins the four binaries
+  the reservation was measured on, and `windows_trybuild_isolation_test.py`
+  asserts that exact set.
+
+- **The four live pre-merge rows were three real gaps and one stale finding.**
+  CodeRabbit's banner reported `2 errors · 2 warnings`. All four were
+  adjudicated on merit rather than dismissed as stale:
+
+  - *Testing (Overall)* was real. `value_optional` is a new wire field, and
+    nothing asserted that IR written before it exists still reads as a plain
+    switch. `legacy_ir_without_value_optional_defaults_to_false` now
+    deserializes one legacy payload into *both* schema mirrors — checked as
+    identical struct bodies by `diff -u`, not assumed — and
+    `test_field_port` now asserts `!value_optional` for a non-boolean field, so
+    the marker cannot become unconditionally `true` unnoticed.
+  - *Testing (Unit And Behavioural)* was real. The three rejected spellings
+    named by the row — `--is-excited false`, `-ifalse`, `--is-excited=invalid`
+    — now run as three distinct `rstest` cases asserting
+    `OrthoError::CliParsing`. They pass in the same run as the positive control
+    `help::generated_parser_round_trips_the_documented_spellings`, which is
+    what makes them non-vacuous: a negative case that passes for a shared,
+    unrelated reason would prove nothing.
+  - *Testing (Compile-Time / Ui)* was real, and is the entry above.
+  - *Out of Scope Changes check* was refuted by ancestry, not by assertion.
+    `default_display.rs` is absent from the PR delta, byte-identical to the
+    base, and authored by `9664641a` on `main`; `git merge-base --is-ancestor`
+    confirms that commit predates the base. CodeRabbit computed the row against
+    `8835347c`, where that commit did not yet exist, so the "unrelated
+    default-display parser change" it saw is `main`'s own work arriving through
+    the base advance. The `input.rs` file it also named is a required
+    400-line-cap split.
+
+- **`trybuild::pass` compiles *and runs* the fixture.** Reading
+  `trybuild-1.0.122/src/lib.rs` showed `pub fn pass` pushing `Expected::Pass`,
+  which the harness both compiles and executes. That matters for what a pass
+  fixture may contain: this one names
+  `BooleanCliConfig::compose_layers_from_iter` as a path rather than calling
+  it, because calling it would read the real process environment and discover
+  configuration files on whatever machine ran the test. The initial draft did
+  call it, and would have been environment-dependent — a green local run would
+  not have proved a green CI run. Naming the generic function still forces the
+  emitted signature to resolve from a downstream crate, which is the property
+  the fixture exists to test.
+
+- **Weave auto-resolved the one file two sides both changed, and the automatic
+  resolution was not trusted on its word.** `git merge-tree` for the branch
+  against the advanced `main` reported
+  `weave: 1 entities auto-resolved (high confidence)` on
+  `ortho_config/tests/documentation_examples_tests.rs`. That file holds
+  `EXPECTED_EXAMPLE_IDS`, a by-name class enumeration, which is exactly where a
+  clean-looking auto-merge can drop a side's additions. Both strategies were
+  run — Weave, and Git's own merge with `core.attributesFile=/dev/null` — and
+  both merged trees were read back to confirm every id from both sides is
+  present (`guide-boolean-override` from this branch,
+  `guide-orthohelp-format-all` and `guide-orthohelp-format-all-tree` from
+  `main`). The repository's own tracked `.gitattributes` does not select Weave;
+  the rule comes from a global ambient block, which is why the fallback was
+  computed rather than assumed.
 
 - **CodeRabbit's "could not verify" was accurate, and it confirms the
   unpublished-repair gap already recorded in `Progress`.** Both round-16

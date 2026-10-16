@@ -72,7 +72,7 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # neighbours build.
 #
 # The names are listed rather than globbed. There is no single pattern for
-# them -- six end in `trybuild` and `compile_fail` and `compile_time` do
+# them -- eight end in `trybuild` and `compile_fail` and `compile_time` do
 # not -- and only exact-name matching is proved against the pinned
 # `cargo-nextest@0.9.120` the coverage action installs, where the logs show
 # `binary(crate_path_trybuild)` taking this override and
@@ -90,6 +90,14 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # terms: the branch added the binary and did not name it here, `build-test
 # (linux)` failed the workflow contract step, and no other step failed.
 #
+# `boolean_cli_trybuild` arrived the same way, from the optional-value
+# boolean CLI branch, and was reported by `trybuild_tier_test.py` on its
+# first local run. It is named here rather than left on the base allowance
+# because it drives a cold child build exactly as the rest do. It is not
+# added to the Windows exclusivity above: that entry names the four
+# binaries the reservation was measured on, and
+# `windows_trybuild_isolation_test.py` pins that set exactly.
+#
 # The allowance is 960s: eight warning periods of 120s. The worst this
 # binary class reached on a run that finished was 572.5s
 # (`crate_path_trybuild`, run 36068184976), which is 0.95 of the 600s it
@@ -101,7 +109,7 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # Keep below [profile.default]'s global-timeout, which the contract in
 # tests/workflow_contracts asserts.
 [[profile.default.overrides]]
-filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
+filter = 'binary(boolean_cli_trybuild) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
 # Serialise orthohelp BDD scenarios: each runs in its own nextest process,

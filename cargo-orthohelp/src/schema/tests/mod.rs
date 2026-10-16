@@ -25,6 +25,40 @@ fn schema_round_trips_against_ortho_config() {
     );
 }
 
+/// IR written before `value_optional` existed still reads as a plain switch.
+///
+/// The field is additive on the wire but not in meaning: a v1.1 document has no
+/// `value_optional` key at all, and the flag it describes is an ordinary
+/// switch. Reading it as `true` would render `--flag[=BOOL]` for a flag that
+/// rejects values. Both schema mirrors carry `#[serde(default)]` for that
+/// reason, so both are checked here against the same legacy payload.
+#[test]
+fn legacy_ir_without_value_optional_defaults_to_false() {
+    let legacy = r#"{
+        "long": "verbose",
+        "short": "v",
+        "value_name": null,
+        "multiple": false,
+        "takes_value": false,
+        "possible_values": [],
+        "hide_in_help": false
+    }"#;
+
+    let from_config: ortho_docs::CliMetadata =
+        serde_json::from_str(legacy).expect("legacy IR should read into ortho_config::docs");
+    let from_helper: CliMetadata =
+        serde_json::from_str(legacy).expect("legacy IR should read into the local schema");
+
+    assert!(
+        !from_config.value_optional,
+        "ortho_config::docs should default a legacy flag to a required value"
+    );
+    assert!(
+        !from_helper.value_optional,
+        "the local schema should default a legacy flag to a required value"
+    );
+}
+
 struct DocMetadataSpec<'a> {
     app_name: &'a str,
     bin_name: Option<&'a str>,

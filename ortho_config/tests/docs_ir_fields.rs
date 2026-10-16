@@ -58,6 +58,10 @@ fn test_field_port(docs_metadata: DocMetadata) -> Result<()> {
         "expected port value name"
     );
     ensure!(port_cli.takes_value, "expected port takes_value true");
+    ensure!(
+        !port_cli.value_optional,
+        "expected port to require its value, unlike an optional-value boolean"
+    );
     ensure!(!port_cli.multiple, "expected port multiple false");
     ensure!(
         port_cli.possible_values.is_empty(),
