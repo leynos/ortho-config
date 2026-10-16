@@ -601,6 +601,34 @@ Observable success: a config file that sets `enabled = true` combined with
       failure it describes. Both repairs are in commit `2882993e`, and
       `cargo doc -p cargo-orthohelp --no-deps` under
       `RUSTDOCFLAGS="-D warnings"` now exits 0.
+- [x] (2026-10-16) Fifth replay, onto `2b57495c` (#489, the 1.89→1.98 toolchain
+      bump). One conflict, in `cargo-orthohelp/src/schema/mod.rs`: #489's
+      Clippy 1.98 `use_self` rewrites land on definitions this branch's split
+      commit relocates into `schema/field.rs`, so the two meet as a
+      modify/delete. Resolved by keeping the split and applying main's rewrites
+      at each type's new home (both `Box<Self>` sites in `field.rs`, the
+      `Vec<Self>` site in `mod.rs`). 47 of 47 commits replayed, none empty, and
+      `range-diff` reports exactly one changed entry — the resolution itself.
+      A sixth replay is avoided from here: `HEAD` now descends from the live
+      remote `main`.
+- [x] (2026-10-16) Fixed the replay-introduced regression in
+      `legacy_load_impl_has_no_profile_surface`. Main's #537 forbade the literal
+      `value_source`, which this branch's push gate legitimately emits; main's
+      own `declarative_path_prunes_only_command_line_values` proves the legacy
+      path reaches that spelling, so the entry was a false positive that passed
+      only because the profile-surface fixture passes an empty field list. The
+      guard now forbids `has_explicitly_provided_value` instead, and
+      `declarative_path_asks_clap_for_value_sources` pins the call site. The
+      `ortho_config_macros` lib suite went from 285 passed / 1 failed to 286
+      passed / 0 failed.
+- [x] (2026-10-16) `make check-fmt` green at `5f138ba3` (both `cargo fmt --all
+      -- --check` and `mdtablefix --check`; the plan's new prose was rewrapped
+      by hand, then verified to be a pure rewrap by a whitespace-insensitive
+      word diff against the pre-fix copy).
+- [ ] (2026-10-16) Full six-gate run on `5f138ba3` delegated to `scrutineer`
+      after the fix commit; results pending.
+- [ ] (2026-10-16) Force-push with lease bound to `b8c9a905` after the gates
+      return green, then refresh the tracking ref and set the upstream.
 
 ## Surprises & discoveries
 
