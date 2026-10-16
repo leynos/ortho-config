@@ -15,11 +15,16 @@
 //!
 //! # Scope
 //!
-//! Generated token text comes from a hyphen-free alphabet, and the only
-//! hyphenated tokens are the audited literals in [`CANONICAL_KEPT_TOKENS`].
-//! That keeps the kept and coverage classes disjoint by construction, with no
-//! filtering anywhere in the generator: a bare fragment cannot spell `-C` or
-//! `instrument-coverage`, because it cannot spell a hyphen.
+//! Generated token text comes from a hyphen-free alphabet, and the hyphenated
+//! tokens are either audited literals in [`CANONICAL_KEPT_TOKENS`] or built from
+//! [`KEPT_PREFIXES`]. Neither class can spell coverage. A bare fragment cannot
+//! spell `-C`, and cannot spell the hyphen inside `instrument-coverage`. A
+//! prefixed token either carries `-C` before an option name that is not
+//! `instrument-coverage`, or does not carry `-C` at all, in which case the whole
+//! token is compared against the coverage option and misses. No prefix is
+//! exactly `-C`, so a prefix plus a fragment cannot complete a coverage name
+//! either. The kept and coverage classes are therefore disjoint by construction,
+//! with no filtering anywhere in the generator.
 //!
 //! Two shapes of the real input space stay out of reach. Empty segments between
 //! encoded separators cannot be generated, though the wholly empty input can,
