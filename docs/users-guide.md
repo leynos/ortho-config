@@ -1193,13 +1193,19 @@ live under `man/man<N>/<bin>.<N>`, where `N` is the section number: the
 directory and the file extension. The PowerShell generator writes its module
 under `powershell/<ModuleName>/`, with a culture subdirectory per resolved
 locale holding `<ModuleName>-help.xml` and `about_<ModuleName>.help.txt`.
-`ModuleName` comes from `--ps-module-name`, then the `windows.module_name` key
-in package metadata, then the binary name. Agent context is not locale-scoped:
-`agent-context.json` sits at the output root rather than under a locale
-directory, so a run with several locales still writes exactly one such
-document, which is also written to standard output unless
-`--check-agent-native` owns that channel. Command summaries inside it are
-resolved from the package's `en-US` resources rather than from a requested
+`ModuleName` is resolved from these sources in order: `--ps-module-name`; the
+`module_name` key under `[package.metadata.ortho_config.windows]`; the
+`module_name` hint declared on the type itself as
+`#[ortho_config(windows(module_name = "Custom"))]`; and finally the binary
+name. Each source applies only when every earlier one is absent, so a type
+declaring `Custom` generates `Custom` even when package metadata declares a
+`[package.metadata.ortho_config.windows]` table without its own `module_name`.
+
+Agent context is not locale-scoped: `agent-context.json` sits at the output
+root rather than under a locale directory, so a run with several locales still
+writes exactly one such document, which is also written to standard output
+unless `--check-agent-native` owns that channel. Command summaries inside it
+are resolved from the package's `en-US` resources rather than from a requested
 `--locale`, and are omitted when no such resource exists.
 
 `--locale` is repeatable, and repeated values are deduplicated while keeping

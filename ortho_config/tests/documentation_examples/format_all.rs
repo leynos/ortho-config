@@ -58,6 +58,19 @@ fn documented_format_all_example_publishes_the_expected_tree() -> Result<()> {
 /// every other entry carries an indent drawn from box-drawing glyphs and
 /// spaces, then a `── ` elbow, then a node name. Directory entries end in `/`
 /// and become the parent of the entries indented beneath them.
+///
+/// The root line contributes no path segment of its own, and each file is
+/// joined to the directories still open above it. Given the tree
+///
+/// ```text
+/// <out>/
+/// ├── agent-context.json
+/// └── ir/
+///     └── en-US.json
+/// ```
+///
+/// the call yields `["agent-context.json", "ir/en-US.json"]`: `<out>` is not
+/// part of the input, and `ir/` is still open when `en-US.json` is reached.
 fn tree_files(tree: &str) -> Vec<String> {
     // An entry's parent is the nearest preceding directory indented less
     // deeply. Comparing indentation directly avoids reconstructing a numeric
