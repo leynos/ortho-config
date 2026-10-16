@@ -394,6 +394,25 @@ Observable success: a config file that sets `enabled = true` combined with
       a single-Markdown-file delta would spend minutes to re-prove what
       `07e6ea53` already proved, since no Rust input changed.
 
+- [ ] (2026-10-15) CodeRabbit round 16 reviewed `b8c9a905` (50 files
+      processed) and returned `CHANGES_REQUESTED` with two advisory
+      duplication findings, both CodeScene-sourced. The first asked for the
+      roff long/short flag formatting to be extracted into a `join_flag_suffix`
+      helper with both public functions left as thin wrappers; the branch had
+      already done exactly that under the name `format_flag_with_suffix` in
+      local commit `e60d343b`, which was never pushed, so the reviewed head
+      `b8c9a905` does not contain it and the finding is correct as written.
+      The second asked for the two `compose_layers` CLI-layer tests to be
+      parameterized as `explicit_false` and `absent` `rstest` cases carrying
+      the CLI arguments, expected provenance vector, and expected merged
+      boolean; that one was live at HEAD and is fixed here as
+      `compose_layers_tracks_cli_layer_presence`, with the requested case
+      names. Both findings are therefore satisfied by the next push. The
+      review's own allowance note — "0 included reviews remain after this
+      review … 1 review per hour" — is a rate limit, not a verdict, and the
+      follow-up reply rather than a fresh review request is what the round
+      needs.
+
 - [x] (2026-10-16) Rebase #2 onto the `origin/main` of `f99d9234` replayed the
       33-commit series onto the current target. The replay produced 32 commits:
       `88463dc0` ("Drop a stray trailing blank line from `default_display`")
@@ -443,6 +462,19 @@ Observable success: a config file that sets `enabled = true` combined with
       normalise one emphasised table caption. The Markdown lanes therefore
       belong in the post-rebase gate set for these files even though the
       replay did not touch their content.
+
+- [x] (2026-10-16) Post-rebase repair of the fourth cross-branch breakage, in
+      `cargo-orthohelp`. `main`'s PR #564 added a required
+      `behaviour: Option<BehaviourMetadata>` field to the shared `DocSpec`
+      test fixture and supplied it at every literal it owns. This branch's
+      `transform_reports_boolean_flags_without_enum_values` literal predates
+      that field, so the branch contributed a `DocSpec` construction with no
+      `behaviour` key: neither side fails alone, and only the combination
+      does. `cargo check -p cargo-orthohelp --all-features --all-targets`
+      named it exactly — `error[E0063]: missing field 'behaviour'` at
+      `src/agent_context/tests.rs:166:24` — and reported no other site, so the
+      cruder text scan that had flagged four neighbours was false-positive.
+      The fix is the same `behaviour: None` the four sibling literals use.
 
 ## Surprises & discoveries
 
@@ -741,6 +773,38 @@ Observable success: a config file that sets `enabled = true` combined with
   A sibling branch, `harden-cargo-external-subcommand-doctest-20260924`,
   already carries a "Fix Cargo external subcommand doctest" commit, so the
   defect is owned elsewhere and is reported here rather than duplicated.
+
+- **A shared test fixture grew a required field under a branch-owned
+  literal.** This is the fourth *combination* breakage and the cleanest
+  example of the shape. `main`'s PR #564 added
+  `behaviour: Option<BehaviourMetadata>` to `DocSpec` in
+  `cargo-orthohelp/src/agent_context/tests_support.rs` and filled it in at
+  every literal that file and its sibling own. This branch's
+  `transform_reports_boolean_flags_without_enum_values` was written before the
+  field existed, so the merge produced one literal without it. Both sides
+  compile alone; only the union does not. The lesson recorded for the next
+  replays is the same one the other three taught, with a sharper edge: a
+  helper struct that lives in `main` and is *constructed* by branch code is a
+  conflict surface even when no hunk of it is conflicted, because adding a
+  required field is not a text conflict at the construction site. Nothing in
+  the replay warns; only a compile of the affected crate does. The earlier
+  text scan that flagged four neighbouring literals was wrong, and the
+  compiler's single-site report was right: reason from the diagnostic, not
+  from the pattern match.
+
+- **A CodeRabbit finding was live at HEAD and stale in the same round.** The
+  round-15 review raised two duplication findings. The first, against the roff
+  flag-suffix formatting, was already satisfied by local commit `e60d343b`,
+  which postdates the reviewed head and had not been pushed: the extraction
+  exists under the name `format_flag_with_suffix` and both public functions
+  are thin wrappers, so the finding is correct as written and answered by the
+  unpushed work rather than by a new change. The second, against the two
+  `compose_layers` CLI-layer tests, was still live at HEAD and is fixed by
+  parameterizing them into one `#[rstest]` over a `CliLayerCase` table. The
+  general lesson is that a review read after a rebase must be re-measured
+  against the new head rather than trusted or dismissed wholesale: one finding
+  had been fixed without being pushed, the other had not been fixed at all,
+  and only re-running the check tells them apart.
 
 ## Decision log
 
