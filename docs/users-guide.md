@@ -1214,11 +1214,12 @@ gains one JSON file per locale, the man tree nests each locale as
 `<locale>/man/man<N>/<bin>.<N>`, and the PowerShell module gains one culture
 subdirectory per locale.
 
-`--locale` takes precedence over `--all-locales`. When no `--locale` value is
-given, `--all-locales` renders the locales declared in package metadata, or
+`--locale` takes precedence over `--all-locales`. When neither is given, the
+command uses the single locale `en-US`, even when the package metadata or the
+package's `locales/` directory declares others. With `--all-locales` and no
+`--locale`, the command renders the locales declared in package metadata, or
 those discovered under the package's `locales/` directory when metadata
-declares none. Only when neither is available does the command fall back to the
-single locale `en-US`.
+declares none, and falls back to `en-US` only when neither source is available.
 
 The PowerShell `en-US` fallback is separate from that locale default. When the
 requested locales omit `en-US`, the generator also writes an `en-US` help set
