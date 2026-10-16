@@ -1255,6 +1255,24 @@ The trace chain from requirement to evidence runs:
   executable documentation example runs under `make test`.
 - Full commit gates run through `scrutineer` before each CodeRabbit review.
 
+**Proof inventory: not applicable, with justification.** This branch introduces
+no CrossHair, Kani, Verus, or LemmaScript proof, and no comparable formal
+obligation. Repository-wide searches for the corresponding source,
+configuration, and tool-invocation artefacts return nothing: there is no
+`kani.toml`, `verus.toml`, or `crosshair.toml`, no proof directory, and no
+proof tool named in any `Cargo.toml`, TOML configuration, or Makefile target.
+The only property-test surface touched is
+`cargo-orthohelp/src/agent_context/proptests.rs`, and it is *inherited*, not
+introduced: the file exists unchanged at the comparison base. The branch's
+entire delta to it is four lines — an import repointed at the split
+`default_display` module, and the new required `value_optional: false` fixture
+field that the IR extension forces. Neither changes a proposition, an
+assumption, a generator, or a bound, so no existing proptest obligation is
+materially altered. The behavioural obligations this branch does introduce are
+discharged by the parameterized tests named in M1–M4 above, which is the
+proportionate method for a finite truth table; escalating them to a formal
+prover would add ceremony without adding coverage.
+
 ## CodeScene disposition
 
 Two `String Heavy Function Arguments` advisory findings are open against the
