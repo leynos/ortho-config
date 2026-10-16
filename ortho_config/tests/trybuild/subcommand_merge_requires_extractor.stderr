@@ -2,8 +2,13 @@ error[E0277]: the trait bound `NoExtractorArgs: CliValueExtractor` is not satisf
   --> tests/trybuild/subcommand_merge_requires_extractor.rs:36:17
    |
 36 |     let _ = cli.load_and_merge_with_matches(&matches);
-   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
    |
+help: the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:20:1
+   |
+20 | struct NoExtractorArgs {
+   | ^^^^^^^^^^^^^^^^^^^^^^
 note: required by a bound in `load_and_merge_with_matches`
   --> src/subcommand/config_merge.rs
    |
@@ -17,8 +22,13 @@ error[E0277]: the trait bound `NoExtractorArgs: CliValueExtractor` is not satisf
   --> tests/trybuild/subcommand_merge_requires_extractor.rs:37:17
    |
 37 |     let _ = cli.load_and_merge_with_matches_with_sources(&matches, source);
-   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
    |
+help: the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:20:1
+   |
+20 | struct NoExtractorArgs {
+   | ^^^^^^^^^^^^^^^^^^^^^^
 note: required by a bound in `load_and_merge_with_matches_with_sources`
   --> src/subcommand/config_merge.rs
    |
