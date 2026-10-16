@@ -4,10 +4,13 @@
 //! without depending on unpublished crate internals.
 //!
 //! The mirror follows the same grouping as `ortho_config::docs::ir`: the
-//! document and its sections here, per-field metadata in [`field`], behaviour
-//! declarations in [`behaviour`], and reusable content in [`content`]. Every
-//! type stays re-exported from this module, so `crate::schema::DocMetadata`
-//! and friends remain valid paths for the rest of the tool.
+//! document and its sections here, per-field metadata in `field`, behaviour
+//! declarations in `behaviour`, and reusable content in `content`. The
+//! submodules are private, so these names are code spans rather than links:
+//! a public module naming private items would otherwise trip
+//! `rustdoc::private-intra-doc-links`. Every type stays re-exported from this
+//! module, so `crate::schema::DocMetadata` and friends remain valid paths for
+//! the rest of the tool.
 
 use serde::{Deserialize, Serialize};
 

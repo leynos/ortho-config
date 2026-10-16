@@ -520,7 +520,7 @@ Observable success: a config file that sets `enabled = true` combined with
       `/pulls/{n}/comments/{id}` read route 404s for a review comment, and the
       working single-comment read is `repos/{owner}/{repo}/pulls/comments/{id}`
       without the pull number. Each posted body was read back and length
-      checked, because a reply is exactly the artifact where a silent stub
+      checked, because a reply is exactly the artefact where a silent stub
       would look like success.
 
 - [ ] (2026-10-16) **Third replay required: `origin/main` advanced to
@@ -537,6 +537,74 @@ Observable success: a config file that sets `enabled = true` combined with
       unchanged — *every gate certificate so far belongs to a pre-rebase
       candidate* — so the four splits' verification must be re-confirmed
       against the third replay before any review evidence is called current.
+
+- [x] (2026-10-16) **Third replay completed: 43 commits onto `568a3907`,
+      new head `5479a969`.** `range-diff` reports **43 of 43 commits with
+      identical patches and none marked changed**, so the replay is
+      semantically clean rather than merely conflict-free. Conflict overlap
+      was a single file (`docs/developers-guide.md`) whose hunks sit far
+      apart — `main` inserts at 349 and 975, the branch edits at 144 and 527 —
+      and it merged without a conflict. The semantic audit passed: 7
+      target-only paths are byte-identical to the target, no path was
+      deleted against the target, and the branch's three renames
+      (`roff/escape.rs`, `docs/ir.rs`, `cli_flags.rs`) all survive as
+      directory modules. All 12 split files remain well under the limit, the
+      tallest being `agent_context/tests.rs` at 311.
+
+- [x] (2026-10-16) **Lesson: the per-replay `cargo fmt --check` guard was
+      mis-calibrated and had to be removed mid-replay.** It is not a parser
+      tripwire — it is a full formatting gate, and it is stricter than this
+      branch's own history. It halted at replay 2 with a
+      `--chain-method`-style line-break difference in
+      `ortho_config_macros/src/derive/build/cli/tests.rs`, which the
+      intermediate commit `c432b4fe` legitimately leaves non-conforming and
+      the *next* commit `3958ecc9` reflows. The file is byte-identical
+      between the original commit and its replay, and both rustfmt 1.8.0 and
+      the 1.89 toolchain pin reject the original, which proves the deviation
+      is inherited, not manufactured by the merge. Removing the guard from
+      `git-rebase-todo` (rather than restarting the replay) was safe because
+      the file's byte-identity is direct evidence the merge did not touch it.
+      A per-replay guard should be a parse-only check; use `rustfmt` as a
+      parser only if it can be told not to enforce style, and keep the real
+      formatting gate at the end of the run.
+
+- [ ] (2026-10-16) Full gate set re-run against the frozen `5479a969`, since
+      every earlier certificate belongs to a pre-rebase candidate. Changed
+      classes versus the target are 46 `.rs`, 10 `.md`, 4 `.snap`, and 1
+      `.txt`, so both the Rust lanes and the Markdown lanes are in scope.
+
+- [x] (2026-10-16) **Two defects surfaced by the first gate pass, both
+      introduced by this branch and both now repaired.** They are the exact
+      class the post-replay re-gate exists to catch, and neither was visible
+      to any pre-rebase certificate.
+
+      1. `cargo doc` failed with three `rustdoc::private-intra-doc-links`
+         errors in `cargo-orthohelp/src/schema/mod.rs`. The split's new module
+         doc described the families as `[`field`]`, `[`behaviour`]`, and
+         `[`content`]` — but those submodules are private, and the module
+         itself is public. The identical prose in
+         `ortho_config/src/docs/ir/mod.rs` is *not* an error: `ir` is a
+         private module, so rustdoc never renders or link-checks it. That
+         asymmetry is why only `cargo-orthohelp` failed, and it is worth
+         recording: mirroring prose between the two trees does not mirror its
+         lint exposure. The fix keeps the submodules private (making them
+         `pub` would add public paths the upstream tree does not expose, and
+         would break the ADR-010 mirror alignment) and demotes the three
+         module names to code spans, with the reason stated inline. Because
+         `cargo doc` aborts `lint-clippy` before `cargo clippy` runs, this one
+         failure also means Clippy and Whitaker were never reached in that
+         pass.
+
+      2. The spellcheck gate rejected one US spelling in this plan's own
+         prose. Rewritten as en-GB "artefact". A repository-wide sweep
+         confirmed the plan was the only file with a bare instance. The
+         surviving occurrences elsewhere sit inside inline code spans naming
+         upstream identifiers, and the overlay's `typos.local.toml` pattern
+         list already covers the ones this project quotes; those are correct
+         as-is under the quoted-API rule and must not be "corrected". Do not
+         name the remaining upstream literals here — the gate reads inline
+         code spans, so writing an unlisted one into this entry would
+         reintroduce the very failure it describes.
 
 ## Surprises & discoveries
 
