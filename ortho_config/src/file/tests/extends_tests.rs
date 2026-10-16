@@ -4,13 +4,13 @@ use super::super::extends::{get_extends, merge_parent, process_extends};
 use super::{to_anyhow, with_fresh_graph};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Context, Result, anyhow, ensure};
+use cap_std::fs::Dir;
 use figment::{
     Figment,
     providers::{Format, Toml},
 };
 use rstest::rstest;
 use std::collections::HashSet;
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -82,16 +82,23 @@ fn get_extends_reports_error_with_file_variant(
     Ok(())
 }
 
+/// Drive one failing `extends` case: stage fixtures, then assert the error.
+///
+/// `setup` receives the isolation root's [`Dir`] and returns the
+/// `extends` document to load, so each case describes only the filesystem
+/// state that provokes its failure. Asserting on an error *fragment* rather
+/// than an exact string keeps the case coupled to the diagnosis, not to
+/// incidental wording around it.
 fn expect_process_extends_failure<F>(
     setup: F,
     failure_message: &str,
     expected_fragment: &str,
 ) -> Result<()>
 where
-    F: FnOnce(&Path) -> io::Result<String>,
+    F: FnOnce(&Dir) -> io::Result<String>,
 {
-    with_fresh_graph(|_j, root, current, visited, stack| {
-        let config = setup(root).map_err(|err| anyhow!(err))?;
+    with_fresh_graph(|dir, _root, current, visited, stack| {
+        let config = setup(dir).map_err(|err| anyhow!(err))?;
         let figment = Figment::from(Toml::string(&config));
         match process_extends(figment, current, visited, stack) {
             Ok(_) => Err(anyhow!(failure_message.to_owned())),
@@ -106,12 +113,19 @@ where
     })
 }
 
+/// Assert both spellings of `extends` resolve to the same parent document.
+///
+/// A relative base is resolved against the *current file's* directory, while
+/// an absolute base is taken as given. Both must land on the fixture written
+/// under the isolation root, so the merged `foo` is visible either way; if
+/// the relative branch ever resolved against the process working directory,
+/// only the absolute case would still pass.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
 fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) -> Result<()> {
-    with_fresh_graph(|j, root, current, visited, stack| {
-        j.create_file("base.toml", "foo = \"base\"")?;
+    with_fresh_graph(|dir, root, current, visited, stack| {
+        dir.write("base.toml", b"foo = \"base\"")?;
         let config = if is_abs {
             format!("extends = '{}'", root.join("base.toml").display())
         } else {
@@ -130,6 +144,11 @@ fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) -> Result
     })
 }
 
+/// Assert a parentless current path is rejected before any filesystem work.
+///
+/// An empty path has no parent, so a relative `extends` cannot be anchored.
+/// The loader must report that as a diagnosis rather than silently resolving
+/// against the working directory or panicking on the unwrap.
 #[test]
 fn process_extends_errors_when_no_parent() -> Result<()> {
     let figment = Figment::from(Toml::string("extends = \"base.toml\""));
@@ -148,24 +167,25 @@ fn process_extends_errors_when_no_parent() -> Result<()> {
     Ok(())
 }
 
+/// Table of `extends` values that must be rejected, each with its own fixture.
+///
+/// Both cases exercise a base that is *not* a readable regular file — a
+/// directory, and an empty `extends` value. They are separate rows because
+/// they fail at different stages: the first reaches the filesystem and is
+/// refused for the file kind, the second is rejected on the value before any
+/// read is attempted.
 #[rstest]
 #[case::not_regular_file(
-    |root: &Path| {
-        let dir_path = root.join("dir");
-        if !dir_path.exists() {
-            fs::create_dir(&dir_path)?;
-        }
+    |root: &Dir| {
+        root.create_dir("dir")?;
         Ok("extends = \"dir\"".to_owned())
     },
     "expected process_extends to fail when base is not a regular file",
     "not a regular file"
 )]
 #[case::empty_extends(
-    |root: &Path| {
-        let base_path = root.join("base.toml");
-        if !base_path.exists() {
-            fs::write(&base_path, "")?;
-        }
+    |root: &Dir| {
+        root.write("base.toml", b"")?;
         Ok("extends = \"\"".to_owned())
     },
     "expected process_extends to fail when extends value is empty",
@@ -177,7 +197,7 @@ fn process_extends_error_cases<F>(
     #[case] expected_fragment: &str,
 ) -> Result<()>
 where
-    F: FnOnce(&Path) -> io::Result<String>,
+    F: FnOnce(&Dir) -> io::Result<String>,
 {
     expect_process_extends_failure(setup, failure_message, expected_fragment)
 }

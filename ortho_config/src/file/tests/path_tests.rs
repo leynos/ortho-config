@@ -1,31 +1,38 @@
 //! Tests covering base path resolution and graph merging.
 
 use super::super::path::resolve_base_path;
-use super::{canonical_root_and_current, with_jail};
+use super::{TestRoot, test_root};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
 use std::path::{Path, PathBuf};
 
+/// Assert a resolvable base comes back canonical, either spelling.
+///
+/// The fixture writes `base.toml` under the isolation root while `current`
+/// lives at that same root, so the relative case must anchor on
+/// `current.parent()`. Success is asserted by comparing against the
+/// *canonical* root join, which also pins the symlink resolution: a path that
+/// merely concatenated the root would compare unequal on a host whose
+/// temporary directory is itself a symlink.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
-fn resolve_base_path_resolves(#[case] is_abs: bool) -> Result<()> {
-    with_jail(|j| {
-        j.create_file("base.toml", "")?;
-        let (root, current) = canonical_root_and_current()?;
-        let base_path = if is_abs {
-            root.join("base.toml")
-        } else {
-            PathBuf::from("base.toml")
-        };
-        let resolved = resolve_base_path(&current, base_path).to_figment()?;
-        ensure!(
-            resolved == root.join("base.toml"),
-            "unexpected resolved path {resolved:?}"
-        );
-        Ok(())
-    })
+fn resolve_base_path_resolves(#[case] is_abs: bool, test_root: Result<TestRoot>) -> Result<()> {
+    let root = test_root?;
+    root.dir.write("base.toml", b"")?;
+    let current = root.root.join("config.toml");
+    let base_path = if is_abs {
+        root.root.join("base.toml")
+    } else {
+        PathBuf::from("base.toml")
+    };
+    let resolved = resolve_base_path(&current, base_path).to_figment()?;
+    ensure!(
+        resolved == root.root.join("base.toml"),
+        "unexpected resolved path {resolved:?}"
+    );
+    Ok(())
 }
 
 #[test]
@@ -46,51 +53,60 @@ fn resolve_base_path_errors_when_no_parent() -> Result<()> {
     Ok(())
 }
 
+/// Assert a missing base yields a diagnosable, correctly typed error.
+///
+/// The message must name both the base that was not found and the current
+/// file that referenced it, because `current_path` is interpolated exactly as
+/// supplied rather than canonicalized. The typed assertion then checks the
+/// error is `OrthoError::File` wrapping `io::ErrorKind::NotFound`, so a caller
+/// can distinguish "absent" from "unreadable" instead of matching on text.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
-fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) -> Result<()> {
-    with_jail(|_| {
-        let (root, current) = canonical_root_and_current()?;
-        let expected_base = root.join("missing.toml");
-        let base = if is_abs {
-            expected_base.clone()
-        } else {
-            PathBuf::from("missing.toml")
-        };
-        let err = match resolve_base_path(&current, base) {
-            Ok(path) => {
-                return Err(anyhow!(
-                    "expected resolve_base_path to fail for missing file, got {path:?}"
-                ));
-            }
-            Err(err) => err,
-        };
-        let msg = err.to_string();
-        ensure!(
-            msg.contains(expected_base.to_string_lossy().as_ref()),
-            "error message {msg} does not mention missing base {expected_base:?}"
-        );
-        ensure!(
-            msg.contains(current.to_string_lossy().as_ref()),
-            "error message {msg} does not mention current path"
-        );
-        ensure!(msg.contains("does not exist"), "message: {msg}");
-        match err.as_ref() {
-            crate::OrthoError::File { source, .. } => {
-                let io_err = source
-                    .downcast_ref::<std::io::Error>()
-                    .ok_or_else(|| anyhow!("expected std::io::Error source"))?;
-                let actual = io_err.kind();
-                ensure!(
-                    actual == std::io::ErrorKind::NotFound,
-                    "unexpected IO error kind: {actual:?}"
-                );
-            }
-            other => {
-                return Err(anyhow!("expected File error, received {other:?}"));
-            }
+fn resolve_base_path_reports_missing_file(
+    #[case] is_abs: bool,
+    test_root: Result<TestRoot>,
+) -> Result<()> {
+    let root = test_root?;
+    let current = root.root.join("config.toml");
+    let expected_base = root.root.join("missing.toml");
+    let base = if is_abs {
+        expected_base.clone()
+    } else {
+        PathBuf::from("missing.toml")
+    };
+    let err = match resolve_base_path(&current, base) {
+        Ok(path) => {
+            return Err(anyhow!(
+                "expected resolve_base_path to fail for missing file, got {path:?}"
+            ));
         }
-        Ok(())
-    })
+        Err(err) => err,
+    };
+    let msg = err.to_string();
+    ensure!(
+        msg.contains(expected_base.to_string_lossy().as_ref()),
+        "error message {msg} does not mention missing base {expected_base:?}"
+    );
+    ensure!(
+        msg.contains(current.to_string_lossy().as_ref()),
+        "error message {msg} does not mention current path"
+    );
+    ensure!(msg.contains("does not exist"), "message: {msg}");
+    match err.as_ref() {
+        crate::OrthoError::File { source, .. } => {
+            let io_err = source
+                .downcast_ref::<std::io::Error>()
+                .ok_or_else(|| anyhow!("expected std::io::Error source"))?;
+            let actual = io_err.kind();
+            ensure!(
+                actual == std::io::ErrorKind::NotFound,
+                "unexpected IO error kind: {actual:?}"
+            );
+        }
+        other => {
+            return Err(anyhow!("expected File error, received {other:?}"));
+        }
+    }
+    Ok(())
 }

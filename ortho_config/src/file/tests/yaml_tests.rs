@@ -2,12 +2,11 @@
 //! Ensures `serde-saphyr` integration preserves YAML 1.2 semantics and reports
 //! malformed input clearly.
 
-use super::to_anyhow;
+use super::{TestRoot, test_root, to_anyhow};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use figment::Figment;
 use rstest::rstest;
-use std::path::PathBuf;
 
 use crate::file::{SaphyrYaml, load_config_file};
 
@@ -47,32 +46,43 @@ fn yaml_respects_boolean_scalars(#[case] literal: &str, #[case] expected: bool) 
     Ok(())
 }
 
+/// Assert the file loader reads a real YAML file from disk, end to end.
+///
+/// The sibling tests above build a `Figment` from an in-memory string, which
+/// exercises the provider but never the path handling. Writing the fixture
+/// through the isolation root's `Dir` and loading its absolute path covers
+/// the read, and would catch a loader that opened the path relative to the
+/// process working directory.
 #[rstest]
-fn yaml_loader_reads_files_via_saphyr() -> Result<()> {
-    super::with_jail(|jail| {
-        jail.create_file("config.yaml", "recipient: friend")?;
-        let figment = to_anyhow(load_config_file(PathBuf::from("config.yaml").as_path()))?
-            .expect("expected configuration figment");
-        let recipient = figment
-            .extract_inner::<String>("recipient")
-            .map_err(anyhow::Error::new)?;
-        ensure!(recipient == "friend", "expected YAML file recipient");
-        Ok(())
-    })
+fn yaml_loader_reads_files_via_saphyr(test_root: Result<TestRoot>) -> Result<()> {
+    let root = test_root?;
+    root.dir.write("config.yaml", b"recipient: friend")?;
+    let figment = to_anyhow(load_config_file(&root.root.join("config.yaml")))?
+        .expect("expected configuration figment");
+    let recipient = figment
+        .extract_inner::<String>("recipient")
+        .map_err(anyhow::Error::new)?;
+    ensure!(recipient == "friend", "expected YAML file recipient");
+    Ok(())
 }
 
+/// Assert a malformed file's error names the file it came from.
+///
+/// `load_config_file` canonicalizes the path before reading, so without the
+/// name in the message a caller holding several candidate files could not
+/// tell which one failed to parse. The fixture is deliberately truncated
+/// mid-flow-sequence so the failure is a parse error, not a read error.
 #[rstest]
-fn yaml_loader_reports_parse_errors_with_paths() -> Result<()> {
-    super::with_jail(|jail| {
-        jail.create_file("config.yaml", "recipient: [")?;
-        let err = to_anyhow(load_config_file(PathBuf::from("config.yaml").as_path()))
-            .expect_err("expected load failure for invalid YAML");
-        ensure!(
-            err.to_string().contains("config.yaml"),
-            "expected error to mention source path, got: {err}"
-        );
-        Ok(())
-    })
+fn yaml_loader_reports_parse_errors_with_paths(test_root: Result<TestRoot>) -> Result<()> {
+    let root = test_root?;
+    root.dir.write("config.yaml", b"recipient: [")?;
+    let err = to_anyhow(load_config_file(&root.root.join("config.yaml")))
+        .expect_err("expected load failure for invalid YAML");
+    ensure!(
+        err.to_string().contains("config.yaml"),
+        "expected error to mention source path, got: {err}"
+    );
+    Ok(())
 }
 
 #[rstest]
