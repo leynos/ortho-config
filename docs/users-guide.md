@@ -1212,10 +1212,15 @@ are resolved from the package's `en-US` resources rather than from a requested
 the order in which they were first given. With more than one locale the IR
 gains one JSON file per locale, the man tree nests each locale as
 `<locale>/man/man<N>/<bin>.<N>`, and the PowerShell module gains one culture
-subdirectory per locale. Without any `--locale` value the command falls back to
-`en-US`.
+subdirectory per locale.
 
-The PowerShell `en-US` fallback is separate from that default. When the
+`--locale` takes precedence over `--all-locales`. When no `--locale` value is
+given, `--all-locales` renders the locales declared in package metadata, or
+those discovered under the package's `locales/` directory when metadata
+declares none. Only when neither is available does the command fall back to the
+single locale `en-US`.
+
+The PowerShell `en-US` fallback is separate from that locale default. When the
 requested locales omit `en-US`, the generator also writes an `en-US` help set
 built from the first locale, because PowerShell culture probing strongly
 prefers an `en-US` culture to be present. `--ensure-en-us` controls this and is
