@@ -249,10 +249,14 @@ def test_the_job_is_advisory_at_job_scope(beta_job: dict[str, object]) -> None:
 def test_the_job_selects_beta_explicitly(beta_job: dict[str, object]) -> None:
     """The toolchain is chosen by ``+beta``, not by the directory pin.
 
-    ``rust-toolchain.toml`` pins the workspace to stable, and rustup
-    honours it for every ``cargo`` invocation that does not name a
+    ``rust-toolchain.toml`` pins the workspace to a dated nightly, and
+    rustup honours it for every ``cargo`` invocation that does not name a
     toolchain. Without the override this job would be an expensive
     second opinion on the pinned toolchain.
+
+    The job also sets ``BUILD_STANDARD=0``, which is tested in
+    ``test_the_job_turns_the_build_standard_off`` below: beta refuses the
+    nightly-only flags the Makefile otherwise restates.
     """
     selections = [
         step.get("env", {}).get(BETA_VARIABLE)
@@ -377,4 +381,23 @@ def test_the_shared_target_is_strict(lint_recipe: list[str]) -> None:
     assert declared == CLIPPY_FLAGS, (
         f"{CLIPPY_FLAGS_VARIABLE} must default to {CLIPPY_FLAGS!r}; it defaults "
         f"to {declared!r}"
+    )
+
+
+def test_the_job_turns_the_build_standard_off(beta_job: dict[str, object]) -> None:
+    """Beta is not the pinned nightly, so the lint step runs with the standard off.
+
+    The standard restates ``-Zthreads=8`` and, on x86_64 Linux, the Cranelift
+    backend. Both are nightly-only, and a beta compiler stops on the first
+    one with "the option `Z` is only accepted on the nightly compiler". The
+    same variable makes the build-tools preflight a no-op, which is why this
+    lane needs neither mold nor the pinned nightly.
+    """
+    switches = [
+        step.get("env", {}).get("BUILD_STANDARD")
+        for step in workflow_steps({"jobs": {JOB_NAME: beta_job}})
+        if isinstance(step.get("env"), dict) and step["env"].get(BETA_VARIABLE) == BETA_SELECTION
+    ]
+    assert switches == ["0"], (
+        f"the step that selects beta must set BUILD_STANDARD to 0; it sets {switches}"
     )
