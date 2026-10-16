@@ -604,34 +604,60 @@ Observable success: a config file that sets `enabled = true` combined with
 
 ## Surprises & discoveries
 
-- **CodeRabbit's "could not verify" was accurate, and it exposed that the
-  `PUSH` never carried the round-16 repairs.** Both round-16 replies drew an
-  in-thread "Verification is inconclusive… The repository snapshot still
-  contains both original tests" (ids `4290703556` and `4290696600`). The
-  instinct is to dismiss that as a stale review snapshot. Checking against
-  `HEAD` rather than the worktree — the exact discipline recorded in [memory
-  `disposition-against-head-not-worktree`] — proves the opposite: at the commit
-  CodeRabbit actually reviewed, `b8c9a905`, neither `format_flag_with_suffix`
-  nor `CliLayerCase` exists. The repairs landed at `e60d343b` and `65fe2437`,
-  whose author dates are 2026-10-16, whereas `b8c9a905` was authored 2026-09-25
-  and its live remote tip is still `b8c9a905`. The two repair commits therefore
-  sit **outside every push ever made** to this branch. CodeRabbit is not
-  confused about its snapshot; the snapshot faithfully reflects what was
-  published.
+- **CodeRabbit's "could not verify" was accurate, and it confirms the
+  unpublished-repair gap already recorded in `Progress`.** Both round-16
+  replies drew an in-thread "Verification is inconclusive… The repository
+  snapshot still contains both original tests" (ids `4290703556` and
+  `4290696600`). The instinct is to dismiss that as a stale review snapshot.
+  Checking against `HEAD` rather than the worktree — the exact discipline
+  recorded in [memory `disposition-against-head-not-worktree`] — proves the
+  opposite: at the commit CodeRabbit actually reviewed, `b8c9a905`, neither
+  `format_flag_with_suffix` nor `CliLayerCase` exists. The repairs landed at
+  `e60d343b` and `65fe2437`, whose author dates are 2026-10-16, whereas
+  `b8c9a905` was authored 2026-09-25 and `git ls-remote` confirms it is still
+  the live remote tip. The two repair commits sit **outside every push ever
+  made** to this branch. The `Progress` entry at 2026-10-15 already recorded
+  this for the roff finding; what the replies add is that CodeRabbit reached
+  the same conclusion independently, and that the condition is branch-wide
+  rather than specific to one finding.
 
   Consequence: the remote branch is 33 commits behind the pre-rebase head and
   99 commits behind the target merge-base, which is why the PR reads
   `CONFLICTING`/`DIRTY`. Nothing in the review record is invalid, but no review
   of the round-16 repairs has ever been possible on the remote — CodeRabbit
   cannot verify work it was never sent. That is the whole reason both threads
-  remain open, and it is not fixable by replying again.
+  remain open, and it is not fixable by replying again; only a push can close
+  them.
 
-  The general form, and the reason this is a discovery rather than a chore: *a
-  locally-green repair is not a published repair.* Every gate certificate, every
-  `range-diff` proof, and every in-thread reply in this plan describes the
-  local tree; only a push moves that evidence into a place a reviewer can read.
-  When a review says "cannot verify", compare its `commit_id` against the
-  remote tip and `git ls-remote` before concluding the reviewer is stale.
+  The general form: *a locally-green repair is not a published repair.* Every
+  gate certificate, every `range-diff` proof, and every in-thread reply in this
+  plan describes the local tree; only a push moves that evidence where a
+  reviewer can read it. When a review says "cannot verify", compare its
+  `commit_id` against `git ls-remote` for the branch before concluding the
+  reviewer is stale.
+
+- **A force-push here discards 33 remote-only commits, and all 33 are
+  accounted for.** The remote tip is not an ancestor of this branch, so this is
+  a divergence rather than a restack, and a lease-bound force-push would
+  overwrite work that exists only remotely. That warrants verification rather
+  than assumption, so every remote-only commit was classified before accepting
+  the push. Thirteen match a local commit by stable patch-id. Of the twenty
+  that do not — patch-ids change by design when a rebase rewrites context —
+  seventeen match a local commit by subject, and the remaining three were each
+  traced to a surviving equivalent: `a221b06d` (a generated `typos.toml`) has a
+  local patch-id twin in `41e54346`, and the generated file at `HEAD` is the
+  current fixed point the spellcheck gate itself accepts; `e27e35fb` (renumber
+  the boolean ADR to 009) survives as the later `5aeeccbf`, which renumbers it
+  to 013 and is referenced from `docs/contents.md`; and `e6239fe5` (drop a
+  trailing blank line in `default_display.rs`) is reflected in that file's
+  current content. No unique work is lost.
+
+  The general form: an ancestry test alone does not decide whether a force-push
+  is safe — it only shows the histories diverged. Classify every remote-only
+  commit by patch-id, then by subject, then by tracing its content to a
+  surviving equivalent, and only then accept the overwrite. A rebase makes
+  patch-id matching lossy by design, so a low match count is not evidence of
+  loss.
 
 - **`coderabbit review findings` reports stale findings, not the latest
   round.** After round 15 returned a clean result, that subcommand still
