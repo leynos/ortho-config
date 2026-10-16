@@ -1,12 +1,37 @@
-//! Property tests for `ir.json` cache writes and the mtime they preserve.
+//! Property tests for `ir.json` cache writes and what they leave behind.
 //!
 //! `write_ir_cache` holds one rule with two halves. Re-offering content the
 //! cache already holds must leave the file alone, mtime included, because cache
 //! validity is decided on timestamps; offering different content must replace
-//! the file and move its mtime forward. The sibling `tests` module checks a
-//! single pair of literal documents; these properties generate documents on
-//! both sides of the comparison and vary how much writing preceded it, so a
-//! short circuit keyed on the wrong comparison fails here.
+//! the file and move its mtime on. The sibling `tests` module checks a single
+//! pair of literal documents; these properties generate documents on both sides
+//! of the comparison and vary how much writing preceded it, so a short circuit
+//! keyed on the wrong comparison fails here.
+//!
+//! # Reading a timestamp that a fresh write may not move
+//!
+//! Two writes in quick succession can be stamped so that the second is not
+//! observably later than the first, and nothing in the `write_ir_cache`
+//! contract says the filesystem must stamp them differently. Where that
+//! happens, "the mtime moved" is unobservable however long it is polled, and a
+//! property that waits for an advance reports a fault in the write that was
+//! never there. Windows CI did exactly that: a property that wrote and polled
+//! for the timestamp to pass the previous one failed on every case, while its
+//! sibling — which never compares two writes — passed.
+//!
+//! Each property therefore pushes the cache file's mtime a minute into the past
+//! before the write it means to judge, and compares against the value the
+//! filesystem stored. A write then moves the timestamp on by a minute, which no
+//! granularity can hide and no rounding can collapse, and a skipped write
+//! leaves it exactly where it was. The advance is still polled with a bound,
+//! since a filesystem may publish the new timestamp a little after the write
+//! returns; polling is what the sibling `tests` module does for its one literal
+//! pair, and backdating saves it the second-long wait for a real clock tick.
+//!
+//! The two halves lean on each other. The differing-content property establishes
+//! that this filesystem does surface a write's timestamp, which is what lets
+//! the other two read an *unchanged* backdated value as evidence that nothing
+//! was written, rather than as evidence that the write was invisible.
 //!
 //! # Scope
 //!
@@ -18,31 +43,12 @@
 //! under test — the write path treats the text as opaque bytes — so a JSON
 //! object is a readable stand-in for the real IR payload rather than a schema
 //! the properties depend on.
-//!
-//! The wall-clock cost sits in the cases that replace the document, which must
-//! wait for the filesystem to timestamp a new write. That is inherent to the
-//! behaviour rather than to the generator: no choice of inputs makes a later
-//! timestamp available sooner. The wait is therefore polled with a bound, and
-//! exceeding the bound is reported as a test failure rather than a panic.
-//!
-//! # Assumption
-//!
-//! These properties assume a file timestamp granularity finer than the poll
-//! budget, which the filesystems this repository builds and tests on all
-//! provide. An mtime is stamped when the write happens and never revised
-//! afterwards, so two writes that land in the same timestamp bucket cannot be
-//! told apart by any amount of polling: the later one's timestamp is already
-//! fixed. The sibling `tests` module handles the same limit by waiting for the
-//! system clock to clear a whole second before its replacement write, which is
-//! affordable for its single literal pair. That wait is deliberately not
-//! repeated here, because it would add about a second to each of 256 generated
-//! cases to defend a case no supported filesystem exhibits.
 
 use std::time::{Duration, Instant, SystemTime};
 
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
+use cap_std::fs_utf8::{Dir, OpenOptions};
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
 use tempfile::tempdir;
@@ -57,6 +63,23 @@ struct GeneratedContent {
     /// A document known to differ from [`Self::original`].
     differing: String,
 }
+
+/// How far into the past the cache file is pushed before a write whose effect
+/// on the timestamp is under test.
+///
+/// Wide enough that no plausible timestamp granularity could merge the
+/// backdated value with the one a fresh write receives.
+const BACKDATE_BY: Duration = Duration::from_secs(60);
+
+/// How long to keep re-reading the cache file before concluding that a write
+/// did not move its mtime.
+///
+/// Reaching the sibling `tests` module's value, which allows for a filesystem
+/// that places the next legal timestamp a full second away.
+const MTIME_TIMEOUT: Duration = Duration::from_millis(1_500);
+
+/// How often the mtime poll re-reads the file.
+const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// The leading members a seed selects, from zero through seven.
 ///
@@ -128,10 +151,35 @@ fn cached_bytes(dir: &Dir) -> std::result::Result<Vec<u8>, TestCaseError> {
         .map_err(|error| TestCaseError::fail(format!("read ir.json contents: {error}")))
 }
 
+/// Backdates the cache file's mtime, returning the value the filesystem stored.
+///
+/// Opening for write is what makes this portable: setting a timestamp needs a
+/// handle permitted to write attributes, which a read-only handle does not
+/// offer on Windows. The open asks to write but not to truncate, so the
+/// document survives it, and opening alone does not stamp the file — the value
+/// read back is therefore the one just set rather than a fresh write's.
+///
+/// The stored value is returned rather than the requested one, so a filesystem
+/// that rounds timestamps to a coarser unit still gets compared against what it
+/// actually holds.
+fn backdate_cache_mtime(dir: &Dir) -> std::result::Result<SystemTime, TestCaseError> {
+    let target = SystemTime::now().checked_sub(BACKDATE_BY).ok_or_else(|| {
+        TestCaseError::fail("system clock is within a minute of the epoch; cannot backdate")
+    })?;
+    let file = dir
+        .open_with("ir.json", OpenOptions::new().write(true))
+        .map_err(|error| TestCaseError::fail(format!("open ir.json to backdate it: {error}")))?;
+    file.into_std()
+        .set_modified(target)
+        .map_err(|error| TestCaseError::fail(format!("backdate ir.json mtime: {error}")))?;
+    cache_mtime(dir)
+}
+
 /// Polls the cache file's mtime until `matches` accepts it, or reports failure.
 ///
 /// Polling rather than sleeping a fixed interval keeps the common case — where
-/// the filesystem has already timestamped the write — free of any wait.
+/// the filesystem has already published the write's timestamp — free of any
+/// wait.
 fn poll_mtime_until(
     dir: &Dir,
     matches: impl Fn(SystemTime) -> bool,
@@ -156,33 +204,21 @@ fn write_cache(paths: &BridgePaths, json: &str) -> std::result::Result<(), TestC
         .map_err(|error| TestCaseError::fail(format!("write ir.json cache: {error:?}")))
 }
 
-/// How long to wait for a replacement's timestamp to diverge from the previous
-/// one.
-///
-/// Reaching the sibling `tests` module's value, which allows for a filesystem
-/// that places the next legal timestamp a full second away. Polling keeps the
-/// usual wait at one interval, since the read that follows a replacement
-/// normally differs at once.
-const MTIME_TIMEOUT: Duration = Duration::from_millis(1_500);
-
-/// How often the mtime poll re-reads the file.
-const POLL_INTERVAL: Duration = Duration::from_millis(5);
-
 proptest! {
     /// Re-offering identical content leaves the file, and its mtime, alone.
     ///
-    /// A rewrite moves the mtime and a correct implementation does not rewrite,
-    /// so the two disagree at once; the read is therefore immediate, with no
-    /// poll to wait out. The bytes are read as well, to catch a short circuit
-    /// that leaves the document other than it found it. A rewrite of identical
-    /// content writes identical bytes, so that second assertion passes under
-    /// this mutation; the mtime is the signal for it, as `# Assumption` notes.
+    /// The mtime is compared against a backdated value, which is what gives a
+    /// rewrite something to move: it writes identical bytes, so the byte
+    /// comparison below has nothing to object to and the timestamp is the
+    /// signal. Reading it straight away is deliberate — this property asserts
+    /// that nothing happened, and waiting cannot make an absence more
+    /// conclusive.
     #[test]
     fn rewriting_identical_content_preserves_mtime(content in generated_content()) {
         let (_temp, dir, paths) = scratch_bridge()?;
 
         write_cache(&paths, &content.original)?;
-        let first = cache_mtime(&dir)?;
+        let first = backdate_cache_mtime(&dir)?;
 
         write_cache(&paths, &content.original)?;
         prop_assert_eq!(
@@ -199,6 +235,9 @@ proptest! {
     }
 
     /// Differing content replaces the file and moves its mtime forward.
+    ///
+    /// This is also what shows the filesystem surfaces a write's timestamp at
+    /// all, which the "nothing was written" readings elsewhere rely on.
     #[test]
     fn differing_content_advances_mtime_and_replaces_the_file(
         content in generated_content(),
@@ -206,14 +245,14 @@ proptest! {
         let (_temp, dir, paths) = scratch_bridge()?;
 
         write_cache(&paths, &content.original)?;
-        let first = cache_mtime(&dir)?;
+        let first = backdate_cache_mtime(&dir)?;
 
         write_cache(&paths, &content.differing)?;
         let second = poll_mtime_until(&dir, |mtime| mtime > first)?;
 
         prop_assert!(
             second > first,
-            "mtime did not advance from {first:?} for differing content"
+            "mtime did not advance past the backdated {first:?} for differing content"
         );
         prop_assert_eq!(
             cached_bytes(&dir)?,
@@ -227,11 +266,8 @@ proptest! {
     /// This visits a state change the other properties do not: a cache that has
     /// already been replaced. An implementation that recognised identical
     /// content only while the file still held the *original* document would
-    /// rewrite here, and the rewrite would be caught by the mtime and the bytes
-    /// together. That the replacement itself moved the mtime is asserted by
-    /// [`differing_content_advances_mtime_and_replaces_the_file`]; this property
-    /// deliberately waits only on the second write, so it does not need to win
-    /// the tick race that the first one sets up.
+    /// rewrite here, moving the timestamp off the backdated value and changing
+    /// the bytes with it.
     #[test]
     fn an_identical_write_after_a_replacement_preserves_the_new_mtime(
         content in generated_content(),
@@ -240,7 +276,7 @@ proptest! {
 
         write_cache(&paths, &content.original)?;
         write_cache(&paths, &content.differing)?;
-        let replaced = cache_mtime(&dir)?;
+        let replaced = backdate_cache_mtime(&dir)?;
 
         write_cache(&paths, &content.differing)?;
         prop_assert_eq!(
