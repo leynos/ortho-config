@@ -404,5 +404,3 @@ fn assert_run<const N: usize>(
     );
     Ok(())
 }
-// weave: run 'weave explain ortho_config/tests/documentation_examples_rust_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
-// weave: run 'weave explain ortho_config/tests/documentation_examples_rust_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
