@@ -110,7 +110,7 @@ defaults < config files < environment < CLI
 
 The documentation IR already models this: `PrecedenceMeta` carries an ordered
 list of `SourceKind` values (`Defaults`, `File`, `Env`, `Cli`) in
-`ortho_config/src/docs/ir.rs`. Roadmap §9.1.2 plans to insert a *selected
+`ortho_config/src/docs/ir/mod.rs`. Roadmap §9.1.2 plans to insert a *selected
 profile* layer between files and the environment; §5.1 notes how this RFC stays
 compatible with that.
 
@@ -135,10 +135,10 @@ fact is load-bearing for the secret model in §5.5.
 
 The documentation IR exposes per-field environment metadata as `EnvMetadata`,
 which currently holds a single field, `var_name: String`
-(`ortho_config/src/docs/ir.rs`), and is emitted under a versioned `ir_version`
-string (currently `"1.1"`). The man-page renderer prints that name in the
-ENVIRONMENT section; the agent-context bridge does not yet surface environment
-metadata at all.
+(`ortho_config/src/docs/ir/field.rs`), and is emitted under a versioned
+`ir_version` string (currently `"1.1"`). The man-page renderer prints that name
+in the ENVIRONMENT section; the agent-context bridge does not yet surface
+environment metadata at all.
 
 ### 3.3 What the consumers do
 

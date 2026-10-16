@@ -96,13 +96,14 @@ file carries both. nextest resolves each override field from the **first**
 matching entry that sets it, so the Windows entry above, being first, decides
 the four binaries it names; the wider entry below is second and supplies the
 rest of the class. The four therefore keep both 600 s *and* run alone, while
-`env_source_trybuild`, `generated_lint_trybuild`, `localization_trybuild`,
-`localized_parse_trybuild` and `subcommand_trybuild` take the 960 s entry, and
-Linux takes 960 s for all nine. Merging the two would have to choose between
-running alone and the larger allowance; leaving both keeps each measured remedy
-at the binaries it was measured on. `trybuild_tier_test.py` reads the widening
-and `windows_trybuild_isolation_test.py` the reservation, so neither remedy can
-be removed by editing the other's entry.
+`boolean_cli_trybuild`, `env_source_trybuild`, `generated_lint_trybuild`,
+`localization_trybuild`, `localized_parse_trybuild` and `subcommand_trybuild`
+take the 960 s entry, and Linux takes 960 s for all ten. Merging the two would
+have to choose between running alone and the larger allowance; leaving both
+keeps each measured remedy at the binaries it was measured on.
+`trybuild_tier_test.py` reads the widening and
+`windows_trybuild_isolation_test.py` the reservation, so neither remedy can be
+removed by editing the other's entry.
 
 The reservation costs Windows wall time. On run 36195916343 the job took 53.5
 min, against a 38 min median over the preceding pull-request runs, and
@@ -140,6 +141,13 @@ or other human-facing reference material. Those fields are versioned by
 `ORTHO_DOCS_IR_VERSION` and exposed through `OrthoConfigDocs`.
 `OrthoConfigSubcommandDocs` is part of the same human-documentation IR contract
 and uses the same versioning boundary for recursive subcommand metadata.
+
+Adding, removing, or changing a field in `ortho_config::docs` requires a
+matching change in `cargo-orthohelp::schema`, which mirrors the IR for the
+standalone generator. The two definitions must stay byte-for-byte aligned;
+`ORTHO_DOCS_IR_VERSION` is bumped in both, and the version-alignment test fails
+if the pair drifts. Add fields with `#[serde(default)]` so documents written
+before the field existed still read correctly, as ADR-003 requires.
 
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
@@ -563,14 +571,14 @@ consistently, removing whitespace around `::` outside quoted strings, character
 literals, and raw strings, whose contents it copies verbatim. Whitespace inside
 a literal is data, so only the surrounding path separator is normalized.
 
-Ownership stays with the agent-context bridge: the bridge calls it when
-populating `AgentInput.default`, and nothing outside `cargo-orthohelp` may
-depend on it. The normalization is display-only. `AgentInput.default` is not
-executable or machine-parseable, so a consumer needing the original rendering
-must read the documentation IR rather than this output. Keep the helper
-`pub(crate)`; exposing it publicly would make a display detail of one bridge a
-compatibility promise, and widening it belongs with a documented agent-context
-API decision, not a refactor.
+Ownership stays with the agent-context bridge: the bridge's input projection
+(`agent_context::input`) calls it when populating `AgentInput.default`, and
+nothing outside `cargo-orthohelp` may depend on it. The normalization is
+display-only. `AgentInput.default` is not executable or machine-parseable, so a
+consumer needing the original rendering must read the documentation IR rather
+than this output. Keep the helper `pub(crate)`; exposing it publicly would make
+a display detail of one bridge a compatibility promise, and widening it belongs
+with a documented agent-context API decision, not a refactor.
 
 ### Consumer dependency tiers
 
@@ -2254,14 +2262,15 @@ than hung.*
 
 The allowance is now 960 s, eight warning periods of 120 s, which is 1.68 times
 the 572.5 s worst observed — the same headroom the base allowance was sized
-with against its own 364.8 s. The filter names all nine trybuild binaries
-rather than the two it used to; seven end in `trybuild` and `compile_fail` and
+with against its own 364.8 s. The filter names all ten trybuild binaries rather
+than the two it used to; eight end in `trybuild` and `compile_fail` and
 `compile_time` do not, so no single glob covers the class and the names are
-enumerated instead. Nine is the count `trybuild_tier_test.py` enforces, so a
+enumerated instead. Ten is the count `trybuild_tier_test.py` enforces, so a
 trybuild binary that arrives after the enumeration is written is reported by
 the contract rather than silently left on the base allowance:
 `subcommand_trybuild` arrived that way on `main`, and `localization_trybuild`
-arrived that way from a branch, and the contract is what caught both.
+and `boolean_cli_trybuild` arrived that way from branches, and the contract is
+what caught each.
 
 The 960 s allowance is lower than the 1,800 s whole-run budget, which the
 ordering contract asserts. That comparison does not by itself guarantee a test

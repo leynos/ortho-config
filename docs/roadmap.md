@@ -962,8 +962,8 @@ cargo-orthohelp-design.md §2.2.
     document's versioning section.
   - [ ] Skip-serialize `CliMetadata.positional` when absent, using
     `#[serde(skip_serializing_if = "Option::is_none")]` in both
-    hand-maintained copies of the type, `ortho_config/src/docs/ir.rs` and
-    `cargo-orthohelp/src/schema/mod.rs`, so flags-only IR omits the
+    hand-maintained copies of the type, `ortho_config/src/docs/ir/field.rs` and
+    `cargo-orthohelp/src/schema/field.rs`, so flags-only IR omits the
     `positional` key rather than emitting `null`.
   - [ ] Success: `git clone <url>` and `cp <src> <dst>` shapes round-trip
     through `--format ir` with correct indices, while a flags-only command

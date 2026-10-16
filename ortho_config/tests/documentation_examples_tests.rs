@@ -29,6 +29,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-alias-derive",
     "guide-alias-install",
     "guide-behaviour-metadata",
+    "guide-boolean-override",
     "guide-cargo-error-hints",
     "guide-cargo-external-subcommand",
     "guide-check-command",

@@ -2,8 +2,25 @@
 //!
 //! These structures are emitted by the derive macro and consumed by external
 //! tooling such as `cargo-orthohelp` to generate user-facing documentation.
+//!
+//! The types are grouped by the part of a command they describe: the document
+//! as a whole and its sections here, per-field metadata in [`field`], declared
+//! behaviour in [`behaviour`], and reusable content in [`content`]. This module
+//! is private; it re-exports every type so `docs` presents the same flat
+//! surface it did before the split, and the public paths stay
+//! `ortho_config::docs::DocMetadata` and friends.
 
 use serde::{Deserialize, Serialize};
+
+mod behaviour;
+mod content;
+mod field;
+
+pub use behaviour::{BehaviourMetadata, InteractionKind, MutationKind};
+pub use content::{Example, Link, Note};
+pub use field::{
+    CliMetadata, DefaultValue, Deprecation, EnvMetadata, FieldMetadata, FileMetadata, ValueType,
+};
 
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -36,59 +53,6 @@ pub struct DocMetadata {
     /// Profile selection metadata for opted-in structs (roadmap 9.1.1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<DocProfilesMeta>,
-}
-
-/// Declared execution behaviour for a command (agent-native metadata).
-///
-/// Every field is optional: a present [`BehaviourMetadata`] with all fields
-/// `None` is equivalent to no declaration at all. Undeclared aspects stay
-/// undeclared; the agent-context layer maps them to its `unknown` state.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BehaviourMetadata {
-    /// Interaction declaration; `None` means undeclared.
-    #[serde(default)]
-    pub interaction: Option<InteractionKind>,
-    /// Mutation boundary declaration; `None` means undeclared.
-    #[serde(default)]
-    pub mutation: Option<MutationKind>,
-    /// Confirmation/prompt bypass flag, for example `--force`.
-    #[serde(default)]
-    pub bypass: Option<String>,
-    /// Dry-run flag name, for example `--dry-run`; `None` means undeclared.
-    #[serde(default)]
-    pub dry_run: Option<String>,
-}
-
-/// Declared interaction behaviour for a command in the documentation IR.
-///
-/// The IR has no `Unknown` variant on purpose: absence of a declaration is
-/// represented by [`BehaviourMetadata::interaction`] being `None`, and only
-/// the agent-context layer models the `unknown` wire state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InteractionKind {
-    /// Command does not prompt and can run unattended.
-    NonInteractive,
-    /// Command may require operator interaction.
-    Interactive,
-}
-
-/// Declared mutation boundary for a command in the documentation IR.
-///
-/// Absence of a declaration is represented by
-/// [`BehaviourMetadata::mutation`] being `None`; see [`InteractionKind`] for
-/// why there is no `Unknown` variant at this layer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MutationKind {
-    /// Read-only command.
-    ReadOnly,
-    /// Command may write local or remote state.
-    Write,
-    /// Command may delete local or remote state.
-    Delete,
-    /// Command submits asynchronous work.
-    Submit,
 }
 
 /// Profile selection metadata carried in the documentation IR (decision D15).
@@ -147,135 +111,6 @@ pub struct HeadingIds {
     /// Fluent ID for the COMMANDS heading (inline subcommands).
     #[serde(default)]
     pub commands: Option<String>,
-}
-
-/// Metadata describing a single configuration field.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FieldMetadata {
-    /// Rust field name for the setting.
-    pub name: String,
-    /// Fluent ID for the short help text.
-    pub help_id: String,
-    /// Optional Fluent ID for long-form help text.
-    pub long_help_id: Option<String>,
-    /// Optional semantic value type for formatting.
-    pub value: Option<ValueType>,
-    /// Optional default value display string.
-    pub default: Option<DefaultValue>,
-    /// Whether the field is required.
-    pub required: bool,
-    /// Deprecation metadata, if any.
-    pub deprecated: Option<Deprecation>,
-    /// CLI-related documentation metadata.
-    pub cli: Option<CliMetadata>,
-    /// Environment-variable documentation metadata.
-    pub env: Option<EnvMetadata>,
-    /// File configuration documentation metadata.
-    pub file: Option<FileMetadata>,
-    /// Field-level examples.
-    pub examples: Vec<Example>,
-    /// Field-level related links.
-    pub links: Vec<Link>,
-    /// Field-level notes.
-    pub notes: Vec<Note>,
-}
-
-/// CLI documentation metadata for a field.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CliMetadata {
-    /// Long CLI flag name (without the leading dashes).
-    pub long: Option<String>,
-    /// Optional short CLI flag character.
-    pub short: Option<char>,
-    /// Optional CLI value placeholder.
-    pub value_name: Option<String>,
-    /// Whether the field accepts repeated values.
-    pub multiple: bool,
-    /// Whether the CLI flag takes a value (false for switches).
-    pub takes_value: bool,
-    /// Allowed values for enum-like options.
-    pub possible_values: Vec<String>,
-    /// Whether the flag is hidden from help output.
-    pub hide_in_help: bool,
-}
-
-/// Environment variable documentation metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct EnvMetadata {
-    /// Environment variable name.
-    pub var_name: String,
-}
-
-/// File configuration metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FileMetadata {
-    /// Dotted configuration key path.
-    pub key_path: String,
-}
-
-/// Strongly-typed value metadata for documentation rendering.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ValueType {
-    /// String value.
-    String,
-    /// Integer value with bit-width and sign.
-    Integer {
-        /// Integer bit width.
-        bits: u8,
-        /// Whether the integer is signed.
-        signed: bool,
-    },
-    /// Floating point value with bit-width.
-    Float {
-        /// Floating point bit width.
-        bits: u8,
-    },
-    /// Boolean switch.
-    Bool,
-    /// Duration value.
-    Duration,
-    /// File system path.
-    Path,
-    /// IP address.
-    IpAddr,
-    /// Hostname value.
-    Hostname,
-    /// URL value.
-    Url,
-    /// Enumeration of allowed values.
-    Enum {
-        /// Allowed variants for the enum.
-        variants: Vec<String>,
-    },
-    /// List of nested values.
-    List {
-        /// Element type for list values.
-        of: Box<Self>,
-    },
-    /// Map with value type metadata.
-    Map {
-        /// Value type for map entries.
-        of: Box<Self>,
-    },
-    /// Custom domain-specific value type.
-    Custom {
-        /// Human-readable type name.
-        name: String,
-    },
-}
-
-/// Display value for a default.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DefaultValue {
-    /// Human-readable default string.
-    pub display: String,
-}
-
-/// Deprecation metadata for a field.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Deprecation {
-    /// Fluent ID for the deprecation note.
-    pub note_id: String,
 }
 
 /// Configuration discovery metadata.
@@ -356,31 +191,4 @@ pub struct WindowsMetadata {
     pub split_subcommands_into_functions: bool,
     /// Optional `HelpInfoUri` for Update-Help.
     pub help_info_uri: Option<String>,
-}
-
-/// Documentation example snippet.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Example {
-    /// Optional Fluent ID for the example title.
-    pub title_id: Option<String>,
-    /// Example code snippet.
-    pub code: String,
-    /// Optional Fluent ID for the example body text.
-    pub body_id: Option<String>,
-}
-
-/// Related link metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Link {
-    /// Optional Fluent ID for the link text.
-    pub text_id: Option<String>,
-    /// URI associated with the link.
-    pub uri: String,
-}
-
-/// Documentation note metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Note {
-    /// Fluent ID for the note content.
-    pub text_id: String,
 }

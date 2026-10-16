@@ -20,7 +20,8 @@
 use proptest::prelude::*;
 use std::collections::BTreeSet;
 
-use super::{bridge_ir_to_agent_context, normalize_default_display};
+use super::bridge_ir_to_agent_context;
+use super::default_display::normalize_default_display;
 use crate::schema::{CliMetadata, DocMetadata, FieldMetadata, HeadingIds, SectionsMetadata};
 
 proptest! {
@@ -259,6 +260,7 @@ fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
             value_name: Some("VALUE".to_owned()),
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: Vec::new(),
             hide_in_help,
         }),
