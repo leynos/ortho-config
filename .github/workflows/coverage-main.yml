@@ -56,6 +56,12 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # The explicit exclusion of the development build standard (the parallel
+      # frontend and mold in `.cargo/config.toml`) from the coverage builds.
+      # Cargo takes RUSTFLAGS in preference to every `rustflags` table in that
+      # file, and cargo-llvm-cov appends `-Cinstrument-coverage` to this value,
+      # so coverage is measured on the LLVM backend with the platform linker.
+      # Never set it to `''`: an empty value leaves the configuration in force.
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
@@ -81,7 +87,16 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
+        # The coverage flags above exclude mold, but the suite that runs under
+        # them is the one the Linux build-test leg runs, so the publisher
+        # installs the same pinned tools before it: unconditionally, in this
+        # job, ahead of both coverage steps. `mold-version` is held equal to
+        # tools/mold/VERSION by
+        # tests/workflow_contracts/build_tools_provisioning_test.py.
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          install-mold: 'true'
+          mold-version: '2.41.0'
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2

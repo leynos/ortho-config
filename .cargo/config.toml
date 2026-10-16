@@ -1,0 +1,33 @@
+# The development build standard, as Cargo's auto-discovered defaults.
+#
+# A bare `cargo build`, `cargo test` or `cargo check` reads this file, so the
+# standard is what a contributor gets without asking for it. The Makefile
+# restates the same flags where a recipe assigns `RUSTFLAGS`
+# (docs/developers-guide.md, "Development build standard");
+# tests/workflow_contracts/build_standard_routing_test.py holds the two equal
+# for every host it names.
+#
+# - `-Zthreads=8` is the parallel `rustc` frontend. It is nightly-only, which
+#   is why rust-toolchain.toml pins a dated nightly.
+# - `-Clink-arg=-fuse-ld=mold` selects the `mold` linker. `mold` ships for Linux
+#   only, so it appears solely under the Linux target table, never in `[build]`
+#   and never under `cfg(unix)`, which macOS builds also take.
+#
+# The Cranelift codegen backend is deliberately absent. Panics do not unwind
+# through Cranelift-compiled frames on the pinned nightly, and this
+# repository's own tests catch them (docs/developers-guide.md, "Cranelift
+# qualification"). tests/workflow_contracts/build_standard_routing_test.py
+# refuses any backend selection until that record is re-measured and cleared.
+#
+# Cargo selects ONE `rustflags` source and does not merge them: a matching
+# `[target.*]` table replaces `[build] rustflags` outright, and an assigned
+# `RUSTFLAGS` outranks every table here. So every flag that must survive is
+# repeated in each source, except the ones deliberately scoped to a platform.
+# Release, coverage and the Whitaker suite take none of this; they assign
+# `RUSTFLAGS` and say so where they do.
+
+[build]
+rustflags = ["-Zthreads=8"]
+
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
