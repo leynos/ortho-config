@@ -1506,38 +1506,40 @@ and hosted engines agree; nothing here is an engine-version artefact.
 
 Status: **rebased, repaired, gated, and published.** Every acceptance criterion
 in issue #444 is implemented and covered, and PR #532 is open against `main`
-(`ef3c4da4`; the PR was opened when `main` was `8835347c`) with its draft flag
-cleared. The replay exposed four *cross-branch* breakages, all repaired — the
-`field_by_name` split, the `with_jail` removal, the Markdown re-flow, and the
-`DocSpec` literal missing `main`'s new `behaviour` field. Every one was
-established as a combination failure: each side passes its own gates alone, so
-none would have been caught by validating either branch in isolation. Two of
-the four were invisible to the replay itself and surfaced only when the
-affected target was actually compiled, which is why the post-rebase gate set is
-mandatory rather than confirmatory.
+(`0175dc89`; the PR was opened when `main` was `8835347c`) with its draft flag
+cleared. The work was replayed six times as the target advanced; the sixth
+replay, recorded in `Progress`, is the one that leaves the head descending from
+the live remote `main`. The replay exposed four *cross-branch* breakages, all
+repaired — the `field_by_name` split, the `with_jail` removal, the Markdown
+re-flow, and the `DocSpec` literal missing `main`'s new `behaviour` field.
+Every one was established as a combination failure: each side passes its own
+gates alone, so none would have been caught by validating either branch in
+isolation. Two of the four were invisible to the replay itself and surfaced
+only when the affected target was actually compiled, which is why the
+post-rebase gate set is mandatory rather than confirmatory.
 
-The repaired tree is now **published**: the force-push with lease bound to the
-recorded remote head `b8c9a905` brought the remote to `a36167b7` and three
-fast-forward pushes since (`aaa2a0f8`, `166488f6`, `af00eda4`) carried it to
-the current head, the tracking ref and upstream were re-pointed, and
-`git ls-remote` confirms the remote head equals `HEAD`. This matters more than
-a routine push. Every repair this branch has made since the round-16 review —
-including both findings that review raised — sat outside every push ever made
-to this branch, which is exactly why that review reported "verification is
-inconclusive: the repository snapshot still contains both original tests".
-CodeRabbit cannot verify work it was never sent, so the push, not another
-reply, is what re-opens those threads to resolution.
+The repaired tree is now **published**: successive force-pushes with lease,
+each bound to a re-printed remote head, carried the remote through `a36167b7`
+and `64ebeb6d` to the current head `6c404070`, the tracking ref and upstream
+were re-pointed, and `git ls-remote` confirms the remote head equals `HEAD`.
+This matters more than a routine push. Every repair this branch has made since
+the round-16 review — including both findings that review raised — sat outside
+every push ever made to this branch, which is exactly why that review reported
+"verification is inconclusive: the repository snapshot still contains both
+original tests". CodeRabbit cannot verify work it was never sent, so the push,
+not another reply, is what re-opens those threads to resolution.
 
-Five of the six gates are green on the published candidate: `check-fmt`,
-`typecheck`, `lint` (covering `cargo doc`, Clippy, and the Whitaker Dylint
-suite), `markdownlint`, and `nixie`. The sixth, `make test`, is red on a single
-target, `documentation_examples_rust_tests`, and the failure is environmental:
-all four failures are `subprocess timed out after 1200s` raised at
-`workspace.rs:122` on the child `cargo build`, before any assertion runs, while
-three other agents on this host ran the byte-identical target concurrently. The
-test names, the deadline constant, and the target all exist unchanged at the
-target merge-base, and hosted CI passed both `build-test` legs on the previous
-remote head. See the `Progress` entry for the full five-point attribution.
+Five of the six gates are green on the candidate as it stood at `a36167b7`:
+`check-fmt`, `typecheck`, `lint` (covering `cargo doc`, Clippy, and the
+Whitaker Dylint suite), `markdownlint`, and `nixie`. The sixth, `make test`, is
+red on a single target, `documentation_examples_rust_tests`, and the failure is
+environmental: all four failures are `subprocess timed out after 1200s` raised
+at `workspace.rs:122` on the child `cargo build`, before any assertion runs,
+while three other agents on this host ran the byte-identical target
+concurrently. The test names, the deadline constant, and the target all exist
+unchanged at the target merge-base, and hosted CI passed both `build-test` legs
+on the previous remote head. See the `Progress` entry for the full five-point
+attribution.
 
 The round-by-round log — including the two findings declined on evidence and
 the one later re-opened and applied after re-measurement — lives in `Progress`
@@ -1597,10 +1599,14 @@ lines, and the two latent Clippy violations the boolean work would have masked
 post-rebase repairs were validated against the replayed tree rather than the
 pre-rebase one, so their evidence is current, and the full six-gate run against
 the frozen `a36167b7` replaced the pre-rebase certificates: five gates green,
-and `test` red only on the saturation class diagnosed in `Progress`. The three
-commits since that run (`aaa2a0f8`, `166488f6`, `af00eda4`) change this
-document alone — `git diff --name-status a36167b7..af00eda4` reports one
-modified `.md` file — so the Rust-lane certificates carry over on content
-identity, while the Markdown lanes were re-run against the published head and
-are green. The one outstanding certificate is a hosted CI pass on `af00eda4`,
-which the locally saturated `test` target cannot supply on this host.
+and `test` red only on the saturation class diagnosed in `Progress`.
+
+The sixth replay invalidates those certificates a second time, and they are
+being re-run rather than transferred. What *can* be transferred is narrower and
+better founded: the replay is proven content-neutral for branch-authored work,
+so the reviewed pre-merge dispositions still bind, but a gate certificate is
+about a tree and not about a diff, and the tree changed. The two commits since
+`a36167b7` that touch this document alone (`af00eda4`, and this record) reach
+no Rust lane, and the Markdown lanes are re-run for each. The one outstanding
+certificate is a hosted CI pass on the current head, which the locally saturated
+`test` target cannot supply on this host.
