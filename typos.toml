@@ -57,6 +57,7 @@ extend-ignore-re = [
     "`[0-9a-f]{7,40}`",
     "`[^`\\n]*cli::tests::localisation[^`\\n]*`",
     "`[^`\\n]*localised_help[^`\\n]*`",
+    "`[^`\\n]*mold[^`\\n]*`",
     "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",
     "`analyzed`",
     "`artifact_path`",
