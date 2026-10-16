@@ -985,6 +985,83 @@ Observable success: a config file that sets `enabled = true` combined with
   had been fixed without being pushed, the other had not been fixed at all, and
   only re-running the check tells them apart.
 
+- **The replay onto #489 needed one resolution, and it was a relocation, not a
+  disagreement.** Main advanced from `568a3907` to `2b57495c` between the
+  plan's first draft and this replay, and the delta is a single commit:
+  `Chore(deps): Bump rust-toolchain from 1.89 to 1.98 (#489)`, authored
+  2026-10-16. Three files are touched by both sides —
+  `cargo-orthohelp/src/schema/mod.rs`, `CHANGELOG.md`, and
+  `docs/developers-guide.md` — and only the first conflicted. #489 applies
+  Clippy 1.98's `use_self` to this crate's IR mirror, rewriting
+  `Vec<DocMetadata>` to `Vec<Self>` and two `Box<ValueType>`s to `Box<Self>`.
+  This branch's split commit `fa201b4e` moves exactly those definitions into
+  the new `schema/field.rs` and `schema/behaviour.rs` submodules, so the two
+  edits meet as a modify/delete: main edits the lines, this branch deletes them
+  from that file. Git's textual merge has no way to follow the types.
+
+  The resolution keeps both intents by applying main's rewrite at each type's
+  new home, which is the relocation-aware form of the per-site rule: take the
+  target's improvement, place it where the branch moved the code. Both
+  `Box<Self>` sites live in `schema/field.rs` (the `ValueType::List` and
+  `ValueType::Map` variants) and the `Vec<Self>` site is `DocMetadata`'s
+  `subcommands` field, which stays in `mod.rs`. Verifying that required reading
+  all three merge stages rather than the working file: stage 3 (the split
+  commit) contains no `Self` spelling at all, which is what proves the rewrite
+  had to be re-applied on the branch side rather than inherited.
+
+  The general form: **a target's `use_self`-style rename does not survive
+  contact with a branch that relocates the same definitions**, and the conflict
+  it produces looks like a deletion of the target's work. Resolve it by
+  locating each rewritten site by *type name* in the branch's new layout, not
+  by accepting either side wholesale.
+
+- **The replay introduced a regression that neither side could see alone, and
+  main's own test was the defective half.** Main's #537 (2026-10-13) added
+  `legacy_load_impl_has_no_profile_surface`, whose forbidden list includes the
+  literal `"value_source"`. This branch's boolean-override fix asks clap's
+  `ArgMatches::value_source` in the *legacy* CLI push gate, so the replayed
+  tree failed the assertion outright. The first instinct — that this branch had
+  broken a contract — is wrong, and the evidence is in main's own sibling test:
+  `declarative_path_prunes_only_command_line_values` builds the legacy path
+  with a *non-empty* `cli_default_as_absent` field list and asserts that
+  `CommandLine` appears at least once, and `CommandLine` is reachable only
+  through `matches.value_source(...)`. Main's legacy path has therefore emitted
+  that spelling since #463 (2026-09-15), a month before #537 forbade it. The
+  entry passes only because the profile-surface fixture happens to pass an
+  *empty* field list, which collapses the `#( ... )*` repetition that emits the
+  call. It was a false positive held up by a vacuous case.
+
+  There is no CommandLine-only alternative to appeal to: clap 4.6.7's
+  `ArgMatches::args_present()` delegates to `ValueSource::is_explicit()`, which
+  is `self != Self::DefaultValue`, so it counts an environment-filled value as
+  explicit and would invert the tier order this crate documents for the
+  declarative path. The repair is therefore to forbid a symbol that is
+  genuinely profile-only — `has_explicitly_provided_value`, the profile path's
+  own explicit-input binding — and to leave the branch's push gate alone. A new
+  test, `declarative_path_asks_clap_for_value_sources`, pins the call site so
+  the removal cannot silently become stale.
+
+  The general form: **a string-containment test over generated tokens is only
+  as sound as its fixture's coverage of the emitting path.** Repetition-driven
+  emitters make that failure silent, because the forbidden string disappears
+  when the list is empty rather than when the code is absent. When such a test
+  fails, check whether the target's own tests contradict the entry before
+  changing the code under test.
+
+- **A "no failing test" claim needs the failure classified *before* it is
+  called environmental.** The earlier gate run reported four
+  `documentation_examples_rust_tests` failures that were compile-contention
+  timeouts; this run reported one failure of a completely different kind — a
+  file-locking probe in the localization artefact suite. Both are unrelated to
+  the diff, but they are unrelated for different reasons, and only one of them
+  is a candidate for a re-run. The discriminator used here: a test whose
+  failure is a pure assertion over in-process strings (`legacy_load_impl...`)
+  is deterministic and must be fixed; a test that spawns processes, takes a
+  file lock, or measures wall-clock time can fail from host load and must be
+  re-run before it is believed. `probing_reports_a_held_lock_as_held` passed
+  3/3 in isolation immediately after failing once inside the full suite, which
+  is what identifies it as contention rather than a defect.
+
 ## Decision log
 
 - **Single value-taking flag, not a `--flag`/`--no-flag` pair.** A negation

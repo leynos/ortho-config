@@ -326,10 +326,20 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
 fn legacy_load_impl_has_no_profile_surface() -> Result<()> {
     let generated = build_legacy_load_impl()?;
     let rendered = generated.to_string();
+    // Each entry must be reachable *only* through the profile surface.
+    // `value_source` is deliberately absent: the declarative path has asked
+    // clap's `ArgMatches::value_source` since #463 (for `cli_default_as_absent`
+    // pruning and, since the boolean-override fix, for the CLI push gate), so
+    // forbidding it would fail a correct legacy impl. It read as profile-only
+    // here only because this fixture passes an empty `cli_default_as_absent`
+    // field list, which collapses the `#( ... )*` repetition that emits the
+    // call. `has_explicitly_provided_value` is the profile path's own
+    // explicit-input check and appears in no legacy builder, so it carries the
+    // same intent without the false positive.
     for forbidden in [
         "extract_profile_layers",
         "SelectedProfile",
-        "value_source",
+        "has_explicitly_provided_value",
         "compose_layers_with_selection_from_iter",
         "load_with_profile",
     ] {
