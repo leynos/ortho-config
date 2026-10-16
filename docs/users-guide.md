@@ -59,6 +59,13 @@ the derive. Optional `json5`, `yaml`, and `metrics` features are covered later.
 OrthoConfig re-exports its derive macros, so a separate `ortho_config_macros`
 dependency is not needed.
 
+Depending on the published crate needs no special toolchain; the supported
+minimum Rust version is 1.89.0. Building OrthoConfig from a source checkout has
+extra prerequisites: the checkout pins a dated nightly toolchain, and Linux
+builds also need the `mold` linker. The
+[developers' guide](developers-guide.md#development-build-standard) explains
+how to install and verify them.
+
 ## Build the first layered CLI
 
 Start with one struct. The `prefix` is used for environment variables and for

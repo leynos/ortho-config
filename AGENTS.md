@@ -155,20 +155,24 @@ project:
     ```
 
     linting every target with all features enabled and denying all warnings.
-    The `whitaker` wrapper must already be on `PATH`; never install,
-    upgrade, or downgrade it from this repository — repository tooling and
-    agents must not modify the user's Whitaker installation. If the wrapper
-    is missing, ask the user to install it. Per-lint configuration (including
-    `no_std_fs_operations` exclusions, each with a rationale comment) lives
-    in the root `dylint.toml`. Use `make lint-clippy` for a Clippy-only pass
-    where Whitaker is unavailable.
+    The rustdoc and Clippy recipes run under `GATE_RUSTFLAGS`, which restates
+    the build standard alongside `-D warnings`; the Whitaker recipe assigns
+    `-D warnings` alone on purpose. The `whitaker` wrapper must already be on
+    `PATH`; never install, upgrade, or downgrade it from this repository —
+    repository tooling and agents must not modify the user's Whitaker
+    installation. If the wrapper is missing, ask the user to install it.
+    Per-lint configuration (including `no_std_fs_operations` exclusions, each
+    with a rationale comment) lives in the root `dylint.toml`. Use
+    `make lint-clippy` for a Clippy-only pass where Whitaker is unavailable.
   - `make test` executes:
 
     ```sh
     cargo test --workspace
     ```
 
-    running the full workspace test suite. Use `make fmt`
+    running the full workspace test suite. The recipe runs under
+    `GATE_RUSTFLAGS`, which restates the build standard alongside
+    `-D warnings`. Use `make fmt`
     (`cargo fmt --workspace`) to apply formatting fixes reported by the
     formatter check.
 - Clippy warnings MUST be disallowed.
@@ -243,6 +247,22 @@ project:
 - Use `cap_std` and `cap_std::fs_utf8` / `camino` in place of `std::fs` and
   `std::path` for enhanced cross-platform support and capabilities oriented
   filesystem access.
+
+### Toolchain and build standard
+
+- `rust-toolchain.toml` pins a dated nightly, which the parallel `rustc`
+  frontend requires. Dependabot moves the pin; do not change it incidentally.
+- Run `make install-build-tools` once to install the pinned `mold` linker (on
+  Linux) and the pinned toolchain, then `make check-build-tools` to verify them.
+- The build standard lives in `.cargo/config.toml` and is restated in the
+  Makefile, because an assigned `RUSTFLAGS` outranks the configuration. Never
+  write a bare `RUSTFLAGS="-D warnings"` in a recipe; use `$(GATE_RUSTFLAGS)`
+  for a gate or `$(DEBUG_RUSTFLAGS)` for a debug build.
+- Release, Whitaker, MSRV, and coverage builds take none of the standard, on
+  purpose.
+- `make msrv-check` exercises the declared MSRV on its own stable toolchain.
+- See the "Development build standard" section of `docs/developers-guide.md`
+  for the routing matrix.
 
 ### Testing
 
