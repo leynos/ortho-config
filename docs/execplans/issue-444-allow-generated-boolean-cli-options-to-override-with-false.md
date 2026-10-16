@@ -753,6 +753,43 @@ Observable success: a config file that sets `enabled = true` combined with
       run log before being posted, not accepted on assertion. The reply is
       comment `6222240768`.
 
+- [x] (2026-10-16) Sixth replay, onto `0175dc89`, after remote `main` advanced
+      again and the PR turned `CONFLICTING`/`DIRTY`. The previous entry
+      predicted this replay would not be needed; it was falsified, because the
+      branch had been re-pointed at the live tip only after that claim was
+      written. 57 of 57 commits replayed, no commit empty, no file deleted
+      against the target. Two conflicts, both in
+      `ortho_config/tests/documentation_examples_rust_tests.rs` and both
+      symmetric additions: the `STANDARD_RUST_EXAMPLES` list tail and a `mod`
+      declaration block. Both were resolved by union of the two sides; the
+      target had independently appended to the same list, which is the shared
+      fixture trap this branch has met before. `range-diff` reports 55 pairs
+      identical and exactly the two conflicts changed, with no unpaired entry.
+      Weave was selected only by the global attributes file with no tracked
+      opt-in, so per the driver-selection policy the replay ran under
+      `-c core.attributesFile=/dev/null` with `zdiff3`; the bypass is recorded
+      because a clean semantic-driver exit is not a correctness oracle, and
+      Weave's own local merge of this tree had already produced a blank-line
+      anomaly that GitHub's native merge did not.
+- [x] (2026-10-16) Proved the replay introduced no branch-authored change,
+      rather than inferring it from a clean test run. Of the 66 branch-touched
+      paths, 53 are byte-identical to the pre-rebase head and the 13 that
+      differ each carry **exactly** main's own numstat against `2b57495c`,
+      line for line. That also explains the earlier `rust-toolchain.toml`
+      puzzle: the `1.99`/`1.98` difference a two-dot diff appeared to show was
+      main's own toolchain commit arriving through the rebase, never a branch
+      downgrade. The four pre-merge repairs
+      (`legacy_ir_without_value_optional_defaults_to_false`,
+      `rejects_invalid_boolean_spellings`, `boolean_cli_trybuild`, the
+      `value_optional` assertion in `docs_ir_fields.rs`, and the trybuild
+      fixture) are byte-identical at the new head, so the reviewed dispositions
+      still bind and no fresh pre-merge round is warranted on those rows.
+- [x] (2026-10-16) Force-pushed with lease, `--force-with-lease` in refspec
+      form bound to the observed remote head, after re-printing that head over
+      SSH rather than trusting the recorded value. Tracking ref refreshed with
+      the leading `+`; local `HEAD`, tracking ref, and `ls-remote` all read the
+      same object.
+
 ## Surprises & discoveries
 
 - **A new trybuild binary is an integration change, not a test-file change.**
