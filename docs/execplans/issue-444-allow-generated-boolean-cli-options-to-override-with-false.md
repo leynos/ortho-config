@@ -694,6 +694,39 @@ Observable success: a config file that sets `enabled = true` combined with
       `Surprises & discoveries` below; the trybuild pass fixture they add also
       required an integration change, recorded there.
 
+- [x] (2026-10-16) Gated the repair, committed it as `7d76e5d6`, and pushed it.
+      Seven lanes are green: `check-fmt` (3 s), `typecheck` (462 s), `lint`
+      (4093 s, covering `cargo doc`, Clippy with warnings denied, and the
+      Whitaker dylint suite), `markdownlint` (42 s), `nixie` (1 s),
+      `test-workflow-contracts` (36 s, 321 passed), and `spellcheck` (29 s).
+      The tree was frozen throughout — `git diff HEAD` hashed identically
+      before and after every run — and the commit was made only once the gates
+      had closed, so no run certified a moving target.
+
+- [x] (2026-10-16) `make test` is blocked by host admission, not by this
+      change, and the block was reported rather than worked around. Two runs
+      failed (1138 s and 2125 s) with **zero rustc source diagnostics** in
+      either log: no `error[E…]`, no `-->` span, no named repository path. The
+      only error text is `build-limits-rustc` process wrappers —
+      `[Errno 104] Connection reset by peer` and
+      `the supervisor refused: unhealthy` — killing child cargo builds for
+      `bitflags`, `fluent-bundle`, and `orthohelp_bridge`. The failing target,
+      `cargo-orthohelp --test agent_context_contract`, is not in this branch's
+      diff. The supervisor then settled into a sticky `UNHEALTHY` state whose
+      own remedy text instructs an operator to stop `sccache`; stopping shared
+      infrastructure would signal other agents' builds, so it was not
+      attempted, and unsetting `RUSTC_WRAPPER` or calling `rustc` directly is
+      forbidden. Admission recovered on its own, after which the four targets
+      this branch actually changes were run individually and all four pass.
+      The other ~40 binaries remain uncertified — a recorded evidence gap, not
+      a failure. `make test` is not a hosted-CI gate: `.github/workflows/ci.yml`
+      exercises the Rust suite through two `generate-coverage` steps instead.
+
+- [x] (2026-10-16) Posted the pre-merge reconciliation as comment `6222208433`
+      on PR #532, through the pooled comment token rather than the lifecycle
+      account. It asks CodeRabbit to confirm all four rows against the new head
+      `7d76e5d6` and the advanced base `84f524ce`.
+
 ## Surprises & discoveries
 
 - **A new trybuild binary is an integration change, not a test-file change.**
