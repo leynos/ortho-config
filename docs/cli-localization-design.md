@@ -451,35 +451,49 @@ The crate ships en-US translations for every raisable variant in stable clap
 `InvalidUtf8`, `Io`, and `Format`. The three display-only variants
 (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`, `DisplayVersion`)
 are recorded but **not** translated — clap renders the help or version text
-itself, and the matrix marks them with a `DisplayOnly` sentinel so the
-mechanical gate (§6.1.1) can prove exhaustive coverage of `ErrorKind` without
-tying the assertion to a hand-maintained subset count.
+itself, and the matrix marks them with a `DisplayOnly` sentinel.
 
-The matrix is **exhaustive** over `ErrorKind`. Every declared variant appears
-exactly once, either with a translated Fluent identifier or with the
-`DisplayOnly` sentinel. In clap 4.5.60 (the version currently locked in
-`Cargo.lock`) that is 14 translated entries plus 3 sentinel entries, totalling
+For each supported `clap_builder` package identity, the intended matrix has one
+entry for every declared variant, either with a translated Fluent identifier or
+with the `DisplayOnly` sentinel. The matrix shape permits a single
+`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison once the gate's source
+identity contract below is enforced.
 
-1. The matrix shape lets the gate reduce to a single
-`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison without filtering or
-subtraction, which is the property the mechanical gate requires.
+#### 6.1.1 Proposed coverage gate
 
-#### 6.1.1 Mechanical coverage gate
+`clap::error::ErrorKind` is `#[non_exhaustive]`; the proposed gate is intended
+to detect coverage gaps rather than rely solely on a release-time audit. A
+checked-in or generated count manifest must bind each count to an explicitly
+supported `clap_builder` package identity: package version, registry or source
+identity, and checksum. `ErrorKind` is defined by `clap_builder` and
+re-exported by the `clap` facade. In this workspace, the lockfile identifies
+`clap_builder` `4.6.0` from
+`registry+https://github.com/rust-lang/crates.io-index` with checksum
+`714a53001bf66416adb0e2ef5ac857140e7dc3a0c48fb28b2f10762fc4b5069f`; this is an
+example supported identity, not proof of the dependency resolved for every
+consumer.
 
-`clap::error::ErrorKind` is `#[non_exhaustive]`; the crate must therefore
-detect coverage gaps automatically rather than relying on a release-time audit.
-The gate is a single mechanism, described once here and referenced from the
-roadmap:
+The implementation must obtain the identity of the `clap_builder` package
+actually used to compile OrthoConfig and verify that it exactly matches a
+supported manifest entry before emitting
+`cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`. It must also verify
+that the compiled `clap` facade exposes `ErrorKind` from that same resolved
+`clap_builder` package. The facade's resolved dependency edge is part of this
+check, not the source identity to which the variant count is bound. The count
+is the total declared variant count for that builder package, not only the
+raisable variants; classification as translated or `DisplayOnly` remains in
+`CLAP_ERROR_IDS`. The implementation must fail closed for unsupported package
+identities, source overrides, or resolutions whose identity cannot be
+established. Its mechanism must be deterministic and account for every
+supported Cargo source.
 
-1. A build script (`build.rs` in the `ortho_config` crate) inspects the
-   `clap::error::ErrorKind` enum exposed by the resolved clap dependency and
-   emits `cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`, where `<n>`
-   is the count of declared variants (all of them — the build script does
-   **not** classify variants as raisable or display-only). Cargo's resolver
-   picks the clap version from the workspace's `Cargo.lock`, so the build
-   script sees the same clap minor or patch the test will run against.
-2. A const-evaluated test reads that constant and compares it to the
-   length of the exhaustive `CLAP_ERROR_IDS`:
+The workspace's `Cargo.lock` does not prove this contract for downstream
+consumers, which resolve dependencies in their own workspaces and may apply
+source overrides. Until the implementation verifies that the count manifest
+entry describes the `clap_builder` source defining the compiled facade's
+`ErrorKind`, the following const assertion is not a mechanical coverage gate.
+Once the identity contract is enforced, a const-evaluated test can compare the
+matrix length with the count:
 
    ```rust
    // In ortho_config's test suite.
@@ -488,12 +502,11 @@ roadmap:
    const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
    ```
 
-When clap adds a variant in a minor or patch release, the lengths diverge and
-CI fails before publish. The fix is mechanical: add a new `CLAP_ERROR_IDS`
-entry that either points at a new Fluent identifier (for a raisable variant) or
-marks the variant `DisplayOnly` (for a new display shape). This replaces a
-maintenance ritual with a mechanical contract. Roadmap §11.2.1 references this
-section rather than restating the mechanism.
+When a supported Clap source adds a variant, its count manifest entry and the
+matrix must be updated together; the assertion detects a length mismatch. A new
+matrix entry points at a Fluent identifier for a raisable variant or marks the
+variant `DisplayOnly` for a new display shape. Roadmap §11.2.1 references this
+section rather than restating the proposed mechanism.
 
 ### 6.2 Canonical mapping constant
 
@@ -836,10 +849,11 @@ Both commands honour the agent-context output contracts already defined in
 ## 12. Failure modes and risks
 
 - **clap patch releases adding `ErrorKind` variants.** `ErrorKind` is
-  `#[non_exhaustive]` and clap may add variants in a patch release. The §6.1
-  const assertion catches this in CI before publish; the §6.3 `warn`-level
-  tracing event catches it in production. The matrix is therefore mechanically
-  gated rather than ceremonially audited.
+  `#[non_exhaustive]` and clap may add variants in a patch release. Once the
+  §6.1.1 identity contract is implemented, its const assertion can catch a
+  matrix/count mismatch in CI; the §6.3 `warn`-level tracing event catches an
+  unmapped kind in production. Until then, the count comparison is not an
+  exhaustive gate.
 - **`BootHandle` non-finalization.** A consumer who drops a
   `BootHandle<Boot>` without calling `finalize` loses the merge-phase locale.
   The typestate prevents extraction of a long-lived `Arc<dyn Localizer>` for
