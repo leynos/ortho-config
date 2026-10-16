@@ -1,10 +1,16 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
 
+#[path = "documentation_examples/api_guide.rs"]
+mod api_guide;
+
 mod documentation_examples;
+
 #[path = "documentation_examples/env_alias_chain.rs"]
 mod env_alias_chain;
+
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
+
 #[path = "documentation_examples/workspace.rs"]
 mod workspace;
 
@@ -29,9 +35,13 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-tracing",
     "guide-orthohelp-metadata",
     "guide-scoped-discovery",
+    "api-guide-policy-report-constructors",
+    "api-guide-policy-report-json",
+    "api-guide-agent-context-constructor",
+    "api-guide-agent-context-json",
 ];
 
-/// Verifies the public Rust examples compile and behave as documented.
+/// Compiles and runs the public Rust examples, checking their documented contracts.
 #[test]
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
@@ -39,7 +49,10 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         workspace.add_binary(documented_example(id)?)?;
     }
     workspace.add_binary(&environment_probe())?;
+    api_guide::add_schema_version_probe(&mut workspace)?;
     workspace.build()?;
+
+    let (policy_version, agent_context_version) = api_guide::schema_versions(&mut workspace)?;
 
     assert_standard_example_runs(&mut workspace)?;
     assert_env_alias_chain(&mut workspace)?;
@@ -50,11 +63,35 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         [],
         "field=host\n",
     )?;
+    assert_run(
+        &mut workspace,
+        ExampleId("api-guide-policy-report-constructors"),
+        [],
+        "",
+    )?;
+    assert_run(
+        &mut workspace,
+        ExampleId("api-guide-agent-context-constructor"),
+        [],
+        "",
+    )?;
+    api_guide::assert_json_schema_version(
+        &mut workspace,
+        ExampleId("api-guide-policy-report-json"),
+        "version",
+        &policy_version,
+    )?;
+    api_guide::assert_json_schema_version(
+        &mut workspace,
+        ExampleId("api-guide-agent-context-json"),
+        "schema_version",
+        &agent_context_version,
+    )?;
     assert_sanitized_binary_environment(&mut workspace)?;
 
     assert_error_flow(&mut workspace)?;
-
     assert_console_flows(&mut workspace)?;
+
     assert_run(
         &mut workspace,
         ExampleId("guide-selected-subcommand-sources"),

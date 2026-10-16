@@ -10,6 +10,9 @@
   documentation metadata, and error handling.
 - [Developer's guide](developers-guide.md): maintain and extend this
   repository, including build, test, lint, release, and contribution workflows.
+- [cargo-orthohelp policy and agent-context API guide](cargo-orthohelp-api-guide.md):
+  construct and serialize the agent-native policy-report and command-context
+  contracts.
 - [Repository layout](repository-layout.md): understand where source code,
   tests, fixtures, generated artefacts, plans, and long-lived references live.
 
