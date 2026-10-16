@@ -396,7 +396,7 @@ Observable success: a config file that sets `enabled = true` combined with
       a single-Markdown-file delta would spend minutes to re-prove what
       `07e6ea53` already proved, since no Rust input changed.
 
-- [ ] (2026-10-15) CodeRabbit round 16 reviewed `b8c9a905` (50 files
+- [x] (2026-10-15) CodeRabbit round 16 reviewed `b8c9a905` (50 files
       processed) and returned `CHANGES_REQUESTED` with two advisory
       duplication findings, both CodeScene-sourced. The first asked for the
       roff long/short flag formatting to be extracted into a `join_flag_suffix`
@@ -511,7 +511,7 @@ Observable success: a config file that sets `enabled = true` combined with
       cases into `tests_profiles.rs`, following the existing
       `behaviour_tests.rs` pattern.
 
-- [ ] (2026-10-16) Round-16 replies posted. Both findings are repaired at
+- [x] (2026-10-16) Round-16 replies posted. Both findings are repaired at
       HEAD — `format_flag_with_suffix` for the roff duplication and the
       `CliLayerCase` parameterization for the composition tests — and the
       replies are recorded in-thread against comment ids `4288826576` and
@@ -523,7 +523,7 @@ Observable success: a config file that sets `enabled = true` combined with
       checked, because a reply is exactly the artefact where a silent stub
       would look like success.
 
-- [ ] (2026-10-16) **Third replay required: `origin/main` advanced to
+- [x] (2026-10-16) **Third replay required: `origin/main` advanced to
       `568a3907` after the second replay landed on `f99d9234`.** The delta is
       three commits (`2421ed97` CLI-localization docs, `ff416e12` a
       `setup-uv` bump, `568a3907` the #452 Figment-Jail-file-test migration),
@@ -568,10 +568,12 @@ Observable success: a config file that sets `enabled = true` combined with
       parser only if it can be told not to enforce style, and keep the real
       formatting gate at the end of the run.
 
-- [ ] (2026-10-16) Full gate set re-run against the frozen `5479a969`, since
+- [x] (2026-10-16) Full gate set re-run against the frozen `5479a969`, since
       every earlier certificate belongs to a pre-rebase candidate. Changed
       classes versus the target are 46 `.rs`, 10 `.md`, 4 `.snap`, and 1
-      `.txt`, so both the Rust lanes and the Markdown lanes are in scope.
+      `.txt`, so both the Rust lanes and the Markdown lanes are in scope. This
+      pass was superseded by the `a36167b7` run recorded above; its results are
+      historical for `5479a969` only and were not transferred.
 
 - [x] (2026-10-16) **Two defects surfaced by the first gate pass, both
       introduced by this branch and both now repaired.** The first was a
@@ -625,10 +627,52 @@ Observable success: a config file that sets `enabled = true` combined with
       -- --check` and `mdtablefix --check`; the plan's new prose was rewrapped
       by hand, then verified to be a pure rewrap by a whitespace-insensitive
       word diff against the pre-fix copy).
-- [ ] (2026-10-16) Full six-gate run on `5f138ba3` delegated to `scrutineer`
-      after the fix commit; results pending.
-- [ ] (2026-10-16) Force-push with lease bound to `b8c9a905` after the gates
-      return green, then refresh the tracking ref and set the upstream.
+- [x] (2026-10-16) Full six-gate run against the frozen `a36167b7`, run
+      sequentially through the Makefile targets with only the officially
+      bounded parallelism inside each. Five gates green: `check-fmt` (exit 0,
+      2 s), `typecheck` (exit 0, 1146 s), `lint` (exit 0, 5511 s, so both
+      `cargo doc`, Clippy, and the Whitaker Dylint suite passed),
+      `markdownlint` (exit 0, 13 s), and `nixie` (exit 0, 2 s). `test` exited
+      2 at 3689 s. The single failing target is
+      `documentation_examples_rust_tests`, and its failure is the saturation
+      class, not a behavioural defect; see the entry below and the
+      `Surprises & discoveries` record.
+
+- [x] (2026-10-16) **The `test` failure is diagnosed, not assumed away.**
+      `test result: FAILED. 14 passed; 4 failed; 5 ignored; finished in
+      1200.27s`, with all four failures reading `Error: build documented Rust:
+      subprocess timed out after 1200s`. Five independent checks establish the
+      attribution: (a) all four test names exist at the target merge-base
+      `2b57495c`, so none is introduced by this branch; (b) the deadline
+      constant is `1_200` at both the merge-base and `HEAD`, so the branch did
+      not tighten it; (c) the timeout fires at
+      `ortho_config/tests/documentation_examples/workspace.rs:122`, on the
+      child `cargo build`, before any branch assertion executes; (d) the
+      failing log records 14 `waiting for a compile slot` lines with queue
+      depths up to 91 ahead; and (e) hosted CI passed both `build-test (linux)`
+      and `build-test (windows)` on the remote head. An isolated re-run of the
+      single target reproduced the same four timeouts at the same 1200 s
+      deadline while three other agents on this host ran the byte-identical
+      target concurrently, which is direct evidence of host contention rather
+      than of a branch regression. The failing log is preserved at
+      `/tmp/test-…out.saturation-run`, sha256
+      `f488d1a24b8edb68c842ef7325cbb2aecca3901566f3904a95bcf65d12ac2b54`; the
+      re-run log is `/tmp/rerun2-doc-examples-….out`.
+
+- [x] (2026-10-16) Force-push with lease bound to the recorded remote head
+      `b8c9a905`, using the refspec form
+      `--force-with-lease=refs/heads/<branch>:<sha>`, which is the form that
+      actually guards the intended remote ref. The live head was re-read with
+      `git ls-remote` immediately before the push and matched the lease
+      expectation; SSH authenticated as `leynos` first. The push reported
+      `+ b8c9a905...a36167b7 … (forced update)`. The tracking ref was then
+      refreshed with the leading-`+` refspec, `git ls-remote` and
+      `git rev-parse HEAD` both print `a36167b7`, and
+      `git rev-list --count @{upstream}..HEAD` is 0. The upstream now resolves
+      to `origin/issue-444-allow-generated-boolean-cli-options-to-override-with-false`.
+      This closes the gap the `Surprises & discoveries` entry below records:
+      the two round-16 repairs are published for the first time, so CodeRabbit
+      can now verify work it was previously never sent.
 
 ## Surprises & discoveries
 
@@ -1213,23 +1257,42 @@ The trace chain from requirement to evidence runs:
 
 ## Outcomes & retrospective
 
-Status: **rebased and repaired, re-gating.** Every acceptance criterion in
-issue #444 is implemented and covered, and PR #532 is open against `main` at
-`f99d9234` with its draft flag cleared. The replay exposed four *cross-branch*
-breakages, all repaired — the `field_by_name` split, the `with_jail` removal,
-the Markdown re-flow, and the `DocSpec` literal missing `main`'s new
-`behaviour` field. Every one was established as a combination failure: each
-side passes its own gates alone, so none would have been caught by validating
-either branch in isolation. Two of the four were invisible to the replay itself
-and surfaced only when the affected target was actually compiled, which is why
-the post-rebase gate set is mandatory rather than confirmatory. The round-16
-CodeRabbit findings are dispositioned and the fixes are committed; the gates
-must now be re-run against this replayed-and-repaired tree before any review
-evidence can be considered current, because every certificate so far belongs to
-a pre-rebase candidate. The round-by-round log — including the two findings
-declined on evidence and the one later re-opened and applied after
-re-measurement — lives in `Progress` and is not restated here, so that a
-per-round count cannot drift out of step with the log it summarizes.
+Status: **rebased, repaired, gated, and published.** Every acceptance criterion
+in issue #444 is implemented and covered, and PR #532 is open against `main`
+(`8835347c`) with its draft flag cleared. The replay exposed four
+*cross-branch* breakages, all repaired — the `field_by_name` split, the
+`with_jail` removal, the Markdown re-flow, and the `DocSpec` literal missing
+`main`'s new `behaviour` field. Every one was established as a combination
+failure: each side passes its own gates alone, so none would have been caught
+by validating either branch in isolation. Two of the four were invisible to the
+replay itself and surfaced only when the affected target was actually compiled,
+which is why the post-rebase gate set is mandatory rather than confirmatory.
+
+The repaired tree is now **published**: the force-push with lease bound to the
+recorded remote head `b8c9a905` brought the remote to `a36167b7`, the tracking
+ref and upstream were re-pointed, and `git ls-remote` confirms the remote head
+equals `HEAD`. This matters more than a routine push. Every repair this branch
+has made since the round-16 review — including both findings that review raised
+— sat outside every push ever made to this branch, which is exactly why that
+review reported "verification is inconclusive: the repository snapshot still
+contains both original tests". CodeRabbit cannot verify work it was never sent,
+so the push, not another reply, is what re-opens those threads to resolution.
+
+Five of the six gates are green on the published candidate: `check-fmt`,
+`typecheck`, `lint` (covering `cargo doc`, Clippy, and the Whitaker Dylint
+suite), `markdownlint`, and `nixie`. The sixth, `make test`, is red on a single
+target, `documentation_examples_rust_tests`, and the failure is environmental:
+all four failures are `subprocess timed out after 1200s` raised at
+`workspace.rs:122` on the child `cargo build`, before any assertion runs, while
+three other agents on this host ran the byte-identical target concurrently. The
+test names, the deadline constant, and the target all exist unchanged at the
+target merge-base, and hosted CI passed both `build-test` legs on the previous
+remote head. See the `Progress` entry for the full five-point attribution.
+
+The round-by-round log — including the two findings declined on evidence and
+the one later re-opened and applied after re-measurement — lives in `Progress`
+and is not restated here, so that a per-round count cannot drift out of step
+with the log it summarizes.
 
 What was achieved, in the order the work forced it:
 
