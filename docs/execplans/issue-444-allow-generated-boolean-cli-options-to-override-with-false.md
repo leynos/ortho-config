@@ -727,6 +727,32 @@ Observable success: a config file that sets `enabled = true` combined with
       account. It asks CodeRabbit to confirm all four rows against the new head
       `7d76e5d6` and the advanced base `84f524ce`.
 
+- [x] (2026-10-16) CodeRabbit replied in `6222228242` and cleared every row:
+      **Testing (Overall)** and **Testing (Unit And Behavioural)** and
+      **Testing (Compile-Time / Ui)** as *Addressed*, and **Out of Scope
+      Changes check** as *Refuted for this base/head pair*. It wrote that "no
+      valid remaining code change was established for these four findings" and
+      that no follow-up prompt was needed. It separately endorsed keeping the
+      wider timing override distinct from the fixed four-binary Windows
+      reservation. Its recorded limits are worth carrying: it inspected source
+      and check results without building or executing anything, so the local
+      test passes it cites are supplied evidence rather than reproduced
+      results.
+
+- [x] (2026-10-16) Verified and accepted CodeRabbit's one factual correction,
+      which was to the evidence description rather than the code.
+      `help::generated_parser_round_trips_the_documented_spellings`
+      (`ortho_config/tests/clap_integration/help.rs`) asserts bare, `=false`,
+      and omitted — three spellings, not the four the reconciliation claimed.
+      The explicit-true case is covered instead by
+      `parsing::boolean_flags_control_precedence::case_03_explicit_true`
+      (`parsing.rs`) and
+      `option_cases::parses_option_bool_across_sources::case_3_explicit_true`
+      (`option_cases.rs`), both of which the certified `clap_integration` log
+      records as `ok`. The correction was checked against the source and the
+      run log before being posted, not accepted on assertion. The reply is
+      comment `6222240768`.
+
 ## Surprises & discoveries
 
 - **A new trybuild binary is an integration change, not a test-file change.**
