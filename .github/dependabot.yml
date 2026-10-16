@@ -71,7 +71,15 @@ updates:
       default-days: 7
       semver-major-days: 14
 
-  # Keep the pinned Rust toolchain current independently of Cargo crates.
+  # Keep the pinned Rust toolchain current independently of Cargo crates
+  # (RT-024). The pin in rust-toolchain.toml is a dated nightly, which
+  # RT-023 requires to stay within 56 days of the audit date, and Dependabot's
+  # `rust-toolchain` ecosystem moves dated nightlies as well as numeric
+  # releases. The interval is daily because DB-005 requires it of every entry
+  # (RT-024 alone would also accept weekly), and the group is the catch-all
+  # `minor-and-patch` shape DB-005 demands last in each entry. No cooldown: no
+  # canon rule asks for one, and a nightly's age is its date, so a cooldown
+  # would spend part of that 56-day window before the bump even opens.
   - package-ecosystem: "rust-toolchain"
     directory: "/"
     groups:
