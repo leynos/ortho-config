@@ -372,3 +372,7 @@ fn open_bridge_file(
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "bridge_proptests.rs"]
+mod proptests;

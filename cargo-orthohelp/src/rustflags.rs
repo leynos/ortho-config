@@ -187,3 +187,7 @@ mod tests {
         assert_eq!(sanitize_encoded_rustflags(&flags), Some(expected));
     }
 }
+
+#[cfg(test)]
+#[path = "rustflags_proptests.rs"]
+mod proptests;
