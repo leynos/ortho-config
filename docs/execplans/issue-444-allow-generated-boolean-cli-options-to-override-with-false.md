@@ -1255,6 +1255,41 @@ The trace chain from requirement to evidence runs:
   executable documentation example runs under `make test`.
 - Full commit gates run through `scrutineer` before each CodeRabbit review.
 
+## CodeScene disposition
+
+Two `String Heavy Function Arguments` advisory findings are open against the
+published head, both in test modules. The ruleset `main-required-checks`
+requires exactly `build-test (linux)` and `build-test (windows)`, so CodeScene
+does not block the merge; it is recorded here rather than dismissed because the
+skill asks that advisory findings be addressed or explicitly justified.
+
+Both findings are accepted as false positives for their context, on one shared
+reason: the "string" arguments are `rstest` case parameters carrying Roff
+markup and literal CLI flag spellings, and `AGENTS.md` mandates parameterized
+`#[rstest]` tables for exactly this shape of finite truth table. Converting
+those case parameters to newtypes would replace a domain-language argument with
+a wrapper that must be constructed and unwrapped at every call site, which is
+the opposite of what the rule intends — the rule exists to stop *unvalidated*
+domain data crossing boundaries, not to stop a test table from spelling the
+literal it asserts. Evidence for the disposition:
+
+- `cargo-orthohelp/src/roff/escape/tests.rs` (9.68): the flagged arguments are
+  the expected Roff strings of `format_flag_combinations`,
+  `required_value_placeholder_follows_the_flag`, and
+  `optional_value_placeholder_joins_the_flag`. Each `(long, short)` row *is*
+  the specification of an escape-sequence spelling; a typed wrapper would have
+  to re-render the same literal to compare against the function's output.
+- `ortho_config_macros/src/derive/build/cli/tests.rs` (9.38 → 9.09): the
+  remaining two warnings on this file are `Code Duplication` at lines 93 and 108
+  (`rejects_invalid_long_flags` / `rejects_reserved_long_flags`), which share
+  the parse-and-assert shape but differ in the input table and the expected
+  error substring. They were left separate deliberately: merging them would put
+  a reservation-policy assertion and a syntax-validation assertion in one body,
+  and the two are specified by different requirements.
+
+`cs check` reproduces the hosted scores locally (9.68 and 9.09), so the local
+and hosted engines agree; nothing here is an engine-version artefact.
+
 ## Outcomes & retrospective
 
 Status: **rebased, repaired, gated, and published.** Every acceptance criterion
