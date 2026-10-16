@@ -3,6 +3,8 @@
 #[path = "documentation_examples/cargo_runner.rs"]
 mod cargo_runner;
 mod documentation_examples;
+#[path = "documentation_examples/format_all.rs"]
+mod format_all;
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
 
@@ -39,6 +41,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-localization",
     "guide-metrics-install",
     "guide-orthohelp-command",
+    "guide-orthohelp-format-all",
+    "guide-orthohelp-format-all-tree",
     "guide-orthohelp-metadata",
     "guide-policy-check",
     "guide-policy-ci",
