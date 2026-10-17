@@ -261,6 +261,9 @@ fn count_base(source: &'static str) {
     .increment(1);
 }
 
+/// Keeps base-resolution call sites available when metric support is disabled.
+///
+/// The source is ignored and no counter is emitted in builds without `metrics`.
 #[cfg(not(feature = "metrics"))]
 const fn count_base(_source: &'static str) {}
 
@@ -275,6 +278,9 @@ fn count_candidates(outcome: &'static str, category: &'static str) {
     .increment(1);
 }
 
+/// Keeps candidate-search call sites available without the `metrics` feature.
+///
+/// The values are ignored; this feature configuration emits no counter.
 #[cfg(not(feature = "metrics"))]
 const fn count_candidates(_outcome: &'static str, _category: &'static str) {}
 
@@ -288,5 +294,8 @@ fn count_candidate(outcome: &'static str) {
     .increment(1);
 }
 
+/// Keeps Unix candidate-probe call sites available when metrics are disabled.
+///
+/// The outcome is ignored; this feature configuration emits no counter.
 #[cfg(all(not(feature = "metrics"), any(unix, target_os = "redox")))]
 const fn count_candidate(_outcome: &'static str) {}

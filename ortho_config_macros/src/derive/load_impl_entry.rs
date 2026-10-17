@@ -13,6 +13,12 @@ use super::source::{
 };
 use super::{LoadImplArgs, LoadImplIdents, build_compose_layers_impl};
 
+/// Emit methods that keep lookup-only and scanning environment capabilities separate.
+///
+/// # Example
+///
+/// A caller can pass a `MapEnv` for discovery and a scan source for merging;
+/// the generated method uses each source only for its assigned capability.
 fn build_source_aware_methods(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplIdents { config_ident, .. } = &args.idents;
     let krate = args.tokens.krate;
@@ -180,6 +186,13 @@ fn build_profile_compose_methods(
     }
 }
 
+/// Emit profile-aware CLI methods with selection and bounded telemetry hooks.
+///
+/// # Example
+///
+/// For a struct with `#[ortho_config(profiles)]`, the emitted CLI impl includes
+/// `load_with_profile_from_iter`; passing `--profile staging` loads that
+/// profile and returns it alongside the resulting configuration.
 fn build_profile_cli_impl(
     args: &LoadImplArgs<'_>,
     compose_layers_impl: &proc_macro2::TokenStream,
@@ -250,6 +263,13 @@ fn build_profile_cli_impl(
     }
 }
 
+/// Emit the compatibility CLI methods without profile-selection machinery.
+///
+/// # Example
+///
+/// For a struct without profile support, passing `--retries 3` to the emitted
+/// `load_from_iter` method loads the ordinary configuration without selection
+/// reporting.
 fn build_legacy_cli_impl(
     args: &LoadImplArgs<'_>,
     compose_layers_impl: &proc_macro2::TokenStream,
@@ -291,6 +311,14 @@ fn build_legacy_cli_impl(
         }
     }
 }
+
+/// Assemble CLI and config impl blocks, selecting the profile path when opted in.
+///
+/// # Example
+///
+/// Given a derive input with profile support enabled, the returned tokens
+/// contain profile-aware CLI methods and config methods that delegate to them;
+/// otherwise they contain the compatibility CLI methods.
 pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplIdents {
         cli_ident,

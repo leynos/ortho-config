@@ -50,6 +50,12 @@ pub(crate) fn parse_input(
     Ok((ident, fields, struct_attrs, field_attrs))
 }
 
+/// Accepts a path type whose final segment is `PathBuf`, including qualified paths.
+///
+/// # Examples
+///
+/// `std::path::PathBuf` is accepted because its final path segment is
+/// `PathBuf`; `Path` is rejected.
 fn is_path_buf(ty: &syn::Type) -> bool {
     let syn::Type::Path(path) = ty else {
         return false;
@@ -60,6 +66,15 @@ fn is_path_buf(ty: &syn::Type) -> bool {
         .is_some_and(|segment| segment.ident == "PathBuf")
 }
 
+/// Checks that a configured project-root selector names a usable CLI path field.
+///
+/// Missing, skipped, or non-path fields are rejected at the derive site so the
+/// generated discovery code never has to guess which field supplies the root.
+///
+/// # Examples
+///
+/// A configured `root: PathBuf` field that remains available to the CLI is
+/// accepted; a `root: String` field produces a derive diagnostic.
 fn validate_project_root_field(
     fields: &[syn::Field],
     attrs: &[FieldAttrs],

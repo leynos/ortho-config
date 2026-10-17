@@ -22,9 +22,12 @@ use crate::policy::{PolicyMode, PolicyReport, PolicyResult, PolicySeverity};
 /// In `warn` mode every finding is a warning; in `deny` mode every finding is
 /// a hard failure, including omitted metadata (design doc §8.1: \"the same
 /// omitted fields fail CI\").
+/// Report severity selected after the policy's off mode has been handled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuleSeverity {
+    /// Keep findings visible without making the policy report fail.
     Warn,
+    /// Mark findings as failures while continuing to report all rule results.
     Deny,
 }
 
@@ -73,27 +76,34 @@ pub fn check_behaviour(context: &AgentContext, mode: PolicyMode) -> PolicyReport
 
 /// One lint rule's stable identifiers.
 struct Rule {
+    /// Names the policy rule independently of any one finding kind.
     rule_id: &'static str,
+    /// Distinguishes the specific result emitted by this rule.
     code: &'static str,
 }
 
 impl Rule {
+    /// A destructive command is missing its declared confirmation bypass.
     const DESTRUCTIVE_BYPASS: Self = Self {
         rule_id: "agent-native.behaviour.destructive-bypass",
         code: "destructive_bypass_missing",
     };
+    /// An interactive command is missing its declared prompt bypass.
     const PROMPT_BYPASS: Self = Self {
         rule_id: "agent-native.behaviour.prompt-bypass",
         code: "prompt_bypass_missing",
     };
+    /// The declared bypass does not match any input's long flag.
     const BYPASS_UNKNOWN: Self = Self {
         rule_id: "agent-native.behaviour.bypass-unknown",
         code: "bypass_flag_unknown",
     };
+    /// Interaction mode was omitted from the command's metadata.
     const UNDECLARED: Self = Self {
         rule_id: "agent-native.behaviour.undeclared",
         code: "interaction_unknown",
     };
+    /// Mutation effect was omitted from the command's metadata.
     const UNDECLARED_MUTATION: Self = Self {
         rule_id: "agent-native.behaviour.undeclared",
         code: "mutation_unknown",

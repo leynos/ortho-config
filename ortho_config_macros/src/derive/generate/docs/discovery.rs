@@ -74,13 +74,19 @@ pub(super) fn build_discovery_metadata(
     }
 }
 
+/// Format families exposed by the discovery metadata, independent of file names.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FormatKind {
+    /// TOML configuration files.
     Toml,
+    /// YAML files using either the `.yaml` or `.yml` suffix.
     Yaml,
+    /// JSON-family files, including JSON5 inputs.
     Json,
 }
 
+/// Classifies a file name by its case-insensitive extension when supported.
+/// For example, `settings.YML` selects YAML, while `settings.ini` is unsupported.
 fn format_kind_from_extension(name: &str) -> Option<FormatKind> {
     match extension_from_name(name).as_deref() {
         Some("toml") => Some(FormatKind::Toml),
@@ -122,6 +128,8 @@ fn collect_formats(names: &[&str], krate: &TokenStream) -> Vec<TokenStream> {
     formats
 }
 
+/// Extracts a trimmed, lower-case suffix, returning `None` for a bare name.
+/// For example, `settings.TOML` yields `toml`, while `settings` has no suffix.
 fn extension_from_name(name: &str) -> Option<String> {
     name.rsplit_once('.')
         .map(|(_, ext)| ext.trim())

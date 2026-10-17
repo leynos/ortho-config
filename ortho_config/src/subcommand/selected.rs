@@ -140,7 +140,9 @@ pub trait SelectedSubcommandMerge: Sized {
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub struct SelectedSubcommandSources<'a> {
+    /// Capability used only to resolve named files for the selected variant.
     files: SubcommandFileContext<'a>,
+    /// Capability used to scan environment values while merging that variant.
     merge_source: SharedScanEnvSource,
 }
 

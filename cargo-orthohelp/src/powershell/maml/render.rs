@@ -1,12 +1,17 @@
 //! Core rendering routines for MAML output.
 
 use crate::ir::{LocalizedFieldMetadata, LocalizedLink};
-use crate::schema::{CliMetadata, ValueType};
+use crate::schema::ValueType;
 use std::borrow::Cow;
 
+use super::paragraphs::parameter_paragraphs;
 use super::types::{CommandSpec, MamlOptions};
 use super::xml_writer::{HELP_ITEMS_OPEN, XML_DECLARATION, XmlWriter, bool_attr, escape_xml};
 
+/// Render localized command metadata as a complete MAML help-items document.
+///
+/// Dynamic values are escaped at their XML text boundary; the writer supplies
+/// stable CRLF line endings for the generated help file.
 pub(super) fn render_help(commands: &[CommandSpec<'_>], options: MamlOptions) -> String {
     let mut writer = XmlWriter::new();
 
@@ -22,6 +27,7 @@ pub(super) fn render_help(commands: &[CommandSpec<'_>], options: MamlOptions) ->
     writer.finish()
 }
 
+/// Emit one command's details, syntax, parameters, examples and related links.
 fn render_command(writer: &mut XmlWriter, command: &CommandSpec<'_>, options: MamlOptions) {
     writer.line("<command:command>");
     writer.indent();
@@ -52,6 +58,7 @@ fn render_command(writer: &mut XmlWriter, command: &CommandSpec<'_>, options: Ma
     writer.line("</command:command>");
 }
 
+/// Emit the command syntax and only those parameters visible in CLI help.
 fn render_syntax(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
     writer.line("<command:syntax>");
     writer.indent();
@@ -75,6 +82,9 @@ fn render_syntax(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
     writer.line("</command:syntax>");
 }
 
+/// Describe one named CLI parameter in the syntax declaration.
+///
+/// Fields without CLI metadata are omitted, and switches have no value node.
 fn render_syntax_parameter(writer: &mut XmlWriter, field: &LocalizedFieldMetadata) {
     let Some(cli) = field.cli.as_ref() else {
         return;
@@ -100,6 +110,7 @@ fn render_syntax_parameter(writer: &mut XmlWriter, field: &LocalizedFieldMetadat
     writer.line("</command:parameter>");
 }
 
+/// Emit parameter details and, when requested, `PowerShell` common parameters.
 fn render_parameters(writer: &mut XmlWriter, command: &CommandSpec<'_>, options: MamlOptions) {
     writer.line("<command:parameters>");
     writer.indent();
@@ -118,6 +129,7 @@ fn render_parameters(writer: &mut XmlWriter, command: &CommandSpec<'_>, options:
     writer.line("</command:parameters>");
 }
 
+/// Emit a parameter's description and value type using its localized metadata.
 fn render_parameter_detail(writer: &mut XmlWriter, field: &LocalizedFieldMetadata) {
     let name = parameter_display_name(field);
     let (value_type, is_switch) = parameter_value_type(field);
@@ -154,6 +166,7 @@ fn render_parameter_detail(writer: &mut XmlWriter, field: &LocalizedFieldMetadat
     writer.line("</command:parameter>");
 }
 
+/// Emit examples in input order, using a numbered title when none was supplied.
 fn render_examples(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
     if command.metadata.sections.examples.is_empty() {
         return;
@@ -193,6 +206,7 @@ fn render_examples(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
     writer.line("</command:examples>");
 }
 
+/// Emit related links only when command metadata contains at least one link.
 fn render_related_links(writer: &mut XmlWriter, links: &[LocalizedLink]) {
     if links.is_empty() {
         return;
@@ -215,10 +229,14 @@ fn render_related_links(writer: &mut XmlWriter, links: &[LocalizedLink]) {
     writer.line("</maml:relatedLinks>");
 }
 
+/// Decide whether a field belongs in generated `PowerShell` help.
+///
+/// Hidden CLI fields and fields without CLI metadata are both excluded.
 fn should_render_parameter(field: &LocalizedFieldMetadata) -> bool {
     field.cli.as_ref().is_some_and(|cli| !cli.hide_in_help)
 }
 
+/// Choose the displayed option spelling, falling back to the configuration key.
 fn parameter_display_name(field: &LocalizedFieldMetadata) -> String {
     if let Some(cli) = field.cli.as_ref() {
         if let Some(long) = cli.long.as_ref() {
@@ -246,6 +264,10 @@ const fn float_type_name(bits: u8) -> &'static str {
     if bits > 32 { "Double" } else { "Single" }
 }
 
+/// Resolve the `PowerShell` type and switch status used by MAML parameter nodes.
+///
+/// Missing value metadata deliberately falls back to `String`; non-value CLI
+/// flags are represented as `SwitchParameter` without a parameter value node.
 #[expect(
     clippy::missing_const_for_fn,
     reason = "runtime-only call sites intentionally keep this helper unconstrained"
@@ -277,111 +299,4 @@ fn parameter_value_type(field: &LocalizedFieldMetadata) -> (&'static str, bool) 
         Some(ValueType::List { .. }) => ("String[]", false),
         Some(ValueType::Map { .. }) => ("Hashtable", false),
     }
-}
-
-fn parameter_paragraphs(field: &LocalizedFieldMetadata) -> Vec<String> {
-    let mut paragraphs = Vec::new();
-    let description = field.long_help.as_ref().unwrap_or(&field.help).clone();
-    paragraphs.push(description);
-
-    push_cli_paragraphs(field, &mut paragraphs);
-    push_default_paragraph(field, &mut paragraphs);
-    push_possible_values(field, &mut paragraphs);
-    push_source_paragraphs(field, &mut paragraphs);
-    push_deprecation_paragraph(field, &mut paragraphs);
-
-    paragraphs
-}
-
-fn push_cli_paragraphs(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<String>) {
-    let Some(cli) = field.cli.as_ref() else {
-        return;
-    };
-    if let Some(short) = cli.short {
-        paragraphs.push(format!("Short flag: -{short}."));
-    }
-    if let Some(long) = cli.long.as_ref() {
-        paragraphs.push(format!("Long flag: --{long}."));
-    }
-    if cli.value_optional {
-        paragraphs.push(optional_value_paragraph(cli));
-    }
-    if cli.multiple {
-        paragraphs.push("This option may be supplied multiple times.".to_owned());
-    }
-}
-
-/// Explains the optional `=<BOOL>` value in prose.
-///
-/// The sentence names the flag the way a user would type it, preferring the
-/// long form and falling back to the short form, because `-e=false` is the
-/// spelling a user copies from the help. Metadata that carries neither flag
-/// cannot name a spelling, so the sentence describes the value without quoting
-/// one rather than rendering the nonsense `the flag=false`.
-fn optional_value_paragraph(cli: &CliMetadata) -> String {
-    let Some(spelling) = cli
-        .long
-        .as_ref()
-        .map(|long| format!("--{long}"))
-        .or_else(|| cli.short.map(|short| format!("-{short}")))
-    else {
-        return String::from(concat!(
-            "The value is optional: the flag without a value means `true`, and ",
-            "an explicit `false` clears a lower-precedence `true`."
-        ));
-    };
-    format!(
-        concat!(
-            "The value is optional: `{spelling}` means `true`, and ",
-            "`{spelling}=false` supplies an explicit `false`."
-        ),
-        spelling = spelling
-    )
-}
-
-fn push_default_paragraph(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<String>) {
-    let Some(default) = field.default.as_ref() else {
-        return;
-    };
-    paragraphs.push(format!("Default: {}.", default.display));
-}
-
-fn push_possible_values(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<String>) {
-    let values = collect_possible_values(field);
-    if values.is_empty() {
-        return;
-    }
-    paragraphs.push(format!("Possible values: {}.", values.join(", ")));
-}
-
-fn collect_possible_values(field: &LocalizedFieldMetadata) -> Vec<String> {
-    let mut values = Vec::new();
-    if let Some(ValueType::Enum { variants }) = field.value.as_ref() {
-        values.extend(variants.iter().cloned());
-    }
-    if let Some(cli) = field.cli.as_ref() {
-        values.extend(cli.possible_values.iter().cloned());
-    }
-    if values.is_empty() {
-        return values;
-    }
-    values.sort();
-    values.dedup();
-    values
-}
-
-fn push_source_paragraphs(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<String>) {
-    if let Some(env) = field.env.as_ref() {
-        paragraphs.push(format!("Environment variable: {}.", env.var_name));
-    }
-    if let Some(file) = field.file.as_ref() {
-        paragraphs.push(format!("Config key: {}.", file.key_path));
-    }
-}
-
-fn push_deprecation_paragraph(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<String>) {
-    let Some(deprecation) = field.deprecated.as_ref() else {
-        return;
-    };
-    paragraphs.push(format!("Deprecated: {}.", deprecation.note));
 }

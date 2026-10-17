@@ -110,6 +110,7 @@ pub fn render_discovery_section(disc: &LocalizedConfigDiscoveryMeta) -> String {
     output
 }
 
+/// Emits each configured search pattern and its optional localized explanatory note.
 fn render_search_paths(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     for path in &disc.search_paths {
         output.push_str(".TP\n");
@@ -122,6 +123,7 @@ fn render_search_paths(output: &mut String, disc: &LocalizedConfigDiscoveryMeta)
     }
 }
 
+/// Adds the supported-format sentence only when discovery metadata names a format.
 fn render_supported_formats(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     if disc.formats.is_empty() {
         return;
@@ -133,6 +135,7 @@ fn render_supported_formats(output: &mut String, disc: &LocalizedConfigDiscovery
     output.push_str(".\n");
 }
 
+/// States XDG compliance only when the metadata confirms that platform behaviour.
 fn render_xdg_compliance(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     if disc.xdg_compliant {
         output.push_str(".PP\n");
@@ -140,6 +143,7 @@ fn render_xdg_compliance(output: &mut String, disc: &LocalizedConfigDiscoveryMet
     }
 }
 
+/// Converts schema format variants to the stable labels used in man-page prose.
 const fn format_config_format(format: &ConfigFormat) -> &'static str {
     match format {
         ConfigFormat::Toml => "TOML",

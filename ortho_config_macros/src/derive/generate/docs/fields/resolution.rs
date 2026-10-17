@@ -6,6 +6,8 @@ use crate::derive::parse::{
 
 use super::value_types::{ValueTypeModel, infer_value_type, parse_value_type_override};
 
+/// Resolves a field's documented type, giving an explicit override precedence
+/// over inference from the Rust field type.
 pub(super) fn resolve_value_type(attrs: &FieldAttrs, field: &syn::Field) -> Option<ValueTypeModel> {
     attrs
         .doc
@@ -15,6 +17,8 @@ pub(super) fn resolve_value_type(attrs: &FieldAttrs, field: &syn::Field) -> Opti
         .or_else(|| infer_value_type(&field.ty))
 }
 
+/// Applies an explicit requiredness setting before inferring whether loading
+/// can proceed without a supplied value.
 pub(super) fn resolve_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool> {
     if let Some(required) = attrs.doc.required {
         return Ok(required);

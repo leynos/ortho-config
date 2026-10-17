@@ -19,11 +19,20 @@ use super::{
 #[must_use]
 #[non_exhaustive]
 pub struct FileLayerOutcome {
+    /// Owned file layers retained until a consumer drains or consumes
+    /// the outcome.
     layers: Vec<MergeLayer<'static>>,
+    /// Winning explicit selector, present even when its selected file fails.
     selection: Option<ResolvedSelection>,
+    /// Automatic scopes that contributed at least one surviving file layer.
     origins: Vec<DiscoveryScope>,
+    /// Fatal explicit-selection failure; it takes precedence over other
+    /// diagnostics.
     selected_error: Option<Arc<OrthoError>>,
+    /// Diagnostics always surfaced, including optional-mode
+    /// selected-file errors.
     reportable_errors: Vec<Arc<OrthoError>>,
+    /// Optional-candidate failures surfaced only when no file layer loaded.
     ignorable_errors: Vec<Arc<OrthoError>>,
 }
 
@@ -99,6 +108,13 @@ impl FileLayerOutcome {
         Value::Object(result)
     }
 
+    /// Add only top-level scalar members to the early-preview map.
+    ///
+    /// # Example
+    ///
+    /// Given `{"port": 8080, "nested": {"enabled": true}, "tags": ["dev"]}`,
+    /// this keeps `port` and skips the object and array; later scalar members
+    /// replace earlier values with the same key.
     fn insert_scalar_values(result: &mut Map<String, Value>, file_value: Value) {
         let Value::Object(object) = file_value else {
             return;
@@ -174,6 +190,13 @@ impl FileLayerOutcome {
         &self.origins
     }
 
+    /// Route diagnostics according to selected-file and fallback outcomes.
+    ///
+    /// # Example
+    ///
+    /// If an optional candidate fails but a later candidate loads, its
+    /// ignorable error is withheld; if no layer loads, that error is returned.
+    /// A fatal selected-file error instead clears the layers and stands alone.
     fn drain_errors(&mut self) -> Vec<Arc<OrthoError>> {
         if let Some(error) = self.selected_error.take() {
             self.layers.clear();
@@ -225,10 +248,16 @@ impl From<DiscoveryLayersOutcome> for FileLayerOutcome {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct ConfigFilePolicy {
+    /// Owned discovery inputs, including roots and the lookup environment
+    /// source.
     discovery: ConfigDiscovery,
+    /// Explicit path selectors tried in order before automatic discovery.
     selectors: Vec<ConfigPathSelector>,
+    /// Failure policy applied after the first selector yields a path.
     explicit_mode: ExplicitMode,
+    /// Determines whether automatic candidates are flat or scope-stacked.
     automatic_mode: AutomaticMode,
+    /// Scope precedence used when automatic discovery stacks scopes.
     scope_order: Vec<DiscoveryScope>,
 }
 

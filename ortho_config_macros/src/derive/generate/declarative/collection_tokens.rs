@@ -9,12 +9,19 @@ use std::collections::HashSet;
 
 use crate::derive::build::CollectionStrategies;
 
+/// Parallel token fragments for collection-state declaration, merging, and
+/// extraction into the final overlay.
 pub(super) struct CollectionTokens {
+    /// Per-layer statements applying the collection's merge policy.
     pub merge_logic: Vec<TokenStream>,
+    /// Pattern entries that bind the generated collection state during finish.
     pub destructured: Vec<TokenStream>,
+    /// Statements that transfer collected values into the output overlay.
     pub inserts: Vec<TokenStream>,
 }
 
+/// Builds corresponding merge, destructuring, and insertion fragments from one
+/// ordered collection field iterator.
 fn build_collection_tokens<'a, I, F, G>(
     fields: I,
     prefix: &str,
@@ -45,6 +52,10 @@ where
     }
 }
 
+/// Emits layer accumulation and final overlay insertion for append vectors.
+///
+/// A null layer value resets the accumulated vector; a scalar is normalized to
+/// one element so file and environment sources can provide either shape.
 pub(super) fn append_collection_tokens(
     strategies: &CollectionStrategies,
     krate: &TokenStream,
@@ -85,6 +96,8 @@ pub(super) fn append_collection_tokens(
     )
 }
 
+/// Emits whole-map replacement fragments so the highest-precedence supplied
+/// map is the value written to the final overlay.
 pub(super) fn map_collection_tokens(strategies: &CollectionStrategies) -> CollectionTokens {
     build_collection_tokens(
         strategies.map_replace.iter().map(|(ident, ty)| (ident, ty)),

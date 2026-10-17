@@ -14,6 +14,13 @@ use crate::derive::load_impl::LoadImplArgs;
 use crate::derive::load_impl::LoadSourceTokens;
 use crate::derive::load_impl::cli::build_profile_cli_layer_tokens;
 
+/// Emit the profile-aware composition body, returning layers with their selection.
+///
+/// # Example
+///
+/// With `staging` selected, the returned pair contains a composition with the
+/// defaults, files, profile, environment, and CLI layers, plus the resolved
+/// `staging` selection.
 pub(crate) fn build_profile_compose_layers_impl(
     args: &LoadImplArgs<'_>,
     file_discovery: &proc_macro2::TokenStream,
@@ -206,6 +213,13 @@ fn build_profile_defaults(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     }
 }
 
+/// Emit file and profile layer extraction while preserving their merge order.
+///
+/// # Example
+///
+/// If discovery yields a base file and a local override, both remain separate
+/// file layers; the selected profile layers follow them, and an invalid
+/// selection is recorded in the shared error list.
 fn build_profile_file_layers(
     krate: &proc_macro2::TokenStream,
     file_discovery: &proc_macro2::TokenStream,
@@ -227,6 +241,13 @@ fn build_profile_file_layers(
     }
 }
 
+/// Emit environment extraction after removing the selector-only `profile` key.
+///
+/// # Example
+///
+/// When the environment contains `APP_PROFILE=staging`, this layer keeps
+/// ordinary settings such as `APP_RETRIES=5` while omitting the selector key
+/// from the configuration value.
 fn build_profile_environment_layer(
     krate: &proc_macro2::TokenStream,
     env_section: &proc_macro2::TokenStream,
@@ -249,6 +270,12 @@ fn build_profile_environment_layer(
     }
 }
 
+/// Emit config-struct methods that delegate profile loading to its CLI struct.
+///
+/// # Example
+///
+/// The emitted `Settings::load_with_profile()` delegates to the generated CLI
+/// type and returns `ProfileLoadOutcome<Settings>` to its caller.
 pub(crate) fn build_config_profile_delegates(
     krate: &proc_macro2::TokenStream,
     cli_ident: &Ident,

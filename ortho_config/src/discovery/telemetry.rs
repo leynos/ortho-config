@@ -253,12 +253,16 @@ pub(super) const fn error_category(err: &crate::OrthoError) -> &'static str {
 /// grouping keeps the "omit a field that has no value" decision at the emission
 /// site instead of at every call site.
 pub(super) struct CandidateFailureFields {
+    /// Discovery operation whose candidate list contains this path.
     pub(super) operation: &'static str,
+    /// Whether failure must be returned even if a later candidate succeeds.
     pub(super) required: bool,
+    /// Closed-vocabulary label identifying the candidate's origin.
     pub(super) source: &'static str,
+    /// Closed-vocabulary reason category; never the raw error or path.
     pub(super) category: &'static str,
-    /// The scope whose walk met this candidate, or `None` for a rung that has
-    /// none because a policy resolves it before automatic discovery begins.
+    /// Scope whose walk met this candidate, or `None` for flat first-wins walks.
+    /// Explicit policy selections emit separate policy-resolution events.
     pub(super) scope: Option<&'static str>,
 }
 

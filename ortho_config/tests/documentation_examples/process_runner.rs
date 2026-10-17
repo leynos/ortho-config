@@ -20,8 +20,12 @@
 //! runs nextest instead, where the per-test `slow-timeout` bounds the whole
 //! test more tightly than this does and its runners are not shared by other
 //! builds, which is why the two runner figures above stay under this one.
+//!
+//! Shared-host compiler admission can exceed even that cold-build allowance.
+//! `ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS` selects a larger, still bounded budget
+//! for these subprocesses without changing CI defaults or output capture.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, ensure};
 use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::thread::{self, JoinHandle};
@@ -30,6 +34,10 @@ use wait_timeout::ChildExt;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1_200);
 const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
+/// Optional shared-host budget; callers must select it before starting tests.
+const TIMEOUT_ENV: &str = "ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS";
+/// Keep overrides finite and safely within platform timer representations.
+const MAX_TIMEOUT_SECONDS: u64 = 86_400;
 
 #[derive(Clone, Copy)]
 pub(super) struct Operation<'a>(pub(super) &'a str);
@@ -64,9 +72,41 @@ impl Default for ProcessLimits {
     }
 }
 
+impl ProcessLimits {
+    /// Read the subprocess budget without mutating the test process environment.
+    fn from_environment() -> Result<Self> {
+        match std::env::var(TIMEOUT_ENV) {
+            Ok(value) => Self::with_timeout_override(Some(&value)),
+            Err(std::env::VarError::NotPresent) => Self::with_timeout_override(None),
+            Err(error) => Err(error).with_context(|| format!("read {TIMEOUT_ENV}")),
+        }
+    }
+
+    /// Validate a supplied seconds budget while preserving the capture bound.
+    ///
+    /// For example, `Some("7200")` permits a two-hour queued build; absence
+    /// preserves the twenty-minute default. Invalid input fails before spawn.
+    fn with_timeout_override(value: Option<&str>) -> Result<Self> {
+        let Some(seconds_text) = value else {
+            return Ok(Self::default());
+        };
+        let seconds = seconds_text
+            .parse::<u64>()
+            .with_context(|| format!("{TIMEOUT_ENV} must contain whole seconds"))?;
+        ensure!(
+            (1..=MAX_TIMEOUT_SECONDS).contains(&seconds),
+            "{TIMEOUT_ENV} must be between 1 and {MAX_TIMEOUT_SECONDS} seconds"
+        );
+        Ok(Self {
+            timeout: Duration::from_secs(seconds),
+            ..Self::default()
+        })
+    }
+}
+
 /// Run a command with the documentation-test timeout and output limits.
 pub(super) fn run_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
-    run_command_with_limits(command, operation, ProcessLimits::default())
+    run_command_with_limits(command, operation, ProcessLimits::from_environment()?)
 }
 
 fn run_command_with_limits(
@@ -187,12 +227,38 @@ fn join_reader(
 mod tests {
     //! Regression coverage for subprocess output and duration bounds.
 
+    mod environment;
+
     use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
     use anyhow::{Context, Result};
     use rstest::rstest;
     use std::io::Write;
     use std::process::Command;
     use std::time::Duration;
+
+    /// Budget selection leaves the default and capture limit unchanged.
+    #[rstest]
+    #[case::default(None, 1_200)]
+    #[case::smallest_budget(Some("1"), 1)]
+    #[case::shared_host(Some("7200"), 7_200)]
+    #[case::largest_budget(Some("86400"), 86_400)]
+    fn timeout_override_preserves_output_limit(#[case] value: Option<&str>, #[case] seconds: u64) {
+        let limits = ProcessLimits::with_timeout_override(value).expect("valid timeout budget");
+        assert_eq!(limits.timeout, Duration::from_secs(seconds));
+        assert_eq!(limits.output_bytes, super::DEFAULT_OUTPUT_BYTES);
+    }
+
+    /// Invalid budgets fail before a subprocess can be started.
+    #[rstest]
+    #[case::empty("")]
+    #[case::zero("0")]
+    #[case::negative("-1")]
+    #[case::not_seconds("forever")]
+    #[case::over_limit("86401")]
+    #[case::overflow("18446744073709551616")]
+    fn invalid_timeout_override_is_rejected(#[case] value: &str) {
+        assert!(ProcessLimits::with_timeout_override(Some(value)).is_err());
+    }
 
     #[test]
     fn output_capture_is_limited_per_stream() {

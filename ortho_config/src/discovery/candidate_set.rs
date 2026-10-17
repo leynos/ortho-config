@@ -31,6 +31,7 @@ fn windows_normalized_key(path: &Path) -> Vec<u16> {
 }
 
 impl ConfigDiscovery {
+    /// Builds a native deduplication key without converting paths to UTF-8.
     pub(super) fn dedup_key(path: &Path) -> DedupKey {
         #[cfg(windows)]
         {
@@ -46,6 +47,7 @@ impl ConfigDiscovery {
         }
     }
 
+    /// Exposes the production Windows key normalization to platform tests.
     #[cfg(all(test, windows))]
     pub(super) fn normalized_key(path: &Path) -> DedupKey {
         Self::dedup_key(path)
@@ -59,6 +61,10 @@ impl ConfigDiscovery {
 /// paths that are not valid Unicode, so no two distinct paths share a key.
 #[cfg(windows)]
 pub(super) type DedupKey = Vec<u16>;
+/// Native path representation used to distinguish non-UTF-8 paths off Windows.
+///
+/// Unlike a lossy `String`, an `OsString` keeps distinct native byte sequences
+/// distinct during candidate deduplication.
 #[cfg(not(windows))]
 pub(super) type DedupKey = std::ffi::OsString;
 
@@ -75,13 +81,21 @@ pub(super) type DedupKey = std::ffi::OsString;
 /// De-duplication keeps one entry, and recording only the first rung's scope
 /// would make the path invisible to a request naming the other one.
 pub(super) struct Candidate {
+    /// Owned path attempted by discovery; the list order expresses preference.
     pub(super) path: PathBuf,
+    /// Bounded source label used in telemetry instead of exposing the path.
     pub(super) source: &'static str,
+    /// Every scope that generated this deduplicated path.
     scopes: Vec<DiscoveryScope>,
 }
 
 impl Candidate {
     /// Report whether this candidate belongs to `scope`.
+    ///
+    /// # Examples
+    ///
+    /// If one path was generated for both user and project scopes, querying
+    /// either scope returns `true` after candidate deduplication.
     pub(super) fn in_scope(&self, scope: DiscoveryScope) -> bool {
         self.scopes.contains(&scope)
     }
@@ -90,6 +104,7 @@ impl Candidate {
 /// Accumulates candidates while deduplicating per the platform's path rules.
 #[derive(Default)]
 pub(super) struct CandidateAccumulator {
+    /// Unique candidates in first-seen preference order.
     pub(super) candidates: Vec<Candidate>,
     /// The index of each path's entry, so a later rung can record its scope on
     /// the entry an earlier rung created instead of being refused outright.
@@ -97,6 +112,12 @@ pub(super) struct CandidateAccumulator {
 }
 
 impl CandidateAccumulator {
+    /// Adds a new path once, while recording later scope memberships on its entry.
+    ///
+    /// # Examples
+    ///
+    /// Pushing the same path for user and project scope returns `true` then
+    /// `false`; the single stored candidate belongs to both scopes.
     pub(super) fn push_unique(
         &mut self,
         candidate: PathBuf,
@@ -158,10 +179,15 @@ impl CandidateAccumulator {
 /// call [`CandidateDecisions::emit`] at their own boundary, which is where a
 /// side effect belongs.
 pub(super) struct CandidateDecisions {
+    /// Bounded outcome describing how the configuration-path selector resolved.
     pub(super) selector: &'static str,
+    /// Presence state for `XDG_CONFIG_HOME`: absent, empty, or present.
     pub(super) xdg_config_home: &'static str,
+    /// Presence state for `XDG_CONFIG_DIRS`: absent, empty, or present.
     pub(super) xdg_dirs: &'static str,
+    /// Bounded label describing how the final XDG locations were resolved.
     pub(super) xdg_resolution: &'static str,
+    /// Which source, if any, supplied the home directory.
     pub(super) home: &'static str,
 }
 
@@ -176,7 +202,10 @@ impl CandidateDecisions {
 
 /// The assembled candidate list, its required prefix, and the decisions taken.
 pub(super) struct CandidateSet {
+    /// Ordered unique locations, from most-preferred to least-preferred.
     pub(super) candidates: Vec<Candidate>,
+    /// Number of leading candidates whose absence or load failure must be reported.
     pub(super) required_bound: usize,
+    /// Decisions retained for emission by the load operation boundary.
     pub(super) decisions: CandidateDecisions,
 }

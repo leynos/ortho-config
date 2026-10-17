@@ -1,9 +1,8 @@
 //! Helpers for generating the `load_and_merge` implementation.
 //!
-//! This module assembles discovery and legacy composition, delegating profile
-//! composition and public entry-point assembly to focused sibling modules.
+//! This module assembles legacy composition and delegates discovery, profile
+//! composition, and public entry-point assembly to focused child modules.
 
-use super::policy_impl::build_policy_based_loading;
 use quote::quote;
 use syn::Ident;
 
@@ -12,6 +11,8 @@ use crate::derive::build::DefaultStructInit;
 pub(crate) mod cli;
 use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
 
+mod discovery;
+use self::discovery::build_file_discovery;
 mod source;
 pub(crate) use source::LoadSourceTokens;
 
@@ -21,17 +22,26 @@ pub(crate) use source::LoadSourceTokens;
     reason = "Field names mirror their purpose for clarity"
 )]
 pub(crate) struct LoadImplIdents<'a> {
+    /// Name of the generated CLI struct that owns argument parsing.
     pub cli_ident: &'a Ident,
+    /// Name of the user-facing config struct constructed from merged layers.
     pub config_ident: &'a Ident,
+    /// Internal type used to materialize field defaults before merging.
     pub defaults_ident: &'a Ident,
 }
 /// Token collections used by the load implementation helpers.
 pub(crate) struct LoadImplTokens<'a> {
+    /// Figment provider tokens used to read the configuration environment.
     pub env_provider: &'a proc_macro2::TokenStream,
+    /// Resolved field initializers and fallible default conversions.
     pub default_struct_init: &'a DefaultStructInit,
+    /// Tokenized environment-variable name for legacy config-file lookup.
     pub config_env_var: &'a proc_macro2::TokenStream,
+    /// Legacy dotfile literal supplied when discovery settings are absent.
     pub dotfile_name: &'a syn::LitStr,
+    /// Application name used to derive legacy discovery locations.
     pub legacy_app_name: String,
+    /// Explicit discovery settings, when the derive input supplied them.
     pub discovery: Option<&'a DiscoveryTokens>,
     /// Runtime source tokens for the source-aware generated entry points.
     pub sources: Option<LoadSourceTokens<'a>>,
@@ -39,16 +49,27 @@ pub(crate) struct LoadImplTokens<'a> {
     pub krate: &'a proc_macro2::TokenStream,
 }
 
+/// Parsed discovery settings shared by legacy and policy token emitters.
 pub(crate) struct DiscoveryTokens {
+    /// Application identity used to construct the discovery builder.
     pub app_name: String,
+    /// Materialized default config-path variable used by the legacy path.
     pub env_var: String,
+    /// Optional conventional config filename override.
     pub config_file_name: Option<String>,
+    /// Optional hidden-file name override.
     pub dotfile_name: Option<String>,
+    /// Optional project-local filename override.
     pub project_file_name: Option<String>,
+    /// Selects the policy resolver instead of the legacy discovery walk.
     pub policy_enabled: bool,
+    /// Ordered selector aliases; the first present variable takes precedence.
     pub env_vars: Vec<String>,
+    /// Optional required/optional mode for an explicitly selected path.
     pub explicit_mode: Option<String>,
+    /// Optional precedence mode used by automatic discovery.
     pub automatic_mode: Option<String>,
+    /// Declared scope precedence, preserved in emitted builder calls.
     pub scope_order: Vec<String>,
     /// Names the CLI field whose parsed value becomes the project root.
     ///
@@ -60,8 +81,11 @@ pub(crate) struct DiscoveryTokens {
 
 /// Convenience wrapper for passing identifiers and tokens together.
 pub(crate) struct LoadImplArgs<'a> {
+    /// Generated type identifiers referenced by the emitted implementation.
     pub idents: LoadImplIdents<'a>,
+    /// Providers, defaults, discovery settings, and crate path for expansion.
     pub tokens: LoadImplTokens<'a>,
+    /// Whether the generated CLI struct contains the required path selector.
     pub has_config_path: bool,
     /// Whether the struct opts into profile support (`#[ortho_config(profiles)]`).
     pub profiles: bool,
@@ -73,182 +97,12 @@ pub(crate) struct LoadImplArgs<'a> {
     pub cli_arg_ids: Vec<String>,
     /// `(arg_id, serialized_key)` for every bool config field.
     ///
-    /// A bool field is emitted with `clap::ArgAction::SetTrue`, so clap supplies
-    /// `false` for an absent flag and the value survives sanitization — unlike
-    /// every other type, whose absent form is a `null` that is stripped. The
-    /// profile layer sits *below* the CLI layer, so an unpruned `false` would
-    /// silently override a profile that sets the field true. Both halves of the
-    /// pair are needed: the arg ID answers `value_source`, the serialized key
-    /// names the JSON member to remove.
+    /// Ordinary boolean absence is `None` and its serialized `null` is stripped.
+    /// Actual clap defaults can survive sanitization, however, and must not
+    /// mask the lower-precedence profile layer. Pruning checks `value_source`
+    /// through the argument ID, then removes the matching serialized JSON key;
+    /// an explicit command-line `false` is retained.
     pub cli_bool_fields: Vec<(String, String)>,
-}
-
-/// CLI parsing is performed outside the generated method.
-///
-/// Generate the file discovery logic section.
-///
-/// Configuration files are searched in multiple locations as described in the
-/// "Configuration File Discovery" section of the design document. This mirrors
-/// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
-fn to_lit_str(value: Option<&String>) -> Option<syn::LitStr> {
-    value.map(|contents| syn::LitStr::new(contents, proc_macro2::Span::call_site()))
-}
-
-fn build_optional_stmt(
-    lit: Option<syn::LitStr>,
-    method_name: &str,
-) -> Option<proc_macro2::TokenStream> {
-    lit.map(|lit_str| {
-        let method_ident = syn::Ident::new(method_name, proc_macro2::Span::call_site());
-        quote! { builder = builder.#method_ident(#lit_str); }
-    })
-}
-
-fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
-    if has_config_path {
-        quote! {
-            if let Some(ref cli) = cli {
-                if let Some(ref path) = cli.config_path {
-                    builder = builder.add_required_path(path.clone());
-                }
-            }
-        }
-    } else {
-        quote! {}
-    }
-}
-
-/// Generate discovery loading tokens with partitioned error handling.
-///
-/// Creates a code block that builds a `ConfigDiscovery`, loads the first
-/// available configuration file using partitioned error reporting, and
-/// conditionally appends optional discovery errors only when no file loads.
-/// Required-path errors are always appended to the main error collection to
-/// preserve the builder API's guarantees.
-///
-/// This uses `compose_layers()` to preserve each file in an `extends` chain
-/// as a separate layer, enabling declarative merge strategies (such as append
-/// for vectors) to work across the inheritance chain.
-///
-/// # Parameters
-/// - `krate`: Resolved crate path token stream.
-/// - `builder_init`: Tokens initializing the `ConfigDiscovery::builder`.
-/// - `builder_steps`: Sequence of builder method calls (for example
-///   `env_var`, `dotfile_name`).
-/// - `cli_chain`: Tokens adding CLI-provided required paths to the builder.
-///
-/// The block evaluates to `(layers, discovery_failed)`. Callers that only need
-/// the layers bind the flag with a leading underscore so it stays warning-free.
-///
-/// `discovery_failed` means "the profile tables could not be inspected", which
-/// is not the same question as "did any candidate fail". Discovery retains the
-/// errors of optional candidates it walked past on the way to a later success,
-/// so an error vector can be non-empty while the resolved chain is complete.
-/// Only two situations leave the chain un-inspected: a required candidate
-/// failed and stopped the fallback walk, or every candidate was tried and none
-/// produced a layer. Suppressing the unknown-profile error in any other case
-/// would hide a genuine selection error behind an unrelated parse complaint
-/// (ADR-012).
-///
-/// The test is "no layer loaded *and* the walk recorded a failure", not "no
-/// layer loaded". A chain that is empty because no candidate *existed* was
-/// searched and found wanting, so the selection is still reported as unknown;
-/// collapsing the two would silence the no-configuration-files diagnostic that
-/// tells an operator which of the two problems they have.
-fn build_discovery_loading_block(
-    krate: &proc_macro2::TokenStream,
-    builder_init: &proc_macro2::TokenStream,
-    builder_steps: &[proc_macro2::TokenStream],
-    cli_chain: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    quote! {{
-        let mut builder = #builder_init;
-        #(#builder_steps)*
-        #cli_chain
-        let discovery = builder.build();
-        let #krate::discovery::DiscoveryLayersOutcome {
-            value: layers,
-            mut required_errors,
-            mut optional_errors,
-        } = discovery.compose_layers();
-        // Read before `append` drains the vectors, and before the empty-chain
-        // append below moves the optional errors out.
-        let discovery_failed = !required_errors.is_empty()
-            || (layers.is_empty() && !optional_errors.is_empty());
-        errors.append(&mut required_errors);
-        if layers.is_empty() {
-            errors.append(&mut optional_errors);
-        }
-        (layers, discovery_failed)
-    }}
-}
-
-fn build_discovery_based_loading(
-    krate: &proc_macro2::TokenStream,
-    discovery: &DiscoveryTokens,
-    has_config_path: bool,
-    source_tokens: Option<&LoadSourceTokens<'_>>,
-) -> proc_macro2::TokenStream {
-    if discovery.policy_enabled {
-        return build_policy_based_loading(krate, discovery, has_config_path, source_tokens);
-    }
-    let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
-    let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
-    let config_file_stmt = build_optional_stmt(
-        to_lit_str(discovery.config_file_name.as_ref()),
-        "config_file_name",
-    );
-    let dotfile_stmt =
-        build_optional_stmt(to_lit_str(discovery.dotfile_name.as_ref()), "dotfile_name");
-    let project_stmt = build_optional_stmt(
-        to_lit_str(discovery.project_file_name.as_ref()),
-        "project_file_name",
-    );
-    let cli_chain = build_cli_chain_tokens(has_config_path);
-    let builder_init = quote! { #krate::ConfigDiscovery::builder(#app_name) };
-    let mut builder_steps = vec![quote! { builder = builder.env_var(#env_var); }];
-    if let Some(injected_sources) = source_tokens {
-        let discovery_source = injected_sources.discovery;
-        builder_steps.push(quote! { builder = builder.env_source(#discovery_source); });
-    }
-    if let Some(stmt) = config_file_stmt {
-        builder_steps.push(stmt);
-    }
-    if let Some(stmt) = dotfile_stmt {
-        builder_steps.push(stmt);
-    }
-    if let Some(stmt) = project_stmt {
-        builder_steps.push(stmt);
-    }
-    build_discovery_loading_block(krate, &builder_init, &builder_steps, &cli_chain)
-}
-
-pub(crate) fn build_file_discovery(
-    tokens: &LoadImplTokens<'_>,
-    has_config_path: bool,
-) -> proc_macro2::TokenStream {
-    let krate = tokens.krate;
-    let source_tokens = tokens.sources.as_ref();
-    tokens.discovery.map_or_else(
-        || {
-            let app_name =
-                syn::LitStr::new(&tokens.legacy_app_name, proc_macro2::Span::call_site());
-            let config_env_var = tokens.config_env_var;
-            let dotfile_name = tokens.dotfile_name.clone();
-            let cli_chain = build_cli_chain_tokens(has_config_path);
-            let builder_init = quote! { #krate::ConfigDiscovery::builder(#app_name) };
-            let mut builder_steps = vec![
-                quote! { builder = builder.env_var(#config_env_var); },
-                quote! { builder = builder.dotfile_name(#dotfile_name); },
-            ];
-            if let Some(injected_sources) = source_tokens {
-                let discovery_source = injected_sources.discovery;
-                builder_steps.push(quote! { builder = builder.env_source(#discovery_source); });
-            }
-            build_discovery_loading_block(krate, &builder_init, &builder_steps, &cli_chain)
-        },
-        |discovery| build_discovery_based_loading(krate, discovery, has_config_path, source_tokens),
-    )
 }
 
 /// Build the environment provider setup.
@@ -270,6 +124,13 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
+/// Emit default-layer construction and retain conversion failures in `errors`.
+///
+/// # Example
+///
+/// If the resolved defaults serialize as `{ retries: 3 }`, the emitted setup
+/// pushes that value as the lowest-priority layer; a sanitization failure is
+/// added to `errors` instead.
 fn build_legacy_defaults(
     krate: &proc_macro2::TokenStream,
     defaults_ident: &Ident,
@@ -288,6 +149,12 @@ fn build_legacy_defaults(
     }
 }
 
+/// Emit the legacy file-layer push, preserving discovery order for merging.
+///
+/// # Example
+///
+/// If discovery returns a base file followed by a local override, the emitted
+/// loop pushes both as separate layers in that order for later composition.
 fn build_legacy_file_layers(file_discovery: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     quote! {
         // The legacy path merges every file layer directly and never reports an
@@ -299,6 +166,13 @@ fn build_legacy_file_layers(file_discovery: &proc_macro2::TokenStream) -> proc_m
     }
 }
 
+/// Emit environment extraction and append conversion failures to `errors`.
+///
+/// # Example
+///
+/// With `APP_RETRIES=5`, the emitted provider extracts the environment layer
+/// and pushes it after file layers; an extraction failure is collected in
+/// `errors`.
 fn build_legacy_environment_layer(
     krate: &proc_macro2::TokenStream,
     env_section: &proc_macro2::TokenStream,
@@ -315,6 +189,11 @@ fn build_legacy_environment_layer(
     }
 }
 
+/// Generate the composition body shared by iterator-based loading methods.
+///
+/// The emitted order is defaults, discovered file layers, environment, then
+/// CLI, so later sources retain their documented higher precedence. Errors
+/// from each conversion are accumulated with the composition result.
 fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplArgs {
         idents,

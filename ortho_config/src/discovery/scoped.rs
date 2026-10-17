@@ -37,7 +37,9 @@ use super::{AutomaticMode, ConfigDiscovery, DiscoveryLayersOutcome, DiscoverySco
 
 /// Every layer one scope contributes, with that scope's diagnostics.
 struct ScopeLayers {
+    /// Layers contributed by this scope in merge application order.
     layers: Vec<MergeLayer<'static>>,
+    /// Required and optional failures encountered while resolving this scope.
     errors: PartitionedErrors,
 }
 
@@ -192,6 +194,12 @@ impl ConfigDiscovery {
             .filter(move |(_, candidate)| candidate.in_scope(scope))
     }
 
+    /// Keeps only the first layer for each canonical path across all scopes.
+    ///
+    /// # Examples
+    ///
+    /// When two scope chains contain the same canonical file, the first layer
+    /// remains and the later duplicate is omitted; pathless layers are retained.
     fn unique_layers(
         chain: Vec<MergeLayer<'static>>,
         loaded_paths: &mut HashSet<PathBuf>,

@@ -5,7 +5,11 @@ use std::path::{Path, PathBuf};
 use super::telemetry;
 use super::{ConfigDiscovery, DiscoveryScope};
 
+use self::provenance::{CandidateOrigin, XdgDecisions};
 use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
+
+mod provenance;
+mod variants;
 
 /// A configured selector's value, classified.
 enum SelectorValue {
@@ -17,27 +21,12 @@ enum SelectorValue {
     Accepted(std::ffi::OsString),
 }
 
-/// The three bounded XDG labels, named so a call site cannot transpose them.
-struct XdgDecisions {
-    config_home: &'static str,
-    dirs: &'static str,
-    resolution: &'static str,
-}
-
-/// Bounded telemetry label and automatic scope for generated candidates.
-#[derive(Clone, Copy)]
-struct CandidateOrigin {
-    source: &'static str,
-    scope: DiscoveryScope,
-}
-
-impl CandidateOrigin {
-    const fn new(source: &'static str, scope: DiscoveryScope) -> Self {
-        Self { source, scope }
-    }
-}
-
 impl ConfigDiscovery {
+    /// Produces the canonical filename, dotfile, and enabled format variants for one base.
+    ///
+    /// The nested canonical name comes first, followed by the base-level
+    /// dotfile; feature-gated JSON5 and YAML alternatives follow in extension
+    /// group order.
     fn candidates_for_base(&self, base_path: &Path) -> Vec<PathBuf> {
         let nested = if self.app_name.is_empty() {
             base_path.to_path_buf()
@@ -70,6 +59,11 @@ impl ConfigDiscovery {
         candidates
     }
 
+    /// Adds each base's candidates in iterator and per-base candidate order.
+    ///
+    /// The accumulator deduplicates by the platform path key. The first path,
+    /// source label, and position survive, while each later automatic origin
+    /// adds its scope to the existing entry so scoped walks retain provenance.
     fn push_for_bases<I>(&self, bases: I, acc: &mut CandidateAccumulator, origin: CandidateOrigin)
     where
         I: IntoIterator,
@@ -83,6 +77,11 @@ impl ConfigDiscovery {
         }
     }
 
+    /// Adds usable XDG bases after selector and explicit candidates.
+    ///
+    /// `XDG_CONFIG_HOME` contributes first. `XDG_CONFIG_DIRS` then contributes
+    /// its non-empty entries in listed order or the platform default, while
+    /// the returned labels preserve the decisions for later telemetry.
     fn push_xdg(&self, acc: &mut CandidateAccumulator) -> XdgDecisions {
         // An empty value must not contribute a base. `PathBuf::from("")` joined
         // with the app name yields a *relative* candidate such as
@@ -143,6 +142,7 @@ impl ConfigDiscovery {
         telemetry::XDG_RESOLUTION_LIST
     }
 
+    /// Adds Windows application-data candidates in `APPDATA`, `LOCALAPPDATA` order.
     fn push_windows(&self, acc: &mut CandidateAccumulator) {
         let dirs = ["APPDATA", "LOCALAPPDATA"].into_iter().filter_map(|key| {
             self.env_source
@@ -193,6 +193,11 @@ impl ConfigDiscovery {
             })
     }
 
+    /// Adds the home `.config` tree and then the home-level dotfile, if resolvable.
+    ///
+    /// Both candidates use the same bounded source label; the returned label
+    /// records whether `HOME`, `USERPROFILE`, or the environment source's
+    /// platform fallback supplied the base.
     fn push_home(&self, acc: &mut CandidateAccumulator) -> &'static str {
         let (home, source) = self.resolve_home();
         if let Some(home_path) = home {
@@ -247,6 +252,7 @@ impl ConfigDiscovery {
         }
     }
 
+    /// Adds one project filename for each configured root in caller order.
     fn push_projects(&self, acc: &mut CandidateAccumulator) {
         for root in &self.project_roots {
             let _ = acc.push_unique(
@@ -257,29 +263,7 @@ impl ConfigDiscovery {
         }
     }
 
-    #[cfg(any(feature = "json5", feature = "yaml"))]
-    fn push_variants_for_extensions(
-        candidates: &mut Vec<PathBuf>,
-        nested: &Path,
-        stem: &str,
-        extensions: &[&str],
-    ) {
-        for ext in extensions {
-            let filename = format!("{stem}.{ext}");
-            candidates.push(nested.join(&filename));
-        }
-    }
-
-    #[cfg(feature = "json5")]
-    fn push_json_variant_candidates(candidates: &mut Vec<PathBuf>, nested: &Path, stem: &str) {
-        Self::push_variants_for_extensions(candidates, nested, stem, &["json", "json5"]);
-    }
-
-    #[cfg(feature = "yaml")]
-    fn push_yaml_variant_candidates(candidates: &mut Vec<PathBuf>, nested: &Path, stem: &str) {
-        Self::push_variants_for_extensions(candidates, nested, stem, &["yaml", "yml"]);
-    }
-
+    /// Adds the Unix-family XDG default base when no usable list is supplied.
     #[cfg(any(unix, target_os = "redox"))]
     fn push_default_xdg(&self, acc: &mut CandidateAccumulator) {
         self.push_for_bases(
@@ -289,6 +273,7 @@ impl ConfigDiscovery {
         );
     }
 
+    /// Adds no fallback because this target has no built-in XDG directory.
     #[cfg(not(any(unix, target_os = "redox")))]
     #[expect(
         clippy::missing_const_for_fn,
@@ -337,6 +322,12 @@ impl ConfigDiscovery {
             .collect()
     }
 
+    /// Assembles candidates in precedence order and records the required prefix.
+    ///
+    /// Required paths lead the list, followed by optional explicit paths, the
+    /// configured selector, platform locations, home locations, and project
+    /// roots. Deduplication preserves the first source label and whether the
+    /// first occurrence was required.
     pub(super) fn candidate_set(&self) -> CandidateSet {
         let mut acc = CandidateAccumulator::default();
         let mut required_bound = 0;

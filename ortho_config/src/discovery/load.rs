@@ -24,7 +24,9 @@ use super::{ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome, Disc
 /// reported error disagreeing.
 #[derive(Debug, Default)]
 pub(super) struct PartitionedErrors {
+    /// Failures from required candidates, retained even if a fallback succeeds.
     required: Vec<Arc<OrthoError>>,
+    /// Failures from optional candidates, kept separate for caller policy.
     optional: Vec<Arc<OrthoError>>,
 }
 
@@ -39,13 +41,23 @@ pub(super) struct PartitionedErrors {
 /// has no scope concept and passes `None`, so the field is omitted from its
 /// events rather than rendered empty.
 pub(super) struct CandidateFailure {
+    /// Bounded operation label identifying which discovery action failed.
     pub(super) operation: &'static str,
+    /// Whether absence or parse failure must be reported as required.
     pub(super) required: bool,
+    /// Bounded candidate source label, never a path or user value.
     pub(super) source: &'static str,
+    /// Scope label for scoped walks; absent for the flat first-wins walk.
     pub(super) scope: Option<&'static str>,
 }
 
 impl PartitionedErrors {
+    /// Emits bounded failure telemetry and stores the error in its policy bucket.
+    ///
+    /// # Examples
+    ///
+    /// Recording an error with `required: true` appends it to
+    /// `required_errors`; an optional failure is retained separately.
     pub(super) fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
         telemetry::candidate_failure(&telemetry::CandidateFailureFields {
             operation: failure.operation,
@@ -61,6 +73,7 @@ impl PartitionedErrors {
         }
     }
 
+    /// Transfers both error partitions into the generic single-value result.
     fn into_outcome<T>(self, value: Option<T>) -> DiscoveryOutcome<T> {
         DiscoveryOutcome {
             value,
@@ -69,6 +82,12 @@ impl PartitionedErrors {
         }
     }
 
+    /// Moves both error buckets into the result for a composed layer stack.
+    ///
+    /// # Examples
+    ///
+    /// Converting an empty partition with two layers preserves both layers and
+    /// returns empty required and optional error lists.
     pub(super) fn into_layers_outcome(
         self,
         value: Vec<MergeLayer<'static>>,
@@ -155,6 +174,10 @@ impl ConfigDiscovery {
         (None, errors)
     }
 
+    /// Runs the shared first-success traversal and maps its value and errors.
+    ///
+    /// The builder runs only for a parsed candidate. Required failures remain
+    /// in the outcome even when a later optional candidate produces a value.
     fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
     where
         F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
@@ -298,6 +321,12 @@ impl ConfigDiscovery {
         (figment, required_errors)
     }
 
+    /// Builds the not-found error used when a required candidate is absent.
+    ///
+    /// # Examples
+    ///
+    /// Passing `settings.toml` produces a file error carrying that path and a
+    /// not-found cause for the caller to aggregate or return.
     pub(super) fn missing_required_error(path: &Path) -> Arc<OrthoError> {
         Arc::new(OrthoError::File {
             path: path.to_path_buf(),

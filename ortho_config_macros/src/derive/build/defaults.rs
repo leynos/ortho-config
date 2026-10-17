@@ -11,6 +11,8 @@ use crate::derive::parse::{
 
 use super::cli::option_type_tokens;
 
+/// Returns a field identifier or emits a compile error for unsupported tuple
+/// input that escaped the earlier derive validation.
 fn require_named_field(field: &syn::Field) -> Result<&syn::Ident, proc_macro2::TokenStream> {
     field.ident.as_ref().ok_or_else(|| {
         syn::Error::new_spanned(field, "OrthoConfig defaults structs require named fields")
@@ -18,6 +20,8 @@ fn require_named_field(field: &syn::Field) -> Result<&syn::Ident, proc_macro2::T
     })
 }
 
+/// Builds optional fields for the synthetic defaults struct, preserving the
+/// configuration struct's order and excluding subcommand selectors.
 pub(crate) fn build_default_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -42,11 +46,21 @@ pub(crate) fn build_default_struct_fields(
 
 /// Tokens that resolve defaults before constructing the defaults struct.
 pub(crate) struct DefaultStructInit {
+    /// Expressions evaluated before construction to report invalid Clap
+    /// defaults through the generated error collection.
     pub resolutions: Vec<proc_macro2::TokenStream>,
+    /// Initializer entries in source-field order, with explicit defaults taking
+    /// precedence over inferred Clap defaults.
     pub fields: Vec<proc_macro2::TokenStream>,
+    /// Field names whose parser defaults must be treated as absent when the
+    /// user did not explicitly supply a CLI value.
     pub cli_default_as_absent_fields: Vec<syn::LitStr>,
 }
 
+/// Resolves field defaults in the same order as runtime configuration loading.
+///
+/// Explicit `OrthoConfig` defaults win over inferred Clap defaults; fields with
+/// neither remain absent for lower-precedence layers to supply.
 pub(crate) fn build_default_struct_init(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -113,6 +127,8 @@ pub(crate) fn build_default_struct_init(
     }
 }
 
+/// Emits code that asks Clap's configured parser to materialize one inferred
+/// default, preserving its value parser, delimiter, and case settings.
 fn clap_value_default_expr(default: &ClapDefaultValue) -> proc_macro2::TokenStream {
     let value = &default.value;
     let leaf_type = &default.leaf_type;

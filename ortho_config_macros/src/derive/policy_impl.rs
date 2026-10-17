@@ -4,12 +4,19 @@ use quote::quote;
 
 use super::load_impl::{DiscoveryTokens, LoadSourceTokens};
 
+/// Generated fragments for configuring and resolving policy-based discovery.
 struct PolicyLoadingTokens {
+    /// Optional discovery overrides and the injected lookup source.
     builder_steps: Vec<proc_macro2::TokenStream>,
+    /// Ordered selector expressions used to choose explicit config paths.
     env_selectors: Vec<proc_macro2::TokenStream>,
+    /// Explicit-path policy expression, or a compile-error token stream.
     explicit_mode: proc_macro2::TokenStream,
+    /// Automatic-discovery policy expression, or a compile-error token stream.
     automatic_mode: proc_macro2::TokenStream,
+    /// Optional call that applies the declared scope precedence.
     scope_order_call: proc_macro2::TokenStream,
+    /// Runtime guard that applies a CLI-provided project root when present.
     project_root: Option<proc_macro2::TokenStream>,
 }
 

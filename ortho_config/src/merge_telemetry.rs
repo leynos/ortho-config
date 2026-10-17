@@ -216,6 +216,10 @@ fn count_attempt(operation: &'static str, source: &'static str) {
     .increment(1);
 }
 
+/// Keeps attempt emission feature-independent when metric support is disabled.
+///
+/// The parameters are intentionally unused: without `metrics`, this library
+/// emits no counter and does not require an application to install a recorder.
 #[cfg(not(feature = "metrics"))]
 const fn count_attempt(_operation: &'static str, _source: &'static str) {}
 
@@ -237,6 +241,10 @@ fn count_outcome(
     .increment(1);
 }
 
+/// Keeps outcome emission feature-independent when metric support is disabled.
+///
+/// No counter is emitted and the application remains free to choose whether it
+/// installs a metrics recorder.
 #[cfg(not(feature = "metrics"))]
 const fn count_outcome(
     _operation: &'static str,

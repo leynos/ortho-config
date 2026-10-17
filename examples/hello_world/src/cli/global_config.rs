@@ -29,7 +29,9 @@ use super::overrides::Overrides;
 /// layer.
 #[derive(Clone)]
 pub struct GlobalConfigSources {
+    /// Lookup-only environment access used while finding configuration files.
     discovery: SharedEnvSource,
+    /// Scanning access used when environment values become a merge layer.
     merge: SharedScanEnvSource,
 }
 

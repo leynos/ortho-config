@@ -75,10 +75,17 @@ fn classify(character: char, chars: &std::iter::Peekable<std::str::Chars<'_>>) -
     }
 }
 
+/// Lexical state needed to copy literals without rewriting their contents.
+///
+/// Ordinary quoted literals use `quote` and `is_escaped`; raw strings use
+/// `raw_hashes` instead, so path separators inside any literal remain intact.
 #[derive(Default)]
 struct LiteralState {
+    /// Active delimiter for an escaped string or character literal.
     quote: Option<char>,
+    /// Whether the preceding character escaped the next quoted character.
     is_escaped: bool,
+    /// Required closing-hash count for a raw string, including zero hashes.
     raw_hashes: Option<usize>,
 }
 

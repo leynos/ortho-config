@@ -43,6 +43,8 @@ fn to_utf8_path(canonical: &Path) -> Utf8PathBuf {
         .unwrap_or_else(|p| Utf8PathBuf::from(p.to_string_lossy().into_owned()))
 }
 
+/// Distinguishes an absent candidate from a present regular file and rejects
+/// directories or other non-file entries as invalid input.
 fn file_exists_and_is_regular(path: &Path) -> OrthoResult<Option<()>> {
     let utf8_path = to_utf8_path(path);
     let (dir, file_name) = match open_parent_dir_and_name(&utf8_path) {
@@ -61,6 +63,8 @@ fn file_exists_and_is_regular(path: &Path) -> OrthoResult<Option<()>> {
     }
 }
 
+/// Reads one selected file through its parent directory capability while
+/// retaining the original path in any I/O error.
 fn read_file_to_string(path: &Path) -> OrthoResult<String> {
     let utf8_path = to_utf8_path(path);
     let (dir, file_name) = open_parent_dir_and_name(&utf8_path).map_err(|e| file_error(path, e))?;
@@ -104,6 +108,8 @@ pub fn load_config_file(path: &Path) -> OrthoResult<Option<Figment>> {
     load_config_file_inner(path, &mut visited, &mut stack)
 }
 
+/// Runs one file operation with canonical-path cycle detection and ancestor
+/// stack tracking shared by recursive `extends` processing.
 fn with_cycle_detection<T, F>(
     path: &Path,
     visited: &mut HashSet<PathBuf>,
@@ -132,6 +138,10 @@ where
     result.map(Some)
 }
 
+/// Loads and parses one file inside an existing inheritance traversal state.
+///
+/// The shared visited set and stack are required so nested `extends` chains
+/// detect cycles across recursive calls.
 pub(super) fn load_config_file_inner(
     path: &Path,
     visited: &mut HashSet<PathBuf>,
@@ -184,6 +194,8 @@ pub fn load_config_file_as_chain(path: &Path) -> OrthoResult<Option<FileLayerCha
     with_cycle_detection(path, &mut visited, &mut stack, load_chain_for_file)
 }
 
+/// Loads each ancestor first and appends the current file as the highest
+/// precedence layer in the returned chain.
 fn load_chain_for_file(
     canonical: &Path,
     visited: &mut HashSet<PathBuf>,

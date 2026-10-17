@@ -10,6 +10,14 @@ use super::literals::{lit_bool, lit_char, lit_crate_path, lit_str};
 use super::localization;
 use super::{DiscoveryAttrs, StructAttrs, parse_prefix};
 
+/// Visits nested entries from each `#[ortho_config(...)]` attribute in source order.
+///
+/// The callback owns key interpretation; syntax errors propagate from `syn`.
+///
+/// # Examples
+///
+/// Given `#[ortho_config(prefix = "APP")]`, the callback receives the nested
+/// `prefix` entry; malformed nested syntax is returned as a `syn` error.
 pub(crate) fn parse_ortho_config<F>(attrs: &[Attribute], mut f: F) -> syn::Result<()>
 where
     F: FnMut(&syn::meta::ParseNestedMeta) -> syn::Result<()>,
@@ -32,10 +40,22 @@ pub(crate) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<
     Ok(())
 }
 
+/// Parses nested discovery settings into the shared discovery model.
+///
+/// # Examples
+///
+/// A nested `app_name = "editor"` entry updates `DiscoveryAttrs::app_name`
+/// while preserving the other discovery settings.
 fn parse_discovery_meta(meta: &ParseNestedMeta, discovery: &mut DiscoveryAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| handle_discovery_nested(&nested, discovery))
 }
 
+/// Assigns one recognized discovery key, consuming unknown keys compatibly.
+///
+/// # Examples
+///
+/// `app_name = "editor"` updates the model; an unknown key is consumed
+/// without changing it so future attributes remain compatible.
 fn handle_discovery_nested(
     nested: &ParseNestedMeta,
     discovery: &mut DiscoveryAttrs,
@@ -78,6 +98,14 @@ fn handle_discovery_nested(
     }
 }
 
+/// Replaces a list-valued discovery setting from a string array or parenthesized list.
+///
+/// Non-string array elements are rejected at the offending expression span.
+///
+/// # Examples
+///
+/// `env_vars = ["APP_CONFIG", "APP_SETTINGS"]` stores both names in order; a
+/// non-string array element returns a diagnostic at that element.
 fn assign_string_list(
     target: &mut Vec<String>,
     nested: &ParseNestedMeta,
@@ -111,18 +139,34 @@ fn assign_string_list(
     Ok(())
 }
 
+/// Parses and replaces one string-valued discovery setting.
+///
+/// # Examples
+///
+/// `config_file_name = "settings.toml"` stores that name in the target slot.
 fn assign_str(target: &mut Option<String>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
     let value = lit_str(nested, key)?.value();
     *target = Some(value);
     Ok(())
 }
 
+/// Parses and replaces one character-valued discovery setting.
+///
+/// # Examples
+///
+/// `config_cli_short = 'c'` stores `Some('c')` for the generated option.
 fn assign_char(target: &mut Option<char>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
     let value = lit_char(nested, key)?;
     *target = Some(value);
     Ok(())
 }
 
+/// Parses and replaces one boolean-valued discovery setting.
+///
+/// # Examples
+///
+/// `config_cli_visible = false` stores `Some(false)`, preserving an explicit
+/// request to hide the option from help.
 fn assign_bool(target: &mut Option<bool>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
     let value = lit_bool(nested, key)?;
     *target = Some(value);
@@ -209,6 +253,12 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
     Ok(out)
 }
 
+/// Detects mutually exclusive single-name and ordered-list environment selectors.
+///
+/// # Examples
+///
+/// A discovery setting with only `env_var` returns `false`; setting both
+/// `env_var` and a non-empty `env_vars` list returns `true` and is rejected.
 const fn has_conflicting_env_selectors(discovery: &DiscoveryAttrs) -> bool {
     discovery.env_var.is_some() && !discovery.env_vars.is_empty()
 }

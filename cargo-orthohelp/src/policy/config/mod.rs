@@ -151,6 +151,7 @@ impl fmt::Display for ExceptionKind {
 #[non_exhaustive]
 pub struct PolicyInputs {}
 
+/// Keeps absent policy tables non-enforcing until a project opts into a mode.
 const fn default_policy_mode() -> PolicyMode {
     PolicyMode::Off
 }
