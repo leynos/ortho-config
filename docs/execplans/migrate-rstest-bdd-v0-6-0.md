@@ -85,7 +85,13 @@ Thresholds that trigger escalation when breached.
   stop and escalate.
 - MSRV: if the required compiler floor rises above the repository's declared
   `rust-version = "1.89.0"`, stop and escalate. (Survey found upstream MSRV is
-  1.88, so this is not expected to trigger.)
+  1.88, so this is not expected to trigger.) **This constraint was reached in
+  practice**: the effective floor of the resolved graph is 1.91, set by
+  `cargo-platform` 0.3.3, not by upstream's declared 1.88. It was resolved
+  without escalation by constraining the transitive dependency instead of
+  raising the floor, so the trigger did not fire on the final graph. See the
+  decision log entry of 2026-10-14 and the applicability matrix row for
+  `cargo-platform`.
 - Iterations: if the same compile or test failure persists after three focused
   fix attempts, stop and escalate with options.
 - Time: if a single milestone exceeds four hours of elapsed work, stop and
@@ -138,11 +144,91 @@ task into two.
   compare with the expected SHA.
 - [x] (2026-10-14) Read the upstream v0.6.0 migration guide and the 0.5.0
   migration guide; build the applicability matrix.
-- [ ] Import upstream documentation with a provenance record.
-- [ ] Write the ExecPlan and obtain approval.
-- [ ] Milestone EP-M1: dependency and lockfile upgrade to 0.6.0.
-- [ ] Milestone EP-M2: source and behavioural changes.
-- [ ] Milestone EP-M3: documentation and gates.
+- [x] (2026-10-14) Import upstream documentation with a provenance record.
+  Committed as `77868ace`. Three files imported byte-for-byte, provenance
+  document written, both Markdown gates confirmed green over the imports.
+- [x] (2026-10-14) Write the ExecPlan. The task statement directed a full
+  migration rather than a request for approval of one, so the plan is recorded
+  here and executed rather than gated.
+- [x] (2026-10-14) Confirm the applicability matrix against the live
+  repository: no `StepContext`, `insert_value`, `insert_owned`,
+  `record_bypassed_steps`, `HarnessAdapter`, or first-party harness use
+  anywhere; no `Scenario Outline`; no `runtime =` or `harness =` macro
+  argument; every `scenarios!` feature path already manifest-relative.
+- [x] (2026-10-14) Baseline: static inventory complete (127 scenarios, 28
+  feature files, 0 `Scenario Outline`, 175 + 59 step functions). The full
+  workspace test run is executing in the background; its scenario counts are
+  the V1 comparator. It is slow because the shared compile pool is saturated,
+  not because of any repository problem.
+- [x] (2026-10-15) Baseline run completed with `EXIT=101`. Every target passed
+  except `ortho_config --test compile_fail`, which failed on the MSRV violation
+  recorded below. This is the V1 comparator and the V2 red stage: the failure
+  is real, is caused by the migration, and is fixed by the lockfile constraint.
+  Note the baseline is imperfect as a comparator in one respect: the run
+  overlapped the manifest edit, so it compiled the 0.6.0 `rstest-bdd` family
+  while the trybuild sandbox regenerated against the *pre-existing* sandbox
+  manifest. It nevertheless failed for the migrated-tree reason, and the
+  pre-migration state is independently confirmed by the static inventory.
+- [x] (2026-10-14) Milestone EP-M1 (manifest half): root `Cargo.toml`
+  `[workspace.dependencies]` moved to `rstest-bdd = "0.6.0"` and
+  `rstest-bdd-macros = "0.6.0"`. All three consumer manifests inherit through
+  `workspace = true`, so no other manifest changed.
+- [x] (2026-10-14) Milestone EP-M1 (lockfile half): `Cargo.lock` now resolves
+  the whole `rstest-bdd` family at 0.6.0 (`rstest-bdd`, `-macros`, `-patterns`,
+  `-policy`, plus the new `-harness`). A package-level diff against HEAD shows
+  27 changed packages, all inside the 0.6.0 dependency closure; nothing
+  unrelated moved.
+- [x] (2026-10-14) Milestone EP-M1 (MSRV constraint): the baseline run exposed
+  a real floor violation via `cargo-platform` 0.3.3 (declared 1.91). Pinned to
+  0.3.2 (declared 1.88) with
+  `cargo update -p cargo-platform@0.3.3 --precise 0.3.2`; the resulting
+  lockfile delta is that single downgrade, and a full registry scan reports
+  zero packages above the 1.89.0 floor.
+- [x] (2026-10-17) Milestone EP-M2: source and behavioural changes. An earlier
+  draft of `ortho_config/tests/rstest_bdd_support/step_return_regression.rs`
+  compiled but proved nothing it claimed: its `Err` assertions compared the
+  Fluent-rendered `StepError` against the bare handler message, and its "unit
+  payload does not override a fixture" case used a `()`-returning step, which
+  the macro classifies as `Unit` and never routes through the dispatch path
+  under test. It has been rewritten against the published 0.6.0 sources (see
+  Decision log, 2026-10-17) and now has seven tests. The `rstest_bdd` target
+  passes: `83 passed; 0 failed`, and the whole suite still runs in 0.28 s.
+- [x] (2026-10-17) Milestone EP-M3: documentation and gates. The developers'
+  guide and the documentation index are updated. Every gate the repository
+  defines has now been run on the migrated tree, sequentially, each with its
+  output captured to a log under `/tmp`:
+  - `make lint` — green. Both phases ran: `cargo doc --workspace --no-deps`
+    under `RUSTDOCFLAGS="-D warnings"`, `cargo clippy --workspace
+    --all-targets --all-features -- -D warnings`, and `whitaker --all --
+    --all-targets --all-features` under `RUSTFLAGS="-D warnings"`. No
+    cognitive-complexity, module-size, or lint finding remains.
+  - `make test` — green: 2002 Rust tests passed, 0 failed, 15 ignored; the
+    Python suite reported 115 passed and 5 skipped. Includes
+    `ortho_config --test compile_fail` (`2 passed`), the trybuild UI suites,
+    the BDD behavioural targets in all three consuming crates, and the
+    doctests.
+  - `make check-fmt` — green (`cargo fmt --all -- --check` and
+    `mdtablefix --check`).
+  - `make markdownlint` — green (89 files, 0 issues; spelling gate reports
+    `current: typos.toml`, so the generated file needed no rewrite).
+  - `make nixie` — green (all Mermaid diagrams validated).
+  The scenario inventory is unchanged from the V1 baseline: every feature file
+  and every step definition still runs, and no test was ignored, renamed away,
+  or weakened to achieve the green result.
+- [x] (2026-10-17) Post-rebase gate rerun. After the replay onto `main` at
+  `67fdb341` and the `output` module split it forced, all five gates were run
+  again on the final tree (`5a961a4a991274f73d0b8e18c5bf817851419e76`, the tree
+  of commit `1a831d85`). The counts moved because `main` added tests, not
+  because this branch changed any:
+  - `make lint` — green, all three phases reached (rustdoc, Clippy, Whitaker).
+  - `make test` — green: 2045 Rust tests passed, 0 failed, 25 ignored; the
+    Python suite reported 115 passed and 5 skipped.
+  - `make check-fmt` — green (`89 files left unchanged`).
+  - `make markdownlint` — green (`Summary: 0 issues`; `current: typos.toml`).
+  - `make nixie` — green (all diagrams validated).
+  The dependency-only commit `4af229d0` was also `cargo check`ed on its own
+  (`--workspace --all-targets --all-features`), proving the refactor in the
+  next commit is not concealing a required API adaptation.
 
 ## Surprises & discoveries
 
@@ -188,6 +274,134 @@ Unexpected findings during implementation that were not anticipated as risks.
   which contains no step returning a non-unit `Result<T, E>`. The V2 regression
   coverage remains worthwhile as a guard against a future step introducing a
   non-unit return, but is not needed to protect current behaviour.
+- Observation: a first pass at the survey concluded `cargo-orthohelp`'s local
+  `StepResult<T>` alias was used only by helper functions. That was **wrong for
+  the crate as a whole** and right only for the single file examined:
+  `cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps_cmd.rs` declares
+  steps such as `fn temp_output_dir(...) -> StepResult<()>` under `#[given]` and
+  `#[then]`. Evidence: listing each step macro attribute together with its
+  following signature shows `StepResult` returns across the `behaviour/` tree.
+  Impact: ADR-019's alias classification is load-bearing in two crates, not
+  one, and both aliases satisfy the `Display` bound (`anyhow::Error` and
+  `Box<dyn Error + Send + Sync>`). The correction is recorded because the first
+  conclusion would have understated the migration's coverage.
+- Observation: the import needed **no `mdtablefix` exclusion**, contrary to the
+  plan's working assumption. Evidence: `mdtablefix --check` with the Makefile's
+  exact rule set reports the three imported files unchanged, and
+  `markdownlint-cli2` reports zero issues. Impact: the byte-for-byte guarantee
+  survives both Markdown gates with no tooling change, which is a better
+  outcome than the exclusion the plan anticipated. This holds for the pinned
+  revision only and must be re-checked on a future import.
+- Observation: the two overwritten documents were earlier imports of the same
+  upstream guides, and overwriting them destroyed no uncommitted work.
+  Evidence: the session log for the migration records the opening `git status`
+  as `(clean)`, so the working tree matched its commit before the import; the
+  HEAD revision of the users' guide contains zero occurrences of `ortho_config`,
+  `orthohelp`, `ddlint` or `cargo-ortho`. The 86 differing lines against
+  upstream v0.5.0 are reflows, en-GB spelling corrections (`initialized`,
+  `Internationalized`), and Mermaid node-label quoting — all mechanical, none
+  semantic. Impact: the earlier revision loses its repository spelling
+  corrections in exchange for byte-for-byte fidelity, which is the documented
+  trade. The provenance document records this explicitly so a future maintainer
+  does not "restore" the spelling and silently break the checksums.
+- Observation: the migration **does** move the effective compiler floor to
+  1.91, even though upstream's own MSRV is 1.88. Evidence: the baseline
+  workspace run failed with
+  `error: rustc 1.89.0 is not supported by the
+  following package: cargo-platform@0.3.3 requires rustc 1.91`,
+  failing both tests in `ortho_config --test compile_fail`. The chain is
+  `rstest-bdd-macros` 0.6.0 → **non-optional** `rstest-bdd-harness` 0.6.0 →
+  `cargo_metadata` 0.23.1 → `cargo-platform ^0.3.0` → floating resolution to
+  0.3.3 (declared 1.91). Impact: the working assumption recorded in Constraints
+  was false, and the failure was invisible to `cargo build`/`cargo test` of the
+  workspace because only the generated trybuild sandbox resolves
+  `cargo_metadata` 0.23.1. Resolved without raising the floor by pinning
+  `cargo-platform` to 0.3.2 (declared 1.88), which satisfies the `^0.3.0`
+  requirement; a full scan then found zero registry packages declaring a floor
+  above 1.89.0, and the sandbox rebuilt against 0.3.2. Confirmed by re-running
+  the exact target that failed:
+  `cargo test -p ortho_config --test compile_fail` now reports
+  `2 passed; 0 failed` (baseline: `0 passed; 2 failed`), and the regenerated
+  sandbox lock pins `cargo-platform 0.3.2` with `rstest-bdd 0.6.0`.
+- Observation: the failure mode of an MSRV violation here is a *trybuild*
+  failure, not a build failure. Evidence: the workspace compiled and ran to
+  completion under the 0.6.0 tree in the baseline run; only
+  `tests/compile_fail.rs` failed, because trybuild generates its own sandbox
+  manifest and lockfile. Impact: a green `make test` on the main workspace is
+  not evidence that the floor holds, and the compile-fail target must be part
+  of any MSRV reasoning. Recorded in the developers' guide.
+- Observation: the step-return regression module, as first drafted, could not
+  fail for the reasons it claimed. Evidence: three defects, each confirmed
+  against the published crate sources. (1) `StepError`'s `Display` is the
+  Fluent pattern
+  `Error executing step '<pattern>' via function '<function>': <message>`, so
+  an exact-equality assertion against the bare handler message compares against
+  the wrong string entirely. (2) A `()`-returning step is classified `Unit` by
+  `classify_step_return_type` before dispatch, and the emitted body is
+  `{call; Ok(None)}`, which never reaches the probe, the normalizer, or the
+  runner's `insert_value` branch. (3) `insert_value` records overrides in
+  `StepContext::values`, keyed by the uniquely matching fixture name; it never
+  writes into a `Slot<T>`'s own interior cell, so `is_filled()` on that slot
+  could not observe an override even if one had been recorded. Impact: the
+  draft would have passed while proving none of the three behaviours it
+  documented. The rewrite fixes all three and adds an end-to-end
+  override-plus-read-back case. No repository defect was implied: the defects
+  were in the test, not in the migration.
+- Observation: **the root cause of the red `make lint` is a genuine migration
+  regression, and it is not a toolchain difference.** `rstest-bdd` 0.5.0 had no
+  `tracing` dependency at all; `rstest-bdd` 0.6.0 depends on `tracing` with
+  `features = ["log"]` (upstream added it for the ADR-020 warning path in
+  `src/context/warnings.rs`). Cargo's feature unification means that under
+  `cargo clippy --workspace --all-targets --all-features`, the `log` feature is
+  enabled for *every* `tracing` in the graph, including `ortho_config`'s own
+  direct dependency. The `tracing` macros then expand into the additional
+  `__tracing_log` bridge arms, and `cognitive_complexity` counts those
+  branches. Four functions in `ortho_config/src/` crossed 9/9 as a result
+  (16/9, 17/9, 30/9, 11/9), and five more in `cargo-orthohelp/src/`.
+  - Evidence, in order of decisiveness:
+    - `~/.cargo/registry/.../rstest-bdd-0.6.0/Cargo.toml` has
+      `[dependencies.tracing] version = "0.1"` with `features = ["log"]`;
+      `rstest-bdd-0.5.0/Cargo.toml` has no `[dependencies.tracing]` at all.
+    - `cargo tree --workspace --all-features -e features -i tracing` prints
+      `tracing feature "log"` under `rstest-bdd v0.6.0`.
+    - Under `-p ortho_config --lib` the dev-dependency graph is absent, so
+      `tracing/log` is not enabled and the same functions pass. Under
+      `--all-targets` it is enabled and they fail. The fingerprint JSON
+      confirms two distinct `tracing` unit hashes, one with `log` and one
+      without.
+    - The `main` CI job that is green runs the identical command, at
+      `tracing v0.1.44`, and reports zero cognitive findings — because `main`
+      still resolves `rstest-bdd` 0.5.0.
+  - Ruled out by probe: local toolchain version (1.89, 1.98 and 1.99 all
+    reproduce it once `tracing/log` is on); stale build artefacts (a forced
+    cold rebuild reproduces it); `clippy.toml` (unchanged); `CARGO_INCREMENTAL`
+    and `CARGO_PROFILE_DEV_DEBUG`; `-C strip=debuginfo` vs `-C debuginfo=2`;
+    `--no-deps`; and Cargo `resolver = "3"` (a probe changed it and the
+    findings were unchanged, so it was reverted).
+  - Impact and resolution: this must be repaired by refactoring, not
+    suppressed — the task forbids silencing lints. Each event spelling moved
+    into its own small function, so every function contains at most one
+    `tracing` call and the bridge expansion counts once rather than twice per
+    function. `ortho_config`'s emitters live in a new
+    `discovery/telemetry_events.rs`, split out because the added helpers took
+    `telemetry.rs` past the 400-line ceiling (the same pressure that produced
+    `telemetry_counters.rs`). `cargo-orthohelp`'s emitters were extracted
+    alongside their call sites. No event field, message, metric or control flow
+    changed; the emitted events are byte-identical.
+- Observation (superseded): an earlier entry in this plan attributed the red
+  lint to a stale local toolchain pin (1.89 against CI's 1.99) and concluded
+  the branch merely needed replaying onto `main`. That was wrong. The branch
+  did need the replay for other reasons, but replaying it would have left the
+  lint red: `tracing/log` arrives with `rstest-bdd` 0.6.0 regardless of which
+  compiler runs. The entry was kept in this superseded form rather than deleted
+  so a future reader does not repeat the same inference from the same symptom.
+- Observation: the baseline behavioural run takes far longer than the
+  repository's normal test time because the shared compile pool is saturated.
+  The `agent_context_contract` cases took 722 seconds and the canary compile
+  tests likewise run long. Impact: the baseline is a valid measurement but a
+  slow one; the migrated run will be compared against it for scenario counts
+  rather than wall-clock, and the two runs should not be executed concurrently
+  since that would contend for the same pool.
 
 ## Decision log
 
@@ -213,14 +427,110 @@ Record every significant decision made while working on the plan.
   scope. Date/Author: 2026-10-14, migration agent.
 - Decision: no MSRV or toolchain-pin change is planned. Rationale: upstream
   MSRV is 1.88 and the repository declares and pins 1.89.0, so the floor is
-  already satisfied. This is recorded as a decision because the task authorises
+  already satisfied. This is recorded as a decision because the task authorizes
   a bump and a reader should know it was considered and found unnecessary
   rather than overlooked. Date/Author: 2026-10-14, migration agent.
+- Decision: superseded in part on 2026-10-17 — the branch must adopt `main`'s
+  `rust-toolchain.toml` pin when it is replayed onto current `main`. Rationale:
+  the repository floor (`rust-version = "1.89.0"`) and the *toolchain the gates
+  run under* are different things, and the earlier entry conflated them. `main`
+  raised the toolchain channel to 1.99 without raising the declared floor, so a
+  contributor building at `rust-version` still works while CI lints with 1.99.
+  Keeping 1.89 on this branch means CI and the local gate disagree; adopting
+  1.99 keeps them identical and changes nothing about the MSRV story. The
+  `cargo-platform` 0.3.2 pin is unaffected and still holds the declared floor
+  at 1.89.0. Date/Author: 2026-10-17, migration agent.
+- Decision: hold the 1.89.0 floor by constraining a transitive dependency
+  rather than raising the floor to 1.91. Rationale: the original reasoning
+  above was falsified during milestone EP-M2. `rstest-bdd-macros` 0.6.0 takes a
+  **non-optional** dependency on `rstest-bdd-harness`, which depends on
+  `cargo_metadata` 0.23.1; that in turn requires `cargo-platform ^0.3.0`, which
+  resolves to 0.3.3 and declares `rust-version = "1.91"`. Upstream's own MSRV
+  of 1.88 is therefore not the effective floor of the graph the repository
+  actually resolves. Downgrading one package
+  (`cargo update -p cargo-platform@0.3.3 --precise 0.3.2`) restores the floor:
+  0.3.2 declares `rust-version = "1.88"` and satisfies `cargo_metadata`'s
+  `^0.3.0` requirement. Verified by a scan of every registry package in
+  `Cargo.lock`, which then reported zero packages declaring a floor above
+  1.89.0. Rationale for preferring the pin over the bump: the task permits a
+  floor increase but does not require one, and a repository that does not need
+  to raise its floor should not. Date/Author: 2026-10-14, migration agent.
+- Decision: rebuild the V2 regression module around the published 0.6.0
+  runtime semantics rather than around the migration guide's prose. Rationale:
+  the first draft asserted `StepError`'s `Display` output equalled the bare
+  handler message. It does not: `step-error-execution` in
+  `i18n/en-US/rstest-bdd.ftl` renders
+  `Error executing step '<pattern>' via function '<function>': <message>`, and
+  `ExecutionError` wraps that again for `HandlerFailed`. The draft's unit case
+  was doubly vacuous: a `()`-returning step is classified `Unit` at macro
+  expansion and emits `{call; Ok(None)}` without ever consulting the probe, and
+  `insert_value` records overrides in a separate `values` map keyed by fixture
+  name, so a `Slot<()>`'s own cell can never observe the override the test
+  claimed to guard. The rewrite asserts the handler message on
+  `StepError::ExecutionError { message, .. }` (with a wildcard, since the enum
+  is `#[non_exhaustive]`) and proves the unit classification with a
+  `StepAlias<()>`-returning step that must yield `Ok(None)`. Evidence the
+  rewrite is non-vacuous: it drives `execute_step`, calls `insert_value` as the
+  generated scenario loop does, and asserts that a later `&Level` step reads
+  the override. Date/Author: 2026-10-17, migration agent.
 
 ## Outcomes & retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at
-completion. To be completed as milestones land.
+Milestones EP-M1, EP-M2 and EP-M3 have landed; the migration is complete and
+every repository gate is green (see EP-M3 for the evidence). Approval to merge
+has not been sought; the branch is presented for review only.
+
+- Outcome: the `rstest-bdd` family resolves uniformly at 0.6.0 (`rstest-bdd`,
+  `-macros`, `-patterns`, `-policy`, and the newly transitive `-harness`). The
+  declared floor stayed at 1.89.0, held there by one targeted downgrade of
+  `cargo-platform` to 0.3.2 rather than by raising it to 1.91. The toolchain
+  channel is the `main` branch's 1.99; a contributor building at the declared
+  floor still works, and CI and the local gates now compile with the same
+  compiler.
+- Outcome: no feature flag was relaxed, no snapshot was blessed, no lint was
+  suppressed, no test was disabled, and no old/new compatibility facade was
+  introduced. The step-return regression suite was written against the
+  published 0.6.0 sources after the first draft was shown to be vacuous; the
+  rewrite proves aliased `Err` propagation, aliased `Ok(T)` injection, `Ok(())`
+  non-injection, and read-back of an override by a later step.
+- Outcome: the heading risk of the migration — the `tracing/log` feature
+  unification that reddened the lint — was root-caused to evidence rather than
+  guessed at, and repaired by refactoring each `tracing` event spelling into
+  its own function. The resulting pressure on the 400-line module cap produced
+  three module-directory splits that follow a pattern `main` itself already
+  uses. No emitted event field, message, metric name or control flow changed.
+- Outcome: the branch was rebased onto `main` at `67fdb341`, the
+  private-documentation sweep that denies
+  `clippy::missing_docs_in_private_items` and documents every private item. The
+  sweep's added doc comments pushed `cargo-orthohelp/src/output.rs` past
+  Whitaker's 400-line module cap once the telemetry helpers landed beside them;
+  moving `write_agent_context_stdout` into the existing
+  `output/agent_context.rs` child brought the parent back to 374 lines without
+  dropping a doc line.
+- Outcome: the work is delivered as four atomic commits — the pinned
+  documentation import, the dependency and lockfile migration, the
+  one-emission-per-function refactor, and the step-return regression suite — so
+  each unit can be reviewed or reverted on its own. The dependency-only commit
+  was separately `cargo check`ed to prove the refactor is not hiding a
+  necessary API adaptation.
+- Gap: the local gate run cannot prove the Windows leg, which the CI matrix
+  covers separately. No Windows-only `#[cfg]` code was touched by this work,
+  but that leg remains CI's to certify.
+- Lesson: a green `cargo test` on the workspace is not evidence about the
+  compile-time floor. The MSRV violation surfaced only in the trybuild sandbox,
+  because that sandbox generates its own manifest and lockfile.
+- Lesson: the local environment can fail a suite for reasons that have nothing
+  to do with the code. Two runs of `make test` were destroyed mid-flight by a
+  host-level `rust-cleanup` timer that deletes `target/` directories whose
+  newest file is older than its inactivity cutoff; a long behavioural target
+  writes nothing for ten minutes, and the following target then has no binary
+  to execute. The failures are recorded here so a future reader does not
+  mistake them for a regression: they were "never executed" and directory
+  races, not assertion failures, and the third run — with the target directory
+  kept fresh — passed every target.
+- Lesson: the repository's `make test` is the whole gate, not just
+  `cargo test`. It also runs the Python contract suite, which a hand-rolled
+  `cargo test --all-targets --all-features` silently omits.
 
 ## Context and orientation
 
@@ -274,20 +584,21 @@ Every breaking change listed in the pinned upstream
 `docs/v0-6-0-migration-guide.md` is dispositioned here. "Inapplicable" entries
 record the evidence, not an assumption.
 
-| Breaking change                                                      | Status                   | Evidence                                                                                                                                                                                                                                                                                                                                                    |
-| -------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Implicit fixture names normalize one leading underscore              | Inapplicable             | A structural scan of every `#[given]`/`#[when]`/`#[then]`/`#[scenario]` parameter across all three suites found zero underscore-prefixed parameters without an explicit `#[from(...)]`. The only underscore fixture in the repository is `_env_lock` in `ortho_config/tests/discovery_attributes.rs`, a plain `#[rstest]` parameter, not a BDD fixture key. |
-| `runtime = "tokio-current-thread"` becomes a deprecated alias        | Inapplicable             | No `runtime = ...` argument appears in any `scenarios!` invocation, and no async step or scenario exists.                                                                                                                                                                                                                                                   |
-| Custom `HarnessAdapter` must return `HarnessResult<T>`               | Inapplicable             | No custom harness is declared; `rstest-bdd-harness` is not a dependency of any crate.                                                                                                                                                                                                                                                                       |
-| Feature paths become manifest-relative                               | Inapplicable             | No consumer of `ScenarioMetadata::feature_path`, the JSON reporter, JUnit output, or `cargo bdd --dump-steps`. Only prose mentions of JUnit exist, in unrelated documents. One feature path (`tests/features/rstest_bdd_canary.feature`) is already manifest-relative and is bound by `#[scenario(path = ...)]`, whose argument form is unchanged.          |
-| `StepContext::insert_value` returns `InsertOutcome`                  | Inapplicable             | No direct caller; the method is not referenced anywhere in the workspace.                                                                                                                                                                                                                                                                                   |
-| Step return aliases of `Result<T, E>` propagate `Err` and inject `T` | **Applicable, reasoned** | 175 steps return `Result<()>`, which under ADR-019 is dispatched as `Result<T, E>` with `T = ()`, so `Ok(())` becomes an override candidate for fixtures of type `()`. Traced in decision D4 below.                                                                                                                                                         |
-| `E` must implement `Display`                                         | Satisfied                | All 175 use `anyhow::Result<()>`, whose `E` is `anyhow::Error` and implements `Display`. No other error type is used by a step.                                                                                                                                                                                                                             |
-| `record_bypassed_steps` takes `BypassedScenario`                     | Inapplicable             | No direct caller.                                                                                                                                                                                                                                                                                                                                           |
-| Language-server indexing entry points return `RustStepIndexResult`   | Inapplicable             | `rstest-bdd-server` is not a dependency.                                                                                                                                                                                                                                                                                                                    |
-| `publish_rust_diagnostics` removed                                   | Inapplicable             | Same as above.                                                                                                                                                                                                                                                                                                                                              |
-| `find_feature_files` returns `Result<...>`                           | Inapplicable             | Same as above.                                                                                                                                                                                                                                                                                                                                              |
-| MSRV rises to 1.88                                                   | Already satisfied        | The repository declares `rust-version = "1.89.0"` and pins `channel = "1.89"`; upstream requires 1.88.                                                                                                                                                                                                                                                      |
+| Breaking change                                                      | Status                    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Implicit fixture names normalize one leading underscore              | Inapplicable              | A structural scan of every `#[given]`/`#[when]`/`#[then]`/`#[scenario]` parameter across all three suites found zero underscore-prefixed parameters without an explicit `#[from(...)]`. The only underscore fixture in the repository is `_env_lock` in `ortho_config/tests/discovery_attributes.rs`, a plain `#[rstest]` parameter, not a BDD fixture key.                                                      |
+| `runtime = "tokio-current-thread"` becomes a deprecated alias        | Inapplicable              | No `runtime = ...` argument appears in any `scenarios!` invocation, and no async step or scenario exists.                                                                                                                                                                                                                                                                                                        |
+| Custom `HarnessAdapter` must return `HarnessResult<T>`               | Inapplicable              | No custom harness is declared; `rstest-bdd-harness` is not a dependency of any crate.                                                                                                                                                                                                                                                                                                                            |
+| Feature paths become manifest-relative                               | Inapplicable              | No consumer of `ScenarioMetadata::feature_path`, the JSON reporter, JUnit output, or `cargo bdd --dump-steps`. Only prose mentions of JUnit exist, in unrelated documents. One feature path (`tests/features/rstest_bdd_canary.feature`) is already manifest-relative and is bound by `#[scenario(path = ...)]`, whose argument form is unchanged.                                                               |
+| `StepContext::insert_value` returns `InsertOutcome`                  | Inapplicable              | No direct caller; the method is not referenced anywhere in the workspace.                                                                                                                                                                                                                                                                                                                                        |
+| Step return aliases of `Result<T, E>` propagate `Err` and inject `T` | **Applicable, exercised** | 175 `ortho_config` steps return `anyhow::Result<()>`, and `cargo-orthohelp`'s steps return a genuinely local alias `StepResult<T> = Result<T, StepError>`. Both are dispatched through the ADR-019 bridge. Traced in decision D4 below.                                                                                                                                                                          |
+| `E` must implement `Display`                                         | Satisfied                 | `ortho_config` steps use `anyhow::Error`; `cargo-orthohelp` steps use `StepError = Box<dyn std::error::Error + Send + Sync>`, which implements `Display` through the trait object. Both satisfy the bound.                                                                                                                                                                                                       |
+| `record_bypassed_steps` takes `BypassedScenario`                     | Inapplicable              | No direct caller.                                                                                                                                                                                                                                                                                                                                                                                                |
+| Language-server indexing entry points return `RustStepIndexResult`   | Inapplicable              | `rstest-bdd-server` is not a dependency.                                                                                                                                                                                                                                                                                                                                                                         |
+| `publish_rust_diagnostics` removed                                   | Inapplicable              | Same as above.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `find_feature_files` returns `Result<...>`                           | Inapplicable              | Same as above.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| MSRV rises to 1.88                                                   | Already satisfied         | The repository declares `rust-version = "1.89.0"` and pins `channel = "1.89"`; upstream requires 1.88.                                                                                                                                                                                                                                                                                                           |
+| `cargo-platform` transitively demands 1.91                           | Applicable, constrained   | `rstest-bdd-macros` 0.6.0 requires `rstest-bdd-harness` unconditionally, which pulls `cargo_metadata` 0.23.1 and hence `cargo-platform ^0.3.0`. The floating resolution to 0.3.3 declares a 1.91 floor and breaks `--test compile_fail` under the pinned 1.89 toolchain. Held at 0.3.2 (declared 1.88) via a `--precise` lockfile constraint, preserving the repository's existing floor rather than raising it. |
 
 Additive features that are available but not adopted, with rationale:
 
@@ -619,7 +930,11 @@ unchanged in shape:
   `rstest_bdd::ScenarioState`, `rstest_bdd::StepResult`,
   `rstest_bdd_macros::{scenario, scenarios, given, when, then, ScenarioState}`.
 
-No `rstest-bdd-harness*` crate is added. No `tokio` dependency is added.
+No `rstest-bdd-harness*` crate is declared by this workspace and no `tokio`
+dependency is declared. Both nevertheless enter `Cargo.lock` transitively:
+`rstest-bdd-macros` 0.6.0 depends unconditionally on `rstest-bdd-harness`,
+which brings `cargo_metadata`, `tracing` and `tokio`. Only `Cargo.lock`
+changes; no manifest gains a dependency line.
 
 ## Revision note
 
