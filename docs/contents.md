@@ -138,8 +138,13 @@
   apply dependency injection patterns in tests.
 - [Rstest BDD users guide](rstest-bdd-users-guide.md): use the current
   `rstest-bdd` testing workflow.
+- [Rstest BDD v0.6.0 migration guide](rstest-bdd-v0-6-0-migration-guide.md):
+  migrate to `rstest-bdd` v0.6.0.
 - [Rstest BDD v0.5.0 migration guide](rstest-bdd-v0-5-0-migration-guide.md):
   migrate to `rstest-bdd` v0.5.0.
+- [Provenance of the imported rstest-bdd documentation](rstest-bdd-doc-provenance.md):
+  the upstream revision behind the imported guides, their checksums, and the
+  link mapping for upstream siblings that are not vendored here.
 - [Rust doctest dry guide](rust-doctest-dry-guide.md): write maintainable Rust
   doctests.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md):

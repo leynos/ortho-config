@@ -1,5 +1,9 @@
 //! Output writers for `cargo-orthohelp`.
 
+mod agent_context;
+
+pub use agent_context::{write_agent_context, write_agent_context_stdout};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, File, OpenOptions};
@@ -9,7 +13,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 use crate::policy::PolicyReport;
-use ortho_config::AgentContext;
 use serde::Serialize;
 
 // Process-wide suffix for atomic JSON artefact temp names. `Relaxed` ordering
@@ -59,64 +62,6 @@ pub fn write_localized_ir(
         })?;
 
     Ok(ir_dir.join(filename))
-}
-
-/// Writes the compact agent-context JSON document.
-///
-/// # Errors
-/// Returns a JSON error on serialization or an I/O error on the atomic write.
-pub fn write_agent_context(
-    out_dir: &Utf8Path,
-    payload: &AgentContext,
-) -> Result<Utf8PathBuf, OrthohelpError> {
-    tracing::debug!(
-        package = %payload.package,
-        out_dir = %out_dir,
-        "starting agent-context write",
-    );
-    let content = serde_json::to_string_pretty(payload).map_err(|error| {
-        tracing::debug!(
-            package = %payload.package,
-            path = %out_dir,
-            error = %error,
-            "failed to serialize agent-context JSON",
-        );
-        OrthohelpError::IrJson(error)
-    })?;
-    let path = write_atomic_json(out_dir, "agent-context.json", &content, "agent-context")?;
-    tracing::debug!(
-        package = %payload.package,
-        path = %path,
-        bytes = content.len(),
-        "agent-context JSON written successfully",
-    );
-    Ok(path)
-}
-
-/// Writes one compact agent-context JSON document to standard output.
-///
-/// The document is followed by a newline so it can be consumed as one complete
-/// machine-readable result.
-///
-/// # Examples
-///
-/// This writes an empty `example-cli` context with no commands as one JSON
-/// line.
-///
-/// ```no_run
-/// use cargo_orthohelp::output::write_agent_context_stdout;
-/// use ortho_config::AgentContext;
-///
-/// fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     write_agent_context_stdout(&AgentContext::new("example-cli"))?;
-///     Ok(())
-/// }
-/// ```
-///
-/// # Errors
-/// Returns a JSON error on serialization or an I/O error when writing stdout.
-pub fn write_agent_context_stdout(payload: &AgentContext) -> Result<(), OrthohelpError> {
-    write_json_stdout("agent-context", payload)
 }
 
 /// Writes the machine-readable policy-report JSON document.
@@ -184,34 +129,76 @@ fn write_atomic_json(
     content: &str,
     artefact: &str,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
-    tracing::debug!(artefact, out_dir = %out_dir, "starting atomic JSON write");
+    log_atomic_write_start(artefact, out_dir);
     let target = JsonArtefactWriteTarget::new(out_dir, filename);
-    let dir = ensure_dir(out_dir).map_err(|error| {
-        tracing::debug!(
-            artefact,
-            path = %out_dir,
-            error = %error,
-            "failed to prepare JSON output directory",
-        );
-        error
-    })?;
+    let dir = prepare_output_dir(out_dir, artefact)?;
     let mut file = open_json_temp_file(&dir, &target, artefact)?;
     write_and_sync_json_temp_file(&mut file, &target, content, artefact)?;
     drop(file);
 
     replace_json_file(&dir, &target, artefact)?;
-    sync_parent_dir(&dir, out_dir).map_err(|error| {
-        tracing::debug!(
-            artefact,
-            path = %out_dir,
-            error = %error,
-            "failed to sync JSON output directory",
-        );
-        error
-    })?;
-    tracing::debug!(artefact, path = %target.path, bytes = content.len(), "atomic JSON write complete");
+    sync_output_parent_dir(&dir, out_dir, artefact)?;
+    log_atomic_write_complete(artefact, &target.path, content.len());
 
     Ok(target.path)
+}
+
+/// Announce the start of an atomic artefact write.
+///
+/// Each emission lives in its own function so that [`write_atomic_json`] holds
+/// at most one `tracing` call: when a dependent crate enables `tracing`'s
+/// `log` bridge, Cargo's feature unification expands every event into a
+/// branch ladder that counts against the workspace's cognitive-complexity
+/// ceiling.
+fn log_atomic_write_start(artefact: &str, out_dir: &Utf8Path) {
+    tracing::debug!(artefact, out_dir = %out_dir, "starting atomic JSON write");
+}
+
+/// Announce a completed atomic artefact write with its size.
+fn log_atomic_write_complete(artefact: &str, path: &Utf8Path, bytes: usize) {
+    tracing::debug!(artefact, path = %path, bytes, "atomic JSON write complete");
+}
+
+/// Create the output directory, reporting why it could not be prepared.
+fn prepare_output_dir(out_dir: &Utf8Path, artefact: &str) -> Result<Dir, OrthohelpError> {
+    ensure_dir(out_dir).inspect_err(|error| {
+        log_output_directory_prepare_failure(artefact, out_dir, error);
+    })
+}
+
+/// Flush the parent directory entry, reporting a failure.
+fn sync_output_parent_dir(
+    dir: &Dir,
+    out_dir: &Utf8Path,
+    artefact: &str,
+) -> Result<(), OrthohelpError> {
+    sync_parent_dir(dir, out_dir).inspect_err(|error| {
+        log_output_directory_sync_failure(artefact, out_dir, error);
+    })
+}
+
+/// Report that the JSON output directory could not be prepared.
+fn log_output_directory_prepare_failure(
+    artefact: &str,
+    out_dir: &Utf8Path,
+    error: &OrthohelpError,
+) {
+    tracing::debug!(
+        artefact,
+        path = %out_dir,
+        error = %error,
+        "failed to prepare JSON output directory",
+    );
+}
+
+/// Report that the JSON output directory could not be synced.
+fn log_output_directory_sync_failure(artefact: &str, out_dir: &Utf8Path, error: &OrthohelpError) {
+    tracing::debug!(
+        artefact,
+        path = %out_dir,
+        error = %error,
+        "failed to sync JSON output directory",
+    );
 }
 
 /// Holds final and temporary names together so every write stage uses matching paths.
@@ -384,5 +371,4 @@ fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
 }
 
 #[cfg(test)]
-#[path = "output_tests.rs"]
 mod tests;

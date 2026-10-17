@@ -3,6 +3,7 @@
 use super::*;
 use crate::policy::PolicyMode;
 use camino::Utf8Path;
+use ortho_config::AgentContext;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tempfile::TempDir;

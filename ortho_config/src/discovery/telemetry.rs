@@ -19,6 +19,7 @@
 use std::ffi::OsString;
 
 use super::telemetry_counters::{count_attempt, count_candidate_failure, count_outcome};
+use super::telemetry_events;
 
 /// Discovery consulted the live process environment.
 pub(super) const SOURCE_PROCESS: &str = "process";
@@ -215,19 +216,9 @@ pub(super) fn attempt(operation: &'static str) {
 /// carried on the selector as a private field instead of being derived from
 /// either.
 pub(super) fn policy_resolution(selector_class: Option<&'static str>) {
-    if let Some(class) = selector_class {
-        tracing::debug!(
-            event = "discovery.policy",
-            operation = OPERATION_POLICY_RESOLVE,
-            selector_class = class,
-            "configuration file policy resolved its layers"
-        );
-    } else {
-        tracing::debug!(
-            event = "discovery.policy",
-            operation = OPERATION_POLICY_RESOLVE,
-            "configuration file policy resolved its layers"
-        );
+    match selector_class {
+        Some(class) => telemetry_events::policy_resolution_with_selector(class),
+        None => telemetry_events::policy_resolution_without_selector(),
     }
 }
 
@@ -283,35 +274,22 @@ pub(super) fn candidate_failure(fields: &CandidateFailureFields) {
         category,
         scope,
     } = *fields;
-    let outcome = if required {
-        OUTCOME_REQUIRED_FAILURE
-    } else {
-        OUTCOME_OPTIONAL_FAILURE
-    };
-    if let Some(label) = scope {
-        tracing::debug!(
-            event = "discovery.candidate",
-            operation,
-            outcome,
-            required,
-            source,
-            category,
-            scope = label,
-            "configuration candidate rejected"
-        );
-    } else {
-        tracing::debug!(
-            event = "discovery.candidate",
-            operation,
-            outcome,
-            required,
-            source,
-            category,
-            "configuration candidate rejected"
-        );
+    let outcome = failure_outcome(required);
+    match scope {
+        Some(label) => telemetry_events::candidate_failure_scoped(fields, outcome, label),
+        None => telemetry_events::candidate_failure_unscoped(fields, outcome),
     }
     count_outcome(operation, outcome);
     count_candidate_failure(operation, source, category);
+}
+
+/// Name the outcome a candidate failure has, given whether it was required.
+const fn failure_outcome(required: bool) -> &'static str {
+    if required {
+        OUTCOME_REQUIRED_FAILURE
+    } else {
+        OUTCOME_OPTIONAL_FAILURE
+    }
 }
 
 /// Record that no working directory was available for the project-root
@@ -353,34 +331,12 @@ pub(super) fn load_outcome(
     scope: Option<&'static str>,
 ) {
     match (source, scope) {
-        (Some(rung), Some(label)) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            source = rung,
-            scope = label,
-            "configuration discovery finished"
-        ),
-        (Some(rung), None) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            source = rung,
-            "configuration discovery finished"
-        ),
-        (None, Some(label)) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            scope = label,
-            "configuration discovery finished"
-        ),
-        (None, None) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            "configuration discovery finished"
-        ),
+        (Some(rung), Some(label)) => {
+            telemetry_events::load_outcome_source_and_scope(operation, outcome, rung, label);
+        }
+        (Some(rung), None) => telemetry_events::load_outcome_source(operation, outcome, rung),
+        (None, Some(label)) => telemetry_events::load_outcome_scope(operation, outcome, label),
+        (None, None) => telemetry_events::load_outcome_bare(operation, outcome),
     }
     count_outcome(operation, outcome);
 }

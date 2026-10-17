@@ -50,20 +50,36 @@ fn apply_sanitized_rustflags_var(
             command.env(name, sanitized);
         }
         Some(sanitized) => {
-            tracing::debug!(
-                var = name,
-                "stripped coverage flags from rustflags variable"
-            );
+            log_rustflags_stripped(name);
             command.env(name, sanitized);
         }
         None => {
-            tracing::debug!(
-                var = name,
-                "removed rustflags variable entirely after coverage flag stripping"
-            );
+            log_rustflags_removed(name);
             command.env_remove(name);
         }
     }
+}
+
+/// Report that coverage flags were stripped from a rustflags variable.
+///
+/// Each emission lives in its own function so [`apply_sanitized_rustflags_var`]
+/// holds at most one `tracing` call: when a dependent crate enables
+/// `tracing`'s `log` bridge, Cargo's feature unification expands every event
+/// into a branch ladder that counts against the workspace's
+/// cognitive-complexity ceiling.
+fn log_rustflags_stripped(name: &str) {
+    tracing::debug!(
+        var = name,
+        "stripped coverage flags from rustflags variable"
+    );
+}
+
+/// Report that a rustflags variable was removed after sanitization.
+fn log_rustflags_removed(name: &str) {
+    tracing::debug!(
+        var = name,
+        "removed rustflags variable entirely after coverage flag stripping"
+    );
 }
 
 /// Sanitizes whitespace-delimited `RUSTFLAGS` by removing coverage tokens.

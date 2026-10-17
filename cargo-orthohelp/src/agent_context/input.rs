@@ -23,10 +23,7 @@ pub(super) fn build_input(field: &FieldMetadata) -> Option<ortho_config::AgentIn
         return None;
     }
     if should_skip_non_flag_input(field) {
-        tracing::warn!(
-            field = field.name,
-            "skipping CLI input with no long or short flag that does not take a value"
-        );
+        warn_skipped_input(field);
         return None;
     }
     Some(ortho_config::AgentInput {
@@ -40,6 +37,19 @@ pub(super) fn build_input(field: &FieldMetadata) -> Option<ortho_config::AgentIn
             .map(|default| normalize_default_display(&default.display)),
         enum_values: enum_values(field),
     })
+}
+
+/// Warn that a CLI-visible field has no invocable surface, so is dropped.
+///
+/// Kept out of [`build_input`] so that function contains a single `tracing`
+/// call at most: the `log` bridge `tracing` expands into when another crate in
+/// the graph enables it is branch-heavy enough to matter to the workspace's
+/// cognitive-complexity ceiling.
+fn warn_skipped_input(field: &FieldMetadata) {
+    tracing::warn!(
+        field = field.name,
+        "skipping CLI input with no long or short flag that does not take a value"
+    );
 }
 
 /// Returns whether a field has CLI metadata but no invocable CLI surface.

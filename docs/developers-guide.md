@@ -1135,24 +1135,50 @@ creation in a controlled milestone, use `INSTA_UPDATE=always` and then verify
 that no `.pending-snap` or `.snap.new` files remain before running the normal
 quality gates.
 
-## `rstest-bdd` v0.5.0 migration strategy
+## `rstest-bdd` migration strategy
 
-Status: adopted. See `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for execution
-history and rationale.
+Status: adopted at v0.6.0. See `docs/execplans/migrate-rstest-bdd-v0-6-0.md`
+for the current migration and `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for
+the previous one. The imported upstream guides are
+`docs/rstest-bdd-users-guide.md`, `docs/rstest-bdd-v0-6-0-migration-guide.md`
+and `docs/rstest-bdd-v0-5-0-migration-guide.md`; their exact upstream revision
+is pinned in `docs/rstest-bdd-doc-provenance.md`.
 
 Migration guidance for contributors:
 
-- Upgrade workspace pins to `rstest-bdd = "0.5.0"` and
-  `rstest-bdd-macros = "0.5.0"`.
-- Scenario functions must return `()` or explicit unit results
-  (`Result<(), E>` / `rstest_bdd::StepResult<(), E>`). Avoid return type
-  aliases in scenario signatures.
+- Workspace pins are `rstest-bdd = "0.6.0"` and
+  `rstest-bdd-macros = "0.6.0"`. The workspace floor stays at Rust 1.89.0 and
+  the pinned toolchain did not move, but the reason is not simply that upstream
+  requires 1.88: `rstest-bdd-macros` 0.6.0 depends unconditionally on
+  `rstest-bdd-harness`, which pulls `cargo_metadata` 0.23.1 and hence
+  `cargo-platform ^0.3.0`, whose floating resolution to 0.3.3 declares a 1.91
+  floor. `Cargo.lock` therefore holds `cargo-platform` at 0.3.2 (declared
+  1.88). Do not drop that constraint when refreshing the lockfile, and re-check
+  the whole graph before raising the floor.
+- To re-check the floor after any dependency change, scan every registry
+  package in `Cargo.lock` for a `rust-version` above the workspace's declared
+  value. The offending package is not necessarily one this workspace names
+  directly; here it was a third-level transitive dependency reached through a
+  crate that upstream does not require for a plain-BDD consumer.
+- The MSRV breakage surfaced only as a `trybuild` failure in
+  `cargo test -p ortho_config --test compile_fail`, because the generated
+  trybuild sandbox resolves its own lockfile. A green workspace build is not
+  evidence that the floor holds.
+- A step returning an alias of `Result<T, E>` now fails the scenario when it
+  returns `Err` and injects `T` when it returns `Ok`. `E` must implement
+  `Display`. This replaced the v0.5.0 advice to avoid return type aliases;
+  aliases are now classified correctly and are safe to use.
+- A unit payload never overrides a fixture, so `Ok(())` from a
+  `Result<()>` step is safe even where a `Slot<()>` flag fixture exists.
+- Scenario functions must return `()` or an explicit fallible result;
+  `#[scenario]` return classification is unchanged from v0.5.0.
 - Prefer `scenarios!(..., fixtures = [...], tags = ...)` for large feature
   bindings to reduce handwritten wrapper boilerplate.
 - Prefer descriptive placeholder names over generic `{string}` placeholders so
   step signatures remain explicit and compile-time checked.
-- Prefer underscore-prefixed fixture names only when no step resolves that
-  fixture by name.
+- Implicit fixture names strip exactly one leading underscore, so `world` and
+  `_world` both bind the fixture named `world`. Use an explicit `#[from(...)]`
+  when a genuinely underscore-named key is intended.
 - Remove file-wide lint suppressions used only for historical generated-fixture
   warnings; retain only narrow, item-level `#[expect(...)]` annotations when
   still required.
@@ -1162,6 +1188,10 @@ Migration guidance for contributors:
   `rstest_bdd::async_step::sync_to_async`.
 - Keep tag names filter-friendly (`@name_part` style). Avoid dots in tag names
   used with `tags = "..."` expressions.
+- Feature-file paths passed to `scenarios!` are manifest-relative and stay
+  that way; diagnostics, the JSON reporter, and the JUnit `classname` attribute
+  all render them relative to the manifest, so no path handling changes are
+  needed in this workspace.
 
 ## Adding or changing behavioural tests
 

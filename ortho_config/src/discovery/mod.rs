@@ -22,6 +22,7 @@ mod scope;
 mod scoped;
 mod telemetry;
 mod telemetry_counters;
+mod telemetry_events;
 
 pub use builder::ConfigDiscoveryBuilder;
 pub use policy::{ConfigFilePolicy, FileLayerOutcome};

@@ -128,7 +128,7 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let Cli {
         command: CargoSubcommand::Orthohelp(args),
     } = cli;
-    tracing::debug!("cargo-orthohelp dispatched via Cargo external-subcommand");
+    log_dispatched();
 
     let metadata = metadata::load_metadata()?;
     if run_policy_check_if_requested(&args, &metadata, format_was_explicit)? {
@@ -197,6 +197,16 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     }
 
     Ok(())
+}
+
+/// Report that the binary ran as a Cargo external subcommand.
+///
+/// Kept out of [`run`] so that function holds a single `tracing` call: when a
+/// dependent crate enables `tracing`'s `log` bridge, Cargo's feature
+/// unification expands every event into a branch ladder that counts against
+/// the workspace's cognitive-complexity ceiling.
+fn log_dispatched() {
+    tracing::debug!("cargo-orthohelp dispatched via Cargo external-subcommand");
 }
 
 /// Copies the selected package identity and dependency details into bridge-owned config.

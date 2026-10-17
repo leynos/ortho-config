@@ -73,11 +73,7 @@ pub fn bridge_ir_to_agent_context(
     package: &str,
     localizer: Option<&dyn Localizer>,
 ) -> AgentContext {
-    tracing::debug!(
-        package = %package,
-        root = %meta.app_name,
-        "starting bridge IR to agent-context transformation",
-    );
+    log_bridge_start(package, &meta.app_name);
     let mut context = AgentContext::new(package);
     if let Some(profiles) = &meta.profiles {
         context.profiles = ProfilesDeclaration::supported(ProfileSelectionContract {
@@ -95,12 +91,31 @@ pub fn bridge_ir_to_agent_context(
             .inputs
             .sort_by(|left, right| left.name.cmp(&right.name));
     }
+    log_bridge_complete(package, context.commands.len());
+    context
+}
+
+/// Announce the start of the IR-to-agent-context bridge.
+///
+/// Extracted so [`bridge_ir_to_agent_context`] holds at most one `tracing`
+/// call: when a dependent crate enables `tracing`'s `log` bridge, Cargo's
+/// feature unification expands every event into a branch ladder that counts
+/// against the workspace's cognitive-complexity ceiling.
+fn log_bridge_start(package: &str, root: &str) {
     tracing::debug!(
         package = %package,
-        command_count = context.commands.len(),
+        root = %root,
+        "starting bridge IR to agent-context transformation",
+    );
+}
+
+/// Announce the end of the IR-to-agent-context bridge.
+fn log_bridge_complete(package: &str, command_count: usize) {
+    tracing::debug!(
+        package = %package,
+        command_count,
         "bridge IR to agent-context transformation complete",
     );
-    context
 }
 
 /// Exposes the profile selector as an input on every command.
