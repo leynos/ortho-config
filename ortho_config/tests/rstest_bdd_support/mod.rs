@@ -34,3 +34,4 @@ mod canary_steps;
 mod cli_default_mode;
 mod nested_docs_fixture;
 mod scenario_state;
+mod step_return_regression;
