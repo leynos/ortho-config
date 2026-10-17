@@ -68,6 +68,12 @@ pub fn message_id_for(command_path: &[impl AsRef<str>], suffix: &str) -> String 
 ///
 /// Dots are rejected here because path and suffix separators are normalized by
 /// their callers before segments are joined into a `Fluent` identifier.
+/// For example, `"Foo_Bar"` becomes `"foo_bar"`.
+///
+/// # Panics
+///
+/// Panics when `raw` is empty or contains a character other than an ASCII
+/// letter, digit, hyphen, or underscore. Invalid input does not return an error.
 pub(crate) fn normalize_segment(raw: &str) -> String {
     assert!(
         !raw.is_empty(),

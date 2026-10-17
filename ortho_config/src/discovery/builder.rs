@@ -237,8 +237,9 @@ impl ConfigDiscoveryBuilder {
 
     /// Derives the default hidden filename from the app name and config extension.
     ///
-    /// A blank app name yields `.toml` (or `.config` without an extension);
-    /// otherwise the trimmed app name and available extension form the stem.
+    /// A blank app name yields a dot followed by the configured filename's
+    /// extension (for example `.toml`), or `.config` without an extension;
+    /// otherwise the trimmed app name and available extension form the name.
     fn default_dotfile(&self) -> String {
         let stem = self.app_name.trim();
         let extension = Path::new(&self.config_file_name)

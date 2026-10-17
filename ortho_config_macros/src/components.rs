@@ -115,7 +115,8 @@ struct LoadImplConfig<'a> {
     discovery_tokens: Option<&'a DiscoveryTokens>,
     /// Whether the parser struct includes a user or generated config-path flag.
     has_config_path: bool,
-    /// Clap IDs for all generated CLI arguments, used to detect explicit inputs.
+    /// Config-field Clap IDs used to detect explicit inputs, excluding the
+    /// generated `profile` and `config_path` selectors.
     cli_arg_ids: Vec<String>,
     /// `(arg_id, serialized_key)` for every bool config field.
     ///
@@ -199,8 +200,9 @@ fn build_load_impl_args<'a>(
 
 /// Derives the CLI layer's lookup keys from the emitted field metadata.
 ///
-/// The first element lists every argument ID for the "was this supplied
-/// explicitly" test. The second lists `(arg_id, serialized_key)` for bool
+/// The first element lists config-field argument IDs for the "was this supplied
+/// explicitly" test, excluding generated selectors. The second lists
+/// `(arg_id, serialized_key)` for bool
 /// fields alone, allowing the profile-enabled CLI layer to remove values that
 /// clap actually reports as `DefaultValue`. Ordinary absence is `None`, while
 /// an explicit `=false` is command-line input and must survive. Both keys are
