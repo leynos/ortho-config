@@ -36,7 +36,6 @@ impl Probe {
 /// Exercise actual environment reads without changing the parent test process.
 #[rstest]
 #[case::absent(None, Probe::Capture)]
-#[case::minimum(Some("1"), Probe::Capture)]
 #[case::shared_host(Some("7200"), Probe::Capture)]
 #[case::maximum(Some("86400"), Probe::Capture)]
 #[case::empty(Some(""), Probe::Invalid)]

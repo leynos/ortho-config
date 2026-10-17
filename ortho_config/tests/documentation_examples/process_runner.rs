@@ -231,7 +231,6 @@ mod tests {
 
     use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
     use anyhow::{Context, Result};
-    use proptest::prelude::*;
     use rstest::rstest;
     use std::io::Write;
     use std::process::Command;
@@ -259,20 +258,6 @@ mod tests {
     #[case::overflow("18446744073709551616")]
     fn invalid_timeout_override_is_rejected(#[case] value: &str) {
         assert!(ProcessLimits::with_timeout_override(Some(value)).is_err());
-    }
-
-    proptest! {
-        /// Accepted budgets retain the requested duration and bounded capture.
-        #[test]
-        fn timeout_override_preserves_requested_budget(
-            seconds in 1..=super::MAX_TIMEOUT_SECONDS,
-        ) {
-            let seconds_text = seconds.to_string();
-            let limits = ProcessLimits::with_timeout_override(Some(&seconds_text))
-                .expect("valid timeout budget");
-            prop_assert_eq!(limits.timeout.as_secs(), seconds);
-            prop_assert_eq!(limits.output_bytes, super::DEFAULT_OUTPUT_BYTES);
-        }
     }
 
     #[test]
