@@ -184,6 +184,9 @@
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
+  - [Skill manifest validation](execplans/6-3-2-skill-manifest-validation.md):
+    approval-gated plan for roadmap item 6.3.2, validating manifest claims and
+    normalized examples against the complete command contract.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
