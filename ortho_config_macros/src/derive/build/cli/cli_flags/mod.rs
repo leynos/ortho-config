@@ -17,21 +17,32 @@ mod replay;
 mod validation;
 pub(super) use validation::{resolve_short_flag, validate_cli_long, validate_user_cli_short};
 
+/// Generated CLI fields and the source-name reservations needed by later builders.
+///
+/// Keeping the emitted fields beside their reserved names lets shared flags
+/// detect conflicts even when a source field was omitted from the CLI.
 #[derive(Debug)]
 pub(crate) struct CliStructTokens {
+    /// Field declarations with the clap and serde attributes required by the derive.
     pub fields: Vec<proc_macro2::TokenStream>,
+    /// Short options already claimed by emitted fields.
     pub used_shorts: HashSet<char>,
+    /// Long options already claimed by emitted fields.
     pub used_longs: HashSet<String>,
     /// Every named source field, including fields omitted from the CLI, for reserved-name checks.
     pub field_names: HashSet<String>,
 }
 
+/// Resolved CLI spellings shared by generated help and documentation metadata.
 #[derive(Debug, Clone)]
 pub(crate) struct CliFieldMetadata {
+    /// Original Rust field name used to associate the metadata with its source.
     pub field_name: String,
+    /// Long option spelling after explicit overrides and defaults are applied.
     pub long: String,
+    /// Short option assigned after duplicate and reserved-name checks.
     pub short: char,
-    /// Whether the field accepts boolean switch semantics rather than a value.
+    /// Whether the field uses optional boolean values in CLI parsing and metadata.
     pub is_bool: bool,
 }
 
@@ -42,11 +53,10 @@ pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 
 /// Whether a declared field type is `bool`, unwrapping a single `Option`.
 ///
-/// Exposed to the derive's CLI-info builder so the bool-ness recorded there is
-/// the same predicate that decides `ArgAction::SetTrue` when the CLI struct is
-/// emitted. Deriving it twice from the type would let the two disagree.
-pub(crate) /// Recognizes plain and optional `bool` fields for clap's switch-style argument handling.
-fn is_bool_type(ty: &Type) -> bool {
+/// Shared with the derive's CLI-info builder so optional boolean parsing and
+/// its value-arity metadata use the same type classification. Independent
+/// predicates could otherwise describe a different CLI from the one emitted.
+pub(crate) fn is_bool_type(ty: &Type) -> bool {
     let inner = option_inner(ty).unwrap_or(ty);
     matches!(
         inner,
@@ -54,9 +64,11 @@ fn is_bool_type(ty: &Type) -> bool {
     )
 }
 
-/// Context for tracking used CLI flags and field names during field processing.
+/// Reservations accumulated while source fields are resolved in declaration order.
 struct CliFieldContext {
+    /// Short options already assigned, preventing duplicate generated flags.
     used_shorts: HashSet<char>,
+    /// Long options already assigned, including explicit user overrides.
     used_longs: HashSet<String>,
     /// Source field names reserved even when their fields opt out of CLI generation.
     field_names: HashSet<String>,
@@ -73,13 +85,17 @@ impl CliFieldContext {
     }
 }
 
-/// Resolved CLI field information shared by both struct field and metadata generation.
+/// Resolved field identity and flag spellings before either output is generated.
 struct ResolvedCliField {
+    /// Source identifier retained for spans and generated Rust field names.
     name: Ident,
+    /// Source spelling used to match metadata back to the declaration.
     field_name: String,
+    /// Validated long option spelling.
     long: String,
+    /// Validated and reserved short option.
     short: char,
-    /// Determines whether generation uses a switch action and omits serde's `None` filter.
+    /// Selects optional boolean parsing and omits serde's `None` filter.
     is_bool: bool,
 }
 

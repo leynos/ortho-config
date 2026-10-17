@@ -65,10 +65,17 @@ const _: fn(&syn::Field) -> syn::Result<bool> = clap_field_is_subcommand;
 const _: fn(&syn::Variant) -> syn::Result<Option<LitStr>> = clap_variant_name;
 const _: fn(&[Attribute]) -> syn::Result<Option<String>> = serde_field_rename;
 
+/// Parsed struct options shared by derive validation and code generation.
+///
+/// Values are kept as syntax-level metadata until generation validates and
+/// emits the corresponding runtime contract.
 #[derive(Default, Clone)]
 pub(crate) struct StructAttrs {
+    /// Environment-variable prefix, normalized to end in `_` when non-empty.
     pub prefix: Option<String>,
+    /// Optional file-discovery policy and naming overrides.
     pub discovery: Option<DiscoveryAttrs>,
+    /// Whether generated loading calls the post-merge hook after composition.
     pub post_merge_hook: bool,
     /// Fluent catalogue root as a dotted path (D-5); falls back to docs app name.
     pub localization_base: Option<String>,
@@ -104,13 +111,22 @@ pub(crate) struct StructAttrs {
 ///   active and no explicit `#[ortho_config(default = ...)]` is provided.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
+    /// Explicit long option spelling used by generated CLI metadata.
     pub cli_long: Option<String>,
+    /// Explicit short option spelling used by generated CLI metadata.
     pub cli_short: Option<char>,
+    /// User expression used when no configuration layer supplies the field.
     pub default: Option<Expr>,
+    /// Clap default preserved when the CLI default must be treated as absent.
     pub inferred_clap_default: Option<ClapInferredDefault>,
+    /// Collection policy applied as configuration layers are composed.
     pub merge_strategy: Option<MergeStrategy>,
+    /// Excludes the field from CLI parsing without excluding it from merging.
     pub skip_cli: bool,
+    /// Omits a clap-provided default from the CLI merge layer.
     pub cli_default_as_absent: bool,
+    /// Marks a clap-owned subcommand selector excluded from config fields.
     pub is_subcommand: bool,
+    /// Field documentation metadata copied into generated API documentation.
     pub doc: DocFieldAttrs,
 }

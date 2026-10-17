@@ -23,6 +23,7 @@ pub(crate) struct DocStructAttrs {
     pub notes: Vec<DocNoteAttr>,
     /// Windows help metadata, absent when no Windows-specific section was declared.
     pub windows: Option<WindowsAttrs>,
+    /// Declared interaction and safety metadata copied into generated help.
     pub behaviour: Option<BehaviourAttrs>,
 }
 
@@ -83,9 +84,13 @@ pub(crate) struct WindowsAttrs {
 /// generate stage converts these validated strings into typed IR values.
 #[derive(Default, Clone)]
 pub(crate) struct BehaviourAttrs {
+    /// How the command interacts with external or user-controlled systems.
     pub interaction: Option<String>,
+    /// Whether the command changes persistent or external state.
     pub mutation: Option<String>,
+    /// Conditions or mechanisms that can bypass ordinary safeguards.
     pub bypass: Option<String>,
+    /// Whether the command supports a preview that avoids applying changes.
     pub dry_run: Option<String>,
 }
 

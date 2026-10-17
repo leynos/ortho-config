@@ -14,6 +14,7 @@ use crate::{OrthoError, OrthoResult};
 /// before this type is constructed.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProfileName {
+    /// Validated spelling retained unchanged; profile names are case-sensitive.
     value: String,
 }
 
@@ -73,8 +74,11 @@ impl fmt::Display for ProfileName {
 /// misdirects the operator towards missing files that are present.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AvailableProfileNames {
+    /// Sorted, unique names retained up to [`Self::DISPLAY_CAP`].
     names: Vec<String>,
+    /// Number of unique names excluded by the display cap.
     omitted_count: usize,
+    /// Distinguishes an empty profile table from a chain with no files.
     files_discovered: bool,
 }
 

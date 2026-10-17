@@ -10,7 +10,9 @@ use super::SelectedProfile;
 /// simultaneous profiles to arrive additively later.
 #[derive(Debug)]
 pub struct ProfileLoadOutcome<T> {
+    /// Configuration produced by the load after applying the selected profile.
     config: T,
+    /// Selected profile identity, currently empty or a singleton.
     selection: Vec<SelectedProfile>,
 }
 

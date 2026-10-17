@@ -176,8 +176,7 @@ fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> Toke
 }
 
 /// Emits one string literal as an owned `String` expression.
-pub(super) /// Quotes a string as an owned literal for insertion into generated code.
-fn string_tokens(value: &str) -> TokenStream {
+pub(super) fn string_tokens(value: &str) -> TokenStream {
     let lit = syn::LitStr::new(value, proc_macro2::Span::call_site());
     quote! { String::from(#lit) }
 }
@@ -200,6 +199,12 @@ fn merge_headings(overrides: &HeadingOverrides) -> HeadingOverrides {
     }
 }
 
+/// Emits explicit precedence tiers or the loader's default source order.
+///
+/// The profile tier appears only when profiles are enabled. An explicit
+/// unsupported tier is returned as a derive error so documentation metadata
+/// cannot claim a source that the generated loader will never read.
+/// For example, enabling profiles inserts their tier below CLI overrides.
 fn build_precedence_metadata(
     doc: &DocStructAttrs,
     profiles: bool,

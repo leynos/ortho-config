@@ -15,6 +15,15 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+The shared workspace Clippy policy denies `missing_docs_in_private_items`.
+Document private modules with `//!` and private items with `///`, including
+build support, examples, and shared fixtures. Explain internal contracts such
+as ownership, precedence, error handling, and generated-code assumptions.
+`make lint` applies the policy across workspace targets and features; keep new
+members opted into the workspace lint table. An unavoidable generated-code
+exception must use an item-scoped `#[expect(..., reason = "...")]` that names
+the concrete limitation.
+
 ## Clap default inference
 
 The `cli_default_as_absent` default path is split between parse-time metadata
@@ -128,6 +137,50 @@ in the same change:
 - Regression coverage for both `cargo <name> [OPTIONS]` and
   `cargo-<name> <name> [OPTIONS]` once the repository adds or revises those
   tests.
+
+## Derive expansion ownership
+
+`ortho_config_macros/src/components.rs` owns the intermediate expansion bundle
+and loader-token assembly shared by generated implementation paths. Proc-macro
+entry points and CLI field extraction metadata remain in `lib.rs`. Output
+generators consume the assembled bundle rather than independently rebuilding
+discovery settings or CLI key mappings.
+
+Derive-side file-discovery token assembly belongs to
+`ortho_config_macros/src/derive/load_impl/discovery.rs`. Legacy and configured
+builder setup, including lookup-only source wiring, stay behind the parent
+module's `build_file_discovery` entry point. The generated block returns
+ordered layers and a separate discovery-failure signal. Policy resolution
+remains in `derive/policy_impl.rs`, and environment merging remains in
+`build_env_section`.
+
+Field documentation resolution and duplicate-source checks remain in
+`derive/generate/docs/fields/mod.rs`. Its private `emission` module accepts
+resolved components and emits the public IR initializer without discovering
+fields or applying policy. Only the parent field builder uses this boundary;
+other generators continue through `build_fields_metadata`.
+
+MAML parameter prose belongs to
+`cargo-orthohelp/src/powershell/maml/paragraphs.rs`. Only the MAML renderer
+consumes its ordered paragraphs; XML structure and escaping remain in
+`render.rs`. Other output formats retain their own formatting contracts.
+
+## CLI long-flag validation ownership
+
+`LongFlagCandidate` in
+`ortho_config_macros/src/derive/build/cli/cli_flags/validation.rs` owns one
+borrowed field identifier and its raw `cli_long` spelling during validation.
+Only `validate_cli_long` constructs it; other derive-builder code uses the
+`cli` module facade. The context is limited to one spelling check and is not a
+reusable representation of a validated flag.
+
+The raw spelling carries no validity promise. Validation checks empty input,
+then a leading dash or underscore, then the ASCII alphanumeric-or-dash grammar,
+and finally clap's reserved `help` and `version` names. This order preserves
+the most specific syntax diagnostic and its source-field span. Duplicate-name
+checks remain in field resolution, where declaration-order reservations are
+available. Keep this context limited to syntax and reserved-name validation;
+short flags and duplicate tracking compose at their existing owners.
 
 ## Schema ownership
 
@@ -1297,6 +1350,15 @@ fixes the semantics tables, the suppression gate, the drain precedence, and the
 stability surface that must settle before the first release shipping them. Read
 it before changing any behaviour here.
 
+Candidate provenance is owned by candidate generation. The co-located
+`ortho_config/src/discovery/candidates/provenance.rs` groups the bounded
+telemetry source/scope pair and XDG decision labels. Candidate call sites
+assign these values where the source is known; keep raw paths and environment
+values out of them. Explicit paths and selectors remain outside
+`CandidateOrigin` because they have no automatic scope. The accumulator keeps
+the first source and list position while merging later scopes for duplicate
+paths.
+
 This section is about file-layer *resolution*. The agent-native,
 `cargo-orthohelp` policy configuration described in
 [Policy configuration test layout](#policy-configuration-test-layout) is a
@@ -2175,6 +2237,29 @@ tier two did not exist at all.
 | Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
 
 *Table: the timers that can end a run, innermost first.*
+
+### Documentation subprocess budgets on shared hosts
+
+The executable documentation tests own an additional subprocess deadline in
+`ortho_config/tests/documentation_examples/process_runner.rs`. It defaults to
+1,200 seconds. A documented command can compile both the CLI and a generated
+bridge in separate target directories, so shared Cargo locks and compiler
+admission count towards that deadline. A shared-host run reached the deadline
+while its bridge was still compiling dependencies after healthy admission.
+
+Select a finite budget before starting the gate when those queues require more
+time:
+
+```sh
+ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS=7200 make test
+```
+
+The override accepts whole seconds from 1 to 86,400. Invalid input fails before
+spawning a subprocess. This setting belongs only to the documentation-test
+runner; it preserves the default for CI, output capture limits, and the
+explicit short deadline used by its stalled-process regression test. It does
+not change nextest or workflow watchdogs. Tests exercise budget parsing without
+mutating the process environment.
 
 ### The outermost tier was missing
 

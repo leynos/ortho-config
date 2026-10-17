@@ -147,6 +147,10 @@ pub(crate) struct ArgIdsModel {
     pub value_name_id: FluentMessageId,
 }
 
+/// Catalogue message identifiers attached to one generated command.
+///
+/// These identifiers are emitted with the command so localization lookup uses
+/// the same keys as the documentation metadata and optional catalogue output.
 #[derive(Debug, Clone)]
 #[expect(
     clippy::struct_field_names,

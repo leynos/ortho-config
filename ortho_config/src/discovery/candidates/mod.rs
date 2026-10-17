@@ -5,8 +5,10 @@ use std::path::{Path, PathBuf};
 use super::telemetry;
 use super::{ConfigDiscovery, DiscoveryScope};
 
+use self::provenance::{CandidateOrigin, XdgDecisions};
 use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
 
+mod provenance;
 mod variants;
 
 /// A configured selector's value, classified.
@@ -17,27 +19,6 @@ enum SelectorValue {
     Empty,
     /// The variable names a path, preserved as read.
     Accepted(std::ffi::OsString),
-}
-
-/// The three bounded XDG labels, named so a call site cannot transpose them.
-struct XdgDecisions {
-    config_home: &'static str,
-    dirs: &'static str,
-    /// Label identifying configured-list use or default-directory fallback.
-    resolution: &'static str,
-}
-
-/// Bounded telemetry label and automatic scope for generated candidates.
-#[derive(Clone, Copy)]
-struct CandidateOrigin {
-    source: &'static str,
-    scope: DiscoveryScope,
-}
-
-impl CandidateOrigin {
-    const fn new(source: &'static str, scope: DiscoveryScope) -> Self {
-        Self { source, scope }
-    }
 }
 
 impl ConfigDiscovery {
@@ -78,6 +59,11 @@ impl ConfigDiscovery {
         candidates
     }
 
+    /// Adds each base's candidates in iterator and per-base candidate order.
+    ///
+    /// The accumulator deduplicates by the platform path key. The first path,
+    /// source label, and position survive, while each later automatic origin
+    /// adds its scope to the existing entry so scoped walks retain provenance.
     fn push_for_bases<I>(&self, bases: I, acc: &mut CandidateAccumulator, origin: CandidateOrigin)
     where
         I: IntoIterator,

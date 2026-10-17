@@ -14,9 +14,14 @@ use super::{ConfigDiscovery, telemetry};
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct ConfigPathSelector {
+    /// Direct path supplied by an adapter; when set it takes precedence
+    /// over an environment lookup.
     path: Option<PathBuf>,
+    /// Lookup key used only when no direct path was supplied.
     environment_variable: Option<String>,
+    /// Diagnostic identity copied into the winning selection.
     label: String,
+    /// Marks a compatibility rung so downstream reporting can identify it.
     legacy: bool,
     /// The constructor family this selector came from, for telemetry: a
     /// `&'static str` from the closed `SELECTOR_CLASS_*` set, never the
@@ -112,8 +117,11 @@ pub enum ExplicitMode {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct ResolvedSelection {
+    /// Label of the selector that won resolution.
     label: String,
+    /// Owned path chosen for this selection, even if loading it fails.
     path: PathBuf,
+    /// Whether the winning selector was a legacy compatibility alias.
     legacy: bool,
 }
 

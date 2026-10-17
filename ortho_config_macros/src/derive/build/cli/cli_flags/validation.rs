@@ -15,44 +15,79 @@ pub(super) const RESERVED_SHORTS: &[char] = &['h', 'V'];
 /// Long flags owned by clap's generated global help and version arguments.
 const RESERVED_LONGS: &[&str] = &["help", "version"];
 
-/// Reports the empty spelling separately so callers can return its specific diagnostic.
-const fn is_empty_long(long: &str) -> bool {
-    long.is_empty()
+/// Borrows one field and its raw long spelling for a single validation pass.
+///
+/// Construction does not certify the spelling: callers must use `validate` before
+/// treating it as a long flag accepted by this derive.
+struct LongFlagCandidate<'a> {
+    /// Keeps diagnostics anchored to the source field without taking ownership.
+    field: &'a Ident,
+    /// Retains the original spelling so validation errors preserve exact text.
+    spelling: &'a str,
 }
 
-/// Long names omit leading dashes and underscores because clap supplies the prefix.
-fn has_invalid_prefix(long: &str) -> bool {
-    long.starts_with(['-', '_'])
-}
-
-/// Restricts long names to the ASCII spelling accepted by this derive's CLI contract.
-fn has_invalid_chars(long: &str) -> bool {
-    !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-}
-
-/// Returns the targeted diagnostic for a forbidden leading dash or underscore.
-fn invalid_prefix_message(long: &str) -> Option<String> {
-    if !has_invalid_prefix(long) {
-        return None;
+impl LongFlagCandidate<'_> {
+    /// Identifies a leading dash or underscore forbidden by the long-name grammar.
+    ///
+    /// For example, `-alpha` yields `Some('-')`, while `alpha` yields `None`.
+    fn invalid_prefix(&self) -> Option<char> {
+        self.spelling
+            .chars()
+            .next()
+            .filter(|&prefix| matches!(prefix, '-' | '_'))
     }
-    let prefix = if long.starts_with('-') { '-' } else { '_' };
-    Some(format!(
-        "invalid `cli_long` '{long}': must not start with '{prefix}'"
-    ))
-}
 
-/// Produces the first applicable syntax error for a long flag spelling.
-fn long_validation_error(long: &str) -> Option<String> {
-    if is_empty_long(long) {
-        Some(format!("invalid `cli_long` '{long}': must be non-empty"))
-    } else if let Some(message) = invalid_prefix_message(long) {
-        Some(message)
-    } else if has_invalid_chars(long) {
-        Some(format!(
-            "invalid `cli_long` '{long}': must contain only ASCII alphanumeric characters or '-'"
-        ))
-    } else {
-        None
+    /// Reports characters outside the derive's ASCII alphanumeric-or-dash grammar.
+    ///
+    /// For example, `alpha-1` passes this check, while `alpha_beta` does not.
+    fn has_invalid_characters(&self) -> bool {
+        !self
+            .spelling
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    }
+
+    /// Returns the first syntax diagnostic in empty, prefix, then character order.
+    ///
+    /// For example, `-bad/flag` reports the leading dash before the slash.
+    fn syntax_error(&self) -> Option<String> {
+        if self.spelling.is_empty() {
+            Some(format!(
+                "invalid `cli_long` '{}': must be non-empty",
+                self.spelling
+            ))
+        } else if let Some(prefix) = self.invalid_prefix() {
+            Some(format!(
+                "invalid `cli_long` '{}': must not start with '{prefix}'",
+                self.spelling
+            ))
+        } else if self.has_invalid_characters() {
+            Some(format!(
+                "invalid `cli_long` '{}': must contain only ASCII alphanumeric characters or '-'",
+                self.spelling
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Validates syntax before reserved names and attaches failures to the field span.
+    ///
+    /// For example, `alpha-1` succeeds, while `help` returns a reserved-name error.
+    fn validate(&self) -> syn::Result<()> {
+        if let Some(message) = self.syntax_error() {
+            return Err(syn::Error::new_spanned(self.field, message));
+        }
+        if RESERVED_LONGS.contains(&self.spelling) {
+            return Err(syn::Error::new_spanned(
+                self.field,
+                format!(
+                    "reserved `cli_long` '{}' conflicts with global clap flags",
+                    self.spelling
+                ),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -132,14 +167,9 @@ pub(in crate::derive::build::cli) fn validate_cli_long(
     name: &Ident,
     long: &str,
 ) -> syn::Result<()> {
-    if let Some(message) = long_validation_error(long) {
-        return Err(syn::Error::new_spanned(name, message));
+    LongFlagCandidate {
+        field: name,
+        spelling: long,
     }
-    if RESERVED_LONGS.contains(&long) {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("reserved `cli_long` '{long}' conflicts with global clap flags"),
-        ));
-    }
-    Ok(())
+    .validate()
 }

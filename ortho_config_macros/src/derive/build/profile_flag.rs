@@ -22,10 +22,15 @@ use super::cli::validate_cli_long;
 /// Borrowed inputs used to validate and generate the profile flag.
 #[derive(Clone, Copy)]
 pub(super) struct ProfileFlagBuildInputs<'a> {
+    /// Original fields used to detect serialized-key and environment collisions.
     pub(super) fields: &'a [syn::Field],
+    /// Parsed field metadata aligned with `fields` by index.
     pub(super) field_attrs: &'a [FieldAttrs],
+    /// Struct-level rename rule needed to compute each serialized key.
     pub(super) serde_rename_all: Option<SerdeRenameAll>,
+    /// Existing CLI long names against which the reserved flag is checked.
     pub(super) used_longs: &'a HashSet<String>,
+    /// Rust field names used to reject the reserved `profile` member.
     pub(super) field_names: &'a HashSet<String>,
 }
 
@@ -82,6 +87,12 @@ pub(super) fn build_profile_flag_field(
     }))
 }
 
+/// Reject a user field whose Serde projection occupies the selector key.
+///
+/// # Example
+///
+/// A field renamed to `profile` returns a `syn::Error` at that field instead
+/// of emitting a second serialized member for the generated selector.
 fn validate_profile_serialized_key(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -101,6 +112,12 @@ fn validate_profile_serialized_key(
     Ok(())
 }
 
+/// Reject a user binding that would compete with the generated selector variable.
+///
+/// # Example
+///
+/// With prefix `APP_`, a field bound to `APP_PROFILE` returns a `syn::Error`
+/// instead of generating two CLI fields backed by the same environment value.
 fn validate_profile_environment_binding(
     fields: &[syn::Field],
     selector_env: &str,

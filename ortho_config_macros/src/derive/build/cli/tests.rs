@@ -83,36 +83,57 @@ fn non_boolean_fields_take_a_value(#[case] ty: &str) -> Result<()> {
 }
 
 #[rstest]
-#[case("")]
-#[case("bad/flag")]
-#[case("alpha_beta")]
-#[case("has space")]
-#[case("*")]
-#[case("_alpha")]
-#[case("-alpha")]
-fn rejects_invalid_long_flags(#[case] bad: &str) -> Result<()> {
-    let name: Ident = syn::parse_quote!(field);
-    let Err(err) = validate_cli_long(&name, bad) else {
-        return Err(anyhow!("expected invalid long flag for {bad}"));
-    };
-    ensure!(
-        err.to_string().contains("invalid `cli_long`"),
-        "unexpected error: {err}"
-    );
-    Ok(())
-}
-
-#[rstest]
-#[case("help")]
-#[case("version")]
-fn rejects_reserved_long_flags(#[case] long: &str) -> Result<()> {
+#[case::empty("", "invalid `cli_long` '': must be non-empty")]
+#[case::slash(
+    "bad/flag",
+    concat!(
+        "invalid `cli_long` 'bad/flag': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::underscore(
+    "alpha_beta",
+    concat!(
+        "invalid `cli_long` 'alpha_beta': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::space(
+    "has space",
+    concat!(
+        "invalid `cli_long` 'has space': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::asterisk(
+    "*",
+    concat!(
+        "invalid `cli_long` '*': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::leading_underscore("_alpha", "invalid `cli_long` '_alpha': must not start with '_'")]
+#[case::leading_dash("-alpha", "invalid `cli_long` '-alpha': must not start with '-'")]
+#[case::prefix_before_character(
+    "-bad/flag",
+    "invalid `cli_long` '-bad/flag': must not start with '-'"
+)]
+#[case::help("help", "reserved `cli_long` 'help' conflicts with global clap flags")]
+#[case::version(
+    "version",
+    "reserved `cli_long` 'version' conflicts with global clap flags"
+)]
+fn rejects_invalid_and_reserved_long_flags(
+    #[case] long: &str,
+    #[case] expected_error: &str,
+) -> Result<()> {
     let name: Ident = syn::parse_quote!(field);
     let Err(err) = validate_cli_long(&name, long) else {
-        return Err(anyhow!("expected reserved long flag error for {long}"));
+        return Err(anyhow!("expected long flag error for {long}"));
     };
     ensure!(
-        err.to_string().contains("reserved `cli_long`"),
-        "unexpected error: {err}"
+        err.to_string() == expected_error,
+        "expected {expected_error:?}, got {err}"
     );
     Ok(())
 }

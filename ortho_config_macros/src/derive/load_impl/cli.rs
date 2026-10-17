@@ -124,19 +124,16 @@ fn build_cli_push_tokens() -> proc_macro2::TokenStream {
     }
 }
 
-/// Remove bool fields whose value came from clap's `SetTrue` default.
+/// Remove boolean fields that clap reports as `DefaultValue`.
 ///
-/// A `bool` field is emitted with `ArgAction::SetTrue`, so clap fills an absent
-/// flag with a real `false` rather than leaving it unset. `sanitize_value`
-/// strips only `null`, so that `false` survives into the CLI layer, and the CLI
-/// layer outranks the profile layer — an absent `--enabled` would therefore
-/// silently reset a profile's `enabled = true`.
+/// Ordinary absence remains `None` and is stripped by `sanitize_value`.
+/// Actual boolean defaults can survive that pass and would mask values in the
+/// lower-precedence profile layer. Source checks distinguish those defaults
+/// from explicit `=false`, which must remain in the CLI layer.
 ///
-/// Unlike `cli_default_as_absent`, this must not depend on the author having
-/// opted in: `SetTrue` is what the macro emits for *every* bool field, so the
-/// default-origin value is spurious whether or not the attribute was written.
-/// The environment layer still supplies `<PREFIX>ENABLED=true` to the
-/// composer; only an untouched flag is pruned.
+/// This pruning applies independently of `cli_default_as_absent` opt-in.
+/// Environment-sourced values are retained, and the separate environment layer
+/// still supplies `<PREFIX>ENABLED=true` to the composer.
 fn build_bool_default_pruning_tokens(
     cli_bool_fields: &[(String, String)],
 ) -> proc_macro2::TokenStream {
@@ -172,8 +169,8 @@ fn build_bool_default_pruning_tokens(
 ///
 /// Fields filled from an inferred clap default are pruned first, so a built-in
 /// default cannot mask a profile value. `cli_bool_fields` extends that pruning
-/// to `SetTrue` bools, which carry a default-origin `false` that
-/// `cli_default_as_absent` cannot describe.
+/// to boolean fields with actual default-origin values, independently of
+/// `cli_default_as_absent` opt-in.
 pub(super) fn build_profile_cli_layer_tokens(
     krate: &proc_macro2::TokenStream,
     cli_arg_ids: &[String],
