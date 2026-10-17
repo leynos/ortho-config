@@ -151,6 +151,10 @@
 
 ## Execution plans
 
+- [Ship the en-US clap error matrix](execplans/11-2-1-ship-en-us-translations-for-clap-stable-error-matrix.md):
+  approval-gated plan for roadmap task 11.2.1, exhaustive translation coverage,
+  and the mechanical clap variant-count gate.
+
 - [ExecPlans directory](execplans/): review living and historical execution
   plans for substantial work.
   - [PowerShell generator with wrapper](execplans/4-1-1-4-power-shell-generator-with-wrapper.md):
