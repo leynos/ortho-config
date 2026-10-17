@@ -2837,9 +2837,16 @@ Dependabot proposes the bump. A human reviewing the pull request must:
 
    See [Testing these diagnostics](#testing-these-diagnostics).
 2. Confirm from the diff that only compiler wording changed.
-3. Re-read the re-measurement instruction in the "Cranelift qualification"
+3. Read a red test run for layout assumptions as well as compiler wording. A
+   nightly can change where Cargo writes build output: the first bump moved
+   build-script output from `target/<profile>/build/<hash>/out` to
+   `target/<profile>/build/<package>/<hash>/out`, which broke
+   `identifier_artefact_e2e.rs` ("fixture identifier artefact was not emitted")
+   after a complete build. Tests should ask where an artefact is, by bounded
+   search or Cargo's JSON `out_dir`, rather than encode one layout.
+4. Re-read the re-measurement instruction in the "Cranelift qualification"
    section of this guide.
-4. Run `make install-build-tools` and `make check-build-tools` locally to pick
+5. Run `make install-build-tools` and `make check-build-tools` locally to pick
    up and verify the new channel.
 
 ### The MSRV lane
