@@ -68,21 +68,16 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
 /// The block evaluates to `(layers, discovery_failed)`. Callers that only need
 /// the layers bind the flag with a leading underscore so it stays warning-free.
 ///
-/// `discovery_failed` means "the profile tables could not be inspected", which
-/// is not the same question as "did any candidate fail". Discovery retains the
-/// errors of optional candidates it walked past on the way to a later success,
-/// so an error vector can be non-empty while the resolved chain is complete.
-/// Only two situations leave the chain un-inspected: a required candidate
-/// failed and stopped the fallback walk, or every candidate was tried and none
-/// produced a layer. Suppressing the unknown-profile error in any other case
-/// would hide a genuine selection error behind an unrelated parse complaint
-/// (ADR-012).
+/// `discovery_failed` gives discovery errors precedence over an unknown-profile
+/// diagnostic (ADR-012). A required-source error sets the flag even when the
+/// candidate walk continues and a later source supplies layers: that fallback
+/// does not discharge the requirement to load the required source.
 ///
-/// The test is "no layer loaded *and* the walk recorded a failure", not "no
-/// layer loaded". A chain that is empty because no candidate *existed* was
-/// searched and found wanting, so the selection is still reported as unknown;
-/// collapsing the two would silence the no-configuration-files diagnostic that
-/// tells an operator which of the two problems they have.
+/// Optional-source errors set the flag only when no layers loaded. An optional
+/// parse failure followed by a successful fallback leaves profile validation
+/// active, so an unrelated parse complaint cannot hide an unknown selection.
+/// No layers and no errors also leaves validation active: when no candidate
+/// existed, an unknown profile still needs its no-configuration diagnostic.
 fn build_discovery_loading_block(
     krate: &proc_macro2::TokenStream,
     builder_init: &proc_macro2::TokenStream,

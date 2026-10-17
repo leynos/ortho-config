@@ -2258,8 +2258,14 @@ The override accepts whole seconds from 1 to 86,400. Invalid input fails before
 spawning a subprocess. This setting belongs only to the documentation-test
 runner; it preserves the default for CI, output capture limits, and the
 explicit short deadline used by its stalled-process regression test. It does
-not change nextest or workflow watchdogs. Tests exercise budget parsing without
-mutating the process environment.
+not change nextest or workflow watchdogs. Tests cover both pure budget parsing
+and the environment boundary used by `run_command`. The process runner's
+`tests/environment.rs` module owns child-process probes for that boundary;
+these probes are private test fixtures, not shared command-building helpers.
+They inject or remove the override with `Command::env` and `env_remove`, so a
+one-second regression budget cannot affect parallel documentation tests. An
+independent outer deadline bounds each probe, including failures of the
+environment wiring itself.
 
 ### The outermost tier was missing
 

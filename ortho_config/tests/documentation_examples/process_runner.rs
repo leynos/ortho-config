@@ -227,6 +227,8 @@ fn join_reader(
 mod tests {
     //! Regression coverage for subprocess output and duration bounds.
 
+    mod environment;
+
     use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
     use anyhow::{Context, Result};
     use proptest::prelude::*;
