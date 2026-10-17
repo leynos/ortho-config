@@ -14,7 +14,7 @@ use crate::hex::to_lower_hex;
 pub struct CacheKey {
     /// SHA-256 fingerprint of package files that can affect the generated IR.
     pub(crate) fingerprint: String,
-    /// Root input kind, separating package and workspace entries in the cache.
+    /// Qualified root configuration type, separating IR for distinct structs.
     pub(crate) root_type: String,
     /// Generator version, invalidating entries when the producing tool changes.
     pub(crate) tool_version: String,

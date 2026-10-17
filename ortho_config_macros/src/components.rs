@@ -126,14 +126,6 @@ struct LoadImplConfig<'a> {
     cli_bool_fields: Vec<(String, String)>,
 }
 
-/// Keeps generated load arguments alive alongside storage they borrow.
-struct LoadImplResult<'a> {
-    /// Parsed identifiers and token references consumed by the load generator.
-    args: LoadImplArgs<'a>,
-    /// Owns the legacy application name referenced from `args`.
-    legacy_app_name_storage: String,
-}
-
 /// Inputs shared by the independent derive output generators.
 pub(super) struct MacroComponentArgs<'a> {
     /// Name of the user configuration struct being derived.
@@ -170,8 +162,8 @@ fn build_load_impl_args<'a>(
     token_refs: LoadTokenRefs<'a>,
     config: LoadImplConfig<'a>,
     krate: &'a proc_macro2::TokenStream,
-) -> LoadImplResult<'a> {
-    let legacy_app_name_storage = config
+) -> LoadImplArgs<'a> {
+    let legacy_app_name = config
         .struct_attrs
         .prefix
         .as_ref()
@@ -189,12 +181,12 @@ fn build_load_impl_args<'a>(
         default_struct_init,
         config_env_var,
         dotfile_name,
-        legacy_app_name: legacy_app_name_storage.clone(),
+        legacy_app_name,
         discovery: config.discovery_tokens,
         sources: None,
         krate,
     };
-    let args = LoadImplArgs {
+    LoadImplArgs {
         idents,
         tokens,
         has_config_path: config.has_config_path,
@@ -202,10 +194,6 @@ fn build_load_impl_args<'a>(
         profile_env_var: compute_profile_env_var(config.struct_attrs),
         cli_arg_ids: config.cli_arg_ids,
         cli_bool_fields: config.cli_bool_fields,
-    };
-    LoadImplResult {
-        args,
-        legacy_app_name_storage,
     }
 }
 
@@ -275,10 +263,8 @@ pub(super) fn build_macro_components(
         cli_arg_ids,
         cli_bool_fields,
     };
-    let LoadImplResult {
-        args: load_impl_args,
-        legacy_app_name_storage: _legacy_app_name_storage,
-    } = build_load_impl_args(load_impl_idents, load_token_refs, load_impl_config, krate);
+    let load_impl_args =
+        build_load_impl_args(load_impl_idents, load_token_refs, load_impl_config, krate);
     let load_impl = build_load_impl(&load_impl_args);
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {
