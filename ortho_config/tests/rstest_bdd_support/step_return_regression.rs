@@ -41,10 +41,12 @@ struct Level(u8);
 /// Mirrors this crate's own step return alias exactly.
 ///
 /// Written as `anyhow::Result<T>` rather than `Result<T, E>` on purpose:
-/// `anyhow::Result` fixes the error type to `anyhow::Error`, so the alias
-/// under test is the one the crate's steps actually return. Spelling it
-/// `Result<T, &'static str>` would resolve through the imported
-/// `std::result::Result` and quietly test a different type.
+/// `anyhow::Result<T>` defaults its error type to `anyhow::Error`, so the
+/// alias under test is the one the crate's steps actually return. Spelling it
+/// `Result<T, &'static str>` would still name the imported `anyhow::Result` —
+/// an explicit second argument replaces the default rather than selecting a
+/// different `Result` — but it would make the step exercise `&'static str` as
+/// its error type instead of `anyhow::Error`.
 type StepAlias<T> = anyhow::Result<T>;
 
 /// Mirrors `cargo-orthohelp`'s step error type, which is a boxed trait object

@@ -302,13 +302,15 @@ Unexpected findings during implementation that were not anticipated as risks.
   `out_dir` back through the helper.
 - Observation: the V2 regression module's `Anyhow` case did not exercise
   `anyhow::Error` at all. `type StepAlias<T> = Result<T, &'static str>` with
-  `use anyhow::Result` in scope resolves to `std::result::Result`, because
-  `anyhow::Result` fixes its error type to `anyhow::Error` rather than exposing
-  a defaulted second parameter. Evidence: the alias declaration against
-  `anyhow`'s definition of `pub type Result<T, E = Error>`. Impact: the test
-  named the crate's real alias but exercised a different type, so the coverage
-  claim was wrong even though the assertions passed. Repaired by declaring the
-  alias as `anyhow::Result<T>` directly.
+  `use anyhow::Result` in scope still names the imported `anyhow::Result`:
+  `anyhow::Result<T>` defaults its error type to `anyhow::Error`, and the
+  explicit `&'static str` replaced that default rather than selecting a
+  different `Result`. Evidence: `anyhow` 1.0.104 declares
+  `pub type Result<T, E = Error> = core::result::Result<T, E>`, so supplying a
+  second argument to that alias is still the alias. Impact: the test named the
+  crate's real alias but parameterized it with the wrong error type, so the
+  coverage claim was wrong even though the assertions passed. Repaired by
+  declaring the alias as `anyhow::Result<T>` directly.
 
 - Observation: `docs/v0-6-0-migration-guide.md` already exists in this
   repository and is **ortho-config's own** v0.5.0→v0.6.0 application migration
