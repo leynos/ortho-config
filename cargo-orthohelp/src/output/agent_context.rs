@@ -22,7 +22,7 @@ pub fn write_agent_context(
     payload: &AgentContext,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     log_agent_context_start(&payload.package, out_dir);
-    let content = serialize_agent_context(payload)?;
+    let content = serialize_agent_context(out_dir, payload)?;
     let path = write_atomic_json(out_dir, "agent-context.json", &content, "agent-context")?;
     log_agent_context_written(&payload.package, &path, content.len());
     Ok(path)
@@ -80,17 +80,29 @@ fn log_agent_context_written(package: &str, path: &Utf8Path, bytes: usize) {
 }
 
 /// Serialize the agent context, reporting a failure with its input directory.
-fn serialize_agent_context(payload: &AgentContext) -> Result<String, OrthohelpError> {
+fn serialize_agent_context(
+    out_dir: &Utf8Path,
+    payload: &AgentContext,
+) -> Result<String, OrthohelpError> {
     serde_json::to_string_pretty(payload).map_err(|error| {
-        log_agent_context_serialization_failure(&payload.package, &error);
+        log_agent_context_serialization_failure(&payload.package, out_dir, &error);
         OrthohelpError::IrJson(error)
     })
 }
 
 /// Report a serialization failure before it is returned to the caller.
-fn log_agent_context_serialization_failure(package: &str, error: &serde_json::Error) {
+///
+/// The event carries the destination directory under the field name `path`
+/// to match the emission this module inherited from the former
+/// `output.rs`, so existing `path` filters still match.
+fn log_agent_context_serialization_failure(
+    package: &str,
+    out_dir: &Utf8Path,
+    error: &serde_json::Error,
+) {
     tracing::debug!(
         package = %package,
+        path = %out_dir,
         error = %error,
         "failed to serialize agent-context JSON",
     );

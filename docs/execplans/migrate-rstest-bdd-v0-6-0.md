@@ -162,8 +162,11 @@ task into two.
   not because of any repository problem.
 - [x] (2026-10-15) Baseline run completed with `EXIT=101`. Every target passed
   except `ortho_config --test compile_fail`, which failed on the MSRV violation
-  recorded below. This is the V1 comparator and the V2 red stage: the failure
-  is real, is caused by the migration, and is fixed by the lockfile constraint.
+  recorded below. This is the V1 comparator only. The failure is real and is
+  caused by the migration, but it is a compile failure in an unrelated target,
+  so it is **not** a red stage for obligation V2: it says nothing about whether
+  a step returning an aliased `Result` is classified correctly at run time.
+  V2's red stage is the differential control recorded under that obligation.
   Note the baseline is imperfect as a comparator in one respect: the run
   overlapped the manifest edit, so it compiled the 0.6.0 `rstest-bdd` family
   while the trybuild sandbox regenerated against the *pre-existing* sandbox
@@ -284,6 +287,28 @@ task into two.
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
+
+- Observation: the `cargo-orthohelp` output-module split silently dropped a
+  field from one existing diagnostic. The
+  `"failed to serialize agent-context JSON"` event carried `package`, `path` and
+  `error` in the former `output.rs`; the extracted serialization helper in
+  `output/agent_context.rs` initially accepted only the package and the error,
+  so the event lost `path`. Evidence:
+  `git show <base>:cargo-orthohelp/src/ output.rs` shows the three-field
+  emission, and the extracted helper's signature shows only two parameters
+  reaching the event. Impact: any operator filter keyed on `path` for that
+  event would have stopped matching, which is a telemetry regression introduced
+  by a refactor that claimed to preserve the events. Repaired by threading
+  `out_dir` back through the helper.
+- Observation: the V2 regression module's `Anyhow` case did not exercise
+  `anyhow::Error` at all. `type StepAlias<T> = Result<T, &'static str>` with
+  `use anyhow::Result` in scope resolves to `std::result::Result`, because
+  `anyhow::Result` fixes its error type to `anyhow::Error` rather than exposing
+  a defaulted second parameter. Evidence: the alias declaration against
+  `anyhow`'s definition of `pub type Result<T, E = Error>`. Impact: the test
+  named the crate's real alias but exercised a different type, so the coverage
+  claim was wrong even though the assertions passed. Repaired by declaring the
+  alias as `anyhow::Result<T>` directly.
 
 - Observation: `docs/v0-6-0-migration-guide.md` already exists in this
   repository and is **ortho-config's own** v0.5.0→v0.6.0 application migration
@@ -518,6 +543,15 @@ Record every significant decision made while working on the plan.
   1.89.0. Rationale for preferring the pin over the bump: the task permits a
   floor increase but does not require one, and a repository that does not need
   to raise its floor should not. Date/Author: 2026-10-14, migration agent.
+- Decision: verify the V2 step-return contract differentially rather than by
+  a pre-migration red run. Rationale: the regression module uses 0.6.0-only APIs
+  (`InsertOutcome`, `FixtureBorrowError`, the `InsertOutcome`-returning
+  `insert_value`), so it cannot compile against 0.5.0 and cannot stage a red
+  there; and the repository's steps return unit aliases only, so a `Slot<()>`
+  flag mutation is vacuous under both versions. The differential control
+  reproduces 0.5.0's `ReturnKind::Value` arm from upstream source and asserts
+  it disagrees with 0.6.0's `step_return` bridge on both the failing and the
+  succeeding path. Date/Author: 2026-10-18, migration agent.
 - Decision: rebuild the V2 regression module around the published 0.6.0
   runtime semantics rather than around the migration guide's prose. Rationale:
   the first draft asserted `StepError`'s `Display` output equalled the bare
@@ -725,23 +759,62 @@ its verification method.
 
 - Statement: for every scenario, a step returning `Ok(())` does not override a
   fixture used as a flag, and a step returning `Err` fails the scenario.
-- Method: targeted behavioural test plus adversarial mutation.
+- Method: two complementary artefacts — a behavioural regression driving real
+  registered steps, and a differential control against the pre-migration
+  wrapper.
 - Rationale: this is the one 0.6.0 change that alters runtime behaviour for
   code this repository actually contains. A reasoned argument alone is
   insufficient because the failure mode is a *false green*, which the existing
   suite would not report.
 - Domain: the 175 `-> Result<()>` steps and the 6 `Slot<()>` flag fields on
   `ExtendsContext`.
-- Artefact: a focused regression test in the `ortho_config` behavioural
-  support tree.
-- Evidence: the regression test must fail against the pre-migration tree for
-  the intended reason and pass afterwards. Specifically, a "successful unit
-  step does not overwrite a set unit flag" case, and an "erroring aliased step
-  fails the scenario" case.
-- Non-vacuity: the negative control is a mutation that sets two `Slot<()>`
-  flags in one scenario and asserts the first survives a succeeding step. If
-  the harness ignored `Ok(())` payloads entirely the test would pass vacuously;
-  asserting the *post-condition* on the flag distinguishes the two.
+- Artefact: `ortho_config/tests/rstest_bdd_support/step_return_regression.rs`,
+  which drives `execute_step` and mirrors the scenario runner's `insert_value`
+  call, together with
+  `ortho_config/tests/rstest_bdd_support/step_return_dispatch_bridge.rs`, which
+  pins the dispatch contract itself.
+- Evidence: the regression module pins all four combinations of alias shape
+  (`anyhow::Result<T>` and `Result<T, Box<dyn Error + Send + Sync>>`) against
+  outcome (an `Err` fails the scenario; an `Ok(T)` injects `T`, while `Ok(())`
+  injects nothing), and every case passes in the certified run.
+- Non-vacuity, and the correction to this obligation's original plan: the
+  "fail against the pre-migration tree" red stage recorded here originally was
+  **not achievable as written**, for two independent reasons.
+  1. The regression module cannot compile against 0.5.0 at all. It uses
+     `InsertOutcome` and `FixtureBorrowError`, which 0.5.0 does not export, and
+     its `insert_value` returns `Option<Box<dyn Any>>` rather than
+     `InsertOutcome`. A test that cannot be built cannot stage a red.
+  2. The originally specified mutation — two `Slot<()>` flags with the first
+     asserted to survive a succeeding step — would not distinguish anything
+     for this repository's steps. `__rstest_bdd_payload_from_value` drops a
+     unit payload under both versions by `TypeId`, and no step here returns a
+     non-unit alias, so that assertion passes before and after the migration.
+
+  The replacement control is differential, which is what the defect actually is.
+  `rstest-bdd-macros` 0.5.0's `ReturnKind::Value` arm emitted
+  `Ok(__rstest_bdd_payload_from_value(#call))`, and `return_classifier.rs`
+  resolved only syntactic `Result<..>` paths and never type aliases — so an
+  aliased `Result` was boxed as a success value and its `Err` was swallowed.
+  0.6.0 replaced that with the type-directed bridge in
+  `rstest_bdd::step_return`. The bridge module reproduces the 0.5.0 helper and
+  wrapper arm verbatim, drives the 0.6.0 probe and tag, and asserts that the
+  two **disagree** on both the failing and the succeeding path. It therefore
+  fails if the new bridge stops classifying a `Result` alias as a `Result`, and
+  it also fails if the recorded old behaviour stops being the behaviour that
+  produced the false green. Asserting the new behaviour alone would not have
+  that second property. Two further cases pin the tag discrimination those
+  comparisons rest on, comparing tag type names for an aliased `Result` and for
+  a plain payload. Without them a probe that answered `StepReturnResultTag` for
+  every input would satisfy each differential check while discriminating
+  nothing.
+
+  A true "run 0.5.0 and watch it fail" stage remains unavailable: the
+  pre-migration dependency is gone from the lockfile, and re-adding it would
+  force the workspace's step macros back to 0.5.0 too. This limitation is
+  recorded rather than papered over. One further scope note: the differential
+  covers `anyhow::Result<T>` directly. The boxed-error shape shares the same
+  bridge arm and is covered by the behavioural module, but it is not probed
+  differentially.
 
 ### Obligation V3: dependency and lockfile state is fully migrated
 
@@ -793,7 +866,15 @@ its verification method.
 - Windows-target behaviour is not exercised by any local gate. This
   repository has Windows CI legs; the local verification can only proxy them.
 - Per-scenario behavioural equivalence is argued from suite results plus the
-  targeted V2 regression, not exhaustively proven for all 127 scenarios.
+  targeted V2 regression and its differential control, not exhaustively proven
+  for all 127 scenarios.
+- Obligation V2 has no literal red run against 0.5.0. The differential control
+  emulates the pre-migration wrapper from upstream source instead, because the
+  regression module cannot compile against 0.5.0. The control is stronger than
+  a restated assertion but weaker than observing the old dependency fail.
+- The differential control probes `anyhow::Result<T>` directly. The boxed-error
+  alias shape shares the same classification bridge and is covered by the
+  behavioural module, but it is not probed differentially.
 
 ## Plan of work
 
@@ -833,7 +914,9 @@ Validation: `cargo tree -i rstest-bdd` reports 0.6.0; the lockfile has no 0.5.0
 ### Stage D: source and behavioural changes (milestone EP-M2)
 
 Classify and apply only the changes the applicability matrix marks as required.
-Add the V2 regression coverage. Rebuild and rerun the behavioural suites.
+Add the V2 regression coverage: the behavioural module that drives registered
+steps, and the differential bridge module that pins the dispatch contract.
+Rebuild and rerun the behavioural suites.
 
 ### Stage E: documentation and gates (milestone EP-M3)
 
@@ -878,8 +961,10 @@ maintenance rules require. Run every gate.
   `RBDD-060-BREAK-step-alias`, and the recorded inapplicability of the
   feature-path and harness items.
 - Acceptance evidence: the migration checklist with each item dispositioned;
-  the V2 regression test failing pre-migration and passing post-migration; the
-  scenario inventory comparison.
+  the V2 behavioural regression passing, plus the V2 differential control
+  showing 0.6.0 and the emulated pre-migration wrapper disagree on an aliased
+  `Result` (see the V2 obligation for why a literal pre-migration run is not
+  achievable); the scenario inventory comparison.
 - Conformance check:
   - Applicability matrix fully dispositioned.
   - No production API changed.
@@ -1011,3 +1096,14 @@ collides with an unrelated repository document, so a prefixed name is used
 instead. The applicability matrix and the full migration checklist are
 maintained in the Progress, Decision log and Surprises sections as work
 proceeds.
+
+Revision, 2026-10-18: closed three findings from an independent assessment of
+the delivered head. Restored the `path` field on the agent-context
+serialization-failure event, which the output-module split had dropped; made
+the V2 `Anyhow` alias actually `anyhow::Result<T>`; and replaced the V2 red
+stage claim, which the delivered tests neither performed nor could perform,
+with a differential control against the emulated pre-migration wrapper. The
+obligation's method, evidence, acceptance line, residual gaps and the recorded
+baseline all changed with that correction; the `COMPLETE` status is unchanged
+because the implemented behaviour was already correct and the repairs tighten
+the evidence rather than the code path.

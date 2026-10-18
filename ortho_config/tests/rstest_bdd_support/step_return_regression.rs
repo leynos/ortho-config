@@ -38,9 +38,14 @@ use rstest_bdd_macros::{given, then};
 #[derive(Debug, PartialEq, Eq)]
 struct Level(u8);
 
-/// Alias of `Result<T, E>` with a `Display` error, mirroring the
-/// `anyhow::Result` alias used by this crate's own steps.
-type StepAlias<T> = Result<T, &'static str>;
+/// Mirrors this crate's own step return alias exactly.
+///
+/// Written as `anyhow::Result<T>` rather than `Result<T, E>` on purpose:
+/// `anyhow::Result` fixes the error type to `anyhow::Error`, so the alias
+/// under test is the one the crate's steps actually return. Spelling it
+/// `Result<T, &'static str>` would resolve through the imported
+/// `std::result::Result` and quietly test a different type.
+type StepAlias<T> = anyhow::Result<T>;
 
 /// Mirrors `cargo-orthohelp`'s step error type, which is a boxed trait object
 /// rather than a concrete error, so the `Display` bound is exercised through
@@ -56,7 +61,7 @@ type StepOutcome = std::result::Result<Option<Box<dyn Any>>, ExecutionError>;
 /// An alias whose `Err` must fail the scenario rather than pass silently.
 #[given("a step return alias reports failure")]
 fn alias_reports_failure() -> StepAlias<()> {
-    Err("aliased step failed")
+    Err(anyhow::anyhow!("aliased step failed"))
 }
 
 /// An alias whose `Ok(())` must produce no override payload.
