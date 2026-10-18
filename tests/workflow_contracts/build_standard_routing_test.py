@@ -243,21 +243,33 @@ def test_make_lint_whitaker_takes_none_of_the_standard() -> None:
     assert PREFLIGHT_SCRIPT not in lines, "lint-whitaker needs none of the standard's tools"
 
 
-def test_make_msrv_check_is_a_stable_check_without_the_standard() -> None:
-    """The MSRV lane checks every target on the MSRV toolchain and runs no tests.
+def test_make_msrv_build_is_a_stable_build_without_the_standard() -> None:
+    """The MSRV lane builds every target on the MSRV toolchain and runs no tests.
 
-    A stable compiler refuses ``-Zthreads`` and the backend flag, so the
-    assignment must displace the configuration rather than inherit it.
+    A stable compiler refuses ``-Zthreads``, so the assignment must displace the
+    configuration rather than inherit it.
     """
-    lines = dry_run("msrv-check", host=HOSTS["linux_x86_64"])
+    lines = dry_run("msrv-build", host=HOSTS["linux_x86_64"])
     (line,) = cargo_lines(lines)
     flags = assigned_rustflags(line)
-    assert flags is not None, f"msrv-check leaves the nightly-only flags in force: {line!r}"
-    assert not development_flags(flags), f"msrv-check carries {sorted(development_flags(flags))}"
+    assert flags is not None, f"msrv-build leaves the nightly-only flags in force: {line!r}"
+    assert not development_flags(flags), f"msrv-build carries {sorted(development_flags(flags))}"
     tokens = line.split()
-    assert tokens[tokens.index("probe-cargo") + 1].startswith("+"), f"no `+toolchain` selection: {line!r}"
-    assert "check" in tokens and "--all-targets" in tokens, f"msrv-check is not an all-targets check: {line!r}"
-    assert not {"test", "nextest", "llvm-cov"} & set(tokens), f"msrv-check runs tests: {line!r}"
+    selection = tokens[tokens.index("probe-cargo") + 1]
+    assert selection.startswith("+"), f"no `+toolchain` selection: {line!r}"
+    assert tokens[tokens.index("probe-cargo") + 2] == "build", f"msrv-build does not build: {line!r}"
+    assert {"--workspace", "--all-targets", "--all-features"} <= set(tokens), line
+    assert not {"test", "nextest", "llvm-cov"} & set(tokens), f"msrv-build runs tests: {line!r}"
+
+
+def test_make_msrv_build_takes_the_toolchain_it_is_given() -> None:
+    """CI passes the matrix leg in, and the default is the manifest's ``major.minor``."""
+    (given,) = cargo_lines(dry_run("msrv-build", "MSRV=1.2", host=HOSTS["linux_x86_64"]))
+    assert "probe-cargo +1.2 build" in given, given
+    (default,) = cargo_lines(dry_run("msrv-build", host=HOSTS["linux_x86_64"]))
+    manifest = tomllib.loads((REPOSITORY_ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+    declared = ".".join(manifest["workspace"]["package"]["rust-version"].split(".")[:2])
+    assert f"probe-cargo +{declared} build" in default, default
 
 
 OPT_OUT_CASES: typ.Final[list[object]] = [

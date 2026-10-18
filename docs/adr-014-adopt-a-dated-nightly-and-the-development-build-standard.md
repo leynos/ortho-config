@@ -92,7 +92,7 @@ routes displacing the configuration instead.
   uses `$(RELEASE_RUSTFLAGS)`, which assigns an empty `RUSTFLAGS` on purpose to
   displace the configuration. Coverage and packaging assign `RUSTFLAGS` in
   their workflows. `make lint-whitaker` assigns `-D warnings` alone, because
-  Whitaker runs on its own toolchain. `make msrv-check` assigns `-D warnings`
+  Whitaker runs on its own toolchain. `make msrv-build` assigns `-D warnings`
   and selects `+$(MSRV)`, a stable toolchain whose version is read from
   `Cargo.toml` (currently 1.89.0). The beta lane sets `BUILD_STANDARD=0`.
 - Provision the build tools explicitly. `make install-build-tools` installs the
@@ -103,8 +103,17 @@ routes displacing the configuration instead.
   failure tells the contributor to run `make install-build-tools`. CI installs
   the same pinned `mold` through the shared `setup-rust` action's
   `install-mold` input in `build-test` and in the coverage publisher job.
-- Add an MSRV check job to CI that runs `make msrv-check`: `cargo check` over
-  every target on the declared MSRV, never a second test run.
+- Add an MSRV build job to CI: a matrix job keyed by `toolchain`, with one
+  quoted leg equal to the manifest's `rust-version` as major.minor, that runs
+  `make msrv-build MSRV=${{ matrix.toolchain }}`. It runs `cargo build` over
+  every target with all features on the declared MSRV, never a test run. The
+  estate rule RT-026 states a cost rule of `cargo check --all-targets`; the
+  maintainer chose a build instead, which is stronger because it also links and
+  is still not a test run. The numeric leg is what RT-026 detects.
+- Keep releases on the pinned nightly. `rust-build-release` resolves the
+  toolchain from `rust-toolchain.toml`, and `release.yml` names no toolchain,
+  so the Dependabot-maintained pin governs releases with production flags only.
+  No workflow names a dated nightly other than the pin (estate rule RT-027).
 - Add a daily `rust-toolchain` entry to `.github/dependabot.yml` so the pin
   stays within the 56-day window.
 
@@ -124,8 +133,8 @@ is not replicated here.
 - Nightly Cargo warns `cargo::unused_workspace_package_fields` for four
   `[workspace.package]` fields that the release scripts nevertheless read.
 - Releases built by `rust-build-release` resolve their toolchain from
-  `rust-toolchain.toml`, so published binaries are now built by the pinned
-  nightly, with production flags only: LLVM, the platform linker, and
+  `rust-toolchain.toml`, so published binaries are built by the pinned nightly,
+  by decision, with production flags only: LLVM, the platform linker, and
   `-D warnings`.
 - Mutation testing relies on the shared `setup-rust` default `RUSTFLAGS` to
   displace the configuration, and no repository contract covers that.
