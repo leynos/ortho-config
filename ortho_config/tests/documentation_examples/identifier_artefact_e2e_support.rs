@@ -253,13 +253,19 @@ pub(super) fn artefact_path(out_dir: &Path) -> Result<Option<PathBuf>> {
         Ok(directory) => directory,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
-            return Err(error).context("open fixture build-script output directory");
+            return Err(error).with_context(|| {
+                format!(
+                    "open fixture build-script output directory {}",
+                    out_dir.display()
+                )
+            });
         }
     };
     let relative_path = Path::new("ortho-config/cli-identifiers.json");
-    Ok(directory
-        .exists(relative_path)
-        .then(|| out_dir.join(relative_path)))
+    let exists = directory.try_exists(relative_path).with_context(|| {
+        format!("inspect identifier artefact under {}", out_dir.display())
+    })?;
+    Ok(exists.then(|| out_dir.join(relative_path)))
 }
 
 /// Read the emitted identifier artefact, failing when it is absent.
@@ -279,4 +285,26 @@ fn retain_runner_error(error: anyhow::Error, operation: &str) -> anyhow::Error {
     } else {
         error.context(format!("{operation} subprocess failed"))
     }
+}
+
+#[test]
+fn artefact_path_reports_non_not_found_lookup_errors() {
+    let output = tempfile::tempdir().expect("create a temporary output directory");
+    std::fs::write(output.path().join("ortho-config"), "not a directory")
+        .expect("write a file at the artefact directory path");
+
+    let error = artefact_path(output.path())
+        .expect_err("a non-directory artefact parent must not read as absence");
+    let io_error = error
+        .downcast_ref::<io::Error>()
+        .expect("the cause is the filesystem error");
+    assert_ne!(
+        io_error.kind(),
+        io::ErrorKind::NotFound,
+        "the invalid parent must report its filesystem error"
+    );
+    assert!(
+        error.to_string().contains(&output.path().display().to_string()),
+        "the error names the output directory: {error}"
+    );
 }
