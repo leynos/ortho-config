@@ -260,7 +260,10 @@ project:
   for a gate or `$(DEBUG_RUSTFLAGS)` for a debug build.
 - Release, Whitaker, MSRV, and coverage builds take none of the standard, on
   purpose.
-- `make msrv-check` exercises the declared MSRV on its own stable toolchain.
+- `make msrv-build` builds the declared MSRV on its own stable toolchain and
+  runs no tests.
+- Releases use the pinned nightly from `rust-toolchain.toml`; no workflow names
+  another toolchain for them.
 - See the "Development build standard" section of `docs/developers-guide.md`
   for the routing matrix.
 

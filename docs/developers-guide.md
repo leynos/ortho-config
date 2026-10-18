@@ -2567,7 +2567,7 @@ they take.
 | `make build`                                         | The host's standard, restated; no `-D warnings`                              | Development          |
 | `make release`                                       | None: an empty assignment displaces the configuration                        | Production           |
 | `make lint-whitaker`                                 | `-D warnings` alone                                                          | Whitaker's toolchain |
-| `make msrv-check`                                    | `-D warnings` alone, on the stable MSRV compiler                             | MSRV                 |
+| `make msrv-build`                                    | `-D warnings` alone, on the stable MSRV compiler                             | MSRV                 |
 | `clippy-beta` lane                                   | `-D warnings` alone, with `BUILD_STANDARD=0` on `cargo +beta`                | Advisory beta        |
 | Coverage in CI                                       | `-D warnings` from the job; `cargo llvm-cov` appends `-Cinstrument-coverage` | Coverage             |
 | Release builds and packaging in CI                   | `-D warnings` from an explicit job-level `RUSTFLAGS`                         | Production           |
@@ -2584,8 +2584,11 @@ Notes on individual rows:
   `-D warnings` by design.
 - `make lint-whitaker` assigns `RUSTFLAGS="-D warnings"` alone. Whitaker runs on
   its installer-managed toolchain and takes none of the standard.
-- `make msrv-check` runs on a stable compiler, which refuses the nightly-only
+- `make msrv-build` runs on a stable compiler, which refuses the nightly-only
   flags, so it assigns `-D warnings` alone to displace the configuration.
+- Releases are not a development route and are not built on a stable compiler:
+  they use the pinned nightly with production flags only. See
+  [Releases use the pinned nightly](#releases-use-the-pinned-nightly).
 - Coverage is `generate-coverage` in the `build-test` job and in
   `coverage-main.yml`. The job-level `RUSTFLAGS: -D warnings` displaces the
   configuration, so a coverage build has neither `mold` nor the parallel
@@ -2633,7 +2636,7 @@ the pinned toolchain. Two targets provision and verify them:
 
 The check runs before `test`, `typecheck`, `lint-clippy` (and therefore `lint`)
 and the debug `build`. It never runs before `release`, `lint-whitaker` or
-`msrv-check`, so a release build does not fail for want of a linker it will not
+`msrv-build`, so a release build does not fail for want of a linker it will not
 use. Under `BUILD_STANDARD=0` it is a no-op.
 
 The Makefile puts `$(BUILD_TOOLS_PREFIX)/bin` first on `PATH` on every host
@@ -2724,6 +2727,16 @@ the published rustup manifests.
 `scripts/build-tools-common.sh` reads the channel from `rust-toolchain.toml`,
 so the installer and the check follow the pin and no second copy exists.
 
+### Releases use the pinned nightly
+
+Releases stay on the pinned nightly; this is a maintainer decision.
+`rust-build-release` resolves the toolchain from an explicit input, then from
+`rust-toolchain.toml`, then from the manifest `rust-version`. `release.yml`
+passes no `toolchain` input and names no toolchain, so the
+Dependabot-maintained pin governs releases. They take production flags only:
+`RUSTFLAGS: -D warnings`, LLVM and the platform linker. No workflow names a
+dated nightly other than the pin (estate rule RT-027).
+
 ### Dependabot keeps the pin fresh
 
 `.github/dependabot.yml` carries a `rust-toolchain` entry on `/`. It runs
@@ -2775,21 +2788,44 @@ Dependabot proposes the bump. A human reviewing the pull request must:
 ### The MSRV lane
 
 The workspace `rust-version` is 1.89.0 and CI exercises it. The `msrv` job in
-`ci.yml` installs `"1.89.0"`, quoted in YAML so that it is not read as a
-number, through the pinned `dtolnay/rust-toolchain` action, and runs
-`make msrv-check`. That target is:
+`ci.yml` is a matrix job keyed by `toolchain`, with one leg, `"1.89"`, quoted
+in YAML so that it is not read as a number. The leg installs
+`${{ matrix.toolchain }}` through the pinned `dtolnay/rust-toolchain` action
+and runs `make msrv-build MSRV=${{ matrix.toolchain }}`. That target is:
 
 ```bash
-RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) check --workspace --all-targets --all-features
+RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features
 ```
 
-The Makefile reads `MSRV` from the manifest, so the check cannot drift from the
-promise. The estate cost rule is a check, never a second test run: a test run
-would repeat what `build-test` has established on the pinned toolchain.
-`RUSTFLAGS` is assigned so that the nightly-only flags in the Cargo
-configuration are displaced, because a stable compiler refuses them.
-`build_exclusions_test.py` holds the job's installed version equal to the
-manifest's and its only step to `make msrv-check`.
+`MSRV` defaults to the manifest's `rust-version` as major.minor (currently
+1.89), so a local run cannot drift from the promise; CI passes the matrix value
+explicitly. The leg builds every workspace target with all features and runs no
+test.
+
+The lane builds rather than checks by a deliberate maintainer choice. The
+estate rule RT-026 states a cost rule of `cargo check --all-targets` on the
+MSRV and never a second test run. A build is stronger than a check, because it
+also links, and it is still not a test run. The numeric leg, equal in
+major.minor to the MSRV, is what RT-026 detects. Behaviour is established on
+the pinned toolchain by `build-test`, so a test run here would only repeat it.
+The command was proved by running it on 1.89.
+
+The leg must not inherit the nightly flags. `.cargo/config.toml` carries
+`-Zthreads=8`, which a stable compiler rejects, so the recipe assigns
+`RUSTFLAGS` to displace it, as the coverage route does. `mold` is not required
+on this leg.
+
+`build_exclusions_test.py` and `build_standard_routing_test.py` hold the lane
+in place:
+
+- The matrix leg equals the manifest's `rust-version` as major.minor, so the
+  two cannot drift, and it is quoted in YAML.
+- The job installs `matrix.toolchain` and runs only
+  `make msrv-build MSRV=${{ matrix.toolchain }}`. It runs no test command and
+  sets no nightly flag in its environment.
+- The Make recipe builds, and does not test, with
+  `--workspace --all-targets --all-features`. It selects `+toolchain`, assigns
+  `RUSTFLAGS` without any standard flag, and takes the toolchain it is given.
 
 ### The workspace-package warning
 
@@ -3933,14 +3969,14 @@ set -o pipefail; make markdownlint 2>&1 | tee /tmp/make-markdownlint.log
 set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
 ```
 
-Two further targets complete the set. `make msrv-check` checks every target on
+Two further targets complete the set. `make msrv-build` builds every target on
 the declared MSRV toolchain without running tests (see
 [The MSRV lane](#the-msrv-lane)), and `make test-workflow-contracts` runs the
 workflow and build-standard contracts (see
 [Workflow contract gate](#workflow-contract-gate)):
 
 ```bash
-set -o pipefail; make msrv-check 2>&1 | tee /tmp/make-msrv-check.log
+set -o pipefail; make msrv-build 2>&1 | tee /tmp/make-msrv-build.log
 set -o pipefail; make test-workflow-contracts 2>&1 | tee /tmp/make-test-workflow-contracts.log
 ```
 

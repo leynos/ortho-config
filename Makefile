@@ -1,4 +1,4 @@
-.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck msrv-check python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts install-build-tools check-build-tools FORCE
+.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck msrv-build python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts install-build-tools check-build-tools FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -51,9 +51,11 @@ DEBUG_RUSTFLAGS = RUSTFLAGS="$(STANDARD_RUSTFLAGS)"
 # to the empty string, displaces the configuration file's `rustflags` tables,
 # which is the whole mechanism.
 RELEASE_RUSTFLAGS = RUSTFLAGS=""
-# The MSRV is read from the manifest so the check cannot drift from the promise.
-# `?=` is lazily expanded, so the shell only runs for the target that needs it.
-MSRV ?= $(shell awk -F'"' '/^rust-version[[:space:]]*=/ { print $$2; exit }' Cargo.toml)
+# The MSRV is read from the manifest, as major.minor, so the build cannot drift
+# from the promise. CI's matrix leg names the same major.minor and passes it in
+# (MSRV=1.89), and a contract holds the two equal. `?=` is lazily expanded, so
+# the shell only runs for the target that needs it.
+MSRV ?= $(shell awk -F'"' '/^rust-version[[:space:]]*=/ { print $$2; exit }' Cargo.toml | cut -d. -f1,2)
 # The build-tools install prefix leads PATH: `-fuse-ld=mold` resolves by PATH
 # order, so the pinned release must outrank any distribution `mold`. Windows
 # separates PATH entries with `;`, so the prefix is not prepended there.
@@ -261,12 +263,16 @@ docstring-coverage: ## Require complete docstrings for every Python source file
 typecheck: check-build-tools ## Typecheck workspace (cargo check)
 	$(GATE_RUSTFLAGS) $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
-# Exercises the declared MSRV, and nothing more: `cargo check` over every target,
-# never a second test run. The MSRV is a stable toolchain, which refuses the
+# Builds every target on the declared MSRV, and runs nothing: a build proves the
+# code compiles and links for the oldest compiler the crates promise to support,
+# and the `build-test` job has already established behaviour on the pinned
+# toolchain. It is stronger than the estate's `cargo check --all-targets` cost
+# rule and still no second test run (a deliberate choice, recorded in the
+# developers' guide). The MSRV is a stable toolchain, which refuses the
 # standard's nightly-only flags, so `RUSTFLAGS` is assigned to displace the
 # configuration's `rustflags` tables rather than inherit them.
-msrv-check: ## Check every target on the declared MSRV toolchain (no tests)
-	RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) check --workspace --all-targets --all-features $(BUILD_JOBS)
+msrv-build: ## Build every target on the declared MSRV toolchain (no tests)
+	RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features $(BUILD_JOBS)
 
 install-build-tools: ## Install the pinned mold linker and the pinned toolchain
 	@scripts/install-build-tools.sh

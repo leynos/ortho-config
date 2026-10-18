@@ -444,22 +444,26 @@ jobs:
           BUILD_STANDARD: '0'
         run: make lint-clippy
 
-  # Exercises the declared MSRV (`rust-version` in Cargo.toml) and nothing more.
-  # The estate's cost rule for this lane is `cargo check --all-targets` on the
-  # MSRV toolchain and never a second test run: a test run proves behaviour the
-  # `build-test` job has already established on the pinned toolchain, while a
-  # check proves that the code still compiles for the oldest compiler the
-  # crates promise to support. Version quoted so YAML does not read 1.89.0 as
-  # a number. tests/workflow_contracts/build_exclusions_test.py holds it equal
-  # to the manifest.
+  # Builds every workspace target on the declared MSRV (`rust-version` in
+  # Cargo.toml) and runs no test. The estate's cost rule for this lane is
+  # `cargo check --all-targets` and never a second test run; a build is stronger
+  # than a check (it also links) and is still not a test run, and was asked for
+  # by the maintainer. `build-test` has already established behaviour on the
+  # pinned toolchain. The leg is keyed by toolchain and quoted so YAML does not
+  # read 1.89 as a number; tests/workflow_contracts/build_exclusions_test.py
+  # holds it equal to the manifest's major.minor, so the two cannot drift.
   msrv:
-    name: msrv (cargo check)
+    name: msrv (${{ matrix.toolchain }} build)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.89"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -467,14 +471,14 @@ jobs:
       - name: Install the MSRV toolchain
         uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f  # master
         with:
-          toolchain: "1.89.0"
+          toolchain: ${{ matrix.toolchain }}
 
-      # `make msrv-check` assigns RUSTFLAGS, which displaces the nightly-only
+      # `make msrv-build` assigns RUSTFLAGS, which displaces the nightly-only
       # flags in `.cargo/config.toml` that a stable compiler refuses, and
-      # selects the toolchain with `+1.89.0`, which bypasses the pinned
+      # selects the toolchain with `+<version>`, which bypasses the pinned
       # nightly in rust-toolchain.toml.
-      - name: Check every target on the MSRV
-        run: make msrv-check
+      - name: Build every target on the MSRV
+        run: make msrv-build MSRV=${{ matrix.toolchain }}
 
   binstall-packaging:
     name: Packaging dry run (${{ matrix.target }})
