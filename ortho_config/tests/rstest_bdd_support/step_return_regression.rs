@@ -27,6 +27,7 @@
 use std::any::Any;
 
 use anyhow::Result;
+use rstest::rstest;
 use rstest_bdd::{
     FixtureBorrowError, InsertOutcome, StepContext, StepError, StepKeyword,
     execution::{ExecutionError, StepExecutionRequest, execute_step},
@@ -116,6 +117,15 @@ fn run_step(keyword: StepKeyword, text: &str, ctx: &mut StepContext<'_>) -> Step
     execute_step(&request(keyword, text), ctx)
 }
 
+/// Drives one `Given` step to completion against a fresh context.
+///
+/// The outcome owns its injected payload, so the context need not outlive the
+/// call; each test body is left with its assertion alone.
+fn outcome_of_given(step: &str) -> StepOutcome {
+    let mut ctx = StepContext::default();
+    run_step(StepKeyword::Given, step, &mut ctx)
+}
+
 /// Unwraps a failing outcome, panicking with `context` when the step passed.
 fn expect_failure(outcome: StepOutcome, context: &str) -> ExecutionError {
     match outcome {
@@ -158,80 +168,86 @@ fn assert_handler_failed(failure: ExecutionError, expected: &str) {
     );
 }
 
+/// The two step-return alias shapes whose semantics must agree.
+///
+/// They differ only in how the error type reaches the `Display` bound:
+/// `anyhow::Result` uses a concrete error, while `cargo-orthohelp`'s steps use
+/// a boxed trait object. Each regression case runs once per shape, so the
+/// assertions exist in one place instead of being copied per shape.
+#[derive(Clone, Copy, Debug)]
+enum AliasShape {
+    /// `Result<T, anyhow::Error>`.
+    Anyhow,
+    /// `Result<T, Box<dyn Error + Send + Sync>>`.
+    Boxed,
+}
+
+impl AliasShape {
+    /// The `Given` step that reports a handler failure for this shape.
+    const fn failure_step(self) -> &'static str {
+        match self {
+            Self::Anyhow => "a step return alias reports failure",
+            Self::Boxed => "a boxed-error step alias reports failure",
+        }
+    }
+
+    /// The handler message this shape's failing step carries.
+    const fn failure_message(self) -> &'static str {
+        match self {
+            Self::Anyhow => "aliased step failed",
+            Self::Boxed => "boxed aliased step failed",
+        }
+    }
+
+    /// The `Given` step that injects a level for this shape.
+    const fn success_step(self) -> &'static str {
+        match self {
+            Self::Anyhow => "a step return alias reports a level of 7",
+            Self::Boxed => "a boxed-error step alias reports a level of 3",
+        }
+    }
+
+    /// The level `success_step` injects for this shape.
+    const fn level(self) -> u8 {
+        match self {
+            Self::Anyhow => 7,
+            Self::Boxed => 3,
+        }
+    }
+}
+
 /// An aliased `Result` step that returns `Err` must fail the scenario.
 ///
 /// Before ADR-019 a fallible alias could be emitted as a value, boxing its
 /// `Err` as an unused payload and letting the scenario pass. This test is the
 /// non-vacuous guard that the defect stays fixed: it reaches the step, and it
 /// asserts the failure, so removing dispatch would fail it.
-#[test]
-fn aliased_err_fails_the_scenario() {
-    let mut ctx = StepContext::default();
+#[rstest]
+#[case::anyhow_alias(AliasShape::Anyhow)]
+#[case::boxed_alias(AliasShape::Boxed)]
+fn aliased_err_fails_the_scenario(#[case] shape: AliasShape) {
     let error = expect_failure(
-        run_step(
-            StepKeyword::Given,
-            "a step return alias reports failure",
-            &mut ctx,
-        ),
+        outcome_of_given(shape.failure_step()),
         "an Err from an aliased step must fail the scenario",
     );
-    assert_handler_failed(error, "aliased step failed");
-}
-
-/// The boxed-error alias must behave identically to the `anyhow` one.
-///
-/// `cargo-orthohelp`'s steps use `Result<T, Box<dyn Error + Send + Sync>>`,
-/// which reaches the `Display` bound through a trait object. A trait object
-/// can lose `Display` in a way a concrete type cannot, so it is asserted
-/// separately rather than assumed.
-#[test]
-fn boxed_error_alias_fails_the_scenario() {
-    let mut ctx = StepContext::default();
-    let error = expect_failure(
-        run_step(
-            StepKeyword::Given,
-            "a boxed-error step alias reports failure",
-            &mut ctx,
-        ),
-        "an Err from a boxed-error alias must fail the scenario",
-    );
-    assert_handler_failed(error, "boxed aliased step failed");
+    assert_handler_failed(error, shape.failure_message());
 }
 
 /// An aliased `Ok(T)` step must inject `T`, not a boxed `Result`.
-#[test]
-fn aliased_ok_injects_the_inner_payload() {
-    let mut ctx = StepContext::default();
+///
+/// The two shapes use different levels so a payload injected by one cannot be
+/// mistaken for the other's.
+#[rstest]
+#[case::anyhow_alias(AliasShape::Anyhow)]
+#[case::boxed_alias(AliasShape::Boxed)]
+fn aliased_ok_injects_the_inner_payload(#[case] shape: AliasShape) {
     let payload = expect_payload(
-        run_step(
-            StepKeyword::Given,
-            "a step return alias reports a level of 7",
-            &mut ctx,
-        ),
+        outcome_of_given(shape.success_step()),
         "an Ok from an aliased step must not fail",
     );
     assert_eq!(
         payload.downcast_ref::<Level>(),
-        Some(&Level(7)),
-        "the injected payload must be the inner T, not a boxed Result"
-    );
-}
-
-/// The boxed-error alias must also inject its inner payload on `Ok`.
-#[test]
-fn boxed_error_alias_ok_injects_the_inner_payload() {
-    let mut ctx = StepContext::default();
-    let payload = expect_payload(
-        run_step(
-            StepKeyword::Given,
-            "a boxed-error step alias reports a level of 3",
-            &mut ctx,
-        ),
-        "an Ok from a boxed-error alias must not fail",
-    );
-    assert_eq!(
-        payload.downcast_ref::<Level>(),
-        Some(&Level(3)),
+        Some(&Level(shape.level())),
         "the injected payload must be the inner T, not a boxed Result"
     );
 }

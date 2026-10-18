@@ -254,6 +254,32 @@ task into two.
   and 18 + 6 + 4 = 28, the total the acceptance criteria use), and the commit
   count (four work commits plus the delivery record). All are
   documentation-only corrections.
+- [x] (2026-10-18) CodeScene repairs after the Code Health Review raised five
+  findings against the migration's own delta. Every finding was introduced by
+  this branch — the four files it flagged scored 10.0 at base `67fdb341`, and
+  the fifth (`telemetry_events.rs`) exists only here — so the failures are
+  branch regressions, not inherited debt. All five are repaired by
+  decomposition, none by suppression, threshold change, rule disabling or
+  metric gaming:
+  - `ortho_config/tests/rstest_bdd_support/step_return_regression.rs`:
+    four shape-identical tests collapsed into two `#[rstest]` cases driven by
+    a new `AliasShape` enum and one `outcome_of_given` driver. The
+    parameterization keeps both alias shapes in the regression net.
+  - `ortho_config/src/discovery/telemetry_events.rs`: the six-and-two
+    duplicated emitters collapse to one `tracing` call each, and the module
+    is folded back into `telemetry.rs`, which then measures 352 lines. See
+    the superseding observation under *Surprises & discoveries*.
+  - `cargo-orthohelp/src/rustflags.rs`: newtypes (`RustflagsVariable`,
+    `RustflagsValue`, `RustflagToken`) plus one `Delimiter`-selected
+    sanitizer replace the `&str`-parameterized helpers and the two
+    near-identical sanitizers.
+  - `cargo-orthohelp/src/output/mod.rs`: two loggers merge into one
+    `DirectoryStage`-parameterized emitter.
+  - `cargo-orthohelp/src/agent_context/mod.rs`: a `SelectorFlag` newtype
+    replaces the bare `&str` threaded through three selector helpers.
+  Result: all five files report 10.0, and `cs delta 67fdb341` reports "No
+  issues found in checked changes". Emitted events are unchanged: same names,
+  fields, messages and metric labels.
 
 ## Surprises & discoveries
 
@@ -407,12 +433,24 @@ Unexpected findings during implementation that were not anticipated as risks.
     suppressed — the task forbids silencing lints. Each event spelling moved
     into its own small function, so every function contains at most one
     `tracing` call and the bridge expansion counts once rather than twice per
-    function. `ortho_config`'s emitters live in a new
-    `discovery/telemetry_events.rs`, split out because the added helpers took
-    `telemetry.rs` past the 400-line ceiling (the same pressure that produced
-    `telemetry_counters.rs`). `cargo-orthohelp`'s emitters were extracted
-    alongside their call sites. No event field, message, metric or control flow
-    changed; the emitted events are byte-identical.
+    function. `cargo-orthohelp`'s emitters were extracted alongside their call
+    sites. No event field, message, metric or control flow changed; the emitted
+    events are byte-identical.
+  - **Superseded (2026-10-18) by the CodeScene repair.** This entry originally
+    claimed that `ortho_config`'s emitters lived in a new
+    `discovery/telemetry_events.rs`, "split out because the added helpers took
+    `telemetry.rs` past the 400-line ceiling", and its module doc went further:
+    that "omit a field when its value is absent" *cannot* be written as one
+    call. Both claims were wrong. `tracing-core` implements `Value` for
+    `Option<T>` by recording nothing for `None`, and a bare identifier in a
+    field list passes the value through untouched, so one call *can* omit an
+    absent optional field. With the duplicated spellings gone, the emitters fit
+    back into `telemetry.rs` at 352 lines, so the split had no remaining
+    justification and was reverted; `telemetry_events.rs` is deleted. The
+    residual constraint is narrower and still real: each *function* may hold
+    only one `tracing` call, because the `log`-bridge expansion is counted per
+    expansion. The original text is kept here rather than deleted so a future
+    reader does not re-derive the same false constraint from the same symptom.
 - Observation (superseded): an earlier entry in this plan attributed the red
   lint to a stale local toolchain pin (1.89 against CI's 1.99) and concluded
   the branch merely needed replaying onto `main`. That was wrong. The branch

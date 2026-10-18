@@ -162,7 +162,7 @@ fn log_atomic_write_complete(artefact: &str, path: &Utf8Path, bytes: usize) {
 /// Create the output directory, reporting why it could not be prepared.
 fn prepare_output_dir(out_dir: &Utf8Path, artefact: &str) -> Result<Dir, OrthohelpError> {
     ensure_dir(out_dir).inspect_err(|error| {
-        log_output_directory_prepare_failure(artefact, out_dir, error);
+        log_output_directory_failure(DirectoryStage::Prepare, artefact, out_dir, error);
     })
 }
 
@@ -173,12 +173,36 @@ fn sync_output_parent_dir(
     artefact: &str,
 ) -> Result<(), OrthohelpError> {
     sync_parent_dir(dir, out_dir).inspect_err(|error| {
-        log_output_directory_sync_failure(artefact, out_dir, error);
+        log_output_directory_failure(DirectoryStage::Sync, artefact, out_dir, error);
     })
 }
 
-/// Report that the JSON output directory could not be prepared.
-fn log_output_directory_prepare_failure(
+/// The directory stage whose failure is being reported.
+///
+/// Both stages log the same fields and differ only in the verb, so they share
+/// one emitter. A stage that is not listed here has no diagnostic, which is
+/// what the closed enum is for.
+#[derive(Clone, Copy)]
+enum DirectoryStage {
+    /// Creating or opening the output directory.
+    Prepare,
+    /// Flushing the parent directory entry after the rename.
+    Sync,
+}
+
+impl DirectoryStage {
+    /// The verb the diagnostic uses for this stage.
+    const fn verb(self) -> &'static str {
+        match self {
+            Self::Prepare => "prepare",
+            Self::Sync => "sync",
+        }
+    }
+}
+
+/// Report that the JSON output directory could not be prepared or synced.
+fn log_output_directory_failure(
+    stage: DirectoryStage,
     artefact: &str,
     out_dir: &Utf8Path,
     error: &OrthohelpError,
@@ -187,17 +211,8 @@ fn log_output_directory_prepare_failure(
         artefact,
         path = %out_dir,
         error = %error,
-        "failed to prepare JSON output directory",
-    );
-}
-
-/// Report that the JSON output directory could not be synced.
-fn log_output_directory_sync_failure(artefact: &str, out_dir: &Utf8Path, error: &OrthohelpError) {
-    tracing::debug!(
-        artefact,
-        path = %out_dir,
-        error = %error,
-        "failed to sync JSON output directory",
+        "failed to {} JSON output directory",
+        stage.verb(),
     );
 }
 
