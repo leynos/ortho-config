@@ -2876,6 +2876,233 @@ because no member inherits them. They cannot simply be removed:
 `scripts/bump_version.py` and `scripts/release_archive_naming.py` read
 `workspace.package.version`.
 
+## Cranelift qualification
+
+This section is the recorded codegen-backend exception for this repository. It
+states why the Cranelift development backend is not part of the build standard,
+what was measured, what was not, and how to re-measure and clear the exception.
+
+Current record: Pinned channel `nightly-2026-10-16`; measured on it on
+2026-10-16; no deferral.
+
+Tracking: [issue #598](https://github.com/leynos/ortho-config/issues/598)
+requires a re-measurement by 2027-04-18, whatever the pin has moved to by then.
+Rewrite the record line above when that measurement is taken.
+
+The pinned nightly is `rustc 1.101.0-nightly (2026-10-15)`. The
+`rustc-codegen-cranelift-preview` component of the same date stays installed by
+`rust-toolchain.toml`, so a re-measurement needs no toolchain edit.
+
+### Verdict
+
+Cranelift is not adopted. The failure is one mechanism: a panic raised in
+Cranelift-compiled code does not find the unwind handler. As a result:
+
+- `catch_unwind` fails to catch the panic.
+- Destructors do not run during unwinding.
+- A panic on a spawned thread aborts the whole process with
+  `fatal runtime error: failed to initiate panic, error 5, aborting` (SIGABRT).
+
+Everything else measured passes, including `#[should_panic]`.
+
+The measurement host was x86_64 Linux (Rocky 10). Cranelift was selected the
+way the standard would have carried it: `-Zcodegen-backend=cranelift` in
+`rustflags`, together with `-Zthreads=8` and `-Clink-arg=-fuse-ld=mold`. A
+`[profile.dev] codegen-backend` key was rejected on other grounds; see Option A
+in
+[ADR-014](adr-014-adopt-a-dated-nightly-and-the-development-build-standard.md).
+
+### The probe
+
+The probe is a five-case crate: a `#[should_panic]` test, `catch_unwind` on the
+main thread, a `Drop` guard observed after `catch_unwind`, a spawned thread
+that is joined, and a scoped thread caught with `catch_unwind`.
+
+```rust
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+#[test]
+#[should_panic(expected = "boom")]
+fn should_panic_is_observed() {
+    panic!("boom");
+}
+
+#[test]
+fn main_thread_catch_unwind_catches() {
+    assert!(catch_unwind(AssertUnwindSafe(|| panic!("boom"))).is_err());
+}
+
+#[test]
+fn spawned_thread_panic_unwinds_to_join() {
+    assert!(std::thread::spawn(|| panic!("boom")).join().is_err());
+}
+
+#[test]
+fn scoped_thread_panic_unwinds_to_scope() {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        std::thread::scope(|scope| {
+            scope.spawn(|| panic!("boom"));
+        });
+    }));
+    assert!(result.is_err());
+}
+
+#[test]
+fn drop_runs_during_unwind() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static DROPPED: AtomicBool = AtomicBool::new(false);
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            DROPPED.store(true, Ordering::SeqCst);
+        }
+    }
+    let _ = catch_unwind(|| {
+        let _guard = Guard;
+        panic!("boom");
+    });
+    assert!(DROPPED.load(Ordering::SeqCst));
+}
+```
+
+| Case                        | Cranelift (with `-Zthreads=8` and `mold`, as the standard would configure) | LLVM control (`-Zthreads=8` and `mold`, the committed standard) |
+| --------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `#[should_panic]`           | Passes                                                                     | Passes                                                          |
+| Main-thread `catch_unwind`  | Fails                                                                      | Passes                                                          |
+| `Drop` during unwinding     | Fails                                                                      | Passes                                                          |
+| Spawned-thread panic joined | Aborts the process                                                         | Passes                                                          |
+| Scoped-thread panic caught  | Aborts the process                                                         | Passes                                                          |
+
+*Table: Results of the five-case probe on `nightly-2026-10-16`, measured on
+2026-10-16.*
+
+As an attribution control, `-Zcodegen-backend=cranelift` as the only flag, with
+neither `mold` nor `-Zthreads`, aborts the probe the same way. Neither `mold`
+nor the parallel frontend is the cause.
+
+### The repository suite
+
+The suite ran as `cargo nextest run --workspace --all-features --no-fail-fast`
+with
+`RUSTFLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold"`,
+which is equivalent to the configuration file. It selected 1924 tests in 97
+binaries. Of these, 1902 completed and 1876 passed. Nine test executions (seven
+distinct test functions) failed, all by unwinding.
+
+| Failure mode                                                              | Test functions                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catch_unwind` fails: assertion failed (4 executions)                     | `ortho_config` `cargo::tests::empty_subcommand_name_trips_debug_assertion`, `cargo::tests::reserved_help_name_trips_debug_assertion`, `cargo::tests::transposed_names_trip_debug_assertion` and `error::tests::aggregate_panics_on_empty`                           |
+| Panic on a spawned thread aborts the test process: SIGABRT (5 executions) | `process_runner::tests::reader_thread_diagnostic_names_the_stream` cases `case_1_stdout` and `case_2_stderr`, compiled into two test binaries (`ortho_config::documentation_examples_tests` and `ortho_config::documentation_examples_rust_tests`; four executions) |
+| Panic on a spawned thread aborts the test process: SIGABRT (continued)    | `rstest_bdd_support::scenario_state::scenario_state_tests::take_issues_recovers_from_poisoned_mutex` in `ortho_config::rstest_bdd`, where a thread panics while holding a mutex (one execution)                                                                     |
+
+*Table: Test functions that failed under Cranelift, by failure mode.*
+
+The LLVM control on the same tree, under the committed standard (`-Zthreads=8`
+and `mold`, LLVM backend), passed all 1731 tests in the 80 fast binaries. That
+includes the five unwinding tests that failed above, and the four
+`reader_thread_diagnostic_names_the_stream` executions pass when run by name.
+
+Under Cranelift these mechanisms, which the estate watches, passed:
+
+- All five `#[should_panic]` tests:
+  `localizer::clap_command::tests::localize_panics_on_colliding_argument_identifiers`,
+  the matching test for subcommand identifiers,
+  `localizer::identifier::tests::message_id_for_rejects_ids_without_leading_letter`
+  (its cases), the `..._unrepresentable_segments` test (its cases), and
+  `localized_parse::agreement::fluent_unsafe_identifier_panics`.
+- The proc-macro crate `ortho_config_macros`. Its 281 unit tests passed, and a
+  derive built by the Cranelift-compiled macro still rejects invalid input:
+  `#[ortho_config(cli_long = "help")]` fails with "reserved `cli_long` 'help'
+  conflicts with global clap flags", identically under LLVM.
+- 116 `cargo-orthohelp` bridge tests (`golden_tests`, `agent_context_contract`,
+  `policy_report_contract`, `nested_subcommand_end_to_end` and `rstest_bdd`).
+  They spawn child `cargo build` processes that inherit the configuration.
+- Doctests: `cargo test --workspace --doc --all-features` with the same
+  `RUSTFLAGS` passed all 124 doctests across the workspace crates, with none
+  failing. Rustdoc builds the doctest binaries and does not read `RUSTFLAGS`,
+  so Cranelift compiled their dependencies only.
+- The trybuild corpus, with its nine test binaries serialized: all 10 tests
+  passed (see the next subsection).
+
+### What is not attributed
+
+The following are not attributable to Cranelift and are not part of the
+exception:
+
+- The earlier result that `ortho_config::compile_fail` reported all 33 of its
+  UI cases as compiling was an artefact of running the trybuild binaries
+  concurrently. They share one project directory
+  (`target/tests/trybuild/ortho_config`) and must run one at a time. It is not
+  a Cranelift failure. With the nine trybuild test binaries serialized
+  (`--test-threads 8` and a nextest group allowing one at a time), all 10 tests
+  pass under the same flags: `cargo-orthohelp::compile_time`
+  (`must_use_compile_tests`), `ortho_config::compile_fail` (two tests),
+  `crate_path_trybuild`, `declarative_merge_trybuild`, `env_source_trybuild`,
+  `generated_lint_trybuild`, `localization_trybuild`,
+  `localized_parse_trybuild` and `subcommand_trybuild`.
+- `identifier_artefact_e2e` failed in the Cranelift run, but not because of the
+  backend. It assumed the older Cargo build-directory layout
+  (`build/<hash>/out`), while the pinned nightly writes
+  `build/<package>/<hash>/out`. It now searches both layouts and passes under
+  the standard, so it is not an exception test.
+- Of the ten tests terminated when the first run was stopped, nine were
+  trybuild tests, now measured as above. The tenth, the
+  `cargo-orthohelp::rstest_bdd` scenario
+  `orthohelp_agent_context_generate_agent_context_json_from_the_simple_fixture`,
+  was not re-run.
+
+Still not measured under Cranelift, which is a gap and not a pass:
+
+- 22 selected tests were never reached when the first run was stopped.
+- Five documentation-example tests failed at their 1,200-second in-process
+  deadline. They fail identically under LLVM on this saturated host, so the
+  deadline reflects host load and not the backend.
+- The one `cargo-orthohelp::rstest_bdd` scenario named above.
+
+A later measurement that covers these belongs in the tables above.
+
+Windows and macOS were not measured, because the measurement host is Linux.
+Cranelift is not selected on any platform, so nothing needs scoping. The pinned
+nightly publishes the Cranelift component for x86_64 Windows MSVC, aarch64 and
+x86_64 macOS, and Linux aarch64, so a later measurement is possible there.
+
+### Re-measuring and clearing
+
+Re-measure on every toolchain bump, because Dependabot moves the pin daily.
+When doing so, rewrite the record line near the top of this section to say what
+the current pin is, whether a measurement was taken on it, and the date any
+deferral runs to.
+
+The flags below select Cranelift the way the standard would carry it:
+
+```bash
+CRANELIFT_FLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold"
+```
+
+1. Run the probe above in a scratch crate outside the repository, with
+   `RUSTFLAGS="$CRANELIFT_FLAGS" cargo test`. The component is already
+   satisfied by `rust-toolchain.toml`.
+2. Run the suite with the same `RUSTFLAGS` and
+   `cargo nextest run --workspace --all-features --no-fail-fast`, running the
+   trybuild binaries one at a time.
+3. The exception can be cleared only when the probe passes five of five and the
+   seven failing functions listed above pass.
+
+To adopt the backend once it is cleared:
+
+- Select it in the Linux target table of `.cargo/config.toml` through
+  `rustflags`, not through a `[profile.dev]` key.
+- Restate it in the Makefile's `STANDARD_RUSTFLAGS`.
+- Have coverage and release keep selecting LLVM.
+- Extend the install check to cover the component.
+- Delete the exception status of this section, and replace the contract
+  `test_cranelift_is_refused_until_the_measurement_is_cleared` in
+  `tests/workflow_contracts/build_standard_routing_test.py` with one that holds
+  the adopted route.
+
+That contract currently refuses any backend selection, so adopting one cannot
+happen quietly.
+
 ## Publish dry run
 
 `make publish-check` runs `lading publish` over the workspace. lading copies
