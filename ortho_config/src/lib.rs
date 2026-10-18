@@ -167,6 +167,33 @@ pub use post_merge::{PostMergeContext, PostMergeHook};
 pub use profile::{ProfileLoadOutcome, ProfileName, ProfileSource, SelectedProfile};
 use std::sync::Arc;
 
+/// Emit derive-generated `cli_default_as_absent` support.
+///
+/// Derive output is compiled in the calling crate, so a
+/// `#[cfg(feature = "serde_json")]` guard there would test the caller's
+/// features rather than this crate's. The derive routes its
+/// `CliValueExtractor` implementation through this macro instead, whose
+/// definition is selected by this crate's own `serde_json` feature.
+#[cfg(feature = "serde_json")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __cli_default_as_absent_support {
+    ($($item:item)*) => { $($item)* };
+}
+
+/// Report that `cli_default_as_absent` needs this crate's `serde_json`
+/// feature, which is disabled in this build.
+#[cfg(not(feature = "serde_json"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __cli_default_as_absent_support {
+    ($($item:item)*) => {
+        ::core::compile_error!(
+            "cli_default_as_absent requires enabling the ortho_config `serde_json` feature"
+        );
+    };
+}
+
 #[doc(hidden)]
 pub mod __private {
     //! Runtime hooks emitted by derive-generated source-aware loading methods.

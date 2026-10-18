@@ -186,6 +186,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Let `#[ortho_config(cli_default_as_absent)]` compile in crates that do not
+  declare their own `serde_json` feature. The derive emitted a
+  `#[cfg(feature = "serde_json")]` guard, which tested the calling crate's
+  features rather than OrthoConfig's; the guard now lives in `ortho_config`,
+  behind a hidden gate macro.
+
 - Keep the generated CLI layer when an explicit command-line value happens to
   equal the struct default. The layering guard compared the whole sanitized CLI
   object against the whole defaults object and skipped the CLI layer when they
