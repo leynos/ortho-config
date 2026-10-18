@@ -88,6 +88,9 @@ class Leg:
 def legs(workflow: str, job_id: str, job: dict[str, object]) -> list[Leg]:
     """Expand *job*'s matrix into its legs.
 
+    The cells are the Cartesian product of the list-valued axes, minus any cell
+    an ``exclude`` entry matches, plus one cell per ``include`` entry.
+
     Parameters
     ----------
     workflow : str
@@ -104,24 +107,49 @@ def legs(workflow: str, job_id: str, job: dict[str, object]) -> list[Leg]:
     """
     strategy = job.get("strategy")
     matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
-    if not isinstance(matrix, dict):
-        return [Leg(workflow, job_id, {}, job)]
+    cells = _matrix_cells(matrix) if isinstance(matrix, dict) else []
+    return [Leg(workflow, job_id, cell, job) for cell in cells] or [Leg(workflow, job_id, {}, job)]
+
+
+def _matrix_cells(matrix: dict[str, object]) -> list[dict[str, str]]:
+    """Return a matrix's cells: the surviving product cells, then the includes."""
+    exclusions = _entries(matrix.get("exclude"))
+    product = [cell for cell in _product_cells(matrix) if not _is_excluded(cell, exclusions)]
+    return product + _entries(matrix.get("include"))
+
+
+def _product_cells(matrix: dict[str, object]) -> list[dict[str, str]]:
+    """Return the Cartesian product of a matrix's list-valued axes (none: no cells)."""
     axes = {
         key: value
         for key, value in matrix.items()
         if key not in {"include", "exclude"} and isinstance(value, list)
     }
-    cells: list[dict[str, str]] = [
-        dict(zip(axes, combination, strict=True))
+    if not axes:
+        return []
+    return [
+        {key: str(value) for key, value in zip(axes, combination, strict=True)}
         for combination in itertools.product(*axes.values())
-    ] if axes else []
-    include = matrix.get("include")
-    cells += [
-        {str(key): str(value) for key, value in entry.items()}
-        for entry in (include if isinstance(include, list) else [])
+    ]
+
+
+def _entries(value: object) -> list[dict[str, str]]:
+    """Return the mapping entries of an ``include`` or ``exclude`` list, as strings."""
+    if not isinstance(value, list):
+        return []
+    return [
+        {str(key): str(item) for key, item in entry.items()}
+        for entry in value
         if isinstance(entry, dict)
     ]
-    return [Leg(workflow, job_id, cell, job) for cell in cells] or [Leg(workflow, job_id, {}, job)]
+
+
+def _is_excluded(cell: dict[str, str], exclusions: list[dict[str, str]]) -> bool:
+    """Report whether any exclusion's keys all match *cell* (an exclusion may be partial)."""
+    return any(
+        all(cell.get(key) == value for key, value in exclusion.items())
+        for exclusion in exclusions
+    )
 
 
 def runner_labels(leg: Leg) -> list[str]:
@@ -145,38 +173,51 @@ def runner_labels(leg: Leg) -> list[str]:
         If ``runs-on`` is absent or its expression names anything but the
         matrix.
     """
+    raw = _raw_labels(leg)
+    return [label for entry in raw for label in _resolve_label(entry, leg)]
+
+
+def _raw_labels(leg: Leg) -> list[str]:
+    """Return ``runs-on`` as a list of labels, whichever of the three forms it takes."""
     runs_on = leg.job.get("runs-on")
-    raw: list[str]
     if isinstance(runs_on, str):
-        raw = [runs_on]
-    elif isinstance(runs_on, list):
-        raw = [str(label) for label in runs_on]
-    elif isinstance(runs_on, dict):
+        return [runs_on]
+    if isinstance(runs_on, list):
+        return [str(label) for label in runs_on]
+    if isinstance(runs_on, dict):
         labels = runs_on.get("labels", [])
-        raw = [labels] if isinstance(labels, str) else [str(label) for label in labels]
-        raw += [str(runs_on["group"])] if "group" in runs_on else []
-    else:
-        message = f"{leg.name} declares no readable runs-on: {runs_on!r}"
+        named = [labels] if isinstance(labels, str) else [str(label) for label in labels]
+        return named + ([str(runs_on["group"])] if "group" in runs_on else [])
+    message = f"{leg.name} declares no readable runs-on: {runs_on!r}"
+    raise UnreadableRunnerError(message)
+
+
+def _resolve_label(label: str, leg: Leg) -> list[str]:
+    """Return the labels one ``runs-on`` entry can name, expanding an expression."""
+    if "${{" not in label:
+        return [label]
+    keys = _MATRIX_REFERENCE.findall(label)
+    literals = _QUOTED_LITERAL.findall(label)
+    if _names_no_runner(label, keys, literals):
+        message = f"{leg.name} runs-on cannot be resolved to labels: {label!r}"
         raise UnreadableRunnerError(message)
-    resolved: list[str] = []
-    for label in raw:
-        if "${{" not in label:
-            resolved.append(label)
-            continue
-        keys = _MATRIX_REFERENCE.findall(label)
-        literals = _QUOTED_LITERAL.findall(label)
-        remainder = _MATRIX_REFERENCE.sub("", label)
-        # `github.*` can only be a condition (the fork fallback tests the event);
-        # these cannot pick a runner label, so they are not a reason to refuse.
-        if (not keys and not literals) or _UNRESOLVABLE.search(remainder):
-            message = f"{leg.name} runs-on cannot be resolved to labels: {label!r}"
-            raise UnreadableRunnerError(message)
-        missing = [key for key in keys if key not in leg.cell]
-        if missing:
-            message = f"{leg.name} runs-on names matrix keys the leg lacks: {missing}"
-            raise UnreadableRunnerError(message)
-        resolved += [leg.cell[key] for key in keys] + literals
-    return resolved
+    missing = [key for key in keys if key not in leg.cell]
+    if missing:
+        message = f"{leg.name} runs-on names matrix keys the leg lacks: {missing}"
+        raise UnreadableRunnerError(message)
+    return [leg.cell[key] for key in keys] + literals
+
+
+def _names_no_runner(label: str, keys: list[str], literals: list[str]) -> bool:
+    """Report whether an expression cannot be read as a set of runner labels.
+
+    ``github.*`` can only be a condition (the fork fallback tests the event), so
+    it is no reason to refuse; ``inputs``, ``vars`` and the like can choose a
+    runner yet cannot be known from the workflow text, so they are.
+    """
+    has_candidates = bool(keys or literals)
+    has_unknowable = _UNRESOLVABLE.search(_MATRIX_REFERENCE.sub("", label)) is not None
+    return has_unknowable or not has_candidates
 
 
 def is_linux(label: str) -> bool:
@@ -215,35 +256,49 @@ def step_runs_on(step: dict[str, object], cell: dict[str, str]) -> bool:
     condition = str(step.get("if", ""))
     if not condition or "||" in condition:
         return True
-    for key, operator, value in _MATRIX_COMPARISON.findall(condition):
-        actual = cell.get(key)
-        if actual is None:
-            continue
-        if (operator == "==") != (actual == value):
-            return False
-    return True
+    return all(
+        _comparison_holds(cell.get(key), operator, value)
+        for key, operator, value in _MATRIX_COMPARISON.findall(condition)
+    )
+
+
+def _comparison_holds(actual: str | None, operator: str, value: str) -> bool:
+    """Evaluate one ``matrix.<key> ==|!= 'value'`` test; an unknown key holds."""
+    if actual is None:
+        return True
+    return (operator == "==") == (actual == value)
 
 
 def _make_goals(run: str) -> list[list[str]]:
     """Return the goal list of each ``make`` invocation in a ``run`` script."""
-    invocations: list[list[str]] = []
-    for line in run.splitlines():
-        # An expression such as `MSRV=${{ matrix.toolchain }}` holds spaces, which
-        # would split into stray words that read as goals; GitHub resolves it
-        # before the shell runs, so it is replaced by a placeholder word.
-        line = _EXPRESSION.sub("EXPR", line)
-        try:
-            tokens = shlex.split(line, comments=True)
-        except ValueError:
-            continue
-        for index, token in enumerate(tokens):
-            if token == "make":
-                goals = [
-                    word for word in tokens[index + 1 :]
-                    if not word.startswith("-") and "=" not in word
-                ]
-                invocations.append(goals)
-    return invocations
+    tokenised = (_tokens(line) for line in run.splitlines())
+    return [
+        _goals_after(tokens, index)
+        for tokens in tokenised
+        for index, token in enumerate(tokens)
+        if token == "make"
+    ]
+
+
+def _tokens(line: str) -> list[str]:
+    """Split one script line into words, or return none for a line shell cannot parse.
+
+    An expression such as `MSRV=${{ matrix.toolchain }}` holds spaces, which
+    would split into stray words that read as goals; GitHub resolves it before
+    the shell runs, so it is replaced by a placeholder word.
+    """
+    try:
+        return shlex.split(_EXPRESSION.sub("EXPR", line), comments=True)
+    except ValueError:
+        return []
+
+
+def _goals_after(tokens: list[str], index: int) -> list[str]:
+    """Return the Make goals following the ``make`` word at *index* (no flags, no assignments)."""
+    return [
+        word for word in tokens[index + 1 :]
+        if not word.startswith("-") and "=" not in word
+    ]
 
 
 def reaches_the_suite(step: dict[str, object], leg: Leg) -> bool:
