@@ -1,339 +1,366 @@
 //! Bounded subprocess execution for executable documentation tests.
 //!
-//! This module owns time and capture limits only. Callers remain responsible
-//! for command construction, environment isolation, and exit-status policy.
-//!
-//! The timeout is sized from this repository's own runs rather than chosen.
-//! The callers that dominate it spawn a child `cargo` in a target directory
-//! kept to itself, so they pay a cold dependency build that no in-process
-//! test pays, and on a shared build host that build queues behind every
-//! other compiler running there. On a `build-test` runner the test took
-//! 56.5 s and 120.7 s; on a developer host it took 588.0 s and 593.6 s in
-//! two runs, then crossed the old 600 s bound while still building. That
-//! is 0.99 of its budget, past the 0.95 that "Test timeouts" in
-//! `docs/developers-guide.md` calls already too small rather than merely
-//! unlucky. A bound a legitimate build reaches is measuring host load
-//! rather than catching a hang, so it is doubled now, to twice the worst
-//! run that finished.
-//!
-//! Under `make test` this is the only timer on the child. The coverage lane
-//! runs nextest instead, where the per-test `slow-timeout` bounds the whole
-//! test more tightly than this does and its runners are not shared by other
-//! builds, which is why the two runner figures above stay under this one.
-//!
-//! Shared-host compiler admission can exceed even that cold-build allowance.
-//! `ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS` selects a larger, still bounded budget
-//! for these subprocesses without changing CI defaults or output capture.
+//! This module owns subprocess trees, operation deadlines, and output capture.
+//! Callers remain responsible for command construction and environment policy.
 
-use anyhow::{Context, Result, anyhow, ensure};
-use std::io::Read;
-use std::process::{Child, Command, ExitStatus, Output, Stdio};
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
-use wait_timeout::ChildExt;
+#[path = "process_runner_capture.rs"]
+mod capture;
+#[path = "process_runner_cleanup.rs"]
+mod cleanup;
+#[path = "process_runner_diagnostics.rs"]
+mod diagnostics;
+#[cfg(unix)]
+#[path = "process_runner_pipe_unix.rs"]
+mod pipe;
+#[cfg(windows)]
+#[path = "process_runner_pipe_windows.rs"]
+mod pipe;
+#[path = "process_runner_policy.rs"]
+mod process_policy;
+#[path = "process_runner_spawn_guard.rs"]
+mod spawn_guard;
+#[cfg(unix)]
+#[path = "process_runner_tree_unix.rs"]
+mod tree;
+#[cfg(windows)]
+#[path = "process_runner_tree_windows.rs"]
+mod tree;
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1_200);
-const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
-/// Optional shared-host budget; callers must select it before starting tests.
-const TIMEOUT_ENV: &str = "ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS";
-/// Keep overrides finite and safely within platform timer representations.
-const MAX_TIMEOUT_SECONDS: u64 = 86_400;
+use diagnostics::{capture_snapshots, environment_evidence, stream_bytes, workspace_identity};
+pub(crate) use process_policy::Policy;
+
+use anyhow::{Context, Result, anyhow};
+use capture::Reader;
+use process_wrap::std::{ChildWrapper, CommandWrap};
+use spawn_guard::SpawnGuard;
+use std::error::Error as StdError;
+use std::fmt;
+use std::io;
+use std::process::{Command, ExitStatus, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+pub(super) const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+struct RunContext {
+    operation: String,
+    workspace: String,
+    environment: String,
+    started: Instant,
+    policy: Policy,
+    process_id: u32,
+}
+
+struct RunHooks<Observer, Poll, Kill> {
+    observer: Observer,
+    poll: Poll,
+    kill: Kill,
+}
+
+struct WaitProcess<'a> {
+    child: &'a mut dyn ChildWrapper,
+    readers: &'a mut [Reader],
+    operation: &'a str,
+    deadline: Instant,
+    timeout: Duration,
+    status: Option<ExitStatus>,
+}
 
 #[derive(Clone, Copy)]
 pub(super) struct Operation<'a>(pub(super) &'a str);
 
-#[derive(Clone, Copy)]
-enum OutputStream {
-    Stdout,
-    Stderr,
-}
+#[derive(Debug)]
+struct IncompleteCleanup;
 
-impl OutputStream {
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Stdout => "stdout",
-            Self::Stderr => "stderr",
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ProcessLimits {
+#[derive(Debug)]
+struct DeadlineExceeded {
+    operation: String,
+    reason: &'static str,
     timeout: Duration,
-    output_bytes: usize,
 }
 
-impl Default for ProcessLimits {
-    fn default() -> Self {
-        Self {
-            timeout: DEFAULT_TIMEOUT,
-            output_bytes: DEFAULT_OUTPUT_BYTES,
-        }
+impl fmt::Display for DeadlineExceeded {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}: {} after {}ms",
+            self.operation,
+            self.reason,
+            self.timeout.as_millis()
+        )
     }
 }
 
-impl ProcessLimits {
-    /// Read the subprocess budget without mutating the test process environment.
-    fn from_environment() -> Result<Self> {
-        match std::env::var(TIMEOUT_ENV) {
-            Ok(value) => Self::with_timeout_override(Some(&value)),
-            Err(std::env::VarError::NotPresent) => Self::with_timeout_override(None),
-            Err(error) => Err(error).with_context(|| format!("read {TIMEOUT_ENV}")),
-        }
-    }
+impl StdError for DeadlineExceeded {}
 
-    /// Validate a supplied seconds budget while preserving the capture bound.
-    ///
-    /// For example, `Some("7200")` permits a two-hour queued build; absence
-    /// preserves the twenty-minute default. Invalid input fails before spawn.
-    fn with_timeout_override(value: Option<&str>) -> Result<Self> {
-        let Some(seconds_text) = value else {
-            return Ok(Self::default());
-        };
-        let seconds = seconds_text
-            .parse::<u64>()
-            .with_context(|| format!("{TIMEOUT_ENV} must contain whole seconds"))?;
-        ensure!(
-            (1..=MAX_TIMEOUT_SECONDS).contains(&seconds),
-            "{TIMEOUT_ENV} must be between 1 and {MAX_TIMEOUT_SECONDS} seconds"
-        );
-        Ok(Self {
-            timeout: Duration::from_secs(seconds),
-            ..Self::default()
-        })
+/// Identify deadline exhaustion without parsing a diagnostic string.
+pub(crate) fn deadline_exceeded(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<DeadlineExceeded>().is_some()
+}
+
+impl fmt::Display for IncompleteCleanup {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("owned subprocess cleanup incomplete")
     }
 }
 
-/// Run a command with the documentation-test timeout and output limits.
-pub(super) fn run_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
-    run_command_with_limits(command, operation, ProcessLimits::from_environment()?)
+impl StdError for IncompleteCleanup {}
+
+/// Report whether an error left owned subprocess cleanup unconfirmed.
+pub(crate) fn cleanup_incomplete(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<IncompleteCleanup>().is_some()
 }
 
-fn run_command_with_limits(
+/// Run a command while applying an explicit operation and cleanup policy.
+pub(crate) fn run_with_policy(
     command: &mut Command,
     operation: Operation<'_>,
-    limits: ProcessLimits,
+    policy: Policy,
 ) -> Result<Output> {
-    let Operation(operation_name) = operation;
-    let mut child = command
+    run_with_observer(command, operation, policy, |_| {})
+}
+
+/// Run a command and observe stdout chunks while they are drained.
+///
+/// The observer sees all stdout bytes, including bytes beyond the retained
+/// capture limit. It must return promptly because it shares the drain thread.
+pub(crate) fn run_with_observer<Observer>(
+    command: &mut Command,
+    operation: Operation<'_>,
+    policy: Policy,
+    observer: Observer,
+) -> Result<Output>
+where
+    Observer: FnMut(&[u8]) + Send + 'static,
+{
+    run_with_hooks(
+        command,
+        operation,
+        policy,
+        RunHooks {
+            observer,
+            poll: poll_child,
+            kill: kill_child,
+        },
+    )
+}
+
+fn poll_child(child: &mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>> {
+    child.try_wait()
+}
+
+fn kill_child(child: &mut dyn ChildWrapper) -> io::Result<()> {
+    child.start_kill()
+}
+
+fn run_with_hooks<Observer, Poll, Kill>(
+    command: &mut Command,
+    Operation(operation_name): Operation<'_>,
+    policy: Policy,
+    hooks: RunHooks<Observer, Poll, Kill>,
+) -> Result<Output>
+where
+    Observer: FnMut(&[u8]) + Send + 'static,
+    Poll: FnMut(&mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>>,
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
+    let RunHooks {
+        observer,
+        poll,
+        mut kill,
+    } = hooks;
+    let started = Instant::now();
+    let deadline = started
+        .checked_add(policy.timeout())
+        .ok_or_else(|| anyhow!("{operation_name}: operation deadline is out of range"))?;
+    let workspace = workspace_identity(command);
+    let environment = environment_evidence(command);
+
+    let mut child =
+        spawn_captured(command).with_context(|| format!("{operation_name}: start subprocess"))?;
+    let process_id = child.id();
+    let context = RunContext {
+        operation: operation_name.to_owned(),
+        workspace,
+        environment,
+        started,
+        policy,
+        process_id,
+    };
+    let mut readers = Vec::with_capacity(2);
+    if let Err(error) = spawn_readers(
+        child.as_mut(),
+        &mut readers,
+        policy.output_limit(),
+        observer,
+    ) {
+        return Err(cleanup::finish_failure(
+            error.context(format!("{operation_name}: prepare output readers")),
+            cleanup::CleanupProcess {
+                child: &mut child,
+                readers: &mut readers,
+                kill: &mut kill,
+                context: &context,
+            },
+        ));
+    }
+
+    let status = match wait_for_exit(
+        WaitProcess {
+            child: child.as_mut(),
+            readers: &mut readers,
+            operation: operation_name,
+            deadline,
+            timeout: policy.timeout(),
+            status: None,
+        },
+        poll,
+    ) {
+        Ok(exit_status) => exit_status,
+        Err(error) => {
+            return Err(cleanup::finish_failure(
+                error,
+                cleanup::CleanupProcess {
+                    child: &mut child,
+                    readers: &mut readers,
+                    kill: &mut kill,
+                    context: &context,
+                },
+            ));
+        }
+    };
+    let captures = capture_snapshots(&readers);
+    Ok(Output {
+        status,
+        stdout: stream_bytes(&captures, "stdout"),
+        stderr: stream_bytes(&captures, "stderr"),
+    })
+}
+
+fn spawn_captured(command: &mut Command) -> Result<Box<dyn ChildWrapper>> {
+    // Transfer the configured command before installing subprocess ownership.
+    let mut owned_command = std::mem::replace(command, Command::new(""));
+    owned_command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("{operation_name}: start subprocess"))?;
-    let stdout_pipe = take_stdout(&mut child, operation)?;
-    let stderr_pipe = take_stderr(&mut child, operation)?;
-    let stdout_reader = spawn_bounded_reader(stdout_pipe, limits.output_bytes);
-    let stderr_reader = spawn_bounded_reader(stderr_pipe, limits.output_bytes);
-
-    let status = wait_for_exit(&mut child, operation, limits.timeout);
-    if status.is_err() {
-        terminate_child(&mut child, operation)?;
-    }
-    let captured_stdout = join_reader(stdout_reader, operation, OutputStream::Stdout)?;
-    let captured_stderr = join_reader(stderr_reader, operation, OutputStream::Stderr)?;
-
-    Ok(Output {
-        status: status?,
-        stdout: captured_stdout,
-        stderr: captured_stderr,
-    })
+        .stderr(Stdio::piped());
+    spawn_owned(owned_command)
 }
 
-fn take_stdout(
-    child: &mut Child,
-    Operation(operation): Operation<'_>,
-) -> Result<std::process::ChildStdout> {
-    child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow!("{operation}: capture subprocess stdout"))
-}
-
-fn take_stderr(
-    child: &mut Child,
-    Operation(operation): Operation<'_>,
-) -> Result<std::process::ChildStderr> {
-    child
-        .stderr
-        .take()
-        .ok_or_else(|| anyhow!("{operation}: capture subprocess stderr"))
-}
-
-fn spawn_bounded_reader(
-    mut pipe: impl Read + Send + 'static,
+fn spawn_readers<Observer>(
+    child: &mut dyn ChildWrapper,
+    readers: &mut Vec<Reader>,
     output_limit: usize,
-) -> JoinHandle<Result<Vec<u8>>> {
-    thread::spawn(move || {
-        let mut captured = Vec::with_capacity(output_limit.min(8192));
-        let mut buffer = [0_u8; 8192];
-        loop {
-            let bytes_read = pipe.read(&mut buffer).context("read subprocess output")?;
-            if bytes_read == 0 {
-                break;
-            }
-            let bytes_to_capture = output_limit.saturating_sub(captured.len()).min(bytes_read);
-            captured.extend(buffer.iter().take(bytes_to_capture).copied());
-        }
-        Ok(captured)
-    })
-}
-
-fn wait_for_exit(
-    child: &mut Child,
-    Operation(operation): Operation<'_>,
-    timeout: Duration,
-) -> Result<ExitStatus> {
-    child
-        .wait_timeout(timeout)
-        .with_context(|| format!("{operation}: wait for subprocess"))?
-        .ok_or_else(|| {
-            anyhow!(
-                "{operation}: subprocess timed out after {}s",
-                timeout.as_secs()
-            )
-        })
-}
-
-fn terminate_child(child: &mut Child, Operation(operation): Operation<'_>) -> Result<()> {
-    if child
-        .try_wait()
-        .with_context(|| format!("{operation}: poll timed-out subprocess"))?
-        .is_some()
-    {
-        return Ok(());
-    }
-    child
-        .kill()
-        .with_context(|| format!("{operation}: kill timed-out subprocess"))?;
-    child
-        .wait()
-        .with_context(|| format!("{operation}: reap timed-out subprocess"))?;
+    observer: Observer,
+) -> Result<()>
+where
+    Observer: FnMut(&[u8]) + Send + 'static,
+{
+    let stdout = child
+        .stdout()
+        .take()
+        .ok_or_else(|| anyhow!("capture subprocess stdout"))?;
+    let stderr = child
+        .stderr()
+        .take()
+        .ok_or_else(|| anyhow!("capture subprocess stderr"))?;
+    readers.push(Reader::spawn("stdout", stdout, output_limit, observer)?);
+    readers.push(Reader::spawn("stderr", stderr, output_limit, |_| {})?);
     Ok(())
 }
 
-fn join_reader(
-    reader: JoinHandle<Result<Vec<u8>>>,
-    Operation(operation): Operation<'_>,
-    stream: OutputStream,
-) -> Result<Vec<u8>> {
-    let stream_name = stream.name();
-    reader
-        .join()
-        .map_err(|_| anyhow!("{operation}: {stream_name} reader thread panicked"))?
+fn wait_for_exit<Poll>(mut process: WaitProcess<'_>, mut poll: Poll) -> Result<ExitStatus>
+where
+    Poll: FnMut(&mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>>,
+{
+    loop {
+        for reader in process.readers.iter_mut() {
+            reader.refresh();
+        }
+        if let Some(reader_error) = process.readers.iter().find_map(|reader| reader.error()) {
+            return Err(anyhow!("{}: {reader_error}", process.operation));
+        }
+
+        let before_poll = Instant::now();
+        if before_poll >= process.deadline {
+            return Err(expired_operation_error(&process));
+        }
+
+        if process.status.is_none() {
+            process.status = poll(process.child)
+                .with_context(|| format!("{}: wait for subprocess", process.operation))?;
+        }
+        let after_poll = Instant::now();
+        if after_poll >= process.deadline {
+            return Err(expired_operation_error(&process));
+        }
+        if let Some(exit_status) = process.status
+            && process.readers.iter().all(Reader::is_finished)
+        {
+            return Ok(exit_status);
+        }
+
+        thread::sleep(POLL_INTERVAL.min(process.deadline.saturating_duration_since(after_poll)));
+    }
+}
+
+fn expired_operation_error(process: &WaitProcess<'_>) -> anyhow::Error {
+    let reason = match (
+        process.status.is_some(),
+        process.readers.iter().all(Reader::is_finished),
+    ) {
+        (true, true) => "subprocess completed after operation deadline",
+        (true, false) => "captured output remained open",
+        (false, _) => "subprocess timed out",
+    };
+    DeadlineExceeded {
+        operation: process.operation.to_owned(),
+        reason,
+        timeout: process.timeout,
+    }
+    .into()
+}
+
+fn spawn_owned(command: Command) -> Result<Box<dyn ChildWrapper>> {
+    let mut wrapped_command = CommandWrap::from(command);
+    let guard = SpawnGuard::new();
+    guard.install(&mut wrapped_command);
+    #[cfg(any(unix, windows))]
+    tree::configure(&mut wrapped_command);
+    #[cfg(not(any(unix, windows)))]
+    return Err(
+        io::Error::other("process-tree supervision is unsupported on this platform").into(),
+    );
+    #[cfg(any(unix, windows))]
+    finish_wrapped_spawn(&mut wrapped_command, &guard)
+}
+
+fn finish_wrapped_spawn(
+    command: &mut CommandWrap,
+    guard: &SpawnGuard,
+) -> Result<Box<dyn ChildWrapper>> {
+    match command.spawn() {
+        Ok(child) => {
+            guard.disarm();
+            Ok(child)
+        }
+        Err(spawn_error) if guard.root_child_seen() => {
+            let contextual_spawn_error =
+                anyhow::Error::new(spawn_error).context("process-tree wrapper setup failed");
+            let evidence = guard.kill_error().map_or_else(
+                || "root child termination was requested; reaping is unconfirmed".to_owned(),
+                |kill_error| {
+                    format!("root child termination failed ({kill_error}); reaping is unconfirmed")
+                },
+            );
+            Err(contextual_spawn_error
+                .context(evidence)
+                .context(IncompleteCleanup))
+        }
+        Err(unwrapped_spawn_error) => Err(unwrapped_spawn_error.into()),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    //! Regression coverage for subprocess output and duration bounds.
-
-    mod environment;
-
-    use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
-    use anyhow::{Context, Result};
-    use rstest::rstest;
-    use std::io::Write;
-    use std::process::Command;
-    use std::time::Duration;
-
-    /// Budget selection leaves the default and capture limit unchanged.
-    #[rstest]
-    #[case::default(None, 1_200)]
-    #[case::smallest_budget(Some("1"), 1)]
-    #[case::shared_host(Some("7200"), 7_200)]
-    #[case::largest_budget(Some("86400"), 86_400)]
-    fn timeout_override_preserves_output_limit(#[case] value: Option<&str>, #[case] seconds: u64) {
-        let limits = ProcessLimits::with_timeout_override(value).expect("valid timeout budget");
-        assert_eq!(limits.timeout, Duration::from_secs(seconds));
-        assert_eq!(limits.output_bytes, super::DEFAULT_OUTPUT_BYTES);
-    }
-
-    /// Invalid budgets fail before a subprocess can be started.
-    #[rstest]
-    #[case::empty("")]
-    #[case::zero("0")]
-    #[case::negative("-1")]
-    #[case::not_seconds("forever")]
-    #[case::over_limit("86401")]
-    #[case::overflow("18446744073709551616")]
-    fn invalid_timeout_override_is_rejected(#[case] value: &str) {
-        assert!(ProcessLimits::with_timeout_override(Some(value)).is_err());
-    }
-
-    #[test]
-    fn output_capture_is_limited_per_stream() {
-        let mut command = probe_command("bounded_output_probe")
-            .expect("the bounded-output probe command should be available");
-        let output = run_command_with_limits(
-            &mut command,
-            Operation("capture bounded output"),
-            ProcessLimits {
-                timeout: Duration::from_secs(5),
-                output_bytes: 256,
-            },
-        )
-        .expect("bounded-output probe should run");
-        assert!(output.status.success(), "probe failed: {output:?}");
-        assert_eq!(output.stdout.len(), 256);
-        assert_eq!(output.stderr.len(), 256);
-    }
-
-    #[test]
-    fn stalled_process_is_terminated_at_the_deadline() {
-        let mut command = probe_command("bounded_timeout_probe")
-            .expect("the bounded-timeout probe command should be available");
-        let error = run_command_with_limits(
-            &mut command,
-            Operation("run timeout probe"),
-            ProcessLimits {
-                timeout: Duration::from_millis(100),
-                output_bytes: 256,
-            },
-        )
-        .expect_err("stalled probe should time out");
-        assert!(format!("{error:#}").contains("run timeout probe: subprocess timed out"));
-    }
-
-    #[rstest]
-    #[case::stdout(OutputStream::Stdout, "read probe: stdout reader thread panicked")]
-    #[case::stderr(OutputStream::Stderr, "read probe: stderr reader thread panicked")]
-    fn reader_thread_diagnostic_names_the_stream(
-        #[case] stream: OutputStream,
-        #[case] expected: &str,
-    ) {
-        let reader = std::thread::spawn(|| -> anyhow::Result<Vec<u8>> {
-            panic!("deliberate reader-thread failure")
-        });
-        let error = join_reader(reader, Operation("read probe"), stream)
-            .expect_err("panicked reader thread should return an error");
-        assert_eq!(format!("{error:#}"), expected);
-    }
-
-    fn probe_command(test_name: &str) -> Result<Command> {
-        let executable = std::env::current_exe()
-            .context("the integration-test executable should have a path")?;
-        let mut command = Command::new(executable);
-        command.args(["--ignored", "--nocapture", test_name]);
-        Ok(command)
-    }
-
-    #[test]
-    #[ignore = "executed as a high-output subprocess"]
-    fn bounded_output_probe() {
-        let output = [b'x'; 4096];
-        std::io::stdout()
-            .lock()
-            .write_all(&output)
-            .expect("write stdout probe data");
-        std::io::stderr()
-            .lock()
-            .write_all(&output)
-            .expect("write stderr probe data");
-    }
-
-    #[test]
-    #[ignore = "executed as a stalled subprocess"]
-    fn bounded_timeout_probe() {
-        std::thread::sleep(Duration::from_secs(30));
-    }
-}
+#[path = "process_runner_tests.rs"]
+mod tests;

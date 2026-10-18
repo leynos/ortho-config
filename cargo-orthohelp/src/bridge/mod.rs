@@ -11,24 +11,38 @@ use crate::cache::CacheKey;
 use crate::error::OrthohelpError;
 use crate::fs_helpers::open_optional_dir;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
-use crate::rustflags::apply_sanitized_rustflags;
-
+#[path = "../bridge_build.rs"]
+mod bridge_build;
+#[path = "../bridge_workspace.rs"]
+mod workspace;
 mod telemetry;
 
-/// Paths used when building the ephemeral bridge crate.
-pub struct BridgePaths {
-    /// Root directory for the bridge crate.
-    pub bridge_dir: Utf8PathBuf,
-    /// Path to the generated `Cargo.toml`.
-    pub manifest_path: Utf8PathBuf,
-    /// Target directory for bridge build artefacts.
+use workspace::BridgeWorkspace;
+
+/// Stable IR cache identity and Cargo-owned compiler state.
+pub struct BridgeCache {
+    /// Directory containing the cached IR and private invocation directories.
+    pub cache_dir: Utf8PathBuf,
+    /// Cargo-resolved target shared across fingerprints and invocations.
     pub target_dir: Utf8PathBuf,
-    /// Cached IR JSON path.
+    /// Stable cached IR JSON path.
     pub ir_path: Utf8PathBuf,
+}
+
+/// Private generated crate paths for exactly one invocation.
+pub struct BridgePaths {
+    /// Root directory of the invocation-owned bridge crate.
+    pub bridge_dir: Utf8PathBuf,
+    /// Path to its generated `Cargo.toml`.
+    pub manifest_path: Utf8PathBuf,
+    /// Independently selected Cargo target directory for build artefacts.
+    pub target_dir: Utf8PathBuf,
 }
 
 /// Inputs needed to generate the bridge crate source.
 pub struct BridgeConfig {
+    /// Workspace owning the dependency lockfile used to seed private builds.
+    pub workspace_root: Utf8PathBuf,
     /// Root directory of the target package.
     pub package_root: Utf8PathBuf,
     /// Cargo package name of the target crate.
@@ -40,34 +54,29 @@ pub struct BridgeConfig {
 }
 
 /// Constructs bridge paths for the provided cache key.
-pub fn prepare_paths(selection: &PackageSelection, cache_key: &CacheKey) -> BridgePaths {
-    let bridge_dir = selection
+pub fn prepare_cache(selection: &PackageSelection, cache_key: &CacheKey) -> BridgeCache {
+    let cache_dir = selection
         .target_directory
         .join("orthohelp")
         .join(cache_key.hash());
-    let manifest_path = bridge_dir.join("Cargo.toml");
-    let target_dir = bridge_dir.join("target");
-    let ir_path = bridge_dir.join("ir.json");
-
-    BridgePaths {
-        bridge_dir,
-        manifest_path,
-        target_dir,
-        ir_path,
+    BridgeCache {
+        ir_path: cache_dir.join("ir.json"),
+        cache_dir,
+        target_dir: selection.target_directory.clone(),
     }
 }
 
 /// Loads cached IR or builds the bridge to produce fresh IR JSON.
 pub fn load_or_build_ir(
     config: &BridgeConfig,
-    paths: &BridgePaths,
+    paths: &BridgeCache,
     should_use_cache: bool,
     should_skip_build: bool,
 ) -> Result<String, OrthohelpError> {
     if should_use_cache || should_skip_build {
         if let Some(cached) = read_cached_ir(paths)? {
             tracing::debug!(
-                bridge_dir = %paths.bridge_dir,
+                cache_dir = %paths.cache_dir,
                 ir_path = %paths.ir_path,
                 "reusing cached bridge IR"
             );
@@ -78,11 +87,18 @@ pub fn load_or_build_ir(
         }
     }
 
-    ensure_bridge_layout(paths)?;
-    write_bridge_manifest(config, paths)?;
-    write_bridge_main(config, paths)?;
-    build_bridge(paths)?;
-    let ir_json = run_bridge(paths)?;
+    let workspace = BridgeWorkspace::new(paths)?;
+    let private_paths = &workspace.paths;
+    ensure_bridge_layout(private_paths)?;
+    workspace.seed_lockfile(config)?;
+    write_bridge_manifest(config, private_paths)?;
+    write_bridge_main(config, private_paths)?;
+    let executable = bridge_build::build_and_snapshot(
+        &mut build_bridge_command(private_paths),
+        &private_paths.target_dir,
+        &private_paths.bridge_dir.join("run"),
+    )?;
+    let ir_json = run_bridge(&executable)?;
     write_ir_cache(paths, &ir_json)?;
 
     Ok(ir_json)
@@ -90,8 +106,8 @@ pub fn load_or_build_ir(
 
 /// Reads the cached IR JSON from the bridge directory, returning `None` when
 /// no cache file exists.
-fn read_cached_ir(paths: &BridgePaths) -> Result<Option<String>, OrthohelpError> {
-    let Some(dir) = open_optional_dir(paths.bridge_dir.as_path())? else {
+fn read_cached_ir(paths: &BridgeCache) -> Result<Option<String>, OrthohelpError> {
+    let Some(dir) = open_optional_dir(paths.cache_dir.as_path())? else {
         return Ok(None);
     };
     let mut file = match dir.open("ir.json") {
@@ -219,58 +235,27 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
     Ok(())
 }
 
-/// Invokes `cargo build` for the ephemeral bridge crate.
-fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
-    let output = build_bridge_command(paths)
-        .output()
-        .map_err(|io_err| OrthohelpError::Io {
-            path: paths.manifest_path.clone(),
-            source: io_err,
-        })?;
-
-    if output.status.success() {
-        telemetry::bridge_build_succeeded(paths, output.status);
-        return Ok(());
-    }
-
-    telemetry::bridge_build_failed(paths, &output);
-    let status = output.status.code().unwrap_or(-1);
-    let message = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Err(OrthohelpError::BridgeBuildFailure { status, message })
-}
-
-/// Constructs the `cargo build` `Command` for the bridge crate, stripping
-/// coverage-related environment variables from the child process.
+/// Build with the caller's wrapper, job, warning, and instrumentation policy.
+///
+/// Cargo resolves configuration from the original working directory. Keeping
+/// the compiler flags also lets compatible dependency fingerprints be reused.
 fn build_bridge_command(paths: &BridgePaths) -> Command {
     let mut command = Command::new("cargo");
     command
-        .arg("build")
+        .args(["build", "--message-format=json-render-diagnostics"])
         .arg("--manifest-path")
         .arg(paths.manifest_path.as_str())
         .arg("--target-dir")
-        .arg(paths.target_dir.as_str())
-        .env_remove("RUSTC_WORKSPACE_WRAPPER")
-        .env_remove("RUSTC_WRAPPER")
-        .env_remove("LLVM_PROFILE_FILE")
-        .env_remove("CARGO_LLVM_COV_TARGET_DIR")
-        .env_remove("CARGO_TARGET_DIR");
-    apply_sanitized_rustflags(&mut command);
+        .arg(paths.target_dir.as_str());
     command
 }
 
 /// Executes the compiled bridge binary and returns its stdout as a JSON string.
-fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
-    let exe_name = format!("orthohelp_bridge{}", std::env::consts::EXE_SUFFIX);
-    let exe_path = paths.target_dir.join("debug").join(exe_name);
-
-    let output = Command::new(exe_path.as_str())
+fn run_bridge(executable: &camino::Utf8Path) -> Result<String, OrthohelpError> {
+    let output = Command::new(executable.as_str())
         .output()
         .map_err(|io_err| OrthohelpError::Io {
-            path: exe_path,
+            path: executable.to_path_buf(),
             source: io_err,
         })?;
 
@@ -296,7 +281,7 @@ fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
 /// mtime-based or content-based cache-validity checks stable across repeated
 /// invocations even when path-normalization differences cause `read_cached_ir`
 /// to return `None` spuriously.
-fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError> {
+fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), OrthohelpError> {
     // Skip writing if the existing cache file already holds identical content.
     // This preserves the file's mtime, making cache-validity checks robust
     // against spurious cache misses (e.g. Windows path-normalization
@@ -308,12 +293,23 @@ fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError>
         telemetry::ir_cache_unchanged(paths);
         return Ok(());
     }
-    let mut file = open_bridge_file(paths, "ir.json", &paths.ir_path)?;
+    let mut file =
+        tempfile::NamedTempFile::new_in(paths.cache_dir.as_std_path()).map_err(|source| {
+            OrthohelpError::Io {
+                path: paths.cache_dir.clone(),
+                source,
+            }
+        })?;
     telemetry::ir_cache_write(paths, json.len());
     file.write_all(json.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
             path: paths.ir_path.clone(),
             source: io_err,
+        })?;
+    file.persist(paths.ir_path.as_std_path())
+        .map_err(|error| OrthohelpError::Io {
+            path: paths.ir_path.clone(),
+            source: error.error,
         })?;
     Ok(())
 }

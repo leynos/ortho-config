@@ -1120,6 +1120,34 @@ fields retain those strategies unchanged. Applications continue to enforce the
 effective policy at network, filesystem, interpreter, process, and provider
 boundaries.
 
+### 4.19. Executable documentation-test build ownership
+
+Executable README and user's-guide examples use private integration-test
+support. It compiles each exact published source body, creates private
+manifests, inputs, run directories, and executable snapshots, and reads
+executable paths from Cargo's JSON artefact records. Documentation tests use
+Cargo's configured shared package cache and resolved target directory. A
+cross-process lock spans the build and snapshot interval so a same-named binary
+cannot be overwritten before its private copy is made. The production
+`cargo-orthohelp` bridge has a separate lock and helper with ownership limited
+to bridge builds.
+
+Build-tool environment preparation has a narrow infrastructure allow-list,
+separate from the smaller application environment. It preserves Cargo
+configuration, compiler and documentation wrappers, warning enforcement,
+configured jobs, and relevant instrumentation without forwarding unlisted
+application variables or secrets. It leaves the shared Cargo cache under
+Cargo's ownership.
+
+Each documentation scenario has a single monotonic 596-second deadline within
+nextest's 600-second per-test limit. Build, execution, discovery, and cleanup
+have respective 600-, 60-, 30-, and 2-second policies; each operation is capped
+by the remaining scenario time. Output activity does not extend a deadline.
+Each stream retains at most 1 MiB and continues draining, and owned
+process-tree cleanup is bounded. The helpers are scoped to documentation tests
+and the production bridge; they are not general application subprocess APIs. See
+[ADR-014](adr-014-documentation-build-ownership.md).
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**

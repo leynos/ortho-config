@@ -15,7 +15,6 @@ fn dummy_paths() -> BridgePaths {
         bridge_dir: Utf8PathBuf::from("/tmp/bridge"),
         manifest_path: Utf8PathBuf::from("/tmp/bridge/Cargo.toml"),
         target_dir: Utf8PathBuf::from("/tmp/bridge/target"),
-        ir_path: Utf8PathBuf::from("/tmp/bridge/ir.json"),
     }
 }
 
@@ -56,29 +55,23 @@ fn poll_clock_after(reference: SystemTime, timeout: Duration) {
     }
 }
 
-const COVERAGE_VARS: &[&str] = &[
-    "RUSTC_WORKSPACE_WRAPPER",
-    "RUSTC_WRAPPER",
-    "LLVM_PROFILE_FILE",
-    "CARGO_LLVM_COV_TARGET_DIR",
-    "CARGO_TARGET_DIR",
-];
-
-#[test]
-fn build_bridge_command_removes_coverage_env_vars() {
-    let cmd = build_bridge_command(&dummy_paths());
-    let env_overrides: Vec<(&OsStr, Option<&OsStr>)> = cmd.get_envs().collect();
-
-    for var in COVERAGE_VARS {
-        let entry = env_overrides
-            .iter()
-            .find(|(key, _)| *key == OsStr::new(var));
-        assert!(
-            matches!(entry, Some((_, None))),
-            "build_bridge_command should mark {var} for removal \
-             (must appear in get_envs() with value None, not absent or set)"
-        );
-    }
+#[rstest::rstest]
+#[case("RUSTC_WRAPPER")]
+#[case("RUSTC_WORKSPACE_WRAPPER")]
+#[case("RUSTDOC")]
+#[case("RUSTFLAGS")]
+#[case("CARGO_ENCODED_RUSTFLAGS")]
+#[case("CARGO_BUILD_JOBS")]
+#[case("CARGO_HOME")]
+#[case("LLVM_PROFILE_FILE")]
+fn build_bridge_command_preserves_infrastructure_policy(#[case] variable: &str) {
+    let command = build_bridge_command(&dummy_paths());
+    assert!(
+        command
+            .get_envs()
+            .all(|(name, _)| name != OsStr::new(variable)),
+        "the bridge must inherit {variable} without mutation"
+    );
 }
 
 #[test]
@@ -91,9 +84,8 @@ fn write_ir_cache_is_idempotent() {
     let bridge_dir = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).expect("UTF-8 path");
     let bridge = Dir::open_ambient_dir(&bridge_dir, ambient_authority()).expect("open bridge dir");
     bridge.create_dir_all("src").expect("create src");
-    let paths = BridgePaths {
-        bridge_dir: bridge_dir.clone(),
-        manifest_path: bridge_dir.join("Cargo.toml"),
+    let paths = BridgeCache {
+        cache_dir: bridge_dir.clone(),
         target_dir: bridge_dir.join("target"),
         ir_path: bridge_dir.join("ir.json"),
     };

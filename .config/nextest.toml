@@ -112,17 +112,10 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 filter = 'binary(boolean_cli_trybuild) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
-# Serialise orthohelp BDD scenarios: each runs in its own nextest process,
-# so inter-process races on the shared orthohelp cache must be prevented
-# at the nextest level rather than with a process-local mutex.
-# Serialise powershell_windows cases: both cases write to the same bridge
-# directory under target/orthohelp/<hash>/ and Windows file-sharing semantics
-# prevent concurrent truncate+write while cargo holds a read lock on the manifest.
-# Serialise nested_subcommand_end_to_end: its rstest cases spawn concurrent
-# bridge builds that share the target/orthohelp/<hash>/ cache, and an
-# inter-process race on that shared Cargo.toml intermittently yields
-# BridgeBuildFailure ("manifest is missing either a [package] or a
-# [workspace]") under coverage runs.
+# Retain the established CLI scenario and cache-publication ordering. Bridge
+# manifests and executable snapshots are now private, and production builds
+# have an OS-level ownership lock. Changing these groups still requires
+# independent Windows and coverage evidence; this repair keeps their limits.
 [test-groups]
 rstest_bdd = { max-threads = 1 }
 powershell_windows = { max-threads = 1 }

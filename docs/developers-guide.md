@@ -904,21 +904,136 @@ an exact fence body. A workspace has one owner: operations that add, build,
 run, or write require an exclusive mutable borrow. Concurrent scenarios must
 create an independent workspace per thread rather than share one workspace. The
 helper may add the dependencies needed to compile a published example, but it
-must not rewrite that source. Keep the expected identifier registry closed so
-adding an example without choosing its behavioural contract fails a test. The
-documentation-example Cargo runner owns isolated Cargo process setup for these
-documentation tests; reuse it only when executing a documented Cargo workflow
-with a caller-owned temporary state directory. Run Cargo and child binaries
-with cleared environments. Cargo receives only the toolchain and platform paths
-it needs; binaries receive only the non-sensitive Windows runtime variables
-named by the workspace allow-list and deliberate scenario overrides. Keep
-fallible host-tool discovery and environment preparation at the runner
-boundary; command construction consumes the prepared values without starting
-subprocesses or writing files. The process-runner helper owns bounded execution
-for these documentation tests only: route Cargo, host-tool, and
-documented-binary commands through it, while keeping command construction and
-exit-status policy with their existing owners. Run-file paths must contain
+must not rewrite that source. Workspace setup copies the repository's
+`Cargo.lock`, when present, into the private example workspace to reuse its
+dependency versions without editing the parent lockfile. This helper belongs to
+the documentation layout and is separate from production bridge seeding. Keep
+the expected identifier registry closed so adding an example without choosing
+its behavioural contract fails a test. The documentation-example Cargo runner
+owns isolated Cargo process setup for these documentation tests; reuse it only
+when executing a documented Cargo workflow with caller-owned temporary state.
+The build-tool environment is a closed allow-list, separate from the narrower
+environment used by documented applications. It retains the configured Cargo
+home and shared package cache, Rust toolchain, compiler and documentation
+wrappers, applicable wrapper settings, build-job limits, warning flags, and
+platform paths. It also forwards `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`,
+`CARGO_LLVM_COV`, and the LLVM profile-output controls unchanged, so a nested
+build reuses the parent's compiler flags and dependency fingerprints instead of
+compiling a second, instrumentation-free copy. Those variables are therefore
+not sanitised: rewriting them would split the fingerprint and defeat the shared
+cache. The closed allow-list also preserves the non-secret
+`SCCACHE_GHA_ENABLED` cache-mode setting. Cargo configuration is read by Cargo
+as well as inherited environment values. `ACTIONS_RUNTIME_TOKEN`, cache
+credentials, application secrets, and other unlisted variables do not cross
+this boundary. Documented binaries receive only the non-sensitive Windows
+runtime variables, LLVM profile-output controls, deterministic home
+directories, and deliberate scenario overrides named by the workspace policy.
+Do not clear or relocate the shared Cargo cache to make a test pass.
+
+Documentation Rust examples use Cargo's resolved parent target for compiler
+artefacts. Their separate ownership state and OS-level lock live under
+`<parent-target>/documentation-examples/v2`; this is not another Cargo target.
+The shared test-only `BuildState` module handles metadata discovery, lock
+ownership, and the recovery marker for both Rust-example builds and the CLI
+documentation integration test. The Rust-example build helper additionally
+parses compiler-reported Cargo JSON paths and snapshots those executables into
+private workspaces. This protects same-named binaries across separate test
+processes; a process-local mutex is insufficient. Cargo 1.89 released its
+profile build lock before running tests in the observed workflow. A regression
+test checks this lock-order contract; it can report an inconclusive result when
+another Cargo process owns the profile lock.
+
+The CLI integration test lives in the `cargo-orthohelp` package and snapshots
+the executable path Cargo supplies through `CARGO_BIN_EXE_cargo-orthohelp` into
+a private run directory. It does not rebuild that CLI executable from Cargo
+JSON while another test might be using it. The test then runs the documented
+Cargo external-subcommand flow; its generated bridge is built and snapshotted
+by the production bridge helper. Keep manifests, source inputs, run
+directories, and copied executables private to their owner. A successful
+operation requires confirmation that the owned process tree has completed and
+its output streams have drained; root exit and pipe EOF alone do not establish
+that descendants have stopped. If that completion cannot be confirmed within
+the cleanup deadline, fail the operation and retain any cache ownership marker
+for owner recovery.
+
+A direct Cargo build error from the subprocess runner retains its marker even
+when OS-tree cleanup completes: an externally admitted compiler may outlive the
+cancelled Cargo process, so its lifetime is unconfirmed. A fully observed Cargo
+nonzero exit and preparation or snapshot errors keep the existing cleanup path;
+remove the marker only after owned-process completion is confirmed. An opaque
+nested CLI callback error retains its marker because internal capture pipes
+hide compiler writer lifetime from the outer runner. Never clear an unconfirmed
+marker automatically or terminate an unrelated process.
+
+During `cargo llvm-cov`, the installed 0.6.24 tool exports its selected target
+as `CARGO_LLVM_COV_TARGET_DIR`, not `CARGO_TARGET_DIR`. Metadata discovery
+promotes that value to `CARGO_TARGET_DIR`, so it resolves the instrumented
+parent target instead of silently selecting a cold default target. Otherwise
+metadata follows the caller's Cargo target configuration. Regression cases
+cover target precedence and secret exclusion. Preserve the coverage flag and
+LLVM profile-output variables for build tools as well as the normal wrappers
+and warning policy.
+
+Keep fallible host-tool discovery and environment preparation at the runner
+boundary; command construction consumes prepared values without starting
+subprocesses or writing files. The process runner is test infrastructure for
+these documentation tests only: route Cargo, host-tool, and documented-binary
+commands through it, while command construction and exit-status policy remain
+with their existing owners. Its build, execution, discovery, and cleanup
+policies use one monotonic overall scenario deadline, keep per-stream capture
+to 1 MiB while continuing to drain output, and report truncation and
+unavailable evidence on failure. Output activity does not extend a deadline.
+The runner must prove that owned descendants have completed before it reports
+success, on every supported platform. The mechanism is platform-specific; the
+contract is not. This ownership applies only to test subprocesses and must not
+terminate unrelated processes or shared cache services.
+
+The build ceiling remains 600 seconds, preserving the existing limit. The
+execution and discovery defaults are 60 and 30 seconds; these are provisional
+operation budgets, not measurements of application runtime. The attempted
+corrected cold build did not finish within 600 seconds, so it does not
+establish a successful cold-cache duration. A later fresh-target probe
+completed in 66 seconds, but cache hit and miss state was unavailable. Neither
+result justifies increasing a limit. Correlated admission delay was
+unavailable. A documentation scenario remains inside nextest's 600-second
+per-test ceiling, which remains inside the 1,800-second whole-run limit, the
+2,700-second Cargo watchdog, and the enclosing job ceiling. See
+[Test timeouts](#test-timeouts-the-tiers-this-repository-sets) and the
+`documentation_budget_test.py` workflow contract. Run-file paths must contain
 normal relative components only.
+
+### Production bridge build ownership
+
+The production bridge used by `cargo-orthohelp` has a separate build helper
+from the documentation-test workspace helper. The stable IR cache entry stays
+under `target/orthohelp/<hash>/`; each invocation writes its generated
+manifest, bridge source, a private copy of the selected workspace's
+`Cargo.lock` when present, and its executable snapshot into a temporary
+directory under that entry. Cargo builds into the selected package's
+Cargo-resolved target. This reuses compiler output across cache keys without
+sharing mutable bridge inputs or running a binary from an artefact path that
+another build can overwrite.
+
+The production helper is scoped to bridge compilation. It uses an `fs4`
+operating-system file lock in Cargo's selected target directory across the
+JSON-reported build artefact and its copy into the private run directory. The
+generated IR cache path and its atomic, idempotent publication remain
+unchanged. Cargo's configured wrappers, job limits, warning flags, and coverage
+settings remain active. The helper does not rewrite Rust flags or relocate the
+default shared Cargo cache. Diagnostics are streamed from the Cargo build to
+the supervising CLI. See the
+[cargo-orthohelp bridge design][bridge-build-ownership] for the ownership and
+data-flow details.
+
+[bridge-build-ownership]:
+  cargo-orthohelp-design.md#632-bridge-build-ownership-and-recovery
+
+The lock is not a recovery signal. If an abrupt interruption leaves a
+fail-closed marker because Cargo writer lifetime is unknown, confirm that the
+bridge's Cargo and compiler processes have exited before removing it. The
+bridge helper must not clear an unconfirmed marker, kill unrelated processes,
+or restart a shared cache service. The existing nextest serialization groups
+remain until their shared-state assumptions are independently disproven.
 
 ### Python docstring examples
 
@@ -1473,50 +1588,6 @@ the change does not invalidate cache directories. A bounded exhaustive unit
 test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
 digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
 encoder cannot pass.
-
-### Rustflags sanitization for bridge builds
-
-The bridge build spawns `cargo build` and so inherits the parent environment.
-Under `cargo-llvm-cov` that environment contains `-Cinstrument-coverage` in
-`RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS`, which would make the bridge binary
-write profiling data into the test run. `cargo-orthohelp/src/rustflags.rs`
-sanitizes both variables before the child is spawned:
-`apply_sanitized_rustflags` is called only from `bridge::build_bridge_command`,
-which also removes `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`,
-`LLVM_PROFILE_FILE`, `CARGO_LLVM_COV_TARGET_DIR`, and `CARGO_TARGET_DIR` from
-the child.
-
-The contract, which `rustflags_proptests.rs` checks against an independent
-reference filter:
-
-- **Two variables, two delimiters.** `RUSTFLAGS` uses
-  `str::split_whitespace`, so any run of Unicode whitespace separates its
-  tokens; `CARGO_ENCODED_RUSTFLAGS` splits on Cargo's unit separator
-  (`U+001F`). The delimiter is chosen once and used in both directions, so a
-  value is never split on one separator and joined with the other. Do not merge
-  the two paths into one string-typed helper.
-- **What counts as a coverage token.** A compact `-Cinstrument-coverage`,
-  including the `-Cinstrument-coverage=<value>` form, or a bare `-C` whose
-  successor is `instrument-coverage` or starts with `instrument-coverage=`. The
-  split pair is removed as a pair, so the successor cannot survive as a stray
-  token.
-- **Surviving tokens keep their order.** Nothing is sorted or deduplicated.
-  When coverage removal changes the value, the survivors are rejoined with the
-  delimiter's separator — one ASCII space for `RUSTFLAGS`, `U+001F` for
-  `CARGO_ENCODED_RUSTFLAGS` — so separator runs are normalized on that path.
-- **An unchanged value passes through byte-for-byte**, whitespace runs
-  included, rather than being re-rendered from its tokens. Original spacing is
-  preserved only here, on the path that removes nothing.
-- **An emptied value removes the variable** rather than setting it to the empty
-  string. An empty `RUSTFLAGS` is not the same as no `RUSTFLAGS` to Cargo.
-- **Every change is logged.** A partial strip and a full removal each emit one
-  `debug` event naming the variable but not its value. The unchanged path emits
-  nothing, because it has nothing to report.
-
-`apply_sanitized_rustflags` reads the current process environment directly
-rather than taking an injected source. The module is therefore tested through
-those pure functions and the property filter, never by mutating the test
-process's environment.
 
 ## Scoped and policy-based configuration discovery
 

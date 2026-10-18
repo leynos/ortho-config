@@ -1,0 +1,86 @@
+//! Compile, snapshot, and supervise the documented Cargo subcommand workflow.
+
+use anyhow::{Context, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use std::path::Path;
+#[path = "scenario.rs"]
+mod scenario;
+
+use crate::{
+    build_state::BuildState,
+    cargo_runner,
+    process_runner::{self, Operation, Policy},
+};
+
+/// Snapshot Cargo's supplied CLI executable and supervise the documented flow.
+///
+/// The integration target belongs to cargo-orthohelp, so Cargo has already
+/// built this executable before tests begin. Never rebuild a parent-owned
+/// executable while another test may be running it (notably on Windows).
+pub(super) fn assert_agent_context(
+    repository: &Path,
+    executable: &Path,
+    destination: &Path,
+) -> Result<()> {
+    let deadline = scenario::deadline();
+    let state = repository.join("target/documentation-workspaces");
+    Dir::create_ambient_dir_all(&state, ambient_authority())?;
+    let owner = tempfile::Builder::new()
+        .prefix("orthohelp-")
+        .tempdir_in(state)?;
+    let private_bin = owner.path().join("executables");
+    snapshot_cli(executable, &private_bin)?;
+    BuildState::with_owned_state(repository, deadline, |_cache, target, remaining| {
+        // The command invokes Cargo for metadata and the generated bridge, so
+        // this is build infrastructure rather than a sanitized example binary.
+        let mut command = cargo_runner::prepare_cargo_command_for_target_before(
+            repository,
+            owner.path(),
+            target,
+            deadline,
+        )?;
+        let inherited_path = std::env::var_os("PATH");
+        let path = cargo_runner::cargo_dispatch_path(&private_bin, inherited_path.as_deref())?;
+        command
+            .env("CARGO_NET_OFFLINE", "true")
+            .env("PATH", path)
+            .args([
+                "orthohelp",
+                "--package",
+                "hello_world",
+                "--format",
+                "agent-context",
+                "--out-dir",
+            ])
+            .arg(destination);
+        let output = process_runner::run_with_policy(
+            &mut command,
+            Operation("run documented cargo-orthohelp flow"),
+            Policy::build().with_timeout(scenario::remaining(deadline)?.min(remaining)),
+        )?;
+        ensure!(
+            output.status.success(),
+            "cargo-orthohelp failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Copy a Cargo-owned executable without rebuilding its shared output path.
+fn snapshot_cli(executable: &Path, private_bin: &Path) -> Result<()> {
+    let source = Dir::open_ambient_dir(
+        executable
+            .parent()
+            .context("Cargo executable has no directory")?,
+        ambient_authority(),
+    )?;
+    let binary_name = executable
+        .file_name()
+        .context("Cargo executable has no filename")?;
+    Dir::create_ambient_dir_all(private_bin, ambient_authority())?;
+    let snapshot = Dir::open_ambient_dir(private_bin, ambient_authority())?;
+    source.copy(binary_name, &snapshot, binary_name)?;
+    Ok(())
+}

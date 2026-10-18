@@ -1,24 +1,16 @@
 //! Executable contracts for examples in public documentation.
 
-#[path = "documentation_examples/cargo_runner.rs"]
-mod cargo_runner;
-
 mod documentation_examples;
 
 #[path = "documentation_examples/format_all.rs"]
 mod format_all;
-
-#[path = "documentation_examples/process_runner.rs"]
-mod process_runner;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use documentation_examples::{documented_example, load_documented_examples};
 use ortho_config::{AgentContext, toml};
-use process_runner::Operation;
 use std::collections::BTreeSet;
-use tempfile::TempDir;
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "api-guide-agent-context-constructor",
@@ -228,8 +220,18 @@ fn yaml_example_uses_yaml_1_2_string_semantics() -> Result<()> {
     let provider = ortho_config::file::SaphyrYaml::string("guide.yaml", &example.body);
     let value = ortho_config::figment::Figment::from(provider)
         .extract::<ortho_config::serde_json::Value>()?;
-    ensure!(value.get("enabled").and_then(serde_json_value_as_str) == Some("yes"));
-    ensure!(value.get("mode").and_then(serde_json_value_as_str) == Some("on"));
+    ensure!(
+        value
+            .get("enabled")
+            .and_then(ortho_config::serde_json::Value::as_str)
+            == Some("yes")
+    );
+    ensure!(
+        value
+            .get("mode")
+            .and_then(ortho_config::serde_json::Value::as_str)
+            == Some("on")
+    );
     ensure!(
         value
             .get("port")
@@ -240,7 +242,7 @@ fn yaml_example_uses_yaml_1_2_string_semantics() -> Result<()> {
 }
 
 #[test]
-fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
+fn documented_orthohelp_command_matches_cli_contract() -> Result<()> {
     let example = documented_example("guide-orthohelp-command")?;
     ensure!(example.language == "console");
     ensure!(
@@ -248,46 +250,6 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
         "cargo-orthohelp command contract drifted"
     );
 
-    let output_directory = TempDir::new().context("create orthohelp output directory")?;
-    let cargo_state = TempDir::new().context("create isolated Cargo state directory")?;
-    let repository_root = repository_root();
-    let mut command =
-        cargo_runner::prepare_cargo_command(repository_root.as_std_path(), cargo_state.path())?;
-    command
-        .args([
-            "run",
-            "--offline",
-            "--quiet",
-            "-p",
-            "cargo-orthohelp",
-            "--",
-            "orthohelp",
-            "--package",
-            "hello_world",
-            "--format",
-            "agent-context",
-            "--out-dir",
-        ])
-        .arg(output_directory.path());
-    let output = process_runner::run_command(
-        &mut command,
-        Operation("run documented cargo-orthohelp flow"),
-    )?;
-    ensure!(
-        output.status.success(),
-        "cargo-orthohelp failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let output_dir = Dir::open_ambient_dir(output_directory.path(), ambient_authority())?;
-    let json = output_dir
-        .read_to_string("agent-context.json")
-        .context("read generated agent context")?;
-    let payload: ortho_config::serde_json::Value = ortho_config::serde_json::from_str(&json)?;
-    ensure!(payload.get("package").and_then(serde_json_value_as_str) == Some("hello_world"));
-    ensure!(
-        payload.get("kind").and_then(serde_json_value_as_str) == Some("hello_world.agent_context")
-    );
     Ok(())
 }
 
@@ -318,8 +280,4 @@ fn assert_dependency_version(manifest: &toml::Value, name: &str, version: &str) 
 
 fn repository_root() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
-}
-
-fn serde_json_value_as_str(value: &ortho_config::serde_json::Value) -> Option<&str> {
-    value.as_str()
 }

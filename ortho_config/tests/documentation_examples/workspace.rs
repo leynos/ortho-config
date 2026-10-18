@@ -2,17 +2,28 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use std::ffi::{OsStr, OsString};
+use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
+use std::time::Instant;
 use tempfile::TempDir;
 
 use super::documentation_examples::{DocumentedExample, is_valid_example_id};
 use crate::process_runner::{self, Operation};
 
+#[path = "build_cache.rs"]
+mod build_cache;
+#[path = "build_state.rs"]
+mod build_state;
 pub(super) mod cargo_runner;
+#[path = "scenario.rs"]
+mod scenario;
 
-const CHILD_ENV_ALLOWLIST: &[&str] = &["SYSTEMROOT", "WINDIR"];
+#[path = "workspace_layout.rs"]
+mod layout;
+use cargo_runner::cargo_dispatch_path;
+use layout::{manifest, sanitize_application_environment};
 
 /// A Cargo dependency alias used by the generated example package.
 pub(super) struct DependencyAlias<'a>(pub(super) &'a str);
@@ -36,6 +47,8 @@ pub(super) struct RunFile<'a> {
 pub struct ExampleWorkspace {
     root: TempDir,
     directory: Dir,
+    executables: BTreeMap<String, std::path::PathBuf>,
+    deadline: Instant,
 }
 
 impl ExampleWorkspace {
@@ -49,7 +62,15 @@ impl ExampleWorkspace {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn new(dependency_alias: DependencyAlias<'_>) -> Result<Self> {
-        let root = tempfile::tempdir().context("create documentation example workspace")?;
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .context("find documentation repository")?;
+        let workspaces = repository.join("target/documentation-workspaces");
+        Dir::create_ambient_dir_all(&workspaces, ambient_authority())?;
+        let root = tempfile::Builder::new()
+            .prefix("example-")
+            .tempdir_in(workspaces)
+            .context("create documentation example workspace")?;
         let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
             .context("open documentation example workspace")?;
         directory
@@ -58,7 +79,13 @@ impl ExampleWorkspace {
         directory
             .write("Cargo.toml", manifest(dependency_alias))
             .context("write example manifest")?;
-        Ok(Self { root, directory })
+        layout::seed_lockfile(repository, &directory)?;
+        Ok(Self {
+            root,
+            directory,
+            executables: BTreeMap::new(),
+            deadline: scenario::deadline(),
+        })
     }
 
     /// Add an example as a binary without altering its published source.
@@ -107,8 +134,8 @@ impl ExampleWorkspace {
 
     /// Build every documented binary in the package.
     ///
-    /// `Ok(())` means every added binary compiled successfully in the isolated
-    /// target directory.
+    /// `Ok(())` means every added binary compiled successfully in Cargo's
+    /// resolved shared target and was snapshotted into this workspace.
     ///
     /// ```no_run
     /// # let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
@@ -117,14 +144,18 @@ impl ExampleWorkspace {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn build(&mut self) -> Result<()> {
-        let mut command = self.cargo_command()?;
-        command.args(["build", "--offline", "--bins"]);
-        let output = process_runner::run_command(&mut command, Operation("build documented Rust"))?;
-        ensure!(
-            output.status.success(),
-            "documented Rust failed to compile:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .context("find documentation repository")?;
+        self.executables = build_cache::BuildCache::build_before(
+            repository,
+            build_cache::BuildInputs {
+                package: self.root.path(),
+                destination: &self.root.path().join("executables"),
+                arguments: &["--bins"],
+            },
+            self.deadline,
+        )?;
         Ok(())
     }
 
@@ -187,12 +218,11 @@ impl ExampleWorkspace {
             .with_context(|| format!("create working directory for {id}"))?;
         let run_dir = self.root.path().join(&run_dir_name);
         let binary = self
-            .root
-            .path()
-            .join("target/debug")
-            .join(format!("{id}{}", std::env::consts::EXE_SUFFIX));
+            .executables
+            .get(id)
+            .with_context(|| format!("no Cargo executable snapshot for {id}"))?;
         let mut command = Command::new(binary);
-        cargo_runner::sanitize_environment(&mut command, CHILD_ENV_ALLOWLIST);
+        sanitize_application_environment(&mut command);
         command
             .args(args)
             .current_dir(&run_dir)
@@ -204,12 +234,19 @@ impl ExampleWorkspace {
                     .map(|EnvironmentVariable { name, value }| (name, value)),
             );
         let operation = format!("run documented binary {id}");
-        process_runner::run_command(&mut command, Operation(&operation))
+        process_runner::run_with_policy(
+            &mut command,
+            Operation(&operation),
+            process_runner::Policy::execution().with_timeout(
+                scenario::remaining(self.deadline)?
+                    .min(process_runner::Policy::execution().timeout()),
+            ),
+        )
     }
 
     /// Run a built `cargo-<subcommand>` binary through Cargo dispatch.
     ///
-    /// The workspace's `target/debug` directory is prepended to the child
+    /// The workspace's private executable directory is prepended to the child
     /// `PATH`, so Cargo discovers only the fixture binary added to this
     /// workspace before any host installation.
     ///
@@ -238,13 +275,35 @@ impl ExampleWorkspace {
             is_valid_example_id(subcommand),
             "{subcommand} is not a safe Cargo subcommand name"
         );
-        let fixture_bin_dir = self.root.path().join("target/debug");
+        let fixture_bin_dir = self.root.path().join("executables");
         let inherited_path = std::env::var_os("PATH");
         let path = cargo_dispatch_path(&fixture_bin_dir, inherited_path.as_deref())?;
-        let mut command = self.cargo_command()?;
-        command.env("PATH", path).arg(subcommand).args(args);
         let operation = format!("run Cargo-dispatched documented binary {subcommand}");
-        process_runner::run_command(&mut command, Operation(&operation))
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .context("find documentation repository")?;
+        build_cache::BuildCache::with_owned_state(
+            repository,
+            self.deadline,
+            |cache, target, remaining| {
+                let mut command = cargo_runner::prepare_cargo_command_for_target_before(
+                    self.root.path(),
+                    cache,
+                    target,
+                    self.deadline,
+                )?;
+                command.env("PATH", path).arg(subcommand).args(args);
+                process_runner::run_with_policy(
+                    &mut command,
+                    Operation(&operation),
+                    process_runner::Policy::execution().with_timeout(
+                        scenario::remaining(self.deadline)?
+                            .min(remaining)
+                            .min(process_runner::Policy::execution().timeout()),
+                    ),
+                )
+            },
+        )
     }
 
     /// Write a file in one binary's deterministic working directory.
@@ -279,9 +338,6 @@ impl ExampleWorkspace {
         let run_dir_name = format!("run-{id}");
         self.directory.create_dir_all(&run_dir_name)?;
         let run_dir = self.directory.open_dir(&run_dir_name)?;
-        // `Dir::write` does not create intermediate directories, so a nested
-        // fixture path — a scope directory such as `xdg/acme/config.toml` —
-        // needs them made first. A bare filename has no parent to create.
         if let Some(parent) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
             run_dir
                 .create_dir_all(parent)
@@ -291,19 +347,20 @@ impl ExampleWorkspace {
         Ok(())
     }
 
-    /// Resolve a path relative to the workspace root.
+    /// Resolve a relative path within this workspace.
     ///
-    /// `write_run_file` writes through a capability handle rather than ambient
-    /// `std::fs`, so the absolute location of a fixture is not otherwise
-    /// observable. A test that has to hand a *path* to a child process - as an
-    /// environment variable naming a configuration file, for instance - needs
-    /// it, because discovery resolves a relative selector value against the
-    /// child's working directory, which is a different directory from the
-    /// workspace root.
+    /// Tests use this when a documented application expects a path in its
+    /// environment rather than opening a run-directory fixture directly.
+    ///
+    /// ```no_run
+    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// let config = workspace.path_in_root("run-example/config.toml")?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     ///
     /// # Errors
     ///
-    /// Returns an error when `relative` escapes the workspace root.
+    /// Returns an error when `relative` contains a root or parent component.
     pub fn path_in_root(&self, relative: &str) -> Result<PathBuf> {
         let relative_path = Path::new(relative);
         ensure!(
@@ -315,54 +372,6 @@ impl ExampleWorkspace {
         );
         Ok(self.root.path().join(relative_path))
     }
-
-    fn cargo_command(&mut self) -> Result<Command> {
-        cargo_runner::prepare_cargo_command(self.root.path(), self.root.path())
-    }
-}
-
-fn cargo_dispatch_path(fixture_bin_dir: &Path, inherited_path: Option<&OsStr>) -> Result<OsString> {
-    std::env::join_paths(
-        std::iter::once(fixture_bin_dir.to_path_buf())
-            .chain(inherited_path.into_iter().flat_map(std::env::split_paths)),
-    )
-    .context("construct PATH for Cargo dispatch")
-}
-
-/// Builds a generated example manifest with local crate dependency paths.
-fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
-    let crate_path = toml::Value::String(env!("CARGO_MANIFEST_DIR").to_owned()).to_string();
-    let cargo_orthohelp_path =
-        toml::Value::String(concat!(env!("CARGO_MANIFEST_DIR"), "/../cargo-orthohelp").to_owned())
-            .to_string();
-    render_manifest(dependency_name, &crate_path, &cargo_orthohelp_path)
-}
-
-/// Render the generated manifest from a serialized Cargo dependency path.
-///
-/// This stays private to the documentation workspace and its path regression
-/// test; callers must serialize the path as a TOML value before using it.
-fn render_manifest(
-    dependency_name: &str,
-    serialized_crate_path: &str,
-    serialized_cargo_orthohelp_path: &str,
-) -> String {
-    format!(
-        concat!(
-            "[package]\n",
-            "name = \"documented-examples\"\n",
-            "version = \"0.0.0\"\n",
-            "edition = \"2024\"\n\n",
-            "[dependencies]\n",
-            "{} = {{ package = \"ortho_config\", path = {} }}\n",
-            "cargo_orthohelp = {{ package = \"cargo-orthohelp\", path = {} }}\n",
-            "clap = {{ version = \"4.5\", features = [\"derive\"] }}\n",
-            "serde = {{ version = \"1.0\", features = [\"derive\"] }}\n",
-            "serde_json = \"1\"\n",
-            "tracing-subscriber = {{ version = \"0.3\", features = [\"env-filter\"] }}\n",
-        ),
-        dependency_name, serialized_crate_path, serialized_cargo_orthohelp_path,
-    )
 }
 
 #[cfg(test)]

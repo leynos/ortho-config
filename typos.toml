@@ -64,6 +64,7 @@ extend-ignore-re = [
     "`behavior`",
     "`behaviour\\(interation = \\.\\.\\.\\)`",
     "`color`",
+    "`compiler-artifact`",
     "`env\\(allias = …\\)`",
     "`normalisation`",
     "`skill_manifest_serialises_with_camino_path`",
