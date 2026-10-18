@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -145,7 +145,7 @@ task into two.
 - [x] (2026-10-14) Read the upstream v0.6.0 migration guide and the 0.5.0
   migration guide; build the applicability matrix.
 - [x] (2026-10-14) Import upstream documentation with a provenance record.
-  Committed as `77868ace`. Three files imported byte-for-byte, provenance
+  Committed as `fbeaf898`. Three files imported byte-for-byte, provenance
   document written, both Markdown gates confirmed green over the imports.
 - [x] (2026-10-14) Write the ExecPlan. The task statement directed a full
   migration rather than a request for approval of one, so the plan is recorded
@@ -217,18 +217,26 @@ task into two.
   or weakened to achieve the green result.
 - [x] (2026-10-17) Post-rebase gate rerun. After the replay onto `main` at
   `67fdb341` and the `output` module split it forced, all five gates were run
-  again on the final tree (`5a961a4a991274f73d0b8e18c5bf817851419e76`, the tree
-  of commit `1a831d85`). The counts moved because `main` added tests, not
-  because this branch changed any:
+  again on the source tree that the branch delivers
+  (`5a961a4a991274f73d0b8e18c5bf817851419e76`). The counts moved because `main`
+  added tests, not because this branch changed any:
   - `make lint` — green, all three phases reached (rustdoc, Clippy, Whitaker).
   - `make test` — green: 2045 Rust tests passed, 0 failed, 25 ignored; the
     Python suite reported 115 passed and 5 skipped.
   - `make check-fmt` — green (`89 files left unchanged`).
   - `make markdownlint` — green (`Summary: 0 issues`; `current: typos.toml`).
   - `make nixie` — green (all diagrams validated).
-  The dependency-only commit `4af229d0` was also `cargo check`ed on its own
+  The dependency-only commit `e0af849f` was also `cargo check`ed on its own
   (`--workspace --all-targets --all-features`), proving the refactor in the
   next commit is not concealing a required API adaptation.
+- [x] (2026-10-18) Final delivery. The pull request head delivers a tree that
+  differs from the gated tree `5a961a4a991274f73d0b8e18c5bf817851419e76` only
+  in this ExecPlan. Every changed path in the delta is Markdown, so the Rust
+  gate certificates transfer by content identity, and the Markdown gates were
+  re-run over the delivered head. The four commits are ordered so that the
+  documentation import, the dependency and lockfile migration, the
+  one-emission-per-function refactor, and the step-return regression suite can
+  each be reviewed or reverted on their own.
 
 ## Surprises & discoveries
 
