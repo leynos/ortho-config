@@ -191,8 +191,11 @@ task into two.
   payload does not override a fixture" case used a `()`-returning step, which
   the macro classifies as `Unit` and never routes through the dispatch path
   under test. It has been rewritten against the published 0.6.0 sources (see
-  Decision log, 2026-10-17) and now has seven tests. The `rstest_bdd` target
-  passes: `83 passed; 0 failed`, and the whole suite still runs in 0.28 s.
+  Decision log, 2026-10-17) and now has eight tests. (An earlier revision of
+  this entry said seven; the module has carried eight `#[test]` functions in
+  every commit that contains it, so the count was a transcription error, not a
+  later addition.) The `rstest_bdd` target passes: `83 passed; 0 failed`, and
+  the whole suite still runs in 0.28 s.
 - [x] (2026-10-17) Milestone EP-M3: documentation and gates. The developers'
   guide and the documentation index are updated. Every gate the repository
   defines has now been run on the migrated tree, sequentially, each with its
@@ -233,10 +236,24 @@ task into two.
   differs from the gated tree `5a961a4a991274f73d0b8e18c5bf817851419e76` only
   in this ExecPlan. Every changed path in the delta is Markdown, so the Rust
   gate certificates transfer by content identity, and the Markdown gates were
-  re-run over the delivered head. The four commits are ordered so that the
+  re-run over the delivered head. The four work commits are ordered so that the
   documentation import, the dependency and lockfile migration, the
   one-emission-per-function refactor, and the step-return regression suite can
-  each be reviewed or reverted on their own.
+  each be reviewed or reverted on their own; a fifth commit records this
+  delivery state.
+- [x] (2026-10-18) Milestone CLI review and plan correction. The review
+  `coderabbit review --agent --committed --base-commit 67fdb341` (CLI 0.9.0)
+  returned zero findings across all 27 committed paths of the delta; the file
+  list the tool reported matches `git diff --name-only 67fdb341...HEAD`
+  exactly, so the null result is full coverage rather than a skipped pass.
+  Nothing to disposition and no repair, so no gate needed re-running. The same
+  audit of this plan found three count errors, all corrected here: the
+  regression module's stated test count (it said seven; the module has carried
+  eight `#[test]` functions in every commit containing it), the `ortho_config`
+  feature-file count in *Context and orientation* (it said 22; the tree has 18,
+  and 18 + 6 + 4 = 28, the total the acceptance criteria use), and the commit
+  count (four work commits plus the delivery record). All are
+  documentation-only corrections.
 
 ## Surprises & discoveries
 
@@ -515,12 +532,13 @@ has not been sought; the branch is presented for review only.
   moving `write_agent_context_stdout` into the existing
   `output/agent_context.rs` child brought the parent back to 374 lines without
   dropping a doc line.
-- Outcome: the work is delivered as four atomic commits — the pinned
+- Outcome: the work is delivered as four atomic work commits — the pinned
   documentation import, the dependency and lockfile migration, the
   one-emission-per-function refactor, and the step-return regression suite — so
-  each unit can be reviewed or reverted on its own. The dependency-only commit
-  was separately `cargo check`ed to prove the refactor is not hiding a
-  necessary API adaptation.
+  each unit can be reviewed or reverted on its own, plus a fifth commit that
+  records the final delivery state in this plan. The dependency-only commit was
+  separately `cargo check`ed to prove the refactor is not hiding a necessary
+  API adaptation.
 - Gap: the local gate run cannot prove the Windows leg, which the CI matrix
   covers separately. No Windows-only `#[cfg]` code was touched by this work,
   but that leg remains CI's to certify.
@@ -546,7 +564,7 @@ This repository is a Rust workspace (`resolver = "2"`, edition 2024) with ten
 members declared in the root `Cargo.toml`. Only three members consume
 `rstest-bdd`:
 
-- `ortho_config` — the primary behavioural suite, 22 feature files.
+- `ortho_config` — the primary behavioural suite, 18 feature files.
 - `cargo-orthohelp` — a cargo subcommand helper, 6 feature files.
 - `examples/hello_world` — a worked example, 4 feature files.
 
