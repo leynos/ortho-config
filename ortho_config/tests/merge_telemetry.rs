@@ -5,7 +5,7 @@
 //! source-aware entry point that makes a terminal loading decision.
 
 use cap_std::{ambient_authority, fs::Dir};
-use figment::{Jail, Provider};
+use figment::Provider;
 use ortho_config::{
     CsvEnv, MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource,
     load_and_merge_subcommand_with_sources, subcommand::Prefix,

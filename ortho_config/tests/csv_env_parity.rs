@@ -71,7 +71,13 @@ where
 fn process_provider_data(probe: &str, pairs: &[(String, String)]) -> Result<String> {
     let executable = std::env::current_exe().context("locate the integration-test executable")?;
     let output = Command::new(executable)
-        .args(["--ignored", "--exact", "--show-output", probe])
+        .args([
+            "--ignored",
+            "--exact",
+            "--show-output",
+            "--test-threads=1",
+            probe,
+        ])
         .env_clear()
         .envs(pairs.iter().cloned())
         .output()
@@ -98,7 +104,8 @@ fn process_provider_data(probe: &str, pairs: &[(String, String)]) -> Result<Stri
 /// Emit the process provider's exact Figment value tree for its parent test.
 fn emit_process_data(provider: &CsvEnv) -> Result<()> {
     let data = provider.data()?;
-    writeln!(std::io::stdout().lock(), "{PROCESS_DATA_MARKER}{data:?}")
+    // Libtest writes progress to stdout; start the marker on a fresh line.
+    writeln!(std::io::stdout().lock(), "\n{PROCESS_DATA_MARKER}{data:?}")
         .context("write process-backed CsvEnv result")
 }
 
