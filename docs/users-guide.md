@@ -377,6 +377,26 @@ fn main() {
 change. `EnvSource` deliberately supports lookup by name but not enumeration;
 discovery cannot accidentally scan or log unrelated environment values.
 
+`EnvSource` is **discovery-only**. It answers the configuration-path selector
+and the platform base-directory lookups; it does not replace the `APP_*`
+configuration-value merge layer, which is supplied separately as a
+`SharedScanEnvSource`. Injecting a discovery source does not change how
+configuration values are read, and enumerating merge variables remains a
+distinct, explicitly named capability.
+
+Injecting a source into `CsvEnv` uses `ScanEnvSource`, the merge-layer path
+completed under [#412](https://github.com/leynos/ortho-config/issues/412).
+Supplying the `CsvEnv` merge layer through `EnvSource` remains out of scope:
+that path requires enumeration, which `EnvSource` deliberately does not offer.
+
+Discovery emits decision and outcome telemetry as it runs, but the events carry
+no environment values, raw paths, file contents, or configuration values. Each
+field is a bounded label such as `operation`, `outcome`, `source`, or
+`required`, so an operator can see which location won or was skipped without
+the log becoming a record of where the application looked or what it read. See
+[Add production diagnostics](#add-production-diagnostics) for how to install a
+subscriber.
+
 ## Resolve discovery and merging without process state
 
 Tests and embedded callers can resolve the complete configuration without
@@ -1167,6 +1187,12 @@ ortho_config = { version = "0.9.0", features = ["metrics"] }
 The feature emits bounded counters such as discovery attempts, outcomes, and
 failures. OrthoConfig never installs a recorder, and enabling the feature does
 nothing visible until the application installs one.
+
+The facade is intended for library consumers as well as applications: a binary
+that already owns a recorder picks the counters up by enabling the feature,
+with no further wiring. The labels are closed vocabularies, never paths,
+variable values, application names, or error strings, so the emitted
+time-series stay bounded however the application is configured.
 
 ## Generate help from the same metadata
 
