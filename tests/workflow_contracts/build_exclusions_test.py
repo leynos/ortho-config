@@ -25,8 +25,9 @@ again: an empty ``RUSTFLAGS`` input to the
 setup action leaves the variable unset, which is the same as leaving the
 configuration in force.
 
-The MSRV lane is held to the estate's cost rule: ``cargo check --all-targets``
-on the MSRV toolchain, never a second test run, on the version the manifest
+The MSRV lane builds every target on the MSRV toolchain and never runs a test
+(the estate's cost rule is a ``cargo check``; a build is stronger and was asked
+for), on the version the manifest
 declares.
 
 Run via ``make test-workflow-contracts``.
@@ -121,30 +122,82 @@ def _declared_msrv() -> str:
     return str(manifest["workspace"]["package"]["rust-version"])
 
 
-def test_the_msrv_job_checks_the_declared_version_and_runs_no_tests(
+def _declared_msrv_leg() -> str:
+    """Return the declared ``rust-version`` as the ``major.minor`` a matrix leg names."""
+    return ".".join(_declared_msrv().split(".")[:2])
+
+
+#: Commands that would turn the MSRV lane into a second test run.
+TEST_COMMANDS: typ.Final[frozenset[str]] = frozenset({"test", "nextest", "llvm-cov", "mutants"})
+
+
+def _msrv_job(documents: dict[str, WorkflowDocument]) -> dict[str, typ.Any]:
+    """Return the ``msrv`` job."""
+    return typ.cast("dict[str, typ.Any]", _job(documents, "ci.yml", "msrv"))
+
+
+def test_the_msrv_matrix_leg_is_the_workspace_rust_version(
     documents: dict[str, WorkflowDocument],
 ) -> None:
-    """One job, named for the MSRV, installing the manifest's version and only checking."""
-    job = _job(documents, "ci.yml", "msrv")
-    steps = [step for step in job["steps"] if isinstance(step, dict)]  # type: ignore[union-attr]
-    toolchains = [_mapping(step.get("with")).get("toolchain") for step in steps if "with" in step]
-    assert _declared_msrv() in toolchains, (
-        f"the MSRV job installs {toolchains}, the manifest declares {_declared_msrv()!r}"
+    """The matrix is keyed by toolchain and has exactly one leg: the declared MSRV.
+
+    The leg is compared with the manifest's ``major.minor``, so raising
+    ``rust-version`` without moving the leg (or the reverse) fails here and the
+    two cannot drift. ``major.minor`` is also what the estate's MSRV audit
+    matches a workflow's numeric toolchain against.
+    """
+    matrix = _msrv_job(documents)["strategy"]["matrix"]
+    assert matrix["toolchain"] == [_declared_msrv_leg()], (
+        f"the MSRV matrix is {matrix.get('toolchain')!r}; the manifest declares {_declared_msrv()!r}"
     )
+
+
+def test_the_msrv_leg_installs_and_builds_its_matrix_toolchain_and_runs_no_tests(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """The leg installs ``matrix.toolchain``, builds through Make, and never tests.
+
+    A build is stronger than the estate's ``cargo check`` cost rule (it links)
+    and is still not a test run; the maintainer asked for it. What the lane may
+    not become is a second execution of the suite.
+    """
+    job = _msrv_job(documents)
+    steps = [step for step in job["steps"] if isinstance(step, dict)]
+    installs = [_mapping(step.get("with")).get("toolchain") for step in steps if "with" in step]
+    assert installs == ["${{ matrix.toolchain }}"], f"the MSRV leg installs {installs}"
     runs = [str(step["run"]) for step in steps if "run" in step]
-    assert runs == ["make msrv-check"], f"the MSRV job runs {runs}, not the one Make target"
+    assert runs == ["make msrv-build MSRV=${{ matrix.toolchain }}"], f"the MSRV leg runs {runs}"
+    for run in runs:
+        assert not TEST_COMMANDS & set(run.split()), f"the MSRV leg runs tests: {run!r}"
     for step in steps:
         if "uses" in step:
             assert _PINNED.search(str(step["uses"])), f"{step['uses']!r} is not pinned to a commit"
 
 
+def test_the_msrv_leg_does_not_inherit_the_nightly_flags(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """Nothing in the leg's environment puts the standard back in front of a stable compiler.
+
+    ``make msrv-build`` assigns ``RUSTFLAGS`` itself, but a job- or step-level
+    value naming a nightly flag would be a second, contradictory statement.
+    """
+    job = _msrv_job(documents)
+    envs = [_mapping(job.get("env"))] + [
+        _mapping(step.get("env")) for step in job["steps"] if isinstance(step, dict)
+    ]
+    for env in envs:
+        flags = set(env.get("RUSTFLAGS", "").split())
+        assert not (STANDARD_FLAGS & flags), f"the MSRV leg sets {sorted(STANDARD_FLAGS & flags)}"
+
+
 def test_the_msrv_version_is_quoted_in_the_workflow_text() -> None:
-    """YAML reads an unquoted ``1.80`` as the number 1.8, so the version must be a string.
+    """YAML reads an unquoted ``1.80`` as the number 1.8, so the leg must be a string.
 
     The workflow reader keeps every scalar as written and cannot see the
     difference; the file text can.
     """
     text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
-    assert re.search(rf'toolchain:\s*["\']{re.escape(_declared_msrv())}["\']', text), (
-        f"ci.yml does not install the MSRV {_declared_msrv()} as a quoted string"
+    assert re.search(rf'toolchain:\s*\[\s*["\']{re.escape(_declared_msrv_leg())}["\']\s*\]', text), (
+        f"ci.yml does not list the MSRV {_declared_msrv_leg()} as a quoted string"
     )

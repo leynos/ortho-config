@@ -44,6 +44,7 @@ _DIRECT_SUITE: typ.Final[re.Pattern[str]] = re.compile(
 )
 _GENERATE_COVERAGE: typ.Final[str] = "/generate-coverage@"
 _MATRIX_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(r"matrix\.([A-Za-z0-9_-]+)")
+_EXPRESSION: typ.Final[re.Pattern[str]] = re.compile(r"\$\{\{.*?\}\}")
 _QUOTED_LITERAL: typ.Final[re.Pattern[str]] = re.compile(r"'([^']+)'")
 #: References that can choose a runner but cannot be known from the workflow text.
 _UNRESOLVABLE: typ.Final[re.Pattern[str]] = re.compile(r"\b(?:inputs|vars|env|needs|steps|secrets)\.")
@@ -227,6 +228,10 @@ def _make_goals(run: str) -> list[list[str]]:
     """Return the goal list of each ``make`` invocation in a ``run`` script."""
     invocations: list[list[str]] = []
     for line in run.splitlines():
+        # An expression such as `MSRV=${{ matrix.toolchain }}` holds spaces, which
+        # would split into stray words that read as goals; GitHub resolves it
+        # before the shell runs, so it is replaced by a placeholder word.
+        line = _EXPRESSION.sub("EXPR", line)
         try:
             tokens = shlex.split(line, comments=True)
         except ValueError:
