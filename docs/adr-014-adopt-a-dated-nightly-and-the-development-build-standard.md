@@ -138,7 +138,5 @@ is not replicated here.
   `-D warnings`.
 - Mutation testing relies on the shared `setup-rust` default `RUSTFLAGS` to
   displace the configuration, and no repository contract covers that.
-- Another open branch also adds an ADR numbered 013, so this number may need
-  renumbering on merge.
 
 [^1]: Developers' guide, "Cranelift qualification" section.
