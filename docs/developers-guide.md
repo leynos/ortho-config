@@ -1707,6 +1707,25 @@ variables for tests.
   native-path behaviour; `MapEnv` stays closed, and custom sources may supply
   an explicit native configuration root for deterministic tests.
 
+### Process-backed environment test probes
+
+Tests that compare `CsvEnv` process behaviour with an injected `MapEnv` must
+run the process-backed provider in a child with a cleared environment and only
+the explicit probe inputs. Keep the probe ignored during ordinary test runs and
+require a dedicated opt-in environment marker before it reads or emits process
+data, so accidental direct invocation cannot expose ambient variables. Run one
+exact probe at a time with `--show-output --test-threads=1`, validate exactly
+one dedicated output marker, and compare the child's result in the parent with
+the injected provider's result. Prefix child inputs with a test-specific key so
+runtime variables such as LLVM coverage settings cannot enter the comparison.
+
+Telemetry probes follow the same child-process boundary for the real process
+source. Exercise injected sources separately in the parent, and assert both
+that the event vocabulary stays bounded and that input sentinels never appear
+in captured fields. This keeps process collection, injected-source coverage,
+and redaction checks explicit without copying the parent's environment into a
+probe.
+
 ## Dependency management
 
 Cargo dependencies in this workspace follow strict version pinning rules so
