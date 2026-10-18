@@ -387,11 +387,11 @@ def test_the_shared_target_is_strict(lint_recipe: list[str]) -> None:
 def test_the_job_turns_the_build_standard_off(beta_job: dict[str, object]) -> None:
     """Beta is not the pinned nightly, so the lint step runs with the standard off.
 
-    The standard restates ``-Zthreads=8`` and, on x86_64 Linux, the Cranelift
-    backend. Both are nightly-only, and a beta compiler stops on the first
-    one with "the option `Z` is only accepted on the nightly compiler". The
-    same variable makes the build-tools preflight a no-op, which is why this
-    lane needs neither mold nor the pinned nightly.
+    The standard restates ``-Zthreads=8`` and, on Linux, the ``mold`` linker
+    argument. The parallel frontend is the nightly-only option, and a beta
+    compiler stops on it with "the option `Z` is only accepted on the nightly
+    compiler". The same variable makes the build-tools preflight a no-op,
+    which is why this lane needs neither mold nor the pinned nightly.
     """
     switches = [
         step.get("env", {}).get("BUILD_STANDARD")
