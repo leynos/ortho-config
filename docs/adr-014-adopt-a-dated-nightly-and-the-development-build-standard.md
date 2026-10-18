@@ -85,7 +85,9 @@ routes displacing the configuration instead.
   and `$(DEBUG_RUSTFLAGS)` for a debug build. `BUILD_STANDARD=0` switches the
   standard off for one invocation; only the advisory beta lane uses it.
 - Do not adopt backend selection. The Cranelift backend was requested, measured,
-  and refused; the evidence is in the developers' guide.[^1]
+  and refused; the evidence is in the developers' guide.[^1] The exception is
+  tracked by [issue #598](https://github.com/leynos/ortho-config/issues/598),
+  which requires a re-measurement by 2027-04-18.
 - Keep explicit non-development routes outside the standard. `make release`
   uses `$(RELEASE_RUSTFLAGS)`, which assigns an empty `RUSTFLAGS` on purpose to
   displace the configuration. Coverage and packaging assign `RUSTFLAGS` in
