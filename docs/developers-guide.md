@@ -2701,6 +2701,21 @@ identifiers are distinct, so each appears by name in `pytest --collect-only`.
 - `build_standard_make.py` and `workflow_legs.py` are support code: the first
   evaluates the Makefile and reads the Cargo configuration, and the second
   derives a job's legs and the steps that reach the suite.
+- `workflow_legs_properties_test.py` holds Hypothesis property tests of the
+  `workflow_legs` interpreter: matrix product completeness, `include` entries
+  appended unchanged, an `exclude` entry removing exactly its matches,
+  degenerate matrices giving one empty leg, the string, list and mapping forms
+  of `runs-on`, `matrix.<key>` substitution including the fork fallback,
+  unreadable runners raising, and step `if` conditions agreeing with an
+  independent oracle. They are derandomized, bounded and use no example
+  database, so they are deterministic and fast. Each property is also run
+  against a deliberately wrong interpreter (a dropped axis, an ignored
+  `exclude`, an always-true condition, an unsubstituted reference) and must
+  reject it. They exist because the repository's workflows use one spelling of
+  everything, so the real workflows cannot tell a working interpreter from a
+  broken one, and the provisioning contract depends on it. Hypothesis is
+  already declared for `make test-workflow-contracts`
+  (`--with 'hypothesis>=6,<7'` in the Makefile target).
 
 These contracts judge this repository's own invocations. Estate-wide policy is
 audited by Concordat (`concordat artefact rule run rust-build-defaults`,
@@ -2757,15 +2772,15 @@ has no cooldown. The reasoning is:
 Dependabot proposes the bump. A human reviewing the pull request must:
 
 1. Regenerate the trybuild `.stderr` snapshots from the compiler, never by
-   hand, then re-run with `TRYBUILD` unset to confirm. Nine test binaries use
+   hand, then re-run with `TRYBUILD` unset to confirm. Ten test binaries use
    trybuild, and they share one project directory under
    `target/tests/trybuild`, so run them one at a time (`cargo test` does; a
    parallel runner must serialize them):
 
    ```bash
-   for t in compile_fail crate_path_trybuild declarative_merge_trybuild \
-     env_source_trybuild generated_lint_trybuild localization_trybuild \
-     localized_parse_trybuild subcommand_trybuild; do
+   for t in boolean_cli_trybuild compile_fail crate_path_trybuild \
+     declarative_merge_trybuild env_source_trybuild generated_lint_trybuild \
+     localization_trybuild localized_parse_trybuild subcommand_trybuild; do
      TRYBUILD=overwrite cargo test -p ortho_config --test "$t"
    done
    TRYBUILD=overwrite cargo test -p cargo-orthohelp --test compile_time
