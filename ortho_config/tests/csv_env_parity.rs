@@ -10,6 +10,7 @@ use proptest::prelude::*;
 use std::{io::Write, process::Command, sync::Arc};
 
 const PROCESS_DATA_MARKER: &str = "ORTHO_CSV_PROCESS_DATA:";
+const PROCESS_PROBE_MARKER: &str = "ORTHO_CSV_PROCESS_PROBE";
 /// Keep process probes scoped to supplied keys, including under coverage.
 const PROCESS_PROBE_PREFIX: &str = "PARITY_";
 
@@ -80,6 +81,7 @@ fn process_provider_data(probe: &str, pairs: &[(String, String)]) -> Result<Stri
         ])
         .env_clear()
         .envs(pairs.iter().cloned())
+        .env(PROCESS_PROBE_MARKER, "1")
         .output()
         .context("run the process-backed CsvEnv probe")?;
     ensure!(
@@ -103,10 +105,43 @@ fn process_provider_data(probe: &str, pairs: &[(String, String)]) -> Result<Stri
 
 /// Emit the process provider's exact Figment value tree for its parent test.
 fn emit_process_data(provider: &CsvEnv) -> Result<()> {
+    if std::env::var_os(PROCESS_PROBE_MARKER).is_none() {
+        return Ok(());
+    }
     let data = provider.data()?;
     // Libtest writes progress to stdout; start the marker on a fresh line.
     writeln!(std::io::stdout().lock(), "\n{PROCESS_DATA_MARKER}{data:?}")
         .context("write process-backed CsvEnv result")
+}
+
+/// An ignored probe invoked directly must not expose matching process values.
+#[test]
+fn ignored_probe_does_not_emit_process_values_without_child_marker() -> Result<()> {
+    let executable = std::env::current_exe().context("locate the integration-test executable")?;
+    let output = Command::new(executable)
+        .args([
+            "--ignored",
+            "--exact",
+            "--show-output",
+            "--test-threads=1",
+            "nested_process_probe",
+        ])
+        .env_clear()
+        .env("APP_SECRET", "ORTHO_CSV_PARENT_SECRET_SENTINEL")
+        .output()
+        .context("run an unmarked process probe")?;
+    ensure!(
+        output.status.success(),
+        "unmarked process probe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout =
+        String::from_utf8(output.stdout).context("decode unmarked process probe output")?;
+    ensure!(
+        !stdout.contains("ORTHO_CSV_PARENT_SECRET_SENTINEL"),
+        "unmarked process probe emitted a process value: {stdout}"
+    );
+    Ok(())
 }
 
 #[test]
