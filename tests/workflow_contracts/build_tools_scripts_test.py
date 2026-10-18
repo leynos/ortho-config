@@ -76,8 +76,7 @@ def _fake_rustup(directory: pathlib.Path, *, installed: bool = True) -> None:
     _tool(
         directory,
         "rustup",
-        'if [ "$1" = toolchain ]; then echo "' + listing + '"; '
-        'elif [ "$1" = component ]; then echo "rustc-codegen-cranelift-preview-x86_64-unknown-linux-gnu"; fi',
+        'if [ "$1" = toolchain ]; then echo "' + listing + '"; fi',
     )
 
 

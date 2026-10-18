@@ -17,8 +17,8 @@ displaces the standard.
   nightly-only flags outright.
 
 The failure mode is the same in each: ``RUSTFLAGS`` is unset, the
-configuration applies, and a coverage run fails (or a release ships a
-Cranelift binary) without anyone having edited the build. So the contract is
+configuration applies, and a coverage run is linked by the wrong linker (or a
+release ships a development-flag binary) without anyone having edited the build. So the contract is
 that each such job sets a ``RUSTFLAGS`` with none of the standard in it (the
 frontend, the linker, or a backend), and that nothing in the job empties it
 again: an empty ``RUSTFLAGS`` input to the
