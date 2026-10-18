@@ -217,7 +217,7 @@ def test_make_release_takes_none_of_the_standard() -> None:
     """A release build assigns ``RUSTFLAGS`` and assigns nothing development.
 
     The assignment must be present: with none, Cargo reads the configuration
-    and the release build would link with mold and select Cranelift.
+    and the release build would link with mold and use the parallel frontend.
     """
     (line,) = [
         line for line in cargo_lines(dry_run("release", host=HOSTS["linux_x86_64"])) if "build" in line
