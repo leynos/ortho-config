@@ -965,14 +965,15 @@ nested CLI callback error retains its marker because internal capture pipes
 hide compiler writer lifetime from the outer runner. Never clear an unconfirmed
 marker automatically or terminate an unrelated process.
 
-During `cargo llvm-cov`, the installed 0.6.24 tool exports its selected target
-as `CARGO_LLVM_COV_TARGET_DIR`, not `CARGO_TARGET_DIR`. Metadata discovery
+During `cargo llvm-cov`, `show-env` exports its selected target as
+`CARGO_LLVM_COV_TARGET_DIR`, not `CARGO_TARGET_DIR`. Metadata discovery
 promotes that value to `CARGO_TARGET_DIR`, so it resolves the instrumented
 parent target instead of silently selecting a cold default target. Otherwise
-metadata follows the caller's Cargo target configuration. Regression cases
-cover target precedence and secret exclusion. Preserve the coverage flag and
-LLVM profile-output variables for build tools as well as the normal wrappers
-and warning policy.
+metadata follows the caller's Cargo target configuration. Nested Cargo builds
+preserve coverage flags and LLVM profile-output variables, while omitting the
+coverage CLI from `RUSTC_WRAPPER`; configured Cargo wrappers and warning policy
+remain active. Regression cases cover target precedence, wrapper selection, and
+secret exclusion.
 
 Keep fallible host-tool discovery and environment preparation at the runner
 boundary; command construction consumes prepared values without starting

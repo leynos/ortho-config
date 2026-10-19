@@ -48,27 +48,42 @@ pub(super) fn format_failure_diagnostic(
         context.environment
     )?;
     for stream in ["stdout", "stderr"] {
-        if let Some((_, capture)) = captures.iter().find(|(name, _)| *name == stream) {
-            write!(
-                &mut diagnostic,
-                "\n{stream}: bytes_seen={}, bytes_captured={}, truncated={}\n{}",
-                capture.bytes_seen,
-                capture.bytes.len(),
-                capture.truncated,
-                String::from_utf8_lossy(&capture.bytes),
-            )?;
-        } else {
-            write!(&mut diagnostic, "\n{stream}: capture unavailable")?;
-        }
+        append_stream_evidence(&mut diagnostic, stream, captures)?;
     }
-    if !cleanup_evidence.is_empty() {
-        diagnostic.push_str("\ncleanup evidence:");
-        for evidence in cleanup_evidence {
-            diagnostic.push_str("\n- ");
-            diagnostic.push_str(evidence);
-        }
-    }
+    append_cleanup_evidence(&mut diagnostic, cleanup_evidence);
     Ok(diagnostic)
+}
+
+fn append_stream_evidence(
+    diagnostic: &mut String,
+    stream: &str,
+    captures: &[(&'static str, Snapshot)],
+) -> Result<(), fmt::Error> {
+    let selected_capture = captures
+        .iter()
+        .find_map(|(name, capture)| (*name == stream).then_some(capture));
+    match selected_capture {
+        Some(snapshot) => write!(
+            diagnostic,
+            "\n{stream}: bytes_seen={}, bytes_captured={}, truncated={}\n{}",
+            snapshot.bytes_seen,
+            snapshot.bytes.len(),
+            snapshot.truncated,
+            String::from_utf8_lossy(&snapshot.bytes),
+        ),
+        None => write!(diagnostic, "\n{stream}: capture unavailable"),
+    }
+}
+
+fn append_cleanup_evidence(diagnostic: &mut String, evidence: &[String]) {
+    if evidence.is_empty() {
+        return;
+    }
+    diagnostic.push_str("\ncleanup evidence:");
+    for item in evidence {
+        diagnostic.push_str("\n- ");
+        diagnostic.push_str(item);
+    }
 }
 
 pub(super) fn workspace_identity(command: &Command) -> String {

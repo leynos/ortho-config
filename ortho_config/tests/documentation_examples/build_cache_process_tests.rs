@@ -131,22 +131,14 @@ fn script_command(executable: &Path) -> Command {
     command
 }
 
-#[cfg(unix)]
 fn compiler_command(inputs: &Path, shared_executable: &Path) -> Command {
+    #[cfg(unix)]
     let mut command = Command::new("/bin/sh");
-    command
-        .arg(inputs.join("compiler.cmd"))
-        .arg(inputs.join("compiler-output"))
-        .arg(shared_executable)
-        .arg(inputs.join("compiler-record.json"));
-    command
-}
-
-#[cfg(windows)]
-fn compiler_command(inputs: &Path, shared_executable: &Path) -> Command {
+    #[cfg(windows)]
     let mut command = Command::new("cmd.exe");
+    #[cfg(windows)]
+    command.args(["/d", "/c"]);
     command
-        .args(["/d", "/c"])
         .arg(inputs.join("compiler.cmd"))
         .arg(inputs.join("compiler-output"))
         .arg(shared_executable)

@@ -32,8 +32,27 @@ where
         .checked_add(process.context.policy.cleanup_timeout())
         .unwrap_or_else(Instant::now);
     let mut observation = CleanupObservation::default();
-    let kill_result = (process.kill)(process.child.as_mut());
-    if let Err(kill_error) = kill_result
+    record_termination_failure(&mut process, &mut observation);
+    let reader_stop_deadline = cleanup_deadline
+        .checked_sub(Duration::from_millis(50))
+        .unwrap_or_else(Instant::now);
+    wait_for_cleanup_completion(&mut process, &mut observation, reader_stop_deadline);
+    request_open_readers_to_stop(&mut process);
+    wait_for_cleanup_completion(&mut process, &mut observation, cleanup_deadline);
+    record_unfinished_process_tree(&mut observation);
+    collect_reader_outcomes(&mut process, cleanup_deadline, &mut observation);
+
+    let captures = capture_snapshots(process.readers);
+    failure_with_evidence(primary, process.context, &captures, &observation)
+}
+
+fn record_termination_failure<Kill>(
+    process: &mut CleanupProcess<'_, Kill>,
+    observation: &mut CleanupObservation,
+) where
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
+    if let Err(kill_error) = (process.kill)(process.child.as_mut())
         && kill_error.kind() != io::ErrorKind::NotFound
     {
         observation.was_incomplete = true;
@@ -41,20 +60,39 @@ where
             .evidence
             .push(format!("tree termination failed: {kill_error}"));
     }
+}
 
-    let reader_stop_deadline = cleanup_deadline
-        .checked_sub(Duration::from_millis(50))
-        .unwrap_or_else(Instant::now);
-    while Instant::now() < reader_stop_deadline {
-        observe_cleanup_state(&mut process, &mut observation);
-        if observation.tree_completed && process.readers.iter().all(Reader::is_finished) {
+fn wait_for_cleanup_completion<Kill>(
+    process: &mut CleanupProcess<'_, Kill>,
+    observation: &mut CleanupObservation,
+    deadline: Instant,
+) where
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
+    while Instant::now() < deadline {
+        observe_cleanup_state(process, observation);
+        if cleanup_is_complete(process, observation) {
             break;
         }
-        thread::sleep(
-            POLL_INTERVAL.min(reader_stop_deadline.saturating_duration_since(Instant::now())),
-        );
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        thread::sleep(POLL_INTERVAL.min(remaining));
     }
+}
 
+fn cleanup_is_complete<Kill>(
+    process: &CleanupProcess<'_, Kill>,
+    observation: &CleanupObservation,
+) -> bool
+where
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
+    observation.tree_completed && process.readers.iter().all(Reader::is_finished)
+}
+
+fn request_open_readers_to_stop<Kill>(process: &mut CleanupProcess<'_, Kill>)
+where
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
     for reader in process
         .readers
         .iter()
@@ -62,26 +100,24 @@ where
     {
         reader.request_stop();
     }
-    while Instant::now() < cleanup_deadline {
-        observe_cleanup_state(&mut process, &mut observation);
-        if observation.tree_completed && process.readers.iter().all(Reader::is_finished) {
-            break;
-        }
-        thread::sleep(
-            POLL_INTERVAL.min(cleanup_deadline.saturating_duration_since(Instant::now())),
-        );
-    }
+}
 
+fn record_unfinished_process_tree(observation: &mut CleanupObservation) {
     if !observation.tree_completed {
         observation.was_incomplete = true;
         observation
             .evidence
             .push("owned process tree did not complete before the cleanup deadline".to_owned());
     }
-    collect_reader_outcomes(&mut process, cleanup_deadline, &mut observation);
+}
 
-    let captures = capture_snapshots(process.readers);
-    let diagnostic = format_failure_diagnostic(process.context, &captures, &observation.evidence)
+fn failure_with_evidence(
+    primary: Error,
+    context: &RunContext,
+    captures: &[(&'static str, super::capture::Snapshot)],
+    observation: &CleanupObservation,
+) -> Error {
+    let diagnostic = format_failure_diagnostic(context, captures, &observation.evidence)
         .unwrap_or_else(|_| "subprocess failure diagnostic formatting failed".to_owned());
     let diagnostic_error = primary.context(diagnostic);
     if observation.was_incomplete {

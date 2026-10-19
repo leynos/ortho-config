@@ -934,15 +934,19 @@ general application subprocess API.
 
 The bridge build retains Cargo's configured compiler and documentation
 wrappers, wrapper settings, job limits, warning flags, and coverage
-instrumentation. For `cargo llvm-cov` 0.6.24, metadata discovery maps its
+instrumentation. Metadata discovery maps `cargo llvm-cov show-env`'s
 `CARGO_LLVM_COV_TARGET_DIR` value to `CARGO_TARGET_DIR`; the former is the
 tool-selected target even though `show-env` does not export the latter. This
-keeps nested metadata on the instrumented parent target. The bridge does not
-sanitize Rust flags to force a separate compiler fingerprint, or change the
-default shared Cargo cache. Cargo's JSON build protocol is consumed while
-diagnostics are streamed to the supervising CLI. IR cache publication remains
-atomic and skips replacement when the existing cache already contains identical
-content, preserving the established path and idempotent-write behaviour.
+keeps nested metadata on the instrumented parent target. A nested build does
+not forward the coverage CLI as `RUSTC_WRAPPER`, because that CLI cannot act as
+the compiler wrapper for a second Cargo process. Coverage flags and profile
+output remain enabled, and configured Cargo wrappers continue to apply. The
+bridge does not sanitize Rust flags to force a separate compiler fingerprint or
+change the default shared Cargo cache. Cargo's JSON build protocol is consumed
+while diagnostics are streamed to the supervising CLI. IR cache publication
+remains atomic and skips replacement when the existing cache already contains
+identical content, preserving the established path and idempotent-write
+behaviour.
 
 An interrupted build whose writer lifetime cannot be confirmed leaves a
 fail-closed ownership marker. A later invocation must not treat that marker as

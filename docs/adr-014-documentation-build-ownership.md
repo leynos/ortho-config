@@ -177,15 +177,17 @@ shared package cache, Cargo configuration, toolchain selectors, `RUSTC_WRAPPER`,
 flags, job limits, and platform requirements. It excludes unlisted application
 variables and secrets. MSVC discovery command files belong to each caller's
 private workspace, separately from the shared compiler target and ownership
-state. Metadata discovery reads the caller-selected target configuration. In
-the installed `cargo-llvm-cov` 0.6.24 environment, `show-env` supplies
-`CARGO_LLVM_COV_TARGET_DIR` rather than `CARGO_TARGET_DIR`. Metadata
-preparation promotes that tool-selected target to `CARGO_TARGET_DIR` for Cargo
-metadata, so both documentation builds and production bridge builds reuse the
-instrumented parent target. The build policy also retains the coverage flag and
-LLVM profile variables. Their separate ownership state protects each
-build-and-snapshot interval. Documented application binaries continue to
-receive their smaller runtime allow-list.
+state. Cargo continues to read configuration from the caller's working
+directory and configured Cargo home. `cargo llvm-cov show-env` supplies
+`CARGO_LLVM_COV_TARGET_DIR` rather than `CARGO_TARGET_DIR`; metadata
+preparation promotes that tool-selected target for Cargo metadata, so
+documentation builds reuse the instrumented parent target. Nested Cargo builds
+retain coverage flags and LLVM profile variables but omit `cargo-llvm-cov` from
+`RUSTC_WRAPPER`: that variable names the coverage CLI, which cannot serve as a
+compiler wrapper for a second Cargo process. Other configured wrappers remain
+available through Cargo configuration and the explicit wrapper settings. Their
+separate ownership state protects each build-and-snapshot interval. Documented
+application binaries continue to receive their smaller runtime allow-list.
 
 One monotonic scenario deadline covers discovery, lock wait, build, snapshot,
 and execution; operation-specific build, execution, discovery, and cleanup

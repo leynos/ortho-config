@@ -5,6 +5,7 @@
 //! boundary; application processes use the narrower policy in `workspace`.
 
 use std::ffi::OsString;
+use std::path::Path;
 use std::process::Command;
 
 pub(super) const CARGO_ENV_ALLOWLIST: &[&str] = &[
@@ -69,7 +70,15 @@ pub(super) struct CargoEnvironment(Vec<(OsString, OsString)>);
 impl CargoEnvironment {
     /// Capture only the closed toolchain, wrapper, and platform allow-list.
     pub(super) fn build() -> Self {
-        Self::from_lookup(CARGO_ENV_ALLOWLIST, |name| std::env::var_os(name))
+        Self::build_with_lookup(|name| std::env::var_os(name))
+    }
+
+    /// Select the nested build environment without forwarding cargo-llvm-cov
+    /// as though its CLI were a rustc wrapper.
+    fn build_with_lookup(lookup: impl FnMut(&str) -> Option<OsString>) -> Self {
+        let mut values = select_environment(CARGO_ENV_ALLOWLIST, lookup);
+        remove_coverage_cli_wrapper(&mut values);
+        Self(values)
     }
 
     /// Capture the build environment plus caller target paths for metadata.
@@ -94,6 +103,7 @@ impl CargoEnvironment {
             values.retain(|(name, _)| name.to_str() != Some("CARGO_TARGET_DIR"));
             values.push((OsString::from("CARGO_TARGET_DIR"), coverage_target));
         }
+        remove_coverage_cli_wrapper(&mut values);
         Self(values)
     }
 
@@ -119,6 +129,20 @@ impl CargoEnvironment {
     #[cfg(test)]
     fn values(&self) -> &[(OsString, OsString)] {
         &self.0
+    }
+}
+
+fn remove_coverage_cli_wrapper(values: &mut Vec<(OsString, OsString)>) {
+    let is_coverage_cli = values
+        .iter()
+        .find(|(name, _)| name == "RUSTC_WRAPPER")
+        .is_some_and(|(_, value)| {
+            Path::new(value)
+                .file_stem()
+                .is_some_and(|name| name == "cargo-llvm-cov")
+        });
+    if is_coverage_cli {
+        values.retain(|(name, _)| name != "RUSTC_WRAPPER");
     }
 }
 

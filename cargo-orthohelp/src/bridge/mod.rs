@@ -13,10 +13,13 @@ use crate::fs_helpers::open_optional_dir;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
 #[path = "../bridge_build.rs"]
 mod bridge_build;
+#[path = "../bridge_build_environment.rs"]
+mod bridge_build_environment;
 #[path = "../bridge_workspace.rs"]
 mod workspace;
 mod telemetry;
 
+use bridge_build_environment::BuildEnvironment;
 use workspace::BridgeWorkspace;
 
 /// Stable IR cache identity and Cargo-owned compiler state.
@@ -93,8 +96,9 @@ pub fn load_or_build_ir(
     workspace.seed_lockfile(config)?;
     write_bridge_manifest(config, private_paths)?;
     write_bridge_main(config, private_paths)?;
+    let environment = BuildEnvironment::from_process();
     let executable = bridge_build::build_and_snapshot(
-        &mut build_bridge_command(private_paths),
+        &mut build_bridge_command(private_paths, &environment),
         &private_paths.target_dir,
         &private_paths.bridge_dir.join("run"),
     )?;
@@ -239,7 +243,7 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
 ///
 /// Cargo resolves configuration from the original working directory. Keeping
 /// the compiler flags also lets compatible dependency fingerprints be reused.
-fn build_bridge_command(paths: &BridgePaths) -> Command {
+fn build_bridge_command(paths: &BridgePaths, environment: &BuildEnvironment) -> Command {
     let mut command = Command::new("cargo");
     command
         .args(["build", "--message-format=json-render-diagnostics"])
@@ -247,6 +251,7 @@ fn build_bridge_command(paths: &BridgePaths) -> Command {
         .arg(paths.manifest_path.as_str())
         .arg("--target-dir")
         .arg(paths.target_dir.as_str());
+    environment.apply(&mut command);
     command
 }
 

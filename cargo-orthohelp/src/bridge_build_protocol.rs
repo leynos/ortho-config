@@ -128,30 +128,49 @@ fn collect_executable(
     target_directory: &camino::Utf8Path,
     messages: &mut CargoMessages,
 ) {
-    let target_info = value.get("target");
-    let is_bridge_bin = target_info
+    if !is_bridge_binary_artifact(value) {
+        return;
+    }
+    let Some(executable) = artifact_executable(value, messages) else {
+        return;
+    };
+    record_bridge_executable(executable, target_directory, messages);
+}
+
+/// Identify artifact records that belong to the generated bridge binary.
+fn is_bridge_binary_artifact(value: &Value) -> bool {
+    let target = value.get("target");
+    target
         .and_then(|target_value| target_value.get("name"))
         .and_then(Value::as_str)
         == Some(BRIDGE_BINARY_NAME)
-        && target_info
+        && target
             .and_then(|target_value| target_value.get("kind"))
             .and_then(Value::as_array)
-            .is_some_and(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("bin")));
-    if !is_bridge_bin {
-        return;
-    }
+            .is_some_and(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("bin")))
+}
 
-    let Some(executable) = value
+/// Read the executable path, retaining a protocol error when it is absent.
+fn artifact_executable(value: &Value, messages: &mut CargoMessages) -> Option<Utf8PathBuf> {
+    value
         .get("executable")
         .and_then(Value::as_str)
         .map(Utf8PathBuf::from)
-    else {
-        set_protocol_error(
-            messages,
-            "bridge compiler-artifact record omitted executable path",
-        );
-        return;
-    };
+        .or_else(|| {
+            set_protocol_error(
+                messages,
+                "bridge compiler-artifact record omitted executable path",
+            );
+            None
+        })
+}
+
+/// Record one validated executable path and reject ambiguous build output.
+fn record_bridge_executable(
+    executable: Utf8PathBuf,
+    target_directory: &camino::Utf8Path,
+    messages: &mut CargoMessages,
+) {
     if !executable.is_absolute() {
         set_protocol_error(messages, "bridge compiler-artifact path was not absolute");
         return;

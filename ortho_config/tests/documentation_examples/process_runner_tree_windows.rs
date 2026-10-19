@@ -56,7 +56,7 @@ impl CommandWrapper for JobObjectOwner {
         let process_handle = HANDLE(child.inner_child().as_raw_handle().cast());
         // SAFETY: the retained private job and suspended child belong to this spawn.
         unsafe { AssignProcessToJobObject(as_handle(&job), process_handle) }
-            .map_err(io::Error::other)?;
+            .map_err(windows_api_error)?;
         resume_root_threads(process_id)?;
         Ok(Box::new(JobObjectChild {
             child,
@@ -79,7 +79,7 @@ fn lock_job(job: &Mutex<Option<OwnedHandle>>) -> MutexGuard<'_, Option<OwnedHand
 
 fn create_kill_on_close_job() -> io::Result<OwnedHandle> {
     // SAFETY: a null name requests a private unnamed Job Object.
-    let raw_job = unsafe { CreateJobObjectW(None, PCWSTR::null()) }.map_err(io::Error::other)?;
+    let raw_job = unsafe { CreateJobObjectW(None, PCWSTR::null()) }.map_err(windows_api_error)?;
     // SAFETY: CreateJobObjectW returned a valid owned kernel handle.
     let job = unsafe { OwnedHandle::from_raw_handle(raw_job.0.cast()) };
     let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
@@ -95,14 +95,14 @@ fn create_kill_on_close_job() -> io::Result<OwnedHandle> {
             information_size,
         )
     }
-    .map_err(io::Error::other)?;
+    .map_err(windows_api_error)?;
     Ok(job)
 }
 
 fn resume_root_threads(process_id: u32) -> io::Result<()> {
     // SAFETY: the Toolhelp snapshot flags request only the system thread list.
     let raw_snapshot =
-        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) }.map_err(io::Error::other)?;
+        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) }.map_err(windows_api_error)?;
     // SAFETY: the successful snapshot call returned an owned kernel handle.
     let snapshot_handle = unsafe { OwnedHandle::from_raw_handle(raw_snapshot.0.cast()) };
     let mut entry = THREADENTRY32 {
@@ -115,7 +115,7 @@ fn resume_root_threads(process_id: u32) -> io::Result<()> {
         Err(error) if is_no_more_threads(&error) => Err(io::Error::other(
             "suspended child has no enumerated thread to resume",
         )),
-        Err(error) => Err(io::Error::other(error)),
+        Err(error) => Err(windows_api_error(error)),
     }
 }
 
@@ -134,7 +134,7 @@ fn resume_matching_threads(
         match unsafe { Thread32Next(as_handle(&snapshot), &mut entry) } {
             Ok(()) => {}
             Err(error) if is_no_more_threads(&error) => break,
-            Err(error) => return Err(io::Error::other(error)),
+            Err(error) => return Err(windows_api_error(error)),
         }
     }
     if resumed_root_thread {
@@ -148,8 +148,8 @@ fn resume_matching_threads(
 
 fn resume_thread(thread_id: u32) -> io::Result<()> {
     // SAFETY: OpenThread requests only the right needed to resume this enumerated thread.
-    let thread =
-        unsafe { OpenThread(THREAD_SUSPEND_RESUME, false, thread_id) }.map_err(io::Error::other)?;
+    let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, false, thread_id) }
+        .map_err(windows_api_error)?;
     // SAFETY: OpenThread returned an owned handle to the enumerated thread.
     let thread = unsafe { OwnedHandle::from_raw_handle(thread.0.cast()) };
     // SAFETY: the handle remains valid for the duration of ResumeThread.
@@ -163,6 +163,10 @@ fn resume_thread(thread_id: u32) -> io::Result<()> {
 
 fn is_no_more_threads(error: &windows::core::Error) -> bool {
     error.code() == HRESULT::from_win32(ERROR_NO_MORE_FILES.0)
+}
+
+fn windows_api_error(error: windows::core::Error) -> io::Error {
+    io::Error::other(error.to_string())
 }
 
 fn as_handle(handle: &OwnedHandle) -> HANDLE {
@@ -193,7 +197,7 @@ impl JobObjectChild {
                 None,
             )
         }
-        .map_err(io::Error::other)?;
+        .map_err(windows_api_error)?;
         Ok(information.ActiveProcesses)
     }
 
@@ -203,7 +207,7 @@ impl JobObjectChild {
         }
         if self.active_processes()? > 0 {
             // SAFETY: the retained Job Object handle names only this command's owned tree.
-            unsafe { TerminateJobObject(as_handle(&self.job), 1) }.map_err(io::Error::other)?;
+            unsafe { TerminateJobObject(as_handle(&self.job), 1) }.map_err(windows_api_error)?;
         }
         self.termination_requested = true;
         Ok(())
@@ -270,7 +274,7 @@ pub(super) fn process_is_active(process_id: u32) -> io::Result<bool> {
         Err(error) if error.code() == HRESULT::from_win32(ERROR_INVALID_PARAMETER.0) => {
             return Ok(false);
         }
-        Err(error) => return Err(io::Error::other(error)),
+        Err(error) => return Err(windows_api_error(error)),
     };
     // SAFETY: OpenProcess returned an owned process handle.
     let process_handle = unsafe { OwnedHandle::from_raw_handle(raw_process.0.cast()) };

@@ -55,8 +55,7 @@ fn build_policy_keeps_toolchain_controls_and_excludes_application_values() {
     supplied.insert(APPLICATION_SECRET, OsString::from("must-not-leak"));
     supplied.insert(CACHE_CREDENTIAL, OsString::from("must-not-leak"));
 
-    let environment =
-        CargoEnvironment::from_lookup(CARGO_ENV_ALLOWLIST, |name| supplied.get(name).cloned());
+    let environment = CargoEnvironment::build_with_lookup(|name| supplied.get(name).cloned());
     let mut command = Command::new("cargo");
     command.env(APPLICATION_SECRET, "must-not-leak");
     environment.apply(&mut command);
@@ -84,6 +83,48 @@ fn build_policy_keeps_toolchain_controls_and_excludes_application_values() {
     assert!(!selected.contains_key(CACHE_CREDENTIAL));
     assert!(!selected.contains_key("CARGO_TARGET_DIR"));
     assert!(!selected.contains_key("CARGO_BUILD_TARGET_DIR"));
+}
+
+#[rstest::rstest]
+#[case::linux_wrapper("/tools/cargo-llvm-cov")]
+#[case::windows_executable("/tools/cargo-llvm-cov.exe")]
+fn nested_build_omits_coverage_cli_wrapper_but_keeps_coverage_policy(#[case] wrapper: &str) {
+    let supplied = HashMap::from([
+        ("RUSTC_WRAPPER", OsString::from(wrapper)),
+        (
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            OsString::from("/configured/sccache"),
+        ),
+        ("CARGO_LLVM_COV", OsString::from("1")),
+        ("RUSTFLAGS", OsString::from("-C instrument-coverage")),
+        (
+            "LLVM_PROFILE_FILE",
+            OsString::from("/profiles/documentation-%p.profraw"),
+        ),
+        ("CARGO_BUILD_JOBS", OsString::from("4")),
+    ]);
+    let environment = CargoEnvironment::build_with_lookup(|name| supplied.get(name).cloned());
+    let selected = environment
+        .values()
+        .iter()
+        .map(|(name, value)| (name.to_str().expect("name is UTF-8"), value.as_os_str()))
+        .collect::<HashMap<_, _>>();
+
+    assert!(!selected.contains_key("RUSTC_WRAPPER"));
+    assert_eq!(
+        selected.get("CARGO_BUILD_RUSTC_WRAPPER"),
+        Some(&OsStr::new("/configured/sccache"))
+    );
+    assert_eq!(selected.get("CARGO_LLVM_COV"), Some(&OsStr::new("1")));
+    assert_eq!(
+        selected.get("RUSTFLAGS"),
+        Some(&OsStr::new("-C instrument-coverage"))
+    );
+    assert_eq!(
+        selected.get("LLVM_PROFILE_FILE"),
+        Some(&OsStr::new("/profiles/documentation-%p.profraw"))
+    );
+    assert_eq!(selected.get("CARGO_BUILD_JOBS"), Some(&OsStr::new("4")));
 }
 
 #[test]

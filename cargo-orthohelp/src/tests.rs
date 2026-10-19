@@ -1,6 +1,7 @@
 //! Tests for ephemeral bridge crate orchestration.
 
-use std::ffi::OsStr;
+use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::time::{Duration, Instant, SystemTime};
 
 use camino::Utf8PathBuf;
@@ -55,23 +56,36 @@ fn poll_clock_after(reference: SystemTime, timeout: Duration) {
     }
 }
 
-#[rstest::rstest]
-#[case("RUSTC_WRAPPER")]
-#[case("RUSTC_WORKSPACE_WRAPPER")]
-#[case("RUSTDOC")]
-#[case("RUSTFLAGS")]
-#[case("CARGO_ENCODED_RUSTFLAGS")]
-#[case("CARGO_BUILD_JOBS")]
-#[case("CARGO_HOME")]
-#[case("LLVM_PROFILE_FILE")]
-fn build_bridge_command_preserves_infrastructure_policy(#[case] variable: &str) {
-    let command = build_bridge_command(&dummy_paths());
-    assert!(
-        command
-            .get_envs()
-            .all(|(name, _)| name != OsStr::new(variable)),
-        "the bridge must inherit {variable} without mutation"
+#[test]
+fn build_bridge_command_applies_the_selected_build_environment() {
+    let supplied = HashMap::from([
+        ("RUSTC_WRAPPER", OsString::from("/tools/build-limits-rustc")),
+        ("RUSTDOC", OsString::from("/toolchain/bin/rustdoc")),
+        ("CARGO_BUILD_JOBS", OsString::from("4")),
+        ("APPLICATION_SECRET", OsString::from("must-not-leak")),
+    ]);
+    let environment = BuildEnvironment::from_lookup(|name| supplied.get(name).cloned());
+    let command = build_bridge_command(&dummy_paths(), &environment);
+    let selected = command
+        .get_envs()
+        .filter_map(|(name, environment_value)| {
+            environment_value.map(|selected_value| (name, selected_value))
+        })
+        .collect::<HashMap<_, _>>();
+
+    assert_eq!(
+        selected.get(OsStr::new("RUSTC_WRAPPER")),
+        Some(&OsStr::new("/tools/build-limits-rustc"))
     );
+    assert_eq!(
+        selected.get(OsStr::new("RUSTDOC")),
+        Some(&OsStr::new("/toolchain/bin/rustdoc"))
+    );
+    assert_eq!(
+        selected.get(OsStr::new("CARGO_BUILD_JOBS")),
+        Some(&OsStr::new("4"))
+    );
+    assert!(!selected.contains_key(OsStr::new("APPLICATION_SECRET")));
 }
 
 #[test]
