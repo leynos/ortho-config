@@ -1448,11 +1448,10 @@ dependencies = [
 
 [[package]]
 name = "ortho_config_test_helpers"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "camino",
- "figment",
  "parking_lot",
 ]
 

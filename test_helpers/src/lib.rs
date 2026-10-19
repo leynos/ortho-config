@@ -8,5 +8,4 @@
 
 pub mod cwd;
 pub mod env;
-pub mod figment;
 pub mod text;
