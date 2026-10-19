@@ -17,9 +17,12 @@ use crate::cli::{
 };
 use anyhow::{Context as _, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{ConfigDiscovery, MapEnv, SharedEnvSource, SharedScanEnvSource};
+use ortho_config::{
+    ConfigDiscovery, EnvSource as _, MapEnv, ProcessEnv, SharedEnvSource, SharedScanEnvSource,
+};
 use rstest::rstest;
 use tempfile::TempDir;
+use test_helpers::coverage::resolve_profile_path;
 
 /// A capability-scoped directory containing the global loader's test fixtures.
 ///
@@ -168,7 +171,8 @@ fn injected_greeting_defaults_ignore_working_directory_overrides() -> Result<()>
         "[cmds.greet]\npreamble = \"From working directory\"\n",
     )?;
     let executable = std::env::current_exe().context("locate the unit-test executable")?;
-    let output = Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .args([
             "--ignored",
             "--exact",
@@ -177,7 +181,18 @@ fn injected_greeting_defaults_ignore_working_directory_overrides() -> Result<()>
         ])
         .current_dir(working_directory.root.path())
         .env_clear()
-        .env(WORKING_DIRECTORY_PROBE_BASE, fixture.root.path())
+        .env(WORKING_DIRECTORY_PROBE_BASE, fixture.root.path());
+    // Coverage runs need `LLVM_PROFILE_FILE`, which `.env_clear()` drops. The
+    // parent's working directory is the anchor for a relative profile path,
+    // because the child runs in the fixture directory this test removes.
+    if let Some(profile_file) = ProcessEnv.get("LLVM_PROFILE_FILE") {
+        let parent_dir = std::env::current_dir()?;
+        command.env(
+            "LLVM_PROFILE_FILE",
+            resolve_profile_path(&profile_file, &parent_dir),
+        );
+    }
+    let output = command
         .output()
         .context("run the working-directory probe")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
