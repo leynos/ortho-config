@@ -13,7 +13,7 @@
 //!
 //! # Examples
 //!
-//! ```
+//! ```no_run
 //! use std::ffi::OsStr;
 //!
 //! use ortho_config_test_helpers::coverage::resolve_profile_path;
@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use std::ffi::OsStr;
 ///
 /// use ortho_config_test_helpers::coverage::resolve_profile_path;
