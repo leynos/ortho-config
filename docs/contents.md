@@ -160,6 +160,9 @@
 
 ## Execution plans
 
+- [Reusable localization runtime](execplans/issue-566-extract-reusable-localisation-runtime-into-ortho-l10n.md):
+  extract `ortho_l10n`, preserve compatibility, and verify consumer dependency
+  boundaries.
 - [ExecPlans directory](execplans/): review living and historical execution
   plans for substantial work.
   - [PowerShell generator with wrapper](execplans/4-1-1-4-power-shell-generator-with-wrapper.md):

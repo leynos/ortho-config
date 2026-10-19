@@ -325,3 +325,6 @@ fn fluent_args_from<'a>(args: &'a LocalizationArgs<'a>) -> FluentArgs<'a> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod characterization;
