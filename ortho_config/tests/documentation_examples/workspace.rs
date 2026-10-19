@@ -119,7 +119,8 @@ impl ExampleWorkspace {
     pub fn build(&mut self) -> Result<()> {
         let mut command = self.cargo_command()?;
         command.args(["build", "--offline", "--bins"]);
-        let output = process_runner::run_command(&mut command, Operation("build documented Rust"))?;
+        let output =
+            process_runner::run_cargo_command(&mut command, Operation("build documented Rust"))?;
         ensure!(
             output.status.success(),
             "documented Rust failed to compile:\n{}",
@@ -244,7 +245,7 @@ impl ExampleWorkspace {
         let mut command = self.cargo_command()?;
         command.env("PATH", path).arg(subcommand).args(args);
         let operation = format!("run Cargo-dispatched documented binary {subcommand}");
-        process_runner::run_command(&mut command, Operation(&operation))
+        process_runner::run_cargo_command(&mut command, Operation(&operation))
     }
 
     /// Write a file in one binary's deterministic working directory.

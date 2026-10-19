@@ -11,6 +11,7 @@ use std::time::Duration;
 use wait_timeout::ChildExt;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
+const CARGO_TIMEOUT: Duration = Duration::from_secs(1800);
 const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy)]
@@ -49,6 +50,20 @@ impl Default for ProcessLimits {
 /// Run a command with the documentation-test timeout and output limits.
 pub(super) fn run_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
     run_command_with_limits(command, operation, ProcessLimits::default())
+}
+
+/// Run a Cargo command with a 30-minute bound for isolated fixture builds.
+///
+/// Isolated builds can queue behind the shared compiler-admission pool.
+pub(super) fn run_cargo_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
+    run_command_with_limits(
+        command,
+        operation,
+        ProcessLimits {
+            timeout: CARGO_TIMEOUT,
+            ..ProcessLimits::default()
+        },
+    )
 }
 
 fn run_command_with_limits(

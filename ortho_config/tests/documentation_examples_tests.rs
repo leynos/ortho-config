@@ -245,7 +245,7 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
             "--out-dir",
         ])
         .arg(output_directory.path());
-    let output = process_runner::run_command(
+    let output = process_runner::run_cargo_command(
         &mut command,
         Operation("run documented cargo-orthohelp flow"),
     )?;

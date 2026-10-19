@@ -375,8 +375,11 @@ boundary; command construction consumes the prepared values without starting
 subprocesses or writing files. The process-runner helper owns bounded execution
 for these documentation tests only: route Cargo, host-tool, and
 documented-binary commands through it, while keeping command construction and
-exit-status policy with their existing owners. Run-file paths must contain
-normal relative components only.
+exit-status policy with their existing owners. Cargo commands use a 30-minute
+bounded timeout because each fixture build uses an isolated target directory
+and may queue behind the shared compiler-admission pool; ordinary documented
+binaries retain the 10-minute bound. Run-file paths must contain normal
+relative components only.
 
 ### Python docstring examples
 
