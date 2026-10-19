@@ -1656,6 +1656,12 @@ variables for tests.
   `load_greet_defaults_with_sources` and `GlobalConfigSources`. Keep this seam
   within greeting/farewell composition and its tests; source selection remains
   with the configuration-loading caller.
+- `test_support::sample_config` is the `rstest` fixture that loads the shipped
+  sample files through closed sources. It is the single place that copies
+  `config/baseline.toml` and `config/overrides.toml` into a fixture root and
+  resolves the sample greeting defaults, so message tests inject it rather than
+  repeating that setup. It belongs to the example's test support surface, not
+  to production composition.
 - Example tests may pass a `ConfigDiscovery` with explicit project roots to the
   crate-private override loader. Source injection alone does not disable
   project-root or current-directory candidates. Tests needing no ambient

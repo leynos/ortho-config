@@ -11,8 +11,9 @@ use ortho_config::{
     load_and_merge_subcommand_with_sources_at,
 };
 use serde::{Deserialize, Serialize};
+use std::ffi::OsStr;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
@@ -97,7 +98,42 @@ fn merge_file_defaults(base: &Path, discovery: &MapEnv) -> Result<CmdCfg> {
     .to_anyhow()
 }
 
+/// Resolve an inherited coverage profile path against the wrapper's directory.
+///
+/// The child runs inside the fixture root, which is deleted as soon as this
+/// test returns. A relative `LLVM_PROFILE_FILE` would therefore write its
+/// profile into the fixture and lose it with the directory, so the inherited
+/// path is anchored to the wrapper's working directory first. Absolute paths
+/// already name their destination and pass through unchanged.
+///
+/// # Examples
+///
+/// `/tmp/app.profraw` stays `/tmp/app.profraw`; `profiles/app.profraw`
+/// becomes `<parent working directory>/profiles/app.profraw`.
+fn profile_file_path(profile_file: &OsStr, parent_dir: &Path) -> PathBuf {
+    let profile_path = Path::new(profile_file);
+    if profile_path.is_absolute() {
+        return profile_path.to_path_buf();
+    }
+    parent_dir.join(profile_path)
+}
 
+/// Prove relative coverage paths are anchored and absolute ones preserved.
+#[test]
+fn profile_file_path_keeps_absolute_and_anchors_relative() -> Result<()> {
+    let parent = PathBuf::from("parent-work-dir");
+    ensure!(
+        profile_file_path(OsStr::new("profiles/run.profraw"), &parent)
+            == parent.join("profiles/run.profraw"),
+        "relative profile path should be anchored to the parent working directory"
+    );
+    let absolute = std::env::temp_dir().join("ortho-config-run.profraw");
+    ensure!(
+        profile_file_path(absolute.as_os_str(), &parent) == absolute,
+        "absolute profile path should pass through unchanged"
+    );
+    Ok(())
+}
 
 /// Check the process-backed default entrypoint without mutating the test process.
 #[test]
@@ -122,7 +158,10 @@ fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
         .env("APP_CMDS_TEST_FOO", "env")
         .env("XDG_CONFIG_DIRS", root.path());
     if let Some(profile_file) = ProcessEnv.get("LLVM_PROFILE_FILE") {
-        child.env("LLVM_PROFILE_FILE", profile_file);
+        child.env(
+            "LLVM_PROFILE_FILE",
+            profile_file_path(&profile_file, &std::env::current_dir()?),
+        );
     }
     let output = child
         .output()
@@ -161,7 +200,6 @@ fn process_backed_probe() -> Result<()> {
         .context("signal process-backed probe completion")?;
     Ok(())
 }
-
 
 #[test]
 fn file_and_env_loading() -> Result<()> {

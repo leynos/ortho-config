@@ -5,10 +5,12 @@
 //! order promised in the design doc: defaults, discovered files, environment,
 //! then CLI.
 
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 
-use super::helpers::{figment_error, parse_command_line, with_jail};
+use super::helpers::parse_command_line;
 use crate::cli::{
     GlobalArgs, GlobalConfigSources, HelloWorldCli, load_config_overrides_from_discovery,
     load_global_config_with_sources, load_greet_defaults_with_sources,
@@ -145,7 +147,14 @@ fn injected_greeting_defaults_use_file_and_merge_sources() -> Result<()> {
     Ok(())
 }
 
+const WORKING_DIRECTORY_PROBE_MARKER: &str = "HELLO_WORLD_LAYERS_PROBE_OK";
+const WORKING_DIRECTORY_PROBE_BASE: &str = "HELLO_WORLD_LAYERS_PROBE_BASE";
+
 /// Explicit greeting discovery ignores a competing process working directory.
+///
+/// The competing file can only matter if the process working directory is the
+/// one under test, so the probe runs in a child process whose directory holds
+/// it. This keeps the case off `figment::Jail` without mutating this process.
 #[test]
 fn injected_greeting_defaults_ignore_working_directory_overrides() -> Result<()> {
     let fixture = LayerFixture::new()?;
@@ -153,23 +162,54 @@ fn injected_greeting_defaults_ignore_working_directory_overrides() -> Result<()>
         ".hello_world.toml",
         "[cmds.greet]\npreamble = \"From file base\"\n",
     )?;
-    let command = with_jail(|jail| {
-        jail.clear_env();
-        jail.create_file(
-            ".hello_world.toml",
-            "[cmds.greet]\npreamble = \"From working directory\"\n",
-        )?;
-        load_greet_defaults_with_sources(
-            fixture.root.path(),
-            GlobalConfigSources::new(Arc::new(MapEnv::new()), Arc::new(MapEnv::new())),
-        )
-        .map_err(figment_error)
-    })?;
+    let working_directory = LayerFixture::new()?;
+    working_directory.write(
+        ".hello_world.toml",
+        "[cmds.greet]\npreamble = \"From working directory\"\n",
+    )?;
+    let executable = std::env::current_exe().context("locate the unit-test executable")?;
+    let output = Command::new(executable)
+        .args([
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "cli::tests::layers::working_directory_probe",
+        ])
+        .current_dir(working_directory.root.path())
+        .env_clear()
+        .env(WORKING_DIRECTORY_PROBE_BASE, fixture.root.path())
+        .output()
+        .context("run the working-directory probe")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    ensure!(
+        output.status.success(),
+        "working-directory probe failed: stdout={stdout}, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        stdout.contains(WORKING_DIRECTORY_PROBE_MARKER),
+        "working-directory probe did not execute: {stdout}"
+    );
+    Ok(())
+}
 
+/// Child half of the working-directory case; run only by its parent test.
+#[test]
+#[ignore = "run by the working-directory isolation test"]
+fn working_directory_probe() -> Result<()> {
+    let base = std::env::var_os(WORKING_DIRECTORY_PROBE_BASE)
+        .ok_or_else(|| anyhow!("probe base directory was not provided"))?;
+    let command = load_greet_defaults_with_sources(
+        Path::new(&base),
+        GlobalConfigSources::new(Arc::new(MapEnv::new()), Arc::new(MapEnv::new())),
+    )
+    .context("load greeting defaults in the probe")?;
     ensure!(
         command.preamble.as_deref() == Some("From file base"),
         "file_base override should win over a working-directory override"
     );
+    writeln!(std::io::stdout().lock(), "{WORKING_DIRECTORY_PROBE_MARKER}")
+        .context("signal probe completion")?;
     Ok(())
 }
 

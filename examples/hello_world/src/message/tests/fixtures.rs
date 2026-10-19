@@ -5,14 +5,8 @@ use super::*;
 pub(crate) use crate::cli::tests::helpers::{
     TakeLeaveCommandFixture, greet_command, take_leave_command,
 };
-use crate::cli::{
-    GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config_with_sources,
-    load_greet_defaults_with_sources,
-};
-use crate::test_support::{ConfigFixture, global_sources};
-use anyhow::{Context, Result, anyhow, ensure};
-use camino::Utf8PathBuf;
-use ortho_config::MapEnv;
+use crate::cli::{GreetCommand, HelloWorldCli, TakeLeaveCommand};
+use anyhow::{Result, anyhow, ensure};
 use rstest::fixture;
 
 pub(crate) struct Plan {
@@ -29,17 +23,21 @@ pub(crate) struct ExpectedPlan {
 
 pub(crate) type HelloWorldCliFixture = Result<HelloWorldCli>;
 
-#[derive(Clone, Copy)]
-pub(crate) enum PlanVariant {
-    Direct,
-    SampleEnv,
-}
+/// The fallible sample configuration consumed by message-planning tests.
+///
+/// This is the `rstest` fixture result injected into tests that compose plans
+/// from the shipped sample files rather than from process-backed defaults.
+pub(crate) type SampleConfigFixture = Result<(HelloWorldCli, GreetCommand)>;
 
+/// One plan-variant case: how to set up its inputs and what it should produce.
+///
+/// `is_sampled` selects whether the case composes its plan from the injected
+/// sample configuration or from the inputs the setup functions prepared.
 pub(crate) struct PlanVariantCase {
     pub greet_setup: GreetSetup,
     pub leave_setup: LeaveSetup,
     pub expected: ExpectedPlan,
-    pub variant: PlanVariant,
+    pub is_sampled: bool,
 }
 
 pub(crate) type GreetSetup = fn(&mut HelloWorldCli, &mut GreetCommand) -> Result<()>;
@@ -85,17 +83,6 @@ pub(crate) fn setup_excited(config: &mut HelloWorldCli, _: &mut GreetCommand) ->
     Ok(())
 }
 
-pub(crate) fn setup_sample_greet(
-    config: &mut HelloWorldCli,
-    greet: &mut GreetCommand,
-) -> Result<()> {
-    with_sample_config(|cfg, sample_greet| {
-        *config = cfg.clone();
-        *greet = sample_greet.clone();
-        Ok(())
-    })
-}
-
 pub(crate) fn setup_noop_leave(_: &mut HelloWorldCli, leave: &mut TakeLeaveCommand) -> Result<()> {
     ensure!(
         !leave.parting.trim().is_empty(),
@@ -135,41 +122,17 @@ pub(crate) fn build_plan_variant(
     config: HelloWorldCli,
     greet: &GreetCommand,
     leave: &TakeLeaveCommand,
-    variant: PlanVariant,
+    sample: Option<&(HelloWorldCli, GreetCommand)>,
 ) -> Result<Plan> {
-    match variant {
-        PlanVariant::Direct => build_plan_from(config, greet, leave, GreetCommand::default()),
-        PlanVariant::SampleEnv => with_sample_config(move |cfg, defaults| {
-            let sample_greet = greet.clone();
-            let sample_leave = leave.clone();
-            build_plan_from(cfg.clone(), &sample_greet, &sample_leave, defaults.clone())
-        }),
-    }
-}
-
-pub(crate) fn with_sample_config<R, F>(action: F) -> Result<R>
-where
-    F: FnOnce(&HelloWorldCli, &GreetCommand) -> Result<R>,
-{
-    let fixture = ConfigFixture::new()?;
-    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let config_dir = cap_std::fs::Dir::open_ambient_dir(
-        manifest_dir.join("config").as_std_path(),
-        cap_std::ambient_authority(),
+    sample.map_or_else(
+        || build_plan_from(config, greet, leave, GreetCommand::default()),
+        |(sample_config, sample_greet)| {
+            build_plan_from(
+                sample_config.clone(),
+                sample_greet,
+                leave,
+                sample_greet.clone(),
+            )
+        },
     )
-    .context("open sample configuration")?;
-    let baseline = config_dir.read_to_string("baseline.toml")?;
-    let overrides = config_dir.read_to_string("overrides.toml")?;
-    fixture.write("baseline.toml", &baseline)?;
-    let selected = fixture.write(".hello_world.toml", &overrides)?;
-    let discovery = MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", selected);
-    let config = load_global_config_with_sources(
-        &GlobalArgs::default(),
-        None,
-        "hello-world",
-        global_sources(discovery.clone(), MapEnv::new()),
-    )?;
-    let greet =
-        load_greet_defaults_with_sources(fixture.path(), global_sources(discovery, MapEnv::new()))?;
-    action(&config, &greet)
 }
