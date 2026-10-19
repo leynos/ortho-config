@@ -1,9 +1,9 @@
 //! Tests for configuration inheritance using the `extends` key.
 use anyhow::{Result, anyhow, ensure};
+use camino::Utf8PathBuf;
 use ortho_config::{MapEnv, OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 #[path = "support/extends_fixture.rs"]
 mod extends_fixture;
@@ -216,7 +216,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
     let fixture = ConfigFixture::new()?;
     let expected_base = fixture.path("missing.toml");
     let extends_value = if is_abs {
-        expected_base.display().to_string()
+        expected_base.as_str().to_owned()
     } else {
         String::from("missing.toml")
     };
@@ -307,19 +307,19 @@ where
 }
 
 enum SetupType {
-    EmptyFile(PathBuf),
-    Directory(PathBuf),
+    EmptyFile(Utf8PathBuf),
+    Directory(Utf8PathBuf),
 }
 
 #[rstest]
 #[case::empty_extends(
-    SetupType::EmptyFile(PathBuf::from("base.toml")),
+    SetupType::EmptyFile(Utf8PathBuf::from("base.toml")),
     "",
     "non-empty",
     "empty extends"
 )]
 #[case::directory_extends(
-    SetupType::Directory(PathBuf::from("dir")),
+    SetupType::Directory(Utf8PathBuf::from("dir")),
     "dir",
     "not a regular file",
     "directory extends"

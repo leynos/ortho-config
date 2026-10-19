@@ -119,7 +119,8 @@ impl ExampleWorkspace {
     pub fn build(&mut self) -> Result<()> {
         let mut command = self.cargo_command()?;
         command.args(["build", "--offline", "--bins"]);
-        let output = process_runner::run_command(&mut command, Operation("build documented Rust"))?;
+        let output =
+            process_runner::run_cargo_command(&mut command, Operation("build documented Rust"))?;
         ensure!(
             output.status.success(),
             "documented Rust failed to compile:\n{}",

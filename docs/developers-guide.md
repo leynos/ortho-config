@@ -373,10 +373,12 @@ named by the workspace allow-list and deliberate scenario overrides. Keep
 fallible host-tool discovery and environment preparation at the runner
 boundary; command construction consumes the prepared values without starting
 subprocesses or writing files. The process-runner helper owns bounded execution
-for these documentation tests only: route Cargo, host-tool, and
-documented-binary commands through it, while keeping command construction and
-exit-status policy with their existing owners. Run-file paths must contain
-normal relative components only.
+for these documentation tests only: Cargo commands that compile temporary
+targets have a 20-minute bound for shared compiler admission, while ordinary
+child commands keep the 10-minute bound. Route Cargo, host-tool, and
+documented-binary commands through the helper, while keeping command
+construction and exit-status policy with their existing owners. Run-file paths
+must contain normal relative components only.
 
 ### Python docstring examples
 
@@ -687,13 +689,13 @@ variables for tests.
   select their own source to keep setup and precedence assertions visible.
 - The `extends` integration tests keep their `ConfigFixture` in
   `ortho_config/tests/support/extends_fixture.rs`. It writes a temporary
-  `.config.toml` through `cap_std::fs::Dir`, requires it with the generated
-  `--config-path` flag, and passes an injected discovery `MapEnv` plus a
-  separate merge `MapEnv`. Keep discovery tests on explicit builder setups so
-  their candidate and environment cases remain visible; this fixture composes
-  the existing lookup and merge boundaries rather than expanding the
-  environment API. Cycle and missing-file cases inject a valid merge value to
-  isolate the file error.
+  `.config.toml` through `cap_std::fs_utf8::Dir` with `camino` paths, requires
+  it with the generated `--config-path` flag, and passes an injected discovery
+  `MapEnv` plus a separate merge `MapEnv`. Keep discovery tests on explicit
+  builder setups so their candidate and environment cases remain visible; this
+  fixture composes the existing lookup and merge boundaries rather than
+  expanding the environment API. Cycle and missing-file cases inject a valid
+  merge value to isolate the file error.
 - The discovery candidate reader is the only production reader, and holds no
   `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the

@@ -11,6 +11,7 @@ use std::time::Duration;
 use wait_timeout::ChildExt;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
+const CARGO_COMMAND_TIMEOUT: Duration = Duration::from_secs(1_200);
 const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy)]
@@ -49,6 +50,29 @@ impl Default for ProcessLimits {
 /// Run a command with the documentation-test timeout and output limits.
 pub(super) fn run_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
     run_command_with_limits(command, operation, ProcessLimits::default())
+}
+
+/// Run a Cargo command with time for a cold temporary target to compile.
+///
+/// Cargo commands may queue for the shared compiler slots while building the
+/// documented package. Ordinary example binaries keep the shorter default.
+///
+/// ```no_run
+/// # use std::process::Command;
+/// # let mut command = Command::new("cargo");
+/// let output = run_cargo_command(&mut command, Operation("build example"))?;
+/// assert!(output.status.success());
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub(super) fn run_cargo_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
+    run_command_with_limits(
+        command,
+        operation,
+        ProcessLimits {
+            timeout: CARGO_COMMAND_TIMEOUT,
+            ..ProcessLimits::default()
+        },
+    )
 }
 
 fn run_command_with_limits(
