@@ -18,93 +18,26 @@
 //! binding and override precedence are exercised as a scenario would exercise
 //! them, not by calling the normalizer directly.
 //!
-//! One deliberate limitation: the tests reach the runner's insertion branch by
-//! hand instead of generating a scenario. The dispatch they pin is emitted by
-//! the step wrapper macro, which is what both paths share; generating a
-//! scenario would additionally need a feature file for a case the behavioural
-//! suite deliberately does not cover today.
+//! The manual `insert_value` call is deliberate here and is *not* the only
+//! coverage of runner behaviour: [`step_return_scenarios`](super::step_return_scenarios)
+//! runs the same aliases through the generated scenario runner, so a defect
+//! in the code that calls `insert_value` fails there. This module keeps the
+//! mutations a scenario cannot express — displacement of an earlier override,
+//! a payload with no matching fixture, and the `NotMutable` proof that
+//! `Ok(())` recorded nothing.
 
 use std::any::Any;
 
-use anyhow::Result;
 use rstest::rstest;
 use rstest_bdd::{
     FixtureBorrowError, InsertOutcome, StepContext, StepError, StepKeyword,
     execution::{ExecutionError, StepExecutionRequest, execute_step},
 };
-use rstest_bdd_macros::{given, then};
 
-/// A non-unit payload carried out of a step as an override.
-#[derive(Debug, PartialEq, Eq)]
-struct Level(u8);
-
-/// Mirrors this crate's own step return alias exactly.
-///
-/// Written as `anyhow::Result<T>` rather than `Result<T, E>` on purpose:
-/// `anyhow::Result<T>` defaults its error type to `anyhow::Error`, so the
-/// alias under test is the one the crate's steps actually return. Spelling it
-/// `Result<T, &'static str>` would still name the imported `anyhow::Result` —
-/// an explicit second argument replaces the default rather than selecting a
-/// different `Result` — but it would make the step exercise `&'static str` as
-/// its error type instead of `anyhow::Error`.
-type StepAlias<T> = anyhow::Result<T>;
-
-/// Mirrors `cargo-orthohelp`'s step error type, which is a boxed trait object
-/// rather than a concrete error, so the `Display` bound is exercised through
-/// a trait object as well as through `anyhow::Error`.
-type BoxedStepError = Box<dyn std::error::Error + Send + Sync>;
-
-/// Mirrors `cargo-orthohelp`'s `StepResult<T>` alias exactly.
-type BoxedStepResult<T> = Result<T, BoxedStepError>;
+use super::step_return_scenarios::Level;
 
 /// The outcome type produced by [`execute_step`] for a single step.
 type StepOutcome = std::result::Result<Option<Box<dyn Any>>, ExecutionError>;
-
-/// An alias whose `Err` must fail the scenario rather than pass silently.
-#[given("a step return alias reports failure")]
-fn alias_reports_failure() -> StepAlias<()> {
-    Err(anyhow::anyhow!("aliased step failed"))
-}
-
-/// An alias whose `Ok(())` must produce no override payload.
-#[given("a step return alias succeeds with no payload")]
-fn alias_succeeds_empty() -> StepAlias<()> {
-    Ok(())
-}
-
-/// An alias whose `Ok` payload must be injected for later steps to read.
-#[given("a step return alias reports a level of {level:u8}")]
-fn alias_reports_level(level: u8) -> StepAlias<Level> {
-    Ok(Level(level))
-}
-
-/// A step using the boxed-error alias that returns `Err`.
-#[given("a boxed-error step alias reports failure")]
-fn boxed_alias_reports_failure() -> BoxedStepResult<()> {
-    Err("boxed aliased step failed".into())
-}
-
-/// A step using the boxed-error alias that returns `Ok` with a payload.
-#[given("a boxed-error step alias reports a level of {level:u8}")]
-fn boxed_alias_reports_level(level: u8) -> BoxedStepResult<Level> {
-    Ok(Level(level))
-}
-
-/// Reads back whatever the preceding aliased step injected.
-///
-/// The parameter name `level` is the implicit fixture name, so this step
-/// observes the override the runner recorded under that name. The test
-/// registers a `Level` fixture there so the wrapper's required-fixture check
-/// passes, exactly as a scenario's fixture argument would.
-#[then("the injected level is {expected:u8}")]
-fn injected_level_is(level: &Level, expected: u8) -> Result<()> {
-    anyhow::ensure!(
-        level.0 == expected,
-        "injected level {}; expected {expected}",
-        level.0
-    );
-    Ok(())
-}
 
 /// Builds a request that resolves against one of the steps above.
 fn request(keyword: StepKeyword, text: &str) -> StepExecutionRequest<'_> {

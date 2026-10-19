@@ -308,6 +308,44 @@ task into two.
   - Three documentation corrections from the same review: the `[workspace
     .dependencies]` versions are described as historical, the pinned channel
     reads `1.99`, and the gate-command block sets `pipefail`.
+- [x] (2026-10-19) Pre-merge-check repairs. The assessment raised three
+  findings against `55bad4e7`, and all three were valid. Each is repaired by
+  adding the coverage it named rather than by changing production code, which
+  the checks confirmed was already correct:
+  - **Runner-boundary scenario coverage.** New
+    `ortho_config/tests/features/step_return.feature` with five scenarios and
+    `ortho_config/tests/rstest_bdd_support/step_return_scenarios.rs` with the
+    matching `#[scenario]` bindings, so both aliases are driven through the
+    generated scenario body: an aliased `Err` fails the scenario (asserted with
+    `#[should_panic(expected = ...)]`), `Ok(T)` reaches a later step as the
+    fixture payload, and `Ok(())` records no override. The focused bridge tests
+    remain, with their module doc now stating that `insert_value` is not the
+    only coverage. Recorded target: `92 passed; 0 failed`.
+  - **Property test for the rustflags sanitizer.** New
+    `cargo-orthohelp/src/rustflags_proptests.rs` compares the sanitizer against
+    an independently written reference filter over generated token sequences,
+    for both delimiters. Five properties assert exact output text (so order and
+    delimiter survive), `None` exactly when every token is removed, and
+    byte-identical passthrough when nothing is removed. The generators end in a
+    coverage token, or are made entirely of removable units, so neither branch
+    is vacuous. Recorded target: `11 passed; 0 failed`.
+  - **Compile-time alias coverage.** New
+    `ortho_config/tests/trybuild/step_return_aliases.rs`, registered as a third
+    `t.pass` fixture in `tests/compile_fail.rs`, declares steps for both
+    `anyhow::Result<T>` and `Result<T, Box<dyn Error + Send + Sync>>` and calls
+    them from `main`, so the generated wrappers are compiled *and* run.
+  - **Scoped `not_found` spelling.** The fourth row, an inline request for a
+    scoped `not_found` telemetry case, is implemented as an in-crate unit test.
+    The dispatcher arm exists at `ortho_config/src/discovery/telemetry.rs:348`,
+    but no production discovery path reaches it, so
+    `discovery::telemetry_tests` calls `load_outcome` directly and asserts on
+    the callsite's declared metadata that `scope` is present and `source` is
+    absent. `telemetry_test_support::CapturedEvent` gained `declares()` for
+    this, since a field recorded as absent and a field never listed are
+    indistinguishable by value. Recorded target: `3 passed; 0 failed`.
+  No production source changed, so the earlier gate certificates for runtime
+  behaviour are untouched; the new files are Rust and Markdown inputs, so the
+  full gate set is re-run rather than transferred.
 
 ## Surprises & discoveries
 
@@ -547,6 +585,67 @@ Unexpected findings during implementation that were not anticipated as risks.
   lints; only `make lint` proves it. A second, cheaper lesson from the same
   round: `check-fmt` runs `mdtablefix` as well as `cargo fmt`, so edited prose
   can fail a formatting gate while the Rust tree is clean.
+- Observation: a payload type shared between two test modules silently stops
+  being injected. `StepContext::insert_value` filters the fixture set by
+  `TypeId`, and returns `NoMatch` when it finds none or several. Declaring a
+  second, structurally identical `Level` in the regression module would give
+  the scenario's payload a different `TypeId` from the fixture the scenario
+  seeds, so every `Ok(T)` scenario would pass while recording nothing. Evidence:
+  `ortho_config/src/context/entry.rs` stores `TypeId::of::<T>()` in the entry,
+  and `insert_value` matches on that value. Impact: the payload type, the steps
+  that produce it, and the fixture that seeds it must live in one module; the
+  regression module imports the scenario module's `Level` rather than
+  redeclaring it. A future reader tempted to move one of the two will get a
+  green suite that tests nothing.
+- Observation: `#[scenario]` with no selector runs the feature file's **first**
+  scenario only, and selection by name is unambiguous or an error. Evidence:
+  `rstest-bdd-macros-0.6.0/src/macros/scenario/selection.rs` maps an absent
+  selector to `0..len` but returns the first match, and `find_scenario_by_name`
+  compares `scenario.name == name` exactly and errors on zero or several
+  matches. Impact: five bindings over one feature file each carry an explicit
+  `name = "…"`; without them the same first scenario would have run five times
+  and three of the required cases would have had no coverage at all.
+- Observation: `And` and `But` are resolved to the preceding primary keyword by
+  `StepKeyword::resolve`, which is defined once in
+  `rstest-bdd-patterns-0.6.0/src/keyword.rs:86-109` and shared by the runtime
+  and the macro crate. An earlier draft of this plan attributed the resolution
+  to a `resolve_keyword_tokens` helper in the macro crate's scenario codegen;
+  that helper could not be re-confirmed in the published sources, so the
+  citation above is the one that was verified. Impact: none for this
+  repository, which uses no `And`/`But` steps, but the earlier attribution
+  should not be relied on. Kept as a correction rather than silently deleted
+  because the same plausible-sounding location is easy to re-derive.
+- Observation: the scoped-load-outcome telemetry event that a review row asked
+  to test for a `not_found` case has **no production caller**, although the
+  dispatcher arm for it exists and is exercised. Evidence:
+  `ortho_config/src/discovery/telemetry.rs:348` is the only call of
+  `events::load_outcome_scope` (defined at `telemetry_events.rs:139`), and
+  every discovery call site passes `None` for scope — `scoped.rs:117`/`:171`,
+  `load.rs:153`/`:173` and `policy.rs:97`; only `scoped.rs::compose_scope`
+  could supply one, and it emits its per-scope terminal only inside
+  `if let Some(source) = winner`, matching the 318 ExecPlan's winners-only
+  per-scope terminals. Impact: the requested case cannot be driven through
+  discovery, so the implementation drives `load_outcome` directly from the
+  sibling unit module, where `pub(super)` emission helpers are reachable. An
+  earlier draft of this plan said the emitter had no caller at all; that
+  overstated the finding and is corrected here. The test asserts on
+  `Metadata::fields` rather than recorded values, because a `None` suppresses a
+  value but not the name a callsite declares.
+- Observation: a trybuild fixture cannot bind `#[scenario]`, and its scratch
+  crate does not inherit the workspace lint set. Evidence: trybuild's scratch
+  `Manifest` (`src/dependencies.rs:100-113`) has no `lints` field and
+  `src/run.rs:218-335` builds the manifest field by field without one, so
+  `[workspace.lints]` does not reach the fixture;
+  `manifest_relative_feature_path` resolves against `CARGO_MANIFEST_DIR`, which
+  for a fixture is the scratch crate. Impact:
+  `tests/trybuild/step_return_aliases.rs` declares its steps and invokes them
+  directly from `main`, which is also what makes the bodies type-check; the
+  runner-boundary behaviour is covered by the `rstest_bdd` integration target
+  instead. A `#[expect]` in a fixture also does not have to satisfy the
+  repository's `allow_attributes` denies, because those lints are workspace
+  configuration rather than rustc defaults — the two expectations in the
+  fixture mirror upstream `tests/step_return.rs` and are scoped to the two
+  functions that genuinely return an always-`Ok` `Result`.
 
 ## Decision log
 
@@ -627,6 +726,30 @@ Record every significant decision made while working on the plan.
   rewrite is non-vacuous: it drives `execute_step`, calls `insert_value` as the
   generated scenario loop does, and asserts that a later `&Level` step reads
   the override. Date/Author: 2026-10-17, migration agent.
+- Decision: keep the focused bridge tests alongside the new runner-boundary
+  scenarios rather than replacing them. Rationale: the runner cannot express
+  displacement of an earlier override, a payload with no matching fixture, or
+  the `NotMutable` observation that proves `Ok(())` recorded nothing; those
+  need the manual `insert_value` call. Conversely the bridge tests cannot
+  notice a defect in the code that calls `insert_value`. The two modules are
+  complements, and each now documents which mutations it owns. Date/Author:
+  2026-10-19, migration agent.
+- Decision: pin the scoped `not_found` telemetry spelling with an in-crate unit
+  test that drives the dispatcher directly, rather than through a discovery
+  run. Rationale: the dispatcher arm exists but no production path reaches it,
+  because `compose_scope` emits per-scope terminals only for a winner, so there
+  is nothing in discovery to observe. Driving `load_outcome` from
+  `discovery::telemetry_tests` records the documented spelling without
+  inventing a code path, and it guards the arm against being collapsed into the
+  bare emitter by a future not-found path. The assertion is on declared
+  metadata, since a suppressed `None` and an unlisted name record identically.
+  Date/Author: 2026-10-19, migration agent.
+- Decision: verify the compile-time alias contract with a trybuild *pass*
+  fixture rather than a compile-fail one. Rationale: the claim under test is
+  that both aliases reach the same `Result` normalization, so a regression is a
+  compile error, not a diagnostic message. A pass fixture is compiled and run,
+  which also type-checks the handler bodies; no `.stderr` snapshot belongs to a
+  contract that must succeed. Date/Author: 2026-10-19, migration agent.
 
 ## Outcomes & retrospective
 
@@ -831,7 +954,10 @@ its verification method.
   which drives `execute_step` and mirrors the scenario runner's `insert_value`
   call, together with
   `ortho_config/tests/rstest_bdd_support/step_return_dispatch_bridge.rs`, which
-  pins the dispatch contract itself.
+  pins the dispatch contract itself, and
+  `ortho_config/tests/rstest_bdd_support/step_return_scenarios.rs` with its
+  `tests/features/step_return.feature`, which drive the same aliases through
+  the generated scenario body.
 - Evidence: the regression module pins all four combinations of alias shape
   (`anyhow::Result<T>` and `Result<T, Box<dyn Error + Send + Sync>>`) against
   outcome (an `Err` fails the scenario; an `Ok(T)` injects `T`, while `Ok(())`
@@ -874,6 +1000,18 @@ its verification method.
   covers `anyhow::Result<T>` directly. The boxed-error shape shares the same
   bridge arm and is covered by the behavioural module, but it is not probed
   differentially.
+
+  A seventh case, added on 2026-10-19, moves the same claims one level up. The
+  artefacts above reach the runner's `insert_value` call by hand, so none of
+  them can notice a defect in the code that calls it. `step_return.feature` and
+  its `step_return_scenarios.rs` bindings now drive the generated `#[scenario]`
+  body end to end: a failing alias in either shape fails the scenario (matched
+  with `#[should_panic(expected = ...)]`, which the macro preserves onto the
+  generated test function), a payload arrives at a later step as the fixture
+  value, and a unit `Ok` leaves the seeded fixture at 5. The `Then` guard in
+  the failing scenarios proves the loop stopped, since its message is distinct
+  from both handler messages. The `Level` payload type lives in exactly one
+  module because `insert_value` filters by `TypeId`.
 
 ### Obligation V3: dependency and lockfile state is fully migrated
 
@@ -1168,3 +1306,18 @@ obligation's method, evidence, acceptance line, residual gaps and the recorded
 baseline all changed with that correction; the `COMPLETE` status is unchanged
 because the implemented behaviour was already correct and the repairs tighten
 the evidence rather than the code path.
+
+Revision, 2026-10-19: closed the three pre-merge-check findings on the
+delivered head, all by adding coverage rather than changing production code.
+Added a feature file and its `#[scenario]` bindings so both aliased `Result`
+shapes are exercised through the generated scenario runner; added a property
+suite for the rustflags sanitizer that compares it against an independently
+written reference filter for both delimiters; and added a trybuild pass fixture
+that compiles the step macros for both downstream return aliases. The fourth
+row of the same assessment asked for a scoped `not_found` telemetry case; an
+in-crate unit test now drives `load_outcome` directly, because the dispatcher
+arm exists but no production discovery path reaches it, and the assertion is on
+the callsite's declared metadata rather than on recorded values. The Surprises
+section records the payload-type identity trap, the trybuild scratch-crate
+constraints and the corrected reading of the scoped emitter discovered while
+building these, and the Decision log records why the focused bridge tests stay.

@@ -245,6 +245,10 @@ fn is_instrument_coverage_option(token: RustflagToken<'_>) -> bool {
 }
 
 #[cfg(test)]
+#[path = "rustflags_proptests.rs"]
+mod proptests;
+
+#[cfg(test)]
 mod tests {
     //! Unit tests for `RUSTFLAGS` handling.
 
