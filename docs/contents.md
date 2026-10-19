@@ -160,7 +160,7 @@
 
 ## Execution plans
 
-- [Reusable localization runtime](execplans/issue-566-extract-reusable-localisation-runtime-into-ortho-l10n.md):
+- [Reusable localization runtime][l10n-runtime-plan]:
   extract `ortho_l10n`, preserve compatibility, and verify consumer dependency
   boundaries.
 - [ExecPlans directory](execplans/): review living and historical execution
@@ -215,3 +215,6 @@
 
 [adr-0008]: adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0009]: adrs/adr-0009-linux-build-test-runner-placement.md
+
+[l10n-runtime-plan]:
+  execplans/issue-566-extract-reusable-localisation-runtime-into-ortho-l10n.md

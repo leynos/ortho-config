@@ -157,8 +157,14 @@ unavailable infrastructure from source failures.
   improving failure diagnostics. The refreshed formatting, lint (including
   rustdoc, Clippy, and Whitaker), typecheck, full tests, Markdown/spelling, and
   diagram gates all pass. Canonical logs are
-  `/tmp/issue566-rebase-assertions-<gate>-issue-566-extract-reusable-localisation-runtime-into-ortho-l10n.out`.
-  EP-M1 commit and CodeRabbit assessment remain pending.
+
+  ```text
+  /tmp/issue566-rebase-assertions-<gate>-issue-566-extract-reusable-localisation-runtime-into-ortho-l10n.out
+  ```
+
+  EP-M1 is committed as `fe5b5334`. CodeRabbit completed its four-file review
+  and reported three minor documentation concerns; resolving those and
+  obtaining a clear assessment remain pending.
 
 - [x] 2026-10-20: At the user's direction, advance the branch from
   `f99d9234f6d72e6b1a489b82f35ff1c5eb7228a7` to supervision PR #607's
@@ -175,6 +181,13 @@ unavailable infrastructure from source failures.
   idle-host waits below are superseded. Commit only after required gates pass,
   review EP-M1, then publish with an explicit lease. The remote issue branch
   was absent at the pre-rebase lease readback.
+
+### Historical gate runs
+
+These earlier failures and retries are resolved by the successful 20 October
+validation above. Retain them as evidence of the original blocker and failed
+approaches; they are no longer outstanding work.
+
 - [x] 2026-10-15: Read instructions and requested skills; rename branch/session.
 - [x] 2026-10-15: Record baseline contract before production edits.
 - [x] 2026-10-15 18:06 UTC: Characterization tests written; formatting and
@@ -200,7 +213,7 @@ unavailable infrastructure from source failures.
 - [x] 2026-10-15: All 18 golden tests pass (944.86 seconds), and all three
   nested-subcommand end-to-end cases pass (430.10 seconds). Five of six
   policy-report contracts pass; the final combined-output fixture is still
-  compiling. Fresh child artifacts confirm forward progress. The complete
+  compiling. Fresh child artefacts confirm forward progress. The complete
   `make test` result is still pending.
 - [x] 2026-10-15: All six policy-report contracts pass (898.11 seconds), and
   all 25 `cargo-orthohelp` BDD scenarios pass (1,820.05 seconds). The gate has
@@ -213,14 +226,14 @@ unavailable infrastructure from source failures.
   snapshot changes. A second nested fixture build passes in 14 minutes 2
   seconds; the public API contract fixture is still compiling. The full gate
   remains pending with no reported failure.
-- [ ] EP-M1 test retry: `make test` stops with four documentation-example
+- [x] EP-M1 test retry: `make test` stops with four documentation-example
   workspace-membership errors. Setting `TMPDIR` beneath the checkout caused
   Cargo to discover the enclosing workspace for temporary packages. Move the
   gate temporary root to the session-specific directory beneath
   `/home/leynos/.cache/ortho-config-gates/`, outside both the checkout and
   `/tmp`. Verify the affected test target, then rerun the full gate. No
   production or test-source fix is indicated by these diagnostics.
-- [ ] EP-M1 infrastructure wait: the external-root focused retry fixes
+- [x] EP-M1 infrastructure wait: the external-root focused retry fixes
   workspace discovery but all four example builds time out at 600 seconds (14
   pass, four fail, five ignore). Supervisor readback is healthy with all four
   slots held, approximately 200 queued requests, and sccache unavailable.
@@ -230,19 +243,19 @@ unavailable infrastructure from source failures.
 - [x] Final formatting, Markdown, spelling, and Mermaid gates pass without
   unrelated changes. Subsequent minute-spaced admission samples fall from
   approximately 200 queued requests to 114, 93, 28, 27, 10, then 10.
-- [ ] Retry the focused documentation examples under the improved queue with
+- [x] Retry the focused documentation examples under the improved queue with
   command-scoped `RUST_TEST_THREADS=1`; retain the fixed 600-second limit,
   shared Cargo cache, and compiler admission. This serializes independent test
   cases while retaining the explicit concurrent-interleaving test. Run the full
   gate with the same setting only after focused success.
-- [ ] 2026-10-16: The serialized retry's first example fails; remaining
+- [x] 2026-10-16: The serialized retry's first example fails; remaining
   cases are still running. A bounded sample shows its Cargo child waiting for
   `.package-cache`, with no compiler or fresh target artefacts. The conflicting
   writer and mutation-lock reader are unrelated to the child ancestry,
   falsifying a direct parent/child Cargo lock-cycle hypothesis. Lower compiler
   queue pressure alone has not removed package-cache contention. Await the
   exact retry summary before another action.
-- [ ] 2026-10-16: Serialized focused retry finishes with 15 passed, three
+- [x] 2026-10-16: Serialized focused retry finishes with 15 passed, three
   failed, five ignored (2,376.04 seconds). Aliased dependency, standard Rust
   examples, and concurrent interleavings each time out while building at 600
   seconds; the external-subcommand example passes. The full test gate is still
@@ -250,7 +263,10 @@ unavailable infrastructure from source failures.
   reduced cache contention before any further retry. The hard-coded timeout has
   no supported operator override; do not broaden this extraction into an
   unrelated harness or service change.
-- [ ] EP-M1: Complete remaining gates, commit, and review.
+
+### Remaining milestones
+
+- [ ] EP-M1: Resolve documentation review concerns and finish assessment.
 - [ ] EP-M2: Extraction and integration, gates, commit, review.
 - [ ] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
@@ -273,12 +289,11 @@ packages to the enclosing Cargo workspace; use an external root for subsequent
 runs. These are infrastructure observations, not localization performance
 measurements.
 
-Official
-[Cargo packaging documentation](https://doc.rust-lang.org/cargo/commands/cargo-package.html)
-describes multiple package selectors and registry-aware lockfile generation.
-The installed Lading pipeline packages crates individually, so the new consumer
-gate must independently verify the multi-package graph. Keep any newer Cargo
-invocation scoped to packaging; retain the repository toolchain pin.
+Official [Cargo packaging documentation][cargo-package] describes multiple
+package selectors and registry-aware lockfile generation. The installed Lading
+pipeline packages crates individually, so the new consumer gate must
+independently verify the multi-package graph. Keep any newer Cargo invocation
+scoped to packaging; retain the repository toolchain pin.
 
 ## Decision log
 
@@ -294,8 +309,10 @@ all eight pass. Formatting, typechecking, rustdoc, Clippy, Whitaker, Markdown,
 spelling, and diagram validation pass. The rebased full test gate passes,
 resolving the earlier documentation-example subprocess timeouts. All required
 gates pass after two assertion-only Clippy corrections for the target's newer
-Rust toolchain. No production extraction, commit, CodeRabbit review, push, or
-PR has occurred. No acceptance item is yet claimed complete.
+Rust toolchain. The characterization commit and its first CodeRabbit review are
+complete; three documentation concerns are being resolved. No production
+extraction, push, or PR has occurred. No extraction acceptance item is yet
+claimed complete.
 
 Revision note (2026-10-20): The user explicitly selected the open supervision
 PR as the new base, replacing the earlier wait for its merge into main. The
@@ -306,3 +323,11 @@ Revision note (2026-10-20, validation): Record the successful rebased gate run
 and the two Clippy assertion corrections. The documentation-example blocker is
 resolved on PR #607's base. EP-M1 still needs its gated commit and milestone
 assessment before extraction begins.
+
+[cargo-package]:
+  https://doc.rust-lang.org/cargo/commands/cargo-package.html
+
+Revision note (2026-10-20, review): Close the superseded infrastructure
+checklist items in a labelled historical record and wrap long references. These
+changes address the three documentation findings from the completed EP-M1
+CodeRabbit assessment; production code remains unchanged.
