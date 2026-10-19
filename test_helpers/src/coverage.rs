@@ -15,19 +15,17 @@
 //!
 //! ```
 //! use std::ffi::OsStr;
-//! use std::path::{Path, PathBuf};
 //!
 //! use ortho_config_test_helpers::coverage::resolve_profile_path;
 //!
-//! let parent = Path::new("/work");
+//! let parent = std::env::temp_dir();
 //! assert_eq!(
-//!     resolve_profile_path(OsStr::new("profiles/run.profraw"), parent),
-//!     PathBuf::from("/work/profiles/run.profraw")
+//!     resolve_profile_path(OsStr::new("profiles/run.profraw"), &parent),
+//!     parent.join("profiles/run.profraw")
 //! );
-//! assert_eq!(
-//!     resolve_profile_path(OsStr::new("/tmp/run.profraw"), parent),
-//!     PathBuf::from("/tmp/run.profraw")
-//! );
+//! let absolute = parent.join("run.profraw");
+//! assert!(absolute.is_absolute());
+//! assert_eq!(resolve_profile_path(absolute.as_os_str(), &parent), absolute);
 //! ```
 
 use std::ffi::OsStr;
@@ -42,13 +40,13 @@ use std::path::{Path, PathBuf};
 ///
 /// ```
 /// use std::ffi::OsStr;
-/// use std::path::{Path, PathBuf};
 ///
 /// use ortho_config_test_helpers::coverage::resolve_profile_path;
 ///
+/// let parent = std::env::temp_dir();
 /// assert_eq!(
-///     resolve_profile_path(OsStr::new("run.profraw"), Path::new("/work")),
-///     PathBuf::from("/work/run.profraw")
+///     resolve_profile_path(OsStr::new("run.profraw"), &parent),
+///     parent.join("run.profraw")
 /// );
 /// ```
 #[must_use]
@@ -66,23 +64,31 @@ mod tests {
 
     use super::resolve_profile_path;
     use std::ffi::OsStr;
-    use std::path::{Path, PathBuf};
 
+    /// The parent is taken from the platform's temp directory because a
+    /// literal like `/work` is root-relative rather than absolute on Windows.
     #[test]
     fn relative_profile_paths_are_anchored_to_the_parent() {
-        let parent = Path::new("/work");
-        assert_eq!(
-            resolve_profile_path(OsStr::new("profiles/run.profraw"), parent),
-            PathBuf::from("/work/profiles/run.profraw")
+        let parent = std::env::temp_dir();
+        let resolved = resolve_profile_path(OsStr::new("profiles/run.profraw"), &parent);
+        assert_eq!(resolved, parent.join("profiles/run.profraw"));
+        assert!(
+            resolved.is_absolute(),
+            "a relative profile must be anchored to an absolute parent: {resolved:?}"
         );
     }
 
     #[test]
     fn absolute_profile_paths_pass_through_unchanged() {
-        let parent = Path::new("/work");
+        let parent = std::env::temp_dir();
+        let absolute = parent.join("run.profraw");
+        assert!(
+            absolute.is_absolute(),
+            "the pass-through premise needs a genuinely absolute path: {absolute:?}"
+        );
         assert_eq!(
-            resolve_profile_path(OsStr::new("/tmp/run.profraw"), parent),
-            PathBuf::from("/tmp/run.profraw")
+            resolve_profile_path(absolute.as_os_str(), &parent),
+            absolute
         );
     }
 }
