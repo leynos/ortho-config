@@ -3,7 +3,8 @@
 The Linux ``build-test`` leg runs on Ubicloud's ``ubicloud-standard-4``:
 on GitHub-hosted runners its queue wait reached 29 minutes against a
 27-minute wall. A fork's pull request cannot obtain an Ubicloud runner,
-so that leg falls back to ``ubuntu-latest`` for forks. The Windows leg
+so that leg falls back to ``ubuntu-latest`` for forks. So does a Dependabot
+pull request: hosted minutes cost nothing on a public repository. The Windows leg
 and every packaging leg stay GitHub-hosted.
 
 The fallback is read by position. An expression that merely names a
@@ -33,6 +34,12 @@ WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
 
 #: The fork fallback, by position: condition, fork arm, owned arm.
 FORK_CONDITION: typ.Final[str] = "github.event.pull_request.head.repo.fork"
+#: The pull request's author, not ``github.actor``: the actor is whoever
+#: triggered the run, so a person pushing to a Dependabot branch would flip it.
+DEPENDABOT_CONDITION: typ.Final[str] = (
+    "github.event.pull_request.user.login == 'dependabot[bot]'"
+)
+HOSTED_CONDITION: typ.Final[str] = f"({FORK_CONDITION} || {DEPENDABOT_CONDITION})"
 FORK_ARM: typ.Final[str] = "matrix.fork-runner"
 OWNED_ARM: typ.Final[str] = "matrix.runner"
 
@@ -57,7 +64,7 @@ CREDENTIALS_ACTION: typ.Final[str] = (
 )
 SELF_HOSTED: typ.Final[str] = "${{ runner.environment == 'self-hosted' }}"
 
-_FALLBACK = re.compile(r"^\$\{\{\s*(?P<cond>\S+)\s*&&\s*(?P<fork>\S+)\s*\|\|\s*(?P<owned>\S+)\s*\}\}$")
+_FALLBACK = re.compile(r"^\$\{\{\s*(?P<cond>\(.+?\))\s*&&\s*(?P<fork>\S+)\s*\|\|\s*(?P<owned>\S+)\s*\}\}$")
 
 
 @pytest.fixture(scope="module")
@@ -100,8 +107,8 @@ def test_the_fork_fallback_is_read_by_position(ci: WorkflowDocument) -> None:
     runs_on = " ".join(str(_build_test(ci).get("runs-on", "")).split())
     parsed = _FALLBACK.match(runs_on)
     assert parsed, f"build-test's runs-on is not a fork fallback: {runs_on!r}"
-    assert parsed.group("cond") == FORK_CONDITION, (
-        f"the fallback must be conditioned on {FORK_CONDITION}; it reads {parsed.group('cond')!r}"
+    assert parsed.group("cond") == HOSTED_CONDITION, (
+        f"the fallback must be conditioned on {HOSTED_CONDITION}; it reads {parsed.group('cond')!r}"
     )
     assert parsed.group("fork") == FORK_ARM, (
         f"forks must take {FORK_ARM}; they take {parsed.group('fork')!r}"
