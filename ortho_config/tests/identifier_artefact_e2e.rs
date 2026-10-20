@@ -110,7 +110,7 @@ fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()>
     clean_fixture(&cargo)?;
     let first_out_dir = build_fixture(false, &cargo, None)?;
     ensure!(
-        artefact_path(&first_out_dir).is_none(),
+        artefact_path(&first_out_dir)?.is_none(),
         "build without opt-in must not emit an identifier artefact"
     );
 
@@ -159,7 +159,7 @@ fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()>
 
     clean_fixture(&cargo)?;
     ensure!(
-        artefact_path(&opt_in_out_dir).is_none(),
+        artefact_path(&opt_in_out_dir)?.is_none(),
         "clean must remove the previous opt-in artefact"
     );
     let rebuilt_out_dir = build_fixture(true, &cargo, None)?;

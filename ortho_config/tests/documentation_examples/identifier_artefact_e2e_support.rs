@@ -8,6 +8,7 @@ use super::{cargo_environment, process_runner};
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use serde_json::Value;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -223,15 +224,27 @@ pub(super) fn clean_fixture(cargo: &FixtureCargo) -> Result<()> {
 }
 
 /// Return the artefact path, if the fixture build emitted one.
-pub(super) fn artefact_path(out_dir: &Path) -> Option<PathBuf> {
-    let path = out_dir.join("ortho-config/cli-identifiers.json");
-    path.exists().then_some(path)
+pub(super) fn artefact_path(out_dir: &Path) -> Result<Option<PathBuf>> {
+    let directory = match Dir::open_ambient_dir(out_dir, ambient_authority()) {
+        Ok(directory) => directory,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).context("open fixture build-script output directory");
+        }
+    };
+    let relative_path = Path::new("ortho-config/cli-identifiers.json");
+    Ok(directory
+        .exists(relative_path)
+        .then(|| out_dir.join(relative_path)))
 }
 
 /// Read the emitted identifier artefact, failing when it is absent.
 pub(super) fn artefact(out_dir: &Path) -> Result<String> {
-    let path = artefact_path(out_dir).context("fixture identifier artefact was not emitted")?;
-    std::fs::read_to_string(path).context("read identifier artefact")
+    let directory = Dir::open_ambient_dir(out_dir, ambient_authority())
+        .context("open fixture build-script output directory")?;
+    directory
+        .read_to_string("ortho-config/cli-identifiers.json")
+        .context("read identifier artefact")
 }
 
 fn retain_runner_error(error: anyhow::Error, operation: &str) -> anyhow::Error {
