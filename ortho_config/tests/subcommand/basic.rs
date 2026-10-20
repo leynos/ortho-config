@@ -21,6 +21,7 @@ use super::fixtures::close_discovery;
 use super::to_anyhow::ToAnyhow as _;
 
 const PROCESS_PROBE_MARKER: &str = "ORTHO_SUBCOMMAND_PROCESS_PROBE_OK";
+const PROCESS_PROFILE_EXPECTED: &str = "ORTHO_SUBCOMMAND_EXPECTED_PROFILE_FILE";
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -129,10 +130,10 @@ fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
         .env("XDG_CONFIG_DIRS", root.path());
     if let Some(profile_file) = ProcessEnv.get("LLVM_PROFILE_FILE") {
         let parent_dir = std::env::current_dir()?;
-        child.env(
-            "LLVM_PROFILE_FILE",
-            resolve_profile_path(&profile_file, &parent_dir),
-        );
+        let profile_path = resolve_profile_path(&profile_file, &parent_dir);
+        child
+            .env("LLVM_PROFILE_FILE", &profile_path)
+            .env(PROCESS_PROFILE_EXPECTED, &profile_path);
     }
     let output = child
         .output()
@@ -155,6 +156,13 @@ fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
 #[test]
 #[ignore = "run by the isolated process-backed wrapper test"]
 fn process_backed_probe() -> Result<()> {
+    let expected_profile = ProcessEnv.get(PROCESS_PROFILE_EXPECTED);
+    let actual_profile = ProcessEnv.get("LLVM_PROFILE_FILE");
+    ensure!(
+        actual_profile == expected_profile,
+        "expected forwarded LLVM_PROFILE_FILE {expected_profile:?}, got {actual_profile:?}"
+    );
+
     let cfg = load_and_merge_subcommand(&Prefix::new("APP_"), &CmdCfg::default())
         .context("merge process-backed subcommand defaults")?;
     ensure!(
