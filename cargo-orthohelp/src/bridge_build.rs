@@ -5,6 +5,8 @@
 
 #[path = "bridge_build_cleanup.rs"]
 mod cleanup;
+#[path = "bridge_build_outputs.rs"]
+mod outputs;
 #[path = "bridge_build_protocol.rs"]
 mod protocol;
 #[path = "bridge_build_snapshot.rs"]

@@ -1045,16 +1045,21 @@ another build can overwrite.
 
 The production helper is scoped to bridge compilation. It uses an `fs4`
 operating-system file lock in Cargo's selected target directory across the
-JSON-reported build artefact and its copy into the private run directory. The
-generated manifest selects a stable target name derived from the package root,
-so an ordinary workspace binary named `orthohelp_bridge` cannot replace the
-reported executable after Cargo releases its own target lock. The generated IR
-cache path and its atomic, idempotent publication remain unchanged. Cargo's
-configured wrappers, job limits, warning flags, and coverage settings remain
-active. The helper does not rewrite Rust flags or relocate the default shared
-Cargo cache. Diagnostics are streamed from the Cargo build to the supervising
-CLI. See the [cargo-orthohelp bridge design][bridge-build-ownership] for the
-ownership and data-flow details.
+JSON-reported build, its copy into the private run directory, and cleanup of
+the generated binary outputs. The generated manifest selects a target name
+derived from the package root and private invocation directory, so an ordinary
+workspace binary named `orthohelp_bridge` cannot replace the reported
+executable after Cargo releases its own target lock. Once the private snapshot
+succeeds, the helper removes only Cargo-reported files whose names belong to
+that generated binary. Missing files are accepted; other cleanup failures are
+logged without invalidating the snapshot. Dependencies and the shared Cargo
+cache remain under Cargo's ownership. The generated IR cache path and its
+atomic, idempotent publication remain unchanged. Cargo's configured wrappers,
+job limits, warning flags, and coverage settings remain active. The helper does
+not rewrite Rust flags or relocate the default shared Cargo cache. Diagnostics
+are streamed from the Cargo build to the supervising CLI. See the
+[cargo-orthohelp bridge design][bridge-build-ownership] for the ownership and
+data-flow details.
 
 [bridge-build-ownership]:
   cargo-orthohelp-design.md#632-bridge-build-ownership-and-recovery

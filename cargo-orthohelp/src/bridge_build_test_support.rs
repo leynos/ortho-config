@@ -33,6 +33,13 @@ struct FixtureOptions<'a> {
     coordination: Option<&'a Utf8Path>,
 }
 
+/// Cargo output paths owned by one controlled bridge artifact fixture.
+struct FixtureArtifactPaths {
+    executable: Utf8PathBuf,
+    dependency_output: Utf8PathBuf,
+    dep_info: Utf8PathBuf,
+}
+
 pub(super) fn binary_file_name(binary_name: &str) -> String {
     super::super::binary_file_name(binary_name)
 }
@@ -146,45 +153,8 @@ fn fixture_cargo_messages(
     target: &Utf8Path,
     options: FixtureOptions<'_>,
 ) -> Result<super::super::protocol::CargoMessages> {
-    let executable = target
-        .join("wasm32-unknown-unknown")
-        .join("release")
-        .join(binary_file_name(options.binary_name));
-    let mut stream = Vec::new();
-    if mode == "malformed" {
-        stream.extend_from_slice(b"not-json\n");
-    } else if mode == "oversized" {
-        for _ in 0..16 {
-            stream.extend_from_slice(&OVERSIZED_CARGO_RECORD_CHUNK);
-        }
-        stream.extend_from_slice(b"x\n");
-    } else {
-        let identity = options.owner.unwrap_or("bridge fixture");
-        create_directory_all(
-            executable
-                .parent()
-                .context("finding fake artifact parent")?,
-        )?;
-        write_bytes(&executable, identity.as_bytes())?;
-        #[cfg(unix)]
-        set_executable(&executable)?;
-
-        if mode == "owned" {
-            publish_owner_started(
-                identity,
-                options.coordination.context("owner coordination path")?,
-            )?;
-        }
-        append_artifact_records(&mut stream, &executable, options.binary_name)?;
-        if mode == "overlap" {
-            let ordinary_binary = executable
-                .parent()
-                .context("finding fake artifact parent")?
-                .join(binary_file_name("orthohelp_bridge"));
-            write_bytes(&ordinary_binary, b"ordinary workspace binary")?;
-        }
-    }
-
+    let paths = fixture_artifact_paths(target, options)?;
+    let stream = fixture_cargo_stream(mode, options, &paths)?;
     let mut reader = Cursor::new(stream);
     let generated_target = super::super::GeneratedTarget {
         directory: target,
@@ -196,6 +166,84 @@ fn fixture_cargo_messages(
         &generated_target,
         &mut diagnostics,
     )?)
+}
+
+/// Derive the private paths used by one controlled Cargo artifact fixture.
+fn fixture_artifact_paths(
+    target: &Utf8Path,
+    options: FixtureOptions<'_>,
+) -> Result<FixtureArtifactPaths> {
+    let executable = target
+        .join("wasm32-unknown-unknown")
+        .join("release")
+        .join(binary_file_name(options.binary_name));
+    let dependency_output = executable
+        .parent()
+        .context("finding fake artifact parent")?
+        .join("deps")
+        .join(format!("{}-fixture-hash", options.binary_name));
+    let dep_info = executable.with_extension("d");
+    Ok(FixtureArtifactPaths {
+        executable,
+        dependency_output,
+        dep_info,
+    })
+}
+
+/// Produce malformed, oversized, or successful Cargo JSON for a probe.
+fn fixture_cargo_stream(
+    mode: &str,
+    options: FixtureOptions<'_>,
+    paths: &FixtureArtifactPaths,
+) -> Result<Vec<u8>> {
+    let mut stream = Vec::new();
+    if mode == "malformed" {
+        stream.extend_from_slice(b"not-json\n");
+    } else if mode == "oversized" {
+        for _ in 0..16 {
+            stream.extend_from_slice(&OVERSIZED_CARGO_RECORD_CHUNK);
+        }
+        stream.extend_from_slice(b"x\n");
+    } else {
+        let identity = options.owner.unwrap_or("bridge fixture");
+        create_directory_all(
+            paths
+                .executable
+                .parent()
+                .context("finding fake artifact parent")?,
+        )?;
+        write_bytes(&paths.executable, identity.as_bytes())?;
+        if mode == "cleanup-failure" {
+            create_directory_all(&paths.dependency_output)?;
+        } else {
+            write_bytes(&paths.dependency_output, b"generated compiler output")?;
+        }
+        write_bytes(&paths.dep_info, b"generated dep-info")?;
+        #[cfg(unix)]
+        set_executable(&paths.executable)?;
+
+        if mode == "owned" {
+            publish_owner_started(
+                identity,
+                options.coordination.context("owner coordination path")?,
+            )?;
+        }
+        append_artifact_records(
+            &mut stream,
+            &paths.executable,
+            &[&paths.dependency_output, &paths.dep_info],
+            options.binary_name,
+        )?;
+        if mode == "overlap" {
+            let ordinary_binary = paths
+                .executable
+                .parent()
+                .context("finding fake artifact parent")?
+                .join(binary_file_name("orthohelp_bridge"));
+            write_bytes(&ordinary_binary, b"ordinary workspace binary")?;
+        }
+    }
+    Ok(stream)
 }
 
 fn confirmed_fixture_failure(error: &anyhow::Error) -> super::super::CargoFailure {
@@ -215,8 +263,11 @@ fn publish_owner_started(owner: &str, coordination: &Utf8Path) -> Result<()> {
 fn append_artifact_records(
     stream: &mut Vec<u8>,
     executable: &Utf8Path,
+    generated_outputs: &[&Utf8Path],
     binary_name: &str,
 ) -> Result<()> {
+    let mut filenames = vec![executable.as_str()];
+    filenames.extend(generated_outputs.iter().map(|path| path.as_str()));
     for (name, kind, executable_path) in [
         ("fixture_dependency", "lib", None),
         (binary_name, "lib", None),
@@ -225,6 +276,7 @@ fn append_artifact_records(
         let record = json!({
             "reason": "compiler-artifact",
             "target": { "name": name, "kind": [kind] },
+            "filenames": if kind == "bin" { filenames.clone() } else { Vec::new() },
             "executable": executable_path
         });
         serde_json::to_writer(&mut *stream, &record)?;

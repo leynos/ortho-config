@@ -173,14 +173,18 @@ even when an ordinary workspace target uses the same conventional bridge name,
 while preserving the selected target directory and shared dependency cache.
 
 A production bridge helper holds a stable `fs4` operating-system lock across
-the Cargo JSON build and executable snapshot. It serializes bridge invocations
-that share the generated target name. Cargo's own target lock does not cover
-the snapshot after Cargo exits, so the distinct generated target name also
-prevents an ordinary workspace build of `orthohelp_bridge` from replacing the
-reported executable in that interval. The helper is private to the production
-bridge build path and is not a general application subprocess API. The similar
-documentation-test helper remains test-only and cannot be imported by the
-binary.
+the Cargo JSON build, executable snapshot, and generated-output cleanup. It
+serializes bridge invocations that share the target directory. Cargo's own
+target lock does not cover the snapshot after Cargo exits, so the distinct
+generated target name also prevents an ordinary workspace build of
+`orthohelp_bridge` from replacing the reported executable in that interval.
+After the private snapshot succeeds, the helper removes only Cargo-reported
+files named for that invocation's generated binary. Missing files are already
+clean; other cleanup failures are warnings and do not discard the valid
+snapshot. Dependency outputs and shared Cargo caches remain owned by Cargo. The
+helper is private to the production bridge build path and is not a general
+application subprocess API. The similar documentation-test helper remains
+test-only and cannot be imported by the binary.
 
 Production bridge builds retain the configured compiler and documentation
 wrappers, applicable wrapper configuration, job limits, warning enforcement,
@@ -313,7 +317,8 @@ controlled run provides usable cold-build evidence.
 - Documentation-test workspaces reuse compiler outputs through Cargo while
   keeping source manifests and executed binaries private.
 - Separate locks protect documentation-test snapshots and production bridge
-  snapshots. The production bridge lock does not own IR cache contents beyond
+  snapshots. The production bridge lock also owns cleanup of that invocation's
+  Cargo-reported binary outputs, but it does not own IR cache contents beyond
   atomic publication.
 - Test-only subprocess supervision does not enter the public crate dependency
   surface.

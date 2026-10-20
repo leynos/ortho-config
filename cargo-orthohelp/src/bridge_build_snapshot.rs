@@ -33,15 +33,22 @@ pub(super) fn finish_build(
             target.binary_name
         ))
     })?;
-    snapshot_executable(&executable, target, snapshot_directory, snapshot).map_err(|error| {
-        tracing::warn!(
-            target_directory = %target.directory,
-            artifact = %executable,
-            error = %error,
-            "bridge snapshot failed after Cargo exited"
-        );
-        error
-    })
+    let private_executable = snapshot_executable(&executable, target, snapshot_directory, snapshot)
+        .map_err(|error| {
+            tracing::warn!(
+                target_directory = %target.directory,
+                artifact = %executable,
+                error = %error,
+                "bridge snapshot failed after Cargo exited"
+            );
+            error
+        })?;
+    super::outputs::remove_generated_outputs(
+        target.directory,
+        target.binary_name,
+        &build.messages.generated_outputs,
+    );
+    Ok(private_executable)
 }
 
 /// Copy Cargo's reported executable to a private invocation-owned directory.

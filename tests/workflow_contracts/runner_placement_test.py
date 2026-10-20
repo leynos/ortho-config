@@ -309,13 +309,17 @@ def test_windows_nested_cargo_build_pins_msvc_linker_before_coverage(
     assert step.get("shell") == "pwsh", "linker discovery runs in PowerShell"
     command = str(step.get("run", ""))
     assert "vswhere.exe" in command, "the linker path comes from the installed Visual Studio"
-    assert "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" in command
+    assert "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" in command, (
+        "Visual Studio discovery requires the x64 MSVC tools component"
+    )
     assert "VsDevCmd.bat" in command, "the SDK and MSVC library paths come from Visual Studio"
     assert "-arch=x64 -host_arch=x64" in command
     assert "'INCLUDE', 'LIB', 'LIBPATH'" in command
     assert "kernel32.lib" in command, "fail early if the Windows SDK library path is absent"
     assert "$env:GITHUB_PATH" in command, "nested build tools resolve from the MSVC directory"
-    assert "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=" in command
+    assert "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=" in command, (
+        "nested Cargo builds receive the selected MSVC linker"
+    )
     assert "$env:GITHUB_ENV" in command, "Cargo receives the linker in later workflow steps"
     assert "did not expose the MSVC library search path" in command
     assert "throw 'vswhere did not find the x64 MSVC linker'" in command
@@ -324,7 +328,8 @@ def test_windows_nested_cargo_build_pins_msvc_linker_before_coverage(
         for position, candidate in enumerate(steps)
         if "/generate-coverage@" in str(candidate.get("uses", ""))
     ]
-    assert coverage and index < min(coverage), "linker setup must precede Windows coverage"
+    assert coverage, "the Windows coverage step is present"
+    assert index < min(coverage), "linker setup must precede Windows coverage"
 
 
 def test_the_discard_follows_lint_and_precedes_both_coverage_passes(ci: WorkflowDocument) -> None:

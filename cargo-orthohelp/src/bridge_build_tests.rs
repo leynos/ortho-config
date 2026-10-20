@@ -38,10 +38,46 @@ fn workspace_binary_cannot_replace_generated_bridge_snapshot() -> Result<()> {
     #[cfg(unix)]
     support::ensure_executable(&executable)?;
     ensure!(!support::path_exists(&target.join(MARKER_FILE))?);
-    ensure!(support::path_exists(
+    ensure!(!support::path_exists(
         &target
             .join("wasm32-unknown-unknown/release")
             .join(support::binary_file_name(&binary_name))
+    )?);
+    ensure!(!support::path_exists(
+        &target
+            .join("wasm32-unknown-unknown/release")
+            .join(format!("{binary_name}.d"))
+    )?);
+    ensure!(!support::path_exists(
+        &target
+            .join("wasm32-unknown-unknown/release/deps")
+            .join(format!("{binary_name}-fixture-hash"))
+    )?);
+    Ok(())
+}
+
+#[test]
+fn output_cleanup_failure_does_not_discard_private_snapshot() -> Result<()> {
+    let temporary = tempdir()?;
+    let target = support::utf8_path(temporary.path().join("target"))?;
+    let snapshot = support::utf8_path(temporary.path().join("private-run"))?;
+    let executable = support::build_probe(
+        "cleanup-failure",
+        &target,
+        &snapshot,
+        "orthohelp_bridge_fixture",
+    )?;
+
+    ensure!(support::read_text(&executable)? == "bridge fixture");
+    ensure!(!support::path_exists(
+        &target
+            .join("wasm32-unknown-unknown/release")
+            .join(support::binary_file_name("orthohelp_bridge_fixture"))
+    )?);
+    ensure!(support::path_exists(
+        &target
+            .join("wasm32-unknown-unknown/release/deps")
+            .join("orthohelp_bridge_fixture-fixture-hash")
     )?);
     Ok(())
 }

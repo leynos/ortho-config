@@ -16,6 +16,8 @@ const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
 pub(super) struct CargoMessages {
     /// Absolute path reported for the bridge executable, when present.
     pub(super) executable: Option<Utf8PathBuf>,
+    /// Cargo-reported output files owned by the generated bridge target.
+    pub(super) generated_outputs: Vec<Utf8PathBuf>,
     /// First malformed, oversized, or out-of-scope protocol record observed.
     pub(super) protocol_error: Option<OrthohelpError>,
 }
@@ -36,6 +38,7 @@ pub(super) fn read_cargo_messages<R: BufRead>(
 ) -> io::Result<CargoMessages> {
     let mut messages = CargoMessages {
         executable: None,
+        generated_outputs: Vec::new(),
         protocol_error: None,
     };
     while let Some(record) = read_record(reader)? {
@@ -124,10 +127,47 @@ fn collect_executable(value: &Value, target: &GeneratedTarget<'_>, messages: &mu
     if !is_bridge_binary_artifact(value, target.binary_name) {
         return;
     }
+    collect_generated_outputs(value, target, messages);
     let Some(executable) = artifact_executable(value, messages) else {
         return;
     };
     record_bridge_executable(executable, target, messages);
+}
+
+/// Retain only Cargo-reported files named for this generated bridge target.
+fn collect_generated_outputs(
+    value: &Value,
+    target: &GeneratedTarget<'_>,
+    messages: &mut CargoMessages,
+) {
+    let Some(filenames) = value.get("filenames").and_then(Value::as_array) else {
+        return;
+    };
+    for filename in filenames.iter().filter_map(Value::as_str) {
+        let path = Utf8PathBuf::from(filename);
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        if is_generated_output(&path, target, name) && !messages.generated_outputs.contains(&path) {
+            messages.generated_outputs.push(path);
+        }
+    }
+}
+
+/// Confirm that an artifact path belongs to this generated bridge target.
+fn is_generated_output(path: &Utf8PathBuf, target: &GeneratedTarget<'_>, file_name: &str) -> bool {
+    path.is_absolute()
+        && path.starts_with(target.directory)
+        && is_generated_output_name(file_name, target.binary_name)
+}
+
+/// Recognize a bridge executable, its dep-info, or its hashed compiler output.
+pub(super) fn is_generated_output_name(file_name: &str, binary_name: &str) -> bool {
+    let executable_name = binary_file_name(binary_name);
+    file_name == executable_name
+        || file_name == format!("{binary_name}.d")
+        || file_name == format!("{executable_name}.d")
+        || file_name.starts_with(&format!("{binary_name}-"))
 }
 
 /// Identify artifact records that belong to the generated bridge binary.
@@ -168,16 +208,15 @@ fn record_bridge_executable(
         set_protocol_error(messages, "bridge compiler-artifact path was not absolute");
         return;
     }
-    match messages.executable.as_ref() {
-        Some(previous) if previous == &executable => return,
-        Some(_) => {
-            set_protocol_error(
-                messages,
-                "Cargo reported multiple generated bridge executables",
-            );
-            return;
-        }
-        None => {}
+    if messages.executable.as_ref() == Some(&executable) {
+        return;
+    }
+    if has_conflicting_executable(messages, &executable) {
+        set_protocol_error(
+            messages,
+            "Cargo reported multiple generated bridge executables",
+        );
+        return;
     }
     if executable.file_name() != Some(binary_file_name(target.binary_name).as_str()) {
         set_protocol_error(
@@ -186,14 +225,25 @@ fn record_bridge_executable(
         );
         return;
     }
-    if executable.starts_with(target.directory) {
-        messages.executable = Some(executable);
-    } else {
+    if !executable.starts_with(target.directory) {
         set_protocol_error(
             messages,
             "Cargo bridge artifact was outside the configured target directory",
         );
+        return;
     }
+    if !messages.generated_outputs.contains(&executable) {
+        messages.generated_outputs.push(executable.clone());
+    }
+    messages.executable = Some(executable);
+}
+
+/// Detect a different executable after Cargo has already reported one.
+fn has_conflicting_executable(messages: &CargoMessages, executable: &Utf8PathBuf) -> bool {
+    messages
+        .executable
+        .as_ref()
+        .is_some_and(|previous| previous != executable)
 }
 
 /// Preserve only the first protocol error so later records cannot obscure it.
