@@ -73,6 +73,10 @@ pub(crate) fn global_sources(discovery: MapEnv, merge: MapEnv) -> GlobalConfigSo
     GlobalConfigSources::new(discovery_source, merge_source)
 }
 
+/// The fallible sample configuration injected into tests that assert against
+/// the shipped sample layering.
+pub(crate) type SampleConfigFixture = Result<(HelloWorldCli, GreetCommand)>;
+
 /// Load the shipped sample configuration through a closed environment.
 ///
 /// The sample files under `config/` are read through a capability scoped to
@@ -80,9 +84,9 @@ pub(crate) fn global_sources(discovery: MapEnv, merge: MapEnv) -> GlobalConfigSo
 /// through the source-aware global and greeting-default loaders. Nothing here
 /// consults the process environment or the working directory.
 ///
-/// The returned pair is everything a message-planning test needs to compose a
-/// plan from the sample layering: the fully merged [`HelloWorldCli`] and the
-/// greeting defaults resolved for its subcommand.
+/// The returned pair is everything a test needs to inspect or compose the
+/// sample layering: the fully merged [`HelloWorldCli`] and the greeting
+/// defaults resolved for its subcommand.
 ///
 /// # Examples
 ///

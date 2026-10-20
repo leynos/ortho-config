@@ -1,7 +1,8 @@
 //! Shared assertions for greeting-plan tests.
 
-use super::fixtures::{ExpectedPlan, Plan, SampleConfigFixture};
+use super::fixtures::{ExpectedPlan, Plan};
 use super::*;
+use crate::test_support::SampleConfigFixture;
 use anyhow::{Result, ensure};
 
 pub(crate) fn assert_plan(plan: &Plan, expected: &ExpectedPlan) -> Result<()> {

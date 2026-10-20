@@ -23,12 +23,6 @@ pub(crate) struct ExpectedPlan {
 
 pub(crate) type HelloWorldCliFixture = Result<HelloWorldCli>;
 
-/// The fallible sample configuration consumed by message-planning tests.
-///
-/// This is the `rstest` fixture result injected into tests that compose plans
-/// from the shipped sample files rather than from process-backed defaults.
-pub(crate) type SampleConfigFixture = Result<(HelloWorldCli, GreetCommand)>;
-
 /// One plan-variant case: how to set up its inputs and what it should produce.
 ///
 /// `is_sampled` selects whether the case composes its plan from the injected

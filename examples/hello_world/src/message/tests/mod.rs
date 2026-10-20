@@ -6,13 +6,13 @@ mod fixtures;
 use super::*;
 use crate::cli::{FarewellChannel, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::ValidationError;
-use crate::test_support::sample_config;
+use crate::test_support::{SampleConfigFixture, sample_config};
 use anyhow::{Result, anyhow, ensure};
 use assertions::{assert_greeting, assert_plan, assert_sample_config_greeting};
 use fixtures::{
-    ExpectedPlan, HelloWorldCliFixture, PlanVariantCase, SampleConfigFixture,
-    TakeLeaveCommandFixture, base_config, build_plan_variant, greet_command, setup_default_greet,
-    setup_excited, setup_festive_leave, setup_noop_leave, take_leave_command,
+    ExpectedPlan, HelloWorldCliFixture, PlanVariantCase, TakeLeaveCommandFixture, base_config,
+    build_plan_variant, greet_command, setup_default_greet, setup_excited, setup_festive_leave,
+    setup_noop_leave, take_leave_command,
 };
 use rstest::rstest;
 
