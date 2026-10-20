@@ -1,12 +1,10 @@
 //! Shared fixtures and utilities for CLI behaviour tests.
 
 use crate::cli::{
-    CommandLine, Commands, FarewellChannel, FileOverrides, GreetCommand, HelloWorldCli,
-    TakeLeaveCommand, load_config_overrides,
+    CommandLine, Commands, FarewellChannel, GreetCommand, HelloWorldCli, TakeLeaveCommand,
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use clap::Parser;
-use ortho_config::figment;
 use rstest::fixture;
 
 pub type CommandAssertion<'a> = &'a dyn Fn(CommandLine) -> Result<()>;
@@ -15,7 +13,7 @@ pub type HelloWorldCliFixture = Result<HelloWorldCli>;
 pub type GreetCommandFixture = Result<GreetCommand>;
 pub type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
 
-pub use crate::test_support::{figment_error, with_jail};
+pub(crate) use crate::test_support::{ConfigFixture, global_sources};
 
 #[fixture]
 pub fn base_cli() -> HelloWorldCliFixture {
@@ -111,25 +109,6 @@ pub fn expect_take_leave(command: Commands) -> Result<TakeLeaveCommand> {
         Commands::Greet(_) => Err(anyhow!("expected take-leave command, found greet")),
         Commands::Context(_) => Err(anyhow!("expected take-leave command, found context")),
     }
-}
-
-pub(crate) fn load_overrides_in_jail<S>(setup: S) -> Result<Option<FileOverrides>>
-where
-    S: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-{
-    with_jail(|j| {
-        setup(j)?;
-        load_config_overrides()
-            .map(|result| result.map(|(overrides, _)| overrides))
-            .map_err(figment_error)
-    })
-}
-
-pub(crate) fn expect_overrides<S>(setup: S) -> Result<FileOverrides>
-where
-    S: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-{
-    load_overrides_in_jail(setup)?.ok_or_else(|| anyhow!("expected overrides"))
 }
 
 pub fn assert_sample_greet_defaults(greet: &GreetCommand) -> Result<()> {

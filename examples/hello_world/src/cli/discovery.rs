@@ -3,11 +3,11 @@
 //! The internal [`discovery`] function constructs the shared
 //! [`ortho_config::ConfigDiscovery`] instance used across the example so all
 //! entrypoints observe the same search order. Test builds on Unix platforms
-//! use [`collect_config_candidates`] to inspect UTF-8 candidate paths
-//! directly. Production code calls [`discover_config_layer`] to load the
-//! first readable configuration file. The `cfg(all(test, unix))` guard keeps
-//! the test helper out of non-Unix builds to avoid dead-code warnings while
-//! documenting its availability for behavioural coverage.
+//! use [`collect_config_candidates`] with an explicit environment source to
+//! inspect UTF-8 candidate paths. Production code calls
+//! [`discover_config_layer`] to load the first readable configuration file.
+//! The `cfg(all(test, unix))` guard keeps the test helper out of non-Unix
+//! builds to avoid dead-code warnings while documenting behavioural coverage.
 
 #[cfg(all(test, unix))]
 use camino::Utf8PathBuf;
@@ -66,8 +66,8 @@ fn discovery_builder(source: SharedEnvSource) -> ortho_config::discovery::Config
 /// Paths that cannot be represented as UTF-8 are omitted by the library's
 /// `utf8_candidates` view; production discovery keeps native paths instead.
 #[cfg(all(test, unix))]
-pub(super) fn collect_config_candidates() -> Vec<Utf8PathBuf> {
-    discovery().utf8_candidates()
+pub(super) fn collect_config_candidates(source: SharedEnvSource) -> Vec<Utf8PathBuf> {
+    discovery_with_source(source).utf8_candidates()
 }
 
 /// Discover the first configuration layer using the process-backed defaults.

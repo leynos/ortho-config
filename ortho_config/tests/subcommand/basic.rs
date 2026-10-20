@@ -6,13 +6,22 @@ use clap::Parser;
 #[cfg(any(unix, target_os = "redox"))]
 use ortho_config::OrthoError;
 use ortho_config::subcommand::Prefix;
-use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_with_sources_at};
+use ortho_config::{
+    EnvSource, MapEnv, ProcessEnv, SubcommandFileContext, load_and_merge_subcommand,
+    load_and_merge_subcommand_with_sources_at,
+};
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
+use test_helpers::coverage::resolve_profile_path;
 
 use super::fixtures::close_discovery;
 use super::to_anyhow::ToAnyhow as _;
+
+const PROCESS_PROBE_MARKER: &str = "ORTHO_SUBCOMMAND_PROCESS_PROBE_OK";
+const PROCESS_PROFILE_EXPECTED: &str = "ORTHO_SUBCOMMAND_EXPECTED_PROFILE_FILE";
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -88,6 +97,88 @@ fn merge_file_defaults(base: &Path, discovery: &MapEnv) -> Result<CmdCfg> {
         Arc::new(MapEnv::new()),
     )
     .to_anyhow()
+}
+
+/// Check the process-backed default entrypoint without mutating the test process.
+///
+/// The child's environment is cleared so the host cannot supply values, then
+/// rebuilt from the fixture: the shim value to merge, the XDG base to discover,
+/// and `HOME` inside the fixture. `HOME` matters because the real process
+/// environment backs the child's loader, and an absent or host `HOME` would
+/// otherwise add host home candidates ahead of the fixture's local file.
+#[test]
+fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
+    let root = tempfile::tempdir().context("create process-backed subcommand fixture")?;
+    write_config(
+        root.path(),
+        Path::new(".app.toml"),
+        "[cmds.test]\nfoo = \"file\"\nbar = true",
+    )?;
+    let executable = std::env::current_exe().context("locate subcommand test executable")?;
+    let mut child = Command::new(executable);
+    child
+        .args([
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "basic::process_backed_probe",
+        ])
+        .current_dir(root.path())
+        .env_clear()
+        .env("HOME", root.path())
+        .env("APP_CMDS_TEST_FOO", "env")
+        .env("XDG_CONFIG_DIRS", root.path());
+    if let Some(profile_file) = ProcessEnv.get("LLVM_PROFILE_FILE") {
+        let parent_dir = std::env::current_dir()?;
+        let profile_path = resolve_profile_path(&profile_file, &parent_dir);
+        child
+            .env("LLVM_PROFILE_FILE", &profile_path)
+            .env(PROCESS_PROFILE_EXPECTED, &profile_path);
+    }
+    let output = child
+        .output()
+        .context("run isolated process-backed subcommand probe")?;
+    ensure!(
+        output.status.success(),
+        "process-backed subcommand probe failed: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        String::from_utf8_lossy(&output.stdout).contains(PROCESS_PROBE_MARKER),
+        "process-backed subcommand probe did not execute: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    Ok(())
+}
+
+/// Probe the process-backed loader and report its merged values to the parent.
+#[test]
+#[ignore = "run by the isolated process-backed wrapper test"]
+fn process_backed_probe() -> Result<()> {
+    let expected_profile = ProcessEnv.get(PROCESS_PROFILE_EXPECTED);
+    let actual_profile = ProcessEnv.get("LLVM_PROFILE_FILE");
+    ensure!(
+        actual_profile == expected_profile,
+        "expected forwarded LLVM_PROFILE_FILE {expected_profile:?}, got {actual_profile:?}"
+    );
+
+    let cfg = load_and_merge_subcommand(&Prefix::new("APP_"), &CmdCfg::default())
+        .context("merge process-backed subcommand defaults")?;
+    ensure!(
+        cfg.foo.as_deref() == Some("env"),
+        "expected environment value over file value, got {:?}",
+        cfg.foo
+    );
+    ensure!(
+        cfg.bar == Some(true),
+        "expected file-backed bar value, got {:?}",
+        cfg.bar
+    );
+    std::io::stdout()
+        .write_all(PROCESS_PROBE_MARKER.as_bytes())
+        .context("signal process-backed probe completion")?;
+    Ok(())
 }
 
 #[test]

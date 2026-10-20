@@ -1018,6 +1018,20 @@ environment-source-pair boilerplate. Callers must keep the `tempfile::TempDir`
 guard alive until the loader has read the fixture, because dropping it deletes
 the directory.
 
+The shared helper crate's coverage module, `test_helpers/src/coverage.rs`, owns
+`resolve_profile_path`. Tests that launch a child process clear its
+environment, which also drops `LLVM_PROFILE_FILE`; an instrumented child would
+then write its profile to a default location, either inside a fixture directory
+the test deletes or inside the working tree where no collection step expects it.
+`resolve_profile_path` returns an absolute profile path unchanged and joins a
+relative one to the parent's working directory, which is the only stable anchor
+once the child runs in a fixture directory. It is owned by the child-process
+probes in `hello_world`'s layer tests and the `subcommand` integration target:
+any probe that calls `.env_clear()` and forwards coverage must read the
+parent's path through `ProcessEnv` and pass the resolved value to the child
+rather than restating the anchoring rule. Both crates already depend on
+`ortho_config_test_helpers` under the `test_helpers` import name.
+
 The subcommand fixture module, `ortho_config/tests/subcommand/fixtures.rs`,
 owns the `isolated_root` fixture and the `close_discovery` constructor. The
 fixture returns a temporary root paired with a discovery source closed against
@@ -1649,12 +1663,29 @@ variables for tests.
   File-only greeting overrides take a lookup source without acquiring the scan
   capability. This context belongs only at the example's configuration-loading
   call sites, not in command construction.
+- `message::build_take_leave_plan_with_greet_loader` is a private composition
+  seam owned by the `hello_world` message module. The public
+  `build_take_leave_plan` supplies the process-backed greeting loader; message
+  tests may supply explicit defaults or load them through
+  `load_greet_defaults_with_sources` and `GlobalConfigSources`. Keep this seam
+  within greeting/farewell composition and its tests; source selection remains
+  with the configuration-loading caller.
+- `test_support::sample_config` is the `rstest` fixture that loads the shipped
+  sample files through closed sources. It is the single place that copies
+  `config/baseline.toml` and `config/overrides.toml` into a fixture root and
+  resolves the sample greeting defaults, so message tests inject it rather than
+  repeating that setup. It belongs to the example's test support surface, not
+  to production composition.
 - Example tests may pass a `ConfigDiscovery` with explicit project roots to the
   crate-private override loader. Source injection alone does not disable
   project-root or current-directory candidates. Tests needing no ambient
   candidates must configure the discovery builder and set `XDG_CONFIG_DIRS` to
   a fixture directory when applicable, since an unset value selects the
   platform's system fallback.
+- The `hello_world` override-test setup functions each stage one explicit,
+  XDG, or local-app-data fixture and return its closed `MapEnv`. They belong
+  only to the override scenario table; other tests use `ConfigFixture` and
+  select their own source to keep setup and precedence assertions visible.
 - It is **not** a general environment service. Adding readers elsewhere in the
   crate requires a decision about scope, not a call site.
 - Subcommand file loading may use `SubcommandFileContext` for named lookup of
@@ -1718,6 +1749,10 @@ exact probe at a time with `--show-output --test-threads=1`, validate exactly
 one dedicated output marker, and compare the child's result in the parent with
 the injected provider's result. Prefix child inputs with a test-specific key so
 runtime variables such as LLVM coverage settings cannot enter the comparison.
+Coverage settings are the one deliberate exception: `.env_clear()` also drops
+`LLVM_PROFILE_FILE`, so a probe running under instrumentation forwards it
+through `test_helpers::coverage::resolve_profile_path` to keep the child's
+profile next to its parent's.
 
 Telemetry probes follow the same child-process boundary for the real process
 source. Exercise injected sources separately in the parent, and assert both

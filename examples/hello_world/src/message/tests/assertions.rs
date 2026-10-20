@@ -1,7 +1,8 @@
 //! Shared assertions for greeting-plan tests.
 
-use super::fixtures::{ExpectedPlan, Plan, with_sample_config};
+use super::fixtures::{ExpectedPlan, Plan};
 use super::*;
+use crate::test_support::SampleConfigFixture;
 use anyhow::{Result, ensure};
 
 pub(crate) fn assert_plan(plan: &Plan, expected: &ExpectedPlan) -> Result<()> {
@@ -39,11 +40,16 @@ pub(crate) fn assert_plan(plan: &Plan, expected: &ExpectedPlan) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn assert_sample_config_greeting<F>(build_fn: F) -> Result<()>
+/// Assert a greeting plan built from shipped sample configuration and defaults.
+pub(crate) fn assert_sample_config_greeting<F>(
+    sample_config: SampleConfigFixture,
+    build_fn: F,
+) -> Result<()>
 where
-    F: FnOnce(&HelloWorldCli) -> ortho_config::figment::error::Result<GreetingPlan>,
+    F: FnOnce(&HelloWorldCli, &GreetCommand) -> Result<GreetingPlan>,
 {
-    let plan = with_sample_config(build_fn)?;
+    let (config, greet) = sample_config?;
+    let plan = build_fn(&config, &greet)?;
     // With declarative merge semantics, Vec<T> appends across defaults + extends chain
     assert_greeting(
         &plan,

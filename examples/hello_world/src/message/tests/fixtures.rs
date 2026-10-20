@@ -5,14 +5,8 @@ use super::*;
 pub(crate) use crate::cli::tests::helpers::{
     TakeLeaveCommandFixture, greet_command, take_leave_command,
 };
-use crate::cli::{
-    GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config,
-    load_greet_defaults,
-};
-use crate::test_support::{figment_error, with_jail};
+use crate::cli::{GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use anyhow::{Result, anyhow, ensure};
-use camino::Utf8PathBuf;
-use ortho_config::figment;
 use rstest::fixture;
 
 pub(crate) struct Plan {
@@ -29,30 +23,31 @@ pub(crate) struct ExpectedPlan {
 
 pub(crate) type HelloWorldCliFixture = Result<HelloWorldCli>;
 
-#[derive(Clone, Copy)]
-pub(crate) enum PlanVariant {
-    Direct,
-    SampleEnv,
-}
-
+/// One plan-variant case: how to set up its inputs and what it should produce.
+///
+/// `is_sampled` selects whether the case composes its plan from the injected
+/// sample configuration or from the inputs the setup functions prepared.
 pub(crate) struct PlanVariantCase {
     pub greet_setup: GreetSetup,
     pub leave_setup: LeaveSetup,
     pub expected: ExpectedPlan,
-    pub variant: PlanVariant,
+    pub is_sampled: bool,
 }
 
 pub(crate) type GreetSetup = fn(&mut HelloWorldCli, &mut GreetCommand) -> Result<()>;
 pub(crate) type LeaveSetup = fn(&mut HelloWorldCli, &mut TakeLeaveCommand) -> Result<()>;
 
+/// Build greeting and farewell plans from explicit configuration and defaults.
 pub(crate) fn build_plan_from(
     config: HelloWorldCli,
     greet: &GreetCommand,
     leave: &TakeLeaveCommand,
+    greeting_defaults: GreetCommand,
 ) -> Result<Plan> {
     let greeting = build_plan(&config, greet).map_err(|err| anyhow!(err.to_string()))?;
     let take_leave =
-        build_take_leave_plan(&config, leave).map_err(|err| anyhow!(err.to_string()))?;
+        build_take_leave_plan_with_greet_loader(&config, leave, || Ok(greeting_defaults))
+            .map_err(|err| anyhow!(err.to_string()))?;
 
     Ok(Plan {
         config,
@@ -81,17 +76,6 @@ pub(crate) fn setup_excited(config: &mut HelloWorldCli, _: &mut GreetCommand) ->
     );
     config.is_excited = true;
     Ok(())
-}
-
-pub(crate) fn setup_sample_greet(
-    config: &mut HelloWorldCli,
-    greet: &mut GreetCommand,
-) -> Result<()> {
-    with_sample_config(|cfg| {
-        *config = cfg.clone();
-        *greet = load_greet_defaults().map_err(figment_error)?;
-        Ok(())
-    })
 }
 
 pub(crate) fn setup_noop_leave(_: &mut HelloWorldCli, leave: &mut TakeLeaveCommand) -> Result<()> {
@@ -129,55 +113,22 @@ pub(crate) fn base_config() -> HelloWorldCliFixture {
     Ok(config)
 }
 
+/// Build a plan from prepared inputs or the optional sampled configuration.
 pub(crate) fn build_plan_variant(
     config: HelloWorldCli,
     greet: &GreetCommand,
     leave: &TakeLeaveCommand,
-    variant: PlanVariant,
+    sample: Option<&(HelloWorldCli, GreetCommand)>,
 ) -> Result<Plan> {
-    match variant {
-        PlanVariant::Direct => with_jail(|jail| {
-            jail.clear_env();
-            plan_from_inputs(config, greet, leave)
-        }),
-        PlanVariant::SampleEnv => with_sample_config(move |cfg| {
-            let sample_greet = greet.clone();
-            let sample_leave = leave.clone();
-            plan_from_inputs(cfg.clone(), &sample_greet, &sample_leave)
-        }),
-    }
-}
-
-fn plan_from_inputs(
-    config: HelloWorldCli,
-    greet: &GreetCommand,
-    leave: &TakeLeaveCommand,
-) -> figment::error::Result<Plan> {
-    build_plan_from(config, greet, leave).map_err(figment_error)
-}
-
-pub(crate) fn with_sample_config<R, F>(action: F) -> Result<R>
-where
-    F: FnOnce(&HelloWorldCli) -> figment::error::Result<R>,
-{
-    with_jail(|jail| {
-        jail.clear_env();
-        let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let config_dir = cap_std::fs::Dir::open_ambient_dir(
-            manifest_dir.join("config").as_std_path(),
-            cap_std::ambient_authority(),
-        )
-        .map_err(figment_error)?;
-        let baseline = config_dir
-            .read_to_string("baseline.toml")
-            .map_err(figment_error)?;
-        let overrides = config_dir
-            .read_to_string("overrides.toml")
-            .map_err(figment_error)?;
-        jail.create_file("baseline.toml", &baseline)?;
-        jail.create_file(".hello_world.toml", &overrides)?;
-        let config = load_global_config(&GlobalArgs::default(), None, "hello-world")
-            .map_err(figment_error)?;
-        action(&config)
-    })
+    sample.map_or_else(
+        || build_plan_from(config, greet, leave, GreetCommand::default()),
+        |(sample_config, sample_greet)| {
+            build_plan_from(
+                sample_config.clone(),
+                sample_greet,
+                leave,
+                sample_greet.clone(),
+            )
+        },
+    )
 }

@@ -4,22 +4,21 @@ mod assertions;
 mod fixtures;
 
 use super::*;
-use crate::cli::{
-    FarewellChannel, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_greet_defaults,
-};
+use crate::cli::{FarewellChannel, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::ValidationError;
-use crate::test_support::{figment_error, with_jail};
+use crate::test_support::{SampleConfigFixture, sample_config};
 use anyhow::{Result, anyhow, ensure};
 use assertions::{assert_greeting, assert_plan, assert_sample_config_greeting};
 use fixtures::{
-    ExpectedPlan, HelloWorldCliFixture, PlanVariant, PlanVariantCase, TakeLeaveCommandFixture,
-    base_config, build_plan_variant, greet_command, setup_default_greet, setup_excited,
-    setup_festive_leave, setup_noop_leave, setup_sample_greet, take_leave_command,
+    ExpectedPlan, HelloWorldCliFixture, PlanVariantCase, TakeLeaveCommandFixture, base_config,
+    build_plan_variant, greet_command, setup_default_greet, setup_excited, setup_festive_leave,
+    setup_noop_leave, take_leave_command,
 };
 use rstest::rstest;
 
-#[test]
-fn build_plan_variants() -> Result<()> {
+/// Exercises greeting and farewell plan variants with ordinary and sampled inputs.
+#[rstest]
+fn build_plan_variants(sample_config: SampleConfigFixture) -> Result<()> {
     let cases = [
         PlanVariantCase {
             greet_setup: setup_default_greet,
@@ -29,7 +28,7 @@ fn build_plan_variants() -> Result<()> {
                 message: "Hello, World!",
                 is_excited: false,
             },
-            variant: PlanVariant::Direct,
+            is_sampled: false,
         },
         PlanVariantCase {
             greet_setup: setup_excited,
@@ -39,30 +38,33 @@ fn build_plan_variants() -> Result<()> {
                 message: "HELLO, WORLD!",
                 is_excited: true,
             },
-            variant: PlanVariant::Direct,
+            is_sampled: false,
         },
         // With declarative merge semantics, Vec<T> appends across defaults + extends chain
         PlanVariantCase {
-            greet_setup: setup_sample_greet,
+            greet_setup: setup_default_greet,
             leave_setup: setup_noop_leave,
             expected: ExpectedPlan {
                 recipient: "Excited crew",
                 message: "HELLO HELLO FROM CONFIG HEY CONFIG FRIENDS, EXCITED CREW!!!",
                 is_excited: true,
             },
-            variant: PlanVariant::SampleEnv,
+            is_sampled: true,
         },
         PlanVariantCase {
-            greet_setup: setup_sample_greet,
+            greet_setup: setup_default_greet,
             leave_setup: setup_festive_leave,
             expected: ExpectedPlan {
                 recipient: "Excited crew",
                 message: "HELLO HELLO FROM CONFIG HEY CONFIG FRIENDS, EXCITED CREW!!!",
                 is_excited: true,
             },
-            variant: PlanVariant::SampleEnv,
+            is_sampled: true,
         },
     ];
+
+    let (sampled_config, sampled_greet) = sample_config?;
+    let sample = (sampled_config, sampled_greet);
 
     for case in cases {
         let mut config = HelloWorldCli::default();
@@ -72,7 +74,8 @@ fn build_plan_variants() -> Result<()> {
         (case.greet_setup)(&mut config, &mut greet)?;
         (case.leave_setup)(&mut config, &mut leave)?;
 
-        let plan = build_plan_variant(config, &greet, &leave, case.variant)?;
+        let selected = case.is_sampled.then_some(&sample);
+        let plan = build_plan_variant(config, &greet, &leave, selected)?;
         assert_plan(&plan, &case.expected)?;
     }
 
@@ -128,6 +131,7 @@ fn build_plan_propagates_validation_errors() -> Result<()> {
     Ok(())
 }
 
+/// Checks farewell details and its greeting using injected greeting defaults.
 #[test]
 fn build_take_leave_plan_produces_steps() -> Result<()> {
     let take_leave_command = TakeLeaveCommand {
@@ -137,10 +141,11 @@ fn build_take_leave_plan_produces_steps() -> Result<()> {
         remind_in: Some(10),
         ..TakeLeaveCommand::default()
     };
-    let plan = with_jail(|jail| {
-        jail.clear_env();
-        build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command).map_err(figment_error)
-    })?;
+    let plan = build_take_leave_plan_with_greet_loader(
+        &HelloWorldCli::default(),
+        &take_leave_command,
+        || Ok(GreetCommand::default()),
+    )?;
     ensure!(
         plan.greeting().message() == "Hello, World!",
         "unexpected greeting"
@@ -159,6 +164,7 @@ fn build_take_leave_plan_produces_steps() -> Result<()> {
     Ok(())
 }
 
+/// Checks that farewell greeting options override injected greeting defaults.
 #[rstest]
 fn build_take_leave_plan_applies_greeting_overrides(
     base_config: HelloWorldCliFixture,
@@ -168,10 +174,8 @@ fn build_take_leave_plan_applies_greeting_overrides(
     command.greeting_preamble = Some(String::from("Until next time"));
     command.greeting_punctuation = Some(String::from("?"));
     let base = base_config?;
-    let plan = with_jail(|jail| {
-        jail.clear_env();
-        build_take_leave_plan(&base, &command).map_err(figment_error)
-    })?;
+    let plan =
+        build_take_leave_plan_with_greet_loader(&base, &command, || Ok(GreetCommand::default()))?;
     ensure!(
         plan.greeting().preamble() == Some("Until next time"),
         "unexpected greeting preamble"
@@ -203,19 +207,22 @@ fn join_fragments_writes_list() -> Result<()> {
     Ok(())
 }
 
+/// Checks that farewell planning uses greeting defaults from the sample config.
 #[rstest]
-fn build_take_leave_plan_uses_greet_defaults() -> Result<()> {
-    assert_sample_config_greeting(|config| {
-        build_take_leave_plan(config, &TakeLeaveCommand::default())
-            .map(|plan| plan.greeting().clone())
-            .map_err(figment_error)
+fn build_take_leave_plan_uses_greet_defaults(sample_config: SampleConfigFixture) -> Result<()> {
+    assert_sample_config_greeting(sample_config, |config, defaults| {
+        build_take_leave_plan_with_greet_loader(config, &TakeLeaveCommand::default(), || {
+            Ok(defaults.clone())
+        })
+        .map(|plan| plan.greeting().clone())
+        .map_err(|err| anyhow!(err.to_string()))
     })
 }
 
+/// Checks that greeting planning applies the shipped sample overrides.
 #[rstest]
-fn build_plan_uses_sample_overrides() -> Result<()> {
-    assert_sample_config_greeting(|config| {
-        let greet = load_greet_defaults().map_err(figment_error)?;
-        build_plan(config, &greet).map_err(figment_error)
+fn build_plan_uses_sample_overrides(sample_config: SampleConfigFixture) -> Result<()> {
+    assert_sample_config_greeting(sample_config, |config, greet| {
+        build_plan(config, greet).map_err(|err| anyhow!(err.to_string()))
     })
 }
