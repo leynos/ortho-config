@@ -7,6 +7,8 @@ pub(super) use implementation::cargo_command;
 pub(super) use implementation::cargo_environment;
 pub(super) use implementation::cargo_environment::CARGO_ENV_ALLOWLIST;
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+pub(super) use implementation::msvc_environment_is_prepared;
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 use implementation::{allowed_environment, first_output_line};
 pub(super) use implementation::{
     cargo_dispatch_path, prepare_cargo_command_for_target_before, prepare_metadata_command,

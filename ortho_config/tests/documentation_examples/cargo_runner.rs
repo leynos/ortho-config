@@ -117,7 +117,9 @@ fn prepare_msvc_environment(
 }
 
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn msvc_environment_is_prepared(mut lookup: impl FnMut(&str) -> Option<OsString>) -> bool {
+pub(super) fn msvc_environment_is_prepared(
+    mut lookup: impl FnMut(&str) -> Option<OsString>,
+) -> bool {
     [
         "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER",
         "INCLUDE",
