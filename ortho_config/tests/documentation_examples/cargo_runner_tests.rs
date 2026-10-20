@@ -1,5 +1,7 @@
 //! Regression coverage for Cargo command preparation and host discovery.
 
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+use super::msvc_environment_is_prepared;
 use super::{CARGO_ENV_ALLOWLIST, cargo_command, prepare_cargo_command_for_target_before};
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 use super::{allowed_environment, first_output_line};
@@ -180,6 +182,35 @@ fn visual_studio_environment_keeps_only_build_variables() {
             ("PATH".to_owned(), r"C:\Visual Studio\bin".to_owned()),
         ]
     );
+}
+
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+#[test]
+fn msvc_environment_requires_linker_and_sdk_paths() {
+    let complete = HashMap::from([
+        (
+            "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER",
+            OsString::from(r"C:\Visual Studio\link.exe"),
+        ),
+        ("INCLUDE", OsString::from(r"C:\Visual Studio\include")),
+        ("LIB", OsString::from(r"C:\Windows Kits\Lib")),
+    ]);
+
+    assert!(msvc_environment_is_prepared(|name| complete
+        .get(name)
+        .cloned()));
+    for missing in [
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER",
+        "INCLUDE",
+        "LIB",
+    ] {
+        let mut incomplete = complete.clone();
+        incomplete.remove(missing);
+        assert!(
+            !msvc_environment_is_prepared(|name| incomplete.get(name).cloned()),
+            "missing {missing} should require Visual Studio discovery"
+        );
+    }
 }
 
 fn current_test_executable() -> anyhow::Result<Command> {

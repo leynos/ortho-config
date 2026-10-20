@@ -202,24 +202,27 @@ from application environment isolation. It preserves the configured Cargo home,
 shared package cache, Cargo configuration, toolchain selectors, `RUSTC_WRAPPER`,
 `RUSTC_WORKSPACE_WRAPPER`, `RUSTDOC`, applicable wrapper settings, warning
 flags, job limits, and platform requirements. It excludes unlisted application
-variables and secrets. MSVC discovery command files belong to each caller's
-private workspace, separately from the shared compiler target and ownership
-state. Cargo continues to read configuration from the caller's working
-directory and configured Cargo home. `cargo llvm-cov show-env` supplies
-`CARGO_LLVM_COV_TARGET_DIR` rather than `CARGO_TARGET_DIR`; metadata
-preparation promotes that tool-selected target for Cargo metadata, so
-documentation builds reuse the instrumented parent target. Nested Cargo builds
-retain coverage flags and LLVM profile variables but omit `cargo-llvm-cov` from
-`RUSTC_WRAPPER`: that variable names the coverage CLI, which cannot serve as a
-compiler wrapper for a second Cargo process. Other configured wrappers remain
-available through Cargo configuration and the explicit wrapper settings. Their
-separate ownership state protects each build-and-snapshot interval. Documented
-application binaries continue to receive their smaller runtime allow-list. The
-bridge selector remains private to `BuildEnvironment` and accepts only named
-toolchain inputs, Cargo target linker or rustflags settings, and registry index
-URLs. Windows matching is ASCII case-insensitive while child processes receive
-the original environment key. Credential-bearing proxy and registry values are
-omitted with a warning that names the variable but never its value.
+variables and secrets. A runner-supplied target-specific MSVC linker and SDK
+search paths are preserved and used directly; `vswhere` and `vcvars64.bat`
+provide the bounded fallback when those paths are incomplete. MSVC discovery
+command files belong to each caller's private workspace, separately from the
+shared compiler target and ownership state. Cargo continues to read
+configuration from the caller's working directory and configured Cargo home.
+`cargo llvm-cov show-env` supplies `CARGO_LLVM_COV_TARGET_DIR` rather than
+`CARGO_TARGET_DIR`; metadata preparation promotes that tool-selected target for
+Cargo metadata, so documentation builds reuse the instrumented parent target.
+Nested Cargo builds retain coverage flags and LLVM profile variables but omit
+`cargo-llvm-cov` from `RUSTC_WRAPPER`: that variable names the coverage CLI,
+which cannot serve as a compiler wrapper for a second Cargo process. Other
+configured wrappers remain available through Cargo configuration and the
+explicit wrapper settings. Their separate ownership state protects each
+build-and-snapshot interval. Documented application binaries continue to
+receive their smaller runtime allow-list. The bridge selector remains private to
+`BuildEnvironment` and accepts only named toolchain inputs, Cargo target
+linker or rustflags settings, and registry index URLs. Windows matching is
+ASCII case-insensitive while child processes receive the original environment
+key. Credential-bearing proxy and registry values are omitted with a warning
+that names the variable but never its value.
 
 One monotonic scenario deadline covers discovery, lock wait, build, snapshot,
 and execution; operation-specific build, execution, discovery, and cleanup

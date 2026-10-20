@@ -9,6 +9,10 @@ const APPLICATION_SECRET: &str = "ORTHO_CONFIG_DOCUMENTATION_TEST_SECRET";
 const CACHE_CREDENTIAL: &str = "ACTIONS_RUNTIME_TOKEN";
 const EXPECTED_BUILD_VALUES: &[(&str, &str)] = &[
     ("CARGO_HOME", "/home/agent/.cargo"),
+    (
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER",
+        "C:\\Visual Studio\\link.exe",
+    ),
     ("SCCACHE_GHA_ENABLED", "true"),
     ("HOME", "/home/agent"),
     ("RUSTUP_HOME", "/home/agent/.rustup"),

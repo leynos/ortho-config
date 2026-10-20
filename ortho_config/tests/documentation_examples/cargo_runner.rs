@@ -98,6 +98,9 @@ fn prepare_msvc_environment(
     state_directory: &Path,
     deadline: Instant,
 ) -> Result<PreparedCargoEnvironment> {
+    if msvc_environment_is_prepared(|name| std::env::var_os(name)) {
+        return Ok(PreparedCargoEnvironment::default());
+    }
     let Some((linker, vcvars)) = find_msvc_toolchain(deadline)? else {
         return Ok(PreparedCargoEnvironment::default());
     };
@@ -111,6 +114,17 @@ fn prepare_msvc_environment(
             .map(|(name, value)| (name.into(), value.into())),
     );
     Ok(PreparedCargoEnvironment(variables))
+}
+
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+fn msvc_environment_is_prepared(mut lookup: impl FnMut(&str) -> Option<OsString>) -> bool {
+    [
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER",
+        "INCLUDE",
+        "LIB",
+    ]
+    .into_iter()
+    .all(|name| lookup(name).is_some_and(|value| !value.is_empty()))
 }
 
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
