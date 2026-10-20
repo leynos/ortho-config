@@ -1,4 +1,4 @@
-# ADR-002: Replace `cucumber-rs` with `rstest-bdd` for behavioural tests
+# Architectural decision record (ADR) 0002: Replace `cucumber-rs` with `rstest-bdd` for behavioural tests
 
 Date: 2025-11-09
 

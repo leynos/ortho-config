@@ -69,7 +69,7 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
 /// the layers bind the flag with a leading underscore so it stays warning-free.
 ///
 /// `discovery_failed` gives discovery errors precedence over an unknown-profile
-/// diagnostic (ADR-012). A required-source error sets the flag even when the
+/// diagnostic (ADR-0012). A required-source error sets the flag even when the
 /// candidate walk continues and a later source supplies layers: that fallback
 /// does not discharge the requirement to load the required source.
 ///

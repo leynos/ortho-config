@@ -130,7 +130,7 @@ forwards the injected subcommand token is changed, update all of the following
 in the same change:
 
 - `docs/design.md` §4.17 and
-  [ADR-004](adr-004-cargo-external-subcommand-entry-point.md).
+  [ADR-0004](adrs/adr-0004-cargo-external-subcommand-entry-point.md).
 - `docs/roadmap.md` if the work remains tracked there.
 - Any user-facing guide or README that shows `cargo <name>` or
   `cargo-<name> <name>` invocation.
@@ -185,8 +185,8 @@ short flags and duplicate tracking compose at their existing owners.
 ## Schema ownership
 
 Documentation IR, agent context, and policy reports have separate owners. See
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md) for
-the accepted decision.
+[ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
+for the accepted decision.
 
 Add localized human-documentation fields to `ortho_config::docs` only when they
 are required by generated documentation, localization, roff, PowerShell help,
@@ -200,7 +200,7 @@ matching change in `cargo-orthohelp::schema`, which mirrors the IR for the
 standalone generator. The two definitions must stay byte-for-byte aligned;
 `ORTHO_DOCS_IR_VERSION` is bumped in both, and the version-alignment test fails
 if the pair drifts. Add fields with `#[serde(default)]` so documents written
-before the field existed still read correctly, as ADR-003 requires.
+before the field existed still read correctly, as ADR-0003 requires.
 
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
@@ -503,7 +503,7 @@ and `all` formats, their accepted spellings, generated paths, and process
 success/failure contract are externally visible behaviours. Add policy and JSON
 status surfaces beside those formats rather than changing them.
 
-Keep schema ownership aligned with ADR-003. Localized human-documentation data
+Keep schema ownership aligned with ADR-0003. Localized human-documentation data
 belongs in `ortho_config::docs`, compact reusable agent context belongs in
 `ortho_config::agent_context`, and policy reports stay in
 `cargo_orthohelp::policy` until a later ADR extracts a shared report model. Do
@@ -521,7 +521,7 @@ roff, PowerShell help, or localized IR output.
 
 `--format agent-context` is the generator format. Downstream applications that
 emit their own runtime payload expose `context --json` as defined by
-[ADR-007](adr-007-downstream-context-command-naming.md).
+[ADR-0007](adrs/adr-0007-downstream-context-command-naming.md).
 
 Agent-context output is not localized. The current transform may use the short
 en-US command description as `AgentCommand.summary`, but it must not copy
@@ -549,7 +549,7 @@ The bridge maps IR `InteractionKind`/`MutationKind` onto the agent-context
 enums, copying `bypass` and `dry_run` verbatim. It never infers these values
 from command names, verbs, or flags: absence stays `unknown`/`null` (design doc
 §8.1). The derive-side keys and grammar are recorded in
-[ADR-010](adr-010-behavioural-metadata-attribute-surface.md).
+[ADR-0010](adrs/adr-0010-behavioural-metadata-attribute-surface.md).
 
 Evolve the schema through the compatibility policy in
 [agent-native-cli-design.md](agent-native-cli-design.md) §8.2. Bump
@@ -676,8 +676,8 @@ Profile support is opt-in at the struct level through the derive attribute
 `#[ortho_config(profiles)]`. A struct that does not opt in keeps the four-tier
 merge order, gains no `--profile` flag, and treats a `[profile.*]` table in a
 shared file as an ordinary key rather than extracting it. The accepted design is
-[ADR-012](adr-012-profile-selection-and-layering.md); the user-facing view is
-the [Profiles section](users-guide.md#profiles) of the users' guide.
+[ADR-0012](adrs/adr-0012-profile-selection-and-layering.md); the user-facing
+view is the [Profiles section](users-guide.md#profiles) of the users' guide.
 
 Opted-in structs merge five tiers, lowest to highest: built-in defaults,
 configuration files, the selected profile, environment variables, and CLI
@@ -707,11 +707,12 @@ The merge API and the post-load surface divide as follows:
   selection, with `config()`, `into_config()`, and `selection()` accessors; and
 - the generated profile entry points named below return a `ProfileLoadOutcome`.
 
-Keep the [ADR-007](adr-007-downstream-context-command-naming.md) static/runtime
-split: profile *support* is agent-context metadata and is static, while the
-*active selection* is runtime-only and reported by `ProfileLoadOutcome`.
-Selected-profile output is deliberately not part of the static agent-context
-contract, which documents the mechanism rather than the moment.
+Keep the [ADR-0007](adrs/adr-0007-downstream-context-command-naming.md)
+static/runtime split: profile *support* is agent-context metadata and is
+static, while the *active selection* is runtime-only and reported by
+`ProfileLoadOutcome`. Selected-profile output is deliberately not part of the
+static agent-context contract, which documents the mechanism rather than the
+moment.
 
 ### Generated profile entry points
 
@@ -1526,10 +1527,10 @@ build tool that motivated the change needed an ordered, fail-closed explicit
 selector chain and a stack of every file that exists, with project keys
 overriding user keys while user-only keys survive. The resulting runtime types
 live in `ortho_config/src/discovery/`, and RFC 0002
-(`docs/rfcs/0002-config-layer-resolution-policy.md`) is their design record: it
-fixes the semantics tables, the suppression gate, the drain precedence, and the
-stability surface that must settle before the first release shipping them. Read
-it before changing any behaviour here.
+(`docs/rfcs/rfc-0002-config-layer-resolution-policy.md`) is their design
+record: it fixes the semantics tables, the suppression gate, the drain
+precedence, and the stability surface that must settle before the first release
+shipping them. Read it before changing any behaviour here.
 
 Candidate provenance is owned by candidate generation. The co-located
 `ortho_config/src/discovery/candidates/provenance.rs` groups the bounded
@@ -2929,7 +2930,8 @@ passes would throw away the warm builds the second pass reuses. The leg prints
 `df -BM /` at each boundary: before lint, before and after the discard, and
 after each coverage pass.
 
-[ADR-009](adr-009-linux-build-test-runner-placement.md) records the decision.
+[ADR-0009](adrs/adr-0009-linux-build-test-runner-placement.md) records the
+decision.
 
 `runner_placement_test.py` holds all of this. It reads the fallback by
 position, checks each leg's runners, and checks that no fork reaches Ubicloud,

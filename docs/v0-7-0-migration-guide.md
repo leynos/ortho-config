@@ -221,4 +221,4 @@ while preserving detailed diagnostics.
 【F:ortho_config/src/result_ext.rs†L71-L112】
 [^rstest-bdd]: The behavioural suites moved from `cucumber-rs` to `rstest-bdd`,
 including tag-aware filtering for YAML scenarios.
-【F:docs/adr-002-replace-cucumber-with-rstest-bdd.md†L9-L47】
+【F:docs/adrs/adr-0002-replace-cucumber-with-rstest-bdd.md†L9-L47】

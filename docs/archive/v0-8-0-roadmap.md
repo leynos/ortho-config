@@ -248,31 +248,31 @@ treated as planned work despite the completed v0.8.0 checklist entry below.
 ### 3.1. YAML parsing provider
 
 - [x] 3.1.1. Replace `serde_yaml` with `serde-saphyr` for YAML parsing. See
-  [ADR-001](../adr-001-replace-serde-yaml-with-serde-saphyr.md).
+  [ADR-0001](../adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md).
   - [x] Update `ortho_config/Cargo.toml` features to remove the indirect
     `figment/yaml` dependency, add optional `serde_saphyr` and `serde_json`
     entries, and wire the YAML feature to these crates. See
-    [ADR-001](../adr-001-replace-serde-yaml-with-serde-saphyr.md).
+    [ADR-0001](../adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md).
   - [x] Implement the `SaphyrYaml` provider in `ortho_config/src/file.rs`
     that reads YAML files, deserializes them with `serde-saphyr`, and
     converts the output into `figment::value::Dict`. See
-    [ADR-001](../adr-001-replace-serde-yaml-with-serde-saphyr.md).
+    [ADR-0001](../adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md).
   - [x] Switch `parse_config_by_format` to use the new provider for `.yaml`
     and `.yml` files, ensuring feature-gated builds continue to compile. See
-    [ADR-001](../adr-001-replace-serde-yaml-with-serde-saphyr.md).
+    [ADR-0001](../adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md).
   - [x] Extend `ortho_config/src/file/file_tests.rs` with YAML 1.2 compliance
     coverage (`key: yes` remains a string, duplicates are rejected) and add
     failure-path tests for malformed YAML inputs. See
-    [ADR-001](../adr-001-replace-serde-yaml-with-serde-saphyr.md).
+    [ADR-0001](../adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md).
   - [x] Document the migration in `CHANGELOG.md`, update user guides to call
     out YAML 1.2 compliance, and plan a minor version bump for the release.
-    See [ADR-001](../adr-001-replace-serde-yaml-with-serde-saphyr.md).
+    See [ADR-0001](../adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md).
 
 ### 3.2. Behavioural testing migration
 
 - [x] 3.2.1. Replace `cucumber-rs` behavioural tests with `rstest-bdd`. This
   migrates behaviour-driven development (BDD) coverage to `rstest-bdd`. See
-  [ADR-002](../adr-002-replace-cucumber-with-rstest-bdd.md).
+  [ADR-0002](../adrs/adr-0002-replace-cucumber-with-rstest-bdd.md).
   - [x] Add `rstest-bdd` scaffolding (dev-dependencies, fixture modules, and a
     canary scenario) inside `ortho_config` and `hello_world` so the macros run
     under `cargo test` without disabling the harness.

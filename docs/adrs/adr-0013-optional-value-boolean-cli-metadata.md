@@ -1,4 +1,4 @@
-# ADR-013: Optional-value boolean CLI metadata
+# Architectural decision record (ADR) 0013: Optional-value boolean CLI metadata
 
 Status: Accepted.
 
@@ -27,7 +27,7 @@ an optional value" or whether the IR needs a new marker.
 - Preserve absent-versus-present semantics: an omitted flag must still leave
   lower-precedence sources in control.
 - Keep the generated IR accurate for renderers and agent-context consumers.
-- Follow the ADR-003 schema-ownership rules, including a version bump and
+- Follow the ADR-0003 schema-ownership rules, including a version bump and
   `#[serde(default)]` for additive fields.
 - Avoid introducing a second clap argument or a second argument identifier per
   field.
@@ -74,11 +74,11 @@ field, described in the documentation IR by a new `value_optional` marker.
 `CliMetadata::value_optional` defaults to `false`. IR written before the field
 existed therefore reads as a plain switch, which preserves the meaning of
 existing documents without a migration step, per
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+[ADR-0003](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 
 `ORTHO_DOCS_IR_VERSION` becomes "2.0". The marker alone is additive, so on its
 own it would ride the unreleased version rather than move it, exactly as
-[ADR-012](adr-012-profile-selection-and-layering.md) records for `profiles`.
+[ADR-0012](adr-0012-profile-selection-and-layering.md) records for `profiles`.
 What forces the version here is the accompanying change to *existing* fields: a
 boolean flag's `takes_value`, `value_name`, and `possible_values` all differ
 after this change, so a 1.1 reader and a 2.0 reader see different CLI surfaces
@@ -146,9 +146,9 @@ the two spellings.
 The user's guide and the migration guide are the normative prose references for
 the command-line surface and for upgrading consumers of the IR.
 
-## Relation to ADR-012
+## Relation to ADR-0012
 
-[ADR-012](adr-012-profile-selection-and-layering.md) records, under
+[ADR-0012](adr-0012-profile-selection-and-layering.md) records, under
 "Flag-equals-default resolution", that opted-in structs gate `push_cli` on
 clap's value-source information while "legacy derives keep the existing
 heuristic untouched". This ADR supersedes that clause for the declarative path.
@@ -157,13 +157,13 @@ not only to profile-opted-in structs: the heuristic it replaces compares the
 sanitized CLI object against the defaults object, which silently discards the
 CLI layer whenever an explicit value happens to equal the struct default.
 Applying the gate only to opt-in structs would leave that defect in place for
-every other derive. ADR-012's five-tier profile ordering is unaffected; its
+every other derive. ADR-0012's five-tier profile ordering is unaffected; its
 profile-specific gate remains in `build_profile_cli_layer_tokens`.
 
 ## References
 
-- [ADR-012: Profile selection and layering](adr-012-profile-selection-and-layering.md).
+- [ADR-0012: Profile selection and layering](adr-0012-profile-selection-and-layering.md).
 - [Agent-native CLI assistance design](agent-native-cli-design.md) §5.
 - [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md).
-- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+- [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 - [clap `Arg::num_args` documentation](https://docs.rs/clap/latest/clap/struct.Arg.html#method.num_args).

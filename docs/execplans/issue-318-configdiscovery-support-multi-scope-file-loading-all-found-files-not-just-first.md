@@ -1209,7 +1209,7 @@ contributes once, at the lowest-precedence position it occupies.
    `value` assertions so first-wins and suppression stay independently verified.
 3. **Tests.** Same-scope multi-file regressions, plus the audited path helper.
 4. **Docs.** `docs/design.md`,
-   `docs/rfcs/0002-config-layer-resolution-policy.md`, `discovery/scope.rs`,
+   `docs/rfcs/rfc-0002-config-layer-resolution-policy.md`, `discovery/scope.rs`,
    `discovery/load.rs` doc comments.
 5. **Gates.** `make check-fmt`, `make test`, `make typecheck`, `make lint`.
    Windows coverage comes from CI.
@@ -1682,10 +1682,11 @@ are documentation rather than behaviour:
    attribute, which the users-guide does cover (`users-guide.md:559-569`). The
    design doc is organized around the resolver boundary here, so this is a gap
    by omission rather than contradiction.
-2. `docs/rfcs/0002-config-layer-resolution-policy.md:998-1001` still carries a
-   #411-era note that scope partitioning and that rewire "edit the same code
-   and should not be built independently". Both changes have long since landed,
-   so the note now reads as a live constraint on work already complete.
+2. `docs/rfcs/rfc-0002-config-layer-resolution-policy.md:998-1001` still
+   carries a #411-era note that scope partitioning and that rewire "edit the
+   same code and should not be built independently". Both changes have long
+   since landed, so the note now reads as a live constraint on work already
+   complete.
 
 Neither is load-bearing for #318, and this round does not change them: they are
 recorded so the next reader does not rediscover them, and so a maintainer who
@@ -1947,7 +1948,7 @@ This round answers the `Developer Documentation` pre-merge row — **the same ro
 Round 13 recorded as already addressed**, which the review still holds open
 against RFC 0002.
 
-**The falsehood.** `docs/rfcs/0002-config-layer-resolution-policy.md` named
+**The falsehood.** `docs/rfcs/rfc-0002-config-layer-resolution-policy.md` named
 `fallthrough` as the default `explicit_mode`, at two sites: the attribute
 bullet in the "Proposed design" section and the stability-surface grammar list.
 No such mode exists. Verified three ways at this head:

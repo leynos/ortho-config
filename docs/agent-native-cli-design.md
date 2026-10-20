@@ -155,7 +155,7 @@ do not force documentation IR migrations unless the same data is genuinely
 needed by both outputs.
 
 Schema ownership is defined in
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+[ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 Reusable agent-context types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
 context in later roadmap work, but it does not own the reusable context
@@ -192,7 +192,7 @@ This keeps the public command approachable while preserving an explicit machine
 schema. Downstream applications do not ship a public `agent-context` alias
 before the first public release, unless a migration explicitly requires one.
 Compatibility detection uses `schema_version`; consumers must not parse `kind`
-as a version. ADR-007 records the naming decision and prior-art divergence.
+as a version. ADR-0007 records the naming decision and prior-art divergence.
 
 The top-level shape should include:
 
@@ -314,13 +314,13 @@ with generic tool failures, so `summary.deny` is the authoritative CI signal.
 Clap usage errors keep exit code 2.
 
 The configuration surface is `[package.metadata.ortho_config.policy]` in the
-target package's `Cargo.toml` (see ADR-008). The enforcement default is `off`
+target package's `Cargo.toml` (see ADR-0008). The enforcement default is `off`
 (the check is opt-in and checks nothing without a policy table); the
 agent-context advertisement default remains the shipped `warn` value. Both
 defaults are distinct, and the transient `--policy-mode` override affects only
 the report's effective mode, never the generated agent context. Configured
 exceptions are visible in the report with their reasons and in agent context
-without reasons (see ADR-008).
+without reasons (see ADR-0008).
 
 ### 3.4 Long-form workflow material
 
@@ -391,8 +391,8 @@ The canonical flags are:
 - `--deliver` for routing generated artefacts.
 
 The canonical downstream introspection command is `context --json`, defined by
-[ADR-007](adr-007-downstream-context-command-naming.md). The `context` command
-name is reserved for application surfaces, while
+[ADR-0007](adrs/adr-0007-downstream-context-command-naming.md). The `context`
+command name is reserved for application surfaces, while
 `cargo-orthohelp --format agent-context` remains the build-time generator
 format.
 
@@ -437,8 +437,8 @@ configure that convention once and expose it in agent context.
 This is realized in the derive attribute surface as
 `behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
 flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
-[ADR-010](adr-010-behavioural-metadata-attribute-surface.md) and the §8.1 table
-below for the defaulting and compatibility contract.
+[ADR-0010](adrs/adr-0010-behavioural-metadata-attribute-surface.md) and the
+§8.1 table below for the defaulting and compatibility contract.
 
 ### 6.2 Structured output
 
@@ -536,8 +536,8 @@ confirmation bypass flag. Consequential commands should declare whether
 This is realized in the derive attribute surface as `behaviour(mutation = ...)`
 with the optional `behaviour(dry_run = ...)` flag, and in agent context as
 `mutation_effect` plus `dry_run_flag`. See
-[ADR-010](adr-010-behavioural-metadata-attribute-surface.md) for the attribute
-grammar and the no-inference rule.
+[ADR-0010](adrs/adr-0010-behavioural-metadata-attribute-surface.md) for the
+attribute grammar and the no-inference rule.
 
 Create-like commands should prefer idempotency tokens or natural keys where the
 application domain supports them. OrthoConfig should model and lint the
@@ -598,8 +598,8 @@ roadmap must document the exact merge order and migration impact before code is
 changed.
 
 That documentation requirement is satisfied by
-[ADR-012](adr-012-profile-selection-and-layering.md), recorded before any
-behavioural code under roadmap 9.1.1. Profiles are named config overlays:
+[ADR-0012](adrs/adr-0012-profile-selection-and-layering.md), recorded before
+any behavioural code under roadmap 9.1.1. Profiles are named config overlays:
 `[profile.<name>]` tables inside the resolved configuration file chain,
 selected statelessly by a `--profile <name>` flag with a `<PREFIX>PROFILE`
 environment-variable fallback. The exact merge order is:
@@ -613,7 +613,7 @@ opt in keep the four-tier order and keep reporting
 `profiles: { "supported": false }`. An explicitly provided flag beats the
 selected profile even when the flag value equals the built-in default. The
 migration impact, including the Rust-level `AgentContext.profiles` retype and
-the rollback story, is recorded in ADR-012's migration plan.
+the rollback story, is recorded in ADR-0012's migration plan.
 
 Agent context should expose whether profiles are supported, how to list them,
 which flag selects one, and which profile fields are redacted or
@@ -762,7 +762,7 @@ in warning mode before enforcing it in CI.
 
 The agent-context schema is versioned independently of the documentation IR as
 recorded in
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+[ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` is a major-version string for the compact
 wire shape emitted by `cargo orthohelp --format agent-context` and by
 `--format all`. It is an integer-valued breaking-change counter, not SemVer:
@@ -817,9 +817,10 @@ Schema v1 history:
   policy, and includes agent-context output in `cargo orthohelp --format all`.
 - `1` (extended by 9.1.1): `profiles` retyped to `ProfilesDeclaration` at the
   Rust level (a pre-approved pre-1.0 break per
-  [ADR-012](adr-012-profile-selection-and-layering.md)); the new optional fields
-  `selection` and `list_command` follow the omitted-when-absent rule, and the
-  unsupported case remains byte-identical to `{ "supported": false }`.
+  [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md)); the new
+  optional fields `selection` and `list_command` follow the omitted-when-absent
+  rule, and the unsupported case remains byte-identical to
+  `{ "supported": false }`.
 
 ## 9. Current gaps to resolve
 

@@ -62,7 +62,7 @@ This is roadmap item **8.3.1** (`docs/roadmap.md` §8.3.1). It is the first step
 of §8.3 "Standardize Cargo external-subcommand entry points" and unblocks 8.3.2
 (derive template documentation), 8.3.3 (macro prototype decision), and 8.3.4
 (shared regression fixtures). The design contract is `docs/design.md` §4.17 and
-`docs/adr-004-cargo-external-subcommand-entry-point.md` (accepted).
+`docs/adrs/adr-0004-cargo-external-subcommand-entry-point.md` (accepted).
 
 ## Constraints
 
@@ -95,9 +95,9 @@ escalation, not a workaround.
    `cargo-orthohelp` or the test fixture crates.
 7. The helper must not install a tracing subscriber or any global state:
    libraries must not install global recorders/subscribers (AGENTS.md). The
-   observability expectation in ADR-004 (subscriber before parsing, debug event
-   at the dispatch boundary) is a binary-level obligation and is handled here
-   as documentation only (see Decision D-4).
+   observability expectation in ADR-0004 (subscriber before parsing, debug
+   event at the dispatch boundary) is a binary-level obligation and is handled
+   here as documentation only (see Decision D-4).
 8. All module files start with `//!` docs; every public item carries `///`
    rustdoc with runnable examples; no code file exceeds 400 lines (AGENTS.md).
 9. Every commit passes the gates (`make check-fmt`, `make typecheck`,
@@ -162,7 +162,7 @@ Stop and escalate (do not work around) when any of these is reached.
    rendering (D-2). Severity: medium. Likelihood: low once the plan is
    approved. Mitigation: the deviation is called out explicitly in D-2 and in
    the design-doc reconciliation milestone; when ticking the roadmap, the
-   `bin_name` sub-bullet is annotated with a pointer to the ADR-004 amendment
+   `bin_name` sub-bullet is annotated with a pointer to the ADR-0004 amendment
    so the roadmap and the shipped code do not silently disagree.
 6. Risk: the helper's top-level `--version` behaviour diverges from the
    derive reference: `cargo-orthohelp` sets `#[command(version)]` on its
@@ -190,7 +190,7 @@ Stop and escalate (do not work around) when any of these is reached.
       `origin/main` and the commit re-landed with two lint fixes folded in
       (clippy `doc_markdown` backticks, `shadow_unrelated` rename).
 - [x] (2026-08-09) Milestone 2: documentation sweep (users' guide, design
-      doc, ADR-004 amendment, developers' guide); `make markdownlint` and
+      doc, ADR-0004 amendment, developers' guide); `make markdownlint` and
       `make nixie` green in addition to the code gates; committed as
       `6286f1c`. The four edits were authored by the `scribe` subagent from
       the Stage C brief and accepted unchanged after review; all six gates
@@ -246,8 +246,8 @@ returns a bounded report.
   unconditional argv[1] filter as in `cargo-deny`). Evidence: prior-art survey
   of clap cookbook, clap-cargo docs, cargo-nextest, cargo-insta, and cargo-deny
   sources (2026-08-06). Impact: the helper fills a genuine gap; the
-  nested-subcommand pattern is the one prescribed by ADR-004 and matches clap's
-  official example.
+  nested-subcommand pattern is the one prescribed by ADR-0004 and matches
+  clap's official example.
 - Observation: in clap 4.6, a subcommand without an explicit `display_name`
   derives it as `{parent_display_name}-{subcommand_name}`, and `render_version`
   prints the display name. With parent name `cargo` and subcommand `demo`, clap
@@ -350,7 +350,7 @@ returns a bounded report.
   testable, and macro-generatable by a possible 8.3.3 attribute (plain
   `impl Into<_>` parameters, no generics over iterators, no lifetimes). The
   argv-stripping alternatives (cargo-insta, cargo-deny patterns) were rejected
-  on two independent anchors: ADR-004 chose the nested-subcommand shape, and
+  on two independent anchors: ADR-0004 chose the nested-subcommand shape, and
   the written acceptance criteria predating this plan require it — design.md
   §4.17's success criterion and the 8.3.4 fixture spec both demand that
   `cargo-<name> <name> [OPTIONS]` parse on direct invocation *without* Cargo in
@@ -387,7 +387,7 @@ returns a bounded report.
   caller-set inner `bin_name` inconsistently between the help and parse-descent
   build paths; resetting makes both derive `cargo <name>`. Milestone 2
   reconciles the design doc's code sketch with this decision and appends an
-  ADR-004 amendment. Plan approval ratifies the deviation (Tolerance 6).
+  ADR-0004 amendment. Plan approval ratifies the deviation (Tolerance 6).
   Date/Author: 2026-08-06, planning session, corrected after panel review (two
   lenses independently found the display-name derivation flaw).
 
@@ -407,12 +407,12 @@ returns a bounded report.
   in the helper's rustdoc so callers know where those concerns live.
   Date/Author: 2026-08-06, planning session, amended after panel review.
 
-- Decision (D-4): **ADR-004's observability expectation is documented, not
-  implemented.** ADR-004 says Cargo-facing binaries should initialize a tracing
-  subscriber before parsing and emit a debug event at the dispatch boundary. A
-  library helper must not install subscribers (AGENTS.md), and the helper never
-  parses, so it has no dispatch boundary of its own. The users' guide section
-  (Milestone 2) states the expectation and points at
+- Decision (D-4): **ADR-0004's observability expectation is documented, not
+  implemented.** ADR-0004 says Cargo-facing binaries should initialize a
+  tracing subscriber before parsing and emit a debug event at the dispatch
+  boundary. A library helper must not install subscribers (AGENTS.md), and the
+  helper never parses, so it has no dispatch boundary of its own. The users'
+  guide section (Milestone 2) states the expectation and points at
   `cargo-orthohelp/src/main.rs` as the reference implementation. Date/Author:
   2026-08-06, planning session.
 
@@ -591,7 +591,7 @@ Key terms:
 2. **The wrapper shape** — a synthetic parent `clap::Command::new("cargo")`
    whose only subcommand carries the tool's real options. clap then consumes
    the injected token as the subcommand selector; no argv massaging is needed.
-   This is clap's official `cargo-example` cookbook pattern and what ADR-004
+   This is clap's official `cargo-example` cookbook pattern and what ADR-0004
    adopted.
 3. **Hand-built command** — a `clap::Command` constructed with the builder
    API rather than `#[derive(clap::Parser)]`. Derive-based callers use the
@@ -657,9 +657,9 @@ Testing infrastructure this plan reuses:
 Signposted documentation and skills:
 
 1. Design and decisions: `docs/design.md` §4.17 (the contract for this task),
-   `docs/adr-004-cargo-external-subcommand-entry-point.md`, `docs/roadmap.md`
-   §8.3, `docs/agent-native-cli-design.md` §7 (why `cargo-orthohelp` is the
-   dogfooding target), `docs/contents.md` (doc index),
+   `docs/adrs/adr-0004-cargo-external-subcommand-entry-point.md`,
+   `docs/roadmap.md` §8.3, `docs/agent-native-cli-design.md` §7 (why
+   `cargo-orthohelp` is the dogfooding target), `docs/contents.md` (doc index),
    `docs/documentation-style-guide.md` (en-GB-oxendict, heading and wrapping
    rules).
 2. Testing guides: `docs/rust-testing-with-rstest-fixtures.md`,
@@ -852,7 +852,7 @@ containing tests and implementation, with the red transcripts recorded in
    top-level `--version` intentionally errors, Risk 6), a copy-pasteable
    `MissingSubcommand`/`UnknownArgument` hint snippet mirroring
    `exit_for_clap_error` and `write_augmented_clap_error` from
-   `cargo-orthohelp/src/main.rs`, and the tracing expectation per ADR-004
+   `cargo-orthohelp/src/main.rs`, and the tracing expectation per ADR-0004
    (D-4). Add a one-line cross-reference from the existing "Give each
    subcommand its own settings" section, where Cargo-tool authors will look
    first. The README now signposts the shipped helper; full derive-template
@@ -860,7 +860,7 @@ containing tests and implementation, with the red transcripts recorded in
 2. `docs/design.md` §4.17: update the code sketch to the shipped shape
    (parent `bin_name("cargo")`, inner `display_name`, per D-2) and note that
    the helper shipped in 8.3.1; keep the section's constraint prose intact.
-3. `docs/adr-004-cargo-external-subcommand-entry-point.md`: append a short
+3. `docs/adrs/adr-0004-cargo-external-subcommand-entry-point.md`: append a short
    amendment note recording D-2 (usage renders the Cargo dispatch form; the
    installed binary name is carried as the inner command's display name; the
    inner `bin_name` is reset).
@@ -884,7 +884,7 @@ recording the formatting result. Commit.
    4) and continue.
 3. Tick roadmap item 8.3.1 in `docs/roadmap.md` (the four sub-bullets and
    the item; mark "done" per the item's convention), annotating the
-   `bin_name("cargo-<name>")` sub-bullet with a pointer to the ADR-004
+   `bin_name("cargo-<name>")` sub-bullet with a pointer to the ADR-0004
    amendment (Risk 5) so the roadmap text and the shipped code do not silently
    disagree.
 4. Update this ExecPlan's `Progress`, `Outcomes & retrospective`, and append
@@ -1053,7 +1053,7 @@ error: could not compile `ortho_config` (test "rstest_bdd") due to 1 previous er
   the two clippy fixes and the `CargoContext` relocation recorded above.
 - Milestone 2 shipped as commit `6286f1c` (2026-08-09): the documentation
   sweep across `docs/users-guide.md`, `docs/design.md` §4.17,
-  `docs/adr-004-cargo-external-subcommand-entry-point.md`, and
+  `docs/adrs/adr-0004-cargo-external-subcommand-entry-point.md`, and
   `docs/developers-guide.md`, drafted by the `scribe` subagent. The
   `scrutineer` recorded all six green gate logs under `/tmp`.
 - The branch was rebased onto `origin/main` again on 2026-08-09 to pick up

@@ -1,4 +1,4 @@
-# ADR-001: Replace `serde_yaml` with `serde-saphyr` for YAML Parsing
+# Architectural decision record (ADR) 0001: Replace `serde_yaml` with `serde-saphyr` for YAML Parsing
 
 Date: 2025-10-17
 
@@ -109,7 +109,7 @@ implementation cost of the integration shim.
 ## Implementation Plan
 
 This document outlines the specific steps required to execute the migration
-detailed in ADR-001.
+detailed in ADR-0001.
 
 ### 1. Dependency Management (`ortho_config/Cargo.toml`)
 

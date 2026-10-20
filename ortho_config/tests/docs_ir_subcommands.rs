@@ -138,7 +138,7 @@ fn test_nested_subcommand_metadata_is_populated(subcommand_metadata: DocMetadata
 }
 
 // ---------------------------------------------------------------------------
-// Behaviour metadata flows through ADR-005 subcommand delegation (Milestone C).
+// Behaviour metadata flows through ADR-0005 subcommand delegation (Milestone C).
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]

@@ -30,7 +30,7 @@ in [agent-native-cli-design.md](agent-native-cli-design.md).
   and unambiguous. For fields that grant capabilities or set security and
   resource boundaries, preference precedence remains separate from the
   application-defined policy authority proposed in
-  [RFC 0003](rfcs/0003-trust-aware-policy-composition.md).
+  [RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md).
 - **For Developers (using `OrthoConfig`):** A dramatic reduction in boilerplate
   and cognitive load. It abstracts away the tedious integration details,
   allowing developers to focus on their application's logic rather than
@@ -55,7 +55,7 @@ The implementation must adhere to the following principles:
   it does not grant permission to widen protected fields. Applications define
   source authority, while OrthoConfig provides reusable monotonic composition,
   delegation, provenance, and diagnostics. See
-  [RFC 0003](rfcs/0003-trust-aware-policy-composition.md).
+  [RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md).
 - **Mechanical agent assistance:** Agent-native CLI behaviour must be generated
   or linted from metadata wherever possible. OrthoConfig should help developers
   enforce canonical verbs, canonical flags, structured output, bounded list
@@ -114,7 +114,7 @@ The primary data flow for a user calling `AppConfig::load()` will be:
      `[profile.<name>]` tables overlay the file values. Each file in the
      resolved chain that defines the selected profile contributes one profile
      layer, in chain order. See
-     [ADR-012](adr-012-profile-selection-and-layering.md).
+     [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md).
    - **Environment Provider:** An `Env` provider configured with the correct
      prefix and key-mapping rules.
 
@@ -139,9 +139,9 @@ The primary data flow for a user calling `AppConfig::load()` will be:
 
 This sequence defines preference composition. A field that opts into the
 trust-aware model proposed in
-[RFC 0003](rfcs/0003-trust-aware-policy-composition.md) additionally receives
-application-supplied authority metadata and a semantic policy family. Its
-policy envelope is composed separately from ordinary scalar and collection
+[RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md) additionally
+receives application-supplied authority metadata and a semantic policy family.
+Its policy envelope is composed separately from ordinary scalar and collection
 precedence before the final configuration is returned.
 
 ### Error ergonomics and interop
@@ -814,7 +814,7 @@ Precedence across all sources becomes:
 3. The selected profile, when profiles are enabled
    (`#[ortho_config(profiles)]`): one overlay layer per file in the chain that
    defines the selected profile, in chain order (base first), per
-   [ADR-012](adr-012-profile-selection-and-layering.md)
+   [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md)
 4. Environment variables
 5. Command‑line arguments
 
@@ -1019,7 +1019,7 @@ belongs at the command boundary; configuration precedence remains defaults →
 files → selected profile (opt-in) → environment → explicit command-line
 arguments, with the profile tier present only for structs that opt in via
 `#[ortho_config(profiles)]` (see
-[ADR-012](adr-012-profile-selection-and-layering.md)).
+[ADR-0012](adrs/adr-0012-profile-selection-and-layering.md)).
 
 The near-term API is a small `ortho_config::cargo` helper for callers that
 build clap commands by hand. A function such as
@@ -1042,7 +1042,7 @@ The helper shipped in 8.3.1 as `ortho_config::cargo::external_subcommand`. Help
 renders two forms: the top-level usage is `Usage: cargo <COMMAND>`, and the
 inner subcommand usage is `Usage: cargo orthohelp [OPTIONS]`. The installed
 binary name is carried as the inner command's display name, so `--version`
-output names the installed binary; see the ADR-004 amendment.
+output names the installed binary; see the ADR-0004 amendment.
 
 The helper must preserve the inner command's existing options rather than
 introducing a second source of configuration semantics. Its success criterion
@@ -1105,14 +1105,14 @@ resource policy needs a separate authority dimension: a later project layer
 must not acquire the right to add a trusted interpreter, enable network access,
 or raise a resource ceiling merely because it appears later.
 
-[RFC 0003](rfcs/0003-trust-aware-policy-composition.md) proposes the opt-in
+[RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md) proposes the opt-in
 contract. Applications define a validated partial order of authority classes,
 classify each participating source deliberately, and supply authoritative
 anchors and typed delegation grants. OrthoConfig supplies semantic monotonic
 families, runtime composition, active-constraint provenance, and bounded
 diagnostics. Scope and origin from
-[RFC 0002](rfcs/0002-config-layer-resolution-policy.md) feed source identity
-but never imply authority by themselves.
+[RFC 0002](rfcs/rfc-0002-config-layer-resolution-policy.md) feed source
+identity but never imply authority by themselves.
 
 The runtime composer precedes derive support. Protected fields use their
 declared policy family instead of `append`, `replace`, or `keyed`; unprotected
@@ -1245,9 +1245,9 @@ flags on top of the derive macro while keeping the application logic explicit.
 - **Trust-aware policy composition:** OrthoConfig should provide the runtime
   authority graph, monotonic policy families, explicit delegation, provenance,
   and diagnostics proposed in
-  [RFC 0003](rfcs/0003-trust-aware-policy-composition.md). Applications retain
-  authority classification and enforcement. See [roadmap.md](roadmap.md) phase
-  14.
+  [RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md). Applications
+  retain authority classification and enforcement. See [roadmap.md](roadmap.md)
+  phase 14.
 - **Async configuration loading:** A version of `load` that uses non-blocking
   IO remains useful, but it is distinct from application-level async job
   metadata such as `--wait`, `jobs get`, or durable job ledgers.
@@ -1305,7 +1305,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
 - **Define downstream agent-context command naming (2026-06-14):**
   Downstream applications expose `context --json` and emit
   `kind: "<tool>.agent_context"`, while `cargo-orthohelp` retains
-  `--format agent-context` as its generator format. ADR-007 records the
+  `--format agent-context` as its generator format. ADR-0007 records the
   rationale, the compatibility rule: use `schema_version`, not parsed `kind`,
   to detect schema compatibility, and the split between the reusable JSON
   adapter and the application CLI literals.
@@ -1380,7 +1380,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
   `CliValueExtractor`.
 - **Generate recursive subcommand documentation metadata (2026-05-24):**
   Introduce the `OrthoConfigSubcommandDocs` companion trait and derive for
-  `clap::Subcommand` enums, as accepted in ADR-005. `OrthoConfig` now
+  `clap::Subcommand` enums, as accepted in ADR-0005. `OrthoConfig` now
   recognizes a `#[command(subcommand)]` selector field, skips it as a
   configuration field, and fills `DocMetadata.subcommands` from the enum's
   per-variant metadata in declaration order.
@@ -1389,7 +1389,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
   declare interaction, mutation, bypass, and dry-run metadata that the derive
   carries into IR 1.2 and the agent-context bridge populates into
   `interaction_mode`, `mutation_effect`, `bypass_flag`, and `dry_run_flag`.
-  ADR-010 records the attribute shape, the no-inference rule, the pinned
+  ADR-0010 records the attribute shape, the no-inference rule, the pinned
   bypass/dry-run flag grammar, the non-interactive/bypass contradiction rule,
   and the IR version-skew contract.
 

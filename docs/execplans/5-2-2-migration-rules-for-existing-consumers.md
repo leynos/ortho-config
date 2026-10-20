@@ -147,7 +147,7 @@ this plan until the user approves it.
 - [x] (2026-05-24T13:35:00Z) Documented migration rules in
   `docs/agent-native-cli-design.md`, `docs/cargo-orthohelp-design.md`,
   `docs/design.md`, `docs/users-guide.md`, `docs/developers-guide.md`, and
-  ADR-003, then marked roadmap item 5.2.2 done.
+  ADR-0003, then marked roadmap item 5.2.2 done.
 - [x] (2026-05-24T13:44:00Z) Ran the documentation milestone gates:
   `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
   `make markdownlint` all passed.
@@ -184,9 +184,9 @@ this plan until the user approves it.
   Evidence: `ortho_config::agent_context` owns
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`, `cargo_orthohelp::policy` owns
   `ORTHO_POLICY_REPORT_SCHEMA_VERSION`, and
-  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` records
-  the ownership decision. Impact: item 5.2.2 should document migration rules on
-  top of that accepted boundary, not re-decide ownership.
+  `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
+  records the ownership decision. Impact: item 5.2.2 should document migration
+  rules on top of that accepted boundary, not re-decide ownership.
 
 - Observation: commit `2b992b67bc5d5e4e763a8ee814bc0314b34cd99b` added a
   `.config/nextest.toml` timeout override for trybuild integration tests.
@@ -255,7 +255,7 @@ this plan until the user approves it.
   2026-05-24T12:51:00Z / Codex.
 
 - Decision: Record 5.2.2 migration rules in the existing design, user, and
-  developer documents rather than creating a new ADR. Rationale: ADR-003
+  developer documents rather than creating a new ADR. Rationale: ADR-0003
   already records the schema ownership decision; this work applies that
   accepted boundary to compatibility and defaulting rules. Date/Author:
   2026-05-24T13:35:00Z / Codex.
@@ -321,8 +321,8 @@ Relevant documentation sources are:
 
 - `docs/roadmap.md` for item 5.2.2 and completion state.
 - `docs/design.md` for high-level architecture and decision history.
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` for the
-  accepted schema ownership decision from roadmap item 5.2.1.
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
+  for the accepted schema ownership decision from roadmap item 5.2.1.
 - `docs/agent-native-cli-design.md` for agent-native versioning and legacy
   defaulting.
 - `docs/cargo-orthohelp-design.md` for the documentation IR, generator, and
@@ -383,7 +383,7 @@ and to state that `agent-context`, `--json`, and policy output cannot break
 `ir`, `man`, `ps`, or `all` without an approved migration. Update
 `docs/design.md` with the compatibility boundary: OrthoConfig owns reusable
 metadata contracts and generated documentation compatibility; downstream
-applications own semantic execution. Reference ADR-003 where ownership matters
+applications own semantic execution. Reference ADR-0003 where ownership matters
 instead of re-litigating the decision. Update `docs/users-guide.md` with
 consumer-facing compatibility notes for crates that only consume generated
 human documentation. Update `docs/developers-guide.md` with internal practice
@@ -392,7 +392,7 @@ reports in `cargo_orthohelp::policy`, keep compact agent context in
 `ortho_config::agent_context`, and avoid format drift. Update `CHANGELOG.md`
 only if the implementation changes user-visible wording or behaviour. Do not
 add a new ADR unless implementation uncovers a substantive migration decision
-that cannot be captured cleanly in the design documents or ADR-003.
+that cannot be captured cleanly in the design documents or ADR-0003.
 
 Stage D: review and harden. Run `make fmt` if Markdown formatting changes are
 needed. Then run `make check-fmt`, `make lint`, and `make test` sequentially
@@ -476,7 +476,7 @@ sed -n '470,490p' docs/cargo-orthohelp-design.md
 sed -n '781,789p' docs/cargo-orthohelp-design.md
 sed -n '1128,1265p' docs/users-guide.md
 sed -n '1,110p' docs/developers-guide.md
-sed -n '1,180p' docs/adr-003-define-schema-ownership-for-agent-native-contracts.md
+sed -n '1,180p' docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md
 ```
 
 Run review and gates:
@@ -563,8 +563,8 @@ The implementation is accepted when all of the following are true:
 - `docs/agent-native-cli-design.md`,
   `docs/cargo-orthohelp-design.md`, `docs/design.md`, `docs/users-guide.md`,
   `docs/developers-guide.md`, and
-  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` describe
-  the same migration policy without contradiction.
+  `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
+  describe the same migration policy without contradiction.
 - `docs/roadmap.md` marks 5.2.2 done only after implementation is complete.
 - `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
   `make markdownlint` pass when those targets exist.
@@ -616,9 +616,9 @@ Main-branch schema ownership work from
 - `cargo-orthohelp/src/policy/mod.rs` defines the `cargo-orthohelp` policy
   report contract, including `PolicyReport`, `PolicySummary`, machine-stable
   finding fields, and `ORTHO_POLICY_REPORT_SCHEMA_VERSION`.
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` is the
-  accepted ownership record. This 5.2.2 plan should add migration rules that
-  respect it rather than introducing a competing ownership model.
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md` is
+  the accepted ownership record. This 5.2.2 plan should add migration rules
+  that respect it rather than introducing a competing ownership model.
 - `docs/users-guide.md` already states that existing
   `cargo-orthohelp --format ir`, `--format man`, `--format ps`, and
   `--format all` behaviour remains compatible while agent-context generation

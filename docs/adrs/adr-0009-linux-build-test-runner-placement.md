@@ -1,4 +1,4 @@
-# ADR-009: Place the Linux build-test leg on Ubicloud
+# Architectural decision record (ADR) 0009: Place the Linux build-test leg on Ubicloud
 
 Status: Accepted.
 

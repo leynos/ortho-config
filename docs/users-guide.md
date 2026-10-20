@@ -979,7 +979,7 @@ fn write_augmented_clap_error(error: &clap::Error) -> std::io::Result<()> {
 }
 ```
 
-- **Tracing.** Per ADR-004, Cargo-facing binaries should initialize a tracing
+- **Tracing.** Per ADR-0004, Cargo-facing binaries should initialize a tracing
   subscriber before parsing and emit a debug event at the dispatch boundary
   once the injected token is accepted. `cargo-orthohelp/src/main.rs` is the
   reference implementation: `init_tracing` installs a `tracing_subscriber::fmt`

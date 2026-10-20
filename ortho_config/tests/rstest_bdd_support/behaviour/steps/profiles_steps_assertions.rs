@@ -237,7 +237,7 @@ fn parse_source(source: &SourceName) -> Result<ProfileSource> {
 /// CLI cannot be parsed *and* the selector names a profile no file defines,
 /// dropping either error would hide a root cause. The parse error is reported
 /// first because it is the reason clap could not supply the flag value. This
-/// is the CLI-side counterpart to ADR-012's rule that a file parse error must
+/// is the CLI-side counterpart to ADR-0012's rule that a file parse error must
 /// not be masked by an unknown-profile error.
 #[then("loading fails reporting parse and unknown-profile errors")]
 fn loading_fails_reporting_parse_and_unknown(profiles_context: &ProfilesContext) -> Result<()> {

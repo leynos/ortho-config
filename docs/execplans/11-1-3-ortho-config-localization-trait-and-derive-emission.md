@@ -14,7 +14,7 @@ command-line help must hand-author every Fluent identifier: it calls
 concatenates strings) and hopes the result matches what the runtime localizer
 looks up. Nothing checks the identifiers at compile time, and a typo or a
 collision between two fields only surfaces as a runtime panic (see
-`docs/adr-006-identifier-derivation-panics.md`).
+`docs/adrs/adr-0006-identifier-derivation-panics.md`).
 
 After this change:
 
@@ -30,7 +30,7 @@ After this change:
 - Two fields whose identifiers normalize to the same Fluent id fail to
   *compile*, with the error pointing at the offending field, instead of
   panicking at runtime. This discharges (for derived argument identifiers) the
-  derive-time guard promised in ADR-006.
+  derive-time guard promised in ADR-0006.
 - The documentation intermediate representation (IR) emitted by the derive
   (`OrthoConfigDocs::get_doc_metadata`) reports root defaults equal to the
   localization trait constants and nested command/argument defaults equal to
@@ -121,7 +121,7 @@ review's findings are folded into the Decision Log and milestones below.
   dependency cycle (cross-implementation property tests) both mandate
   additional files with no smaller alternative. The work was reviewed and
   accepted on that basis rather than re-scoped, because each increment is
-  separately motivated in this document and in ADR-011. This note records the
+  separately motivated in this document and in ADR-0011. This note records the
   overshoot and its authorization; it is not a revision of the limit.
 - Interface: if any *existing* public API signature must change (as opposed
   to the additive, provided path-aware methods authorized by D-9), stop and
@@ -185,7 +185,7 @@ review's findings are folded into the Decision Log and milestones below.
 - Risk: a future tool mistakes the build-time JSON's standalone per-struct ids
   for mounted command-tree ids. Severity: high. Likelihood: medium. Mitigation:
   include `path_scope: "standalone"` in every entry, describe the limitation in
-  ADR-011 and the schema documentation, and require roadmap 11.5.2 to obtain
+  ADR-0011 and the schema documentation, and require roadmap 11.5.2 to obtain
   mounted ids from the path-aware compiled docs IR before exposing translator
   output.
 - Risk: artefact emission interacts badly with incremental compilation —
@@ -329,9 +329,9 @@ review's findings are folded into the Decision Log and milestones below.
     input permutations.
   - Residual limitation: a rename within the same source file keeps its
     recorded path unchanged, so a stale fragment is not pruned. This is
-    accepted and documented in ADR-011.
-- [x] Milestone 6: documentation, ADR-011, roadmap completion, final gates.
-  - ADR-011, the localization design, guides, ADR-006, changelog, and roadmap
+    accepted and documented in ADR-0011.
+- [x] Milestone 6: documentation, ADR-0011, roadmap completion, final gates.
+  - ADR-0011, the localization design, guides, ADR-0006, changelog, and roadmap
     document the path-aware IR migration and explicitly opt-in artefact flow.
     The roadmap's 11.1.3 checkboxes and validation checklist are ticked, and
     the final workspace gates plus Markdown lint pass.
@@ -420,7 +420,7 @@ review's findings are folded into the Decision Log and milestones below.
   research pass over the Cargo issue tracker and internals threads, 2026-08-06.
   Impact: the design document's §8.2 artefact bullet cannot be implemented as
   an unconditional write, and even the opt-in write needs a documented
-  forced-recompile workflow; Decisions D-3 and D-11, recorded in ADR-011.
+  forced-recompile workflow; Decisions D-3 and D-11, recorded in ADR-0011.
 - Observation: the existing docs derive emits dotted identifiers
   (`{app}.about`, `{app}.fields.{field}.help`) under a `fields.` namespace,
   while `message_id_for` emits dash-joined identifiers under an `args.`
@@ -566,7 +566,7 @@ contracts, alternatives, scaling, failure modes, viability).
   model) and Cargo team guidance both reject ambient proc-macro writes; an
   env-gated write neutralizes the docs.rs, rust-analyzer, and expansion-cache
   failure modes while still honouring the design document's artefact contract.
-  Recorded as ADR-011 in Milestone 6, together with the guidance that the
+  Recorded as ADR-0011 in Milestone 6, together with the guidance that the
   variable is set per-invocation and never exported in shell profiles or
   CI-wide environment blocks. Date/Author: 2026-08-06, planning session;
   revised 2026-08-17 after D-9 made mounted docs identifiers path-aware.
@@ -648,7 +648,7 @@ contracts, alternatives, scaling, failure modes, viability).
   canonicalization produces ids based on a standalone base rather than the
   runtime-mounted path. Derive-time collision detection still covers argument
   identifiers within one deriving struct; sibling-subcommand-name collisions
-  remain a runtime panic per ADR-006. Date/Author: 2026-08-06, post-review
+  remain a runtime panic per ADR-0006. Date/Author: 2026-08-06, post-review
   revision; replaced by explicit user decision on 2026-08-17 after the
   Ambiguity tolerance was reached.
 - Decision D-10 (revised): context-free localization constants and explicit
@@ -676,7 +676,7 @@ contracts, alternatives, scaling, failure modes, viability).
   `cargo clean -p <crate> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build`,
   which recreates `OUT_DIR` content from scratch and defeats both the
   untracked-env-var problem and the expansion cache. Residual staleness for
-  renames within one file is accepted and documented in ADR-011. Date/Author:
+  renames within one file is accepted and documented in ADR-0011. Date/Author:
   2026-08-06, post-review revision.
 - Decision D-12: fields introduced through `#[clap(flatten)]` /
   `#[command(flatten)]` are excluded from `ARG_IDS` in this task, and the
@@ -756,14 +756,14 @@ This task builds on prior work: 11.1.1 promoted `LocalizeCmd` and
 `message_id_for`; 11.1.2 promoted `LocalizedParse` and added an
 identifier-coverage test (`ortho_config/tests/localized_parse.rs`, the
 `RecordingLocalizer` and `identifier_coverage_matches_message_id_for`) that
-this task extends. ADR-006 records that runtime identifier derivation panics on
-invalid or colliding segments *until this task* adds the compile-time guard for
-derived argument identifiers.
+this task extends. ADR-0006 records that runtime identifier derivation panics
+on invalid or colliding segments *until this task* adds the compile-time guard
+for derived argument identifiers.
 
 Relevant skills for the implementer: `leta` (code navigation), `rust-router`
 (then `rust-types-and-apis` for the trait surface and `rust-unit-testing` for
 the test work), `execplans` (this document's maintenance), `commit-message`,
-`comenq-coderabbit` (review loop), `arch-decision-records` (ADR-011),
+`comenq-coderabbit` (review loop), `arch-decision-records` (ADR-0011),
 `proptest`, and `en-gb-oxendict` (prose). Relevant repository documentation:
 `docs/design.md`, `docs/cli-localization-design.md`,
 `docs/localizable-rust-libraries-with-fluent.md`,
@@ -778,7 +778,7 @@ The upstream requirement is `docs/roadmap.md` item 11.1.3: derive localization
 constants, make docs IR use the same identifiers, emit an identifier artefact,
 and reject collisions at compile time. The governing design is
 `docs/cli-localization-design.md` §4.1 (path-based identifier grammar), §8.1
-(trait ownership), and §8.2 (derive behaviour). ADR-006 governs which invalid
+(trait ownership), and §8.2 (derive behaviour). ADR-0006 governs which invalid
 or colliding identifiers fail at derive time and which hand-built command-tree
 cases may still panic at runtime.
 
@@ -1204,7 +1204,7 @@ Validation: full gate set; `coderabbit review --agent`. Commit.
 
 ### Milestone 6: documentation, ADR, roadmap, and closure
 
-- Write `docs/adr-011-opt-in-identifier-artefact-emission.md`
+- Write `docs/adrs/adr-0011-opt-in-identifier-artefact-emission.md`
   (Y-Statement, per `arch-decision-records`): ambient proc-macro writes
   rejected; env-gated emission chosen (exact-`1` semantics, per-invocation-only
   guidance); the forced-recompile workflow and expansion-cache caveat; the
@@ -1217,9 +1217,9 @@ Validation: full gate set; `coderabbit review --agent`. Commit.
 - Amend `docs/cli-localization-design.md`: §8.1 (widened trait surface and
   named `ArgLocalizationIds` per D-7, `LOCALIZATION_BASE` per D-5, and replace
   the impossible blanket-impl sentence with the generated delegation of D-1);
-  §8.2 (artefact emission is opt-in, reference ADR-011; mark the
+  §8.2 (artefact emission is opt-in, reference ADR-0011; mark the
   `localized_default` bullet deferred per D-4; specify D-9's path-aware nested
-  docs generation and D-12's flatten exclusion). Update ADR-006's known-risk
+  docs generation and D-12's flatten exclusion). Update ADR-0006's known-risk
   paragraph to state precisely which collisions moved to compile time (argument
   ids within a deriving struct) and which remain runtime panics (hand-built
   trees; sibling subcommand names).
@@ -1351,7 +1351,7 @@ and missing-directory cases.
 Remaining known gap, carried as future work rather than a Milestone 5
 obligation: a rename within one source file does not change the fragment's
 recorded `source_file`, so that fragment survives pruning and its stale entries
-persist until the next forced refresh. Decision D-11 accepts this and ADR-011
+persist until the next forced refresh. Decision D-11 accepts this and ADR-0011
 documents it.
 
 ## Interfaces and dependencies
@@ -1444,7 +1444,7 @@ range. Two conflicts arose; both were resolved to preserve this branch's intent:
   redundant line was dropped and the file is byte-identical to `main`. The
   replay of that commit is therefore empty; its purpose is met by main.
 - `docs/contents.md` in `d347c9e7`. Both sides independently added an entry for
-  ADR-008, so both entries were kept and the numbering collision was resolved
+  ADR-0008, so both entries were kept and the numbering collision was resolved
   separately (below).
 
 Two commits in the original series did not survive as distinct commits, both
@@ -1454,12 +1454,12 @@ already present in `main`, confirmed by comparing each added line against
 `origin/main:typos.toml`, and the file is byte-identical across `main`,
 `OLD_HEAD`, and the rebased tree.
 
-Main landed its own ADR-008 for the agent-native policy configuration while
+Main landed its own ADR-0008 for the agent-native policy configuration while
 this branch was in flight, so two different decisions claimed number 008. The
 landed ADR keeps 008, because its number is already published in main's
 `agent-native-cli-design.md` and 7.1.1 execplan; the identifier artefact
-emission decision is renumbered to ADR-009 and its file renamed to match. Only
-this branch's references were updated; main's ADR-008 files remain
+emission decision is renumbered to ADR-0009 and its file renamed to match. Only
+this branch's references were updated; main's ADR-0008 files remain
 byte-identical to `main`.
 
 The lock file took `main`'s version and was then re-resolved through
@@ -1586,7 +1586,7 @@ The first conflict was the original artefact-ADR addition (`6f05675f`), which
 had claimed 008 when that number was free. Main has since published 008 for the
 agent-native policy configuration and 009 for the Linux build-test runner
 placement, so both numbers the branch had used were occupied. The resolution
-keeps both ADDED entries verbatim: main's ADR-009 entry and the branch's new
+keeps both ADDED entries verbatim: main's ADR-0009 entry and the branch's new
 ADR entry, in the historical numbering the commit itself used. The renumber is
 left to the commit that exists for it.
 
@@ -1594,10 +1594,10 @@ The second conflict was that renumber commit (`bd935b0b`) meeting the moved
 occupancy. Its stated purpose — renumber the branch's unlanded ADR to the next
 free number and rename its file, because a published number must not be
 reclaimed — still holds; only its numeral was stale. The branch's ADR becomes
-**ADR-011**, and its file is
-`docs/adr-011-opt-in-identifier-artefact-emission.md`. This follows the
+**ADR-0011**, and its file is
+`docs/adrs/adr-0011-opt-in-identifier-artefact-emission.md`. This follows the
 precedent the commit itself set: the landed ADR keeps its number, and the
-unlanded branch adjusts. Main's own ADR-009 files and their two references
+unlanded branch adjusts. Main's own ADR-0009 files and their two references
 (`docs/developers-guide.md` and the `[adr-009]` link definition) were left
 byte-identical to main; only this branch's references were moved, across
 `docs/contents.md`, `docs/cli-localization-design.md`, `docs/roadmap.md`, the
@@ -1627,7 +1627,7 @@ suite-splitting commits, not new drift. Repairing them let the recipe reach its
 second step, `mdtablefix --check`, for the first time in any recorded run of
 this range; that step then reported three Markdown files needing `--wrap`.
 Those re-wraps were applied and verified as pure line-break changes, with
-ADR-006's historical decision text confirmed byte-identical afterwards.
+ADR-0006's historical decision text confirmed byte-identical afterwards.
 
 `make test` aborted at the `ortho_config_macros` lib target, the second Rust
 target to run, on
@@ -1862,7 +1862,7 @@ removed before it is believed.
 
 The three `-ise` spellings that the spelling gate did catch were real. The
 repository enforces en-GB-oxendict, so the `typos` dictionary maps that word
-class to `-ize`; the lock prose in ADR-011, the localization design guide, and
+class to `-ize`; the lock prose in ADR-0011, the localization design guide, and
 this plan all used the `-ise` form. They are corrected in `ce023fee` with no
 word-level exemptions added to `typos.local.toml`.
 
@@ -2153,20 +2153,20 @@ win over main's concurrent `1.2`, which was an additive behaviour-metadata bump.
 identifier values.
 
 `docs/contents.md` conflicted twice, both times as additive collisions: the
-branch's ADR entry against main's ADR-010 entry, and then the branch's own
+branch's ADR entry against main's ADR-0010 entry, and then the branch's own
 renumber commit. The second is the more interesting one. That commit's stated
 purpose — an unlanded ADR must not reclaim a published number — still holds,
 but its numeral was stale again: it renamed the artefact ADR to 010, and main
-has since published its own ADR-010 for the behavioural metadata surface. The
-branch's artefact ADR therefore becomes **ADR-011**, and its file is
-`docs/adr-011-opt-in-identifier-artefact-emission.md`. The renumber follows the
-precedent that commit set: the landed ADR keeps its number and the unlanded
-branch adjusts. Only this branch's references moved, across `docs/contents.md`,
-`docs/cli-localization-design.md`, `docs/roadmap.md`, the ADR's own title, and
-this plan; main's `behaviour(...)` ADR-010 files and references are
-byte-identical to main. The renumber is applied as a separate commit after the
-replay rather than inside a conflict resolution, so the history shows the
-decision that was made.
+has since published its own ADR-0010 for the behavioural metadata surface. The
+branch's artefact ADR therefore becomes **ADR-0011**, and its file is
+`docs/adrs/adr-0011-opt-in-identifier-artefact-emission.md`. The renumber
+follows the precedent that commit set: the landed ADR keeps its number and the
+unlanded branch adjusts. Only this branch's references moved, across
+`docs/contents.md`, `docs/cli-localization-design.md`, `docs/roadmap.md`, the
+ADR's own title, and this plan; main's `behaviour(...)` ADR-0010 files and
+references are byte-identical to main. The renumber is applied as a separate
+commit after the replay rather than inside a conflict resolution, so the
+history shows the decision that was made.
 
 The fourth conflict was a one-line table caption in `docs/developers-guide.md`.
 Both sides had added a lead-in above the same release-targets table: main an

@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 005: Subcommand docs companion trait
+# Architectural decision record (ADR) 0005: Subcommand docs companion trait
 
 ## Status
 

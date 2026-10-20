@@ -88,10 +88,10 @@ workaround.
 - Keep the mirrored schema in `cargo-orthohelp/src/schema/mod.rs` byte-for-byte
   aligned with `ortho_config/src/docs/ir.rs`. The existing version-alignment
   test in `cargo-orthohelp/src/schema/tests.rs` must continue to pass.
-- Preserve the boundary established by ADR-003
-  (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`). The
-  new `OrthoConfigSubcommandDocs` trait belongs to the human-documentation IR
-  contract and stays in `ortho_config::docs`; it must not introduce any
+- Preserve the boundary established by ADR-0003
+  (`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`).
+  The new `OrthoConfigSubcommandDocs` trait belongs to the human-documentation
+  IR contract and stays in `ortho_config::docs`; it must not introduce any
   dependency on `cargo-orthohelp`, the bridge, the agent-context schema, or
   policy reports.
 - Keep `cargo-orthohelp/src/bridge.rs` unchanged in its public behaviour. The
@@ -235,7 +235,7 @@ risks emerge.
   a small companion trait if enum-level documentation cannot be represented
   cleanly through the existing `OrthoConfigDocs` trait." The recommended design
   (below) introduces a new trait. Severity: medium. Likelihood: medium.
-  Mitigation: capture the choice in ADR-005 (see Milestone 0); the ADR is the
+  Mitigation: capture the choice in ADR-0005 (see Milestone 0); the ADR is the
   approval gate. If review prefers to extend `OrthoConfigDocs` instead, stop
   and revise the plan.
 - Risk: divergence between the variant-name convention used by clap and the
@@ -351,8 +351,8 @@ The implementation must review and keep aligned with:
 - `docs/developers-guide.md` (the "Schema ownership" section);
 - `docs/documentation-style-guide.md` (ADR template, design-document
   guidance, en-GB-oxendict rules);
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` (the
-  governing ownership boundary);
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
+  (the governing ownership boundary);
 - `docs/contents.md` (add a link to the new ADR).
 
 External prior art checked during planning (firecrawl, 2026-05-22):
@@ -613,8 +613,9 @@ Steps:
 
 1. Submit this ExecPlan for review and wait for explicit maintainer approval.
    Record the approval date in `Progress`. Update `Status:` to `APPROVED`.
-2. Draft `docs/adr-005-subcommand-docs-companion-trait.md` following the ADR
-   template in `docs/documentation-style-guide.md:411-489`. Cover at minimum:
+2. Draft `docs/adrs/adr-0005-subcommand-docs-companion-trait.md` following the
+   ADR template in `docs/documentation-style-guide.md:411-489`. Cover at
+   minimum:
    - context (the gap named by
      `docs/agent-native-cli-design.md` §4 and §9);
    - alternatives considered (extend `OrthoConfigDocs`, introduce a
@@ -623,7 +624,7 @@ Steps:
    - the accepted decision (the companion trait described above);
    - consequences (additive surface, no IR schema change, follow-ups for
      hidden/alias/deprecated metadata and unit-variant support).
-3. Add the new ADR to `docs/contents.md` next to ADR-003.
+3. Add the new ADR to `docs/contents.md` next to ADR-0003.
 4. Update `docs/developers-guide.md` "Schema ownership" (line 18-) with a
    single sentence noting that `OrthoConfigSubcommandDocs` is part of the
    human-documentation IR and is versioned by `ORTHO_DOCS_IR_VERSION`.
@@ -643,7 +644,7 @@ be recorded in `Surprises & Discoveries` before continuing.
 
 Run `coderabbit review --agent` and clear concerns.
 
-Acceptance: ADR-005 exists, the plan is `APPROVED`, the documentation index
+Acceptance: ADR-0005 exists, the plan is `APPROVED`, the documentation index
 links to the ADR, and the developers guide mentions the new trait.
 
 ### Milestone 1: introduce the trait and the shared parsing helper
@@ -939,7 +940,7 @@ Steps:
      describing the new subcommand-field detection;
    - add a dated entry to §9 "Decision log" in the same style as the
      2025-12-19 "Merge selected subcommand enums" entry at
-     `docs/design.md:933-944`, citing ADR-005.
+     `docs/design.md:933-944`, citing ADR-0005.
 2. Update `docs/cargo-orthohelp-design.md`:
    - §2.1 (top-level metadata): explain that `subcommands` is now populated
      by `OrthoConfigSubcommandDocs`;
@@ -1167,10 +1168,10 @@ before and after a change, etc.).
   populated `subcommands` automatically once the consumer's `RootType` is a
   top-level `Parser` struct with `#[command(subcommand)]` and the new derive.
 
-- ADR-003
-  (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`)
-  governs the ownership boundary; ADR-005 will sit alongside it and inherit its
-  versioning rules.
+- ADR-0003
+  (`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`)
+  governs the ownership boundary; ADR-0005 will sit alongside it and inherit
+  its versioning rules.
 
 ## Interfaces and dependencies
 
@@ -1243,7 +1244,7 @@ actual current state of the work.
 - [x] (2026-05-23 ??:??Z) Draft ExecPlan created.
 - [x] (2026-05-24 12:40Z) Plan approved by maintainer instruction to
   proceed with implementation; status set to `APPROVED`.
-- [x] (2026-05-24 12:58Z) Milestone 0 complete (ADR-005 drafted,
+- [x] (2026-05-24 12:58Z) Milestone 0 complete (ADR-0005 drafted,
   contents index updated, developers guide note added, markdownlint and nixie
   clean, CodeRabbit clear).
 - [x] (2026-05-24 13:16Z) Milestone 1 complete (trait published,

@@ -208,7 +208,7 @@ catalogue across multiple binaries by giving each a distinct prefix. The
 canonical function is exposed as
 `ortho_config::message_id_for(&command_path, suffix)` so applications, tests,
 and the IR pipeline can produce identical identifiers without re-implementing
-the convention (see [ADR-006](adr-006-identifier-derivation-panics.md)).
+the convention (see [ADR-0006](adrs/adr-0006-identifier-derivation-panics.md)).
 
 Identifier normalization is a documented function: lowercase American Standard
 Code for Information Interchange (ASCII) letters pass through, ASCII digits,
@@ -222,18 +222,18 @@ produces the same runtime id directly.
 
 Two segments that normalize to the same identifier are a build-time error in
 the macros crate and a runtime panic in `LocalizeCmd::localize` for hand-built
-command trees (see [ADR-006](adr-006-identifier-derivation-panics.md)). The
-derive's identifier-generation pass therefore enforces uniqueness at compile
-time, and ADR-006 records why the promoted runtime API panics rather than
-returning `Result` when a hand-built command tree cannot produce unique Fluent
-identifiers.
+command trees (see [ADR-0006](adrs/adr-0006-identifier-derivation-panics.md)).
+The derive's identifier-generation pass therefore enforces uniqueness at
+compile time, and ADR-0006 records why the promoted runtime API panics rather
+than returning `Result` when a hand-built command tree cannot produce unique
+Fluent identifiers.
 
 `OrthoConfigLocalization` exposes the localization base, all command-level
 identifiers, and named argument-id records. The derive also delegates docs IR
 through the mounted command path, so nested defaults agree with runtime lookup;
 flattened fields remain excluded. Artefact emission is opt-in and described by
-[ADR-011](adr-011-opt-in-identifier-artefact-emission.md); `localized_default`
-remains deliberately deferred.
+[ADR-0011](adrs/adr-0011-opt-in-identifier-artefact-emission.md);
+`localized_default` remains deliberately deferred.
 
 ### 4.2 `try_parse_localized` helpers
 

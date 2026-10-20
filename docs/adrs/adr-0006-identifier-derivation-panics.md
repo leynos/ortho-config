@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 006: Identifier-derivation panics
+# Architectural decision record (ADR) 0006: Identifier-derivation panics
 
 ## Status
 

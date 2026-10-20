@@ -2,7 +2,7 @@
 
 This guide shows library consumers how to construct the two agent-native JSON
 contracts. The ownership boundary is defined by
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md):
+[ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md):
 `cargo_orthohelp` owns policy reports, while `ortho_config` owns reusable agent
 context.
 

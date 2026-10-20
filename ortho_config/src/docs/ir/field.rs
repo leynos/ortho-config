@@ -70,7 +70,7 @@ pub struct CliMetadata {
     /// bracket the placeholder when this is set.
     ///
     /// Defaults to `false` so IR written before this field existed still reads
-    /// as a plain switch, per ADR-003.
+    /// as a plain switch, per ADR-0003.
     #[serde(default)]
     pub value_optional: bool,
     /// Allowed values for enum-like options.

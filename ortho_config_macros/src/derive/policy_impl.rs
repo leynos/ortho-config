@@ -246,7 +246,7 @@ pub(crate) fn build_policy_based_loading(
         // filled fatal slot both leave the profile tables unread too. Profile
         // extraction suppresses the unknown-profile error in those cases and no
         // others, so a chain that loaded after an unrelated optional failure
-        // still reports a selection the files do not define (ADR-012).
+        // still reports a selection the files do not define (ADR-0012).
         //
         // An empty chain with nothing recorded is deliberately *not* a
         // failure: no candidate failed, so the selection is reported as

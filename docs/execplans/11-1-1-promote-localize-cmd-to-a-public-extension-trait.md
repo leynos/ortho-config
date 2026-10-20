@@ -157,14 +157,14 @@ is breached.
    on unrepresentable / colliding command paths. Reviewers flagged this as a
    hard-to-reverse choice. Severity: medium. Likelihood: low (inputs are
    compile-time-fixed command trees). Mitigation: this is mandated by §4.1 and
-   the roadmap; record ADR-006 capturing the decision and the rejected `Result`
-   alternative. See Decision Log.
+   the roadmap; record ADR-0006 capturing the decision and the rejected
+   `Result` alternative. See Decision Log.
 
 ## Progress
 
 - [x] (2026-06-11) Milestone 0 — design-doc reconciliation (§4.1 prose,
-  ADR-006). Updated `docs/cli-localization-design.md`, added
-  `docs/adr-006-identifier-derivation-panics.md`, indexed ADR-006 in
+  ADR-0006). Updated `docs/cli-localization-design.md`, added
+  `docs/adrs/adr-0006-identifier-derivation-panics.md`, indexed ADR-0006 in
   `docs/contents.md`, and began implementation status tracking.
 - [x] (2026-06-11) Milestone 1 — `normalize_segment` + `message_id_for`
   (red→green, proptest). Added `ortho_config/src/localizer/identifier.rs`,
@@ -236,10 +236,11 @@ rediscover them.
    use `with_base("hello_world.cli")`; this is the canonical "multi-segment
    catalogue" demonstration of `with_base`.
 8. Observation: **ADR location follows the existing flat docs convention.**
-   Evidence: `docs/contents.md` indexes ADR-001 through ADR-005 at
-   `docs/adr-00x-...md`, not under `docs/adr/`. Impact: ADR-006 was added as
-   `docs/adr-006-identifier-derivation-panics.md` to match the repository's
-   current convention despite the generic ADR skill mentioning `docs/adr/`.
+   Evidence: `docs/contents.md` indexes ADR-0001 through ADR-0005 at
+   `docs/adr-00x-...md`, not under `docs/adr/`. Impact: ADR-0006 was added as
+   `docs/adrs/adr-0006-identifier-derivation-panics.md` to match the
+   repository's current convention despite the generic ADR skill mentioning
+   `docs/adr/`.
 9. Observation: **CodeRabbit can wedge during sandbox preparation.**
    Evidence: the second Milestone 0 review stayed at
    `{"phase":"setup","status":"preparing_sandbox"}` for about 18 minutes after
@@ -344,11 +345,11 @@ rediscover them.
   Inputs are compile-time-fixed command trees authored by the binary developer,
   so a colliding/unrepresentable id is a build-time bug surfaced at first run,
   mirroring clap's own `mut_arg` panic-on-undefined-id. The reviewers' `Result`
-  alternative is recorded as rejected in **ADR-006** so the trade-off is
+  alternative is recorded as rejected in **ADR-0006** so the trade-off is
   auditable; if a downstream consumer needs recoverability later, a
   `try_message_id_for -> Result` can be added without breaking the panicking
   function. Date/Author: 2026-06-09, planning agent (pending user approval and
-  ADR-006 sign-off).
+  ADR-0006 sign-off).
 - Decision: **Keep the example single-phase; do not wire `BootLocalizer`.**
   Rationale: `BootLocalizer`/`BootHandle` are 11.3 deliverables and do not
   exist yet. 11.1.1 keeps the example's current
@@ -367,7 +368,7 @@ rediscover them.
   legal; only the final id's first character must be a letter. Keeping
   `normalize_segment` pure (no composition-aware panic) lets the derive
   (11.1.3) and load path reuse it. Date/Author: 2026-06-09, planning agent.
-- Decision: **Keep ADR-006 in the flat `docs/` ADR series.**
+- Decision: **Keep ADR-0006 in the flat `docs/` ADR series.**
   Rationale: the repository's accepted ADRs and documentation index already use
   flat `docs/adr-00x-...md` paths. Matching that local convention preserves
   discoverability and avoids an unnecessary documentation-layout change.
@@ -396,8 +397,8 @@ rediscover them.
 
 Milestone 0 is complete. The design document now preserves underscores in
 runtime Fluent ids, documents the 11.1.1 non-localized clap surfaces, and
-references ADR-006 for the public panic contract. The promoted trait is not yet
-implemented; Milestone 1 begins the red-green identifier helper work.
+references ADR-0006 for the public panic contract. The promoted trait is not
+yet implemented; Milestone 1 begins the red-green identifier helper work.
 
 Milestone 1 is complete through focused validation. The red command
 `cargo test -p ortho_config localizer::tests::message_id_for` failed with
@@ -621,14 +622,14 @@ Staged, each stage ending in validation. Do not advance past a failing stage.
    `--help`/`--version` argument text; per-`PossibleValue` help; the
    `help_template` layout string), with a pointer that the footer slots
    (`after_help`/`after_long_help`) *are* localized.
-3. Author **ADR-006** (`docs/adr-006-identifier-derivation-panics.md`) in
+3. Author **ADR-0006** (`docs/adrs/adr-0006-identifier-derivation-panics.md`) in
    Y-Statement form (use the `arch-decision-records` skill): "In the context of
    deriving Fluent identifiers from compile-time-fixed clap command trees,
    facing the need to surface unrepresentable or colliding ids, we decided to
    panic (matching clap's `mut_arg` convention and the §4.1 mandate) and
    neglected a `Result`-returning API, accepting that hand-built dynamic trees
    must validate names before localizing, because the inputs are
-   developer-authored constants surfaced at first run." Reference ADR-006 from
+   developer-authored constants surfaced at first run." Reference ADR-0006 from
    the design doc and from `message_id_for`'s rustdoc. Add it to
    [contents.md](../contents.md).
 4. Validation: `make markdownlint` passes; the design doc no longer contradicts
@@ -826,7 +827,7 @@ Acceptance is behavioural:
 6. **Gates.** `make all` passes.
 
 Quality criteria ("done"): all four make gates plus doctests, snapshots, and
-BDD green; CodeRabbit concerns cleared at each milestone; ADR-006 recorded and
+BDD green; CodeRabbit concerns cleared at each milestone; ADR-0006 recorded and
 referenced; roadmap 11.1.1 marked done; users-guide, developers-guide, and the
 design/component docs updated.
 
@@ -866,12 +867,12 @@ Documentation:
 - [reliable-testing-in-rust-via-dependency-injection.md](../reliable-testing-in-rust-via-dependency-injection.md)
 - [complexity-antipatterns-and-refactoring-strategies.md](../complexity-antipatterns-and-refactoring-strategies.md)
 - [rstest-bdd-users-guide.md](../rstest-bdd-users-guide.md)
-- ADR-005 (subcommand docs companion trait) for the existing companion-trait
+- ADR-0005 (subcommand docs companion trait) for the existing companion-trait
   pattern.
 
 Skills: `rust-router` → `rust-types-and-apis` (trait/API shape, `WithBase`
 wrapper), `arch-crate-design` (public-vs-internal surface, boundary),
-`rust-errors` (panic boundary rationale), `arch-decision-records` (ADR-006),
+`rust-errors` (panic boundary rationale), `arch-decision-records` (ADR-0006),
 `rust-unit-testing` (rstest fixtures, googletest/pretty_assertions, insta),
 `proptest` (the normalization invariants), `rstest-bdd` skill via the
 users-guide, `leta` for navigation/refactor, and `arch-supply-chain` (the
@@ -886,6 +887,6 @@ review surfaced five must-fix corrections now baked into the plan: the
 non-existent `get_arguments_mut` (use `mut_arg`), the `value_name` action
 side-effect guard, the underscore-preservation prose contradiction (Milestone
 0), the default-base mismatch forcing `with_base` in the example (Risk 1 /
-Milestone 4), and the panic-as-public-API contract (ADR-006). The two-phase
+Milestone 4), and the panic-as-public-API contract (ADR-0006). The two-phase
 `BootLocalizer` lifecycle and built-in `--help`/`--version` text localization
 are explicitly scoped out (11.3 and a later item respectively).

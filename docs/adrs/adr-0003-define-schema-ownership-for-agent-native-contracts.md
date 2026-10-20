@@ -1,4 +1,4 @@
-# ADR-003: Define schema ownership for agent-native contracts
+# Architectural decision record (ADR) 0003: Define schema ownership for agent-native contracts
 
 Status: Accepted
 

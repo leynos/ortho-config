@@ -53,7 +53,7 @@ pub struct ExtractionOutcome {
 ///   the second case the profile tables could never be inspected, so the
 ///   selection is reported as unknown only in the first: a file parse error is
 ///   the root cause and must not be joined by a false selection error
-///   (ADR-012).
+///   (ADR-0012).
 ///
 /// # Errors
 ///
@@ -91,7 +91,7 @@ pub fn extract_profile_layers(
     // actually be inspected. When discovery could not inspect them, the chain
     // says nothing about whether the profile exists; reporting it as unknown
     // would falsely diagnose the selection while a file parse error is the real
-    // root cause (ADR-012: parse errors take precedence over unknown-profile
+    // root cause (ADR-0012: parse errors take precedence over unknown-profile
     // errors). A chain that loaded after an unrelated optional failure is
     // inspected and complete, so it does not reach this suppression.
     let unmatched = selected.filter(|_| !selected_found && !discovery_failed);

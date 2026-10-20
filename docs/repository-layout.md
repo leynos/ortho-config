@@ -15,8 +15,10 @@ layout and the critical subdirectories new contributors usually need first.
 │   ├── src/
 │   └── tests/
 ├── docs/
+│   ├── adrs/
 │   ├── archive/
-│   └── execplans/
+│   ├── execplans/
+│   └── rfcs/
 ├── examples/
 │   └── hello_world/
 ├── ortho_config/
@@ -153,8 +155,11 @@ isolated Cargo caches unless the repository instructions explicitly change.
 
 ## Documentation ownership
 
-Long-lived documentation belongs under `docs/`. Active plans belong under
-`docs/execplans/`, while historical plans or roadmaps that should remain
+Long-lived documentation belongs under `docs/`. Architectural decision records
+belong under `docs/adrs/`, and proposals for review belong under `docs/rfcs/`.
+Both use four-digit serials and title slugs as specified in the
+[documentation style guide](documentation-style-guide.md). Active plans belong
+under `docs/execplans/`, while historical plans or roadmaps that should remain
 readable but should not drive future work belong under `docs/archive/`.
 
 When adding, renaming, or removing documentation, update
