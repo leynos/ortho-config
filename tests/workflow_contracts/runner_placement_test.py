@@ -223,7 +223,7 @@ def test_the_lint_trees_go_before_coverage(ci: WorkflowDocument) -> None:
 #: wrong platform, or on the old runner label, would skip or run the wrong leg
 #: with no failure to show for it.
 PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
-    "Select the MSVC linker for nested Cargo builds": "${{ matrix.platform == 'windows' }}",
+    "Configure MSVC for nested Cargo builds": "${{ matrix.platform == 'windows' }}",
     "Install mdtablefix": LINUX_ONLY,
     "Check formatting": LINUX_ONLY,
     "Check Rust formatting": "${{ matrix.platform != 'linux' }}",
@@ -297,12 +297,12 @@ def test_no_other_step_is_keyed_on_the_platform_or_a_runner_label(ci: WorkflowDo
 def test_windows_nested_cargo_build_pins_msvc_linker_before_coverage(
     ci: WorkflowDocument,
 ) -> None:
-    """The Windows coverage subprocesses resolve Cargo's linker to MSVC."""
+    """Nested Windows Cargo builds receive the MSVC and SDK toolchain paths."""
     steps = _steps(ci)
     matching = [
         (index, step)
         for index, step in enumerate(steps)
-        if step.get("name") == "Select the MSVC linker for nested Cargo builds"
+        if step.get("name") == "Configure MSVC for nested Cargo builds"
     ]
     assert len(matching) == 1, f"found {len(matching)} MSVC linker setup steps"
     (index, step), = matching
@@ -310,8 +310,14 @@ def test_windows_nested_cargo_build_pins_msvc_linker_before_coverage(
     command = str(step.get("run", ""))
     assert "vswhere.exe" in command, "the linker path comes from the installed Visual Studio"
     assert "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" in command
+    assert "VsDevCmd.bat" in command, "the SDK and MSVC library paths come from Visual Studio"
+    assert "-arch=x64 -host_arch=x64" in command
+    assert "'INCLUDE', 'LIB', 'LIBPATH'" in command
+    assert "kernel32.lib" in command, "fail early if the Windows SDK library path is absent"
+    assert "$env:GITHUB_PATH" in command, "nested build tools resolve from the MSVC directory"
     assert "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=" in command
     assert "$env:GITHUB_ENV" in command, "Cargo receives the linker in later workflow steps"
+    assert "did not expose the MSVC library search path" in command
     assert "throw 'vswhere did not find the x64 MSVC linker'" in command
     coverage = [
         position

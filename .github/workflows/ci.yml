@@ -102,17 +102,54 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
 
       # The Windows coverage action uses Bash, which prepends Git's /usr/bin
-      # ahead of the Visual Studio paths. Pin Cargo's linker explicitly so a
-      # nested bridge build cannot select Git's GNU link.exe by name.
-      - name: Select the MSVC linker for nested Cargo builds
+      # ahead of Visual Studio. Pin the linker and export its SDK search paths
+      # so nested bridge builds can find MSVC and Windows SDK libraries.
+      - name: Configure MSVC for nested Cargo builds
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
         run: |
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1
+          if (-not $installation) {
+            throw 'vswhere did not find the Visual Studio C++ toolchain'
+          }
+          $vsDevCmd = Join-Path $installation 'Common7\Tools\VsDevCmd.bat'
+          if (-not (Test-Path $vsDevCmd)) {
+            throw 'Visual Studio did not provide VsDevCmd.bat'
+          }
+          $env:MSVC_VSDEVCMD = $vsDevCmd
+          $devEnvironment = & $env:COMSPEC /d /s /c 'call "%MSVC_VSDEVCMD%" -arch=x64 -host_arch=x64 >nul && set'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'VsDevCmd.bat could not configure the x64 MSVC environment'
+          }
+          $toolVariables = @('INCLUDE', 'LIB', 'LIBPATH', 'VCINSTALLDIR', 'VSINSTALLDIR', 'VSCMD_ARG_TGT_ARCH', 'WindowsSdkDir', 'WindowsSDKVersion')
+          $selectedVariables = @{}
+          foreach ($entry in $devEnvironment) {
+            $separator = $entry.IndexOf('=')
+            if ($separator -gt 0) {
+              $name = $entry.Substring(0, $separator)
+              if ($toolVariables -contains $name) {
+                $selectedVariables[$name] = $entry.Substring($separator + 1)
+              }
+            }
+          }
+          if (-not $selectedVariables.ContainsKey('LIB')) {
+            throw 'VsDevCmd.bat did not expose the MSVC library search path'
+          }
+          $sdkLibraries = $selectedVariables['LIB'] -split ';' | Where-Object { $_ }
+          if (-not ($sdkLibraries | Where-Object { Test-Path (Join-Path $_ 'kernel32.lib') })) {
+            throw 'VsDevCmd.bat did not expose the Windows SDK kernel32.lib search path'
+          }
+          foreach ($name in $toolVariables) {
+            if ($selectedVariables.ContainsKey($name)) {
+              Add-Content -Path $env:GITHUB_ENV -Value "$name=$($selectedVariables[$name])" -Encoding utf8
+            }
+          }
           $linker = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe' | Select-Object -First 1
           if (-not $linker) {
             throw 'vswhere did not find the x64 MSVC linker'
           }
+          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $linker.Trim()) -Encoding utf8
           Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($linker.Trim())" -Encoding utf8
 
       - name: Install bun

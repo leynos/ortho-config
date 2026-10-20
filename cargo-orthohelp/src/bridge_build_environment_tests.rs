@@ -20,6 +20,12 @@ fn build_policy_preserves_toolchain_inputs_and_excludes_application_values() {
             "PKG_CONFIG_PATH",
             OsString::from("/toolchain/lib/pkgconfig"),
         ),
+        ("INCLUDE", OsString::from(r"C:\Visual Studio\include")),
+        (
+            "LIB",
+            OsString::from(r"C:\Visual Studio\lib;C:\Windows Kits\um\x64"),
+        ),
+        ("LIBPATH", OsString::from(r"C:\Visual Studio\references")),
         (
             "CARGO_BUILD_RUSTC_WRAPPER",
             OsString::from("/tools/sccache"),
@@ -63,6 +69,10 @@ fn build_policy_preserves_toolchain_inputs_and_excludes_application_values() {
             Some(expected.as_os_str())
         );
     }
+    assert_selected_environment_boundaries(&selected);
+}
+
+fn assert_selected_environment_boundaries(selected: &HashMap<String, OsString>) {
     assert!(!selected.contains_key("APPLICATION_SECRET"));
     assert!(!selected.contains_key("CARGO_REGISTRY_TOKEN"));
     assert!(!selected.contains_key("HTTPS_PROXY"));
