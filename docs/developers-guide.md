@@ -1056,13 +1056,15 @@ logged without invalidating the snapshot. Dependencies and the shared Cargo
 cache remain under Cargo's ownership. The generated IR cache path and its
 atomic, idempotent publication remain unchanged. Cargo's configured wrappers,
 job limits, warning flags, and coverage settings remain active. The helper does
-not rewrite Rust flags or relocate the default shared Cargo cache. Diagnostics
-are streamed from the Cargo build to the supervising CLI. See the
+not rewrite Rust flags or relocate the default shared Cargo cache. Its Cargo
+JSON reader retains at most 1 MiB of rendered diagnostics; `run_cargo` forwards
+that bounded output to the supervising CLI after draining the stream and marks
+truncation explicitly. See the
 [cargo-orthohelp bridge design][bridge-build-ownership] for the ownership and
 data-flow details.
 
 [bridge-build-ownership]:
-  cargo-orthohelp-design.md#632-bridge-build-ownership-and-recovery
+  cargo-orthohelp-design.md#633-bridge-build-ownership-and-recovery
 
 The lock is not a recovery signal. The fail-closed marker is
 `<selected-target>/orthohelp-bridge-build.in-progress`. If an interruption

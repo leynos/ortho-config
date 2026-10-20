@@ -108,3 +108,7 @@ fn snapshot_executable(
     }
     Ok(destination_path)
 }
+
+#[cfg(test)]
+#[path = "bridge_build_snapshot_tests.rs"]
+mod tests;

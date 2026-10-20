@@ -897,7 +897,7 @@ check alone writes `policy-report.json` and exits. This mirrors the
 generator preconditions (`root_type`, a library target, or an `ortho_config`
 dependency).
 
-### 6.3.2 Bridge build ownership and recovery
+### 6.3.3 Bridge build ownership and recovery
 
 The `target/orthohelp/<hash>/` directory remains the stable identity for cached
 IR. It is not a Cargo target directory. Each uncached bridge generation creates
@@ -950,11 +950,13 @@ not forward the coverage CLI as `RUSTC_WRAPPER`, because that CLI cannot act as
 the compiler wrapper for a second Cargo process. Coverage flags and profile
 output remain enabled, and configured Cargo wrappers continue to apply. The
 bridge does not sanitize Rust flags to force a separate compiler fingerprint or
-change the default shared Cargo cache. Cargo's JSON build protocol is consumed
-while diagnostics are streamed to the supervising CLI. IR cache publication
-remains atomic and skips replacement when the existing cache already contains
-identical content, preserving the established path and idempotent-write
-behaviour.
+change the default shared Cargo cache. The Cargo JSON reader retains at most 1
+MiB of rendered compiler diagnostics and records when it truncates output. It
+has no presentation sink; `run_cargo` forwards the retained diagnostics to
+stderr after draining the JSON stream and emits a truncation notice when
+needed. IR cache publication remains atomic and skips replacement when the
+existing cache already contains identical content, preserving the established
+path and idempotent-write behaviour.
 
 An interrupted build whose writer lifetime cannot be confirmed leaves a
 fail-closed ownership marker. A later invocation must not treat that marker as

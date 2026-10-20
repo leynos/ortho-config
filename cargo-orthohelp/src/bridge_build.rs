@@ -246,7 +246,7 @@ fn run_cargo(
     };
 
     let mut reader = BufReader::new(stdout);
-    let messages = match read_cargo_messages(&mut reader, &target, &mut io::stderr().lock()) {
+    let messages = match read_cargo_messages(&mut reader, &target) {
         Ok(messages) => messages,
         Err(error) => {
             drop(reader);
@@ -257,6 +257,14 @@ fn run_cargo(
             )));
         }
     };
+    if let Err(error) = forward_cargo_diagnostics(&messages) {
+        drop(reader);
+        let cleanup = owned_child.stop_bounded();
+        return Err(CargoFailure::unconfirmed(with_cleanup_evidence(
+            io_error(target.directory, error),
+            &cleanup,
+        )));
+    }
     drop(reader);
 
     let status = match owned_child.wait() {
@@ -279,6 +287,19 @@ fn run_cargo(
         status: cargo_status,
         messages,
     })
+}
+
+/// Forward bounded parser output at the Cargo process boundary.
+fn forward_cargo_diagnostics(messages: &CargoMessages) -> io::Result<()> {
+    let mut stderr = io::stderr().lock();
+    stderr.write_all(messages.diagnostics.as_bytes())?;
+    if messages.diagnostics_truncated {
+        writeln!(
+            stderr,
+            "\n[bridge] additional Cargo diagnostics omitted after 1 MiB"
+        )?;
+    }
+    stderr.flush()
 }
 
 /// Open a directory with ambient authority and retain path context on failure.

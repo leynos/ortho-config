@@ -5,19 +5,25 @@
 
 use camino::Utf8PathBuf;
 use serde_json::Value;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead};
 
 use super::{GeneratedTarget, binary_file_name};
 use crate::error::OrthohelpError;
 
 /// Maximum retained size for one newline-delimited Cargo JSON record.
 const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
+/// Maximum rendered compiler diagnostics retained before they are truncated.
+const MAX_CARGO_DIAGNOSTIC_BYTES: usize = 1024 * 1024;
 /// Relevant build output collected while draining Cargo's JSON stream.
 pub(super) struct CargoMessages {
     /// Absolute path reported for the bridge executable, when present.
     pub(super) executable: Option<Utf8PathBuf>,
     /// Cargo-reported output files owned by the generated bridge target.
     pub(super) generated_outputs: Vec<Utf8PathBuf>,
+    /// Bounded rendered compiler diagnostics forwarded by the Cargo boundary.
+    pub(super) diagnostics: String,
+    /// Whether additional compiler diagnostics exceeded the retained limit.
+    pub(super) diagnostics_truncated: bool,
     /// First malformed, oversized, or out-of-scope protocol record observed.
     pub(super) protocol_error: Option<OrthohelpError>,
 }
@@ -30,15 +36,16 @@ struct CargoRecord {
     oversized: bool,
 }
 
-/// Drain Cargo JSON into an explicit diagnostic sink and locate the bridge binary.
+/// Drain bounded Cargo JSON and retain the bridge binary and compiler diagnostics.
 pub(super) fn read_cargo_messages<R: BufRead>(
     reader: &mut R,
     target: &GeneratedTarget<'_>,
-    diagnostic_sink: &mut impl Write,
 ) -> io::Result<CargoMessages> {
     let mut messages = CargoMessages {
         executable: None,
         generated_outputs: Vec::new(),
+        diagnostics: String::new(),
+        diagnostics_truncated: false,
         protocol_error: None,
     };
     while let Some(record) = read_record(reader)? {
@@ -46,9 +53,8 @@ pub(super) fn read_cargo_messages<R: BufRead>(
             set_protocol_error(&mut messages, "Cargo JSON record exceeded 128 KiB");
             continue;
         }
-        parse_record(&record.bytes, target, &mut messages, diagnostic_sink)?;
+        parse_record(&record.bytes, target, &mut messages);
     }
-    diagnostic_sink.flush()?;
 
     Ok(messages)
 }
@@ -86,40 +92,42 @@ fn read_record<R: BufRead>(reader: &mut R) -> io::Result<Option<CargoRecord>> {
 }
 
 /// Parse a bounded Cargo message and handle only diagnostics and artefacts.
-fn parse_record(
-    bytes: &[u8],
-    target: &GeneratedTarget<'_>,
-    messages: &mut CargoMessages,
-    stderr: &mut impl Write,
-) -> io::Result<()> {
+fn parse_record(bytes: &[u8], target: &GeneratedTarget<'_>, messages: &mut CargoMessages) {
     let value = match serde_json::from_slice::<Value>(bytes) {
         Ok(value) => value,
         Err(error) => {
             set_protocol_error(messages, &format!("invalid Cargo JSON record: {error}"));
-            return Ok(());
+            return;
         }
     };
 
     match value.get("reason").and_then(Value::as_str) {
-        Some("compiler-message") => forward_rendered_diagnostic(&value, stderr)?,
+        Some("compiler-message") => retain_rendered_diagnostic(&value, messages),
         Some("compiler-artifact") => {
             collect_executable(&value, target, messages);
         }
         _ => {}
     }
-    Ok(())
 }
 
-/// Forward Cargo's human-readable compiler diagnostic to the supervising stderr.
-fn forward_rendered_diagnostic(value: &Value, stderr: &mut impl Write) -> io::Result<()> {
-    if let Some(rendered) = value
+/// Retain rendered diagnostics up to the bound while continuing to drain Cargo.
+fn retain_rendered_diagnostic(value: &Value, messages: &mut CargoMessages) {
+    let Some(rendered) = value
         .get("message")
         .and_then(|message| message.get("rendered"))
         .and_then(Value::as_str)
-    {
-        stderr.write_all(rendered.as_bytes())?;
+    else {
+        return;
+    };
+    let remaining = MAX_CARGO_DIAGNOSTIC_BYTES.saturating_sub(messages.diagnostics.len());
+    let mut retained_bytes = rendered.len().min(remaining);
+    while !rendered.is_char_boundary(retained_bytes) {
+        retained_bytes -= 1;
     }
-    Ok(())
+    messages
+        .diagnostics
+        .push_str(rendered.get(..retained_bytes).unwrap_or_default());
+    messages.diagnostics_truncated |= retained_bytes < rendered.len();
 }
 
 /// Accept one compiler-artifact path when it identifies the expected binary.

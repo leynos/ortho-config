@@ -160,11 +160,9 @@ fn fixture_cargo_messages(
         directory: target,
         binary_name: options.binary_name,
     };
-    let mut diagnostics = Vec::new();
     Ok(super::super::protocol::read_cargo_messages(
         &mut reader,
         &generated_target,
-        &mut diagnostics,
     )?)
 }
 

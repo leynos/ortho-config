@@ -189,11 +189,13 @@ test-only and cannot be imported by the binary.
 Production bridge builds retain the configured compiler and documentation
 wrappers, applicable wrapper configuration, job limits, warning enforcement,
 and coverage instrumentation. Rust flags are not sanitized to create a separate
-fingerprint, and the default shared Cargo cache is unchanged. Cargo diagnostics
-are streamed to the supervising process while its JSON build records provide
-the executable path. The stable IR cache entry and path are unchanged;
-publication remains atomic and skips replacement when the existing file already
-contains identical content.
+fingerprint, and the default shared Cargo cache is unchanged. The Cargo JSON
+reader retains at most 1 MiB of rendered compiler diagnostics and indicates
+when output is truncated; it has no presentation sink. The `run_cargo` boundary
+forwards that bounded output to stderr after draining the records and prints a
+truncation notice when needed. The stable IR cache entry and path are
+unchanged; publication remains atomic and skips replacement when the existing
+file already contains identical content.
 
 Build-tool environment preparation uses a narrow, explicit allow-list separate
 from application environment isolation. It preserves the configured Cargo home,
