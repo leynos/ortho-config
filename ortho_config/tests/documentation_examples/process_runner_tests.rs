@@ -6,6 +6,11 @@ mod capture_tests;
 mod deadline_tests;
 #[path = "process_runner_test_probes.rs"]
 mod probes;
+#[cfg(target_os = "linux")]
+use super::tree::read_proc_stat;
+#[cfg(target_os = "linux")]
+#[path = "process_runner_tree_unix_tests.rs"]
+mod unix_tree_tests;
 
 use super::spawn_guard::SpawnGuard;
 use super::{
@@ -22,15 +27,16 @@ use std::time::{Duration, Instant};
 #[test]
 fn operation_policies_select_distinct_budgets() {
     let build = Policy::build();
-    let execution = Policy::execution();
+    let execution = execution_policy(Duration::from_secs(60), Duration::from_secs(2), 1024 * 1024);
     let discovery = Policy::discovery();
 
+    assert_eq!(build.timeout(), Duration::from_secs(596));
     assert!(build.timeout() > execution.timeout());
     assert!(execution.timeout() > discovery.timeout());
     assert_eq!(build.output_limit(), 1024 * 1024);
     assert_eq!(build.cleanup_timeout(), Duration::from_secs(2));
     assert_eq!(
-        execution.with_timeout(Duration::from_millis(7)).timeout(),
+        execution_policy(Duration::from_millis(7), Duration::from_secs(2), 1024).timeout(),
         Duration::from_millis(7)
     );
 }
@@ -41,7 +47,7 @@ fn timeout_diagnostic_keeps_bounded_output_and_truncation_evidence() -> Result<(
     let error = run_with_policy(
         &mut command,
         Operation("capture timeout probe"),
-        short_policy().with_output_limit(64),
+        execution_policy(Duration::from_millis(150), Duration::from_millis(700), 64),
     )
     .expect_err("the sleeping output probe should time out");
     let diagnostic = format!("{error:#}");
@@ -118,9 +124,7 @@ fn tree_completion_terminates_descendants_that_keep_output_pipes_open() -> Resul
     let output = run_with_policy(
         &mut command,
         Operation("terminate pipe-holding descendant"),
-        Policy::execution()
-            .with_timeout(Duration::from_secs(5))
-            .with_cleanup_timeout(Duration::from_secs(1)),
+        execution_policy(Duration::from_secs(5), Duration::from_secs(1), 1024 * 1024),
     )?;
     let elapsed = started.elapsed();
 
@@ -157,9 +161,7 @@ fn closed_pipe_writer_is_gone_before_success_and_external_process_survives() -> 
     let outcome = run_with_policy(
         &mut command,
         Operation("verify closed-pipe descendant completion"),
-        Policy::execution()
-            .with_timeout(Duration::from_secs(5))
-            .with_cleanup_timeout(Duration::from_secs(1)),
+        execution_policy(Duration::from_secs(5), Duration::from_secs(1), 1024 * 1024),
     );
     let elapsed = started.elapsed();
     let observations = (|| -> Result<_> {
@@ -167,8 +169,8 @@ fn closed_pipe_writer_is_gone_before_success_and_external_process_survives() -> 
             .read_to_string("writer-pid")?
             .parse::<u32>()?;
         Ok((
-            super::tree::process_is_active(writer_process_id)?,
-            super::tree::process_is_active(sentinel.id())?,
+            probes::process_is_active(writer_process_id)?,
+            probes::process_is_active(sentinel.id())?,
             coordination_dir.try_exists("writer-finished")?,
         ))
     })();
@@ -205,9 +207,11 @@ fn incomplete_runner_cleanup_reports_cancelled_readers() -> Result<()> {
     let error = run_with_hooks(
         &mut command,
         Operation("report bounded reader cancellation"),
-        Policy::execution()
-            .with_timeout(Duration::from_millis(100))
-            .with_cleanup_timeout(Duration::from_millis(200)),
+        execution_policy(
+            Duration::from_millis(100),
+            Duration::from_millis(200),
+            1024 * 1024,
+        ),
         RunHooks {
             observer: |_: &[u8]| {},
             poll: |child: &mut dyn ChildWrapper| child.try_wait(),
@@ -245,9 +249,7 @@ fn stdout_observer_receives_bytes_beyond_the_capture_limit() -> Result<()> {
     let output = run_with_observer(
         &mut command,
         Operation("observe complete output"),
-        Policy::execution()
-            .with_timeout(Duration::from_secs(5))
-            .with_output_limit(32),
+        execution_policy(Duration::from_secs(5), Duration::from_secs(2), 32),
         move |chunk| {
             observer_output
                 .lock()
@@ -311,10 +313,20 @@ impl CommandWrapper for FailingTreeWrapper {
     }
 }
 
-fn short_policy() -> Policy {
-    Policy::execution()
-        .with_timeout(Duration::from_millis(150))
-        .with_cleanup_timeout(Duration::from_millis(700))
+const fn execution_policy(
+    timeout: Duration,
+    cleanup_timeout: Duration,
+    output_limit: usize,
+) -> Policy {
+    Policy::new("execution", timeout, cleanup_timeout, output_limit)
+}
+
+const fn short_policy() -> Policy {
+    execution_policy(
+        Duration::from_millis(150),
+        Duration::from_millis(700),
+        1024 * 1024,
+    )
 }
 
 fn ensure_timeout_stream(diagnostic: &str, stream: &str, sentinel: &str) -> Result<()> {

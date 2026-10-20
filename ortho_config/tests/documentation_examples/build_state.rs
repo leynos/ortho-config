@@ -34,7 +34,12 @@ impl BuildState {
         let output = process_runner::run_with_policy(
             &mut command,
             Operation("discover documentation build cache"),
-            Policy::discovery().with_timeout(remaining.min(Policy::discovery().timeout())),
+            Policy::new(
+                "discovery",
+                remaining.min(Policy::discovery().timeout()),
+                Duration::from_secs(2),
+                1024 * 1024,
+            ),
         )?;
         ensure!(
             output.status.success(),

@@ -8,9 +8,14 @@ use cap_std::fs::PermissionsExt;
 use cap_std::fs_utf8::{Dir, OpenOptions};
 use serde_json::json;
 use std::io::{Cursor, Read, Write};
-use std::process::{Child, Command};
+use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
+
+#[path = "bridge_build_test_process.rs"]
+mod process;
+
+pub(super) use process::ProbeProcess;
 
 const PROBE_TARGET: &str = "ORTHOHELP_BRIDGE_PROBE_TARGET";
 const PROBE_OWNER: &str = "ORTHOHELP_BRIDGE_PROBE_OWNER";
@@ -19,9 +24,17 @@ const PROBE_SNAPSHOT: &str = "ORTHOHELP_BRIDGE_PROBE_SNAPSHOT";
 const PROBE_WAIT: Duration = Duration::from_secs(8);
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const OVERSIZED_CARGO_RECORD_CHUNK: [u8; 8192] = [b'x'; 8192];
+const FIXTURE_BINARY_NAME: &str = "orthohelp_bridge_fixture";
 
-pub(super) fn binary_file_name() -> String {
-    super::super::binary_file_name()
+#[derive(Clone, Copy)]
+struct FixtureOptions<'a> {
+    binary_name: &'a str,
+    owner: Option<&'a str>,
+    coordination: Option<&'a Utf8Path>,
+}
+
+pub(super) fn binary_file_name(binary_name: &str) -> String {
+    super::super::binary_file_name(binary_name)
 }
 
 pub(super) fn utf8_path(path: std::path::PathBuf) -> Result<Utf8PathBuf> {
@@ -73,11 +86,23 @@ pub(super) fn build_probe(
     mode: &str,
     target: &Utf8Path,
     snapshot: &Utf8Path,
+    binary_name: &str,
 ) -> Result<Utf8PathBuf> {
     Ok(super::super::build_and_snapshot_with(
         target,
         snapshot,
-        || fixture_cargo_build(mode, target, None, None),
+        binary_name,
+        || {
+            fixture_cargo_build(
+                mode,
+                target,
+                FixtureOptions {
+                    binary_name,
+                    owner: None,
+                    coordination: None,
+                },
+            )
+        },
     )?)
 }
 
@@ -106,10 +131,9 @@ fn test_process(filter: &str) -> Result<Command> {
 fn fixture_cargo_build(
     mode: &str,
     target: &Utf8Path,
-    owner: Option<&str>,
-    coordination: Option<&Utf8Path>,
+    options: FixtureOptions<'_>,
 ) -> std::result::Result<super::super::CargoBuild, super::super::CargoFailure> {
-    let messages = fixture_cargo_messages(mode, target, owner, coordination)
+    let messages = fixture_cargo_messages(mode, target, options)
         .map_err(|error| confirmed_fixture_failure(&error))?;
     Ok(super::super::CargoBuild {
         status: super::super::CargoStatus::Success,
@@ -120,13 +144,12 @@ fn fixture_cargo_build(
 fn fixture_cargo_messages(
     mode: &str,
     target: &Utf8Path,
-    owner: Option<&str>,
-    coordination: Option<&Utf8Path>,
+    options: FixtureOptions<'_>,
 ) -> Result<super::super::protocol::CargoMessages> {
     let executable = target
         .join("wasm32-unknown-unknown")
         .join("release")
-        .join(binary_file_name());
+        .join(binary_file_name(options.binary_name));
     let mut stream = Vec::new();
     if mode == "malformed" {
         stream.extend_from_slice(b"not-json\n");
@@ -136,25 +159,42 @@ fn fixture_cargo_messages(
         }
         stream.extend_from_slice(b"x\n");
     } else {
-        let identity = owner.unwrap_or("bridge fixture");
+        let identity = options.owner.unwrap_or("bridge fixture");
         create_directory_all(
             executable
                 .parent()
                 .context("finding fake artifact parent")?,
         )?;
         write_bytes(&executable, identity.as_bytes())?;
+        #[cfg(unix)]
         set_executable(&executable)?;
 
         if mode == "owned" {
-            publish_owner_started(identity, coordination.context("owner coordination path")?)?;
+            publish_owner_started(
+                identity,
+                options.coordination.context("owner coordination path")?,
+            )?;
         }
-        append_artifact_records(&mut stream, &executable)?;
+        append_artifact_records(&mut stream, &executable, options.binary_name)?;
+        if mode == "overlap" {
+            let ordinary_binary = executable
+                .parent()
+                .context("finding fake artifact parent")?
+                .join(binary_file_name("orthohelp_bridge"));
+            write_bytes(&ordinary_binary, b"ordinary workspace binary")?;
+        }
     }
 
     let mut reader = Cursor::new(stream);
+    let generated_target = super::super::GeneratedTarget {
+        directory: target,
+        binary_name: options.binary_name,
+    };
+    let mut diagnostics = Vec::new();
     Ok(super::super::protocol::read_cargo_messages(
         &mut reader,
-        target,
+        &generated_target,
+        &mut diagnostics,
     )?)
 }
 
@@ -172,11 +212,15 @@ fn publish_owner_started(owner: &str, coordination: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-fn append_artifact_records(stream: &mut Vec<u8>, executable: &Utf8Path) -> Result<()> {
+fn append_artifact_records(
+    stream: &mut Vec<u8>,
+    executable: &Utf8Path,
+    binary_name: &str,
+) -> Result<()> {
     for (name, kind, executable_path) in [
         ("fixture_dependency", "lib", None),
-        ("orthohelp_bridge", "lib", None),
-        ("orthohelp_bridge", "bin", Some(executable.as_str())),
+        (binary_name, "lib", None),
+        (binary_name, "bin", Some(executable.as_str())),
     ] {
         let record = json!({
             "reason": "compiler-artifact",
@@ -198,9 +242,18 @@ pub(super) fn run_owner_process() -> Result<()> {
         confirm_other_process_holds_lock(&target)?;
         write_bytes(&coordination.join("attempted-B"), b"attempted")?;
     }
-    let executable = super::super::build_and_snapshot_with(&target, &snapshot, || {
-        fixture_cargo_build("owned", &target, Some(&owner), Some(&coordination))
-    })?;
+    let executable =
+        super::super::build_and_snapshot_with(&target, &snapshot, FIXTURE_BINARY_NAME, || {
+            fixture_cargo_build(
+                "owned",
+                &target,
+                FixtureOptions {
+                    binary_name: FIXTURE_BINARY_NAME,
+                    owner: Some(&owner),
+                    coordination: Some(&coordination),
+                },
+            )
+        })?;
     let content = read_text(&executable)?;
     ensure!(
         content == owner,
@@ -258,31 +311,6 @@ impl Drop for ReleaseOwner {
     }
 }
 
-pub(super) struct ProbeProcess(Option<Child>);
-
-impl ProbeProcess {
-    pub(super) fn spawn(command: &mut Command) -> Result<Self> {
-        Ok(Self(Some(command.spawn()?)))
-    }
-
-    pub(super) fn wait(mut self) -> Result<()> {
-        let mut child = self
-            .0
-            .take()
-            .context("controlled probe process was already reaped")?;
-        wait_for_success(&mut child)
-    }
-}
-
-impl Drop for ProbeProcess {
-    fn drop(&mut self) {
-        if let Some(child) = self.0.as_mut() {
-            kill_probe(child);
-            reap_after_kill(child);
-        }
-    }
-}
-
 #[cfg(unix)]
 pub(super) fn ensure_executable(path: &Utf8Path) -> Result<()> {
     let (parent, name) = path_parts(path)?;
@@ -293,54 +321,6 @@ pub(super) fn ensure_executable(path: &Utf8Path) -> Result<()> {
         "snapshotted bridge lost execute permissions"
     );
     Ok(())
-}
-
-#[cfg(not(unix))]
-pub(super) fn ensure_executable(_path: &Utf8Path) -> Result<()> {
-    Ok(())
-}
-
-pub(super) fn wait_for_success(child: &mut Child) -> Result<()> {
-    let deadline = Instant::now() + PROBE_WAIT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                ensure!(status.success(), "probe process exited with {status}");
-                return Ok(());
-            }
-            Ok(None) if Instant::now() < deadline => thread::sleep(POLL_INTERVAL),
-            Ok(None) => {
-                kill_probe(child);
-                reap_after_kill(child);
-                anyhow::bail!("controlled owner process exceeded its bounded wait")
-            }
-            Err(error) => {
-                kill_probe(child);
-                reap_after_kill(child);
-                return Err(error).context("waiting for controlled owner process");
-            }
-        }
-    }
-}
-
-fn reap_after_kill(child: &mut Child) {
-    let deadline = Instant::now() + Duration::from_secs(1);
-    while Instant::now() < deadline {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) => thread::sleep(POLL_INTERVAL),
-            Err(error) => {
-                tracing::warn!(error = %error, "failed to reap controlled test probe");
-                break;
-            }
-        }
-    }
-}
-
-fn kill_probe(child: &mut Child) {
-    if let Err(error) = child.kill() {
-        tracing::warn!(error = %error, "failed to terminate controlled test probe");
-    }
 }
 
 fn env_path(name: &str) -> Result<Utf8PathBuf> {
@@ -357,10 +337,5 @@ fn set_executable(path: &Utf8Path) -> Result<()> {
     let mut permissions = file.metadata()?.permissions();
     permissions.set_mode(0o755);
     file.set_permissions(permissions)?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn set_executable(_path: &Utf8Path) -> Result<()> {
     Ok(())
 }

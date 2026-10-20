@@ -12,11 +12,11 @@ pub(super) enum ReadProgress {
     End,
 }
 
-pub(super) trait ReadHandle: AsRawHandle + Read + Send {}
+pub(crate) trait ReadHandle: AsRawHandle + Read + Send {}
 
 impl<PipeHandle> ReadHandle for PipeHandle where PipeHandle: AsRawHandle + Read + Send {}
 
-pub(super) trait Input: ReadHandle + 'static {}
+pub(crate) trait Input: ReadHandle + 'static {}
 
 impl<PipeHandle> Input for PipeHandle where PipeHandle: ReadHandle + 'static {}
 
@@ -25,10 +25,10 @@ pub(super) struct Pipe {
 }
 
 impl Pipe {
-    pub(super) fn new<PipeHandle: Input>(pipe: PipeHandle) -> io::Result<Self> {
-        Ok(Self {
+    pub(super) fn new<PipeHandle: Input>(pipe: PipeHandle) -> Self {
+        Self {
             pipe: Box::new(pipe),
-        })
+        }
     }
 
     pub(super) fn read(&mut self, buffer: &mut [u8]) -> io::Result<ReadProgress> {
@@ -37,7 +37,7 @@ impl Pipe {
         // SAFETY: the reader owns the open child pipe handle for this call;
         // PeekNamedPipe only observes available bytes and writes to `available`.
         let peek_result =
-            unsafe { PeekNamedPipe(handle, None, 0, None, Some(&mut available), None) };
+            unsafe { PeekNamedPipe(handle, None, 0, None, Some(&raw mut available), None) };
         match peek_result {
             Ok(()) if available == 0 => Ok(ReadProgress::Pending),
             Ok(()) => read_available(self.pipe.as_mut(), available, buffer),

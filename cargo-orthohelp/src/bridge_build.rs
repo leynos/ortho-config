@@ -25,8 +25,15 @@ use cleanup::OwnedChild;
 const LOCK_FILE: &str = "orthohelp-bridge-build.lock";
 /// Marker left behind when build ownership cannot be confirmed as complete.
 const MARKER_FILE: &str = "orthohelp-bridge-build.in-progress";
-/// Cargo target name whose reported executable is snapshotted.
-const BRIDGE_BINARY_NAME: &str = "orthohelp_bridge";
+
+/// Cargo output location and target identity for one generated bridge binary.
+#[derive(Clone, Copy)]
+pub(super) struct GeneratedTarget<'a> {
+    /// Selected Cargo target directory shared by bridge invocations.
+    pub(super) directory: &'a Utf8Path,
+    /// Explicit generated bin name, distinct from ordinary workspace targets.
+    pub(super) binary_name: &'a str,
+}
 
 /// Build the bridge with Cargo and copy the reported executable into a private
 /// run directory.
@@ -40,9 +47,16 @@ pub(super) fn build_and_snapshot(
     command: &mut Command,
     target_directory: &Utf8Path,
     snapshot_directory: &Utf8Path,
+    binary_name: &str,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
-    build_and_snapshot_with(target_directory, snapshot_directory, || {
-        run_cargo(command, target_directory)
+    build_and_snapshot_with(target_directory, snapshot_directory, binary_name, || {
+        run_cargo(
+            command,
+            GeneratedTarget {
+                directory: target_directory,
+                binary_name,
+            },
+        )
     })
 }
 
@@ -50,14 +64,19 @@ pub(super) fn build_and_snapshot(
 fn build_and_snapshot_with(
     target_directory: &Utf8Path,
     snapshot_directory: &Utf8Path,
+    binary_name: &str,
     run: impl FnOnce() -> Result<CargoBuild, CargoFailure>,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
-    let ownership = BuildOwnership::acquire(target_directory)?;
-    refuse_stale_marker(&ownership.directory, target_directory)?;
+    let target = GeneratedTarget {
+        directory: target_directory,
+        binary_name,
+    };
+    let ownership = BuildOwnership::acquire(target.directory)?;
+    refuse_stale_marker(&ownership.directory, target.directory)?;
     Dir::create_ambient_dir_all(snapshot_directory, ambient_authority())
         .map_err(|error| io_error(snapshot_directory, error))?;
     let snapshot = open_directory(snapshot_directory)?;
-    let marker = BuildMarker::create(&ownership.directory, target_directory)?;
+    let marker = BuildMarker::create(&ownership.directory, target.directory)?;
 
     let build = match run() {
         Ok(build) => build,
@@ -75,7 +94,7 @@ fn build_and_snapshot_with(
         }
     };
 
-    let result = snapshot::finish_build(build, target_directory, snapshot_directory, &snapshot);
+    let result = snapshot::finish_build(build, &target, snapshot_directory, &snapshot);
     match result {
         Ok(executable) => {
             marker.remove()?;
@@ -208,13 +227,13 @@ impl CargoFailure {
 /// Run Cargo with a piped JSON stream and return its status and parsed messages.
 fn run_cargo(
     command: &mut Command,
-    target_directory: &Utf8Path,
+    target: GeneratedTarget<'_>,
 ) -> Result<CargoBuild, CargoFailure> {
     command.stdout(Stdio::piped());
     command.stderr(Stdio::inherit());
     let child = command
         .spawn()
-        .map_err(|error| CargoFailure::confirmed(io_error(target_directory, error)))?;
+        .map_err(|error| CargoFailure::confirmed(io_error(target.directory, error)))?;
     let mut owned_child = OwnedChild::new(child);
     let Some(stdout) = owned_child.child.stdout.take() else {
         let primary = message_error("Cargo build stdout was not piped");
@@ -225,13 +244,13 @@ fn run_cargo(
     };
 
     let mut reader = BufReader::new(stdout);
-    let messages = match read_cargo_messages(&mut reader, target_directory) {
+    let messages = match read_cargo_messages(&mut reader, &target, &mut io::stderr().lock()) {
         Ok(messages) => messages,
         Err(error) => {
             drop(reader);
             let cleanup = owned_child.stop_bounded();
             return Err(CargoFailure::unconfirmed(with_cleanup_evidence(
-                io_error(target_directory, error),
+                io_error(target.directory, error),
                 &cleanup,
             )));
         }
@@ -243,7 +262,7 @@ fn run_cargo(
         Err(error) => {
             let cleanup = owned_child.stop_bounded();
             return Err(CargoFailure::unconfirmed(with_cleanup_evidence(
-                io_error(target_directory, error),
+                io_error(target.directory, error),
                 &cleanup,
             )));
         }
@@ -269,7 +288,7 @@ fn open_directory(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
 fn refuse_stale_marker(directory: &Dir, target_directory: &Utf8Path) -> Result<(), OrthohelpError> {
     match directory.symlink_metadata(MARKER_FILE) {
         Ok(_) => Err(message_error(&format!(
-            "bridge target requires owner recovery after an interrupted build: {}",
+            "bridge target requires owner recovery after an interrupted build: {}; confirm no Cargo or rustc process still uses the target directory, then remove the marker and rerun",
             target_directory.join(MARKER_FILE)
         ))),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -313,8 +332,8 @@ fn message_error(message: &str) -> OrthohelpError {
 }
 
 /// Return the bridge executable name with its host platform suffix.
-fn binary_file_name() -> String {
-    format!("{BRIDGE_BINARY_NAME}{}", std::env::consts::EXE_SUFFIX)
+fn binary_file_name(binary_name: &str) -> String {
+    format!("{binary_name}{}", std::env::consts::EXE_SUFFIX)
 }
 
 #[cfg(test)]

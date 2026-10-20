@@ -1,94 +1,22 @@
 //! End-to-end coverage for opt-in identifier artefact emission.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 use serial_test::serial;
 
-const TARGET_DIR: &str = "target/identifier-e2e";
+#[path = "documentation_examples/cargo_environment.rs"]
+mod cargo_environment;
+#[path = "documentation_examples/identifier_artefact_e2e_support.rs"]
+mod identifier_artefact_e2e_support;
+#[path = "documentation_examples/process_runner_build_support.rs"]
+mod process_runner;
 
-/// Builds the fixture crate, opting into artefact emission when `emit` is set.
-///
-/// The opt-in variable is removed rather than left unset so an inherited
-/// value from the surrounding environment cannot turn emission on for the
-/// negative case and make it pass vacuously.
-fn build_fixture(emit: bool) -> Result<()> {
-    let mut command = Command::new("cargo");
-    command
-        .args([
-            "build",
-            "-p",
-            "orthohelp_fixture",
-            "--target-dir",
-            TARGET_DIR,
-        ])
-        .env_remove("ORTHO_CONFIG_EMIT_IDENTIFIERS");
-    if emit {
-        command.env("ORTHO_CONFIG_EMIT_IDENTIFIERS", "1");
-    }
-    let status = command.status().context("run fixture build")?;
-    ensure!(status.success(), "fixture build should succeed");
-    Ok(())
-}
+use identifier_artefact_e2e_support::{
+    artefact, artefact_path, build_fixture, clean_fixture, fixture_cargo,
+};
 
-/// Removes the fixture's build output so the next build starts cold.
-fn clean_fixture() -> Result<()> {
-    let status = Command::new("cargo")
-        .args([
-            "clean",
-            "-p",
-            "orthohelp_fixture",
-            "--target-dir",
-            TARGET_DIR,
-        ])
-        .status()
-        .context("clean fixture build")?;
-    ensure!(status.success(), "fixture clean should succeed");
-    Ok(())
-}
-
-/// Locates the emitted identifier artefact under the fixture's build output.
-///
-/// `None` means no build ran rather than that emission was suppressed; the
-/// caller distinguishes the two when asserting on a negative case.
-fn artefact_path() -> Result<Option<PathBuf>> {
-    let build_root = Path::new(TARGET_DIR).join("debug/build");
-    if !build_root.exists() {
-        return Ok(None);
-    }
-    let build_entries = fs::read_dir(build_root)?;
-    for entry in build_entries {
-        let path = entry?.path().join("out/ortho-config/cli-identifiers.json");
-        if path.exists() {
-            return Ok(Some(path));
-        }
-    }
-    Ok(None)
-}
-
-/// Returns the emitted artefact's contents, failing when none was produced.
-fn artefact() -> Result<String> {
-    let path = artefact_path()?.context("fixture identifier artefact was not emitted")?;
-    fs::read_to_string(path).context("read identifier artefact")
-}
-
-/// Removes the fixture target directory so a build starts cold.
-///
-/// A warm build reuses the previous `OUT_DIR`, which would hide a failure to
-/// re-emit the artefact.
-fn reset_target_dir() -> Result<()> {
-    let target = Path::new(TARGET_DIR);
-    if target.exists() {
-        fs::remove_dir_all(target).context("remove stale identifier artefact target")?;
-    }
-    Ok(())
-}
-
-/// Returns the named field of an entry as a string, failing when absent.
 fn string_field<'a>(entry: &'a Value, key: &str, id: &str) -> Result<&'a str> {
     entry
         .get(key)
@@ -178,20 +106,17 @@ fn assert_entry_ownership(entries: &[Value]) -> Result<()> {
 #[test]
 #[serial]
 fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()> {
-    reset_target_dir()?;
+    let cargo = fixture_cargo()?;
+    clean_fixture(&cargo)?;
+    let first_out_dir = build_fixture(false, &cargo, None)?;
     ensure!(
-        artefact_path()?.is_none(),
-        "fresh build target must not contain a stale artefact"
-    );
-    build_fixture(false)?;
-    ensure!(
-        artefact_path()?.is_none(),
-        "fresh build without opt-in must not emit an identifier artefact"
+        artefact_path(&first_out_dir).is_none(),
+        "build without opt-in must not emit an identifier artefact"
     );
 
-    reset_target_dir()?;
-    build_fixture(true)?;
-    let first = artefact()?;
+    clean_fixture(&cargo)?;
+    let opt_in_out_dir = build_fixture(true, &cargo, None)?;
+    let first = artefact(&opt_in_out_dir)?;
     let document: Value = serde_json::from_str(&first)?;
     ensure!(
         document.get("schema_version") == Some(&Value::from(1)),
@@ -226,20 +151,20 @@ fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()>
         "no identifier may use a hyphenated `long-help` suffix",
     );
 
-    build_fixture(false)?;
+    build_fixture(false, &cargo, Some(&opt_in_out_dir))?;
     ensure!(
-        artefact()? == first,
+        artefact(&opt_in_out_dir)? == first,
         "warm build without opt-in must not rewrite artefact"
     );
 
-    clean_fixture()?;
+    clean_fixture(&cargo)?;
     ensure!(
-        artefact_path()?.is_none(),
+        artefact_path(&opt_in_out_dir).is_none(),
         "clean must remove the previous opt-in artefact"
     );
-    build_fixture(true)?;
+    let rebuilt_out_dir = build_fixture(true, &cargo, None)?;
     ensure!(
-        artefact()? == first,
+        artefact(&rebuilt_out_dir)? == first,
         "forced opt-in rebuild must recreate the identifier artefact"
     );
     Ok(())

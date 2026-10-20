@@ -79,6 +79,7 @@ fn cargo_dispatch_path_prepends_fixture_to_inherited_entries() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial(documentation_build)]
 fn independently_owned_workspaces_support_concurrent_interleavings() -> Result<()> {
     std::thread::scope(|scope| {
         let first = scope.spawn(|| exercise_workspace_interleavings("first", "updated-first"));

@@ -96,13 +96,7 @@ impl BuildCache {
         request: BuildRequest<'_>,
         prepare: impl FnOnce(&Path, Instant) -> Result<Command>,
     ) -> Result<BTreeMap<String, PathBuf>> {
-        let BuildRequest {
-            package,
-            destination,
-            started,
-            timeout,
-        } = request;
-        let deadline = started + timeout;
+        let deadline = request.started + request.timeout;
         let _ownership = self.acquire(deadline)?;
         let directory = Dir::open_ambient_dir(&self.root, ambient_authority())?;
         // An interrupted build may leave a compiler owned by an external
@@ -116,49 +110,64 @@ impl BuildCache {
             "build.in-progress",
             format!(
                 "workspace={} pid={}\n",
-                package.display(),
+                request.package.display(),
                 std::process::id()
             ),
         )?;
-        // An external admission service may still be cancelling compiler
-        // writers after the owned adapter tree has drained.
         let mut is_build_lifetime_unconfirmed = false;
-        let result = (|| {
-            let mut command = prepare(&self.root, deadline)?;
-            let artifacts = Arc::new(Mutex::new(Artifacts::default()));
-            let observed = Arc::clone(&artifacts);
-            let remaining = deadline
-                .checked_duration_since(Instant::now())
-                .context("documentation build deadline elapsed during preparation")?;
-            is_build_lifetime_unconfirmed = true;
-            let output = process_runner::run_with_observer(
-            &mut command, Operation("build documented Rust and snapshot executables"),
-            Policy::build().with_timeout(remaining),
-            move |bytes| {
-                observe_artifacts(&observed, bytes);
-            },
-        ).with_context(|| format!(
-            "workspace={} cache={} lock_wait_included=true elapsed={:?} deadline={timeout:?}",
-            package.display(), self.root.display(), started.elapsed(),
-        ))?;
-            is_build_lifetime_unconfirmed = false;
-            ensure!(
-                output.status.success(),
-                "documented Rust failed to compile:\nstdout (Cargo JSON):\n{}\nstderr:\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            ensure!(
-                Instant::now() < deadline,
-                "documentation build deadline elapsed before snapshot"
-            );
-            let snapshots = artifacts
-                .lock()
-                .map_err(|_| anyhow!("Cargo artefact observer was poisoned"))?
-                .snapshot(destination)?;
-            Ok(snapshots)
-        })();
+        let result = self.run_and_snapshot(request, prepare, &mut is_build_lifetime_unconfirmed);
         finish_observed_build(&directory, result, is_build_lifetime_unconfirmed)
+    }
+
+    fn run_and_snapshot(
+        &self,
+        request: BuildRequest<'_>,
+        prepare: impl FnOnce(&Path, Instant) -> Result<Command>,
+        is_build_lifetime_unconfirmed: &mut bool,
+    ) -> Result<BTreeMap<String, PathBuf>> {
+        let deadline = request.started + request.timeout;
+        let mut command = prepare(&self.root, deadline)?;
+        let artifacts = Arc::new(Mutex::new(Artifacts::default()));
+        let observed = Arc::clone(&artifacts);
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .context("documentation build deadline elapsed during preparation")?;
+        *is_build_lifetime_unconfirmed = true;
+        let output = process_runner::run_with_observer(
+            &mut command,
+            Operation("build documented Rust and snapshot executables"),
+            Policy::new(
+                "build",
+                remaining.min(Policy::build().timeout()),
+                Duration::from_secs(2),
+                1024 * 1024,
+            ),
+            move |bytes| observe_artifacts(&observed, bytes),
+        )
+        .with_context(|| {
+            format!(
+                "workspace={} cache={} lock_wait_included=true elapsed={:?} deadline={:?}",
+                request.package.display(),
+                self.root.display(),
+                request.started.elapsed(),
+                request.timeout,
+            )
+        })?;
+        *is_build_lifetime_unconfirmed = false;
+        ensure!(
+            output.status.success(),
+            "documented Rust failed to compile:\nstdout (Cargo JSON):\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        ensure!(
+            Instant::now() < deadline,
+            "documentation build deadline elapsed before snapshot"
+        );
+        artifacts
+            .lock()
+            .map_err(|_| anyhow!("Cargo artefact observer was poisoned"))?
+            .snapshot(request.destination)
     }
 }
 

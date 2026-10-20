@@ -1,16 +1,15 @@
 //! Regression coverage for Cargo command preparation and host discovery.
 
-use super::{
-    CARGO_ENV_ALLOWLIST, allowed_environment, cargo_command, first_output_line,
-    prepare_cargo_command, run_process, run_process_before,
-};
+use super::{CARGO_ENV_ALLOWLIST, cargo_command, prepare_cargo_command_for_target_before};
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+use super::{allowed_environment, first_output_line};
 use crate::process_runner::{self, Operation, Policy};
 use anyhow::ensure;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 const SECRET_NAME: &str = "ORTHO_CONFIG_DOCUMENTATION_TEST_SECRET";
@@ -77,8 +76,8 @@ fn metadata_command_preserves_caller_target_directories() {
 }
 
 #[test]
-fn cargo_child_does_not_observe_an_application_secret() {
-    let mut command = current_test_executable();
+fn cargo_child_does_not_observe_an_application_secret() -> anyhow::Result<()> {
+    let mut command = current_test_executable()?;
     command.env(SECRET_NAME, "must-not-leak");
     super::cargo_environment::CargoEnvironment::build().apply(&mut command);
     command.args(["--ignored", "--nocapture", "cargo_environment_probe"]);
@@ -86,13 +85,13 @@ fn cargo_child_does_not_observe_an_application_secret() {
         &mut command,
         Operation("run sanitized build environment probe"),
         Policy::discovery(),
-    )
-    .expect("the sanitized build environment probe should run");
-    assert!(output.status.success(), "probe failed: {output:?}");
-    assert!(
+    )?;
+    ensure!(output.status.success(), "probe failed: {output:?}");
+    ensure!(
         String::from_utf8_lossy(&output.stdout).contains(&format!("{SECRET_NAME}=<absent>")),
         "application secret reached the build child: {output:?}"
     );
+    Ok(())
 }
 
 #[test]
@@ -106,50 +105,29 @@ fn cargo_environment_probe() {
 }
 
 #[test]
-fn discovery_process_start_failures_are_reported() {
-    let mut command = Command::new("ortho-config-documentation-command-that-does-not-exist");
-    let error = run_process(&mut command, Operation("discover the MSVC toolchain"))
-        .expect_err("a missing discovery command should return an error");
-    let message = format!("{error:#}");
-    assert!(message.contains("discover the MSVC toolchain: start subprocess"));
-}
-
-#[test]
-fn preparation_process_failures_are_reported() {
-    let mut command = current_test_executable();
-    command.args(["--ignored", "--nocapture", "process_failure_probe"]);
-    let error = run_process(&mut command, Operation("prepare the MSVC environment"))
-        .expect_err("a failed preparation command should return an error");
-    let message = format!("{error:#}");
-    assert!(message.contains("prepare the MSVC environment: subprocess failed"));
-}
-
-#[test]
-fn discovery_rejects_an_expired_overall_deadline_before_spawning() {
-    let mut command = Command::new("ortho-config-documentation-command-that-does-not-exist");
-    let error = run_process_before(
-        &mut command,
-        Operation("discover the MSVC toolchain"),
-        Instant::now(),
-    )
-    .expect_err("an expired discovery deadline should not spawn a child");
-    assert!(format!("{error:#}").contains("Cargo discovery deadline elapsed"));
-}
-
-#[test]
-#[ignore = "executed as a failing subprocess"]
-fn process_failure_probe() {
-    std::process::exit(23);
-}
-
-#[test]
 fn concurrent_cargo_preparation_isolates_state_directories() -> anyhow::Result<()> {
     let first_state = TempDir::new()?;
     let second_state = TempDir::new()?;
+    let first_target = first_state.path().join("target");
+    let second_target = second_state.path().join("target");
+    let deadline = Instant::now() + Duration::from_secs(30);
     let (first_result, second_result) = std::thread::scope(|scope| {
-        let first = scope.spawn(|| prepare_cargo_command(first_state.path(), first_state.path()));
-        let second =
-            scope.spawn(|| prepare_cargo_command(second_state.path(), second_state.path()));
+        let first = scope.spawn(|| {
+            prepare_cargo_command_for_target_before(
+                first_state.path(),
+                first_state.path(),
+                &first_target,
+                deadline,
+            )
+        });
+        let second = scope.spawn(|| {
+            prepare_cargo_command_for_target_before(
+                second_state.path(),
+                second_state.path(),
+                &second_target,
+                deadline,
+            )
+        });
         (
             first
                 .join()
@@ -161,8 +139,6 @@ fn concurrent_cargo_preparation_isolates_state_directories() -> anyhow::Result<(
     });
     let first_command = first_result?;
     let second_command = second_result?;
-    let first_target = first_state.path().join("target");
-    let second_target = second_state.path().join("target");
     ensure!(
         command_env(&first_command, "CARGO_TARGET_DIR") == Some(first_target.as_os_str()),
         "first Cargo command should use its own state directory"
@@ -179,6 +155,7 @@ fn concurrent_cargo_preparation_isolates_state_directories() -> anyhow::Result<(
     Ok(())
 }
 
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 #[test]
 fn visual_studio_discovery_uses_the_first_reported_linker() {
     let output = b"C:\\Visual Studio\\link.exe\r\nC:\\Other\\link.exe\r\n";
@@ -188,6 +165,7 @@ fn visual_studio_discovery_uses_the_first_reported_linker() {
     );
 }
 
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 #[test]
 fn visual_studio_environment_keeps_only_build_variables() {
     let environment = concat!(
@@ -204,10 +182,8 @@ fn visual_studio_environment_keeps_only_build_variables() {
     );
 }
 
-fn current_test_executable() -> Command {
-    Command::new(
-        std::env::current_exe().expect("the integration-test executable should have a path"),
-    )
+fn current_test_executable() -> anyhow::Result<Command> {
+    Ok(Command::new(std::env::current_exe()?))
 }
 
 fn command_env<'a>(command: &'a Command, key: &str) -> Option<&'a OsStr> {

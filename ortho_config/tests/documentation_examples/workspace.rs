@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 use super::documentation_examples::{DocumentedExample, is_valid_example_id};
@@ -16,6 +16,7 @@ use crate::process_runner::{self, Operation};
 mod build_cache;
 #[path = "build_state.rs"]
 mod build_state;
+#[path = "cargo_runner_test_support.rs"]
 pub(super) mod cargo_runner;
 #[path = "scenario.rs"]
 mod scenario;
@@ -237,9 +238,11 @@ impl ExampleWorkspace {
         process_runner::run_with_policy(
             &mut command,
             Operation(&operation),
-            process_runner::Policy::execution().with_timeout(
-                scenario::remaining(self.deadline)?
-                    .min(process_runner::Policy::execution().timeout()),
+            process_runner::Policy::new(
+                "execution",
+                scenario::remaining(self.deadline)?.min(Duration::from_secs(60)),
+                Duration::from_secs(2),
+                1024 * 1024,
             ),
         )
     }
@@ -296,10 +299,13 @@ impl ExampleWorkspace {
                 process_runner::run_with_policy(
                     &mut command,
                     Operation(&operation),
-                    process_runner::Policy::execution().with_timeout(
+                    process_runner::Policy::new(
+                        "execution",
                         scenario::remaining(self.deadline)?
                             .min(remaining)
-                            .min(process_runner::Policy::execution().timeout()),
+                            .min(Duration::from_secs(60)),
+                        Duration::from_secs(2),
+                        1024 * 1024,
                     ),
                 )
             },

@@ -8,6 +8,92 @@ use std::io::Write;
 use std::process::Stdio;
 use std::time::Duration;
 
+#[cfg(unix)]
+pub(super) fn process_is_active(process_id: u32) -> std::io::Result<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        let proc_directory = Dir::open_ambient_dir("/proc", ambient_authority())?;
+        let stat_path = format!("{process_id}/stat");
+        let stat = match proc_directory.read_to_string(stat_path.as_str()) {
+            Ok(stat) => stat,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound
+                    || error.raw_os_error() == Some(nix::libc::ESRCH) =>
+            {
+                return Ok(false);
+            }
+            Err(error) => return Err(error),
+        };
+        let (_, fields) = stat
+            .rsplit_once(')')
+            .ok_or_else(|| std::io::Error::other("malformed process stat"))?;
+        let state = fields
+            .split_whitespace()
+            .next()
+            .and_then(|value| value.chars().next())
+            .ok_or_else(|| std::io::Error::other("missing process state"))?;
+        Ok(!matches!(state, 'Z' | 'X'))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let raw_process_id =
+            i32::try_from(process_id).map_err(|_| std::io::Error::other("invalid process ID"))?;
+        match nix::sys::signal::kill(nix::unistd::Pid::from_raw(raw_process_id), None) {
+            Ok(()) => Ok(true),
+            Err(nix::errno::Errno::ESRCH) => Ok(false),
+            Err(error) => Err(std::io::Error::from(error)),
+        }
+    }
+}
+
+#[cfg(windows)]
+pub(super) fn process_is_active(process_id: u32) -> std::io::Result<bool> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows::Win32::Foundation::{
+        ERROR_INVALID_PARAMETER, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    };
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    };
+    use windows::core::HRESULT;
+
+    // SAFETY: the process query is limited to the test-owned probe PID.
+    let raw_process = match unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            false,
+            process_id,
+        )
+    } {
+        Ok(raw_process) => raw_process,
+        Err(error) if error.code() == HRESULT::from_win32(ERROR_INVALID_PARAMETER.0) => {
+            return Ok(false);
+        }
+        Err(error) => return Err(std::io::Error::other(error.to_string())),
+    };
+    // SAFETY: OpenProcess returned an owned process handle.
+    let process_handle = unsafe { OwnedHandle::from_raw_handle(raw_process.0.cast()) };
+    // SAFETY: the handle remains valid and a zero timeout never blocks.
+    let state = unsafe {
+        WaitForSingleObject(
+            windows::Win32::Foundation::HANDLE(process_handle.as_raw_handle().cast()),
+            0,
+        )
+    };
+    if state == WAIT_TIMEOUT {
+        Ok(true)
+    } else if state == WAIT_OBJECT_0 {
+        Ok(false)
+    } else if state == WAIT_FAILED {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Err(std::io::Error::other(format!(
+            "unexpected process wait result: {}",
+            state.0
+        )))
+    }
+}
+
 #[test]
 #[ignore = "executed as a bounded output timeout subprocess"]
 fn output_then_sleep_probe() {

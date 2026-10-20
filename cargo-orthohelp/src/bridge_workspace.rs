@@ -1,11 +1,22 @@
 //! Private generated bridge inputs with independently selected compiler state.
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 use super::{BridgeCache, BridgeConfig, BridgePaths};
 use crate::error::OrthohelpError;
+use crate::hex::to_lower_hex;
+
+/// Prefix keeps generated bridge outputs apart from ordinary workspace bins.
+const BRIDGE_BINARY_PREFIX: &str = "orthohelp_bridge_workspace_";
+
+/// Derive a stable generated target name from its package's resolved path.
+pub(super) fn bridge_binary_target_name(package_root: &Utf8Path) -> String {
+    let root_digest = Sha256::digest(package_root.as_str().as_bytes());
+    format!("{BRIDGE_BINARY_PREFIX}{}", to_lower_hex(&root_digest))
+}
 
 /// Keep generated inputs and the executed snapshot alive for one CLI invocation.
 pub(super) struct BridgeWorkspace {
@@ -17,7 +28,10 @@ pub(super) struct BridgeWorkspace {
 
 impl BridgeWorkspace {
     /// Allocate private files while sharing only Cargo's selected target.
-    pub(super) fn new(cache: &BridgeCache) -> Result<Self, OrthohelpError> {
+    pub(super) fn new(
+        cache: &BridgeCache,
+        package_root: &Utf8Path,
+    ) -> Result<Self, OrthohelpError> {
         Dir::create_ambient_dir_all(&cache.cache_dir, ambient_authority()).map_err(|source| {
             OrthohelpError::Io {
                 path: cache.cache_dir.clone(),
@@ -40,6 +54,7 @@ impl BridgeWorkspace {
                 manifest_path: bridge_dir.join("Cargo.toml"),
                 bridge_dir,
                 target_dir: cache.target_dir.clone(),
+                binary_name: bridge_binary_target_name(package_root),
             },
             _owner: owner,
         })

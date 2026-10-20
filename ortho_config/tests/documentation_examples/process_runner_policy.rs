@@ -2,73 +2,49 @@
 
 use std::time::Duration;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Kind {
-    Build,
-    Execution,
-    Discovery,
-}
-
-impl Kind {
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Build => "build",
-            Self::Execution => "execution",
-            Self::Discovery => "discovery",
-        }
-    }
-}
-
 /// Bounds one documentation-test operation and its cleanup.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Policy {
-    kind: Kind,
+    kind: &'static str,
     timeout: Duration,
     cleanup_timeout: Duration,
     output_limit: usize,
 }
 
 impl Policy {
-    /// Retain the existing ten-minute ceiling until measured build timing can replace it.
+    /// Fit inside the fixed scenario envelope after its cleanup reservations.
     pub(crate) const fn build() -> Self {
-        Self::new(Kind::Build, Duration::from_secs(600))
-    }
-
-    /// Bound execution independently from compilation and discovery.
-    pub(crate) const fn execution() -> Self {
-        Self::new(Kind::Execution, Duration::from_secs(60))
+        Self::new(
+            "build",
+            Duration::from_secs(596),
+            Duration::from_secs(2),
+            1024 * 1024,
+        )
     }
 
     /// Bound executable discovery independently from compilation and execution.
     pub(crate) const fn discovery() -> Self {
-        Self::new(Kind::Discovery, Duration::from_secs(30))
+        Self::new(
+            "discovery",
+            Duration::from_secs(30),
+            Duration::from_secs(2),
+            1024 * 1024,
+        )
     }
 
-    const fn new(kind: Kind, timeout: Duration) -> Self {
+    /// Select an operation's hard deadline, cleanup allowance and capture bound.
+    pub(crate) const fn new(
+        kind: &'static str,
+        timeout: Duration,
+        cleanup_timeout: Duration,
+        output_limit: usize,
+    ) -> Self {
         Self {
             kind,
             timeout,
-            cleanup_timeout: Duration::from_secs(2),
-            output_limit: 1024 * 1024,
+            cleanup_timeout,
+            output_limit,
         }
-    }
-
-    /// Override the operation deadline for a controlled probe.
-    pub(crate) const fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
-    /// Override the bounded cleanup allowance for a controlled probe.
-    pub(crate) const fn with_cleanup_timeout(mut self, timeout: Duration) -> Self {
-        self.cleanup_timeout = timeout;
-        self
-    }
-
-    /// Override per-stream capture for a controlled probe.
-    pub(crate) const fn with_output_limit(mut self, output_limit: usize) -> Self {
-        self.output_limit = output_limit;
-        self
     }
 
     pub(crate) const fn timeout(self) -> Duration {
@@ -84,6 +60,6 @@ impl Policy {
     }
 
     pub(crate) const fn kind_name(self) -> &'static str {
-        self.kind.name()
+        self.kind
     }
 }

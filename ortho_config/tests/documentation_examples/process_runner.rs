@@ -4,29 +4,29 @@
 //! Callers remain responsible for command construction and environment policy.
 
 #[path = "process_runner_capture.rs"]
-mod capture;
+pub(crate) mod capture;
 #[path = "process_runner_cleanup.rs"]
 mod cleanup;
 #[path = "process_runner_diagnostics.rs"]
 mod diagnostics;
 #[cfg(unix)]
 #[path = "process_runner_pipe_unix.rs"]
-mod pipe;
+pub(crate) mod pipe;
 #[cfg(windows)]
 #[path = "process_runner_pipe_windows.rs"]
-mod pipe;
+pub(crate) mod pipe;
 #[path = "process_runner_policy.rs"]
 mod process_policy;
 #[path = "process_runner_spawn_guard.rs"]
-mod spawn_guard;
+pub(crate) mod spawn_guard;
 #[cfg(unix)]
 #[path = "process_runner_tree_unix.rs"]
-mod tree;
+pub(crate) mod tree;
 #[cfg(windows)]
 #[path = "process_runner_tree_windows.rs"]
-mod tree;
+pub(crate) mod tree;
 #[path = "process_runner_wait.rs"]
-mod wait;
+pub(crate) mod wait;
 
 use diagnostics::{capture_snapshots, environment_evidence, stream_bytes, workspace_identity};
 pub(crate) use process_policy::Policy;
@@ -54,14 +54,14 @@ struct RunContext {
     process_id: u32,
 }
 
-struct RunHooks<Observer, Poll, Kill> {
-    observer: Observer,
-    poll: Poll,
-    kill: Kill,
+pub(crate) struct RunHooks<Observer, Poll, Kill> {
+    pub(crate) observer: Observer,
+    pub(crate) poll: Poll,
+    pub(crate) kill: Kill,
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Operation<'a>(pub(super) &'a str);
+pub(crate) struct Operation<'a>(pub(crate) &'a str);
 
 #[derive(Debug)]
 struct IncompleteCleanup;
@@ -126,7 +126,7 @@ fn kill_child(child: &mut dyn ChildWrapper) -> io::Result<()> {
     child.start_kill()
 }
 
-fn run_with_hooks<Observer, Poll, Kill>(
+pub(crate) fn run_with_hooks<Observer, Poll, Kill>(
     command: &mut Command,
     Operation(operation_name): Operation<'_>,
     policy: Policy,
@@ -272,7 +272,7 @@ where
     Ok(())
 }
 
-fn spawn_owned(command: Command) -> Result<Box<dyn ChildWrapper>> {
+pub(crate) fn spawn_owned(command: Command) -> Result<Box<dyn ChildWrapper>> {
     let mut wrapped_command = CommandWrap::from(command);
     let guard = SpawnGuard::new();
     guard.install(&mut wrapped_command);
@@ -286,7 +286,7 @@ fn spawn_owned(command: Command) -> Result<Box<dyn ChildWrapper>> {
     finish_wrapped_spawn(&mut wrapped_command, &guard)
 }
 
-fn finish_wrapped_spawn(
+pub(crate) fn finish_wrapped_spawn(
     command: &mut CommandWrap,
     guard: &SpawnGuard,
 ) -> Result<Box<dyn ChildWrapper>> {
@@ -311,7 +311,3 @@ fn finish_wrapped_spawn(
         Err(unwrapped_spawn_error) => Err(unwrapped_spawn_error.into()),
     }
 }
-
-#[cfg(test)]
-#[path = "process_runner_tests.rs"]
-mod tests;

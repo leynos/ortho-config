@@ -4,7 +4,7 @@ use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use std::io::{self, Read};
 use std::os::fd::AsFd;
 
-pub(super) trait Input: AsFd + Read + Send + 'static {}
+pub(crate) trait Input: AsFd + Read + Send + 'static {}
 
 impl<PipeHandle> Input for PipeHandle where PipeHandle: AsFd + Read + Send + 'static {}
 

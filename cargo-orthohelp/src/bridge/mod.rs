@@ -40,6 +40,8 @@ pub struct BridgePaths {
     pub manifest_path: Utf8PathBuf,
     /// Independently selected Cargo target directory for build artefacts.
     pub target_dir: Utf8PathBuf,
+    /// Generated target name that is distinct from a workspace's default bin.
+    pub binary_name: String,
 }
 
 /// Inputs needed to generate the bridge crate source.
@@ -58,10 +60,11 @@ pub struct BridgeConfig {
 
 /// Constructs bridge paths for the provided cache key.
 pub fn prepare_cache(selection: &PackageSelection, cache_key: &CacheKey) -> BridgeCache {
+    let cache_key_hash = cache_key.hash();
     let cache_dir = selection
         .target_directory
         .join("orthohelp")
-        .join(cache_key.hash());
+        .join(cache_key_hash);
     BridgeCache {
         ir_path: cache_dir.join("ir.json"),
         cache_dir,
@@ -90,7 +93,7 @@ pub fn load_or_build_ir(
         }
     }
 
-    let workspace = BridgeWorkspace::new(paths)?;
+    let workspace = BridgeWorkspace::new(paths, &config.package_root)?;
     let private_paths = &workspace.paths;
     ensure_bridge_layout(private_paths)?;
     workspace.seed_lockfile(config)?;
@@ -101,6 +104,7 @@ pub fn load_or_build_ir(
         &mut build_bridge_command(private_paths, &environment),
         &private_paths.target_dir,
         &private_paths.bridge_dir.join("run"),
+        &private_paths.binary_name,
     )?;
     let ir_json = run_bridge(&executable)?;
     write_ir_cache(paths, &ir_json)?;
@@ -167,18 +171,26 @@ fn append_ortho_config_dependency(
 
 /// Generates and writes the ephemeral bridge `Cargo.toml`.
 fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
-    let mut manifest = String::from(concat!(
-        "[package]\n",
-        "name = \"orthohelp_bridge\"\n",
-        "version = \"0.1.0\"\n",
-        "edition = \"2024\"\n",
-        "publish = false\n",
-        "\n",
-        "[workspace]\n",
-        "\n",
-        "[dependencies]\n",
-        "serde_json = \"1\"\n",
-    ));
+    let mut manifest = format!(
+        concat!(
+            "[package]\n",
+            "name = \"orthohelp_bridge\"\n",
+            "version = \"0.1.0\"\n",
+            "edition = \"2024\"\n",
+            "autobins = false\n",
+            "publish = false\n",
+            "\n",
+            "[[bin]]\n",
+            "name = {:?}\n",
+            "path = \"src/main.rs\"\n",
+            "\n",
+            "[workspace]\n",
+            "\n",
+            "[dependencies]\n",
+            "serde_json = \"1\"\n",
+        ),
+        paths.binary_name
+    );
 
     writeln!(
         manifest,
@@ -247,6 +259,8 @@ fn build_bridge_command(paths: &BridgePaths, environment: &BuildEnvironment) -> 
     let mut command = Command::new("cargo");
     command
         .args(["build", "--message-format=json-render-diagnostics"])
+        .arg("--bin")
+        .arg(&paths.binary_name)
         .arg("--manifest-path")
         .arg(paths.manifest_path.as_str())
         .arg("--target-dir")

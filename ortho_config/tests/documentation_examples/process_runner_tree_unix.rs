@@ -6,8 +6,6 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 #[cfg(not(target_os = "linux"))]
 use nix::errno::Errno;
-#[cfg(not(target_os = "linux"))]
-use nix::sys::signal::kill;
 use nix::sys::signal::{Signal, killpg};
 #[cfg(any(
     target_os = "linux",
@@ -256,7 +254,9 @@ fn group_has_writers(group: Pid) -> io::Result<bool> {
 }
 
 #[cfg(target_os = "linux")]
-fn read_proc_stat(read: impl FnOnce() -> io::Result<String>) -> io::Result<Option<String>> {
+pub(crate) fn read_proc_stat(
+    read: impl FnOnce() -> io::Result<String>,
+) -> io::Result<Option<String>> {
     match read() {
         Ok(stat) => Ok(Some(stat)),
         Err(error) if process_entry_disappeared(&error) => Ok(None),
@@ -297,38 +297,3 @@ fn proc_stat_has_writer(stat: &str, group: i32) -> io::Result<bool> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing proc group ID"))?;
     Ok(process_group == group && !matches!(state, 'Z' | 'X'))
 }
-
-pub(super) fn process_is_active(process_id: u32) -> io::Result<bool> {
-    #[cfg(target_os = "linux")]
-    {
-        let proc_directory = Dir::open_ambient_dir("/proc", ambient_authority())?;
-        let stat_path = format!("{process_id}/stat");
-        let Some(stat) = read_proc_stat(|| proc_directory.read_to_string(stat_path.as_str()))?
-        else {
-            return Ok(false);
-        };
-        let (_, fields) = stat
-            .rsplit_once(')')
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "malformed proc stat"))?;
-        let state = fields
-            .split_whitespace()
-            .next()
-            .and_then(|value| value.chars().next())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing proc state"))?;
-        Ok(!matches!(state, 'Z' | 'X'))
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let raw_process_id = i32::try_from(process_id)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid process ID"))?;
-        match kill(Pid::from_raw(raw_process_id), None) {
-            Ok(()) => Ok(true),
-            Err(Errno::ESRCH) => Ok(false),
-            Err(error) => Err(io::Error::from(error)),
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[path = "process_runner_tree_unix_tests.rs"]
-mod tests;

@@ -16,6 +16,7 @@ fn dummy_paths() -> BridgePaths {
         bridge_dir: Utf8PathBuf::from("/tmp/bridge"),
         manifest_path: Utf8PathBuf::from("/tmp/bridge/Cargo.toml"),
         target_dir: Utf8PathBuf::from("/tmp/bridge/target"),
+        binary_name: "orthohelp_bridge_test".to_owned(),
     }
 }
 
@@ -66,6 +67,16 @@ fn build_bridge_command_applies_the_selected_build_environment() {
     ]);
     let environment = BuildEnvironment::from_lookup(|name| supplied.get(name).cloned());
     let command = build_bridge_command(&dummy_paths(), &environment);
+    let arguments = command.get_args().collect::<Vec<_>>();
+    assert!(arguments.windows(2).any(|pair| {
+        pair.first()
+            .copied()
+            .is_some_and(|argument| argument == OsStr::new("--bin"))
+            && pair
+                .get(1)
+                .copied()
+                .is_some_and(|argument| argument == OsStr::new("orthohelp_bridge_test"))
+    }));
     let selected = command
         .get_envs()
         .filter_map(|(name, environment_value)| {
@@ -86,6 +97,58 @@ fn build_bridge_command_applies_the_selected_build_environment() {
         Some(&OsStr::new("4"))
     );
     assert!(!selected.contains_key(OsStr::new("APPLICATION_SECRET")));
+}
+
+#[test]
+fn generated_binary_names_are_stable_and_scoped_to_the_package_path() {
+    let package_root = camino::Utf8Path::new("/workspace/application");
+    let binary_name = workspace::bridge_binary_target_name(package_root);
+    let other_binary_name =
+        workspace::bridge_binary_target_name(camino::Utf8Path::new("/workspace/other-application"));
+
+    assert!(binary_name.starts_with("orthohelp_bridge_workspace_"));
+    assert_ne!(binary_name, "orthohelp_bridge");
+    assert_eq!(
+        binary_name,
+        workspace::bridge_binary_target_name(package_root)
+    );
+    assert_ne!(binary_name, other_binary_name);
+}
+
+#[test]
+fn bridge_manifest_disables_the_default_binary_target() {
+    let temporary = tempdir().expect("temporary workspace");
+    let bridge_dir =
+        Utf8PathBuf::from_path_buf(temporary.path().to_path_buf()).expect("UTF-8 temporary path");
+    let paths = BridgePaths {
+        manifest_path: bridge_dir.join("Cargo.toml"),
+        bridge_dir: bridge_dir.clone(),
+        target_dir: bridge_dir.join("target"),
+        binary_name: "orthohelp_bridge_workspace_fixture".to_owned(),
+    };
+    let config = BridgeConfig {
+        workspace_root: bridge_dir.clone(),
+        package_root: bridge_dir.clone(),
+        package_name: "example".to_owned(),
+        root_type: "example::Config".to_owned(),
+        ortho_config_dependency: OrthoConfigDependency {
+            requirement: "0.9.0".to_owned(),
+            path: None,
+        },
+    };
+
+    ensure_bridge_layout(&paths).expect("create generated crate layout");
+    write_bridge_manifest(&config, &paths).expect("write generated manifest");
+    let directory = Dir::open_ambient_dir(&bridge_dir, ambient_authority())
+        .expect("open generated crate directory");
+    let manifest = directory
+        .read_to_string("Cargo.toml")
+        .expect("read generated manifest");
+
+    assert!(manifest.contains("autobins = false"));
+    assert!(manifest.contains(
+        "[[bin]]\nname = \"orthohelp_bridge_workspace_fixture\"\npath = \"src/main.rs\""
+    ));
 }
 
 #[test]

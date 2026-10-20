@@ -922,15 +922,22 @@ variable and snapshots that binary into its private run directory. It does not
 rebuild the CLI binary as part of the test; only the generated bridge uses the
 JSON build-and-snapshot path described here.
 
+The generated manifest disables automatic binary discovery and names its
+explicit bridge target with a stable suffix derived from the selected package
+root. This keeps that executable separate from an ordinary workspace target
+named `orthohelp_bridge` while preserving the selected target directory and
+shared dependency cache.
+
 A bridge-only build helper holds an operating-system file lock in the selected
 Cargo target directory across the Cargo build and executable snapshot. Cargo's
-own build lock ends before the bridge can copy its output, so the additional
-lock protects same-named executables when independent `cargo-orthohelp`
-processes share the selected target. This helper is private to the production
-bridge pipeline. The documentation-test `BuildState` helper is test-only and
-shared by the Rust-example and CLI documentation test targets; compilation and
-artefact extraction stay with the Rust-example helper. Neither helper is a
-general application subprocess API.
+own build lock ends before the bridge can copy its output. The additional lock
+serializes bridge invocations that share the generated target name; the
+distinct name prevents an ordinary workspace build of `orthohelp_bridge` from
+replacing the reported executable during that interval. This helper is private
+to the production bridge pipeline. The documentation-test `BuildState` helper
+is test-only and shared by the Rust-example and CLI documentation test targets;
+compilation and artefact extraction stay with the Rust-example helper. Neither
+helper is a general application subprocess API.
 
 The bridge build retains Cargo's configured compiler and documentation
 wrappers, wrapper settings, job limits, warning flags, and coverage

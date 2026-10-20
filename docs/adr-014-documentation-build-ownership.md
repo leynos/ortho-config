@@ -131,6 +131,18 @@ Cargo workspace. It coordinates documentation snapshot owners and reports
 contention as an inconclusive observation because another Cargo process may
 hold the profile lock.
 
+Tests that build through this shared sidecar are serialized before their
+scenario deadlines start: direct `cargo test` uses a named in-process serial
+lock, while nextest assigns the affected binaries to one test group. The
+independent-workspace regression retains its concurrent workers inside that
+test, so it continues to exercise cross-process artefact ownership.
+
+The identifier-artefact integration test gives its fixture a private target
+nested under Cargo's configured workspace target. Its package clean can then
+force a fresh build without deleting test executables that the outer Cargo
+workspace has already built. The fixture continues to use Cargo's default
+shared package cache.
+
 The build cache is test infrastructure. It may reuse compiler output through
 Cargo's normal target and package-cache behaviour, but it must not relocate,
 clear, or repair the shared package cache. A unique run directory and exact
@@ -154,12 +166,21 @@ update the private lockfile copy for the generated root package, but must not
 edit the selected workspace's lockfile. Run the JSON-reported executable from
 its private snapshot; do not assume a `target/debug` path.
 
+The generated manifest disables automatic binary discovery and names its
+explicit bridge target with a stable suffix derived from the selected package
+root. This keeps its executable path distinct from a workspace's ordinary
+`orthohelp_bridge` target while preserving the selected target directory and
+shared dependency cache.
+
 A production bridge helper holds a stable `fs4` operating-system lock across
-the Cargo JSON build and executable snapshot. It protects against another
-bridge invocation replacing a same-named artefact before the snapshot. Its
-scope is the production bridge build path and it is not a general application
-subprocess API. The similar documentation-test helper remains test-only and
-cannot be imported by the binary.
+the Cargo JSON build and executable snapshot. It serializes bridge invocations
+that share the generated target name. Cargo's own target lock does not cover
+the snapshot after Cargo exits, so the distinct generated target name also
+prevents an ordinary workspace build of `orthohelp_bridge` from replacing the
+reported executable in that interval. The helper is private to the production
+bridge build path and is not a general application subprocess API. The similar
+documentation-test helper remains test-only and cannot be imported by the
+binary.
 
 Production bridge builds retain the configured compiler and documentation
 wrappers, applicable wrapper configuration, job limits, warning enforcement,
@@ -307,7 +328,7 @@ controlled run provides usable cold-build evidence.
 - [Descriptor locking with `fs4`][file-lock]
 
 [design-infrastructure]:
-  design.md#418-executable-documentation-test-infrastructure
+  design.md#419-executable-documentation-test-build-ownership
 [developer-guidance]: developers-guide.md#public-documentation-examples
 [timeout-guidance]:
   developers-guide.md#test-timeouts-the-tiers-this-repository-sets

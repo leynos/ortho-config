@@ -48,6 +48,9 @@ impl SpawnGuard {
     }
 
     pub(crate) fn kill_error(&self) -> Option<String> {
+        if !self.kill_attempted() {
+            return None;
+        }
         self.state
             .kill_error
             .lock()

@@ -19,7 +19,7 @@ use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, then, when};
 use serde_json::Value;
 
-use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp, scenario_target_dir};
+use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
 
 /// Package name fixtures used by the policy scenarios.
 const WARN_FIXTURE: &str = "orthohelp_policy_warn_fixture";
@@ -276,11 +276,11 @@ fn stderr_notes_nothing_checked(orthohelp_context: &mut OrthoHelpContext) -> Ste
 
 /// Asserts that `policy-report.json` is the only artefact the run produced.
 ///
-/// The bridge build creates `orthohelp/` and cached IR files under the
-/// target directory; the generator writes `agent_context.json`, man pages,
-/// or IR output into the output directory. The adoption scenario therefore
-/// asserts both surfaces stay untouched, proving the check ran without the
-/// generator pipeline (`ExecPlan` acceptance criterion 6).
+/// The generator writes `agent_context.json`, man pages, or IR output into
+/// the output directory. This per-scenario directory therefore proves the
+/// check ran without the generator pipeline (`ExecPlan` acceptance criterion
+/// 6). The shared Cargo target is intentionally not inspected: another test
+/// process can build the bridge there concurrently.
 #[then("the policy report is the only artefact in the output directory")]
 fn policy_report_is_the_only_artefact(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let out_root = get_out_dir(orthohelp_context)?;
@@ -294,11 +294,6 @@ fn policy_report_is_the_only_artefact(orthohelp_context: &mut OrthoHelpContext) 
         entries,
         vec!["policy-report.json".to_owned()],
         "the policy check should not run the generator or the bridge build"
-    );
-    let scenario_target = scenario_target_dir(orthohelp_context)?;
-    assert!(
-        !scenario_target.join("orthohelp").exists(),
-        "the bridge build directory should not be created for a policy-only run"
     );
     Ok(())
 }

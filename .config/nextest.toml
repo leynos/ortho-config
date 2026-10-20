@@ -112,23 +112,15 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 filter = 'binary(boolean_cli_trybuild) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
-# Retain the established CLI scenario and cache-publication ordering. Bridge
-# manifests and executable snapshots are now private, and production builds
-# have an OS-level ownership lock. Changing these groups still requires
-# independent Windows and coverage evidence; this repair keeps their limits.
+# The BDD cache scenarios remove `target/orthohelp` to verify a cold cache,
+# while documentation builds share `target/documentation-examples/v2`. Keep
+# every nextest binary that can clear either cache or build against those
+# ownership locks in one process-wide group. This prevents scenarios from
+# spending their own deadlines waiting behind peer tests. Production locks
+# still protect build-and-snapshot operations across separate processes.
 [test-groups]
-rstest_bdd = { max-threads = 1 }
-powershell_windows = { max-threads = 1 }
-nested_subcommand_end_to_end = { max-threads = 1 }
+orthohelp_cache = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'binary(rstest_bdd)'
-test-group = 'rstest_bdd'
-
-[[profile.default.overrides]]
-filter = 'binary(powershell_windows)'
-test-group = 'powershell_windows'
-
-[[profile.default.overrides]]
-filter = 'binary(nested_subcommand_end_to_end)'
-test-group = 'nested_subcommand_end_to_end'
+filter = 'binary(rstest_bdd) | binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e)'
+test-group = 'orthohelp_cache'

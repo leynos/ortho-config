@@ -5,13 +5,16 @@ use cap_std::fs_utf8::Dir;
 use cap_std::fs_utf8::OpenOptions;
 use std::io;
 
-use super::{CargoBuild, CargoStatus, binary_file_name, io_error, message_error, open_directory};
+use super::{
+    CargoBuild, CargoStatus, GeneratedTarget, binary_file_name, io_error, message_error,
+    open_directory,
+};
 use crate::error::OrthohelpError;
 
 /// Validate Cargo's status and protocol state, then snapshot its binary.
 pub(super) fn finish_build(
     build: CargoBuild,
-    target_directory: &Utf8Path,
+    target: &GeneratedTarget<'_>,
     snapshot_directory: &Utf8Path,
     snapshot: &Dir,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
@@ -25,11 +28,14 @@ pub(super) fn finish_build(
         return Err(error);
     }
     let executable = build.messages.executable.ok_or_else(|| {
-        message_error("Cargo build succeeded without a bin orthohelp_bridge artifact")
+        message_error(&format!(
+            "Cargo build succeeded without a bin {} artifact",
+            target.binary_name
+        ))
     })?;
-    snapshot_executable(&executable, snapshot_directory, snapshot).map_err(|error| {
+    snapshot_executable(&executable, target, snapshot_directory, snapshot).map_err(|error| {
         tracing::warn!(
-            target_directory = %target_directory,
+            target_directory = %target.directory,
             artifact = %executable,
             error = %error,
             "bridge snapshot failed after Cargo exited"
@@ -41,13 +47,14 @@ pub(super) fn finish_build(
 /// Copy Cargo's reported executable to a private invocation-owned directory.
 fn snapshot_executable(
     executable: &Utf8Path,
+    target: &GeneratedTarget<'_>,
     snapshot_directory: &Utf8Path,
     snapshot: &Dir,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
-    let executable_name = binary_file_name();
+    let executable_name = binary_file_name(target.binary_name);
     if executable.file_name() != Some(executable_name.as_str()) {
         return Err(message_error(
-            "Cargo artifact name did not match orthohelp_bridge",
+            "Cargo artifact name did not match the generated bridge target",
         ));
     }
     let source_directory = executable

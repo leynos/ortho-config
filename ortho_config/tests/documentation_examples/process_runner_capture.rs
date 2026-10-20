@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 const PIPE_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug)]
-pub(super) struct Snapshot {
+pub(crate) struct Snapshot {
     pub(super) bytes: Vec<u8>,
     pub(super) bytes_seen: u64,
     pub(super) truncated: bool,
@@ -115,7 +115,7 @@ enum ReaderEnd {
 }
 
 /// Owns a cancellable drain thread and exposes partial capture while it runs.
-pub(super) struct Reader {
+pub(crate) struct Reader {
     stream: &'static str,
     progress: Arc<Mutex<Progress>>,
     cancellation: Arc<AtomicBool>,
@@ -125,7 +125,7 @@ pub(super) struct Reader {
 }
 
 impl Reader {
-    pub(super) fn spawn<PipeHandle, Observer>(
+    pub(crate) fn spawn<PipeHandle, Observer>(
         stream: &'static str,
         pipe_handle: PipeHandle,
         output_limit: usize,
@@ -135,7 +135,10 @@ impl Reader {
         PipeHandle: super::pipe::Input,
         Observer: FnMut(&[u8]) + Send + 'static,
     {
+        #[cfg(unix)]
         let pipe = Pipe::new(pipe_handle)?;
+        #[cfg(windows)]
+        let pipe = Pipe::new(pipe_handle);
         let progress = Arc::new(Mutex::new(Progress::default()));
         let cancellation = Arc::new(AtomicBool::new(false));
         let drain_state = DrainState {
@@ -160,7 +163,7 @@ impl Reader {
         })
     }
 
-    pub(super) fn refresh(&mut self) {
+    pub(crate) fn refresh(&mut self) {
         let Some(active_join) = self.join.as_ref() else {
             return;
         };
@@ -177,31 +180,31 @@ impl Reader {
         }
     }
 
-    pub(super) const fn is_finished(&self) -> bool {
+    pub(crate) const fn is_finished(&self) -> bool {
         self.join.is_none()
     }
 
-    pub(super) const fn stream(&self) -> &'static str {
+    pub(crate) const fn stream(&self) -> &'static str {
         self.stream
     }
 
-    pub(super) fn error(&self) -> Option<&str> {
+    pub(crate) fn error(&self) -> Option<&str> {
         self.error.as_deref()
     }
 
-    pub(super) fn was_cancelled(&self) -> bool {
+    pub(crate) fn was_cancelled(&self) -> bool {
         self.completion == Some(ReaderEnd::Cancelled)
     }
 
-    pub(super) fn snapshot(&self) -> Snapshot {
+    pub(crate) fn snapshot(&self) -> Snapshot {
         lock_progress(&self.progress).snapshot()
     }
 
-    pub(super) fn request_stop(&self) {
+    pub(crate) fn request_stop(&self) {
         self.cancellation.store(true, Ordering::Release);
     }
 
-    pub(super) fn join_until(&mut self, deadline: Instant) {
+    pub(crate) fn join_until(&mut self, deadline: Instant) {
         while !self.is_finished() && Instant::now() < deadline {
             self.refresh();
             if !self.is_finished() {
@@ -213,7 +216,7 @@ impl Reader {
         self.refresh();
     }
 
-    pub(super) fn detach_if_running(&mut self) -> bool {
+    pub(crate) fn detach_if_running(&mut self) -> bool {
         if self.join.as_ref().is_some_and(JoinHandle::is_finished) {
             self.refresh();
             return false;

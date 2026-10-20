@@ -32,7 +32,12 @@ fn another_process_cannot_enter_build_and_snapshot_ownership() -> Result<()> {
     let output = process_runner::run_with_policy(
         &mut command,
         Operation("exercise separate-process lock contention"),
-        Policy::execution().with_timeout(Duration::from_secs(5)),
+        Policy::new(
+            "execution",
+            Duration::from_secs(5),
+            Duration::from_secs(2),
+            1024 * 1024,
+        ),
     )?;
     ensure!(output.status.success(), "lock probe failed: {output:?}");
     ensure!(String::from_utf8_lossy(&output.stdout).contains("CACHE_LOCK_BLOCKED"));
@@ -123,7 +128,12 @@ fn opaque_nested_timeout_retains_marker_after_complete_outer_cleanup() -> Result
             process_runner::run_with_policy(
                 &mut command,
                 Operation("opaque nested build probe"),
-                Policy::build().with_timeout(Duration::from_millis(100)),
+                Policy::new(
+                    "build",
+                    Duration::from_millis(100),
+                    Duration::from_secs(2),
+                    1024 * 1024,
+                ),
             )
         })
         .expect_err("an opaque nested build timeout must require owner recovery");

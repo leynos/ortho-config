@@ -16,22 +16,31 @@ use tempfile::tempdir;
 use super::MARKER_FILE;
 
 #[test]
-fn reported_custom_target_executable_is_snapshotted() -> Result<()> {
+fn workspace_binary_cannot_replace_generated_bridge_snapshot() -> Result<()> {
     let temporary = tempdir()?;
     let target = support::utf8_path(temporary.path().join("target"))?;
     let snapshot = support::utf8_path(temporary.path().join("private-run"))?;
+    let binary_name = super::super::workspace::bridge_binary_target_name(camino::Utf8Path::new(
+        "/workspace/fixture",
+    ));
 
-    let executable = support::build_probe("artifact", &target, &snapshot)?;
+    let executable = support::build_probe("overlap", &target, &snapshot, &binary_name)?;
     let content = support::read_text(&executable)?;
+    let ordinary_binary = target
+        .join("wasm32-unknown-unknown/release")
+        .join(support::binary_file_name("orthohelp_bridge"));
 
-    ensure!(executable == snapshot.join(support::binary_file_name()));
+    ensure!(binary_name != "orthohelp_bridge");
+    ensure!(executable == snapshot.join(support::binary_file_name(&binary_name)));
     ensure!(content == "bridge fixture");
+    ensure!(support::read_text(&ordinary_binary)? == "ordinary workspace binary");
+    #[cfg(unix)]
     support::ensure_executable(&executable)?;
     ensure!(!support::path_exists(&target.join(MARKER_FILE))?);
     ensure!(support::path_exists(
         &target
             .join("wasm32-unknown-unknown/release")
-            .join(support::binary_file_name())
+            .join(support::binary_file_name(&binary_name))
     )?);
     Ok(())
 }
@@ -44,7 +53,7 @@ fn invalid_records_fail_and_clear_marker(#[case] mode: &str, #[case] expected: &
     let target = support::utf8_path(temporary.path().join("target"))?;
     let snapshot = support::utf8_path(temporary.path().join("private-run"))?;
     support::create_directory_all(&snapshot)?;
-    let result = support::build_probe(mode, &target, &snapshot);
+    let result = support::build_probe(mode, &target, &snapshot, "orthohelp_bridge_fixture");
 
     let error = result
         .err()
@@ -66,12 +75,13 @@ fn stale_marker_blocks_build_without_removal() -> Result<()> {
         .open_with(MARKER_FILE, OpenOptions::new().write(true).create_new(true))?
         .write_all(b"interrupted owner")?;
     let runner_called = Cell::new(false);
-    let result = super::build_and_snapshot_with(&target, &snapshot, || {
-        runner_called.set(true);
-        Err(super::CargoFailure::confirmed(
-            crate::error::OrthohelpError::Message("unexpected Cargo runner call".to_owned()),
-        ))
-    });
+    let result =
+        super::build_and_snapshot_with(&target, &snapshot, "orthohelp_bridge_fixture", || {
+            runner_called.set(true);
+            Err(super::CargoFailure::confirmed(
+                crate::error::OrthohelpError::Message("unexpected Cargo runner call".to_owned()),
+            ))
+        });
 
     ensure!(result.is_err());
     ensure!(!runner_called.get());
@@ -111,8 +121,16 @@ fn separate_processes_snapshot_same_named_artifacts_privately() -> Result<()> {
         !started_while_locked,
         "second build started while the lock was held"
     );
-    ensure!(support::read_text(&snapshot_a.join(support::binary_file_name()))? == "A");
-    ensure!(support::read_text(&snapshot_b.join(support::binary_file_name()))? == "B");
+    ensure!(
+        support::read_text(
+            &snapshot_a.join(support::binary_file_name("orthohelp_bridge_fixture"))
+        )? == "A"
+    );
+    ensure!(
+        support::read_text(
+            &snapshot_b.join(support::binary_file_name("orthohelp_bridge_fixture"))
+        )? == "B"
+    );
     Ok(())
 }
 

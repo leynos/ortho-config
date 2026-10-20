@@ -22,6 +22,7 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 use super::steps::{
     OrthoHelpContext, StepResult, get_out_dir, get_workspace_root, scenario_target_dir,
@@ -127,6 +128,7 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
     let out_dir = get_out_dir(ctx)?;
     let target_dir = scenario_target_dir(ctx)?;
     let mut command = Command::new(exe.as_str());
+    crate::cargo_environment::CargoEnvironment::build().apply(&mut command);
     command
         .current_dir(workspace_root.as_str())
         .env("CARGO_TARGET_DIR", target_dir.as_str())
@@ -134,5 +136,50 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
         .arg("--out-dir")
         .arg(out_dir.as_str())
         .args(args);
-    Ok(command.output()?)
+    let deadline = ctx
+        .deadline
+        .with_ref(|deadline| *deadline)
+        .ok_or("BDD scenario deadline should be set")?;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err("BDD scenario deadline elapsed before cargo-orthohelp execution".into());
+    }
+    let default_policy = if args.contains(&"--no-build") {
+        crate::process_runner::Policy::new(
+            "execution",
+            Duration::from_secs(60),
+            Duration::from_secs(2),
+            1024 * 1024,
+        )
+    } else {
+        crate::process_runner::Policy::build()
+    };
+    let timeout = remaining
+        .saturating_sub(default_policy.cleanup_timeout())
+        .min(default_policy.timeout());
+    if timeout.is_zero() {
+        return Err("BDD scenario deadline leaves no time for subprocess cleanup".into());
+    }
+    crate::process_runner::run_with_policy(
+        &mut command,
+        crate::process_runner::Operation("run cargo-orthohelp BDD scenario"),
+        crate::process_runner::Policy::new(
+            default_policy.kind_name(),
+            timeout,
+            default_policy.cleanup_timeout(),
+            default_policy.output_limit(),
+        ),
+    )
+    .map_err(|error| classify_runner_error(&error))
+}
+
+fn classify_runner_error(error: &anyhow::Error) -> super::steps::StepError {
+    let category = if crate::process_runner::deadline_exceeded(error) {
+        "subprocess deadline exceeded"
+    } else if crate::process_runner::cleanup_incomplete(error) {
+        "subprocess cleanup was not confirmed"
+    } else {
+        "subprocess failed"
+    };
+    format!("cargo-orthohelp BDD {category}: {error:#}").into()
 }

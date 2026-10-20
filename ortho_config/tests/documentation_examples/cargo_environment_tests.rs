@@ -1,6 +1,6 @@
 //! Specifications for the documentation Cargo environment boundary.
 
-use super::{CARGO_ENV_ALLOWLIST, CargoEnvironment};
+use super::cargo_environment::{CARGO_ENV_ALLOWLIST, CargoEnvironment};
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
@@ -24,6 +24,11 @@ const EXPECTED_BUILD_VALUES: &[(&str, &str)] = &[
     ),
     ("CARGO_BUILD_RUSTDOC", "/config/rustdoc"),
     ("CARGO_BUILD_JOBS", "4"),
+    ("CARGO_NET_OFFLINE", "true"),
+    ("CC", "clang"),
+    ("PKG_CONFIG_PATH", "/toolchain/lib/pkgconfig"),
+    ("TEMP", "C:\\Temp"),
+    ("TMP", "C:\\Tmp"),
     ("CARGO_INCREMENTAL", "0"),
     ("CARGO_LLVM_COV", "1"),
     ("CARGO_MAKEFLAGS", "--jobs=4"),
@@ -39,6 +44,30 @@ const EXPECTED_BUILD_VALUES: &[(&str, &str)] = &[
     ("BUILD_LIMITS_SOCKET", "/run/build-limits.sock"),
     ("XDG_RUNTIME_DIR", "/run/user/1000"),
 ];
+
+#[test]
+fn injected_allowlist_environment_accepts_discovered_build_values() {
+    let environment = CargoEnvironment::from_lookup(&["CARGO_HOME"], |name| {
+        (name == "CARGO_HOME").then(|| OsString::from("/shared/cargo"))
+    });
+    let values = selected_environment(&environment);
+    assert_eq!(
+        values.get("CARGO_HOME").map(OsString::as_os_str),
+        Some(OsStr::new("/shared/cargo"))
+    );
+}
+
+fn selected_environment(environment: &CargoEnvironment) -> HashMap<String, OsString> {
+    let mut command = Command::new("cargo");
+    environment.apply(&mut command);
+    command
+        .get_envs()
+        .filter_map(|(name, environment_value)| {
+            environment_value
+                .map(|value| (name.to_string_lossy().into_owned(), value.to_os_string()))
+        })
+        .collect()
+}
 
 #[test]
 fn build_policy_keeps_toolchain_controls_and_excludes_application_values() {
@@ -104,27 +133,31 @@ fn nested_build_omits_coverage_cli_wrapper_but_keeps_coverage_policy(#[case] wra
         ("CARGO_BUILD_JOBS", OsString::from("4")),
     ]);
     let environment = CargoEnvironment::build_with_lookup(|name| supplied.get(name).cloned());
-    let selected = environment
-        .values()
-        .iter()
-        .map(|(name, value)| (name.to_str().expect("name is UTF-8"), value.as_os_str()))
-        .collect::<HashMap<_, _>>();
+    let selected = selected_environment(&environment);
 
     assert!(!selected.contains_key("RUSTC_WRAPPER"));
     assert_eq!(
-        selected.get("CARGO_BUILD_RUSTC_WRAPPER"),
-        Some(&OsStr::new("/configured/sccache"))
-    );
-    assert_eq!(selected.get("CARGO_LLVM_COV"), Some(&OsStr::new("1")));
-    assert_eq!(
-        selected.get("RUSTFLAGS"),
-        Some(&OsStr::new("-C instrument-coverage"))
+        selected
+            .get("CARGO_BUILD_RUSTC_WRAPPER")
+            .map(OsString::as_os_str),
+        Some(OsStr::new("/configured/sccache"))
     );
     assert_eq!(
-        selected.get("LLVM_PROFILE_FILE"),
-        Some(&OsStr::new("/profiles/documentation-%p.profraw"))
+        selected.get("CARGO_LLVM_COV").map(OsString::as_os_str),
+        Some(OsStr::new("1"))
     );
-    assert_eq!(selected.get("CARGO_BUILD_JOBS"), Some(&OsStr::new("4")));
+    assert_eq!(
+        selected.get("RUSTFLAGS").map(OsString::as_os_str),
+        Some(OsStr::new("-C instrument-coverage"))
+    );
+    assert_eq!(
+        selected.get("LLVM_PROFILE_FILE").map(OsString::as_os_str),
+        Some(OsStr::new("/profiles/documentation-%p.profraw"))
+    );
+    assert_eq!(
+        selected.get("CARGO_BUILD_JOBS").map(OsString::as_os_str),
+        Some(OsStr::new("4"))
+    );
 }
 
 #[test]
@@ -136,26 +169,20 @@ fn metadata_policy_alone_preserves_target_directory_overrides() {
     ]);
     let environment =
         CargoEnvironment::metadata_with_lookup(|name| supplied.get(name).map(OsString::from));
-    let selected = environment
-        .values()
-        .iter()
-        .map(|(name, value)| (name.to_str().expect("name is UTF-8"), value))
-        .collect::<HashMap<_, _>>();
+    let selected = selected_environment(&environment);
 
     assert_eq!(
-        selected.get("CARGO_HOME").map(|value| value.as_os_str()),
+        selected.get("CARGO_HOME").map(OsString::as_os_str),
         Some(OsStr::new("/home/agent/.cargo"))
     );
     assert_eq!(
-        selected
-            .get("CARGO_TARGET_DIR")
-            .map(|value| value.as_os_str()),
+        selected.get("CARGO_TARGET_DIR").map(OsString::as_os_str),
         Some(OsStr::new("/workspace/target"))
     );
     assert_eq!(
         selected
             .get("CARGO_BUILD_TARGET_DIR")
-            .map(|value| value.as_os_str()),
+            .map(OsString::as_os_str),
         Some(OsStr::new("/configured/target"))
     );
 }
@@ -176,14 +203,10 @@ fn metadata_selects_the_instrumented_parent_target(
     }
     let environment =
         CargoEnvironment::metadata_with_lookup(|name| supplied.get(name).map(OsString::from));
-    let selected = environment
-        .values()
-        .iter()
-        .map(|(name, value)| (name.to_str().expect("name is UTF-8"), value.as_os_str()))
-        .collect::<HashMap<_, _>>();
+    let selected = selected_environment(&environment);
     assert_eq!(
-        selected.get("CARGO_TARGET_DIR"),
-        Some(&OsStr::new(expected_target))
+        selected.get("CARGO_TARGET_DIR").map(OsString::as_os_str),
+        Some(OsStr::new(expected_target))
     );
     assert!(!selected.contains_key(APPLICATION_SECRET));
 }

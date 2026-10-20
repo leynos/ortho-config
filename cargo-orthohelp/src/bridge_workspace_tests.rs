@@ -51,8 +51,8 @@ fn concurrent_invocations_own_private_inputs_with_shared_build_state() -> Result
     let root = camino::Utf8Path::from_path(state.path()).context("UTF-8 test directory")?;
     let package = selection(root);
     let cache = super::super::prepare_cache(&package, &cache_key("same source body"));
-    let first = BridgeWorkspace::new(&cache)?;
-    let second = BridgeWorkspace::new(&cache)?;
+    let first = BridgeWorkspace::new(&cache, &package.package_root)?;
+    let second = BridgeWorkspace::new(&cache, &package.package_root)?;
     ensure!(first.paths.bridge_dir != second.paths.bridge_dir);
     ensure!(first.paths.target_dir == second.paths.target_dir);
     let first_dir = Dir::open_ambient_dir(&first.paths.bridge_dir, ambient_authority())?;
@@ -83,18 +83,19 @@ fn workspace_lockfile_is_seeded_privately(#[case] contents: Option<&str>) -> Res
     let root = camino::Utf8Path::from_path(state.path()).context("UTF-8 test directory")?;
     let package = selection(root);
     let cache = super::super::prepare_cache(&package, &cache_key("source body"));
+    let package_root = package.package_root.clone();
     let directory = Dir::open_ambient_dir(root, ambient_authority())?;
     if let Some(body) = contents {
         directory.write("Cargo.lock", body)?;
     }
     let config = BridgeConfig {
         workspace_root: root.to_path_buf(),
-        package_root: package.package_root,
+        package_root: package_root.clone(),
         package_name: package.package_name,
         root_type: package.root_type,
         ortho_config_dependency: package.ortho_config_dependency,
     };
-    let workspace = BridgeWorkspace::new(&cache)?;
+    let workspace = BridgeWorkspace::new(&cache, &package_root)?;
     workspace.seed_lockfile(&config)?;
     let private = Dir::open_ambient_dir(&workspace.paths.bridge_dir, ambient_authority())?;
     ensure!(private.try_exists("Cargo.lock")? == contents.is_some());

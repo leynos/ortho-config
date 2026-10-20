@@ -54,7 +54,12 @@ fn worker(identity: &str, state: &Path) -> Result<()> {
     let output = process_runner::run_with_policy(
         &mut command,
         Operation("exercise process-private executable snapshot"),
-        Policy::execution().with_timeout(Duration::from_secs(10)),
+        Policy::new(
+            "execution",
+            Duration::from_secs(10),
+            Duration::from_secs(2),
+            1024 * 1024,
+        ),
     )?;
     ensure!(
         output.status.success(),
@@ -105,7 +110,12 @@ fn build_snapshot_probe() -> Result<()> {
         let output = process_runner::run_with_policy(
             &mut command,
             Operation("run same-named fixture snapshot"),
-            Policy::execution().with_timeout(Duration::from_secs(2)),
+            Policy::new(
+                "execution",
+                Duration::from_secs(2),
+                Duration::from_secs(2),
+                1024 * 1024,
+            ),
         )?;
         ensure!(output.status.success(), "fixture failed: {output:?}");
         ensure!(String::from_utf8(output.stdout)?.trim() == format!("{identity}:{value}"));

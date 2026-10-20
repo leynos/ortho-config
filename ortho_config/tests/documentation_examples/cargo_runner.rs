@@ -7,20 +7,23 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Command;
 use std::time::{Duration, Instant};
 
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 use crate::process_runner::{self, Operation, Policy};
-use cargo_environment::{CARGO_ENV_ALLOWLIST, CargoEnvironment};
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+use cargo_environment::CARGO_ENV_ALLOWLIST;
+use cargo_environment::CargoEnvironment;
 
 #[path = "cargo_environment.rs"]
-mod cargo_environment;
+pub(crate) mod cargo_environment;
 
 #[derive(Default)]
 struct PreparedCargoEnvironment(Vec<(OsString, OsString)>);
 
 /// Prepend a private subcommand directory to the optional inherited search path.
-pub(super) fn cargo_dispatch_path(
+pub(crate) fn cargo_dispatch_path(
     fixture_bin_dir: &Path,
     inherited_path: Option<&OsStr>,
 ) -> Result<OsString> {
@@ -31,69 +34,35 @@ pub(super) fn cargo_dispatch_path(
     .context("construct PATH for Cargo dispatch")
 }
 
-/// Prepare and create a Cargo command with isolated process state.
-///
-/// # Errors
-///
-/// Returns an error when state validation or Windows preparation fails.
-pub(super) fn prepare_cargo_command(
-    working_directory: &Path,
-    state_directory: &Path,
-) -> Result<Command> {
-    let deadline = discovery_deadline()?;
-    prepare_cargo_command_before(working_directory, state_directory, deadline)
-}
-
-/// Prepare Cargo while keeping platform discovery inside the caller's deadline.
-///
-/// The same deadline applies to every MSVC discovery subprocess and the
-/// resulting Cargo command preparation.
-///
-/// # Errors
-///
-/// Returns an error when the deadline expires, state validation fails, or
-/// Windows preparation fails.
-pub(super) fn prepare_cargo_command_before(
-    working_directory: &Path,
-    state_directory: &Path,
-    deadline: Instant,
-) -> Result<Command> {
-    prepare_cargo_command_for_target_before(
-        working_directory,
-        state_directory,
-        &state_directory.join("target"),
-        deadline,
-    )
-}
-
 /// Prepare build-tool state while reusing an independently resolved target.
-pub(super) fn prepare_cargo_command_for_target_before(
+pub(crate) fn prepare_cargo_command_for_target_before(
     working_directory: &Path,
     state_directory: &Path,
     target_directory: &Path,
     deadline: Instant,
 ) -> Result<Command> {
-    let mut environment = CargoEnvironment::build();
-    environment.extend(prepare_cargo_environment(state_directory, deadline)?.0);
+    let prepared_environment = prepare_cargo_environment(state_directory, deadline)?;
     remaining_discovery_time(deadline, "prepare Cargo command")?;
-    Ok(cargo_command(
+    let mut command = cargo_command(
         working_directory,
         Some(target_directory),
-        &environment,
-    ))
+        &CargoEnvironment::build(),
+    );
+    command.envs(prepared_environment.0);
+    Ok(command)
 }
 
 /// Prepare Cargo metadata without changing its caller-selected target paths.
 ///
-/// The caller's target settings affect discovery only; later builds use
-/// `prepare_cargo_command` and an explicitly owned target directory.
+/// The caller's target settings affect discovery only; later builds use an
+/// explicitly owned target directory.
 ///
-pub(super) fn prepare_metadata_command(working_directory: &Path) -> Command {
+pub(crate) fn prepare_metadata_command(working_directory: &Path) -> Command {
     let environment = CargoEnvironment::metadata();
     cargo_command(working_directory, None, &environment)
 }
 
-fn cargo_command(
+pub(crate) fn cargo_command(
     working_directory: &Path,
     target_directory_override: Option<&Path>,
     environment: &CargoEnvironment,
@@ -248,19 +217,22 @@ fn decode_utf16le(output: &[u8]) -> Result<String> {
     String::from_utf16(&code_units).context("MSVC environment output should be valid UTF-16")
 }
 
-fn run_process(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
-    run_process_before(command, operation, discovery_deadline()?)
-}
-
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn run_process_before(
     command: &mut Command,
     operation: Operation<'_>,
     deadline: Instant,
-) -> Result<Output> {
+) -> Result<std::process::Output> {
     CargoEnvironment::build().apply(command);
     let max_duration = Policy::discovery().timeout();
     let remaining = remaining_discovery_time(deadline, operation.0)?;
-    let policy = Policy::discovery().with_timeout(remaining.min(max_duration));
+    let default_policy = Policy::discovery();
+    let policy = Policy::new(
+        "discovery",
+        remaining.min(max_duration),
+        default_policy.cleanup_timeout(),
+        default_policy.output_limit(),
+    );
     let output = process_runner::run_with_policy(command, operation, policy)?;
     let Operation(operation_name) = operation;
     ensure!(
@@ -272,12 +244,6 @@ fn run_process_before(
     Ok(output)
 }
 
-fn discovery_deadline() -> Result<Instant> {
-    Instant::now()
-        .checked_add(Policy::discovery().timeout())
-        .context("Cargo discovery deadline is out of range")
-}
-
 fn remaining_discovery_time(deadline: Instant, operation: &str) -> Result<Duration> {
     let remaining = deadline.saturating_duration_since(Instant::now());
     ensure!(
@@ -287,6 +253,7 @@ fn remaining_discovery_time(deadline: Instant, operation: &str) -> Result<Durati
     Ok(remaining)
 }
 
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn allowed_environment(environment: &str) -> Vec<(String, String)> {
     environment
         .lines()
@@ -300,6 +267,7 @@ fn allowed_environment(environment: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn first_output_line(output: &[u8]) -> Option<&OsStr> {
     let decoded_output = std::str::from_utf8(output).ok()?;
     decoded_output
@@ -307,7 +275,3 @@ fn first_output_line(output: &[u8]) -> Option<&OsStr> {
         .find(|line| !line.trim().is_empty())
         .map(OsStr::new)
 }
-
-#[cfg(test)]
-#[path = "cargo_runner_tests.rs"]
-mod tests;

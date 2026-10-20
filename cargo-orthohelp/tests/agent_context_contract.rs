@@ -61,9 +61,6 @@ fn run_agent_context(out_dir: &TempDir, root_type: Option<&str>) -> TestResult<O
     let mut command = Command::new(executable.as_str());
     command
         .current_dir(fixtures::workspace_root()?.as_std_path())
-        // Isolate Cargo metadata's bridge cache as well as the generated
-        // artefact, so parallel test processes cannot rewrite one cache key.
-        .env("CARGO_TARGET_DIR", out_dir.path().join("cargo-target"))
         // Debug tracing must not contaminate the machine-readable stdout.
         .env("RUST_LOG", "debug")
         .args([

@@ -6,11 +6,11 @@
 
 #[path = "../../ortho_config/tests/documentation_examples/build_state.rs"]
 mod build_state;
-#[path = "../../ortho_config/tests/documentation_examples/cargo_runner.rs"]
+#[path = "../../ortho_config/tests/documentation_examples/cargo_runner_support.rs"]
 mod cargo_runner;
 #[path = "../../ortho_config/tests/documentation_examples/orthohelp_workflow.rs"]
 mod orthohelp_workflow;
-#[path = "../../ortho_config/tests/documentation_examples/process_runner.rs"]
+#[path = "../../ortho_config/tests/documentation_examples/process_runner_state_support.rs"]
 mod process_runner;
 
 use anyhow::{Context, Result, ensure};

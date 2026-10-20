@@ -125,10 +125,10 @@ fn emitted_policy_report_has_stable_contract(#[case] case: PolicyCase) -> TestRe
 fn run_policy_check(out_dir: &TempDir, case: PolicyCase) -> TestResult<Output> {
     let executable = fixtures::cargo_orthohelp_exe()?;
     let mut command = Command::new(executable.as_str());
-    // Policy-only runs return before the generator and bridge-build path.
+    // Policy-only runs avoid the bridge; the combined case reuses Cargo's
+    // configured target and only isolates its generated artefacts.
     command
         .current_dir(fixtures::workspace_root()?.as_std_path())
-        .env("CARGO_TARGET_DIR", out_dir.path().join("cargo-target"))
         // Debug tracing must not contaminate the machine-readable stdout.
         .env("RUST_LOG", "debug")
         .args([

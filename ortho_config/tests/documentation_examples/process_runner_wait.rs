@@ -10,13 +10,13 @@ use std::process::ExitStatus;
 use std::thread;
 use std::time::{Duration, Instant};
 
-pub(super) struct WaitProcess<'a> {
-    pub(super) child: &'a mut dyn ChildWrapper,
-    pub(super) readers: &'a mut [Reader],
-    pub(super) operation: &'a str,
-    pub(super) deadline: Instant,
-    pub(super) timeout: Duration,
-    pub(super) status: Option<ExitStatus>,
+pub(crate) struct WaitProcess<'a> {
+    pub(crate) child: &'a mut dyn ChildWrapper,
+    pub(crate) readers: &'a mut [Reader],
+    pub(crate) operation: &'a str,
+    pub(crate) deadline: Instant,
+    pub(crate) timeout: Duration,
+    pub(crate) status: Option<ExitStatus>,
 }
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ impl fmt::Display for DeadlineExceeded {
 
 impl std::error::Error for DeadlineExceeded {}
 
-pub(super) fn wait_for_exit<Poll>(
+pub(crate) fn wait_for_exit<Poll>(
     mut process: WaitProcess<'_>,
     mut poll: Poll,
 ) -> Result<ExitStatus>
