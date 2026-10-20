@@ -382,6 +382,22 @@ certification of the current candidate unless explicitly stated.
   complete run has no failing target. Final delivery changes only this
   ExecPlan; its Markdown gates were rerun after the entry was written, and the
   Rust gate results transfer by content identity.
+- [x] (2026-10-20) Refreshed the candidate after `main` advanced. Rebased the
+  13 branch commits from `2d6ed36` onto `3c4e2565`; `git range-diff` matched
+  all 13 patches one-to-one, and `git diff --check` passed. The merged lockfile
+  retains the full `rstest-bdd` family at 0.6.0 and `cargo-platform` 0.3.2,
+  while incorporating `sha2` 0.11.1 from `main`. The developer guide retains
+  both `main`'s shared coverage guidance and this branch's migration strategy.
+  All six local gates ran sequentially on candidate
+  `6876bfb61ea0af43511ed398f76fafa40fb17592`:
+  - `make check-fmt` — passed; 89 files unchanged.
+  - `make lint` — passed; rustdoc, Clippy and Whitaker.
+  - `make typecheck` — passed.
+  - `ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS=7200 make test` — passed; 2,072 Rust
+    tests passed, 0 failed and 35 ignored across 101 targets; BDD 43/43;
+    Python 115 passed and 5 skipped.
+  - `make markdownlint` — passed; 0 issues and `typos.toml` current.
+  - `make nixie` — passed; all Mermaid diagrams validated.
 
 ## Surprises & discoveries
 
