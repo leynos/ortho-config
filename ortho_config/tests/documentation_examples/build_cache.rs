@@ -136,12 +136,7 @@ impl BuildCache {
         let output = process_runner::run_with_observer(
             &mut command,
             Operation("build documented Rust and snapshot executables"),
-            Policy::new(
-                "build",
-                remaining.min(Policy::build().timeout()),
-                Duration::from_secs(2),
-                1024 * 1024,
-            ),
+            Policy::build().bounded_by(remaining),
             move |bytes| observe_artifacts(&observed, bytes),
         )
         .with_context(|| {

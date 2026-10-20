@@ -12,6 +12,8 @@ mod env_alias_chain;
 
 #[path = "documentation_examples/process_runner_test_support.rs"]
 mod process_runner;
+#[path = "documentation_examples/process_runner_execution_policy.rs"]
+mod process_runner_execution_policy;
 
 #[path = "documentation_examples/rust_flows.rs"]
 mod example_flows;

@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 use serde_json::Value;
 use std::io::{self, BufRead, Write};
 
-use super::GeneratedTarget;
+use super::{GeneratedTarget, binary_file_name};
 use crate::error::OrthohelpError;
 
 /// Maximum retained size for one newline-delimited Cargo JSON record.
@@ -194,11 +194,6 @@ fn record_bridge_executable(
             "Cargo bridge artifact was outside the configured target directory",
         );
     }
-}
-
-/// Return the bridge executable name with the host platform suffix.
-fn binary_file_name(binary_name: &str) -> String {
-    format!("{binary_name}{}", std::env::consts::EXE_SUFFIX)
 }
 
 /// Preserve only the first protocol error so later records cannot obscure it.

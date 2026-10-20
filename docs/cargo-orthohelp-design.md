@@ -923,21 +923,22 @@ rebuild the CLI binary as part of the test; only the generated bridge uses the
 JSON build-and-snapshot path described here.
 
 The generated manifest disables automatic binary discovery and names its
-explicit bridge target with a stable suffix derived from the selected package
-root. This keeps that executable separate from an ordinary workspace target
-named `orthohelp_bridge` while preserving the selected target directory and
-shared dependency cache.
+explicit bridge target from the selected package root and unique invocation
+directory. This keeps the executable path private to that invocation, even when
+an ordinary workspace target is named `orthohelp_bridge`, while preserving the
+selected target directory and shared dependency cache.
 
 A bridge-only build helper holds an operating-system file lock in the selected
 Cargo target directory across the Cargo build and executable snapshot. Cargo's
-own build lock ends before the bridge can copy its output. The additional lock
-serializes bridge invocations that share the generated target name; the
-distinct name prevents an ordinary workspace build of `orthohelp_bridge` from
-replacing the reported executable during that interval. This helper is private
-to the production bridge pipeline. The documentation-test `BuildState` helper
-is test-only and shared by the Rust-example and CLI documentation test targets;
-compilation and artefact extraction stay with the Rust-example helper. Neither
-helper is a general application subprocess API.
+own build lock ends before the bridge can copy its output. The generated binary
+name includes the unique invocation directory, so an ordinary workspace build
+cannot replace the reported executable during that interval. The additional
+lock serializes bridge invocations sharing the selected target and protects
+their marker lifecycle. This helper is private to the production bridge
+pipeline. The documentation-test `BuildState` helper is test-only and shared by
+the Rust-example and CLI documentation test targets; compilation and artefact
+extraction stay with the Rust-example helper. Neither helper is a general
+application subprocess API.
 
 The bridge build retains Cargo's configured compiler and documentation
 wrappers, wrapper settings, job limits, warning flags, and coverage

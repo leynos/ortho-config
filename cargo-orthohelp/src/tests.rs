@@ -100,19 +100,26 @@ fn build_bridge_command_applies_the_selected_build_environment() {
 }
 
 #[test]
-fn generated_binary_names_are_stable_and_scoped_to_the_package_path() {
+fn generated_binary_names_are_private_to_each_invocation() {
     let package_root = camino::Utf8Path::new("/workspace/application");
-    let binary_name = workspace::bridge_binary_target_name(package_root);
-    let other_binary_name =
-        workspace::bridge_binary_target_name(camino::Utf8Path::new("/workspace/other-application"));
+    let invocation_root = camino::Utf8Path::new("/cache/invocation-a");
+    let other_invocation_root = camino::Utf8Path::new("/cache/invocation-b");
+    let binary_name = workspace::bridge_binary_target_name(package_root, invocation_root);
+    let other_package_name = workspace::bridge_binary_target_name(
+        camino::Utf8Path::new("/workspace/other-application"),
+        invocation_root,
+    );
+    let other_invocation_name =
+        workspace::bridge_binary_target_name(package_root, other_invocation_root);
 
     assert!(binary_name.starts_with("orthohelp_bridge_workspace_"));
     assert_ne!(binary_name, "orthohelp_bridge");
     assert_eq!(
         binary_name,
-        workspace::bridge_binary_target_name(package_root)
+        workspace::bridge_binary_target_name(package_root, invocation_root)
     );
-    assert_ne!(binary_name, other_binary_name);
+    assert_ne!(binary_name, other_package_name);
+    assert_ne!(binary_name, other_invocation_name);
 }
 
 #[test]

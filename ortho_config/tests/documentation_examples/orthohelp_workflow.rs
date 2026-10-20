@@ -3,7 +3,6 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::path::Path;
-use std::time::Duration;
 #[path = "scenario.rs"]
 mod scenario;
 
@@ -57,14 +56,7 @@ pub(super) fn assert_agent_context(
         let output = process_runner::run_with_policy(
             &mut command,
             Operation("run documented cargo-orthohelp flow"),
-            Policy::new(
-                "build",
-                scenario::remaining(deadline)?
-                    .min(remaining)
-                    .min(Policy::build().timeout()),
-                Duration::from_secs(2),
-                1024 * 1024,
-            ),
+            Policy::build().bounded_by(scenario::remaining(deadline)?.min(remaining)),
         )
         .map_err(|error| {
             if process_runner::deadline_exceeded(&error) {

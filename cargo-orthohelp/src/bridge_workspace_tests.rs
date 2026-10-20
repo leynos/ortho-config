@@ -54,6 +54,7 @@ fn concurrent_invocations_own_private_inputs_with_shared_build_state() -> Result
     let first = BridgeWorkspace::new(&cache, &package.package_root)?;
     let second = BridgeWorkspace::new(&cache, &package.package_root)?;
     ensure!(first.paths.bridge_dir != second.paths.bridge_dir);
+    ensure!(first.paths.binary_name != second.paths.binary_name);
     ensure!(first.paths.target_dir == second.paths.target_dir);
     let first_dir = Dir::open_ambient_dir(&first.paths.bridge_dir, ambient_authority())?;
     let second_dir = Dir::open_ambient_dir(&second.paths.bridge_dir, ambient_authority())?;

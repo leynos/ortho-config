@@ -10,6 +10,8 @@
 mod cargo_environment;
 #[path = "../../ortho_config/tests/documentation_examples/process_runner_support.rs"]
 mod process_runner;
+#[path = "../../ortho_config/tests/documentation_examples/process_runner_execution_policy.rs"]
+mod process_runner_execution_policy;
 
 mod fixtures;
 mod rstest_bdd_support;

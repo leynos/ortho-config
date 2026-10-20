@@ -5,6 +5,8 @@ use camino::Utf8Path;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use std::io::Write;
+#[cfg(all(unix, not(target_os = "linux")))]
+use std::process::Command;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -38,12 +40,30 @@ pub(super) fn process_is_active(process_id: u32) -> std::io::Result<bool> {
     {
         let raw_process_id =
             i32::try_from(process_id).map_err(|_| std::io::Error::other("invalid process ID"))?;
-        match nix::sys::signal::kill(nix::unistd::Pid::from_raw(raw_process_id), None) {
-            Ok(()) => Ok(true),
-            Err(nix::errno::Errno::ESRCH) => Ok(false),
-            Err(error) => Err(std::io::Error::from(error)),
+        let output = Command::new("ps")
+            .args(["-o", "stat=", "-p"])
+            .arg(raw_process_id.to_string())
+            .output()?;
+        if !output.status.success() && output.stdout.is_empty() {
+            return Ok(false);
         }
+        let state = String::from_utf8_lossy(&output.stdout);
+        Ok(process_state_is_active(state.trim()))
     }
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn process_state_is_active(state: &str) -> bool {
+    !matches!(state.chars().next(), Some('Z' | 'X') | None)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+#[test]
+fn process_state_check_treats_zombies_as_inactive() {
+    assert!(process_state_is_active("S"));
+    assert!(!process_state_is_active("Z+"));
+    assert!(!process_state_is_active("X"));
+    assert!(!process_state_is_active(""));
 }
 
 #[cfg(windows)]

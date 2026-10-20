@@ -47,6 +47,14 @@ impl Policy {
         }
     }
 
+    /// Cap only the operation deadline while preserving cleanup and capture policy.
+    pub(crate) fn bounded_by(self, remaining: Duration) -> Self {
+        Self {
+            timeout: self.timeout.min(remaining),
+            ..self
+        }
+    }
+
     pub(crate) const fn timeout(self) -> Duration {
         self.timeout
     }

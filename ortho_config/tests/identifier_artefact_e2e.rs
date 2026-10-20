@@ -12,6 +12,8 @@ mod cargo_environment;
 mod identifier_artefact_e2e_support;
 #[path = "documentation_examples/process_runner_build_support.rs"]
 mod process_runner;
+#[path = "documentation_examples/scenario.rs"]
+mod scenario;
 
 use identifier_artefact_e2e_support::{
     artefact, artefact_path, build_fixture, clean_fixture, fixture_cargo,

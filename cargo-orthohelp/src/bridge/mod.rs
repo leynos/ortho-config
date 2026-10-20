@@ -40,7 +40,7 @@ pub struct BridgePaths {
     pub manifest_path: Utf8PathBuf,
     /// Independently selected Cargo target directory for build artefacts.
     pub target_dir: Utf8PathBuf,
-    /// Generated target name that is distinct from a workspace's default bin.
+    /// Invocation-specific target name that avoids workspace artifact collisions.
     pub binary_name: String,
 }
 

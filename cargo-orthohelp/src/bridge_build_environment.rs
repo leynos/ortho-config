@@ -6,6 +6,7 @@
 //! It is limited to bridge compilation; generated programs keep their own
 //! runtime environment policy.
 
+use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::Command;
@@ -134,42 +135,73 @@ impl BuildEnvironment {
 
 /// Check the fixed allow-list and narrow Cargo target/registry settings.
 fn is_allowed_name(environment_name: &OsStr) -> bool {
-    let Some(name) = environment_name.to_str() else {
+    let Some(name) = comparable_name(environment_name) else {
         return false;
     };
-    BUILD_ENV_ALLOWLIST.contains(&name) || is_target_build_override(name) || is_registry_index(name)
+    is_listed_name(name.as_ref())
+        || is_target_build_override(name.as_ref())
+        || is_registry_index(name.as_ref())
+}
+
+/// Match host environment keys without changing the spelling forwarded to Cargo.
+fn comparable_name(environment_name: &OsStr) -> Option<Cow<'_, str>> {
+    let name = environment_name.to_str()?;
+    #[cfg(windows)]
+    {
+        Some(Cow::Owned(name.to_ascii_uppercase()))
+    }
+    #[cfg(not(windows))]
+    {
+        Some(Cow::Borrowed(name))
+    }
+}
+
+/// Compare one normalized key with the fixed environment allow-list.
+fn is_listed_name(name: &str) -> bool {
+    BUILD_ENV_ALLOWLIST.iter().any(|allowed| {
+        comparable_name(OsStr::new(allowed)).is_some_and(|candidate| candidate.as_ref() == name)
+    })
 }
 
 /// Recognize only target linker and rustflags variables.
 fn is_target_build_override(name: &str) -> bool {
-    has_cargo_scope_setting(name, "CARGO_TARGET_", &["LINKER", "RUSTFLAGS"])
-}
-
-/// Recognize registry index URLs while excluding credential variables.
-fn is_registry_index(name: &str) -> bool {
-    has_cargo_scope_setting(name, "CARGO_REGISTRIES_", &["INDEX"])
-}
-
-/// Validate one scoped Cargo variable against its approved setting suffixes.
-fn has_cargo_scope_setting(name: &str, prefix: &str, allowed_settings: &[&str]) -> bool {
-    let Some(scoped_setting) = name.strip_prefix(prefix) else {
+    let Some(scoped_setting) = name.strip_prefix("CARGO_TARGET_") else {
         return false;
     };
     let Some((scope, setting)) = scoped_setting.rsplit_once('_') else {
         return false;
     };
+    is_valid_cargo_scope(scope) && matches!(setting, "LINKER" | "RUSTFLAGS")
+}
+
+/// Recognize registry index URLs while excluding credential variables.
+fn is_registry_index(name: &str) -> bool {
+    let Some(registry_scope) = name.strip_prefix("CARGO_REGISTRIES_") else {
+        return false;
+    };
+    let Some(scope) = registry_scope.strip_suffix("_INDEX") else {
+        return false;
+    };
+    is_valid_cargo_scope(scope)
+}
+
+/// Accept Cargo's uppercase scope spelling and embedded underscores.
+fn is_valid_cargo_scope(scope: &str) -> bool {
     !scope.is_empty()
         && scope
             .bytes()
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
-        && allowed_settings.contains(&setting)
 }
 
 /// Reject non-UTF-8 and credential-bearing proxy or index values.
 fn is_safe_value(environment_name: &OsStr, value: &OsStr) -> bool {
-    let Some(name) = environment_name.to_str() else {
+    let Some(raw_name) = environment_name.to_str() else {
         return false;
     };
+    let Some(comparable) = comparable_name(environment_name) else {
+        return false;
+    };
+    let name = comparable.as_ref();
     let may_contain_credentials = matches!(
         name,
         "ALL_PROXY"
@@ -182,12 +214,21 @@ fn is_safe_value(environment_name: &OsStr, value: &OsStr) -> bool {
             | "NO_PROXY"
             | "no_proxy"
     ) || is_registry_index(name);
-    !may_contain_credentials
-        || value.to_str().is_some_and(|text| {
-            !text
-                .chars()
-                .any(|character| matches!(character, '@' | '?' | '#'))
-        })
+    if !may_contain_credentials {
+        return true;
+    }
+    let is_safe = value.to_str().is_some_and(|text| {
+        !text
+            .chars()
+            .any(|character| matches!(character, '@' | '?' | '#'))
+    });
+    if !is_safe {
+        tracing::warn!(
+            variable = raw_name,
+            "omitted credential-bearing Cargo build setting; configure proxy and registry credentials in Cargo configuration under CARGO_HOME"
+        );
+    }
+    is_safe
 }
 
 /// Avoid treating the coverage CLI itself as Cargo's compiler wrapper.

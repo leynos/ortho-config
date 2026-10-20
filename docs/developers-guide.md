@@ -71,21 +71,21 @@ the use local to the module that needs it.
 
 ### Nextest test-group serialization
 
-`.config/nextest.toml` assigns two test binaries to single-threaded groups:
+`.config/nextest.toml` places nine documentation and cache users in the
+single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
+`nested_subcommand_end_to_end`, `documented_command`,
+`documentation_examples_rust_tests`, `agent_context_contract`,
+`policy_report_contract`, `golden_tests` and `identifier_artefact_e2e`. These
+binaries can clear the shared BDD cache or build documented examples against
+Cargo's shared target. A process-local `Mutex` cannot serialize separate
+nextest processes or direct `cargo test` runs; filesystem locks also protect
+ownership across those processes.
 
-- **`rstest_bdd`** — each BDD scenario runs in its own OS process under nextest,
-  so a process-local `Mutex` cannot protect the shared `target/orthohelp` cache
-  directory. Setting `max-threads = 1` for this binary ensures scenarios run
-  sequentially and do not race on cache reads or `remove_dir_all` calls.
-- **`powershell_windows`** — both test cases invoke
-  `cargo-orthohelp --format ps` for the same package, which writes to the same
-  ephemeral bridge directory (`target/orthohelp/<hash>/`). On Windows,
-  `cargo build` holds a read lock on `Cargo.toml`; a concurrent
-  truncate-and-rewrite from the second invocation violates that lock.
-  Serializing the binary prevents the race.
-
-Do not remove the `max-threads = 1` constraint from either group without first
-verifying that the underlying shared-state access has been eliminated.
+The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
+same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
+Windows, `cargo build` holds a read lock on `Cargo.toml`; a concurrent
+truncate-and-rewrite from another invocation violates that lock. Keep the whole
+group serialized unless the shared-state access has been eliminated.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:

@@ -25,19 +25,42 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 #[test]
-fn operation_policies_select_distinct_budgets() {
+fn operation_policies_select_distinct_timeouts() {
     let build = Policy::build();
-    let execution = execution_policy(Duration::from_secs(60), Duration::from_secs(2), 1024 * 1024);
+    let execution = crate::process_runner_execution_policy::policy();
     let discovery = Policy::discovery();
 
     assert_eq!(build.timeout(), Duration::from_secs(596));
     assert!(build.timeout() > execution.timeout());
     assert!(execution.timeout() > discovery.timeout());
+}
+
+#[test]
+fn operation_policies_preserve_capture_and_cleanup_limits() {
+    let build = Policy::build();
+    let execution = crate::process_runner_execution_policy::policy();
     assert_eq!(build.output_limit(), 1024 * 1024);
     assert_eq!(build.cleanup_timeout(), Duration::from_secs(2));
+    assert_eq!(execution.output_limit(), 1024 * 1024);
+    assert_eq!(execution.cleanup_timeout(), Duration::from_secs(2));
+}
+
+#[test]
+fn bounded_build_policy_keeps_its_other_limits() {
+    let build = Policy::build();
     assert_eq!(
         execution_policy(Duration::from_millis(7), Duration::from_secs(2), 1024).timeout(),
         Duration::from_millis(7)
+    );
+
+    let bounded = build.bounded_by(Duration::from_secs(17));
+    assert_eq!(bounded.timeout(), Duration::from_secs(17));
+    assert_eq!(bounded.cleanup_timeout(), build.cleanup_timeout());
+    assert_eq!(bounded.output_limit(), build.output_limit());
+    assert_eq!(bounded.kind_name(), build.kind_name());
+    assert_eq!(
+        build.bounded_by(Duration::from_secs(700)).timeout(),
+        build.timeout()
     );
 }
 

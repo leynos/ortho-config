@@ -20,9 +20,10 @@ fn workspace_binary_cannot_replace_generated_bridge_snapshot() -> Result<()> {
     let temporary = tempdir()?;
     let target = support::utf8_path(temporary.path().join("target"))?;
     let snapshot = support::utf8_path(temporary.path().join("private-run"))?;
-    let binary_name = super::super::workspace::bridge_binary_target_name(camino::Utf8Path::new(
-        "/workspace/fixture",
-    ));
+    let binary_name = super::super::workspace::bridge_binary_target_name(
+        camino::Utf8Path::new("/workspace/fixture"),
+        &snapshot,
+    );
 
     let executable = support::build_probe("overlap", &target, &snapshot, &binary_name)?;
     let content = support::read_text(&executable)?;

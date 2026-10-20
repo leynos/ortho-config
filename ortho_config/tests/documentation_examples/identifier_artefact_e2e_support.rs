@@ -4,7 +4,7 @@
 //! directory so its clean operations cannot delete workspace test binaries.
 //! Cargo still uses the default shared package cache.
 
-use super::{cargo_environment, process_runner};
+use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use serde_json::Value;
@@ -12,6 +12,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Instant;
 
 const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
@@ -101,11 +102,25 @@ pub(super) struct FixtureCargo {
     repository: PathBuf,
     target_directory: PathBuf,
     package_id: String,
+    deadline: Instant,
     _target_owner: tempfile::TempDir,
+}
+
+impl FixtureCargo {
+    fn bounded_policy(
+        &self,
+        policy: process_runner::Policy,
+        operation: &str,
+    ) -> Result<process_runner::Policy> {
+        let remaining = scenario::remaining(self.deadline)
+            .with_context(|| format!("{operation}: scenario deadline elapsed"))?;
+        Ok(policy.bounded_by(remaining))
+    }
 }
 
 /// Discover the fixture package and allocate a target private to this test.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
+    let deadline = scenario::deadline();
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("find fixture workspace")?
@@ -115,10 +130,12 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
     command
         .args(["metadata", "--offline", "--no-deps", "--format-version=1"])
         .current_dir(&repository);
+    let remaining =
+        scenario::remaining(deadline).context("discover Cargo target for identifier artefact")?;
     let output = process_runner::run_with_policy(
         &mut command,
         process_runner::Operation("discover Cargo target for identifier artefact"),
-        process_runner::Policy::discovery(),
+        process_runner::Policy::discovery().bounded_by(remaining),
     )?;
     ensure!(
         output.status.success(),
@@ -153,6 +170,7 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         repository,
         target_directory,
         package_id: package_id.to_owned(),
+        deadline,
         _target_owner: target_owner,
     })
 }
@@ -187,7 +205,10 @@ pub(super) fn build_fixture(
     let output = process_runner::run_with_observer(
         &mut command,
         process_runner::Operation("build identifier artefact fixture"),
-        process_runner::Policy::build(),
+        cargo.bounded_policy(
+            process_runner::Policy::build(),
+            "build identifier artefact fixture",
+        )?,
         move |chunk| lock_cargo_messages(&observed_messages).observe(chunk),
     )
     .map_err(|error| retain_runner_error(error, "build identifier artefact fixture"))?;
@@ -212,7 +233,10 @@ pub(super) fn clean_fixture(cargo: &FixtureCargo) -> Result<()> {
             .arg(&cargo.target_directory)
             .current_dir(&cargo.repository),
         process_runner::Operation("clean identifier artefact fixture outputs"),
-        process_runner::Policy::build(),
+        cargo.bounded_policy(
+            process_runner::Policy::build(),
+            "clean identifier artefact fixture outputs",
+        )?,
     )
     .map_err(|error| retain_runner_error(error, "clean identifier artefact fixture outputs"))?;
     ensure!(

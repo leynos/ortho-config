@@ -224,15 +224,8 @@ fn run_process_before(
     deadline: Instant,
 ) -> Result<std::process::Output> {
     CargoEnvironment::build().apply(command);
-    let max_duration = Policy::discovery().timeout();
     let remaining = remaining_discovery_time(deadline, operation.0)?;
-    let default_policy = Policy::discovery();
-    let policy = Policy::new(
-        "discovery",
-        remaining.min(max_duration),
-        default_policy.cleanup_timeout(),
-        default_policy.output_limit(),
-    );
+    let policy = Policy::discovery().bounded_by(remaining);
     let output = process_runner::run_with_policy(command, operation, policy)?;
     let Operation(operation_name) = operation;
     ensure!(
@@ -254,7 +247,7 @@ fn remaining_discovery_time(deadline: Instant, operation: &str) -> Result<Durati
 }
 
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn allowed_environment(environment: &str) -> Vec<(String, String)> {
+pub(super) fn allowed_environment(environment: &str) -> Vec<(String, String)> {
     environment
         .lines()
         .filter_map(|line| line.split_once('='))
@@ -268,7 +261,7 @@ fn allowed_environment(environment: &str) -> Vec<(String, String)> {
 }
 
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn first_output_line(output: &[u8]) -> Option<&OsStr> {
+pub(super) fn first_output_line(output: &[u8]) -> Option<&OsStr> {
     let decoded_output = std::str::from_utf8(output).ok()?;
     decoded_output
         .lines()

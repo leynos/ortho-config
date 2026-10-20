@@ -167,10 +167,10 @@ edit the selected workspace's lockfile. Run the JSON-reported executable from
 its private snapshot; do not assume a `target/debug` path.
 
 The generated manifest disables automatic binary discovery and names its
-explicit bridge target with a stable suffix derived from the selected package
-root. This keeps its executable path distinct from a workspace's ordinary
-`orthohelp_bridge` target while preserving the selected target directory and
-shared dependency cache.
+explicit bridge target from both the selected package root and unique
+invocation directory. This keeps the artefact path private to the invocation,
+even when an ordinary workspace target uses the same conventional bridge name,
+while preserving the selected target directory and shared dependency cache.
 
 A production bridge helper holds a stable `fs4` operating-system lock across
 the Cargo JSON build and executable snapshot. It serializes bridge invocations
@@ -208,7 +208,12 @@ retain coverage flags and LLVM profile variables but omit `cargo-llvm-cov` from
 compiler wrapper for a second Cargo process. Other configured wrappers remain
 available through Cargo configuration and the explicit wrapper settings. Their
 separate ownership state protects each build-and-snapshot interval. Documented
-application binaries continue to receive their smaller runtime allow-list.
+application binaries continue to receive their smaller runtime allow-list. The
+bridge selector remains private to `BuildEnvironment` and accepts only named
+toolchain inputs, Cargo target linker or rustflags settings, and registry index
+URLs. Windows matching is ASCII case-insensitive while child processes receive
+the original environment key. Credential-bearing proxy and registry values are
+omitted with a warning that names the variable but never its value.
 
 One monotonic scenario deadline covers discovery, lock wait, build, snapshot,
 and execution; operation-specific build, execution, discovery, and cleanup

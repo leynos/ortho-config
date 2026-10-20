@@ -49,6 +49,8 @@ pub type StepError = Box<dyn std::error::Error + Send + Sync>;
 /// Result type for step definition operations.
 pub type StepResult<T> = Result<T, StepError>;
 
+const SCENARIO_TIMEOUT_SECS: u64 = 596;
+
 /// Scenario state for cargo-orthohelp scenarios.
 #[derive(Debug, ScenarioState)]
 pub struct OrthoHelpContext {
@@ -140,7 +142,7 @@ fn acquire_cache_lock(file: File, deadline: Instant) -> StepResult<CacheLock> {
             Err(error) if error.code() == HRESULT::from_win32(ERROR_LOCK_VIOLATION.0) => {
                 wait_for_cache_ownership_retry(deadline)?;
             }
-            Err(error) => return Err(error.into()),
+            Err(error) => return Err(std::io::Error::other(error.to_string()).into()),
         }
     }
 }
@@ -207,12 +209,7 @@ pub(super) fn resolve_target_dir(
     let output = process_runner::run_with_policy(
         &mut command,
         process_runner::Operation("discover the BDD Cargo target"),
-        process_runner::Policy::new(
-            "discovery",
-            remaining.min(process_runner::Policy::discovery().timeout()),
-            Duration::from_secs(2),
-            1024 * 1024,
-        ),
+        process_runner::Policy::discovery().bounded_by(remaining),
     )?;
     if !output.status.success() {
         return Err(format!(
@@ -247,7 +244,7 @@ pub fn orthohelp_context() -> OrthoHelpContext {
     };
     let ctx = OrthoHelpContext::default();
     ctx.workspace_root.set(workspace_root.clone());
-    let deadline = Instant::now() + Duration::from_secs(596);
+    let deadline = Instant::now() + Duration::from_secs(SCENARIO_TIMEOUT_SECS);
     ctx.deadline.set(deadline);
     let target_dir = match resolve_target_dir(&workspace_root, deadline) {
         Ok(target) => target,

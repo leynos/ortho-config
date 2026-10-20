@@ -22,7 +22,7 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use super::steps::{
     OrthoHelpContext, StepResult, get_out_dir, get_workspace_root, scenario_target_dir,
@@ -145,12 +145,7 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
         return Err("BDD scenario deadline elapsed before cargo-orthohelp execution".into());
     }
     let default_policy = if args.contains(&"--no-build") {
-        crate::process_runner::Policy::new(
-            "execution",
-            Duration::from_secs(60),
-            Duration::from_secs(2),
-            1024 * 1024,
-        )
+        crate::process_runner_execution_policy::policy()
     } else {
         crate::process_runner::Policy::build()
     };
@@ -163,12 +158,7 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
     crate::process_runner::run_with_policy(
         &mut command,
         crate::process_runner::Operation("run cargo-orthohelp BDD scenario"),
-        crate::process_runner::Policy::new(
-            default_policy.kind_name(),
-            timeout,
-            default_policy.cleanup_timeout(),
-            default_policy.output_limit(),
-        ),
+        default_policy.bounded_by(timeout),
     )
     .map_err(|error| classify_runner_error(&error))
 }

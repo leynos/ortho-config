@@ -146,6 +146,52 @@ fn dynamic_cargo_build_inputs_are_narrow_and_credential_free() {
     assert!(!selected.contains_key("CARGO_HTTP_PROXY"));
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_environment_names_are_matched_without_exposing_credentials() {
+    let values = [
+        ("Path", OsString::from(r"C:\toolchain\bin")),
+        ("SystemRoot", OsString::from(r"C:\Windows")),
+        (
+            "Https_Proxy",
+            OsString::from("https://user:secret@proxy.example"),
+        ),
+        (
+            "Cargo_Target_x86_64_pc_windows_msvc_Linker",
+            OsString::from("clang-cl"),
+        ),
+        (
+            "Cargo_Registries_Internal_Index",
+            OsString::from("sparse+https://registry.example/index/"),
+        ),
+        (
+            "Cargo_Registries_Internal_Token",
+            OsString::from("must-not-reach-build-script"),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, value)| (OsString::from(name), value));
+    let environment = BuildEnvironment::from_values(values);
+    let selected = environment
+        .0
+        .iter()
+        .map(|(name, value)| (name.to_string_lossy().into_owned(), value.as_os_str()))
+        .collect::<HashMap<_, _>>();
+
+    assert_eq!(selected.get("Path"), Some(&OsStr::new(r"C:\toolchain\bin")));
+    assert_eq!(selected.get("SystemRoot"), Some(&OsStr::new(r"C:\Windows")));
+    assert_eq!(
+        selected.get("Cargo_Target_x86_64_pc_windows_msvc_Linker"),
+        Some(&OsStr::new("clang-cl"))
+    );
+    assert_eq!(
+        selected.get("Cargo_Registries_Internal_Index"),
+        Some(&OsStr::new("sparse+https://registry.example/index/"))
+    );
+    assert!(!selected.contains_key("Https_Proxy"));
+    assert!(!selected.contains_key("Cargo_Registries_Internal_Token"));
+}
+
 #[rstest::rstest]
 #[case::linux_cli("/tools/cargo-llvm-cov")]
 #[case::windows_cli("/tools/cargo-llvm-cov.exe")]

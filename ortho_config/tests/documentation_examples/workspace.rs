@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tempfile::TempDir;
 
 use super::documentation_examples::{DocumentedExample, is_valid_example_id};
@@ -238,12 +238,8 @@ impl ExampleWorkspace {
         process_runner::run_with_policy(
             &mut command,
             Operation(&operation),
-            process_runner::Policy::new(
-                "execution",
-                scenario::remaining(self.deadline)?.min(Duration::from_secs(60)),
-                Duration::from_secs(2),
-                1024 * 1024,
-            ),
+            crate::process_runner_execution_policy::policy()
+                .bounded_by(scenario::remaining(self.deadline)?),
         )
     }
 
@@ -299,14 +295,8 @@ impl ExampleWorkspace {
                 process_runner::run_with_policy(
                     &mut command,
                     Operation(&operation),
-                    process_runner::Policy::new(
-                        "execution",
-                        scenario::remaining(self.deadline)?
-                            .min(remaining)
-                            .min(Duration::from_secs(60)),
-                        Duration::from_secs(2),
-                        1024 * 1024,
-                    ),
+                    crate::process_runner_execution_policy::policy()
+                        .bounded_by(scenario::remaining(self.deadline)?.min(remaining)),
                 )
             },
         )

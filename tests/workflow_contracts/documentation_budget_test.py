@@ -15,7 +15,9 @@ SUPPORT = Path(__file__).resolve().parents[2] / "ortho_config/tests/documentatio
 def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None:
     """Fit this binary's default allowance, not the larger trybuild override."""
     policy = (SUPPORT / "process_runner_policy.rs").read_text(encoding="utf-8")
-    runner_tests = (SUPPORT / "process_runner_tests.rs").read_text(encoding="utf-8")
+    execution_policy = (SUPPORT / "process_runner_execution_policy.rs").read_text(
+        encoding="utf-8"
+    )
     scenario = (SUPPORT / "scenario.rs").read_text(encoding="utf-8")
     bdd_scenarios = (
         Path(__file__).resolve().parents[2]
@@ -28,9 +30,9 @@ def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None
         )
     }
     execution_match = re.search(
-        r'execution_policy\(Duration::from_secs\((\d+)\),', runner_tests
+        r'"execution",\s*Duration::from_secs\((\d+)\)', execution_policy
     )
-    assert execution_match is not None, "runner tests must exercise the execution budget"
+    assert execution_match is not None, "execution policy must declare its timeout"
     operations["execution"] = int(execution_match[1])
     cleanup_match = re.search(
         r'Self::new\(\s*"build",\s*Duration::from_secs\(\d+\),\s*Duration::from_secs\((\d+)\)',
@@ -38,12 +40,14 @@ def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None
     )
     scenario_match = re.search(r"PER_TEST_SECONDS:\s*u64\s*=\s*(\d+)", scenario)
     bdd_deadline_match = re.search(
-        r"Instant::now\(\)\s*\+\s*Duration::from_secs\((\d+)\)",
+        r"SCENARIO_TIMEOUT_SECS:\s*u64\s*=\s*(\d+)",
         bdd_scenarios,
     )
     assert cleanup_match is not None, "Policy::new must declare a cleanup_timeout"
     assert scenario_match is not None, "scenario.rs must declare PER_TEST_SECONDS"
-    assert bdd_deadline_match is not None, "BDD scenarios must declare a fixed deadline"
+    assert bdd_deadline_match is not None, (
+        "BDD scenarios must declare SCENARIO_TIMEOUT_SECS for their fixed deadline"
+    )
     cleanup = int(cleanup_match[1])
     per_test = int(scenario_match[1])
     nextest = NEXTEST_CONFIG.read_text(encoding="utf-8")

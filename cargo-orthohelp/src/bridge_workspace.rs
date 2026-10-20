@@ -12,10 +12,16 @@ use crate::hex::to_lower_hex;
 /// Prefix keeps generated bridge outputs apart from ordinary workspace bins.
 const BRIDGE_BINARY_PREFIX: &str = "orthohelp_bridge_workspace_";
 
-/// Derive a stable generated target name from its package's resolved path.
-pub(super) fn bridge_binary_target_name(package_root: &Utf8Path) -> String {
-    let root_digest = Sha256::digest(package_root.as_str().as_bytes());
-    format!("{BRIDGE_BINARY_PREFIX}{}", to_lower_hex(&root_digest))
+/// Derive an invocation-private target name from its package and workspace paths.
+pub(super) fn bridge_binary_target_name(
+    package_root: &Utf8Path,
+    invocation_root: &Utf8Path,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(package_root.as_str().as_bytes());
+    digest.update([0]);
+    digest.update(invocation_root.as_str().as_bytes());
+    format!("{BRIDGE_BINARY_PREFIX}{}", to_lower_hex(&digest.finalize()))
 }
 
 /// Keep generated inputs and the executed snapshot alive for one CLI invocation.
@@ -52,9 +58,9 @@ impl BridgeWorkspace {
         Ok(Self {
             paths: BridgePaths {
                 manifest_path: bridge_dir.join("Cargo.toml"),
+                binary_name: bridge_binary_target_name(package_root, &bridge_dir),
                 bridge_dir,
                 target_dir: cache.target_dir.clone(),
-                binary_name: bridge_binary_target_name(package_root),
             },
             _owner: owner,
         })
