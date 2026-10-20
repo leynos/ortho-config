@@ -18,3 +18,10 @@ pub(super) use implementation::{
 mod cargo_environment_tests;
 #[path = "cargo_runner_tests.rs"]
 mod tests;
+
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+pub(super) fn msvc_environment_is_prepared(
+    lookup: impl FnMut(&str) -> Option<std::ffi::OsString>,
+) -> bool {
+    implementation::msvc_environment_is_prepared(lookup)
+}
