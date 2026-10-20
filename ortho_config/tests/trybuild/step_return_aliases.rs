@@ -21,9 +21,9 @@
 //! crate has no feature file of its own, and runtime behaviour is covered by
 //! the `rstest_bdd` integration target in `ortho_config`.
 //!
-//! The return annotations are deliberate. `Ok(())` from `anyhow::Result<()>`
-//! is `unnecessary_wraps` for Clippy, and both aliases exist to exercise the
-//! wrapper, so the expectation is scoped to the two functions that need it.
+//! The return annotations are deliberate: this fixture checks that both
+//! aliases compile through the generated wrapper. `trybuild` compiles the
+//! fixture with Cargo and `rustc`, not Clippy.
 
 use std::error::Error;
 
@@ -44,11 +44,6 @@ type BoxedStepResult<T> = Result<T, BoxedStepError>;
 
 /// A failing `anyhow::Result` step, as `ortho_config` writes them.
 #[given("a downstream alias reports failure")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the step deliberately returns Result to exercise the wrapper's \
-              Result normalization"
-)]
 fn anyhow_alias_reports_failure() -> StepAlias<()> {
     Err(anyhow::anyhow!("downstream alias failed"))
 }
@@ -69,11 +64,6 @@ fn boxed_alias_reports_level(level: u8) -> BoxedStepResult<Level> { Ok(Level(lev
 
 /// A unit-returning `anyhow::Result` step, whose `Ok(())` carries no payload.
 #[then("a downstream alias finishes with no payload")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the step deliberately returns Result to exercise the wrapper's \
-              Result normalization"
-)]
 fn anyhow_alias_finishes_empty() -> StepAlias<()> { Ok(()) }
 
 /// Runs each alias through the return values its wrapper must normalize.

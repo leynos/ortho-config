@@ -17,8 +17,8 @@
 //! payload, which is why that module imports this one's type instead.
 //!
 //! Each binding names its scenario explicitly. Without a selector the macro
-//! defaults to the feature file's first scenario, so four bindings over one
-//! file would otherwise run the same case four times.
+//! defaults to the feature file's first scenario, so several bindings over
+//! one file would otherwise all run the same case.
 
 use anyhow::Result;
 use rstest::fixture;

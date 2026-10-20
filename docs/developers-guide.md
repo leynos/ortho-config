@@ -1155,11 +1155,13 @@ Migration guidance for contributors:
   floor. `Cargo.lock` therefore holds `cargo-platform` at 0.3.2 (declared
   1.88). Do not drop that constraint when refreshing the lockfile, and re-check
   the whole graph before raising the floor.
-- To re-check the floor after any dependency change, scan every registry
-  package in `Cargo.lock` for a `rust-version` above the workspace's declared
-  value. The offending package is not necessarily one this workspace names
-  directly; here it was a third-level transitive dependency reached through a
-  crate that upstream does not require for a plain-BDD consumer.
+- To re-check the floor after any dependency change, use `Cargo.lock` to
+  enumerate resolved registry packages, then read each package's `rust-version`
+  from its registry manifest or full `cargo metadata` output. Compare those
+  values with the workspace's declared floor. The offending package is not
+  necessarily one this workspace names directly; here it was a third-level
+  transitive dependency reached through a crate that upstream does not require
+  for a plain-BDD consumer.
 - The MSRV breakage surfaced only as a `trybuild` failure in
   `cargo test -p ortho_config --test compile_fail`, because the generated
   trybuild sandbox resolves its own lockfile. A green workspace build is not
