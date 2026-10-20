@@ -151,6 +151,7 @@ fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
     Ok(())
 }
 
+/// Probe the process-backed loader and report its merged values to the parent.
 #[test]
 #[ignore = "run by the isolated process-backed wrapper test"]
 fn process_backed_probe() -> Result<()> {

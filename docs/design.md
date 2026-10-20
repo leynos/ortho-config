@@ -281,6 +281,24 @@ checks (file → environment → CLI) stay deterministic and the developer's
 environment remains pristine. Compile-time tag filters keep `@requires.yaml`
 scenarios out of non-`yaml` builds without ad-hoc runtime filtering.
 
+Unit tests that exercise CLI overrides use `ConfigFixture`, which creates a
+fresh `TempDir` and scopes file writes through a directory capability. Its
+`ConfigDiscovery` is rooted at that fixture and receives a closed `MapEnv`, so
+discovery and merge inputs are explicit. The `sample_config` fixture reads the
+shipped baseline and override files through a directory capability, stages
+copies in a fresh `ConfigFixture`, then injects the selected paths into the
+source-aware loaders. Public loaders keep their process-backed defaults.
+
+Message tests use the private `build_take_leave_plan_with_greet_loader` seam to
+provide deterministic greeting defaults; the public `build_take_leave_plan`
+continues to load defaults through the process-backed loader. A child-process
+test covers the supported process-backed subcommand loader: it clears the
+child's environment, supplies fixture values for `HOME`, `XDG_CONFIG_DIRS`, and
+the test setting, then asserts that the environment value overrides the file
+value while another file-only value remains available. The child also receives
+`LLVM_PROFILE_FILE` when set; relative profile paths are resolved against the
+parent test's working directory before launch.
+
 The example now ships repository-managed samples in `config/baseline.toml` and
 `config/overrides.toml`. The baseline file captures the values exercised by the
 demo scripts and behavioural scenarios, while `overrides.toml` extends it to

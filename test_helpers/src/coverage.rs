@@ -78,6 +78,7 @@ mod tests {
         );
     }
 
+    /// Checks that an absolute profile path is returned unchanged.
     #[test]
     fn absolute_profile_paths_pass_through_unchanged() {
         let parent = std::env::temp_dir();

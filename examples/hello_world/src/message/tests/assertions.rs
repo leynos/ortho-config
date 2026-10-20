@@ -40,6 +40,7 @@ pub(crate) fn assert_plan(plan: &Plan, expected: &ExpectedPlan) -> Result<()> {
     Ok(())
 }
 
+/// Assert a greeting plan built from shipped sample configuration and defaults.
 pub(crate) fn assert_sample_config_greeting<F>(
     sample_config: SampleConfigFixture,
     build_fn: F,

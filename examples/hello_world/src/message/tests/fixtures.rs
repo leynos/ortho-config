@@ -37,6 +37,7 @@ pub(crate) struct PlanVariantCase {
 pub(crate) type GreetSetup = fn(&mut HelloWorldCli, &mut GreetCommand) -> Result<()>;
 pub(crate) type LeaveSetup = fn(&mut HelloWorldCli, &mut TakeLeaveCommand) -> Result<()>;
 
+/// Build greeting and farewell plans from explicit configuration and defaults.
 pub(crate) fn build_plan_from(
     config: HelloWorldCli,
     greet: &GreetCommand,
@@ -112,6 +113,7 @@ pub(crate) fn base_config() -> HelloWorldCliFixture {
     Ok(config)
 }
 
+/// Build a plan from prepared inputs or the optional sampled configuration.
 pub(crate) fn build_plan_variant(
     config: HelloWorldCli,
     greet: &GreetCommand,

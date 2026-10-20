@@ -16,6 +16,7 @@ use fixtures::{
 };
 use rstest::rstest;
 
+/// Exercises greeting and farewell plan variants with ordinary and sampled inputs.
 #[rstest]
 fn build_plan_variants(sample_config: SampleConfigFixture) -> Result<()> {
     let cases = [
@@ -130,6 +131,7 @@ fn build_plan_propagates_validation_errors() -> Result<()> {
     Ok(())
 }
 
+/// Checks farewell details and its greeting using injected greeting defaults.
 #[test]
 fn build_take_leave_plan_produces_steps() -> Result<()> {
     let take_leave_command = TakeLeaveCommand {
@@ -162,6 +164,7 @@ fn build_take_leave_plan_produces_steps() -> Result<()> {
     Ok(())
 }
 
+/// Checks that farewell greeting options override injected greeting defaults.
 #[rstest]
 fn build_take_leave_plan_applies_greeting_overrides(
     base_config: HelloWorldCliFixture,
@@ -204,6 +207,7 @@ fn join_fragments_writes_list() -> Result<()> {
     Ok(())
 }
 
+/// Checks that farewell planning uses greeting defaults from the sample config.
 #[rstest]
 fn build_take_leave_plan_uses_greet_defaults(sample_config: SampleConfigFixture) -> Result<()> {
     assert_sample_config_greeting(sample_config, |config, defaults| {
@@ -215,6 +219,7 @@ fn build_take_leave_plan_uses_greet_defaults(sample_config: SampleConfigFixture)
     })
 }
 
+/// Checks that greeting planning applies the shipped sample overrides.
 #[rstest]
 fn build_plan_uses_sample_overrides(sample_config: SampleConfigFixture) -> Result<()> {
     assert_sample_config_greeting(sample_config, |config, greet| {
