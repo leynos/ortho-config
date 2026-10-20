@@ -19,8 +19,9 @@ observe:
 
 - `Cargo.lock` resolves `rstest-bdd = 0.6.0` and
   `rstest-bdd-macros = 0.6.0` with no remaining `0.5.0` packages.
-- `make test` passes with the same set of `rstest-bdd` scenarios executing as
-  before the change (baseline: 127 `Scenario` blocks across 28 feature files, no
+- `make test` passes with all baseline `rstest-bdd` scenarios preserved and
+  the five new step-return scenarios executing (baseline: 127 `Scenario` blocks
+  across 28 feature files; candidate: 132 across 29 feature files; no
   `Scenario Outline` blocks).
 - `make check-fmt`, `make lint` and `make markdownlint` pass on the final
   tree.
@@ -36,9 +37,9 @@ or application redesign.
 Hard invariants that must hold throughout implementation. These are not
 suggestions; violation requires escalation, not workarounds.
 
-- **Preserve behavioural coverage.** No `.feature` file may be deleted or have
-  `Scenario` blocks removed to make the migration compile. Scenario count after
-  migration must be greater than or equal to the baseline of 127.
+- **Preserve behavioural coverage.** No baseline `.feature` file may be
+  deleted or have `Scenario` blocks removed to make the migration compile.
+  Preserve all 127 baseline scenarios and add the five step-return scenarios.
 - **Preserve production interfaces.** No public API in `ortho_config/src/`,
   `ortho_config_macros/src/` or `examples/hello_world/src/` may change except
   where a change is strictly required to keep existing tests compiling. The BDD
@@ -138,6 +139,9 @@ Use a list with checkboxes to summarize granular steps. Every stopping point
 must be documented here, even if it requires splitting a partially completed
 task into two.
 
+Entries below document historical milestones as they occurred; they are not
+certification of the current candidate unless explicitly stated.
+
 - [x] (2026-10-14) Reconnaissance: branch, manifests, lockfiles, toolchain,
   CI, feature-file inventory, step-return survey.
 - [x] (2026-10-14) Resolve upstream `v0.6.0` tag to an immutable commit and
@@ -218,9 +222,9 @@ task into two.
   - `make markdownlint` — green (89 files, 0 issues; spelling gate reports
     `current: typos.toml`, so the generated file needed no rewrite).
   - `make nixie` — green (all Mermaid diagrams validated).
-  The scenario inventory is unchanged from the V1 baseline: every feature file
-  and every step definition still runs, and no test was ignored, renamed away,
-  or weakened to achieve the green result.
+  This historical run predates the step-return feature file. The candidate
+  preserves all 127 baseline scenarios and adds five scenarios in one new
+  feature file; no baseline scenario was ignored, renamed away, or weakened.
 - [x] (2026-10-17) Post-rebase gate rerun. After the replay onto `main` at
   `67fdb341` and the `output` module split it forced, all five gates were run
   again on the source tree that the branch delivers
@@ -235,15 +239,17 @@ task into two.
   The dependency-only commit `e0af849f` was also `cargo check`ed on its own
   (`--workspace --all-targets --all-features`), proving the refactor in the
   next commit is not concealing a required API adaptation.
-- [x] (2026-10-18) Final delivery. The pull request head delivers a tree that
-  differs from the gated tree `5a961a4a991274f73d0b8e18c5bf817851419e76` only
-  in this ExecPlan. Every changed path in the delta is Markdown, so the Rust
-  gate certificates transfer by content identity, and the Markdown gates were
-  re-run over the delivered head. The four work commits are ordered so that the
-  documentation import, the dependency and lockfile migration, the
-  one-emission-per-function refactor, and the step-return regression suite can
-  each be reviewed or reverted on their own; a fifth commit records this
-  delivery state.
+- [x] (2026-10-18) Final delivery at that point. The pull request head then
+  delivered a tree that differs from the gated tree
+  `5a961a4a991274f73d0b8e18c5bf817851419e76` only in this ExecPlan. Every
+  changed path in the delta is Markdown, so the Rust gate certificates transfer
+  by content identity, and the Markdown gates were re-run over the delivered
+  head. The four work commits are ordered so that the documentation import, the
+  dependency and lockfile migration, the one-emission-per-function refactor,
+  and the step-return regression suite can each be reviewed or reverted on
+  their own; a fifth commit records this delivery state. Later review fixes
+  changed source files and added five step-return scenarios, so this entry is
+  historical and does not certify the current candidate.
 - [x] (2026-10-18) Milestone CLI review and plan correction. The review
   `coderabbit review --agent --committed --base-commit 67fdb341` (CLI 0.9.0)
   returned zero findings across all 27 committed paths of the delta; the file
@@ -346,6 +352,34 @@ task into two.
   No production source changed, so the earlier gate certificates for runtime
   behaviour are untouched; the new files are Rust and Markdown inputs, so the
   full gate set is re-run rather than transferred.
+- [x] (2026-10-20) First full-suite rerun used:
+
+  ```sh
+  ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS=7200 make test
+  ```
+
+  The host reached 0 bytes available after 6,786 s and stopped the run (exit
+  130). It produced no assertion failure or final test summary. The BDD target
+  completed all 43/43 scenarios successfully, and completed trybuild/UI suites
+  passed; four documentation-example/concurrency tests were still active.
+  Candidate build caches were removed only after confirming no live process
+  referenced them, restoring approximately 28.7 GiB free. This did not
+  establish a passing `make test`; the candidate cache was cleared and the
+  complete sequential gate set was rerun below.
+- [x] (2026-10-20) Complete sequential gate rerun on implementation candidate
+  `5062d657a84c34a1d0172c18b27830e08c634683`:
+  - `make check-fmt` — passed; 89 files unchanged.
+  - `make lint` — passed; rustdoc, Clippy and Whitaker.
+  - `make typecheck` — passed.
+  - `ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS=7200 make test` — passed; 101 Rust
+    targets reported 2,069 passed, 0 failed and 33 ignored; Python reported
+    115 passed and 5 skipped. The `rstest_bdd` suite passed all 43 scenarios.
+  - `make markdownlint` — passed; 0 issues.
+  - `make nixie` — passed; all Mermaid diagrams validated.
+  The failed disk-exhausted run above is retained as process history. This
+  complete run has no failing target. Final delivery changes only this
+  ExecPlan; its Markdown gates were rerun after the entry was written, and the
+  Rust gate results transfer by content identity.
 
 ## Surprises & discoveries
 
@@ -929,10 +963,11 @@ its verification method.
   pass/fail report.
 - Rationale: a count is a finite, exactly checkable partition of the suite and
   cannot be satisfied by a partially migrated tree.
-- Domain: all 28 `.feature` files; scenarios per file.
+- Domain: the 28 baseline `.feature` files and the added step-return feature.
 - Artefact: the inventory command in `Concrete steps`, run before and after.
-- Evidence: baseline shows 127 scenarios and 0 outlines; post-migration must
-  show >= 127 and the same per-file counts.
+- Evidence: baseline shows 127 scenarios and 0 outlines; candidate inventory
+  preserves all 127 baseline scenarios and adds five scenarios in one new
+  feature file, for 132 scenarios across 29 files.
 - Non-vacuity: the check fails if any `scenarios!` invocation stops matching,
   which is the realistic regression mode. The baseline non-zero count (127)
   proves the counter is not measuring an empty set.
@@ -950,14 +985,14 @@ its verification method.
   suite would not report.
 - Domain: the 175 `-> Result<()>` steps and the 6 `Slot<()>` flag fields on
   `ExtendsContext`.
-- Artefact: `ortho_config/tests/rstest_bdd_support/step_return_regression.rs`,
-  which drives `execute_step` and mirrors the scenario runner's `insert_value`
-  call, together with
-  `ortho_config/tests/rstest_bdd_support/step_return_dispatch_bridge.rs`, which
-  pins the dispatch contract itself, and
-  `ortho_config/tests/rstest_bdd_support/step_return_scenarios.rs` with its
-  `tests/features/step_return.feature`, which drive the same aliases through
-  the generated scenario body.
+- Artefacts: `ortho_config/tests/rstest_bdd_support/step_return_regression.rs`,
+  which directly tests registry/dispatch behaviour through `execute_step` and
+  mirrors the runner's `insert_value` call; it is not itself the generated
+  runner suite. The generated runner's end-to-end behaviour is covered by
+  `ortho_config/tests/rstest_bdd_support/step_return_scenarios.rs`, registered
+  against `ortho_config/tests/features/step_return.feature`. The separate
+  `ortho_config/tests/rstest_bdd_support/step_return_dispatch_bridge.rs` pins
+  the lower-level dispatch contract.
 - Evidence: the regression module pins all four combinations of alias shape
   (`anyhow::Result<T>` and `Result<T, Box<dyn Error + Send + Sync>>`) against
   outcome (an `Err` fails the scenario; an `Ok(T)` injects `T`, while `Ok(())`
@@ -1218,17 +1253,18 @@ must report `v0.6.0`.
 
 ## Validation and acceptance
 
-Software behaviour acceptance: after the change, removing a `Scenario` block
-from any feature file makes the corresponding generated test disappear from the
-run (proving the suite is genuinely bound to the feature text), and the full
-suite passes with at least 127 scenarios.
+Software behaviour acceptance: after the change, removing a baseline `Scenario`
+block makes its corresponding generated test disappear from the run (proving
+the suite is genuinely bound to the feature text). All 127 baseline scenarios
+are preserved, five step-return scenarios are added in one new feature file,
+and the full suite passes with 132 scenarios across 29 files.
 
 Quality criteria:
 
 - Tests: `make test` passes; the V2 regression test passes; the `rstest_bdd`
   canary scenario in each consuming crate still executes.
 - Verification: obligations V1 through V4 discharged.
-- Lint/typecheck: `make lint` and `make check-fmt` pass.
+- Lint/typecheck: `make check-fmt`, `make lint` and `make typecheck` pass.
 - Documentation: `make markdownlint` passes; the provenance document exists.
 - Performance: no benchmark target exists for the test suite; the nextest
   per-test and whole-run budgets in `.config/nextest.toml` already bound the
@@ -1265,7 +1301,8 @@ $ sha256sum docs/users-guide.md docs/v0-6-0-migration-guide.md docs/v0-5-0-migra
 ```
 
 Baseline scenario inventory: 127 `Scenario` blocks, 0 `Scenario Outline`
-blocks, across 28 feature files.
+blocks, across 28 feature files. The candidate preserves all 127 and adds five
+step-return scenarios in one feature file, for 132 scenarios across 29 files.
 
 ## Interfaces and dependencies
 
@@ -1296,16 +1333,16 @@ instead. The applicability matrix and the full migration checklist are
 maintained in the Progress, Decision log and Surprises sections as work
 proceeds.
 
-Revision, 2026-10-18: closed three findings from an independent assessment of
-the delivered head. Restored the `path` field on the agent-context
-serialization-failure event, which the output-module split had dropped; made
-the V2 `Anyhow` alias actually `anyhow::Result<T>`; and replaced the V2 red
-stage claim, which the delivered tests neither performed nor could perform,
-with a differential control against the emulated pre-migration wrapper. The
-obligation's method, evidence, acceptance line, residual gaps and the recorded
-baseline all changed with that correction; the `COMPLETE` status is unchanged
-because the implemented behaviour was already correct and the repairs tighten
-the evidence rather than the code path.
+Revision, 2026-10-18 (historical status at that revision): closed three
+findings from an independent assessment of the delivered head. Restored the
+`path` field on the agent-context serialization-failure event, which the
+output-module split had dropped; made the V2 `Anyhow` alias actually
+`anyhow::Result<T>`; and replaced the V2 red stage claim, which the delivered
+tests neither performed nor could perform, with a differential control against
+the emulated pre-migration wrapper. The obligation's method, evidence,
+acceptance line, residual gaps and the recorded baseline all changed with that
+correction. The plan was marked `COMPLETE` at that time; its current status is
+`IN PROGRESS` pending final validation.
 
 Revision, 2026-10-19: closed the three pre-merge-check findings on the
 delivered head, all by adding coverage rather than changing production code.
