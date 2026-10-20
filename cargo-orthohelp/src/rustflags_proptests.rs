@@ -23,7 +23,7 @@
 //! Two shapes of the real input space stay out of reach. Empty segments between
 //! encoded separators cannot be generated, though the wholly empty input can,
 //! and no generated token contains whitespace, since the plain form would split
-//! it in two. Both remain in the sibling `tests` module's example table.
+//! it in two. Neither is covered by the sibling `tests` module either.
 
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
@@ -128,24 +128,20 @@ fn has_coverage(elements: &[FlagElement]) -> bool {
     elements.iter().any(FlagElement::is_coverage)
 }
 
-/// The string sanitisation must produce for `input`, per the element model.
+/// The string sanitisation must produce when it removes a token.
 ///
-/// Returns `None` exactly when sanitisation must drop every token. `input` is
-/// consulted only for the rewrite-free case, where the implementation promises
-/// to hand back the original string untouched.
-fn expected_output(form: FlagForm, input: &str, elements: &[FlagElement]) -> Option<String> {
-    if !has_coverage(elements) {
-        return Some(input.to_owned());
-    }
+/// Returns `None` exactly when removing the coverage tokens leaves nothing
+/// behind. The rewrite-free case belongs to the caller, which compares the
+/// original string instead.
+fn rewritten_output(form: FlagForm, elements: &[FlagElement]) -> Option<String> {
     let retained = retained_tokens(elements);
     (!retained.is_empty()).then(|| form.join(&retained))
 }
 
 /// Whether `token` spells a coverage flag or a coverage option.
 ///
-/// This restates the requirement in literals of its own instead of deferring to
-/// the module's private predicates, so a mistake in those predicates cannot
-/// hide behind this check.
+/// Restates the requirement in literals of its own rather than deferring to the
+/// module's private predicates, so a mistake there cannot hide behind it.
 fn spells_coverage(token: &str) -> bool {
     let option = token.strip_prefix("-C").unwrap_or(token);
     option == COVERAGE_OPTION || option.starts_with(COVERAGE_OPTION_VALUE)
@@ -304,8 +300,15 @@ proptest! {
     ) {
         let input = form.render_input(&all_tokens(&elements), &filler);
 
+        // Sanitisation only rewrites when it removed something; otherwise it
+        // returns `input` verbatim, spacing included.
+        let expected = if has_coverage(&elements) {
+            rewritten_output(form, &elements)
+        } else {
+            Some(input.clone())
+        };
         let sanitised = form.sanitize(&input);
-        prop_assert_eq!(sanitised, expected_output(form, &input, &elements));
+        prop_assert_eq!(sanitised, expected);
     }
 
     /// Input holding no coverage token comes back byte for byte.
