@@ -134,7 +134,7 @@ fn acquire_cache_lock(file: File, deadline: Instant) -> StepResult<CacheLock> {
                 None,
                 u32::MAX,
                 u32::MAX,
-                &mut overlapped,
+                &raw mut overlapped,
             )
         };
         match result {
