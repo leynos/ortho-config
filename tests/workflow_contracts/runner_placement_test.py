@@ -313,16 +313,20 @@ def test_windows_nested_cargo_build_pins_msvc_linker_before_coverage(
         "Visual Studio discovery requires the x64 MSVC tools component"
     )
     assert "VsDevCmd.bat" in command, "the SDK and MSVC library paths come from Visual Studio"
-    assert "-arch=x64 -host_arch=x64" in command
-    assert "'INCLUDE', 'LIB', 'LIBPATH'" in command
+    assert "-arch=x64 -host_arch=x64" in command, "VsDevCmd.bat must select the x64 host and target"
+    assert "'INCLUDE', 'LIB', 'LIBPATH'" in command, "the step must export the MSVC search paths"
     assert "kernel32.lib" in command, "fail early if the Windows SDK library path is absent"
     assert "$env:GITHUB_PATH" in command, "nested build tools resolve from the MSVC directory"
     assert "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=" in command, (
         "nested Cargo builds receive the selected MSVC linker"
     )
     assert "$env:GITHUB_ENV" in command, "Cargo receives the linker in later workflow steps"
-    assert "did not expose the MSVC library search path" in command
-    assert "throw 'vswhere did not find the x64 MSVC linker'" in command
+    assert "did not expose the MSVC library search path" in command, (
+        "the step must fail when LIB is absent"
+    )
+    assert "throw 'vswhere did not find the x64 MSVC linker'" in command, (
+        "the step must fail when the x64 linker is absent"
+    )
     coverage = [
         position
         for position, candidate in enumerate(steps)

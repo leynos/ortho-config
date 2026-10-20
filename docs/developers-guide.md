@@ -924,7 +924,7 @@ not sanitised: rewriting them would split the fingerprint and defeat the shared
 cache.
 
 The allow-list is closed in the sense that unlisted application variables do
-not cross it, but three families of Cargo setting are recognised structurally
+not cross it, but two families of Cargo setting are recognised structurally
 rather than by name. Target-specific `LINKER` and `RUSTFLAGS` settings are
 forwarded, as are registry `INDEX` locations. Proxy endpoints and registry
 indexes are forwarded only when their values contain no user information,

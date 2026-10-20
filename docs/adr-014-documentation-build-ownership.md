@@ -290,10 +290,10 @@ ceiling, 2,700-second Cargo watchdog, and workflow job ceilings remain in
 force. Each documentation scenario starts with a 596-second operation envelope,
 preserving two 2-second allowances within the per-test ceiling for child
 cleanup and test reporting. A subprocess receives the smaller of its operation
-budget and the scenario's remaining time. The current 600-second build policy
-preserves the former subprocess ceiling but cannot extend the scenario
-deadline. The 60-second execution and 30-second discovery policies are
-provisional pending measurements.
+budget and the scenario's remaining time. The current 596-second build policy
+matches the scenario envelope and cannot extend the scenario deadline. The
+60-second execution and 30-second discovery policies are provisional pending
+measurements.
 
 The attempted corrected cold build exceeded 600 seconds while admission slots
 were held and sccache was unavailable. The run did not produce a successful

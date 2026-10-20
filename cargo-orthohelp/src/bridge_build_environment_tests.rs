@@ -50,7 +50,6 @@ fn build_policy_preserves_toolchain_inputs_and_excludes_application_values() {
             "SSH_AUTH_SOCK",
             OsString::from("/run/user/1000/ssh-agent.sock"),
         ),
-        ("HTTP_PROXY", OsString::from("http://proxy.example:3128")),
         ("NO_PROXY", OsString::from("localhost,127.0.0.1")),
         ("http_proxy", OsString::from("http://proxy.example:8080")),
         (
@@ -65,26 +64,48 @@ fn build_policy_preserves_toolchain_inputs_and_excludes_application_values() {
         BUILD_ENV_ALLOWLIST.contains(name) && super::is_safe_value(OsStr::new(name), value)
     }) {
         assert_eq!(
-            selected.get(*name).map(OsString::as_os_str),
+            selected_value(&selected, name).map(OsString::as_os_str),
             Some(expected.as_os_str())
         );
     }
-    assert_selected_environment_boundaries(&selected);
+    assert_application_credentials_are_excluded(&selected);
+    assert_proxy_values_follow_the_build_policy(&selected);
+    assert_cargo_home_is_preserved(&selected);
 }
 
-fn assert_selected_environment_boundaries(selected: &HashMap<String, OsString>) {
+fn assert_application_credentials_are_excluded(selected: &HashMap<String, OsString>) {
     assert!(!selected.contains_key("APPLICATION_SECRET"));
     assert!(!selected.contains_key("CARGO_REGISTRY_TOKEN"));
-    assert!(!selected.contains_key("HTTPS_PROXY"));
     assert!(!selected.contains_key("SSH_AUTH_SOCK"));
+}
+
+fn assert_proxy_values_follow_the_build_policy(selected: &HashMap<String, OsString>) {
+    assert!(!selected.contains_key("HTTPS_PROXY"));
     assert_eq!(
-        selected.get("http_proxy").map(OsString::as_os_str),
+        selected_value(selected, "http_proxy").map(OsString::as_os_str),
         Some(OsStr::new("http://proxy.example:8080"))
     );
+}
+
+fn assert_cargo_home_is_preserved(selected: &HashMap<String, OsString>) {
     assert_eq!(
         selected.get("CARGO_HOME").map(OsString::as_os_str),
         Some(OsStr::new("/home/agent/.cargo"))
     );
+}
+
+fn selected_value<'a>(selected: &'a HashMap<String, OsString>, name: &str) -> Option<&'a OsString> {
+    #[cfg(windows)]
+    {
+        selected
+            .iter()
+            .find(|(selected_name, _)| selected_name.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value)
+    }
+    #[cfg(not(windows))]
+    {
+        selected.get(name)
+    }
 }
 
 fn selected_environment(environment: &BuildEnvironment) -> HashMap<String, OsString> {

@@ -1141,7 +1141,7 @@ Cargo's ownership.
 
 Each documentation scenario has a single monotonic 596-second deadline within
 nextest's 600-second per-test limit. Build, execution, discovery, and cleanup
-have respective 600-, 60-, 30-, and 2-second policies; each operation is capped
+have respective 596-, 60-, 30-, and 2-second policies; each operation is capped
 by the remaining scenario time. Output activity does not extend a deadline.
 Each stream retains at most 1 MiB and continues draining, and owned
 process-tree cleanup is bounded. The helpers are scoped to documentation tests

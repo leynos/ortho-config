@@ -257,14 +257,6 @@ fn run_cargo(
             )));
         }
     };
-    if let Err(error) = forward_cargo_diagnostics(&messages) {
-        drop(reader);
-        let cleanup = owned_child.stop_bounded();
-        return Err(CargoFailure::unconfirmed(with_cleanup_evidence(
-            io_error(target.directory, error),
-            &cleanup,
-        )));
-    }
     drop(reader);
 
     let status = match owned_child.wait() {
@@ -277,6 +269,13 @@ fn run_cargo(
             )));
         }
     };
+    if let Err(error) = forward_cargo_diagnostics(&messages) {
+        tracing::warn!(
+            target_directory = %target.directory,
+            error = %error,
+            "could not forward bounded Cargo diagnostics to stderr"
+        );
+    }
 
     let cargo_status = if status.success() {
         CargoStatus::Success
