@@ -339,7 +339,9 @@ certification of the current candidate unless explicitly stated.
     `ortho_config/tests/trybuild/step_return_aliases.rs`, registered as a third
     `t.pass` fixture in `tests/compile_fail.rs`, declares steps for both
     `anyhow::Result<T>` and `Result<T, Box<dyn Error + Send + Sync>>` and calls
-    them from `main`, so the generated wrappers are compiled *and* run.
+    them from `main`, so the generated wrappers and handler bodies are
+    type-checked. `trybuild` does not execute the fixture; runner behaviour is
+    covered by the separate feature scenarios.
   - **Scoped `not_found` spelling.** The fourth row, an inline request for a
     scoped `not_found` telemetry case, is implemented as an in-crate unit test.
     The dispatcher arm exists at `ortho_config/src/discovery/telemetry.rs:348`,
@@ -781,9 +783,11 @@ Record every significant decision made while working on the plan.
 - Decision: verify the compile-time alias contract with a trybuild *pass*
   fixture rather than a compile-fail one. Rationale: the claim under test is
   that both aliases reach the same `Result` normalization, so a regression is a
-  compile error, not a diagnostic message. A pass fixture is compiled and run,
-  which also type-checks the handler bodies; no `.stderr` snapshot belongs to a
-  contract that must succeed. Date/Author: 2026-10-19, migration agent.
+  compile error, not a diagnostic message. `trybuild` compiles the pass
+  fixture; its `main` contains direct handler calls that type-check the handler
+  bodies. The separate feature scenarios exercise runner behaviour. No
+  `.stderr` snapshot belongs to a contract that must succeed. Date/Author:
+  2026-10-19, migration agent.
 
 ## Outcomes & retrospective
 
@@ -1341,8 +1345,8 @@ output-module split had dropped; made the V2 `Anyhow` alias actually
 tests neither performed nor could perform, with a differential control against
 the emulated pre-migration wrapper. The obligation's method, evidence,
 acceptance line, residual gaps and the recorded baseline all changed with that
-correction. The plan was marked `COMPLETE` at that time; its current status is
-`IN PROGRESS` pending final validation.
+correction. The plan was marked `COMPLETE` at that revision; final validation
+was still pending then, and the status was `IN PROGRESS`.
 
 Revision, 2026-10-19: closed the three pre-merge-check findings on the
 delivered head, all by adding coverage rather than changing production code.
@@ -1358,3 +1362,10 @@ the callsite's declared metadata rather than on recorded values. The Surprises
 section records the payload-type identity trap, the trybuild scratch-crate
 constraints and the corrected reading of the scoped emitter discovered while
 building these, and the Decision log records why the focused bridge tests stay.
+
+Revision, 2026-10-20: clarified the boundary of the trybuild pass fixture after
+an independent assessment. `trybuild` compiles the annotated handlers and
+type-checks direct calls in `main`, but does not execute the fixture; runtime
+step-return behaviour is covered by the registered feature scenarios. The
+historical `IN PROGRESS` status above is now explicitly tied to the 2026-10-18
+revision; the current status and final local validation are recorded earlier.

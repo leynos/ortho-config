@@ -9,18 +9,17 @@
 //! tests cannot answer: a change that stopped resolving either alias would
 //! surface here as a compile error, not as a failing assertion.
 //!
-//! The handlers are exercised rather than merely declared. `#[given]` is a
-//! no-op for a body that returns a plain value, and a step wrapper is created
-//! only for the annotated function, so invoking the functions directly runs
-//! the same return values through the same `Result` types the wrapper will
-//! normalize. A registration that stopped compiling for one alias fails the
-//! scratch build; a body that stopped type-checking for the other fails the
-//! `main` below.
+//! The handler calls are type-checked rather than executed. `#[given]` creates
+//! a wrapper for each annotated function, while `main` calls the handlers
+//! directly; compiling the scratch crate checks both the generated wrappers
+//! and the handlers' alias-bearing return types. A registration that stopped
+//! compiling for one alias fails the scratch build, as does a handler call
+//! whose return type no longer matches its alias.
 //!
-//! This is a pass fixture, so `main` must also exit successfully. It is kept
-//! free of scenario files and of any `#[scenario]` binding: a scratch crate
-//! has no feature file of its own, and the runtime behaviour is covered by the
-//! `rstest_bdd` integration target in `ortho_config`.
+//! This is a pass fixture, and `trybuild` does not execute its `main`. It is
+//! kept free of scenario files and of any `#[scenario]` binding: a scratch
+//! crate has no feature file of its own, and runtime behaviour is covered by
+//! the `rstest_bdd` integration target in `ortho_config`.
 //!
 //! The return annotations are deliberate. `Ok(())` from `anyhow::Result<()>`
 //! is `unnecessary_wraps` for Clippy, and both aliases exist to exercise the
