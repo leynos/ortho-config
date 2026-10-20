@@ -223,6 +223,7 @@ def test_the_lint_trees_go_before_coverage(ci: WorkflowDocument) -> None:
 #: wrong platform, or on the old runner label, would skip or run the wrong leg
 #: with no failure to show for it.
 PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
+    "Select the MSVC linker for nested Cargo builds": "${{ matrix.platform == 'windows' }}",
     "Install mdtablefix": LINUX_ONLY,
     "Check formatting": LINUX_ONLY,
     "Check Rust formatting": "${{ matrix.platform != 'linux' }}",
@@ -291,6 +292,33 @@ def test_no_other_step_is_keyed_on_the_platform_or_a_runner_label(ci: WorkflowDo
         if "matrix.os" in _condition(step) or "ubuntu-latest" in _condition(step)
     ]
     assert not stale, f"steps still key on a runner label: {stale}"
+
+
+def test_windows_nested_cargo_build_pins_msvc_linker_before_coverage(
+    ci: WorkflowDocument,
+) -> None:
+    """The Windows coverage subprocesses resolve Cargo's linker to MSVC."""
+    steps = _steps(ci)
+    matching = [
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name") == "Select the MSVC linker for nested Cargo builds"
+    ]
+    assert len(matching) == 1, f"found {len(matching)} MSVC linker setup steps"
+    (index, step), = matching
+    assert step.get("shell") == "pwsh", "linker discovery runs in PowerShell"
+    command = str(step.get("run", ""))
+    assert "vswhere.exe" in command, "the linker path comes from the installed Visual Studio"
+    assert "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" in command
+    assert "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=" in command
+    assert "$env:GITHUB_ENV" in command, "Cargo receives the linker in later workflow steps"
+    assert "throw 'vswhere did not find the x64 MSVC linker'" in command
+    coverage = [
+        position
+        for position, candidate in enumerate(steps)
+        if "/generate-coverage@" in str(candidate.get("uses", ""))
+    ]
+    assert coverage and index < min(coverage), "linker setup must precede Windows coverage"
 
 
 def test_the_discard_follows_lint_and_precedes_both_coverage_passes(ci: WorkflowDocument) -> None:

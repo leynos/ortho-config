@@ -101,6 +101,20 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
 
+      # The Windows coverage action uses Bash, which prepends Git's /usr/bin
+      # ahead of the Visual Studio paths. Pin Cargo's linker explicitly so a
+      # nested bridge build cannot select Git's GNU link.exe by name.
+      - name: Select the MSVC linker for nested Cargo builds
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $linker = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe' | Select-Object -First 1
+          if (-not $linker) {
+            throw 'vswhere did not find the x64 MSVC linker'
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($linker.Trim())" -Encoding utf8
+
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
