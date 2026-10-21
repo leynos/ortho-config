@@ -143,7 +143,7 @@ fn normalize_id_line(line: &str) -> String {
         return line.to_owned();
     };
 
-    // Only normalise top-level identifiers. Indented lines belong to message
+    // Only normalize top-level identifiers. Indented lines belong to message
     // bodies, attributes, or variants and must be left untouched.
     if left.chars().next().is_some_and(char::is_whitespace) {
         return line.to_owned();
@@ -154,11 +154,11 @@ fn normalize_id_line(line: &str) -> String {
         return line.to_owned();
     }
 
-    let normalised_id = normalize_identifier(id_segment).into_owned();
+    let normalized_id = normalize_identifier(id_segment).into_owned();
     let trailing_ws = left.strip_prefix(id_segment).unwrap_or_default();
 
     let mut rebuilt = String::with_capacity(line.len());
-    rebuilt.push_str(&normalised_id);
+    rebuilt.push_str(&normalized_id);
     rebuilt.push_str(trailing_ws);
     rebuilt.push('=');
     rebuilt.push_str(right);
@@ -332,31 +332,31 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn normalises_top_level_dotted_ids() {
+    fn normalizes_top_level_dotted_ids() {
         let resource = "cli.about = About text";
-        let normalised = normalize_resource_ids(resource);
-        assert_eq!(normalised, "cli-about = About text");
+        let normalized = normalize_resource_ids(resource);
+        assert_eq!(normalized, "cli-about = About text");
     }
 
     #[test]
     fn leaves_indented_lines_with_equals_untouched() {
         let resource = "message =\n    section.title = Title line";
-        let normalised = normalize_resource_ids(resource);
-        assert!(normalised.contains("    section.title = Title line"));
+        let normalized = normalize_resource_ids(resource);
+        assert!(normalized.contains("    section.title = Title line"));
     }
 
     #[test]
     fn leaves_terms_and_attributes_unchanged() {
         let resource = "-term.id = Term value\nmessage = Value\n    .label = Label";
-        let normalised = normalize_resource_ids(resource);
-        assert!(normalised.contains("-term.id = Term value"));
-        assert!(normalised.contains("    .label = Label"));
+        let normalized = normalize_resource_ids(resource);
+        assert!(normalized.contains("-term.id = Term value"));
+        assert!(normalized.contains("    .label = Label"));
     }
 
     #[test]
-    fn normalises_unicode_identifiers() {
+    fn normalizes_unicode_identifiers() {
         let resource = "ключ.значение = Привет";
-        let normalised = normalize_resource_ids(resource);
-        assert!(normalised.starts_with("ключ-значение = Привет"));
+        let normalized = normalize_resource_ids(resource);
+        assert!(normalized.starts_with("ключ-значение = Привет"));
     }
 }

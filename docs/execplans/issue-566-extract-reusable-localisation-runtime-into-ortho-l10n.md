@@ -130,18 +130,18 @@ resources. No new business theorem or unsafe invariant is introduced.
 
 EP-M3 acceptance evidence, per criterion:
 
-| Criterion                                                         | Evidence                                                                                                                                            |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Direct runtime consumer builds and tests                          | `workspace_runtime_consumer_builds_and_tests`                                                                                                       |
-| Existing facade consumer still builds and tests                   | `workspace_facade_consumer_builds_and_tests`                                                                                                        |
-| Both import paths name the same types                             | `workspace_mixed_consumer_builds_and_tests`, which compiles cross-assignments                                                                       |
-| Published graph behaves the same                                  | `every_packaged_consumer_shape_builds_and_tests`                                                                                                    |
-| No forbidden package resolves                                     | `no_forbidden_package_appears_in_a_workspace_runtime_consumer`, `packaged_runtime_consumer_has_no_facade_closure`                                   |
-| The closure is not over-shrunk                                    | `assert_runtime_normal_edges` and `assert_root_edges`, which both fail on a *missing* edge too                                                      |
-| A negative fixture fails for the injected dependency and names it | `negative_controls_reject_every_injected_edge`, `negative_controls_name_the_injected_dependency`, `an_unrelated_failure_does_not_satisfy_a_control` |
-| Packaged manifests carry the right edges                          | the four `manifests::` tests                                                                                                                        |
-| The render and the resolved graph agree                           | `the_rendered_consumer_is_the_package_the_closure_reads`                                                                                            |
-| A focused entry point exists                                      | `make boundary`, pinned by `boundary_target_test.py`                                                                                                |
+| Criterion                                                         | Evidence                                                                                                                                                                              |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direct runtime consumer builds and tests                          | `workspace_runtime_consumer_builds_and_tests`                                                                                                                                         |
+| Existing facade consumer still builds and tests                   | `workspace_facade_consumer_builds_and_tests`                                                                                                                                          |
+| Both import paths name the same types                             | `workspace_mixed_consumer_builds_and_tests`, which compiles cross-assignments                                                                                                         |
+| Published graph behaves the same                                  | `every_packaged_consumer_shape_builds_and_tests`                                                                                                                                      |
+| No forbidden package resolves                                     | `no_forbidden_package_appears_in_a_workspace_runtime_consumer`, `packaged_runtime_consumer_has_no_facade_closure`                                                                     |
+| The closure is not over-shrunk                                    | `assert_runtime_normal_edges` and `assert_root_edges`, which both fail on a *missing* edge too                                                                                        |
+| A negative fixture fails for the injected dependency and names it | `negative_controls_reject_every_injected_edge` (one `#[values]` case per injection, each asserting the diagnostic names the crate), `an_unrelated_failure_does_not_satisfy_a_control` |
+| Packaged manifests carry the right edges                          | the four `manifests::` tests                                                                                                                                                          |
+| The render and the resolved graph agree                           | `the_rendered_consumer_is_the_package_the_closure_reads`                                                                                                                              |
+| A focused entry point exists                                      | `make boundary`, pinned by `boundary_target_test.py`                                                                                                                                  |
 
 Proof inventory: not applicable. EP-M3 introduces no CrossHair, Kani, Verus, or
 LemmaScript artefact. Its claims are about a resolved dependency graph and a
@@ -324,6 +324,8 @@ approaches; they are no longer outstanding work.
   findings are being dispositioned, so the milestone checkbox stays open until
   none is outstanding.
 - [ ] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
+  The follow-up review's four findings are repaired; the gates and the closing
+  assessment against the repaired tree are what remain.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR.
 
@@ -394,16 +396,18 @@ below it are rendered foreign package roots, not tests.
 | File                                                 | Lines           | What it owns                                          |
 | ---------------------------------------------------- | --------------- | ----------------------------------------------------- |
 | `boundary/fixture_cargo/mod.rs`                      | 372             | disposable root, deadline-bounded child, TOML reading |
-| `boundary/fixture_cargo/environment.rs`              | 143             | the closed child environment                          |
+| `boundary/fixture_cargo/environment.rs`              | 161             | the closed child environment                          |
 | `boundary/fixture_cargo/metadata.rs`                 | 229             | the `cargo metadata` document contract                |
 | `boundary/consumer/mod.rs`                           | 195             | consumer manifests, workspace and packaged            |
 | `boundary/consumer/library/mod.rs`                   | 289             | the three consumer bodies                             |
 | `boundary/closure/mod.rs`                            | 316             | forbidden names, expected edges, negative controls    |
-| `boundary/package_set/mod.rs`                        | 293             | the two-invocation packaging recipe                   |
-| `boundary_tests/{closure,consumer,manifests}/mod.rs` | 210 / 145 / 155 | the 15 contracts                                      |
+| `boundary/package_set/mod.rs`                        | 335             | the two-invocation packaging recipe                   |
+| `boundary_tests/{closure,consumer,manifests}/mod.rs` | 208 / 145 / 156 | the 17 cases, from 15 test functions                  |
 | `boundary/mod.rs`, `boundary_tests/mod.rs`           | 29 / 14         | module wiring                                         |
 
-Green runs, three regimes, all 15 tests:
+Green runs, three regimes. The counts are the pre-review shapes: the 15 test
+functions below became 17 cases when the negative controls were parameterized in
+`b82f182e`.
 
 - `cargo test -p ortho_l10n --test boundary --offline` (default parallelism,
   warm): `15 passed … finished in 115.25s`. The two packaged-runtime contracts
@@ -412,10 +416,17 @@ Green runs, three regimes, all 15 tests:
 - `cargo nextest run -p ortho_l10n -E 'binary(boundary)'` (process per test):
   `Summary [70.144s] 15 tests run: 15 passed (2 slow)`, slowest 70.143 s.
 
-70 s sits far inside nextest's 600 s per-test allowance, so **no nextest
-override is added**. The first figure is larger than the third only because
-libtest's in-process threads contend for one shared packaging `OnceLock`; that
-is a scheduling property of the harness, not suite cost.
+70 s sits far inside nextest's 600 s per-test allowance. The first figure is
+larger than the third only because libtest's in-process threads contend for one
+shared packaging `OnceLock`; that is a scheduling property of the harness, not
+suite cost.
+
+The reassessment corrected the scheduling conclusion, not the allowance one. No
+`slow-timeout` override is needed — but a `test-group` override is, because the
+process-per-test regime is exactly what lets several contracts package one
+shared target directory at once. See the reassessment round above. Re-measured
+after that repair, all 17 cases pass in 34.98 s under `make boundary` and 32.55
+s under `cargo nextest run`.
 
 The suite is 1.7 G on disk (938 M `cargo-target`, 745 M `packaging-target`),
 all under the git-ignored `target/localization-boundary`. `BOUNDARY_ROOT`
@@ -448,7 +459,9 @@ against exactly the failures that would make it silently not the gate:
 `--workspace`, `--all-targets`, a missing `--offline`, and a missing
 `RUSTFLAGS`. Each was proved non-vacuous by mutating the Makefile, observing
 that mutation's own test fail, and restoring the file byte-for-byte (`cmp`
-after each restore). The full contract suite is 330 passed, one skipped.
+after each restore). The full contract suite is 330 passed, one skipped; after
+the reassessment added `boundary_packaging_test.py` it is 334 passed, one
+skipped.
 
 ### EP-M3 measurements (2026-10-21)
 
@@ -561,6 +574,73 @@ and was removed; `Dependency::ALL` is still read and stays.
 Repairs are committed as `b82f182e`. The sequential gate run against that tree
 and the reassessment follow, and the milestone checkbox stays open until the
 reassessment reports no valid concern.
+
+### EP-M3 reassessment round (2026-10-22)
+
+The follow-up `coderabbit review --agent` (CLI 0.9.1) ran over the tree at
+`ea71e094` and returned four findings, all minor, and all four are valid.
+
+Scope, recorded because the CLI did not attest it: the request carried
+`reviewType: "all"` and `baseBranch: "main"` with no `baseCommit`. The
+`complete` record names 130 reviewed files, and that set is exactly
+`git diff --name-only origin/main...HEAD`, which is the same 130 paths. The
+head binding is therefore inferred from the file set rather than asserted by
+the CLI, and it is consistent with the tree the gates certify.
+
+| #   | Finding                                         | Disposition                                     |
+| --- | ----------------------------------------------- | ----------------------------------------------- |
+| 1   | `PACKAGE_DEADLINE` can never fire under nextest | Valid; 900 s reduced to 240 s, see below        |
+| 2   | `environment` module doc contradicts its list   | Valid; doc rewritten to classify the exclusions |
+| 3   | `-ise` spellings in `ortho_l10n` rustdoc        | Valid; `-ize` sweep over the crate's prose      |
+| 4   | The `boundary` tests are not serialized         | Valid; `boundary_packaging` nextest group added |
+
+Finding 1 is the most consequential, and neither remedy the report offered was
+taken as stated. The review proposed lowering the bound *or* adding a nextest
+override for a larger allowance. Under nextest a single test carries both
+packaging invocations, so the real requirement is that the pair fit inside the
+per-test allowance; whether `make boundary` (one process) can reach 900 s is
+irrelevant, because nextest would stop the test at 600 s first. 240 s per
+invocation puts the pair at 480 s of the 600 s base allowance with 120 s for
+the root checks around them, which needs no override at all. That choice also
+avoids the ambiguity rule in `trybuild_tier_test.py`, which refuses to read the
+filter if two overrides carry the file's largest allowance.
+
+The figure is a measurement, not a guess. With the packaging target removed,
+the pair took 244 s on this host — and that figure is an upper bound, because
+the child inherits compile admission and waits in its queue. Warm, the same
+test takes about 35 s: `make boundary` finished all 17 contracts in 34.98 s, and
+`cargo nextest run -p ortho_l10n --test boundary` in 32.55 s.
+
+Finding 4 was proved rather than accepted on inspection. `packaged_set()`'s
+`OnceLock` is process-local and nextest runs each test in its own process, so
+in a full nextest run six contracts each ran `cargo package` against one
+`packaging-target`. Cargo's package-cache lock closes the package archive but
+does not hold readers out while a root is removed and unpacked, so a run that
+passed was evidence of scheduling luck rather than safety. Two fixes follow: a
+`boundary_packaging` group with `max-threads = 1` selecting `binary(boundary)`,
+and `tests/workflow_contracts/boundary_packaging_test.py`, which reads the
+group, the `[[test]]` target name, the override count and the deadline out of
+the sources so a later edit cannot quietly undo either half. Its two
+load-bearing assertions were mutation-proved: `max-threads = 2` fails only the
+seriality test, `from_secs(400)` and an invocation count of 3 each fail only
+the arithmetic test.
+
+Finding 3 was applied to `ortho_l10n` alone. The crate's identifiers
+(`LocalizationArgs`, `Localizer`, `NoOpLocalizer`, `FluentLocalizer`) already
+spell `-ize`, so the prose now matches them. Outside the crate the same sweep
+would rename `exercises` and `raises`, which are correct English, so it stops
+at the crate boundary; `examples/hello_world/tests/localised_help.rs` and the
+`typos.local.toml` entries that name it are untouched. The two
+`Normalised only` string literals in `ortho_l10n/src/tests.rs` were fixture
+text, not a contract, and became `Consumer fallback` rather than a respelled
+version of the same word — a value that no longer reads like a misspelling is
+easier to keep out of a future sweep's way.
+
+Finding 2's `environment` doc now states the policy the list actually encodes:
+compiler flags and wrappers are inherited *deliberately*, so the child is held
+to the same `-D warnings` policy as the parent, and the exclusions are named by
+kind — target-directory selectors, configuration and profile selectors, and the
+two variables that name the parent crate.
 
 ## Surprises & discoveries
 
@@ -682,16 +762,17 @@ and a 312-character table-wrap defect both caused red gates; both are repaired
 and recorded above. Standalone/package closure proof, measurements, release
 tooling, and the draft PR remain EP-M3/EP-M4 work.
 
-EP-M3 implementation is complete and its evidence is recorded above: 15
-boundary contracts green under three scheduling regimes, the negative controls
+EP-M3 implementation is complete and its evidence is recorded above: 17
+boundary cases green under three scheduling regimes, the negative controls
 proved to fail for their injected dependency by name, the packaged set built
 from two `cargo package` invocations, the macro host cost measured against
 `f99d9234`, and the focused `make boundary` target pinned by a workflow
-contract. The sequential gate run passed on tree `7b2ce374` and the milestone
-CLI review has since run, so what remains before the checkbox closes is that
-review round's disposition and repair. The measured +24-crate macro closure is
-recorded as a risk with an upper-bound caveat rather than as a settled
-performance claim.
+contract. The sequential gate run passed on tree `7b2ce374`, the milestone CLI
+review returned seventeen findings, and the follow-up round returned four more.
+All twenty-one were dispositioned and every valid one repaired. What remains
+before the checkbox closes is the gate run against the repaired tree and the
+assessment that confirms it. The measured +24-crate macro closure is recorded
+as a risk with an upper-bound caveat rather than as a settled performance claim.
 
 Decision log note (2026-10-21): The earlier guidance to use explicit result
 branches at the Clap collision panic boundaries is superseded. Those sites now

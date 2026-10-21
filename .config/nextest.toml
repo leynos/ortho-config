@@ -120,6 +120,9 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # still protect build-and-snapshot operations across separate processes.
 [test-groups]
 orthohelp_cache = { max-threads = 1 }
+# Serialized because its members package and unpack one shared target
+# directory from separate processes; see the override below.
+boundary_packaging = { max-threads = 1 }
 
 # A documented-command run reached 595.9s with only Cargo package-cache lock
 # waits before its 596s operation deadline. The 956s scenario envelope is 1.60
@@ -135,3 +138,23 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e)'
 test-group = 'orthohelp_cache'
 slow-timeout = { period = "120s", terminate-after = 8 }
+
+# The boundary contracts materialize their packaged crates once per *process*,
+# and nextest runs each test in its own process. Several of them therefore run
+# `cargo package` and unpack the same target directory side by side. Cargo's
+# own lock does not cover that: it does not hold readers out while a package
+# root is removed and unpacked, so one process can replace a root another is
+# reading. Serialize the binary.
+#
+# That also settles the per-test allowance. Two packaging invocations share one
+# test, and each is bounded at 240 s
+# (`ortho_l10n/tests/boundary/package_set`), so the pair fits inside the 600 s
+# base allowance with 120 s for the root checks around them. A bound that did
+# not fit would never fire: nextest would stop the test first, and the error
+# naming the invocation that hung would never be printed.
+#
+# `make boundary` and `make test` do not need this entry: each starts one
+# process for the binary, which initializes the cache once and reuses it.
+[[profile.default.overrides]]
+filter = 'binary(boundary)'
+test-group = 'boundary_packaging'

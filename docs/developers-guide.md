@@ -116,6 +116,24 @@ Windows, `cargo build` holds a read lock on `Cargo.toml`; a concurrent
 truncate-and-rewrite from another invocation violates that lock. Keep the whole
 group serialized unless the shared-state access has been eliminated.
 
+The `boundary` binary has a group of its own, `boundary_packaging`. Its
+packaged contracts materialize the release once per *process*, and nextest runs
+each test in its own process, so without the group six of them run
+`cargo package` and unpack `target/localization-boundary/packaging-target` side
+by side. Cargo's package-cache lock does not cover that: it does not hold
+readers out while a package root is removed and unpacked, so one process can
+replace a root another is reading. `make boundary` and `make test` start one
+process for the binary and need nothing extra, which is why the group exists
+only for nextest.
+
+That group also fixes the per-test allowance arithmetic. One packaged test runs
+both `cargo package` invocations, each bounded at 240 s by `PACKAGE_DEADLINE`,
+so the pair has to fit inside the 600 s base allowance with room for the root
+checks around them. A deadline that did not fit could never fire: nextest would
+stop the test first, and the error naming the invocation that hung would never
+be printed. `boundary_packaging_test.py` reads the group, the manifest and the
+deadline so neither half can drift from the other.
+
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
 `ortho_config::crate_path_trybuild`, `ortho_config::declarative_merge_trybuild`,

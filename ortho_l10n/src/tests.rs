@@ -1,4 +1,4 @@
-//! Unit tests for localisation helpers and Fluent-backed behaviour.
+//! Unit tests for localization helpers and Fluent-backed behaviour.
 
 use super::*;
 use crate::langid;
@@ -75,8 +75,8 @@ fn fluent_localizer_logs_and_falls_back_on_format_error() {
     let resolved = localizer
         .lookup("cli.usage", Some(&args))
         .expect("default bundle should provide fallback copy");
-    let sanitised = strip_bidi_isolates(&resolved);
-    assert_eq!(sanitised, "Usage: demo [OPTIONS] <COMMAND>");
+    let sanitized = strip_bidi_isolates(&resolved);
+    assert_eq!(sanitized, "Usage: demo [OPTIONS] <COMMAND>");
 
     let logged = issues
         .lock()
@@ -125,12 +125,12 @@ fn lookup_prefers_original_id_over_normalized() {
 fn lookup_falls_back_to_normalized_consumer_id() {
     let localizer = FluentLocalizer::builder(langid!("en-US"))
         .disable_defaults()
-        .with_consumer_resources(["cli-about = Normalised only"])
+        .with_consumer_resources(["cli-about = Consumer fallback"])
         .try_build()
         .expect("consumer-only bundle should build");
 
     let resolved = localizer.lookup("cli.about", None);
-    assert_eq!(resolved.as_deref(), Some("Normalised only"));
+    assert_eq!(resolved.as_deref(), Some("Consumer fallback"));
 }
 
 #[rstest]
@@ -146,8 +146,8 @@ fn lookup_falls_back_to_default_when_consumer_formatting_fails() {
     let resolved = localizer
         .lookup("cli.usage", Some(&args))
         .expect("default bundle should provide usage copy");
-    let sanitised = strip_bidi_isolates(&resolved);
-    assert_eq!(sanitised, "Usage: demo [OPTIONS] <COMMAND>");
+    let sanitized = strip_bidi_isolates(&resolved);
+    assert_eq!(sanitized, "Usage: demo [OPTIONS] <COMMAND>");
 }
 
 fn strip_bidi_isolates(text: &str) -> String {

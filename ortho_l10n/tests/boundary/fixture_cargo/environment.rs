@@ -2,10 +2,26 @@
 //!
 //! A boundary contract answers a question about a *stranger's* package. That
 //! only means something if the child process sees the toolchain that built the
-//! parent and nothing else from the developer's shell: an inherited
-//! `CARGO_TARGET_DIR`, a `RUSTFLAGS` override, or a stray `RUSTC_WRAPPER` from a
-//! coverage run would each make the child build something other than what the
-//! contract claims to measure.
+//! parent and nothing else from the developer's shell. So the list below is an
+//! allow-list rather than a deny-list, and three kinds of variable are left out
+//! on purpose:
+//!
+//! - anything that selects a target directory, such as `CARGO_TARGET_DIR` or
+//!   `CARGO_BUILD_TARGET_DIR`, because the fixture owns its own target and a
+//!   child sharing the parent's would contend on its fingerprints;
+//! - anything that selects a Cargo configuration file or profile, such as
+//!   `CARGO_BUILD_TARGET` and `CARGO_PROFILE_*`, because each fixture root
+//!   renders its own manifest and must be resolved under Cargo's defaults;
+//! - `CARGO` and `CARGO_MANIFEST_DIR`, which name the parent's own crate rather
+//!   than a toolchain setting.
+//!
+//! Compiler flags and wrappers are *not* in that list. `RUSTFLAGS`,
+//! `RUSTC_WRAPPER`, the `CARGO_BUILD_*` and `CARGO_ENCODED_*` spellings, and
+//! `LLVM_PROFILE_FILE` are inherited deliberately: `make boundary` and `make
+//! test` both build with `RUSTFLAGS="-D warnings"`, and the child has to be
+//! held to the same policy as the parent, or a fixture that compiles with a
+//! warning would pass a run the parent gate fails. The coverage wrapper is the
+//! one exception, and [`remove_coverage_cli_wrapper`] explains why.
 //!
 //! The list mirrors the closed policy the documentation-example harness already
 //! applies, so both nested-Cargo suites in this repository agree about what a
@@ -27,8 +43,10 @@ pub(crate) const CARGO_DEADLINE: Duration = Duration::from_secs(300);
 ///
 /// Compiler admission (`BUILD_LIMITS_*`, `RUSTC_WRAPPER`), the Cargo and rustup
 /// homes, the system link path, and the MSVC discovery variables are here
-/// because a build child cannot work without them. Nothing that selects a
-/// target directory, a configuration file, or a profile is.
+/// because a build child cannot work without them. The compiler flags and
+/// wrappers are here so the child is built under the same `-D warnings` policy
+/// as the parent. Nothing that selects a target directory, a configuration
+/// file, or a profile is; the module doc lists those by name.
 pub(crate) const INHERITED_VARIABLES: &[&str] = &[
     "BUILD_LIMITS_COMPILERS_SLICE",
     "BUILD_LIMITS_HEARTBEAT_SECS",

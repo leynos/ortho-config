@@ -44,11 +44,34 @@ use std::time::Duration;
 
 /// Longest either packaging invocation may run.
 ///
-/// The second invocation reuses the first's target directory, so it is much
-/// shorter. Both are bounded together by this figure, which is generous enough
-/// for a cold target and short enough to fail inside the test allowance rather
-/// than after it.
-const PACKAGE_DEADLINE: Duration = Duration::from_secs(900);
+/// Each invocation is bounded on its own, and every entry in
+/// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
+/// inside nextest's per-test allowance with room for the root checks around
+/// them: 2 x 240 s is 480 s of the 600 s base allowance, leaving 120 s. The
+/// figure is derived from the allowance rather than chosen for comfort,
+/// because a bound that does not fit never fires: nextest stops the test
+/// first, and the error naming the invocation that hung is never printed.
+///
+/// The second invocation reuses the first's target directory and is much
+/// shorter. For scale, the pair took 244 s on this host with the packaging
+/// target removed, which is an upper bound rather than a build time: it
+/// includes waiting for compile-admission slots, which the child inherits. So
+/// 240 s per invocation is generous against the whole pair rather than tight
+/// against either half.
+const PACKAGE_DEADLINE: Duration = Duration::from_secs(240);
+
+/// The `cargo package` invocations that together produce all three roots.
+///
+/// Each entry names the crates it packages and the sibling it patches to the
+/// workspace sources. They are data rather than two call statements because
+/// the per-test allowance is shared between them: `boundary_packaging_test.py`
+/// reads this array's length and [`PACKAGE_DEADLINE`] to check that the whole
+/// set can reach its own deadlines before nextest stops the test. The array
+/// length is part of the type, so rustc checks it against the initializers.
+const PACKAGING_INVOCATIONS: [(&[&str], &str); 2] = [
+    (&["ortho_l10n", "ortho_config"], "ortho_config_macros"),
+    (&["ortho_config_macros"], "ortho_l10n"),
+];
 
 /// Directory `cargo package` writes into, relative to the shared target root.
 const PACKAGE_DIRECTORY: &str = "package";
@@ -107,6 +130,16 @@ pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
 /// directory. A failure is cached too, so a broken packaging step is reported
 /// once rather than retried by every contract.
 ///
+/// That cache is process-local, and nextest runs each test in its own process,
+/// so in a full run several of these packaged contracts package the same target
+/// directory side by side. Cargo's own lock does not cover that: it does not
+/// hold readers out while a package root is removed and unpacked, so one
+/// process can replace a root another is reading. `binary(boundary)` is
+/// therefore serialized as its own nextest test group; see
+/// `.config/nextest.toml` and "Nextest test-group serialization" in
+/// `docs/developers-guide.md`. Without that entry this function is safe only
+/// under `make boundary`, which runs one process.
+///
 /// # Errors
 ///
 /// Returns an error when either packaging invocation fails or when one of the
@@ -156,13 +189,9 @@ fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
     Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
         .with_context(|| format!("create packaging target {target}"))?;
 
-    package_sources(
-        &repository,
-        &target,
-        &["ortho_l10n", "ortho_config"],
-        "ortho_config_macros",
-    )?;
-    package_sources(&repository, &target, &["ortho_config_macros"], "ortho_l10n")?;
+    for (crates, sibling) in PACKAGING_INVOCATIONS {
+        package_sources(&repository, &target, crates, sibling)?;
+    }
 
     let package_directory = target.join(PACKAGE_DIRECTORY);
     let mut roots = Vec::new();

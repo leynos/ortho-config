@@ -19,14 +19,14 @@ mod fluent;
 mod identifier;
 use fluent::{BundleWithLocale, normalize_identifier};
 
-/// Arguments forwarded to localisation lookups.
+/// Arguments forwarded to localization lookups.
 ///
 /// Implementations can inspect these values while formatting a translation. In
 /// Fluent-backed scenarios the map keys correspond to the placeholder names
 /// declared in the `.ftl` resources.
 pub type LocalizationArgs<'value> = HashMap<&'value str, FluentValue<'value>>;
 
-/// Provides localised strings for user-facing CLI output.
+/// Provides localized strings for user-facing CLI output.
 ///
 /// Implementations may forward lookups to Fluent bundles, embed simple maps for
 /// testing, or proxy to other translation sources. Consumers invoke these
@@ -35,10 +35,10 @@ pub type LocalizationArgs<'value> = HashMap<&'value str, FluentValue<'value>>;
 /// applications to store it behind `Arc<dyn Localizer>` and thread it through
 /// builders at runtime.
 pub trait Localizer: Send + Sync {
-    /// Performs a localisation lookup for the provided identifier.
+    /// Performs a localization lookup for the provided identifier.
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String>;
 
-    /// Returns the locale used for localisation lookups when it is known.
+    /// Returns the locale used for localization lookups when it is known.
     fn locale(&self) -> Option<&LanguageIdentifier> {
         None
     }
@@ -65,7 +65,7 @@ pub trait Localizer: Send + Sync {
     }
 }
 
-/// Default localiser that declines to translate messages.
+/// Default localizer that declines to translate messages.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoOpLocalizer;
 
@@ -83,7 +83,7 @@ impl Localizer for NoOpLocalizer {
     }
 }
 
-/// Denotes which bundle produced a localisation attempt.
+/// Denotes which bundle produced a localization attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FluentBundleSource {
     /// Application-provided catalogue layered over the defaults.
@@ -108,7 +108,7 @@ pub struct FormattingIssue {
 /// Reporter invoked when Fluent raises formatting errors.
 pub type FormattingIssueReporter = Arc<dyn Fn(&FormattingIssue) + Send + Sync>;
 
-/// Fluent-powered localiser that layers consumer bundles over embedded defaults.
+/// Fluent-powered localizer that layers consumer bundles over embedded defaults.
 pub struct FluentLocalizer {
     /// Consumer catalogue checked first so applications can override embedded messages.
     consumer: Option<BundleWithLocale>,
@@ -166,7 +166,7 @@ pub enum FluentLocalizerError {
 }
 
 impl FluentLocalizer {
-    /// Starts building a localiser for the provided locale.
+    /// Starts building a localizer for the provided locale.
     ///
     /// # Examples
     /// ```rust
@@ -182,7 +182,7 @@ impl FluentLocalizer {
         FluentLocalizerBuilder::new(locale)
     }
 
-    /// Builds a localiser using only the embedded catalogue for the locale.
+    /// Builds a localizer using only the embedded catalogue for the locale.
     ///
     /// This helper avoids repeating `builder(locale).try_build()` in consumers
     /// that do not need to layer additional resources.
@@ -196,7 +196,7 @@ impl FluentLocalizer {
         Self::builder(locale).try_build()
     }
 
-    /// Builds a localiser that layers consumer resources over the embedded defaults.
+    /// Builds a localizer that layers consumer resources over the embedded defaults.
     ///
     /// # Errors
     ///
@@ -212,7 +212,7 @@ impl FluentLocalizer {
             .try_build()
     }
 
-    /// Builds an English (en-US) localiser with the provided consumer resources.
+    /// Builds an English (en-US) localizer with the provided consumer resources.
     ///
     /// # Errors
     ///
