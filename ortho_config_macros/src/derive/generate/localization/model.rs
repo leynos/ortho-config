@@ -74,26 +74,8 @@ pub(crate) struct FluentSegments(pub(super) Vec<String>);
 impl FluentSegments {
     /// Ensures the first normalized segment starts with an ASCII letter.
     pub(super) fn ensure_leading_ascii_letter(&self, span: Span) -> syn::Result<()> {
-        let Some(first) = self.0.first() else {
-            return Err(syn::Error::new(
-                span,
-                "Fluent identifier must start with an ASCII letter: missing command root",
-            ));
-        };
-        let Some(ch) = first.chars().next() else {
-            return Err(syn::Error::new(
-                span,
-                "Fluent identifier must start with an ASCII letter: empty command root",
-            ));
-        };
-        if ch.is_ascii_alphabetic() {
-            Ok(())
-        } else {
-            Err(syn::Error::new(
-                span,
-                format!("Fluent identifier must start with an ASCII letter: {first:?}"),
-            ))
-        }
+        let root = self.0.first().map(std::slice::from_ref).unwrap_or_default();
+        join_identifier(root, span).map(|_| ())
     }
 
     /// Returns a copy with one additional segment.

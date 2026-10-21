@@ -28,6 +28,10 @@ fn test_field_long_help_id_matches_runtime_lookup(
     let log_level = field_by_name(&docs_metadata, "log_level")?;
     let command_path = DocsConfig::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
     let expected = message_id_for(&command_path, "args.log_level.long_help");
+    ensure!(
+        expected == ortho_l10n::message_id_for(&command_path, "args.log_level.long_help"),
+        "direct runtime and compatibility facade identifiers must agree",
+    );
 
     ensure!(
         log_level.long_help_id.as_deref() == Some(expected.as_str()),

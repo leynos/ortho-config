@@ -163,8 +163,8 @@ unavailable infrastructure from source failures.
   ```
 
   EP-M1 is committed as `fe5b5334`. CodeRabbit completed its four-file review
-  and reported three minor documentation concerns; resolving those and
-  obtaining a clear assessment remain pending.
+  and reported three minor documentation concerns. Commit `b50d56b0` resolves
+  them; the subsequent six-file reassessment reports zero findings.
 
 - [x] 2026-10-20: At the user's direction, advance the branch from
   `f99d9234f6d72e6b1a489b82f35ff1c5eb7228a7` to supervision PR #607's
@@ -266,8 +266,22 @@ approaches; they are no longer outstanding work.
 
 ### Remaining milestones
 
-- [ ] EP-M1: Resolve documentation review concerns and finish assessment.
-- [ ] EP-M2: Extraction and integration, gates, commit, review.
+- [x] EP-M1: Commit characterization (`fe5b5334`), resolve the three
+  documentation findings (`b50d56b0`), and complete fresh CodeRabbit review
+  with zero findings across all six files. Publish over SSH with an explicit
+  absent-branch lease; HEAD, remote, and origin tracking all match `b50d56b0`.
+- [x] 2026-10-20: Begin EP-M2. Record ADR-015 before introducing the crate
+  and shared fallible identifier API, as repository abstraction policy
+  requires. This brings the planned boundary ADR forward from EP-M4 without
+  changing ownership or scope. CodeGraph impact identifies 12 direct and 30
+  total identifier references; preserve their configuration re-export paths.
+- [x] EP-M2: Runtime, embedded resources, and pure tests moved into
+  `ortho_l10n`; configuration now re-exports actual types and retains adapters.
+  Macros use the shared fallible API, including root validation and the common
+  argument-fragment separator. Structured-error/panic and source-span
+  regressions plus direct/facade identity checks are present. All gates pass
+  and the milestone review's only valid findings are repaired; the clean
+  milestone commit is the delivery point.
 - [ ] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR.
@@ -304,15 +318,25 @@ and documentation IR ownership as explicitly required.
 
 ## Outcomes & retrospective
 
-The compatibility contract and eight new characterization cases are written;
-all eight pass. Formatting, typechecking, rustdoc, Clippy, Whitaker, Markdown,
-spelling, and diagram validation pass. The rebased full test gate passes,
-resolving the earlier documentation-example subprocess timeouts. All required
-gates pass after two assertion-only Clippy corrections for the target's newer
-Rust toolchain. The characterization commit and its first CodeRabbit review are
-complete; three documentation concerns are being resolved. No production
-extraction, push, or PR has occurred. No extraction acceptance item is yet
-claimed complete.
+EP-M1 is complete, reviewed with zero outstanding findings, and published as a
+remote branch at `b50d56b0`; no pull request exists yet, so "published" here
+means branch-pushed over SSH with the origin tracking ref matching. EP-M2 is
+complete: the runtime, resources, and pure tests now belong to `ortho_l10n`,
+with actual-type configuration re-exports and shared macro normalization.
+Focused runtime, macro, identity, and documentation-agreement tests pass, every
+sequential gate passes on the corrected tree, and the milestone review's three
+findings are dispositioned and repaired. A mid-implementation disk exhaustion
+and a 312-character table-wrap defect both caused red gates; both are repaired
+and recorded above. Standalone/package closure proof, measurements, release
+tooling, and the draft PR remain EP-M3/EP-M4 work.
+
+Decision log note (2026-10-21): The earlier guidance to use explicit result
+branches at the Clap collision panic boundaries is superseded. Those sites now
+delegate to `message_id_for`, matching the base branch and satisfying the
+review. The rule that survives is narrower and is what the gate actually
+enforced: do not introduce `unwrap_or_else` panic closures in this API. Panics
+documented in public `# Panics` sections and routed through one fallible owner
+remain the intended programmer-error behaviour.
 
 Revision note (2026-10-20): The user explicitly selected the open supervision
 PR as the new base, replacing the earlier wait for its merge into main. The
@@ -321,8 +345,8 @@ results before the first milestone can be committed or reviewed.
 
 Revision note (2026-10-20, validation): Record the successful rebased gate run
 and the two Clippy assertion corrections. The documentation-example blocker is
-resolved on PR #607's base. EP-M1 still needs its gated commit and milestone
-assessment before extraction begins.
+resolved on PR #607's base. At that point EP-M1 still needed its gated commit
+and milestone assessment; both subsequently completed as recorded above.
 
 [cargo-package]:
   https://doc.rust-lang.org/cargo/commands/cargo-package.html
@@ -331,3 +355,99 @@ Revision note (2026-10-20, review): Close the superseded infrastructure
 checklist items in a labelled historical record and wrap long references. These
 changes address the three documentation findings from the completed EP-M1
 CodeRabbit assessment; production code remains unchanged.
+
+Revision note (2026-10-20, EP-M2): Record accepted EP-M1 review and verified
+publication. Bring the boundary ADR into the extraction milestone so the new
+shared helper's ownership is documented before implementation.
+
+Revision note (2026-10-20, extraction candidate): Move implementation and tests
+with the compatibility catalogues, replace the paired normalizers with one
+fallible owner, and update affected catalogue paths and architecture guidance.
+The workspace lockfile changes only internal dependency edges and the new
+package. Standalone/package closure proof and measurements remain EP-M3 work.
+
+EP-M2 focused evidence: `ortho_l10n` passes 48 unit tests and ten doctests;
+macros pass 276 tests. The attempted configuration command names fixture and
+support files as Cargo targets, so Cargo rejects it before running tests. Use
+their owning harnesses: `localization_trybuild`, `crate_path_trybuild`,
+`localized_parse`, and `docs_ir`, alongside the direct identity and nested IR
+targets. This is an invocation correction, rather than a source failure.
+
+EP-M2 corrected focused configuration verification passes: crate aliases,
+localization public-path and parser trybuild fixtures, two nominal-identity
+checks, 12 localized-parse cases, eight docs IR cases, and nine nested IR
+cases. No diagnostic snapshots changed. Full candidate gates and review remain
+pending.
+
+EP-M2 full-gate attempt: formatting and rustdoc pass. Clippy identifies two
+unused imports left in the retained Clap test module after its pure tests
+moved. Remove those imports and restart the sequential gates; this is test
+support cleanup, with no runtime behaviour change.
+
+EP-M2 cleanup retry: rustdoc passes after shared-cache waits. Clippy rejects
+assertions in the result-returning identity test and two discarded `must_use`
+values. Make the test infallible with explicit fixture construction and
+exercise the typed arguments and reporter through a real formatted lookup.
+Retain all cross-path assignments without lint suppressions; repeat the
+sequential gates.
+
+EP-M2 identity-test retry: rustdoc and Clippy pass. Whitaker rejects the
+`unwrap_or_else` panic closure in the compatibility API. The API deliberately
+retains programmer-error panics, while dynamic callers have the fallible API.
+Use explicit result branches at that documented boundary and the two existing
+Clap collision panic boundaries. Preserve exact error text and validation
+order, without expects, exclusions, or lint suppressions. Repeat all gates.
+
+Revision note (2026-10-20, capacity recovery): Preserve the failed EP-M2
+integration log at `/tmp/issue566-m2-panic-boundary-test.out`; its two failing
+agent-context cases report `No space left on device`, rather than a runtime
+assertion regression. Record the user's capacity-restoration instruction and
+restart validation without changing production code. The prerequisite PR #607
+advanced to `680efaed` after the earlier rebase; inspect and incorporate its
+build-supervision improvements before the next publication. Measurements use
+`b50d56b0`, the immediate pre-extraction checkpoint with the same supervision
+base and toolchain, rather than the historical initial baseline.
+
+EP-M2 full-gate results: the candidate `81fa98d` passed typecheck (47 s), lint
+(rustdoc, Clippy, and Whitaker, 88 s), full tests (2,049 passed, 0 failed, 29
+ignored, 418 s; pytest 115 passed and five skipped), diagrams, and workflow
+contracts. Formatting and Markdown both failed on the same defect: two
+`docs/repository-layout.md` table rows measured 313 and 311 characters against
+the 312-character column width that `mdtablefix` enforces. Re-running the
+repository's own `mdtablefix --in-place` repaired exactly those two rows;
+`make check-fmt` then reported 90 files unchanged, `make markdownlint` reported
+zero issues with `current: typos.toml` (no rewrite), and the repaired candidate
+`1eae3da2` carried the earlier green gates forward. The delta was whitespace in
+one documentation file, and no test, `include_str!`, or documentation-example
+registry reads it, so the carried results remain valid for the file classes the
+delta reaches.
+
+EP-M2 milestone review: CodeRabbit CLI 0.9.0 ran through the scrutineer against
+`--base-commit 1334cc88` for 316 s, covered all 40 changed files, and returned
+three trivial findings. Preserved evidence is
+`/tmp/coderabbit-ep-m2-gjHPyN/coderabbit-agent.out`, with head-before and
+reviewed-file listings beside it. Findings one and three are the same defect
+reported twice: both ask the two `assert_unique_*_ids` helpers in
+`ortho_config/src/localizer/clap_command/mod.rs` to call `message_id_for`
+rather than reproducing its body. Finding two is a title/body contradiction:
+its title says to remove the empty-path guard in
+`ortho_l10n::try_message_id_for`, while its body says to keep it and document
+why.
+
+Both dispositions are valid. The branch itself introduced the duplicated
+blocks; the base `1334cc88` called `message_id_for` at both sites, so the
+repair restores the base form. This supersedes the earlier plan guidance to
+place explicit result branches at the Clap collision boundaries. That guidance
+generalized from a Whitaker rejection of an `unwrap_or_else` panic closure in
+the compatibility API, which is a narrower rule than "no panic at these
+boundaries": `message_id_for` contains the same `match`/`panic!` internally and
+Whitaker accepts it. The empty-path guard stays, with the requested comment
+stating that it preserves the legacy error ordering.
+
+Repair gates on the corrected tree, run sequentially: `make check-fmt`,
+`make typecheck`, `make lint` (rustdoc, Clippy, and Whitaker all clean),
+`make test` (2,049 passed, 0 failed, 29 ignored; pytest 115 passed and five
+skipped), `make markdownlint`, `make nixie`, and `make test-workflow-contracts`
+(325 passed, one skipped) all pass. Canonical logs follow the
+`/tmp/issue566-m2-cr-repair-<gate>.out` pattern. The tree did not move during
+any of these gates.

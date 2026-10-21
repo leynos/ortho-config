@@ -158,3 +158,14 @@ difference: a catalogue entry may translate cleanly and still never be reached.
 The decision recorded here is unchanged: hand-built and sibling subcommand
 collisions still follow the accepted panic contract, and the derive now fails
 before it can emit an ambiguous identifier.
+
+On 2026-10-20 issue #566 introduced the additive fallible API in `ortho_l10n`.
+The runtime's `message_id_for` panic and the macro's spanned diagnostic now
+wrap one shared fallible normalizer. `try_normalize_segment` validates a
+fragment, `try_join_identifier` validates a complete identifier, and
+`try_message_id_for` composes the command path and dotted suffix. Structured
+errors carry the offending input; existing panic text and macro spans remain
+unchanged. Collision detection remains in the configuration adapters and derive
+pass. [ADR-015](adr-015-localization-runtime-boundary.md) supersedes the
+paired-normalizer decision without moving configuration metadata into the
+runtime.

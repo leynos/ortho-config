@@ -2,7 +2,7 @@
 
 use super::{LocalizationArgs, Localizer, message_id_for};
 use clap::{Arg, ArgAction, Command};
-use fluent_bundle::FluentValue;
+use ortho_l10n::FluentValue;
 use std::collections::{HashMap, HashSet};
 
 mod parse;

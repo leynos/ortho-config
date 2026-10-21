@@ -270,13 +270,14 @@ name `profiles: None`. The runtime "which profile is active" concern is
 `SelectedProfile` and `ProfileLoadOutcome`, deliberately separate from the
 static agent-context contract.
 
-`localizer::identifier::normalize_segment` is the single source of truth for
-strict runtime and derive-time Fluent identifier segments. Reuse it from
-command localization, derive output, and future lookup-id generation instead of
-duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
-`localizer::fluent` separate: it exists only to pre-normalize hand-authored
-resource ids such as dotted catalogue keys before Fluent parses them, and must
-not be used to validate generated command ids.
+`ortho_l10n::try_normalize_segment` is the single source of truth for strict
+runtime and derive-time Fluent identifier segments. Reuse it, or the
+complete-identifier helpers re-exported beside it, from command localization,
+derive output, and future lookup-id generation instead of duplicating ASCII
+normalization rules. Keep the tolerant catalogue load path in
+`ortho_l10n/src/fluent.rs` separate: it exists only to pre-normalize
+hand-authored resource ids such as dotted catalogue keys before Fluent parses
+them, and must not be used to validate generated command ids.
 
 `#[derive(OrthoConfig)]` emits `OrthoConfigLocalization` for the deriving
 configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
@@ -429,9 +430,11 @@ command identifiers are still a documented runtime panic contract owned by
 runtime panic tests until derive-emitted identifiers move validation to compile
 time.
 
-The runtime and macro normalizers are deliberate twins, locked by their shared
-version marker and property tests against `message_id_for`. Generated docs IR
-receives mounted paths through path-aware trait methods; handwritten trait
+`ortho_l10n` owns the shared fallible identifier normalizer. The runtime panic
+and macro spanned diagnostics wrap that implementation; argument fragments use
+the shared separator without imposing the root rule. See
+[ADR-015](adr-015-localization-runtime-boundary.md). Generated docs IR receives
+mounted paths through path-aware trait methods; handwritten trait
 implementations use their provided fallback. The optional identifier artefact
 uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
 schema has standalone scope until a downstream consumer joins it to docs IR.

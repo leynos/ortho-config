@@ -1,6 +1,7 @@
 //! Integration coverage for localised clap parsing helpers.
 
 use clap::{Args, CommandFactory, Parser, Subcommand};
+use ortho_config::LanguageIdentifier;
 use ortho_config::{
     ArgLocalizationIds, LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer,
     OrthoConfig, OrthoConfigLocalization, OrthoConfigSubcommandDocs, langid, message_id_for,
@@ -16,7 +17,6 @@ use tracing::field::{Field, Visit};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Layer, Registry};
-use unic_langid::LanguageIdentifier;
 
 #[derive(Debug, Parser)]
 #[command(name = "fixture", bin_name = "fixture")]

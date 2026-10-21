@@ -1,252 +1,62 @@
-//! Strict Fluent identifier segment normaliser for the derive macro.
+//! Spanned diagnostics around the runtime's single identifier convention.
 //!
-//! This is the test-locked macro-side twin of
-//! `ortho_config::localizer::identifier::normalize_segment`. The two
-//! implementations cannot share source (the macro crate is `proc-macro = true`
-//! and must stay build-independent of `ortho_config`), so agreement is locked
-//! by (a) this marker, (b) the dev-dependency-cycle property test, and (c) the
-//! cross-crate agreement tests in `ortho_config/tests/`.
-//!
-//! Unlike the runtime twin, this normaliser returns spanned [`syn::Error`]s so
-//! a bad identifier is a compile-time diagnostic at the offending field or
-//! attribute, never a panic.
-//!
-//! NORMALIZATION-RULES-VERSION: 1
+//! Configuration emission retains source spans and diagnostic wording while
+//! `ortho_l10n` owns normalization and complete-identifier validation.
 
 use proc_macro2::Span;
 use syn::Error;
 
-/// Normalises a single Fluent identifier segment.
-///
-/// Lowercase ASCII alphanumerics, `-`, and `_` pass through; any other
-/// character, or an empty segment, is a spanned error.
+/// Normalizes a fragment without imposing the complete ID's leading-letter rule.
 pub(crate) fn normalize_segment(raw: &str, span: Span) -> Result<String, Error> {
-    if raw.is_empty() {
-        return Err(Error::new(
-            span,
-            "invalid Fluent identifier segment: segment must not be empty",
-        ));
-    }
-
-    for ch in raw.chars() {
-        if !(ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_')) {
-            return Err(Error::new(
-                span,
-                format!("invalid Fluent identifier segment: {raw:?}"),
-            ));
-        }
-    }
-
-    Ok(raw.to_ascii_lowercase())
+    ortho_l10n::try_normalize_segment(raw).map_err(|error| Error::new(span, error))
 }
 
-/// Joins one or more normalised segments into a Fluent identifier.
-///
-/// The joined identifier must start with an ASCII letter, matching the runtime
-/// convention (Fluent message ids have the same lexical rule).
+/// Composes normalized segments and maps validation errors to the caller's span.
 pub(crate) fn join_identifier(segments: &[String], span: Span) -> Result<String, Error> {
-    let joined = segments.join("-");
-    let Some(first) = joined.chars().next() else {
-        return Err(Error::new(
-            span,
-            "Fluent identifier must start with an ASCII letter: missing command root",
-        ));
-    };
-    if !first.is_ascii_alphabetic() {
-        return Err(Error::new(
-            span,
-            format!("Fluent identifier must start with an ASCII letter: {joined:?}"),
-        ));
-    }
-    Ok(joined)
+    ortho_l10n::try_join_identifier(segments).map_err(|error| Error::new(span, error))
 }
 
 #[cfg(test)]
 mod tests {
-    //! Tests for the strict normaliser twin.
+    //! Error wording and source-span preservation at the macro boundary.
 
     use super::*;
-    use proptest::prelude::*;
     use rstest::rstest;
 
-    const MARKER: &str = "NORMALIZATION-RULES-VERSION: 1";
-
-    /// Lower-casing and `-`/`_` preservation hold for representable input.
+    /// Invalid fragments retain both the shared error text and a nonempty source span.
     #[rstest]
-    #[case("hello", "hello")]
-    #[case("HELLO", "hello")]
-    #[case("Hello_World", "hello_world")]
-    #[case("hello-world", "hello-world")]
-    #[case("2026", "2026")]
-    #[case("a1-b2_c3", "a1-b2_c3")]
-    fn normalizes_ascii_segments(#[case] input: &str, #[case] expected: &str) {
+    #[case::empty("", "invalid Fluent identifier segment: segment must not be empty")]
+    #[case::dot("bad.name", "invalid Fluent identifier segment: \"bad.name\"")]
+    #[case::unicode("héllo", "invalid Fluent identifier segment: \"héllo\"")]
+    fn segment_errors_keep_the_input_span(#[case] raw: &str, #[case] expected: &str) {
+        let literal: syn::LitStr = syn::parse_str("\n  \"original span\"").expect("literal");
+        let span = syn::spanned::Spanned::span(&literal);
+        let error = normalize_segment(raw, span).expect_err("invalid segment");
+        assert_eq!(error.to_string(), expected);
+        assert_eq!(error.span().start(), span.start());
+        assert_eq!(error.span().end(), span.end());
+        assert_ne!(span.start(), span.end(), "span check must not be vacuous");
+    }
+
+    /// Fragment normalization permits digit-leading argument ids.
+    #[test]
+    fn numeric_argument_fragments_remain_representable() {
         assert_eq!(
-            normalize_segment(input, proc_macro2::Span::call_site())
-                .expect("segment should normalise"),
-            expected
+            normalize_segment("123_ABC", Span::call_site()).expect("fragment"),
+            "123_abc"
         );
     }
 
-    /// Input a Fluent identifier cannot carry is rejected, not silently cut.
-    ///
-    /// The cases cover whitespace, non-ASCII letters, and the two separator
-    /// characters that are structural elsewhere, so a loosened rule that
-    /// admitted any of them would fail here.
+    /// Complete identifiers keep the root diagnostic at the supplied source span.
     #[rstest]
-    #[case("")]
-    #[case("hello world")]
-    #[case("héllo")]
-    #[case("hello.world")]
-    #[case("hello/world")]
-    #[case("ключ")]
-    fn rejects_unrepresentable_segments(#[case] input: &str) {
-        assert!(
-            normalize_segment(input, proc_macro2::Span::call_site()).is_err(),
-            "segment {input:?} should be rejected"
-        );
-    }
-
-    /// The normaliser source carries the rules-version marker.
-    #[rstest]
-    fn marker_version_is_present_in_source() {
-        let source = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/src/derive/generate/localization/identifier.rs"
-        ));
-        assert!(
-            source.contains(MARKER),
-            "normaliser source must carry the {MARKER} gate"
-        );
-    }
-
-    /// The macro twin and the runtime twin declare the same rules version.
-    #[rstest]
-    fn marker_version_matches_runtime_twin() {
-        // Decision D-8 version gate: editing the normalization rules in one
-        // implementation mechanically points at the other by failing here.
-        let runtime = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../ortho_config/src/localizer/identifier.rs"
-        ));
-        let ours = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/src/derive/generate/localization/identifier.rs"
-        ));
-        let runtime_version = marker_version_from(runtime)
-            .expect("runtime twin must carry the marker version comment");
-        let our_version =
-            marker_version_from(ours).expect("normaliser must carry the marker version comment");
-        assert_eq!(
-            our_version, runtime_version,
-            "normalization-rules version mismatch between the macro normaliser and the runtime twin"
-        );
-    }
-
-    /// Extracts the `NORMALIZATION-RULES-VERSION` value from marked source.
-    ///
-    /// The marker lives in a `//!` module doc comment in both twins, so the
-    /// scan strips the doc-comment prefix before matching.
-    fn marker_version_from(source: &str) -> Option<&str> {
-        source.lines().find_map(|line| {
-            line.trim_start_matches("//!")
-                .trim()
-                .strip_prefix("NORMALIZATION-RULES-VERSION:")
-                .map(str::trim)
-        })
-    }
-
-    // A raw identifier segment that may start with any Fluent character.
-    prop_compose! {
-        fn segment()(
-            raw in "[A-Za-z0-9_-]{1,12}",
-        ) -> String { raw }
-    }
-
-    // A segment that starts with an ASCII letter.
-    //
-    // Both the runtime and the macro twin reject identifiers whose root does
-    // not start with a letter, so generated roots must respect that bound.
-    prop_compose! {
-        fn root_segment()(
-            first in "[A-Za-z]",
-            rest in "[A-Za-z0-9_-]{0,12}",
-        ) -> String {
-            format!("{first}{rest}")
-        }
-    }
-
-    proptest! {
-        /// The macro normaliser agrees byte-for-byte with the runtime lookup.
-        ///
-        /// This is the Decision D-8 dev-dependency cycle check: for generated
-        /// command paths whose root starts with a letter, plus dotted
-        /// suffixes, the twin's joined output must equal `message_id_for`'s.
-        #[test]
-        fn joined_output_agrees_with_message_id_for(
-            root in root_segment(),
-            tail in proptest::collection::vec(segment(), 0..3),
-            suffix_segments in proptest::collection::vec(segment(), 1..4),
-        ) {
-            let mut path = vec![root];
-            path.extend(tail);
-            let suffix = suffix_segments.join(".");
-            let span = proc_macro2::Span::call_site();
-            let normalised_path = path
-                .iter()
-                .map(|s| normalize_segment(s, span).expect("generated path segment normalises"))
-                .collect::<Vec<_>>();
-            let normalised_tail = suffix
-                .split('.')
-                .map(|s| normalize_segment(s, span).expect("generated suffix segment normalises"))
-                .collect::<Vec<_>>();
-            let mut all = normalised_path.clone();
-            all.extend(normalised_tail);
-            let joined = join_identifier(&all, span).expect("generated id joins");
-
-            let expected = ortho_config::message_id_for(&path, &suffix);
-
-            prop_assert_eq!(joined, expected);
-        }
-
-        /// Normalising an already-normalised segment changes nothing.
-        #[test]
-        fn normalization_is_idempotent(raw in segment()) {
-            let span = proc_macro2::Span::call_site();
-            let once = normalize_segment(&raw, span).expect("generated segment normalises once");
-            let twice = normalize_segment(&once, span).expect("normalised segment is stable");
-            prop_assert_eq!(once, twice);
-        }
-
-        /// Any joined identifier satisfies the Fluent identifier grammar.
-        #[test]
-        fn joined_output_is_a_valid_fluent_identifier(
-            root in root_segment(),
-            tail in proptest::collection::vec(segment(), 0..3),
-            suffix_segments in proptest::collection::vec(segment(), 1..4),
-        ) {
-            let mut path = vec![root];
-            path.extend(tail);
-            let suffix = suffix_segments.join(".");
-            let span = proc_macro2::Span::call_site();
-            let mut segments = path
-                .iter()
-                .map(|s| normalize_segment(s, span).expect("generated path segment normalises"))
-                .collect::<Vec<_>>();
-            segments.extend(
-                suffix
-                    .split('.')
-                    .map(|s| normalize_segment(s, span).expect("generated suffix segment normalises")),
-            );
-            let joined = join_identifier(&segments, span).expect("generated id joins");
-
-            prop_assert!(
-                joined.chars().next().is_some_and(|c| c.is_ascii_alphabetic()),
-                "joined id must start with an ASCII letter: {joined}"
-            );
-            prop_assert!(
-                joined.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')),
-                "joined id must contain only Fluent characters: {joined}"
-            );
-        }
+    #[case::missing(vec![], "Fluent identifier must start with an ASCII letter: missing command root")]
+    #[case::numeric(vec!["123".to_owned()], "Fluent identifier must start with an ASCII letter: \"123\"")]
+    fn root_errors_keep_the_input_span(#[case] segments: Vec<String>, #[case] expected: &str) {
+        let literal: syn::LitStr = syn::parse_str("\n  \"root span\"").expect("literal");
+        let span = syn::spanned::Spanned::span(&literal);
+        let error = join_identifier(&segments, span).expect_err("invalid root");
+        assert_eq!(error.to_string(), expected);
+        assert_eq!(error.span().start(), span.start());
+        assert_eq!(error.span().end(), span.end());
     }
 }

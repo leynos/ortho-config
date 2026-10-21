@@ -625,7 +625,7 @@ the target locale.
 ### 4.2 Catalogues
 
 ```plaintext
-ortho_config/locales/
+ortho_l10n/locales/
   en-US/messages.ftl             # canonical English library catalogue
   ja/messages.ftl                # other shipped library catalogue
 consumer-package/locales/
@@ -645,11 +645,11 @@ PowerShell culture probing strongly prefers `en-US` presence.
 #### 4.2.1 Default heading catalogue
 
 `ortho_config` ships the complete `ortho.headings.*` catalogue in the canonical
-`ortho_config/locales/en-US/messages.ftl` resource. A consumer that has
-authored no Fluent catalogue renders correct headings from the first generator
-run; a consumer that adds a locale translates the headings it wants and
-inherits the rest. English locale tags such as `en-GB` use these same embedded
-`en-US` resources through language-only matching.
+`ortho_l10n/locales/en-US/messages.ftl` resource. A consumer that has authored
+no Fluent catalogue renders correct headings from the first generator run; a
+consumer that adds a locale translates the headings it wants and inherits the
+rest. English locale tags such as `en-GB` use these same embedded `en-US`
+resources through language-only matching.
 
 The catalogue is the fallback of record. `cargo-orthohelp` currently carries a
 hardcoded English table for the standard heading identifiers, which keeps raw

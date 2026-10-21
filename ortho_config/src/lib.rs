@@ -137,9 +137,10 @@ pub use error::{OrthoError, is_display_request};
 pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};
 pub use localizer::{
     ArgLocalizationIds, FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder,
-    FluentLocalizerError, FormattingIssue, LocalizationArgs, LocalizeCmd, LocalizedParse,
-    Localizer, NoOpLocalizer, OrthoConfigLocalization, WithBase, clap_error_formatter,
-    localize_clap_error, localize_clap_error_with_command, message_id_for, parse_localized_command,
+    FluentLocalizerError, FluentValue, FormattingIssue, FormattingIssueReporter, LocalizationArgs,
+    LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer, OrthoConfigLocalization, WithBase,
+    clap_error_formatter, localize_clap_error, localize_clap_error_with_command, message_id_for,
+    parse_localized_command,
 };
 /// Re-export sanitization helpers used to strip `None` fields and produce a
 /// Figment provider.
@@ -161,10 +162,10 @@ pub use localizer::{
 /// ```
 #[cfg(feature = "serde_json")]
 pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_without_nones};
+pub use ortho_l10n::{LanguageIdentifier, langid};
 pub use post_merge::{PostMergeContext, PostMergeHook};
 pub use profile::{ProfileLoadOutcome, ProfileName, ProfileSource, SelectedProfile};
 use std::sync::Arc;
-pub use unic_langid::{LanguageIdentifier, langid};
 
 #[doc(hidden)]
 pub mod __private {

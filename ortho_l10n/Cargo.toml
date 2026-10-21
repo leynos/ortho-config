@@ -1,0 +1,25 @@
+[package]
+name = "ortho_l10n"
+version = "0.9.0"
+edition = "2024"
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Reusable Fluent localization runtime and message identifier convention."
+documentation = "https://docs.rs/ortho_l10n"
+keywords = ["localization", "fluent", "i18n"]
+
+[lints]
+workspace = true
+
+[dependencies]
+fluent-bundle = "0.16.0"
+fluent-syntax = "0.12"
+unic-langid = { version = "0.9", features = ["macros"] }
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+rstest.workspace = true
+proptest.workspace = true

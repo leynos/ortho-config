@@ -73,6 +73,9 @@
 - [ADR-014: Documentation build and process ownership](adrs/adr-0014-documentation-build-ownership.md):
   review the test-only build-cache ownership, process supervision, and timeout
   policy for executable documentation.
+- [ADR-0015: Reusable localization runtime](adrs/adr-0015-localization-runtime-boundary.md):
+  review the reusable localization boundary, compatibility defaults, and shared
+  identifier owner.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

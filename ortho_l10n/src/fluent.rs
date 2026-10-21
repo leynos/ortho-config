@@ -38,9 +38,9 @@ impl fmt::Debug for BundleWithLocale {
 }
 
 /// Embedded English catalogue used for any requested locale whose language is English.
-const EN_US_CATALOGUE: &str = include_str!("../../locales/en-US/messages.ftl");
+const EN_US_CATALOGUE: &str = include_str!("../locales/en-US/messages.ftl");
 /// Embedded Japanese catalogue used for any requested locale whose language is Japanese.
-const JA_CATALOGUE: &str = include_str!("../../locales/ja/messages.ftl");
+const JA_CATALOGUE: &str = include_str!("../locales/ja/messages.ftl");
 
 /// Resource slice for the embedded English catalogue, kept static for bundle construction.
 static EN_US_RESOURCES: [&str; 1] = [EN_US_CATALOGUE];
@@ -98,7 +98,7 @@ pub(super) fn bundle_from_resources(
 /// IDs without dots are borrowed unchanged, avoiding allocation on the common lookup path.
 pub(super) fn normalize_identifier(id: &str) -> Cow<'_, str> {
     if id.contains('.') {
-        Cow::Owned(id.replace('.', "-"))
+        Cow::Owned(id.replace('.', super::MESSAGE_ID_SEPARATOR))
     } else {
         Cow::Borrowed(id)
     }
