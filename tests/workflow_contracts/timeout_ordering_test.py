@@ -80,7 +80,13 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: was killed at 600.224 s on run 36070786646. The BDD allowance is
 #: measured independently in `documentation_budget_test.py`.
 REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 960.0
-REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 30 * 60.0
+#: The whole-run budget, raised from 1,800 s when the dated-nightly pin
+#: cold-missed sccache. Sized from the run that was cancelled rather than
+#: from the warm sample that predates the pin: the Windows leg ran
+#: 1,810.1 s and would have finished near 1,900 s with its two surviving
+#: tests completed, against 1,044.1 s on the previous toolchain over the
+#: same tests and features. See issue 614.
+REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 2_300.0
 
 REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {
     ("ci.yml", "build-test"): 2,
@@ -137,7 +143,7 @@ def test_each_coverage_job_runs_the_steps_it_is_meant_to() -> None:
 
     ``required`` is the sum of the watchdogs found plus the allowance, so
     deleting one of a job's two coverage steps lowers the requirement by
-    1,800 s and every timing assertion still passes, while the lane
+    3,300 s and every timing assertion still passes, while the lane
     silently measures half of what it did. Pinning the count by
     coordinate is what makes that deletion fail.
     """
@@ -220,7 +226,7 @@ def test_a_whole_run_budget_would_sit_inside_each_watchdog(
 ) -> None:
     """Tier three must not pre-empt tier two, and must fit inside tier one.
 
-    ``.config/nextest.toml`` sets ``global-timeout = "30m"``, so this
+    ``.config/nextest.toml`` sets ``global-timeout = "2300s"``, so this
     runs against the current tree: the whole-run budget has to sit above
     the largest per-test allowance, or the run ends before the slowest
     test can use its budget, and below the watchdog with nextest's
