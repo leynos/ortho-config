@@ -1088,6 +1088,38 @@ must not clear an unconfirmed marker, kill unrelated processes, remove the
 shared cache, or restart a cache service. The existing nextest serialization
 groups remain until their shared-state assumptions are independently disproven.
 
+#### Windows nested Cargo builds
+
+The bridge performs a nested Cargo build, so a Windows developer or CI runner
+needs a discoverable MSVC toolchain and Windows SDK before any gate that
+compiles Rust. The hosted `build-test (windows)` lane performs this setup in
+its "Configure MSVC for nested Cargo builds" step; reproduce the equivalent
+environment locally.
+
+Prerequisites are Visual Studio with the **Desktop development with C++**
+workload and the x64 compiler tools. Discover the installation with `vswhere`,
+which hosted runners ship at
+`${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe`,
+filtering on `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. Then run
+`VsDevCmd.bat -arch=x64 -host_arch=x64` and export the variables it prints:
+`INCLUDE`, `LIB`, `LIBPATH`, `VCINSTALLDIR`, `VSINSTALLDIR`,
+`VSCMD_ARG_TGT_ARCH`, `WindowsSdkDir`, and `WindowsSDKVersion`.
+
+Two checks make the setup fail closed rather than produce a confusing linker
+error later. `LIB` must be present, and at least one directory on it must
+contain `kernel32.lib`, which proves the Windows SDK search path resolved. The
+x64 `link.exe` found under `VC\Tools\MSVC\**\bin\Hostx64\x64` is then placed on
+`PATH`, and its full path is exported as
+`CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` so the nested build selects it
+rather than whatever `PATH` resolves first.
+
+That ordering matters: the coverage action runs under Bash, and Git's
+`/usr/bin` precedes Visual Studio on `PATH`. Configure MSVC before coverage or
+any other step that builds Rust, or the nested bridge build links against the
+wrong tools. The setup is a CI and local-development requirement only; it does
+not change the production allow-list beyond the linker variable already
+documented above.
+
 ### Python docstring examples
 
 The helper scripts under `scripts/` carry NumPy-style `Examples` sections, and
