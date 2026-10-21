@@ -363,6 +363,77 @@ render. Atomic per-file writes keep each file whole, but the directory as a
 whole is not replaced atomically and the layout may change between renders. A
 reader that must be consistent has to take the same lock or retry.
 
+### Diagnosing a post-release lock hold
+
+`is_free` answers a boolean, so a test that finds the lock held after releasing
+it can report only that. Issue #606 recorded such failures, and a bare boolean
+cannot say whether a descriptor leaked in this process or an unrelated process
+holds the same inode — cases that call for opposite fixes. The test-only
+`artefact_lock_diagnostics` module turns a hold into a report naming the lock
+file, the `device`/`inode` it was observed on, every matching `/proc/locks`
+record, the process and parent of each recorded owner, their relation to the
+reporting process, and each descriptor that still refers to the file. It then
+re-probes once after `SHORT_WAIT_THRESHOLD`, which separates a lock released a
+moment late from one with a live owner. The caller's own expectation stays the
+first line; diagnostic faults are folded into the report text and never replace
+the primary failure.
+
+Two assertions exist and the split between them is deliberate.
+`ensure_released` demands the lock be free at the instant it is probed, and is
+what the ignored fork diagnostic uses. `ensure_settles_free` retries within a
+two-second `SETTLE_BUDGET` and is what the gating suites use. The reason is a
+`flock` property rather than a code defect: the lock belongs to the open file
+description, which a child inherits across `fork` and loses only at `exec`. Any
+peer test that spawns a process can therefore make a correctly released lock
+read as held for the length of that `fork`. With a forking peer present the
+strict form failed 11 of 12 runs, while the same cycles isolated from any peer
+spawn passed 12 of 12; the settling form then passed five consecutive full
+binary runs. A strict assertion in a gated suite would therefore be a check on
+the scheduler, not on the lock.
+
+`artefact_lock_evidence.rs` holds the pure half — the glibc `dev_t` split and
+the `/proc/locks` parser — tested on every platform, because a mis-split device
+or a skipped line both read as "nothing holds this lock". `/proc/locks` is a
+racing snapshot filtered to the reader's pid namespace, and `FLOCK` records
+name the acquiring process even when a child inherited the description, so the
+report states what it observed rather than implying a certainty the kernel does
+not offer.
+
+The scan reads ambient procfs through `std::fs` rather than a capability
+handle. That departs from the `AGENTS.md` preference for `cap_std`, and is
+confined to test support: the artefacts live below an ambient `OUT_DIR` chosen
+by Cargo, there is no capability root to thread through, and the lock API
+itself requires a `std::fs::File`. `ortho_config_macros` is listed under
+`no_std_fs_operations` in `dylint.toml` for the same reason.
+
+Re-run the suites that exercise this directly:
+
+```sh
+# The gated suites, at the parallelism the failures were observed under.
+cargo test -p ortho_config_macros --lib -- --test-threads=32
+
+# The ignored fork diagnostic, which asserts strictly and reports the holder.
+cargo test -p ortho_config_macros --lib -- --ignored --exact \
+  derive::generate::localization::artefact::lock_stress_tests::probes_survive_a_concurrent_fork
+```
+
+Running the test binary directly needs the sysroot's target library directory
+on the loader path, or it fails to find `libstd`:
+
+```sh
+LD_LIBRARY_PATH="$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/lib" \
+  target/debug/deps/ortho_config_macros-<hash> --test-threads=32
+```
+
+`--test-threads` controls libtest's concurrency only. It does not bound the
+compiler jobs a `cargo build` uses, and it is not a Nextest setting — this
+repository runs the lock suites under libtest, so Nextest's per-test process
+model is unavailable here. The ticket's baseline was one failure in roughly
+four full-binary runs on 2026-10-16 and six consecutive passes on 2026-10-19,
+so a green run is weak evidence. **A green `make test` does not establish that
+the flake is gone**; only the settling budget doing its job, with the strict
+diagnostic still able to reproduce the window, does.
+
 A second opt-in, `ORTHO_CONFIG_ARTEFACT_REPORT=1`, turns on the observation
 channel that explains the same sequence when a build is slow or fails. It
 writes three files below the artefact root, none of which is part of the
@@ -435,13 +506,13 @@ share one `OUT_DIR` per package and an unset variable would otherwise be
 indistinguishable from a stale one.
 
 `artefact/artefact_probe.rs` owns the stale-fragment policy:
-`source_still_exists` is its only entry point, `probe_metadata` is the only
-`std::fs::metadata` call site for it, and `classify_metadata` is the only copy
-of the rule that `NotFound` alone means stale while every other metadata error
-aborts the merge. `merge_fragments` is the single production caller; the
-identity artefact's merge and the merge-level regression tests are its only
-call sites. For OS-independent policy tests, `with_metadata_outcome` is a
-test-only, thread-local injection that matches one exact probe path and is
+`source_still_exists` is its only entry point, `probe_metadata` is its only
+`std::fs::metadata` call site in production code, and `classify_metadata` is
+the only copy of the rule that `NotFound` alone means stale while every other
+metadata error aborts the merge. `merge_fragments` is the single production
+caller; the identity artefact's merge and the merge-level regression tests are
+its only call sites. For OS-independent policy tests, `with_metadata_outcome`
+is a test-only, thread-local injection that matches one exact probe path and is
 compiled out of non-test builds. It exists because no filesystem layout
 provokes the same metadata error portably: a regular file in a parent position
 yields `NotADirectory` on Unix and `NotFound` on Windows. Which `ErrorKind` a

@@ -27,7 +27,7 @@
 use std::fs;
 use std::path::Path;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 
@@ -46,6 +46,18 @@ const PROC_LOCKS: &str = "/proc/locks";
 /// already small enough to sit inside a failing test's budget and long enough
 /// for a lock released a moment late to be observed as free.
 const RECHECK_DELAY: Duration = SHORT_WAIT_THRESHOLD;
+
+/// How long a release assertion waits for a fork-inherited description to clear.
+///
+/// A child holds the inherited description only from `fork` until `exec`, and
+/// `exec` is reached immediately by the short-lived commands this test tree
+/// spawns. The budget is generous relative to that window because it is paid
+/// only on a path that would otherwise fail, and it stops well short of the
+/// twenty-second acquire timeout so a genuine leak still fails promptly.
+pub(super) const SETTLE_BUDGET: Duration = Duration::from_secs(2);
+
+/// How long each settling probe waits before looking at the lock again.
+const SETTLE_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Explains why an `FLOCK` record can name this process while a child owns it.
 ///
@@ -79,6 +91,43 @@ pub(super) fn ensure_released(root: &Path, expectation: &str) -> Result<()> {
         LockProbe::Free => Ok(()),
         LockProbe::Held { metadata } => Err(report_hold(root, expectation, &metadata)),
     }
+}
+
+/// Asserts that the lock becomes free within a bounded settling window.
+///
+/// This is the assertion a *gate* should use, and [`ensure_released`] is the
+/// one that explains why it failed. The difference is what `flock` means when a
+/// peer forks: the lock belongs to the open file description, which a child
+/// inherits across `fork` and loses only at `exec`. A probe taken in that window
+/// therefore reports the lock held although its owner has released it, and no
+/// amount of care at the release site can prevent that — the release is correct
+/// and the observation is early.
+///
+/// That window is transient by construction, so waiting it out separates the two
+/// cases a single probe cannot: a lock that is still held because a descriptor
+/// leaked, and a lock that merely outlived its owner by one fork. The former
+/// survives every probe in [`SETTLE_BUDGET`] and fails with the full report; the
+/// latter settles. Both outcomes keep the caller's `expectation` as the first
+/// line.
+///
+/// [`SETTLE_BUDGET`]: self::SETTLE_BUDGET
+///
+/// # Errors
+///
+/// Returns the same failure [`ensure_released`] describes once the lock is still
+/// held at the end of the window, and the probe's own I/O error when a probe
+/// cannot be taken.
+pub(super) fn ensure_settles_free(root: &Path, expectation: &str) -> Result<()> {
+    let deadline = Instant::now() + SETTLE_BUDGET;
+    let mut probe = probe_lock(root).with_context(|| expectation.to_owned())?;
+    while let LockProbe::Held { metadata } = probe {
+        if Instant::now() >= deadline {
+            return Err(report_hold(root, expectation, &metadata));
+        }
+        thread::sleep(SETTLE_INTERVAL);
+        probe = probe_lock(root).with_context(|| expectation.to_owned())?;
+    }
+    Ok(())
 }
 
 /// Builds the failure a still-held lock produces.
