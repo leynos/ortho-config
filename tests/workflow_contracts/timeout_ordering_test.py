@@ -83,9 +83,12 @@ REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 960.0
 #: The whole-run budget, raised from 1,800 s when the dated-nightly pin
 #: cold-missed sccache. Sized from the run that was cancelled rather than
 #: from the warm sample that predates the pin: the Windows leg ran
-#: 1,810.1 s and would have finished near 1,900 s with its two surviving
-#: tests completed, against 1,044.1 s on the previous toolchain over the
-#: same tests and features. See issue 614.
+#: 1,810.1 s, and its younger survivor had run 157.3 s when the timer
+#: fired, so it started at 1,652.8 s and could not have finished before
+#: 1,652.8 + its own 600 s allowance, or 2,252.8 s. 2,300 s covers that
+#: bound with 47 s to spare; 1,800 s fell 452.8 s short of it. The
+#: comparison against the previous toolchain is 1,044.1 s over the same
+#: tests and features. See issue 614.
 REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 2_300.0
 
 REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {
