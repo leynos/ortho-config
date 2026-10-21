@@ -2744,7 +2744,9 @@ Notes on individual rows:
 - Coverage is `generate-coverage` in the `build-test` job and in
   `coverage-main.yml`. The job-level `RUSTFLAGS: -D warnings` displaces the
   configuration, so a coverage build has neither `mold` nor the parallel
-  frontend.
+  frontend. On the Windows leg the coverage steps also run under a short
+  `CARGO_TARGET_DIR`; see
+  [The Windows coverage command line](#the-windows-coverage-command-line).
 - Release builds (`release.yml`, job `build-assets`) and packaging (`ci.yml`,
   job `binstall-packaging`) set the same explicit job-level value and take the
   production route.
@@ -2804,6 +2806,44 @@ notice-only no-op on Windows, so no platform guard exists or is allowed. It
 sets no linker flag; `.cargo/config.toml` does. The Windows leg installs
 nothing because the action does nothing there, and `clippy-beta`, `msrv`,
 packaging and release do not call the installer.
+
+### The Windows coverage command line
+
+Windows enforces two different length limits, and they fail differently. The
+first is `MAX_PATH`, 260 characters, which `link.exe` reports as `LNK1104`; the
+bridge cache key is sized to stay inside it (see
+[The bridge cache key](#the-bridge-cache-key)). The second is the command line
+`CreateProcess` accepts for a spawned process: 32,767 characters, reported as
+`os error 206` before the process ever starts.
+
+The coverage build reaches the second limit. Cargo passes the compiler one
+`-L dependency=<target>/llvm-cov-target/debug/build/<crate>/<hash>/out`
+argument per build-script unit and one `--extern` path per dependency, so a
+single target root is repeated across the whole command line. In run
+39645228205 the `cargo-orthohelp` bin test's invocation was 33,406 characters,
+639 over; its 53-character checkout root appeared 251 times and accounted for
+13,303 of them.
+
+`cargo-llvm-cov` takes its tree from `CARGO_TARGET_DIR`, so shortening that
+root shortens every occurrence at once. A step named
+`Choose the coverage target root` republishes
+`CARGO_TARGET_DIR=%RUNNER_TEMP%\cov` through `GITHUB_ENV` on the Windows leg
+only, which leaves roughly 5,100 characters of headroom. Two consequences are
+easy to undo by accident:
+
+- The coverage steps must not set `CARGO_TARGET_DIR` themselves. Assigning it
+  per step needs the Linux cells to resolve to an empty string, and
+  `cargo-llvm-cov` refuses an empty value rather than reading it as unset. A
+  per-step value also makes the coverage legs read a matrix value their
+  publisher does not, which the CV-005 pairing rejects.
+- The directory name is deliberately terse. `cargo-target` would also clear
+  the limit but leaves under 2,900 characters, which the next dependency added
+  to the workspace would erode.
+
+`coverage_command_line_test.py` holds both rules and re-derives the arithmetic
+from the measured invocation, so a change that restores the long root, shortens
+the margin, or moves the assignment fails the contract rather than the Windows
+job.
 
 ### Opting out with `BUILD_STANDARD`
 
@@ -2955,9 +2995,12 @@ Dependabot proposes the bump. A human reviewing the pull request must:
    hosted Windows runner, over the 260-character `MAX_PATH` that `link.exe`
    still applies, and `build-test (windows)` failed with `LNK1104`. The bridge
    cache-directory name was shortened from 64 to 32 hexadecimal digits to make
-   room; see [*The bridge cache key*](#the-bridge-cache-key). Platform-specific
-   length limits are invisible to a Linux-only gate, so check them by hand
-   rather than waiting for the runner to say so.
+   room; see [*The bridge cache key*](#the-bridge-cache-key). A newer
+   dependency also widens the coverage compiler command line, which is bounded
+   by `CreateProcess` rather than by `MAX_PATH`; see
+   [The Windows coverage command line](#the-windows-coverage-command-line).
+   Platform-specific length limits are invisible to a Linux-only gate, so check
+   them by hand rather than waiting for the runner to say so.
 5. Re-read the re-measurement instruction in the "Cranelift qualification"
    section of this guide.
 6. Run `make install-build-tools` and `make check-build-tools` locally to pick

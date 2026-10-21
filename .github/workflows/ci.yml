@@ -274,10 +274,44 @@ jobs:
         if: ${{ always() && matrix.platform == 'linux' }}
         run: df -BM /
 
+      - name: Choose the coverage target root
+        # Windows measures a spawned process's whole command line against the
+        # 32,767 characters CreateProcess accepts. The cargo-orthohelp bin
+        # test's rustc invocation reached 33,406 on run 39645228205 and died
+        # with `os error 206` before the compiler ran: 639 characters over.
+        #
+        # The checkout path dominates the excess. Cargo passes one
+        # `-L dependency=<target>/llvm-cov-target/debug/build/<crate>/<hash>/
+        # out` argument per build-script unit (207 here) and one `--extern`
+        # path per dependency (43), so that single 53-character root appears
+        # 251 times and accounts for 13,303 of the 33,406. `cargo-llvm-cov`
+        # derives its tree from `CARGO_TARGET_DIR`, so shortening the root
+        # shortens every one of those occurrences at once. `cov` costs 23
+        # characters fewer than the checkout root and yields about 5,100
+        # characters of headroom; `cargo-target` would leave under 2,900.
+        #
+        # Linux keeps the default, whose limit is MAX_ARG_STRLEN, an order of
+        # magnitude further away.
+        #
+        # Scoped to the coverage steps because nothing else in the job builds
+        # under `llvm-cov-target`: lint and typecheck ran before this, and the
+        # only later step that runs cargo is the PowerShell wrapper check.
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: |
+          "CARGO_TARGET_DIR=$env:RUNNER_TEMP\cov" >> $env:GITHUB_ENV
+
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
+        #
+        # `CARGO_TARGET_DIR` arrives from the step that chooses it, which
+        # runs on Windows only, so the Linux leg keeps cargo-llvm-cov's
+        # default. Setting it here instead would need an empty string on
+        # Linux, and cargo-llvm-cov rejects an empty value rather than
+        # reading it as "unset": it appends its own `llvm-cov-target` to
+        # whatever root it is given.
         uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           output-path: lcov-serde-saphyr.info
@@ -295,6 +329,8 @@ jobs:
         run: df -BM /
 
       - name: Test and Measure Coverage (without serde_saphyr)
+        # Same short Windows target root as the first leg, and from the same
+        # place: the step that chooses it republishes through GITHUB_ENV.
         uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           output-path: lcov-no-serde-saphyr.info

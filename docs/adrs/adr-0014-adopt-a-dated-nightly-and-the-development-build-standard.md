@@ -138,5 +138,10 @@ is not replicated here.
   `-D warnings`.
 - Mutation testing relies on the shared `setup-rust` default `RUSTFLAGS` to
   displace the configuration, and no repository contract covers that.
+- The Windows coverage legs build under a short `CARGO_TARGET_DIR`, because
+  Cargo repeats the target root across one compiler command line often enough
+  to reach the 32,767-character `CreateProcess` limit. The Linux legs keep
+  cargo-llvm-cov's default. See
+  [The Windows coverage command line](../developers-guide.md#the-windows-coverage-command-line).
 
 [^1]: Developers' guide, "Cranelift qualification" section.
