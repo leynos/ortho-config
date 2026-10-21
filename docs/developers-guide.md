@@ -921,11 +921,11 @@ platform paths. It also forwards `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`,
 `CARGO_LLVM_COV`, and the LLVM profile-output controls unchanged, so a nested
 build reuses the parent's compiler flags and dependency fingerprints instead of
 compiling a second, instrumentation-free copy. Those variables are therefore
-not sanitised: rewriting them would split the fingerprint and defeat the shared
+not sanitized: rewriting them would split the fingerprint and defeat the shared
 cache.
 
 The allow-list is closed in the sense that unlisted application variables do
-not cross it, but two families of Cargo setting are recognised structurally
+not cross it, but two families of Cargo setting are recognized structurally
 rather than by name. Target-specific `LINKER` and `RUSTFLAGS` settings are
 forwarded, as are registry `INDEX` locations. Proxy endpoints and registry
 indexes are forwarded only when their values contain no user information,
