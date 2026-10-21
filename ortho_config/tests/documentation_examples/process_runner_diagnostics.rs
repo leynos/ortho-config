@@ -94,15 +94,23 @@ fn append_cleanup_evidence(diagnostic: &mut String, evidence: &[String]) {
 /// Name the directory a subprocess runs in, never failing to report something.
 ///
 /// A command-local directory wins because it overrides inheritance. When it is
-/// absent the process working directory is queried explicitly, and a failed
-/// query is reported as such: the previous `ok()` chain collapsed "the query
-/// failed" into the same string as "no directory is configured", which hides
-/// an environmental fault exactly when the failure diagnostic matters.
-pub(super) fn workspace_identity(command: &Command) -> String {
+/// absent the caller's `query` supplies the inherited working directory, and a
+/// failed query is reported as such: the previous `ok()` chain collapsed "the
+/// query failed" into the same string as "no directory is configured", which
+/// hides an environmental fault exactly when the failure diagnostic matters.
+///
+/// The query is a parameter rather than an `std::env::current_dir` call so the
+/// fallible environmental read stays injectable. The production caller passes
+/// the real process query; tests supply their own without provoking a
+/// host-wide environmental change.
+pub(super) fn workspace_identity(
+    command: &Command,
+    query: impl FnOnce() -> std::io::Result<PathBuf>,
+) -> String {
     // `map_or_else` takes the fallback lazily, so a command-local directory is
-    // still reported without ever consulting the ambient working directory.
+    // still reported without ever consulting the injected directory query.
     command.get_current_dir().map_or_else(
-        || inherited_workspace_identity(std::env::current_dir),
+        || inherited_workspace_identity(query),
         |path| path.display().to_string(),
     )
 }

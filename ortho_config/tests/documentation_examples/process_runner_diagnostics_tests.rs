@@ -2,6 +2,7 @@
 
 use super::super::RunContext;
 use anyhow::{Result, ensure};
+use std::cell::Cell;
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,13 +52,27 @@ fn safe_environment_presence_does_not_expose_secret_values() -> Result<()> {
     Ok(())
 }
 
+/// The production boundary reports the injected directory when the query works.
+#[test]
+fn a_successful_working_directory_query_names_the_inherited_directory() -> Result<()> {
+    let command = Command::new("cargo");
+
+    let identity =
+        super::workspace_identity(&command, || Ok(PathBuf::from("/inherited/workspace")));
+
+    ensure!(identity == "/inherited/workspace");
+    Ok(())
+}
+
 /// A failed working-directory query is named, not collapsed into a blank.
 ///
 /// The queried directory is supplied rather than provoked: no portable
 /// environmental change makes `std::env::current_dir` fail on demand.
 #[test]
 fn a_failed_working_directory_query_is_reported_explicitly() {
-    let identity = super::inherited_workspace_identity(|| {
+    let command = Command::new("cargo");
+
+    let identity = super::workspace_identity(&command, || {
         Err(io::Error::from(io::ErrorKind::PermissionDenied))
     });
 
@@ -71,14 +86,26 @@ fn a_failed_working_directory_query_is_reported_explicitly() {
     );
 }
 
-/// A command-local directory wins and never consults the ambient directory.
+/// A command-local directory wins and never consults the inherited query.
+///
+/// The injected query records its own invocation, so a `map_or_else` whose
+/// default closure were eager would consult the ambient directory even though
+/// the command already names its own.
 #[test]
 fn a_command_directory_overrides_the_inherited_workspace() -> Result<()> {
     let mut command = Command::new("cargo");
     command.current_dir(PathBuf::from("/private/command/directory"));
+    let was_queried = Cell::new(false);
 
-    let identity = super::workspace_identity(&command);
+    let identity = super::workspace_identity(&command, || {
+        was_queried.set(true);
+        Ok(PathBuf::from("/inherited/workspace"))
+    });
 
     ensure!(identity == "/private/command/directory");
+    ensure!(
+        !was_queried.get(),
+        "the inherited directory query ran despite a command-local directory"
+    );
     Ok(())
 }

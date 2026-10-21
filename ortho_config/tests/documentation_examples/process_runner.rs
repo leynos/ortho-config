@@ -146,7 +146,7 @@ where
     let deadline = started
         .checked_add(policy.timeout())
         .ok_or_else(|| anyhow!("{operation_name}: operation deadline is out of range"))?;
-    let workspace = workspace_identity(command);
+    let workspace = workspace_identity(command, std::env::current_dir);
     let environment = environment_evidence(command);
 
     let child =
