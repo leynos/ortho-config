@@ -14,6 +14,7 @@
 
 use std::fmt;
 
+/// A device number split into the major and minor halves `/proc/locks` prints.
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct DeviceNumber {
@@ -28,17 +29,17 @@ impl DeviceNumber {
     /// Splits a raw `st_dev` value into the halves `/proc/locks` prints.
     ///
     /// glibc packs the major's low 12 bits at bit 8 and its high 20 bits at bit
-    /// 32, and the minor's low 8 bits at bit 0 and its high 24 bits at bit 12.
+    /// 44, and the minor's low 8 bits at bit 0 and its high 24 bits at bit 20.
     /// The masks below are those four fields, so each half is the masked low
     /// part shifted down plus the masked high part shifted down.
     pub(super) const fn from_raw(raw: u64) -> Self {
         /// Bits 8..20 of the raw value: the major's low 12 bits.
         const MAJOR_LOW: u64 = 0x0000_0000_000f_ff00;
-        /// Bits 32..52 of the raw value: the major's high 20 bits.
+        /// Bits 44..64 of the raw value: the major's high 20 bits.
         const MAJOR_HIGH: u64 = 0xffff_f000_0000_0000;
         /// Bits 0..8 of the raw value: the minor's low 8 bits.
         const MINOR_LOW: u64 = 0x0000_0000_0000_00ff;
-        /// Bits 12..36 of the raw value: the minor's high 24 bits.
+        /// Bits 20..44 of the raw value: the minor's high 24 bits.
         const MINOR_HIGH: u64 = 0x0000_0fff_fff0_0000;
         Self {
             major: (raw & MAJOR_LOW) >> 8 | (raw & MAJOR_HIGH) >> 32,
@@ -50,42 +51,10 @@ impl DeviceNumber {
 #[cfg(any(target_os = "linux", test))]
 impl fmt::Display for DeviceNumber {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}:{}", hex(self.major), hex(self.minor))
+        // The kernel prints each half as `%02x`, so single digits keep a
+        // leading zero and wider values are never truncated.
+        write!(formatter, "{:02x}:{:02x}", self.major, self.minor)
     }
-}
-
-/// Renders a device half the way the kernel prints it: `%02x`.
-#[cfg(any(target_os = "linux", test))]
-fn hex(value: u64) -> String {
-    let digits = hex_digits(value);
-    if digits.len() >= 2 {
-        digits
-    } else {
-        format!("0{digits}")
-    }
-}
-
-/// Renders a value in lowercase hexadecimal without padding.
-#[cfg(any(target_os = "linux", test))]
-fn hex_digits(value: u64) -> String {
-    let mut digits = String::new();
-    let mut remaining = value;
-    loop {
-        digits.insert(0, nibble_char(remaining.rem_euclid(16)));
-        remaining = remaining.div_euclid(16);
-        if remaining == 0 {
-            return digits;
-        }
-    }
-}
-
-/// Maps a four-bit value to its lowercase hexadecimal digit.
-#[cfg(any(target_os = "linux", test))]
-fn nibble_char(nibble: u64) -> char {
-    u32::try_from(nibble)
-        .ok()
-        .and_then(|value| char::from_digit(value, 16))
-        .unwrap_or('?')
 }
 
 /// One record from the kernel's lock table.
@@ -174,7 +143,7 @@ impl LockRecord {
 /// Parses one `/proc/locks` line, or reports that it is not one.
 ///
 /// Malformed input returns `None` rather than an error. The table belongs to
-/// the whole machine, so a line this parser does not recognise is a record to
+/// the whole machine, so a line this parser does not recognize is a record to
 /// skip — including any future lock type — not a reason to abandon the
 /// diagnosis of the one record that matters.
 #[cfg(any(target_os = "linux", test))]

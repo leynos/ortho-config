@@ -75,6 +75,44 @@ fn parses_an_open_file_description_lock_without_an_owner() {
     );
 }
 
+#[rstest]
+#[case::granted_flock(false, Some(2_181_913), Some(2_181_913))]
+#[case::blocked_waiter(true, Some(2_181_920), None)]
+#[case::ownerless_record(false, None, None)]
+fn reports_only_a_granted_record_as_an_owner(
+    #[case] blocked: bool,
+    #[case] pid: Option<u32>,
+    #[case] expected: Option<u32>,
+) {
+    let record = LockRecord {
+        blocked,
+        pid,
+        ..granted_flock(9_476_791)
+    };
+    assert_eq!(
+        record.owning_pid(),
+        expected,
+        "a waiter and an OFDLCK record own nothing, so neither may be reported as the holder",
+    );
+}
+
+#[rstest]
+#[case::flock("FLOCK", true)]
+#[case::posix("POSIX", false)]
+#[case::ofdlck("OFDLCK", false)]
+#[case::unknown_type("LEASE", false)]
+fn identifies_only_flock_records(#[case] kind: &str, #[case] expected: bool) {
+    let record = LockRecord {
+        kind: String::from(kind),
+        ..granted_flock(9_476_791)
+    };
+    assert_eq!(
+        record.is_flock(),
+        expected,
+        "only flock locks belong to an open file description, so only FLOCK explains an inherited hold",
+    );
+}
+
 #[test]
 fn parses_device_and_inode_from_the_identity_column() {
     assert_eq!(
@@ -84,33 +122,26 @@ fn parses_device_and_inode_from_the_identity_column() {
     );
 }
 
+#[test]
+fn parses_an_unknown_lock_type_as_a_record() {
+    let expected = LockRecord {
+        kind: String::from("LEASE"),
+        pid: Some(1),
+        ..granted_flock(1)
+    };
+    assert_eq!(
+        parse_lock_record("13: LEASE ADVISORY WRITE 1 09:02:1 0 EOF"),
+        Some(expected),
+        "a never-seen lock type is still a record to report, not a line to skip",
+    );
+}
+
 #[rstest]
 #[case::empty("")]
 #[case::no_ordinal("FLOCK ADVISORY WRITE 1 09:02:1 0 EOF")]
 #[case::ordinal_without_colon("13 FLOCK ADVISORY WRITE 1 09:02:1 0 EOF")]
 #[case::truncated_after_ordinal("13:")]
 #[case::truncated_before_pid("13: FLOCK ADVISORY WRITE")]
-#[case::unknown_lock_type_is_still_a_record("13: LEASE ADVISORY WRITE 1 09:02:1 0 EOF")]
-fn parses_recognized_lock_types(#[case] line: &str) {
-    let parsed = parse_lock_record(line);
-    let expected = line.contains("LEASE").then(|| LockRecord {
-        blocked: false,
-        kind: String::from("LEASE"),
-        mode: String::from("ADVISORY"),
-        access: String::from("WRITE"),
-        pid: Some(1),
-        major: 0x09,
-        minor: 0x02,
-        inode: 1,
-        range: String::from("0 EOF"),
-    });
-    assert_eq!(
-        parsed, expected,
-        "a never-seen lock type is a record to report, an incomplete line is not",
-    );
-}
-
-#[rstest]
 #[case::non_numeric_pid("13: FLOCK ADVISORY WRITE x 09:02:1 0 EOF")]
 #[case::padded_pid_placeholder("13: FLOCK ADVISORY WRITE - 09:02:1 0 EOF")]
 #[case::non_numeric_major("13: FLOCK ADVISORY WRITE 1 zz:02:1 0 EOF")]

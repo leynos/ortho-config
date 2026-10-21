@@ -83,8 +83,10 @@ fn probe_cycles(root: &Path) -> Result<()> {
     ensure_settles_free(root, "an unheld lock must be reported free")?;
     ensure_settles_free(
         root,
-        "a probe must release the lock it took, so a second probe still finds \
-         it free",
+        concat!(
+            "a probe must release the lock it took, so a second probe still finds ",
+            "it free",
+        ),
     )?;
     let held = lock(root).context("take the lock for the release cycle")?;
     // Without this the assertions above prove nothing: a guard that never took
@@ -98,6 +100,18 @@ fn probe_cycles(root: &Path) -> Result<()> {
     ensure_settles_free(root, "releasing the guard must make the lock free again")
 }
 
+/// Creates one worker's artefact root and lock file.
+///
+/// Kept separate from [`stress_worker`] so the worker can reach the barrier
+/// before it propagates a set-up failure: the barrier is a rendezvous of fixed
+/// size, not a place to report errors from.
+fn prepare_root(worker: usize) -> Result<TempRoot> {
+    let root =
+        TempRoot::new().with_context(|| format!("create worker {worker}'s artefact root"))?;
+    create_lock(root.path()).with_context(|| format!("create worker {worker}'s lock file"))?;
+    Ok(root)
+}
+
 /// Runs one worker's fixed number of probe cycles over its own artefact root.
 ///
 /// The barrier is what makes the workers concurrent rather than merely
@@ -105,10 +119,13 @@ fn probe_cycles(root: &Path) -> Result<()> {
 /// starts, so the cycles overlap from the outset instead of hoping the spawn
 /// order lines them up.
 fn stress_worker(barrier: &Arc<Barrier>, worker: usize) -> Result<()> {
-    let root =
-        TempRoot::new().with_context(|| format!("create worker {worker}'s artefact root"))?;
-    create_lock(root.path()).with_context(|| format!("create worker {worker}'s lock file"))?;
+    let prepared = prepare_root(worker);
+    // The barrier is sized for `WORKERS` parties and this worker is one of
+    // them, so it must arrive even when its own set-up failed. Returning early
+    // would leave the peers waiting on a party that never comes, and `join`
+    // would wait on those peers: a set-up error would hang instead of report.
     barrier.wait();
+    let root = prepared?;
     for iteration in 0..ITERATIONS {
         probe_cycles(root.path())
             .with_context(|| format!("worker {worker}, iteration {iteration}"))?;
@@ -185,8 +202,10 @@ fn strict_cycles(root: &Path) -> Result<()> {
     ensure_released(root, "an unheld lock must be reported free")?;
     ensure_released(
         root,
-        "a probe must release the lock it took, so a second probe still finds \
-         it free",
+        concat!(
+            "a probe must release the lock it took, so a second probe still finds ",
+            "it free",
+        ),
     )?;
     // Both of issue #606's observed failures are covered: the probe pair above,
     // and the guard release below. Dropping the guard is the shape the release
@@ -232,6 +251,10 @@ fn run_fork_stress() -> Result<()> {
 /// proof of a leaked handle, and it is why this case must never gate a merge.
 #[cfg(target_os = "linux")]
 #[test]
+// The escaped newline is deliberate here. `#[ignore = concat!(..)]` compiles,
+// but libtest only reports a reason written as one string literal: the macro
+// form silently degrades the output to a bare "ignored", and that sentence is
+// the whole explanation of why this case must never gate a merge.
 #[ignore = "widens the fork-to-exec window; slow and schedule-dependent, and a \
             failure here is diagnostic evidence rather than a gate"]
 fn probes_survive_a_concurrent_fork() -> Result<()> {
