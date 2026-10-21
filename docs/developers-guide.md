@@ -3752,8 +3752,34 @@ Summary [1810.068s] 2070 tests run: 2068 passed (17 slow), 2 failed, 30 skipped
 ```
 
 Both survivors were far inside their own 600 s allowance — 192.3 s and 157.3 s
-— so no per-test tier is what failed. At 2,300 s the run completes with about
-400 s to spare.
+— so no per-test tier is what failed. How much the run still needed is bounded
+rather than guessed. The younger survivor, at 157.3 s elapsed when the timer
+fired, had started at 1,652.8 s; its own allowance would have let it run until
+2,252.8 s, so no outcome of that run could have taken longer. That is the
+figure 2,300 s was chosen against: it covers the bound with 47 s to spare,
+where 1,800 s fell 452.8 s short of it.
+
+The bound is not a comfortable margin, and run 39681374732 does not widen it.
+That run was the second on the pin, so it inherited the entries the cancelled
+run had written: its hit rate was 88.77 % — 2,285 hits against 289 misses —
+which is main's 89.00 % rather than the cold 35.67 %. Both of its Windows
+passes completed inside the budget:
+
+```text
+Summary [1519.887s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [1142.681s] 2042 tests run: 2042 passed (12 slow), 30 skipped
+```
+
+Even warm, that is a third slower than main's 1,044.1 s over the same 2,070
+tests at the same hit rate, so the pin costs time with the cache already behind
+it and the cold figure is not an anomaly to be explained away. What recurs is
+the cold case: Dependabot moves the pin, every entry keyed by the old compiler
+becomes unreachable, and the first run on the new pin pays the whole graph
+again. The warm 1,519.9 s measures the floor, not the peak, and the cold budget
+rests on the bound above.
+
+That the margin is 47 s is the argument for fixing the cause rather than the
+figure.
 
 Raising the figure again would be the wrong repair. The lever is letting the
 nested builds reach `sccache` at all, which cannot happen while
