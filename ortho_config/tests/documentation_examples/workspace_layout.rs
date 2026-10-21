@@ -24,21 +24,31 @@ pub(super) fn sanitize_application_environment(command: &mut Command) {
 
 pub(super) fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
     let crate_path = toml::Value::String(env!("CARGO_MANIFEST_DIR").to_owned()).to_string();
-    let cargo_orthohelp_path =
-        toml::Value::String(concat!(env!("CARGO_MANIFEST_DIR"), "/../cargo-orthohelp").to_owned())
-            .to_string();
-    render_manifest(dependency_name, &crate_path, &cargo_orthohelp_path)
+    let sibling = |name: &str| {
+        toml::Value::String(format!("{}/../{name}", env!("CARGO_MANIFEST_DIR"))).to_string()
+    };
+    render_manifest(
+        dependency_name,
+        &ManifestPaths {
+            ortho_config: &crate_path,
+            ortho_l10n: &sibling("ortho_l10n"),
+            cargo_orthohelp: &sibling("cargo-orthohelp"),
+        },
+    )
+}
+
+/// TOML-serialized paths of the workspace packages a documented example uses.
+pub(super) struct ManifestPaths<'a> {
+    pub(super) ortho_config: &'a str,
+    pub(super) ortho_l10n: &'a str,
+    pub(super) cargo_orthohelp: &'a str,
 }
 
 /// Render the generated manifest from serialized Cargo dependency paths.
 ///
 /// This stays private to the documentation workspace and its path regression
 /// test; callers must serialize the path as a TOML value before using it.
-pub(super) fn render_manifest(
-    dependency_name: &str,
-    serialized_crate_path: &str,
-    serialized_cargo_orthohelp_path: &str,
-) -> String {
+pub(super) fn render_manifest(dependency_name: &str, paths: &ManifestPaths<'_>) -> String {
     format!(
         concat!(
             "[package]\n",
@@ -48,13 +58,14 @@ pub(super) fn render_manifest(
             "[workspace]\n\n",
             "[dependencies]\n",
             "{} = {{ package = \"ortho_config\", path = {} }}\n",
+            "ortho_l10n = {{ path = {} }}\n",
             "cargo_orthohelp = {{ package = \"cargo-orthohelp\", path = {} }}\n",
             "clap = {{ version = \"4.5\", features = [\"derive\"] }}\n",
             "serde = {{ version = \"1.0\", features = [\"derive\"] }}\n",
             "serde_json = \"1\"\n",
             "tracing-subscriber = {{ version = \"0.3\", features = [\"env-filter\"] }}\n",
         ),
-        dependency_name, serialized_crate_path, serialized_cargo_orthohelp_path,
+        dependency_name, paths.ortho_config, paths.ortho_l10n, paths.cargo_orthohelp,
     )
 }
 

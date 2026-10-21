@@ -161,9 +161,15 @@ def test_shared_documentation_builds_start_after_peer_tests() -> None:
     }
     assert not missing, f"shared documentation cache users escaped serialization: {missing}"
 
-    direct_tests = (
-        repository / "ortho_config/tests/documentation_examples_rust_tests.rs"
-    ).read_text(encoding="utf-8")
+    # The direct-test binary declares its build-heavy tests in the root file
+    # and in the Cargo-flow module it includes.
+    direct_tests = "\n".join(
+        (repository / path).read_text(encoding="utf-8")
+        for path in (
+            "ortho_config/tests/documentation_examples_rust_tests.rs",
+            "ortho_config/tests/documentation_examples/cargo_flows.rs",
+        )
+    )
     workspace_tests = (
         repository / "ortho_config/tests/documentation_examples/workspace_tests.rs"
     ).read_text(encoding="utf-8")

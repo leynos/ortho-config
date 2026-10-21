@@ -764,7 +764,9 @@ Profile support is opt-in at the struct level through the derive attribute
 merge order, gains no `--profile` flag, and treats a `[profile.*]` table in a
 shared file as an ordinary key rather than extracting it. The accepted design is
 [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md); the user-facing
-view is the [Profiles section](users-guide.md#profiles) of the users' guide.
+view is the
+[named profiles section](users-guide.md#switch-between-named-profiles) of the
+users' guide.
 
 Opted-in structs merge five tiers, lowest to highest: built-in defaults,
 configuration files, the selected profile, environment variables, and CLI
@@ -964,12 +966,12 @@ cargo test -p ortho_config --test <target>
 
 ### Public documentation examples
 
-The root README, `docs/users-guide.md`, and `docs/cargo-orthohelp-api-guide.md`
-are executable documentation. Every fenced block in those files must have a
-unique `tested-example` marker on the immediately preceding line. The
-documentation-example test support owns parsing and lookup for these examples.
-It is test infrastructure only; production code, other crates, and examples
-must not depend on it.
+The root README, `docs/users-guide.md`, `docs/cargo-orthohelp-api-guide.md`, and
+`docs/v0-10-0-migration-guide.md` are executable documentation. Every fenced
+block in those files must have a unique `tested-example` marker on the
+immediately preceding line. The documentation-example test support owns parsing
+and lookup for these examples. It is test infrastructure only; production code,
+other crates, and examples must not depend on it.
 
 The loader is shared by the documentation integration-test targets. Each target
 loads and parses the documents once, then borrows examples from its cached
@@ -1121,6 +1123,36 @@ Cargo retains compiler wrappers, job limits, warning enforcement, coverage
 settings, and allow-listed native build inputs. Application secrets and
 arbitrary application variables are excluded. Run-file paths must contain
 normal relative components only.
+
+The contracts are split across integration-test targets by concern, following
+the layout used in Netsuke:
+
+- `documentation_examples_tests.rs` owns the closed identifier registry, README
+  parity with the packaged crate README, and static contracts for data fences
+  such as configuration files, JSON documents, and command spellings;
+- `documentation_installation_tests.rs` owns installation and upgrade
+  manifests. It sweeps every TOML fence that depends on `ortho_config` and
+  requires the version to equal `CARGO_PKG_VERSION`, so `lading bump`, which
+  rewrites the README and user's guide, keeps the contract and the
+  documentation in step. Migration guides are excluded from the sweep because
+  their versions describe a fixed upgrade path;
+- `documentation_examples_rust_tests.rs` compiles every Rust fence into one
+  temporary workspace and runs it. Examples whose contract is their output for
+  fixed arguments belong in the table in
+  `documentation_examples/simple_runs.rs`; examples that need fixture files,
+  environment overrides, or transcripts belong in a feature-named flow module
+  such as `guide_flows.rs`, `migration_flows.rs`, or `cargo_flows.rs`; and
+- `cargo-orthohelp/tests/documented_command.rs` runs the documented
+  `cargo orthohelp` command flows against workspace packages, using the
+  executable Cargo has already built for the package, and checks the artefacts
+  and streams they produce. The command text itself is pinned by the static
+  contracts, so the executed flags and the published flags cannot drift apart.
+
+A console transcript is tested in two halves: assert the exact published text,
+then run the binary under the conditions each command line names and compare
+the output with the lines that follow it. Placeholder package names in command
+examples, such as `my-cli`, are mapped onto workspace fixture packages whose
+manifests carry the documented configuration.
 
 ### Production bridge build ownership
 
