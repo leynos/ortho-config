@@ -451,3 +451,18 @@ skipped), `make markdownlint`, `make nixie`, and `make test-workflow-contracts`
 (325 passed, one skipped) all pass. Canonical logs follow the
 `/tmp/issue566-m2-cr-repair-<gate>.out` pattern. The tree did not move during
 any of these gates.
+
+EP-M2 milestone close: the repairs were amended into the milestone commit,
+which replaced the working subject with a descriptive one. The scrutineer then
+re-ran all seven gates sequentially against the frozen candidate `a4fc4435`,
+with each gate's own exit status captured by direct redirection rather than
+through a pipe. All seven pass, the tree stayed empty throughout, and the full
+test gate again recorded 2,049 passed, 0 failed, and 29 ignored, with pytest at
+115 passed and five skipped. A fresh CodeRabbit review against
+`--base-commit 1334cc88` then completed in 229 s with zero findings over all 40
+changed files. That coverage is set-equal to
+`git diff --name-only 1334cc88..HEAD`, and it includes all three files changed
+by the repair, so the earlier findings are confirmed resolved rather than
+merely unreported. Evidence lives at `/tmp/coderabbit-ep-m2-final-U2Py6hNO/`
+and under the `/tmp/issue566-m2-final-<gate>-…out` log names; the earlier
+review bundle is preserved unmodified.
