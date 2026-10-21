@@ -3,6 +3,7 @@
 use super::{GeneratedTarget, MAX_CARGO_DIAGNOSTIC_BYTES, binary_file_name, read_cargo_messages};
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
+use rstest::rstest;
 use serde_json::{Value, json};
 use std::io::Cursor;
 
@@ -205,17 +206,25 @@ fn conflicting_executable_records_are_rejected() -> Result<()> {
     assert_protocol_error(&records, &target, "multiple generated bridge executables")
 }
 
-#[test]
-fn debug_symbols_named_for_the_bridge_are_collected() -> Result<()> {
+/// Only the bridge's own uplifted debug symbols join its generated outputs.
+///
+/// The negative case is the control: the MSVC linker uplifts `foo.pdb` for
+/// binary `foo`, so an unanchored suffix or prefix match would also claim a
+/// sibling binary's `foo_other.pdb` and delete another build's symbols.
+#[rstest]
+#[case(format!("{TARGET_NAME}.pdb"), true)]
+#[case(format!("{TARGET_NAME}_other.pdb"), false)]
+fn bridge_debug_symbol_names_are_collected_only_for_the_bridge(
+    #[case] debug_file_name: String,
+    #[case] is_collected: bool,
+) -> Result<()> {
     let target_directory = generated_target_directory()?;
     let target = generated_target(&target_directory);
     let executable = target_directory
         .join("debug")
         .join(binary_file_name(TARGET_NAME));
     let executable_text = executable.to_string();
-    let debug_info = target_directory
-        .join("debug")
-        .join(format!("{TARGET_NAME}.pdb"));
+    let debug_info = target_directory.join("debug").join(debug_file_name);
     let record = artifact_record(
         TARGET_NAME,
         &[executable_text.clone(), debug_info.to_string()],
@@ -225,31 +234,7 @@ fn debug_symbols_named_for_the_bridge_are_collected() -> Result<()> {
     let messages = read_records(&[record], &target)?;
 
     ensure!(messages.protocol_error.is_none());
-    ensure!(messages.generated_outputs.contains(&debug_info));
-    Ok(())
-}
-
-#[test]
-fn a_debug_symbol_name_for_another_binary_is_not_collected() -> Result<()> {
-    let target_directory = generated_target_directory()?;
-    let target = generated_target(&target_directory);
-    let executable = target_directory
-        .join("debug")
-        .join(binary_file_name(TARGET_NAME));
-    let executable_text = executable.to_string();
-    let foreign_debug_info = target_directory
-        .join("debug")
-        .join(format!("{TARGET_NAME}_other.pdb"));
-    let record = artifact_record(
-        TARGET_NAME,
-        &[executable_text.clone(), foreign_debug_info.to_string()],
-        Some(&executable_text),
-    );
-
-    let messages = read_records(&[record], &target)?;
-
-    ensure!(messages.protocol_error.is_none());
-    ensure!(!messages.generated_outputs.contains(&foreign_debug_info));
+    ensure!(messages.generated_outputs.contains(&debug_info) == is_collected);
     Ok(())
 }
 
