@@ -41,10 +41,20 @@
 # allowance, so no per-test tier was what failed; the whole-run budget
 # was.
 #
-# 2,300s covers the run that was cancelled: completing the two
-# survivors puts it near 1,900s, which leaves about 400s to spare. It
-# also stays inside the 3,000s cargo watchdog with the cold build and
-# nextest's termination procedure counted.
+# 2,300s covers the run that was cancelled. The younger survivor had run
+# 157.3s when the timer fired, so it started at 1,652.8s and its own 600s
+# allowance reached 2,252.8s: no outcome of that run could have taken
+# longer, and 2,300s covers that bound with 47s to spare where 1,800s fell
+# 452.8s short of it. The margin is thin on purpose -- it is the argument
+# for fixing the cause rather than the figure. It also stays inside the
+# 3,300s cargo watchdog with the cold build and nextest's termination
+# procedure counted.
+#
+# The first run on this budget (run 39681374732) did not test that bound:
+# it was the second on the pin and inherited the cancelled run's sccache
+# entries, a 88.77% hit rate rather than the cold 35.67%, and finished
+# 1,519.9s and 1,142.7s. Even warm that is a third slower than main's
+# 1,044.1s, so the budget still rests on the cold bound above.
 #
 # Raising this figure again would be the wrong repair. The lever is
 # letting the nested builds reach sccache at all, which cannot happen
