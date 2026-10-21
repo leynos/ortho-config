@@ -630,11 +630,12 @@ Finding 3 was applied to `ortho_l10n` alone. The crate's identifiers
 spell `-ize`, so the prose now matches them. Outside the crate the same sweep
 would rename `exercises` and `raises`, which are correct English, so it stops
 at the crate boundary; `examples/hello_world/tests/localised_help.rs` and the
-`typos.local.toml` entries that name it are untouched. The two
-`Normalised only` string literals in `ortho_l10n/src/tests.rs` were fixture
-text, not a contract, and became `Consumer fallback` rather than a respelled
-version of the same word — a value that no longer reads like a misspelling is
-easier to keep out of a future sweep's way.
+`typos.local.toml` entries that name it are untouched. The two fixture string
+literals built on the same stem in `ortho_l10n/src/tests.rs` were test data,
+not a contract, and became `Consumer fallback` rather than a respelled version
+of the same word. A value that no longer reads like a misspelling is easier to
+keep out of a future sweep's way, and the spelling gate cannot trip over the
+sentence that describes it.
 
 Finding 2's `environment` doc now states the policy the list actually encodes:
 compiler flags and wrappers are inherited *deliberately*, so the child is held
