@@ -44,7 +44,7 @@ the current primitives cannot express directly:
 1. **Ordered explicit selection.** The precedence is `--config`, then
    `NETSUKE_CONFIG`, then automatic discovery. When this RFC was drafted the
    chain also carried a legacy `NETSUKE_CONFIG_PATH` alias; Netsuke removed it
-   in [netsuke#427][netsuke-427] and [ADR-0004][netsuke-adr-004] now records
+   in [netsuke#427][netsuke-427] and [ADR-004][netsuke-adr-004] now records
    `NETSUKE_CONFIG` as its **only** environment selector, pinned by a
    `legacy_config_path_variable_is_not_a_selector` test. The limitation is
    unchanged by that removal: the current builder accepts only one environment
@@ -680,7 +680,7 @@ behaviours, while preserving the existing defaults exactly.
     config_cli_long = "config",
     config_cli_visible = true,
     // Two entries shown to exercise the alias grammar; Netsuke's live
-    // configuration declares only `NETSUKE_CONFIG` (netsuke#427, ADR-0004).
+    // configuration declares only `NETSUKE_CONFIG` (netsuke#427, ADR-004).
     env_vars = ["NETSUKE_CONFIG", "NETSUKE_CONFIG_PATH"],
     explicit_mode = "required_exclusive",
     automatic_mode = "stack_scopes",
@@ -994,7 +994,7 @@ ______________________________________________________________________
 - **Netsuke's live selector ladder is two selectors, not three.** The RFC was
   drafted against `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
   Netsuke retired the legacy alias in [netsuke#427][netsuke-427], and
-  [ADR-0004][netsuke-adr-004] records `NETSUKE_CONFIG` as its only environment
+  [ADR-004][netsuke-adr-004] records `NETSUKE_CONFIG` as its only environment
   selector, pinned by a `legacy_config_path_variable_is_not_a_selector` test.
   The problem statement, the "current source" excerpt, and delivery step 3 are
   corrected accordingly.
