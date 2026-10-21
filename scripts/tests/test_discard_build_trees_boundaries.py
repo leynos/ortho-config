@@ -77,6 +77,7 @@ def test_a_directory_scan_error_is_not_swallowed(
     _tree(tmp_path, "debug")
 
     def unreadable(_top: Path, onerror: object, **_: object) -> object:
+        """Send the simulated scan error to os.walk's callback."""
         onerror(PermissionError("simulated scan failure"))  # type: ignore[operator]
         return iter(())
 
@@ -90,6 +91,7 @@ def test_a_resolution_failure_is_typed(tmp_path: Path, monkeypatch: pytest.Monke
     """A symlink loop or I/O error while resolving is a ``DiscardError``."""
 
     def refuse(_self: Path, **_: object) -> Path:
+        """Simulate an I/O error while resolving a path."""
         message = "simulated resolution failure"
         raise OSError(message)
 
@@ -106,6 +108,7 @@ def test_an_examination_failure_is_not_taken_for_absence(
     real_lstat = Path.lstat
 
     def refuse(self: Path) -> object:
+        """Fail when the target's metadata is examined."""
         if self.name == "debug":
             message = "simulated permission failure"
             raise PermissionError(message)
@@ -125,6 +128,7 @@ def test_a_later_failure_leaves_earlier_trees_removed_and_later_ones_alone(
     real_rmtree = discard_build_trees.shutil.rmtree
 
     def fail_on_second(path: Path) -> None:
+        """Remove the first tree and fail when removing the second."""
         if Path(path).name == "second":
             message = "simulated removal failure"
             raise OSError(message)

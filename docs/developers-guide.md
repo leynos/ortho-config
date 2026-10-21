@@ -15,6 +15,12 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+`make lint` also runs `interrogate --fail-under 100` over every tracked and
+non-ignored untracked `*.py` and `*.pyi` file. Git path discovery includes
+hidden directories and does not restrict the scan to package and test
+directories, so Python sources used by GitHub workflows and actions, scripts,
+tests, tools, and benchmarks are covered as well.
+
 The shared workspace Clippy policy denies `missing_docs_in_private_items`.
 Document private modules with `//!` and private items with `///`, including
 build support, examples, and shared fixtures. Explain internal contracts such

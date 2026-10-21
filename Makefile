@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint spellcheck spelling nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -40,6 +40,7 @@ PYTHON_VENV ?= scripts/.venv
 UV ?= uv
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
+PYTHON_SOURCES := $(shell git ls-files --cached --others --exclude-standard -- '*.py' '*.pyi')
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_trees.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
 	scripts/verify_release_archives.py scripts/tests -q
@@ -108,7 +109,7 @@ target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
 
 FORCE:
 
-lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with warnings denied
+lint: lint-clippy lint-whitaker docstring-coverage ## Run linters with warnings denied
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
@@ -116,6 +117,9 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
+
+docstring-coverage: ## Require complete docstrings for every Python source file
+	$(UV_RUN) interrogate --fail-under 100 --ext pyi $(PYTHON_SOURCES)
 
 typecheck: ## Typecheck workspace (cargo check)
 	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)

@@ -20,6 +20,7 @@ def fail_removal(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make every ``shutil.rmtree`` call raise ``OSError``."""
 
     def refuse(_path: Path) -> None:
+        """Reject a requested tree removal."""
         message = "simulated removal failure"
         raise OSError(message)
 
@@ -94,6 +95,7 @@ def test_an_unreadable_file_raises_a_typed_error(
     _tree(tmp_path, "debug", 1)
 
     def refuse(_self: Path, **_: object) -> object:
+        """Simulate a failure while reading path metadata."""
         message = "simulated stat failure"
         raise PermissionError(message)
 
