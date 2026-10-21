@@ -1139,11 +1139,11 @@ configured jobs, and relevant instrumentation without forwarding unlisted
 application variables or secrets. It leaves the shared Cargo cache under
 Cargo's ownership.
 
-Each documentation scenario has a single monotonic 596-second deadline within
-nextest's 600-second per-test limit. Build, execution, discovery, and cleanup
-have respective 596-, 60-, 30-, and 2-second policies; each operation is capped
-by the remaining scenario time. Output activity does not extend a deadline.
-Each stream retains at most 1 MiB and continues draining, and owned
+Each documentation scenario has a single monotonic 956-second deadline within
+its 960-second nextest per-test allowance. Build, execution, discovery, and
+cleanup have respective 956-, 60-, 30-, and 2-second policies; each operation
+is capped by the remaining scenario time. Output activity does not extend a
+deadline. Each stream retains at most 1 MiB and continues draining, and owned
 process-tree cleanup is bounded. The helpers are scoped to documentation tests
 and the production bridge; they are not general application subprocess APIs. See
 [ADR-014](adrs/adr-0014-documentation-build-ownership.md).
