@@ -681,6 +681,23 @@ the other five keep their certificates, because a name-only diff of those two
 commits contains no path any of them reads. This is the same transfer rule the
 plan applies elsewhere: a certificate follows content identity, not ancestry.
 
+A first attempt at that re-run was void, and the reason belongs in the record
+because it is a process failure rather than a source failure. The scrutineer
+froze `71ac7873` correctly and `git status --porcelain` was empty at the start,
+but this section was being written into the worktree while the gates read it.
+`check-fmt` then reported a `+14 -13` mdtablefix delta and the spelling gate
+reported two tokens that do not exist in the frozen blob at all, while the same
+file on disk kept growing. The scrutineer proved the frozen blob passes the
+identical mdtablefix invocation, so the failure was the moving file and not the
+candidate. It discarded all three results rather than reporting the `nixie`
+pass, which is the right call: a green gate over contaminated input certifies
+nothing either.
+
+The rule this leaves behind is the one the plan already states and this round
+broke: freeze HEAD *and* stop writing to it. The plan text is part of the
+candidate when a gate reads Markdown, so a "living document" is not exempt from
+a gate freeze. The re-run below starts only after the tree has stopped changing.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
@@ -774,11 +791,37 @@ through nextest's default filter, so adding it to `make test` would be a third
 execution of one suite and would hide which contract failed. The target is what
 makes a boundary failure attributable; it is not a second gate.
 
-2026-10-21 (EP-M3): Add no CI step and no nextest override. The `build-test`
-ceiling is exactly consumed by its two coverage watchdogs and the surrounding
-allowances, the platform-keyed step set is closed, and `DISCARD_COMMAND` is
-pinned as an exact string. The suite's 70 s worst case sits far inside the 600
-s per-test allowance, so an override would encode a contention figure as policy.
+2026-10-21 (EP-M3): Add no CI step and no nextest `slow-timeout` override. The
+`build-test` ceiling is exactly consumed by its two coverage watchdogs and the
+surrounding allowances, the platform-keyed step set is closed, and
+`DISCARD_COMMAND` is pinned as an exact string. The suite's 70 s worst case
+sits far inside the 600 s per-test allowance, so a timeout override would
+encode a contention figure as policy.
+
+2026-10-22 (EP-M3, revised): Add a nextest `test-group` override even though no
+timeout override is warranted. The two decisions are about different things.
+The allowance question is answered by measurement and stays closed; the safety
+question is answered by the process model and was open. nextest gives each test
+its own process, so a cache that is correct within a process is not correct
+across a run, and six packaged contracts were each repackaging one shared
+target directory. A single-threaded group is the smallest fix that does not
+touch the fixture's design, and it leaves `make boundary` and `make test`
+unchanged because each starts one process for the binary.
+
+2026-10-22 (EP-M3): Size the packaging deadline from the allowance rather than
+from comfort. `2 x 240 s` fits inside the 600 s base allowance with 120 s for
+the root checks; 900 s per invocation, the figure inherited from an earlier
+draft, could never fire because nextest would stop the test first. The
+invocations are now a `const` array so the workflow contract can count them
+instead of restating the number, and its arithmetic assertion is the thing that
+fails if either figure drifts.
+
+2026-10-22 (process): Stop editing the plan before a gate round starts. A gate
+that reads Markdown reads the working tree, so an edit made while it runs is an
+edit to the candidate, and it silently voids the round in a way that looks like
+a source failure. The first re-run after `3c22ba57` was discarded for exactly
+this reason. Plan maintenance and gate execution are therefore sequenced, not
+interleaved: settle the text, commit it, then freeze and gate.
 
 2026-10-21 (EP-M3): Keep the macro's `ortho_l10n` dependency as a normal
 dependency and record the measured host cost rather than hiding it behind a
