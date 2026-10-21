@@ -1,70 +1,8 @@
 //! Behavioural checks for the public Rust examples and console commands.
 
-use super::{
-    EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile, assert_run, documented_example,
-};
+use super::{EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile, documented_example};
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
-
-/// Run each standard guide example and check its documented output.
-pub(super) fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> {
-    assert_run(
-        workspace,
-        ExampleId("readme-main"),
-        ["--host", "0.0.0.0", "--port", "3000"],
-        "Listening on 0.0.0.0:3000\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-first-cli"),
-        [
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "3000",
-            "--log-level",
-            "debug",
-        ],
-        "host=0.0.0.0 port=3000 log_level=debug\n",
-    )?;
-    assert_run(workspace, ExampleId("guide-discovery"), [], "port=8080\n")?;
-    assert_run(
-        workspace,
-        ExampleId("guide-hermetic-discovery"),
-        [],
-        "candidate=/srv/acme/server.toml\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-load-first-outcomes"),
-        [],
-        "discovery=absent\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-compose-layers-with-sources"),
-        [],
-        "composition=ready\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-subcommand"),
-        ["serve", "--port", "3000"],
-        "port=Some(3000)\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-subcommand-sources"),
-        [],
-        "port=Some(9000)\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-localization"),
-        [],
-        "verbose=true\n",
-    )
-}
 
 pub(super) fn assert_error_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
     let output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;

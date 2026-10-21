@@ -1,8 +1,9 @@
 //! Compile, snapshot, and supervise the documented Cargo subcommand workflow.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs::Dir};
 use std::path::Path;
+use std::process::Output;
 #[path = "scenario.rs"]
 mod scenario;
 
@@ -12,16 +13,20 @@ use crate::{
     process_runner::{self, Operation, Policy},
 };
 
-/// Snapshot Cargo's supplied CLI executable and supervise the documented flow.
+/// Snapshot Cargo's supplied CLI executable, then run
+/// `cargo orthohelp <args> --out-dir <destination>` through Cargo's
+/// external-subcommand dispatch and return its captured output.
 ///
 /// The integration target belongs to cargo-orthohelp, so Cargo has already
 /// built this executable before tests begin. Never rebuild a parent-owned
-/// executable while another test may be running it (notably on Windows).
-pub(super) fn assert_agent_context(
+/// executable while another test may be running it (notably on Windows). The
+/// caller judges the exit status and streams.
+pub(super) fn run_orthohelp(
     repository: &Path,
     executable: &Path,
+    args: &[&str],
     destination: &Path,
-) -> Result<()> {
+) -> Result<Output> {
     let deadline = scenario::deadline();
     let state = repository.join("target/documentation-workspaces");
     Dir::create_ambient_dir_all(&state, ambient_authority())?;
@@ -44,16 +49,11 @@ pub(super) fn assert_agent_context(
         command
             .env("CARGO_NET_OFFLINE", "true")
             .env("PATH", path)
-            .args([
-                "orthohelp",
-                "--package",
-                "hello_world",
-                "--format",
-                "agent-context",
-                "--out-dir",
-            ])
+            .arg("orthohelp")
+            .args(args)
+            .arg("--out-dir")
             .arg(destination);
-        let output = process_runner::run_with_policy(
+        process_runner::run_with_policy(
             &mut command,
             Operation("run documented cargo-orthohelp flow"),
             Policy::build().bounded_by(scenario::remaining(deadline)?.min(remaining)),
@@ -66,15 +66,8 @@ pub(super) fn assert_agent_context(
             } else {
                 error.context("documented cargo-orthohelp subprocess failed")
             }
-        })?;
-        ensure!(
-            output.status.success(),
-            "cargo-orthohelp failed:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        Ok(())
-    })?;
-    Ok(())
+        })
+    })
 }
 
 /// Copy a Cargo-owned executable without rebuilding its shared output path.
