@@ -128,6 +128,27 @@ tool contracts to verify against official Cargo documentation; Fluent
 parser/formatter internals are external assumptions exercised through real
 resources. No new business theorem or unsafe invariant is introduced.
 
+EP-M3 acceptance evidence, per criterion:
+
+| Criterion                                                         | Evidence                                                                                                                                            |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direct runtime consumer builds and tests                          | `workspace_runtime_consumer_builds_and_tests`                                                                                                       |
+| Existing facade consumer still builds and tests                   | `workspace_facade_consumer_builds_and_tests`                                                                                                        |
+| Both import paths name the same types                             | `workspace_mixed_consumer_builds_and_tests`, which compiles cross-assignments                                                                       |
+| Published graph behaves the same                                  | `every_packaged_consumer_shape_builds_and_tests`                                                                                                    |
+| No forbidden package resolves                                     | `no_forbidden_package_appears_in_a_workspace_runtime_consumer`, `packaged_runtime_consumer_has_no_facade_closure`                                   |
+| The closure is not over-shrunk                                    | `assert_runtime_normal_edges` and `assert_root_edges`, which both fail on a *missing* edge too                                                      |
+| A negative fixture fails for the injected dependency and names it | `negative_controls_reject_every_injected_edge`, `negative_controls_name_the_injected_dependency`, `an_unrelated_failure_does_not_satisfy_a_control` |
+| Packaged manifests carry the right edges                          | the four `manifests::` tests                                                                                                                        |
+| The render and the resolved graph agree                           | `the_rendered_consumer_is_the_package_the_closure_reads`                                                                                            |
+| A focused entry point exists                                      | `make boundary`, pinned by `boundary_target_test.py`                                                                                                |
+
+Proof inventory: not applicable. EP-M3 introduces no CrossHair, Kani, Verus, or
+LemmaScript artefact. Its claims are about a resolved dependency graph and a
+compiled consumer, which are checked by building and resolving the real graph
+rather than by a model of it; a model checker over crate names would restate
+the fixture it reads.
+
 ## Tolerances (exception triggers)
 
 Stop for an unintended public API change, snapshot change, dependency cycle,
@@ -144,6 +165,19 @@ and compile admission can distort timings; record those conditions. Packaged
 same-version edges need Cargo's local registry overlay. Full workspace tests
 may contain unrelated infrastructure failures; preserve logs and distinguish
 unavailable infrastructure from source failures.
+
+EP-M3 measured that cost: +25 crates and +13.25 s on a from-scratch macro
+build, about 10 %, and nothing on an incremental one. The figure is a
+warm-cache delta, not a download cost, and it was taken under a fully held
+admission pool with sccache unavailable for part of the HEAD run. Treat it as
+an upper bound.
+
+The boundary suite writes 1.7 G under `target/localisation-boundary`, and the
+CI runner is sized for disk rather than time. `discard_build_trees.py` cannot
+name that tree — it accepts one relative component directly under the target
+root and the workflow's invocation is pinned — so the tree is discarded only by
+`cargo clean` or by hand. On a 150 GB runner against 1.7 G this is not a disk
+risk, but it is a local one on a full workstation.
 
 ## Progress
 
@@ -282,9 +316,173 @@ approaches; they are no longer outstanding work.
   regressions plus direct/facade identity checks are present. All gates pass
   and the milestone review's only valid findings are repaired; the clean
   milestone commit is the delivery point.
+- [x] 2026-10-21: EP-M3 boundary fixtures, package graph, and measurements
+  built and green locally; the `make boundary` target and its workflow contract
+  are in place. Gates and the milestone CLI review are outstanding, so the
+  milestone checkbox stays open until they pass.
 - [ ] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR.
+
+### EP-M3 reconnaissance (2026-10-21)
+
+Read-only survey before any EP-M3 tracked edit. All probes ran under the
+git-ignored `target/l10n-m3-probe` and were then deleted; no workspace file
+changed.
+
+- **CI budget is exactly consumed.** `build-test` has a 165-minute ceiling
+  (9,900 seconds). Its watchdog plus outside-watchdog allowance plus ceiling
+  margin already total 2×2,700 + 3,600 + 900 + 900 = 9,900, so no further
+  coverage-invoking step fits in that job. Any new EP-M3 gate must be a
+  Makefile target that the existing Linux leg already runs, or a new job with
+  its own budget entry.
+- **Closed step-condition set.**
+  `tests/workflow_contracts/runner_placement_test.py` enumerates all 16
+  platform-keyed or always-guarded `if:` strings and asserts set equality. A new
+  `build-test` step carrying a platform condition must be registered there.
+  `discard_build_trees.py` accepts only single relative path components
+  directly beneath the target root, so a new build tree cannot be added to its
+  prune list without a matching script change.
+- **Doctest-collection obligation.** `PYTEST_FLAGS` is a closed list checked by
+  `scripts/tests/test_doctest_collection.py`, which fails if any
+  `scripts/**/*.py` containing `>>>` is unnamed. A new script with doctests
+  must be appended to that variable.
+- **Unaffected closed sets.** New `ortho_l10n` tests and fixtures do not touch
+  `mutation_testing_test.py` (`EXPECTED_WITH` paths and exclude globs),
+  `trybuild_tier.py` (configuration and `cargo-orthohelp` directories only), or
+  `documentation_budget_test.py` (shared-cache group and serial names), unless
+  the new target is deliberately added to the `orthohelp_cache` group.
+- **Packaging recipe proved.**
+
+  ```sh
+  cargo package --offline -p ortho_l10n -p ortho_config --allow-dirty \
+    --config 'patch.crates-io.ortho_config_macros.path="ortho_config_macros"'
+  ```
+
+  This succeeds in 31 seconds. `--no-verify` over all three crates succeeds in
+  1 second. `-p ortho_config_macros` alone with only the `ortho_l10n` patch
+  verifies in 10 seconds, and its child build compiles `ortho_l10n` from the
+  workspace path. The "package collision in the lockfile" seen earlier occurs
+  only when the macro crate is *verified* alongside another selected package.
+- **Published manifest shape.** Packaged manifests rewrite internal edges to a
+  bare `version = "0.9.0"` with no `path`, expand `[lints] workspace = true`
+  inline into `[lints.clippy]`, `[lints.rust]`, and `[lints.rustdoc]`, and add
+  `build = false` and `autolib = false` to `ortho_l10n`.
+- **Packaged consumer pattern.** A consumer root with its own `[workspace]`,
+  `ortho_l10n = "0.9.0"`, and `[patch.crates-io]` entries pointing at
+  **absolute** paths into the extracted `.crate` contents resolves offline in 2
+  seconds with all three `ortho_*` packages at `source = None`. Relative patch
+  paths resolve against the consuming manifest and fail.
+- **Standalone closure.** A fresh `ortho_l10n`-only consumer resolves to 36
+  packages with no `ortho_config`, `ortho_config_macros`, `figment`, `clap`, or
+  `ortho_config_test_helpers`.
+- **Edge classification.** `resolve.nodes[].deps[].dep_kinds[].kind` reports
+  normal edges as `[None]`, build edges as `["build"]`, and dev edges as
+  `["dev"]`. `packages[].dependencies[]` omits `path` for registry dependencies
+  and cannot classify edges.
+
+### EP-M3 boundary suite (2026-10-21)
+
+Twelve files, 2,390 lines, untracked until the milestone commit. The declared
+`[[test]] name = "boundary"` target in `ortho_l10n/Cargo.toml` reaches
+`tests/boundary_tests/mod.rs`; the fixtures below it are rendered foreign
+package roots, not tests.
+
+| File                                                 | Lines           | What it owns                                          |
+| ---------------------------------------------------- | --------------- | ----------------------------------------------------- |
+| `boundary/fixture_cargo/mod.rs`                      | 372             | disposable root, deadline-bounded child, TOML reading |
+| `boundary/fixture_cargo/environment.rs`              | 143             | the closed child environment                          |
+| `boundary/fixture_cargo/metadata.rs`                 | 229             | the `cargo metadata` document contract                |
+| `boundary/consumer/mod.rs`                           | 195             | consumer manifests, workspace and packaged            |
+| `boundary/consumer/library/mod.rs`                   | 289             | the three consumer bodies                             |
+| `boundary/closure/mod.rs`                            | 316             | forbidden names, expected edges, negative controls    |
+| `boundary/package_set/mod.rs`                        | 293             | the two-invocation packaging recipe                   |
+| `boundary_tests/{closure,consumer,manifests}/mod.rs` | 210 / 145 / 155 | the 15 contracts                                      |
+| `boundary/mod.rs`, `boundary_tests/mod.rs`           | 29 / 14         | module wiring                                         |
+
+Green runs, three regimes, all 15 tests:
+
+- `cargo test -p ortho_l10n --test boundary --offline` (default parallelism,
+  warm): `15 passed … finished in 115.25s`. The two packaged-runtime contracts
+  each ran past 60 s and both trigger the same `OnceLock` packaging step.
+- The same suite cold, single-threaded: `finished in 71.06s`.
+- `cargo nextest run -p ortho_l10n -E 'binary(boundary)'` (process per test):
+  `Summary [70.144s] 15 tests run: 15 passed (2 slow)`, slowest 70.143 s.
+
+70 s sits far inside nextest's 600 s per-test allowance, so **no nextest
+override is added**. The first figure is larger than the third only because
+libtest's in-process threads contend for one shared packaging `OnceLock`; that
+is a scheduling property of the harness, not suite cost.
+
+The suite is 1.7 G on disk (938 M `cargo-target`, 745 M `packaging-target`),
+all under the git-ignored `target/localisation-boundary`. `BOUNDARY_ROOT`
+appears at three sites, all inside `ortho_l10n/tests/`.
+
+**The target is already in CI.** `generate-coverage` defaults to
+`cargo llvm-cov nextest` with `all-targets` off; nextest's default filter still
+runs every test binary in the workspace, so both coverage steps execute
+`boundary` today. No workflow edit is needed, and none is made: the
+`build-test` ceiling is exactly consumed (2×2,700 + 3,600 + 900 + 900 = 9,900
+s), the platform-keyed step set is closed at 16 entries, and `DISCARD_COMMAND`
+is pinned as an exact string that cannot name a new tree.
+
+Offline resolution under `target/` means the children emit their own
+`LLVM_PROFILE_FILE` profiles, which the coverage step never collects. CI
+coverage is therefore unchanged in expectation, not degraded.
+
+### EP-M3 Makefile target (2026-10-21)
+
+`make boundary` runs
+`RUSTFLAGS="-D warnings" cargo test -p ortho_l10n --test boundary --offline`.
+It selects one package and one test target, so a boundary failure is
+attributable, and it sets the same `-D warnings` the workspace denies. It does
+not join `make test`'s recipe: `--all-targets` already reaches the declared
+test target, and CI's coverage lane reaches it again, so a second copy would be
+a third execution of one suite.
+
+`tests/workflow_contracts/boundary_target_test.py` (5 tests) pins the recipe
+against exactly the failures that would make it silently not the gate:
+`--workspace`, `--all-targets`, a missing `--offline`, and a missing
+`RUSTFLAGS`. Each was proved non-vacuous by mutating the Makefile, observing
+that mutation's own test fail, and restoring the file byte-for-byte (`cmp`
+after each restore). The full contract suite is 330 passed, one skipped.
+
+### EP-M3 measurements (2026-10-21)
+
+All figures are from fresh `CARGO_TARGET_DIR` roots and the shared Cargo
+package cache. **The cache was warm; no figure is a cold-download claim.**
+
+| Measurement                                             | Wall     | Crates compiled |
+| ------------------------------------------------------- | -------- | --------------- |
+| Macro crate, baseline `f99d9234` (no `ortho_l10n` edge) | 129.74 s | 14              |
+| Macro crate, HEAD `21ad3e3f`                            | 142.99 s | 38 (25 more)    |
+| Runtime consumer, `ortho_l10n` only, packaged 0.9.0     | 24.53 s  | 31              |
+| Facade consumer, `ortho_config` only, packaged 0.9.0    | 62 s     | 103             |
+
+The 25 crates the macro build gains are `ortho_l10n` and its transitive closure
+(`fluent-bundle`, `fluent-syntax`, `fluent-langneg`, `intl-memoizer`,
+`intl_pluralrules`, `unic-langid*`, `thiserror`, `tracing`, `type-map`,
+`self_cell`, `once_cell`, `smallvec`, `pin-project-lite`, `rustc-hash`,
+`tinystr`, `displaydoc`, `proc-macro-hack`). Nothing was removed. So the macro
+normal dependency is a real host-build cost: **+13.25 s and +24 crates** over a
+from-scratch build, about 10 %, and **zero** for an incremental rebuild (0.10 s
+warm).
+
+Consumer closure, same packaged set: the runtime root resolves **36** packages
+with no `ortho_config`, `ortho_config_macros`, `figment`, `clap`, or
+`ortho_config_test_helpers`; the facade root resolves **139**. Nearly four
+times the graph is what the extraction removes for a formatting-only
+application, which is the claim issue #566 exists to make true.
+
+Both measurements ran under `build-limits` with every slot held and the
+admission queue populated; the HEAD run recorded three
+`the managed sccache server is not serving compilations` lines while baseline
+recorded none, so the HEAD number is if anything pessimistic. A first attempt
+placed a doubled `$PWD/…` target path and compiled into a stray tree; that tree
+was deleted and those figures were discarded rather than reported.
+
+No tracked file, gate, commit, or review has been produced for EP-M3 beyond
+what is recorded above.
 
 ## Surprises & discoveries
 
@@ -309,12 +507,88 @@ pipeline packages crates individually, so the new consumer gate must
 independently verify the multi-package graph. Keep any newer Cargo invocation
 scoped to packaging; retain the repository toolchain pin.
 
+EP-M3: `cargo metadata` names a path package by `source#<version>` with no
+name, while a registry package ends `#<name>@<version>`. A contract that read
+the identity from the id fragment would work against crates.io and fail against
+exactly the unpacked packaged roots these tests resolve, so `Metadata::edges`
+resolves every `pkg` id through the package list instead.
+
+EP-M3: the child Cargo invocation must put the subcommand first.
+`--manifest-path` and `--offline` are per-command flags, not global ones, so
+`cargo --manifest-path X metadata` is a usage error rather than a stricter form
+of the same command.
+
+EP-M3: both child pipes must be drained on their own threads before the
+deadline wait. A nested `cargo test` prints far more than a pipe buffer holds,
+so a runner that waits for the exit status first deadlocks and then reports a
+deadline. Draining concurrently is what makes a reported deadline mean the
+child itself stalled.
+
+EP-M3: `cargo metadata` resolves a `[patch.crates-io]` entry that the graph
+does not use and warns rather than failing. A runtime-only consumer therefore
+carries three patch entries while only one applies. That is intended: the same
+rendered manifest is reused by every shape, and a patch that silently failed to
+apply shows up as a resolved `source` rather than as silence.
+
+EP-M3: `packaged_manifests_carry_no_path_dependencies` reads the manifest as
+TOML rather than as text. `[lib] path` and `[[test]] path` are keys in other
+tables, and a textual search for `path =` reports them as dependencies — the
+test was written that way first and failed on its own file before the
+structured walk replaced it.
+
+EP-M3: the coverage lane already executes the boundary target. This is the
+reason no CI step was added for it, and it is worth restating because the
+default reading of `all-targets` is off: that option narrows *feature*
+coverage, not the set of test binaries nextest selects.
+
+EP-M3: `make test` passed on this suite while `make lint` failed on it with 14
+Clippy errors. `cargo test` does not run Clippy lints, so a green test run says
+nothing about Clippy — the same false green is recorded in the issue-318 plan
+for `shadow_reuse`. Because `lint` runs `lint-clippy` and `lint-whitaker` as
+sibling prerequisites, Clippy's failure also left the Whitaker verdict
+*unknown*, not passing.
+
+EP-M3: four of the 14 findings came from one helper rather than from the
+design. The runner bound the drain thread to `stdout`, then rebound the same
+name to the joined output, and the `shadow_*` lints reject exactly that; the
+readers are now `stdout_reader`/`stderr_reader`, and `drain` takes `&str`
+rather than an owned `String` it immediately cloned.
+
+EP-M3: repairing Clippy exposed a Whitaker finding that Clippy could not have
+reached, because `lint` runs the two halves as sibling prerequisites and the
+first failure aborts make. `bumpy_road_function` rejected two sibling `if`
+blocks that each spelled one dependency line. Both writers now iterate
+`Dependency::crates()`, a table of the internal crates each shape needs, so the
+branch disappeared instead of being split into helpers: a fourth shape adds a
+row, not a conditional. The general lesson is that a repaired lint half does
+not grade the other half until the whole `make lint` target is re-run.
+
 ## Decision log
 
 2026-10-15: Treat the user's detailed coding plan and explicit implementation
 request as execution authorization. Retain compatibility resource data below
 configuration rather than changing builder defaults. Retain Fluent arguments
 and documentation IR ownership as explicitly required.
+
+2026-10-21 (EP-M3): Add `make boundary` as a focused entry point and leave
+`make test`'s recipe unchanged. `--all-targets` already reaches the declared
+`[[test]] name = "boundary"` target, and the CI coverage lane reaches it
+through nextest's default filter, so adding it to `make test` would be a third
+execution of one suite and would hide which contract failed. The target is what
+makes a boundary failure attributable; it is not a second gate.
+
+2026-10-21 (EP-M3): Add no CI step and no nextest override. The `build-test`
+ceiling is exactly consumed by its two coverage watchdogs and the surrounding
+allowances, the platform-keyed step set is closed, and `DISCARD_COMMAND` is
+pinned as an exact string. The suite's 70 s worst case sits far inside the 600
+s per-test allowance, so an override would encode a contention figure as policy.
+
+2026-10-21 (EP-M3): Keep the macro's `ortho_l10n` dependency as a normal
+dependency and record the measured host cost rather than hiding it behind a
+build-script or feature gate. The 25 extra crates are the price of one fallible
+identifier owner shared by macro-expansion time and runtime; the alternative is
+a second copy of the normalizer, which is the defect the extraction exists to
+remove.
 
 ## Outcomes & retrospective
 
@@ -329,6 +603,16 @@ findings are dispositioned and repaired. A mid-implementation disk exhaustion
 and a 312-character table-wrap defect both caused red gates; both are repaired
 and recorded above. Standalone/package closure proof, measurements, release
 tooling, and the draft PR remain EP-M3/EP-M4 work.
+
+EP-M3 implementation is complete and its evidence is recorded above: 15
+boundary contracts green under three scheduling regimes, the negative controls
+proved to fail for their injected dependency by name, the packaged set built
+from two `cargo package` invocations, the macro host cost measured against
+`f99d9234`, and the focused `make boundary` target pinned by a workflow
+contract. What remains before the checkbox closes is the sequential gate run
+and the milestone CLI review, neither of which had started when this note was
+written. The measured +25-crate macro closure is recorded as a risk with an
+upper-bound caveat rather than as a settled performance claim.
 
 Decision log note (2026-10-21): The earlier guidance to use explicit result
 branches at the Clap collision panic boundaries is superseded. Those sites now
