@@ -643,6 +643,44 @@ to the same `-D warnings` policy as the parent, and the exclusions are named by
 kind — target-directory selectors, configuration and profile selectors, and the
 two variables that name the parent crate.
 
+### EP-M3 gate results against the repaired tree (2026-10-22)
+
+Repairs committed as `3c22ba57`. The scrutineer ran all eight gates
+sequentially against that frozen candidate
+(`3c22ba573e83d87c897493bb6b0802023c1764c9`, tree
+`c7927bb3abf47d3fb16dc0943871ff77201839b3`) and re-checked HEAD, tree and
+`git status --porcelain` after the last gate, so the certificate applies to the
+frozen tree rather than to whatever was on disk at the end.
+
+| Gate                      | Result  | Time  | Evidence                                 |
+| ------------------------- | ------- | ----- | ---------------------------------------- |
+| `check-fmt`               | pass    | 1 s   | 90 files unchanged                       |
+| `typecheck`               | pass    | 10 s  | `cargo check --workspace --all-targets`  |
+| `lint`                    | pass    | 30 s  | rustdoc, Clippy *and* Whitaker all ran   |
+| `test`                    | pass    | 209 s | 2,066 Rust tests passed, 29 ignored      |
+| `boundary`                | pass    | 12 s  | 17/17, packaged and negative-control too |
+| `markdownlint`            | **red** | 16 s  | one spelling finding, see below          |
+| `test-workflow-contracts` | pass    | 3 s   | 334 passed, 1 skipped                    |
+| `nixie`                   | pass    | 0 s   | every diagram validated                  |
+
+`build-limits-status` reported capacity 4, held 0, healthy, caching through
+sccache, with no queued requests, so nothing in this round was coloured by
+admission.
+
+The one failure was mine, and it is the gate catching a category of error no
+other gate can see. The reassessment record above quoted the misspelling it was
+describing, in backticks. The typos gate reads inline code inside Markdown
+prose, so naming the word reintroduced exactly the fault the sentence reported.
+The repair is a rewording rather than an exception: the sentence now refers to
+the strings by their role, so there is no token for the gate to read and no new
+`typos.local.toml` entry whose scope would have to be argued.
+
+The repair is `71ac7873`, and its delta from the certified tree `3c22ba57` is
+one Markdown file. Only the three Markdown-reading gates are re-run against it;
+the other five keep their certificates, because a name-only diff of those two
+commits contains no path any of them reads. This is the same transfer rule the
+plan applies elsewhere: a certificate follows content identity, not ancestry.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
