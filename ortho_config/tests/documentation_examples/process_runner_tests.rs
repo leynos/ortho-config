@@ -58,10 +58,12 @@ fn bounded_build_policy_keeps_its_other_limits() {
     assert_eq!(bounded.cleanup_timeout(), build.cleanup_timeout());
     assert_eq!(bounded.output_limit(), build.output_limit());
     assert_eq!(bounded.kind_name(), build.kind_name());
-    assert_eq!(
-        build.bounded_by(Duration::from_secs(700)).timeout(),
-        build.timeout()
-    );
+    // The bound must exceed the policy's own deadline in order to prove that
+    // `bounded_by` never lengthens one. Deriving it from the policy keeps the
+    // assertion about the invariant rather than about a constant that the
+    // build budget can outgrow.
+    let looser_than_policy = build.timeout() + Duration::from_secs(1);
+    assert_eq!(build.bounded_by(looser_than_policy).timeout(), build.timeout());
 }
 
 #[test]
