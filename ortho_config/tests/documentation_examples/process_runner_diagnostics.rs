@@ -110,7 +110,9 @@ pub(super) fn workspace_identity(command: &Command) -> String {
 /// Render the inherited working directory, naming an explicit query failure.
 fn inherited_workspace_identity(query: impl FnOnce() -> std::io::Result<PathBuf>) -> String {
     query().map_or_else(
-        |error| format!("unavailable: querying the inherited working directory failed with {error}"),
+        |error| {
+            format!("unavailable: querying the inherited working directory failed with {error}")
+        },
         |path| path.display().to_string(),
     )
 }
