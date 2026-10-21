@@ -201,7 +201,6 @@ pub(super) enum LockProbe {
 /// read-only descriptor without complaint; the portability caveat is accepted
 /// for a test-only probe rather than paid for with a write handle.
 #[cfg(test)]
-#[must_use]
 pub(super) fn probe_lock(root: &Path) -> std::io::Result<LockProbe> {
     let file = open_existing_lock_file(&lock_path(root))?;
     let probe = match file.try_lock() {
