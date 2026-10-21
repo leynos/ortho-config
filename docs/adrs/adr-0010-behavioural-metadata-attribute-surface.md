@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 010: Behavioural metadata attribute surface
+# Architectural decision record (ADR) 0010: Behavioural metadata attribute surface
 
 ## Status
 
@@ -34,7 +34,7 @@ fields must not be inferred from command names or spelling.
   flags (design doc §8.1). Absent metadata stays `unknown`.
 - Preserve dependency direction `ortho_config_macros` → `ortho_config` →
   `cargo-orthohelp`; the bridge transform is the only place the documentation
-  IR and agent-context schemas meet (ADR-003 ownership split).
+  IR and agent-context schemas meet (ADR-0003 ownership split).
 - Use one nested attribute group scoped to runtime execution semantics; later
   roadmap items add sibling groups (for example `output(...)`) rather than
   growing this one indefinitely.
@@ -61,7 +61,7 @@ struct PurgeArgs {
 The group is scoped to runtime execution semantics only. Later roadmap items
 add sibling groups rather than growing this one. Struct-level attributes
 already flow through the `StructAttrs`/`DocStructAttrs` parse path and reach
-subcommand metadata via the ADR-005 companion-trait delegation, which
+subcommand metadata via the ADR-0005 companion-trait delegation, which
 overwrites only `app_name` and `about_id`.
 
 This is the accepted option.
@@ -71,7 +71,7 @@ This is the accepted option.
 Authors annotate subcommand enum variants directly. This was rejected because
 variant-level attributes have no existing parse path today and would duplicate
 state held by the struct-level metadata that already reaches subcommands via
-the ADR-005 delegation.
+the ADR-0005 delegation.
 
 ### Option C: A third `InteractionMode` variant for "requires bypass"
 
@@ -113,8 +113,8 @@ the declared enums without an `Unknown` variant; agent context has `Unknown`.
 `ORTHO_DOCS_IR_VERSION` bumped from `"1.1"` to `"1.2"` for the additive
 `DocMetadata::behaviour` block; `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` stays
 `"1"` under the §8.2 additive-change policy. (The IR version has since moved to
-`"2.0"` for the profile-metadata field added by ADR-012; this paragraph records
-the version this change alone established.)
+`"2.0"` for the profile-metadata field added by ADR-0012; this paragraph
+records the version this change alone established.)
 
 ## Goals and non-goals
 
@@ -166,7 +166,7 @@ The phases were implemented as milestones B–F of the 7.2.1 execplan:
 
 ## Outstanding decisions
 
-- None. ADR-007 remains the reference for downstream `context --json` naming.
+- None. ADR-0007 remains the reference for downstream `context --json` naming.
 
 ## Architectural rationale
 
@@ -181,10 +181,10 @@ readers accept 1.1 IR with `behaviour: None`.
 
 ## References
 
-- [Agent-native CLI assistance design](agent-native-cli-design.md) §6.1, §6.4,
-  §8.1, §8.2.
-- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).
-- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md).
-- [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md).
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §6.1,
+  §6.4, §8.1, §8.2.
+- [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
+- [ADR-0005: Subcommand docs companion trait](adr-0005-subcommand-docs-companion-trait.md).
+- [ADR-0007: Downstream context command naming](adr-0007-downstream-context-command-naming.md).
 - [Model Context Protocol tool annotations](https://modelcontextprotocol.io/specification/2025-06-18/tools).
 - [Command Line Interface Guidelines (clig.dev)](https://clig.dev/).

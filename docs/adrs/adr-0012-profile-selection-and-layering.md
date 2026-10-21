@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 012: Profile selection and layering
+# Architectural decision record (ADR) 0012: Profile selection and layering
 
 ## Status
 
@@ -23,10 +23,10 @@ four layers (defaults, files, environment, CLI), the derive macro generates no
 `--profile` flag, and the agent-context schema hard-codes
 `"profiles": { "supported": false }`.
 
-[Agent-native CLI assistance design](agent-native-cli-design.md) §6.7, titled
-"Persistent profiles", names the contract: profile support should be optional,
-must use a canonical root flag when present, and should follow the recommended
-precedence
+[Agent-native CLI assistance design](../agent-native-cli-design.md) §6.7,
+titled "Persistent profiles", names the contract: profile support should be
+optional, must use a canonical root flag when present, and should follow the
+recommended precedence
 `built-in defaults < config files < selected profile < environment < flags`.
 The word "persistent" there describes profiles that live in configuration files
 and survive across invocations; it does not require persisted *selection*
@@ -35,7 +35,7 @@ named config overlays, the exact merge order and migration impact are
 documented before code is changed. Roadmap item 9.1.1 tasks OrthoConfig with
 designing and implementing that optional profile metadata. This record is the
 required documentation; the governing execution plan is
-[9.1.1 profile metadata](execplans/9-1-1-profile-metadata.md).
+[9.1.1 profile metadata](../execplans/9-1-1-profile-metadata.md).
 
 Prior art surveyed before deciding: AWS CLI (named `[profile x]` sections in
 shared INI files), kubectl and gcloud (named contexts plus a persisted
@@ -291,7 +291,7 @@ accessors `config()`, `into_config()`, and `selection() -> &[SelectedProfile]`
 additively later). `SelectedProfile { name, source }` and
 `#[non_exhaustive] ProfileSource { Flag, Environment }` are plain runtime types
 without serde implementations: downstream `context --json` commands own their
-JSON mapping per ADR-003's ownership split, and the users' guide shows the
+JSON mapping per ADR-0003's ownership split, and the users' guide shows the
 recommended snake_case rendering. The existing `load`/`load_from_iter`
 signatures are untouched.
 
@@ -316,7 +316,7 @@ survives future field additions. The new fields are:
 
 Selected-profile semantics (which profile is active now and why) are a runtime
 concern exposed through `ProfileLoadOutcome`; the static generated context
-documents the mechanism, not the moment, following ADR-007's static/runtime
+documents the mechanism, not the moment, following ADR-0007's static/runtime
 split.
 
 The bridge learns about profile support through the documentation IR:
@@ -386,7 +386,7 @@ additions do not repeat the break. The wire contract is unaffected; a
 byte-identity test proves the unsupported serialization is unchanged.
 
 Profiles are a soft ship-time dependency per
-[agent-native-cli-design.md](agent-native-cli-design.md) §2.2: Weaver and
+[agent-native-cli-design.md](../agent-native-cli-design.md) §2.2: Weaver and
 Netsuke may carry temporary `--profile` parsing adapters until 9.1 ships, and
 must replace them within their next release once it does; on shape conflict,
 the OrthoConfig shape wins. Those adapters should parse only, mirroring the
@@ -439,13 +439,13 @@ unknown keys. Downstream rollback notes should say both things.
 
 ## References
 
-- [Agent-native CLI assistance design](agent-native-cli-design.md) §2.2,
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §2.2,
   §6.7, §8.1, and §8.2.
-- [Roadmap](roadmap.md) §9.1.
-- [ExecPlan: 9.1.1 profile metadata](execplans/9-1-1-profile-metadata.md).
-- [RFC 0002: Customizable configuration layering policy](rfcs/0002-config-layer-resolution-policy.md).
-- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).
-- [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md).
-- [Design Document: The `OrthoConfig` Crate](design.md) §4.3 and §4.10.
+- [Roadmap](../roadmap.md) §9.1.
+- [ExecPlan: 9.1.1 profile metadata](../execplans/9-1-1-profile-metadata.md).
+- [RFC 0002: Customizable configuration layering policy](../rfcs/rfc-0002-config-layer-resolution-policy.md).
+- [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
+- [ADR-0007: Downstream context command naming](adr-0007-downstream-context-command-naming.md).
+- [Design Document: The `OrthoConfig` Crate](../design.md) §4.3 and §4.10.
 - [Cargo book: profiles](https://doc.rust-lang.org/cargo/reference/profiles.html).
 - [AWS CLI: named profiles](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).

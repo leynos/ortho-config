@@ -1,4 +1,4 @@
-# ADR-003: Define schema ownership for agent-native contracts
+# Architectural decision record (ADR) 0003: Define schema ownership for agent-native contracts
 
 Status: Accepted
 
@@ -97,7 +97,7 @@ contract unless that migration explicitly updates the surface. Roadmap item
 beside the existing IR, man-page, and PowerShell artefacts without changing
 their paths or meanings. The agent-context versioning and compatibility
 mechanism is defined in
-[agent-native-cli-design.md](agent-native-cli-design.md) §8.2.
+[agent-native-cli-design.md](../agent-native-cli-design.md) §8.2.
 
 Issue #329 establishes an additive stdout channel for the two agent-native
 contracts: `--format agent-context` and `--format all` emit the generated
@@ -119,7 +119,7 @@ of scraping rendered help output.
 
 The authoritative consumer dependency tier for Weaver, Netsuke, and other
 downstream consumers is recorded in
-[agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
+[agent-native-cli-design.md](../agent-native-cli-design.md) §2.2.
 
 Static Analysis Results Interchange Format (SARIF), JSON Schema, and Model
 Context Protocol tool definitions remain useful prior art for field naming and

@@ -1,4 +1,4 @@
-# ADR-007: Downstream context command naming
+# Architectural decision record (ADR) 0007: Downstream context command naming
 
 Status: Accepted.
 
@@ -128,11 +128,11 @@ normative prose references for this command convention.
 
 ## References
 
-- [Agent-native CLI assistance design](agent-native-cli-design.md) §3.2 and
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §3.2 and
   §5.
-- [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md)
+- [OrthoConfig IR documentation design for cargo-orthohelp](../cargo-orthohelp-design.md)
   §6.3.1.
-- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+- [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 - [Trevin Chow, "10 Principles for Agent-Native CLIs"](https://trevinsays.com/p/10-principles-for-agent-native-clis).
 - [Cloudflare Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/).
 - [Kubernetes object required fields](https://kubernetes.io/docs/concepts/overview/working-with-objects/).

@@ -15,11 +15,11 @@ The source documents for this roadmap are:
 - [Improved error message design](improved-error-message-design.md);
 - [CLI localization surface design](cli-localization-design.md);
 - [DDLint gap analysis](ddlint-gap-analysis.md);
-- [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
-- [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md);
-- [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md);
-- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md);
-- [RFC 0003: Trust-aware policy composition](rfcs/0003-trust-aware-policy-composition.md).
+- [ADR-0001: Replace `serde_yaml` with `serde-saphyr`](adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md);
+- [ADR-0002: Replace `cucumber-rs` with `rstest-bdd`](adrs/adr-0002-replace-cucumber-with-rstest-bdd.md);
+- [ADR-0004: Cargo external-subcommand entry-point architecture](adrs/adr-0004-cargo-external-subcommand-entry-point.md);
+- [ADR-0005: Subcommand docs companion trait](adrs/adr-0005-subcommand-docs-companion-trait.md);
+- [RFC 0003: Trust-aware policy composition](rfcs/rfc-0003-trust-aware-policy-composition.md).
 
 The first downstream consumers for the expanded agent-native contract are
 Weaver and Netsuke. Their plans make several generic requirements explicit:
@@ -101,7 +101,7 @@ responsibilities and downstream application responsibilities.
 - [x] 5.2.3. Record consumer dependency boundaries for Weaver and Netsuke.
   - Requires 5.2.1 and 5.2.2.
   - See agent-native-cli-design.md §2.1 and
-    adr-003-define-schema-ownership-for-agent-native-contracts.md.
+    adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md.
   - [x] Document that OrthoConfig owns reusable command-contract machinery,
     while Weaver owns semantic code-edit execution and Netsuke owns build and
     package execution.
@@ -153,7 +153,7 @@ fields.
 - [x] 6.2.2. Version and validate the agent-context schema.
   - Requires 6.2.1.
   - See agent-native-cli-design.md §3.2 and §8;
-    adr-003-define-schema-ownership-for-agent-native-contracts.md.
+    adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md.
   - [x] Add schema-version tests that fail on accidental shape changes.
   - [x] Add golden fixtures for a simple CLI, a nested CLI, and a CLI with enum
     values.
@@ -163,7 +163,7 @@ fields.
 - [x] 6.2.3. Define downstream `context --json` command naming.
   - Requires 6.2.1.
   - See agent-native-cli-design.md §3.2 and §5;
-    adr-007-downstream-context-command-naming.md.
+    adrs/adr-0007-downstream-context-command-naming.md.
   - [x] Prefer `<tool> context --json` for application command surfaces while
     keeping `cargo orthohelp --format agent-context` as the generator format.
   - [x] Include a payload `kind` such as `<tool>.agent_context`.
@@ -356,7 +356,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [x] 8.3.1. Add a small `ortho_config::cargo` helper for hand-built clap
   commands.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [x] Provide an `external_subcommand` helper that accepts the installed
     binary name, injected Cargo subcommand name, and an existing
     `clap::Command`.
@@ -364,7 +365,7 @@ from carrying a bespoke pattern that other crates copy by hand. See
     subcommand. Usage renders the Cargo dispatch form (parent
     `bin_name("cargo")`); the installed binary name is carried as the inner
     command's `display_name`. This deviates from the literal
-    `bin_name("cargo-<name>")` wording here; see the ADR-004 amendment
+    `bin_name("cargo-<name>")` wording here; see the ADR-0004 amendment
     (2026-08-09).
   - [x] Preserve the existing options on the inner command rather than
     introducing another configuration-loading pathway.
@@ -374,7 +375,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [ ] 8.3.2. Document the derive-friendly Cargo subcommand template.
   - Requires 8.3.1.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [ ] Add user-guide and README examples showing a `Cli` wrapper with
     `#[command(name = "cargo", bin_name = "cargo-<name>")]`, a
     `#[command(subcommand)]` field, and an enum variant wrapping the existing
@@ -389,7 +391,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 - [ ] 8.3.3. Evaluate an optional macro attribute for Cargo subcommand
   wrappers.
   - Requires 8.3.2.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [ ] Prototype the candidate `cargo_subcommand` and `cargo_bin` attribute
     syntax from `docs/design.md` §4.17.
   - [ ] Decide whether the macro should generate a companion wrapper parser,
@@ -403,7 +406,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [ ] 8.3.4. Add regression fixtures for Cargo-dispatched binaries.
   - Requires 8.3.1.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [ ] Add a small workspace fixture or shared test helper that runs
     `cargo-<name> <name> --help`.
   - [ ] Add a companion assertion for `cargo <name> --help` with the fixture
@@ -424,7 +428,7 @@ helpers, while downstream applications own domain behaviour.
 - [x] 9.1.1. Design and implement optional profile metadata.
   - Requires step 6.2.
   - See agent-native-cli-design.md §6.7.
-  - See [ADR-012](adr-012-profile-selection-and-layering.md) for the
+  - See [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md) for the
     approved design: named overlays inside configuration files, stateless
     `--profile` selection, and the five-tier merge order.
   - [x] Standardize `--profile <name>` as the root selection flag.
@@ -581,7 +585,7 @@ later progressively add opinion.
     compares every runtime lookup with `message_id_for` over a fixture
     `#[derive(clap::Parser)]` command tree.
   - Finding: the promoted parser helpers inherit `LocalizeCmd::localize`
-    panics for invalid Fluent roots or colliding identifiers; ADR-006 records
+    panics for invalid Fluent roots or colliding identifiers; ADR-0006 records
     that widened panic surface until 11.1.3 adds derive-time guards.
   - Progress: `examples/hello_world` now calls `parse_localized_command` and
     no longer carries `ParsedCommandLine` or inherent
@@ -613,10 +617,10 @@ later progressively add opinion.
     derive-emitted impls under coherence rules and cannot supply per-field
     metadata.
   - Decision: artefact emission is opt-in behind
-    `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` (ADR-011); ambient proc-macro writes are
+    `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` (ADR-0011); ambient proc-macro writes are
     rejected per Cargo team guidance. Refreshing requires a forced
     recompilation, because Cargo does not fingerprint proc-macro environment
-    reads; see ADR-011 for the exact invocation.
+    reads; see ADR-0011 for the exact invocation.
   - Decision: the trait is wider than the design §8.1 sketch — it carries
     every command-level suffix the runtime walker requests, and `ARG_IDS`
     entries are a named `ArgLocalizationIds` struct rather than positional
@@ -634,7 +638,7 @@ later progressively add opinion.
     `artefact_tests.rs` (including a `proptest` property).
   - Limitation: a rename within one source file leaves an unpruned fragment
     until the next forced refresh. Accepted in Decision D-11 and documented in
-    ADR-011.
+    ADR-0011.
   - Follow-up: flattened fields are excluded from `ARG_IDS` for now; their
     arguments surface at runtime under the parent command. Item 11.6.2 covers
     closing that gap.
@@ -891,11 +895,11 @@ named-field variants without changing the trait contract or the IR envelope.
 The outcome decides whether service-style command sets and three-level command
 trees can be documented at all, and it establishes how far the field-metadata
 pipeline generalizes beyond struct fields. See cargo-orthohelp-design.md §3.1
-and adr-005-subcommand-docs-companion-trait.md §Subsequent amendments.
+and adrs/adr-0005-subcommand-docs-companion-trait.md §Subsequent amendments.
 
 - [ ] 12.1.1. Support unit subcommand variants in `OrthoConfigSubcommandDocs`.
   - See cargo-orthohelp-design.md §3.1;
-    adr-005-subcommand-docs-companion-trait.md.
+    adrs/adr-0005-subcommand-docs-companion-trait.md.
   - [ ] Emit a minimal `DocMetadata` node per unit variant: clap command label,
     generated `about_id`, default heading identifiers, and empty `fields` and
     `subcommands`.

@@ -1,4 +1,4 @@
-# ADR-004: Cargo external-subcommand entry-point architecture
+# Architectural decision record (ADR) 0004: Cargo external-subcommand entry-point architecture
 
 ## Status
 

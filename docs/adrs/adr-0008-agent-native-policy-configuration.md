@@ -1,4 +1,4 @@
-# ADR-008: Opt-in agent-native policy configuration
+# Architectural decision record (ADR) 0008: Opt-in agent-native policy configuration
 
 Status: Accepted.
 
@@ -26,7 +26,7 @@ reported, and what the two defaults mean for each surface.
 ## Decision drivers
 
 - Keep the feature opt-in: a package with no policy table checks nothing.
-- Follow ADR-003 schema ownership: the policy-report schema stays in
+- Follow ADR-0003 schema ownership: the policy-report schema stays in
   `cargo_orthohelp::policy`; reusable agent-context types stay in
   `ortho_config::agent_context`.
 - Keep machine-readable policy output separate from human diagnostics.
@@ -199,9 +199,9 @@ documents a CI recipe asserting the mode
 
 ## References
 
-- [Agent-native CLI assistance design](agent-native-cli-design.md) §3.3 and
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §3.3 and
   §5.
 - [OrthoConfig IR documentation design for
-  cargo-orthohelp](cargo-orthohelp-design.md) §6.3.2.
-- [Execution plan for roadmap 7.1.1](execplans/7-1-1-opt-in-agent-native-policy-configuration.md).
-- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+  cargo-orthohelp](../cargo-orthohelp-design.md) §6.3.2.
+- [Execution plan for roadmap 7.1.1](../execplans/7-1-1-opt-in-agent-native-policy-configuration.md).
+- [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).

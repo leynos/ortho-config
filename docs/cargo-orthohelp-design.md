@@ -165,7 +165,7 @@ Key choices:
   documentation IR, while the future agent-context schema version governs
   compact agent-facing output.
 - Ownership boundary:
-  [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md)
+  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
   keeps documentation IR in `ortho_config::docs`, reusable agent context in
   `ortho_config::agent_context`, and policy reports in
   `cargo_orthohelp::policy` until a later extraction is approved.
@@ -856,7 +856,7 @@ and character literal contents are preserved verbatim, and lifetime syntax is
 not treated as a path separator.
 
 `--format agent-context` is the generator format and remains unchanged by
-[ADR-007](adr-007-downstream-context-command-naming.md). The downstream
+[ADR-0007](adrs/adr-0007-downstream-context-command-naming.md). The downstream
 application command convention is `<tool> context --json`; the `context` name
 is reserved for application surfaces, and `cargo-orthohelp` does not add a
 public `context` or `agent-context` subcommand or alias. The agent-context

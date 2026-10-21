@@ -195,7 +195,7 @@ fn rejects_bad_bypass_grammar(#[case] bypass: &str) -> Result<()> {
 /// A bypass on a non-interactive command is always contradictory.
 ///
 /// A command that never prompts has nothing to bypass, so this must be a hard
-/// error rather than a warning (ADR-010). Because `behaviour(...)` may be
+/// error rather than a warning (ADR-0010). Because `behaviour(...)` may be
 /// repeated, validation runs against the merged state; the contradiction must
 /// therefore survive the keys being split across groups in either order, which
 /// is what the ordering cases pin down.

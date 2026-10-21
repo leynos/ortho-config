@@ -186,7 +186,7 @@ result is correct but repetitive, and the repetition exists only because the
     custom-sources extension point.
   - Changing the four-layer merge precedence (defaults, file, environment,
     CLI) or the declarative merge strategies. This boundary is deliberate,
-    rather than an omission: [RFC 0003](0003-trust-aware-policy-composition.md)
+    rather than an omission: [RFC 0003](rfc-0003-trust-aware-policy-composition.md)
     proposes an orthogonal, opt-in authority model for protected fields while
     preserving ordinary preference merges.
 

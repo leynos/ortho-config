@@ -78,12 +78,13 @@ shape alone cannot determine safe composition.
 
 ### 3.2. RFC 0002 scope and origin
 
-[RFC 0002](0002-config-layer-resolution-policy.md) proposes ordered explicit
-selectors, fail-closed file selection, automatic scope stacking, and replayable
-file-layer outcomes. Its scope and origin information is necessary input to
-this proposal, but its ordering remains preference ordering. In particular, RFC
-0002 deliberately permits project-scope layers to follow user-scope layers and
-deliberately excludes changes to declarative merge strategies.
+[RFC 0002](rfc-0002-config-layer-resolution-policy.md) proposes ordered
+explicit selectors, fail-closed file selection, automatic scope stacking, and
+replayable file-layer outcomes. Its scope and origin information is necessary
+input to this proposal, but its ordering remains preference ordering. In
+particular, RFC 0002 deliberately permits project-scope layers to follow
+user-scope layers and deliberately excludes changes to declarative merge
+strategies.
 
 Path scope does not confer authority. An explicitly selected file, an
 automatically discovered project file, and an inherited parent file may share a
@@ -802,7 +803,7 @@ The review-sized implementation tasks and their dependencies live in
 
 ## 15. Related work
 
-- [RFC 0002: Customizable configuration layering policy](0002-config-layer-resolution-policy.md)
+- [RFC 0002: Customizable configuration layering policy](rfc-0002-config-layer-resolution-policy.md)
 - [ConfigDiscovery: support multi-scope file loading (all found files, not just first) #318](https://github.com/leynos/ortho-config/issues/318)
 - [Enable scoped configuration discovery (#318) #465](https://github.com/leynos/ortho-config/pull/465)
 - [Fail closed for explicit configuration selectors #437](https://github.com/leynos/ortho-config/issues/437)

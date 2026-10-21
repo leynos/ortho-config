@@ -33,40 +33,40 @@
 
 ## Decisions and archives
 
-- [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md):
+- [ADR-0001: Replace `serde_yaml` with `serde-saphyr`](adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md):
   review the accepted YAML parser replacement and migration consequences.
-- [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md):
+- [ADR-0002: Replace `cucumber-rs` with `rstest-bdd`](adrs/adr-0002-replace-cucumber-with-rstest-bdd.md):
   review the accepted behavioural testing migration and expected workflow.
-- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md):
+- [ADR-0003: Define schema ownership for agent-native contracts](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md):
   review the accepted ownership split for documentation IR, agent context, and
   policy reports.
-- [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md):
+- [ADR-0004: Cargo external-subcommand entry-point architecture](adrs/adr-0004-cargo-external-subcommand-entry-point.md):
   review the accepted Cargo dispatch boundary and wrapper shape.
-- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md):
+- [ADR-0005: Subcommand docs companion trait](adrs/adr-0005-subcommand-docs-companion-trait.md):
   review the accepted companion trait for recursive subcommand documentation
   metadata.
-- [ADR-006: Identifier-derivation panics](adr-006-identifier-derivation-panics.md):
+- [ADR-0006: Identifier-derivation panics](adrs/adr-0006-identifier-derivation-panics.md):
   review the accepted panic-on-collision and panic-on-unrepresentable-segment
   contract for `message_id_for` and `LocalizeCmd::localize`.
-- [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md):
+- [ADR-0007: Downstream context command naming](adrs/adr-0007-downstream-context-command-naming.md):
   review the accepted `context --json` downstream command convention and `kind`
   discriminator rule for agent-context payloads.
-- [ADR-008: Opt-in agent-native policy configuration][adr-008]:
+- [ADR-0008: Opt-in agent-native policy configuration][adr-0008]:
   review the accepted 7.1.1 policy configuration surface, the enforcement and
   advertisement defaults, the report contract, and the reserved 7.1.2 seam.
-- [ADR-009: Place the Linux build-test leg on Ubicloud][adr-009]:
+- [ADR-0009: Place the Linux build-test leg on Ubicloud][adr-0009]:
   review the accepted runner size, fork fallback, platform-based check names,
   and pre-coverage disk discard for the Linux `build-test` leg.
-- [ADR-010: Behavioural metadata attribute surface](adr-010-behavioural-metadata-attribute-surface.md):
+- [ADR-0010: Behavioural metadata attribute surface](adrs/adr-0010-behavioural-metadata-attribute-surface.md):
   review the accepted 7.2.1 `behaviour(...)` derive attribute, the no-inference
   rule, the pinned bypass and dry-run flag grammar, and the
   `agent-native.behaviour.*` rule set.
-- [ADR-011: Opt-in identifier artefact emission](adr-011-opt-in-identifier-artefact-emission.md):
+- [ADR-0011: Opt-in identifier artefact emission](adrs/adr-0011-opt-in-identifier-artefact-emission.md):
   review the guarded build-time export for derived CLI identifiers.
-- [ADR-012: Profile selection and layering](adr-012-profile-selection-and-layering.md):
+- [ADR-0012: Profile selection and layering](adrs/adr-0012-profile-selection-and-layering.md):
   review the decision for optional profile overlays, the five-tier merge order,
   stateless selection, and the opt-in profile contract.
-- [ADR-013: Optional-value boolean CLI metadata](adr-013-optional-value-boolean-cli-metadata.md):
+- [ADR-0013: Optional-value boolean CLI metadata](adrs/adr-0013-optional-value-boolean-cli-metadata.md):
   review the accepted `value_optional` marker, the documentation IR version
   bump, and the rejected alternatives for expressing the new boolean flag
   surface.
@@ -76,16 +76,16 @@
 
 ## Requests for comments (RFCs)
 
-- [RFC 0001: Field-level environment aliases](rfcs/0001-field-level-environment-aliases.md):
+- [RFC 0001: Field-level environment aliases](rfcs/rfc-0001-field-level-environment-aliases.md):
   review the proposal to add first-class field-level environment-variable
   aliases and projections, with deterministic intra-environment precedence,
   empty-value handling, and secret-redaction metadata, motivated by the `vk` and
   `podbot` use cases.
-- [RFC 0002: Customizable configuration layering policy](rfcs/0002-config-layer-resolution-policy.md):
+- [RFC 0002: Customizable configuration layering policy](rfcs/rfc-0002-config-layer-resolution-policy.md):
   review the proposed generic file-layer resolution policy — ordered explicit
   selectors, multi-scope stacking, and a reusable resolver — with Netsuke as
   the proof case.
-- [RFC 0003: Trust-aware policy composition](rfcs/0003-trust-aware-policy-composition.md):
+- [RFC 0003: Trust-aware policy composition](rfcs/rfc-0003-trust-aware-policy-composition.md):
   review the proposed separation of preference precedence from
   application-defined policy authority, with monotonic policy families,
   explicit delegation, and bounded provenance diagnostics.
@@ -207,5 +207,5 @@
     plan for the optional-value boolean flag, the `value_optional` IR marker,
     and the explicit-false override.
 
-[adr-008]: adr-008-agent-native-policy-configuration.md
-[adr-009]: adr-009-linux-build-test-runner-placement.md
+[adr-0008]: adrs/adr-0008-agent-native-policy-configuration.md
+[adr-0009]: adrs/adr-0009-linux-build-test-runner-placement.md

@@ -176,7 +176,7 @@ fn context() -> impl Strategy<Value = AgentContext> {
 
 /// The finding codes the rules are specified to emit for one command.
 ///
-/// This restates the contract from ADR-010 and the `behaviour` module
+/// This restates the contract from ADR-0010 and the `behaviour` module
 /// documentation. The three helpers below are the three rule groups the report
 /// walks a command through, and they are concatenated in that same order so the
 /// codes come back in the order the report emits them.

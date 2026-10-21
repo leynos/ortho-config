@@ -46,7 +46,7 @@ Observable success: a config file that sets `enabled = true` combined with
       `hello_world` suites green afterwards.
 - [x] M2 (Task 2): runtime merge/precedence verified with integration fixtures
       (10-case matrix in `clap_integration` plus the doc-example flow).
-- [x] M3 (Task 3): docs IR `value_optional` marker, ADR-013, renderers,
+- [x] M3 (Task 3): docs IR `value_optional` marker, ADR-0013, renderers,
       goldens.
 - [x] M4 (Task 4): users-guide section, changelog entries, v0.10.0 migration
       guide sections (flag spellings, explicit-value precedence) with impact
@@ -67,7 +67,7 @@ Observable success: a config file that sets `enabled = true` combined with
       now joins the flag (`--flag[=BOOL]`, matching clap's own
       `require_equals` suffix) with a regression test proven non-vacuous; the
       406-line doc-example test file split into
-      `documentation_examples/boolean_override.rs`; ADR-013 links made
+      `documentation_examples/boolean_override.rs`; ADR-0013 links made
       same-directory; the migration-guide "Before" block now shows the real
       `TooManyValues` parse failure instead of output the old code could not
       produce; and the ExecPlan itself is indexed in `docs/contents.md`.
@@ -115,8 +115,8 @@ Observable success: a config file that sets `enabled = true` combined with
       signature with the suppression deleted and observing
       `clippy::too_many_arguments` fire.
 - [x] (2026-09-25) Rebasing onto the advanced `origin/main` (`8835347c`, PR
-      #416) found and fixed a defect no gate could catch: this branch's ADR-008
-      collided with the ADR-008 that PR #416 had already merged, so two
+      #416) found and fixed a defect no gate could catch: this branch's ADR-0008
+      collided with the ADR-0008 that PR #416 had already merged, so two
       different ADRs would have claimed number 008. This branch's
       unpublished ADR renumbers to 009. Four conflicts were resolved by
       hand — three in
@@ -190,14 +190,14 @@ Observable success: a config file that sets `enabled = true` combined with
       `[=<BOOL>]`. The roff renderer does not wrap, and its golden confirms
       `\fI[=BOOL]\fR`. The docs had been describing *man-page* output in
       *clap's* notation. The finding named one site; the same false claim
-      appeared in four, all fixed: the users' guide, two passages of ADR-013,
+      appeared in four, all fixed: the users' guide, two passages of ADR-0013,
       and the migration guide. The two IR field doc comments were left alone —
       they say renderers bracket the placeholder without asserting a spelling,
       which remains true.
 - [x] (2026-09-25) Round 5, findings 3, 4, and 6 were actioned: the PowerShell
       sentence now uses `concat!` (with an explicit `spelling = spelling`
       argument, because an empirical probe showed `format!(concat!(…))` cannot
-      capture implicitly), and the ExecPlan's ADR-003 reference now names the
+      capture implicitly), and the ExecPlan's ADR-0003 reference now names the
       file that exists.
 - [x] (2026-09-25) All six gates green at `d211cc68` over the round-5 fixes:
       `check-fmt`, `typecheck`, `lint` (clippy and whitaker), `test` (1348
@@ -236,7 +236,7 @@ Observable success: a config file that sets `enabled = true` combined with
       non-vacuous by reverting the fix and watching the two fallback tests
       fail. The second finding was the `require_equals` rationale, and
       re-measuring it falsified a claim this branch had already written into
-      the user's guide, ADR-013, and the derive macro's own comment; see the
+      the user's guide, ADR-0013, and the derive macro's own comment; see the
       first entry under `Surprises & discoveries` for the full reversal.
 - [x] (2026-09-25) The round-7 fixes then exposed a gate-ordering lesson. The
       new test lines pushed `roff/escape.rs` to 445 lines against the 400-line
@@ -263,7 +263,7 @@ Observable success: a config file that sets `enabled = true` combined with
       were verified and applied, and both are the kind of defect a reader
       notices but a gate cannot: the rustdoc on `replay.rs` broke the
       hyphenated compound `per-argument` across a line, which Markdown renders
-      as "per- argument", and ADR-013 wrote the plural possessive "users'
+      as "per- argument", and ADR-0013 wrote the plural possessive "users'
       guide" where the project's own style guide and the document's title both
       use the singular "user's guide". Notably, none of the round-7 fixes drew
       a finding — the `--flag[=]` render fix, its three tests, and the
@@ -430,12 +430,12 @@ Observable success: a config file that sets `enabled = true` combined with
       `#[path]`-declared shared support module that both binaries include.
       The repairs that needed to change replayed content were performed *inside*
       the replay, so the series still has exactly 32 commits and none dated
-      after the replay: the ADR-013 rename and its ExecPlan, `contents.md`, and
+      after the replay: the ADR-0013 rename and its ExecPlan, `contents.md`, and
       Surprises records all ride in one replayed commit, and the round-5 roff
       correction rides in the round-5 fixes commit. Only the renumber commit's
       *message* was repaired afterwards, by an interactive rebase that rewrote
       that one message and left its tree and parent byte-identical. Intermediate
-      replays therefore carry the ADR-008 filename up to the renumber and 013
+      replays therefore carry the ADR-0008 filename up to the renumber and 013
       from it onward; the final HEAD shows 013 alone.
 
 - [x] (2026-10-16) Post-rebase repair of the second cross-branch breakage. The
@@ -457,7 +457,7 @@ Observable success: a config file that sets `enabled = true` combined with
 
 - [x] (2026-10-16) Post-rebase repair of the third cross-branch breakage, in
       the Markdown tree. Re-formatting with `make fmt` rewrote the migration
-      guide's opening paragraph and two passages in ADR-013, all of which were
+      guide's opening paragraph and two passages in ADR-0013, all of which were
       well-formatted under the `mdtablefix` this branch was last formatted
       with and are rejected by the newer one on `main`. Every hunk was read
       back and confirmed to change no word: the edits re-wrap prose and
@@ -588,7 +588,7 @@ Observable success: a config file that sets `enabled = true` combined with
       the two trees does not mirror its lint exposure. The fix keeps the
       submodules private — making them `pub` would expose public paths the
       upstream tree does not have, breaking the mirror alignment recorded in
-      ADR-010 — and demotes the three names to code spans with the reason
+      ADR-0010 — and demotes the three names to code spans with the reason
       stated inline. Because `cargo doc` aborts the lint target before
       `cargo clippy` runs, this single failure also hid every Clippy and
       Whitaker result for that pass. The second was a spellcheck rejection:
@@ -978,42 +978,44 @@ Observable success: a config file that sets `enabled = true` combined with
   under test rather than a neighbouring failure that fires first for unrelated
   reasons.
 
-- **ADR-008 was already taken.** This branch minted
+- **ADR-0008 was already taken.** This branch minted
   `docs/adr-008-optional-value-boolean-cli-metadata.md`, but `origin/main`
-  gained `docs/adr-008-agent-native-policy-configuration.md` (dated 2026-08-12)
-  via PR #416 while this branch was in flight. Two different ADRs would
-  therefore have claimed number 008 on merge, and the collision is invisible
-  from this branch alone because the branch predates that merge. Numbering
-  follows landing order, so the unpublished ADR renumbers to **ADR-009**; the
-  file, its title, `docs/contents.md`, and this plan's M3 and round-2 entries
-  all move together. Detected by probing `git merge-tree` against `origin/main`
-  before opening the pull request, not by a gate.
+  gained `docs/adrs/adr-0008-agent-native-policy-configuration.md` (dated
+  2026-08-12) via PR #416 while this branch was in flight. Two different ADRs
+  would therefore have claimed number 008 on merge, and the collision is
+  invisible from this branch alone because the branch predates that merge.
+  Numbering follows landing order, so the unpublished ADR renumbers to
+  **ADR-0009**; the file, its title, `docs/contents.md`, and this plan's M3 and
+  round-2 entries all move together. Detected by probing `git merge-tree`
+  against `origin/main` before opening the pull request, not by a gate.
 
-- **Then ADR-009 was taken too.** Renumbering to 009 was correct only against
+- **Then ADR-0009 was taken too.** Renumbering to 009 was correct only against
   the `origin/main` of 2026-09-24. While the pull request waited for review,
-  `main` gained `docs/adr-009-linux-build-test-runner-placement.md` via PR #534
-  — the same collision one number higher, and equally invisible from this
-  branch. Replaying this branch during the rebase onto `main` reproduced it:
-  both sides create `docs/adr-009-*`, so the merge conflicts on the file rename
-  and on the adjacent `docs/contents.md` entries. Numbering still follows
-  landing order, so the ADR moves again, to **ADR-010**. This is the second
-  renumber for the same ADR (008 → 009 → 010); the replayed commit does both
-  edits at once, so the intermediate number never appears in the new series.
+  `main` gained `docs/adrs/adr-0009-linux-build-test-runner-placement.md` via
+  PR #534 — the same collision one number higher, and equally invisible from
+  this branch. Replaying this branch during the rebase onto `main` reproduced
+  it: both sides create `docs/adr-009-*`, so the merge conflicts on the file
+  rename and on the adjacent `docs/contents.md` entries. Numbering still
+  follows landing order, so the ADR moves again, to **ADR-0010**. This is the
+  second renumber for the same ADR (008 → 009 → 010); the replayed commit does
+  both edits at once, so the intermediate number never appears in the new
+  series.
 
-- **Then ADR-010, 011, and 012 were all taken.** Renumbering to 010 was
+- **Then ADR-0010, 011, and 012 were all taken.** Renumbering to 010 was
   correct only against the `origin/main` of 2026-09-25. The rebase onto the
   `origin/main` of 2026-10-16 found
-  `docs/adr-010-behavioural-metadata-attribute-surface.md`,
-  `docs/adr-011-opt-in-identifier-artefact-emission.md`, and
-  `docs/adr-012-profile-selection-and-layering.md` already landed, so 010 was
-  the third number to collide. Numbering still follows landing order and the
-  unpublished ADR takes the next free number, **ADR-013**. This is the third
-  renumber (008 → 009 → 010 → 013), and the replayed commit performs it
-  directly so no intermediate number appears in the new series. ADR-012 also
+  `docs/adrs/adr-0010-behavioural-metadata-attribute-surface.md`,
+  `docs/adrs/adr-0011-opt-in-identifier-artefact-emission.md`, and
+  `docs/adrs/adr-0012-profile-selection-and-layering.md` already landed, so 010
+  was the third number to collide. Numbering still follows landing order and
+  the unpublished ADR takes the next free number, **ADR-0013**. This is the
+  third renumber (008 → 009 → 010 → 013), and the replayed commit performs it
+  directly so no intermediate number appears in the new series. ADR-0012 also
   narrows the earlier claim that `"2.0"` belongs to the identifier change alone:
   `profiles` rides the unreleased version rather than moving it, so
   `value_optional` is versioned the same way. The ADR records that reasoning
-  and points at ADR-012.
+  and points at ADR-0012. Its current path is
+  `docs/adrs/adr-0013-optional-value-boolean-cli-metadata.md`.
 
 - **A second cross-branch breakage: `clap_integration` no longer exports
   `with_jail`.** The rebase's conflict resolutions were clean in
@@ -1194,20 +1196,20 @@ Observable success: a config file that sets `enabled = true` combined with
 
 - **The replay broke the Markdown tree in a third place, and only a *fixer*
   could show it.** Replaying onto the current `main` left two documents failing
-  `make check-fmt`: the migration guide's opening paragraph and ADR-013's prose
-  and table caption. Both sides were individually well-formatted; `main` had
-  moved to a newer `mdtablefix`, whose wrap rules differ from the version this
-  branch was last formatted under, so lines that were correct when written are
-  now rejected. Neither file is semantically changed — `make fmt` re-wrapped
-  prose and normalized `_Table 1:_` to `*Table 1:*`, changing no word. This is
-  the same *combination* shape as the two Rust breakages: an ambient-toolchain
-  change on `main` that only becomes visible when the branch's own text is
-  re-checked against it. The practical consequence is that a post-rebase gate
-  run must include the Markdown lanes for *any* changed `.md`, including files
-  the replay did not touch, because a stale formatting baseline is invisible
-  until a fixer runs. Taking a formatter's diff on faith is not enough either:
-  `make fmt` is not a checker, so each hunk it wrote was read back and
-  confirmed to be a re-wrap.
+  `make check-fmt`: the migration guide's opening paragraph and ADR-0013's
+  prose and table caption. Both sides were individually well-formatted; `main`
+  had moved to a newer `mdtablefix`, whose wrap rules differ from the version
+  this branch was last formatted under, so lines that were correct when written
+  are now rejected. Neither file is semantically changed — `make fmt`
+  re-wrapped prose and normalized `_Table 1:_` to `*Table 1:*`, changing no
+  word. This is the same *combination* shape as the two Rust breakages: an
+  ambient-toolchain change on `main` that only becomes visible when the
+  branch's own text is re-checked against it. The practical consequence is that
+  a post-rebase gate run must include the Markdown lanes for *any* changed
+  `.md`, including files the replay did not touch, because a stale formatting
+  baseline is invisible until a fixer runs. Taking a formatter's diff on faith
+  is not enough either: `make fmt` is not a checker, so each hunk it wrote was
+  read back and confirmed to be a re-wrap.
 
 - **A doctest fails, and no gate can see it.** `cargo test --doc` fails on
   `ortho_config/src/cargo/mod.rs - cargo::external_subcommand (line 90)` with
@@ -1337,7 +1339,7 @@ Observable success: a config file that sets `enabled = true` combined with
   §5.
 - **Add a marker to `CliMetadata` rather than overloading existing fields.**
   `takes_value` cannot express "value is optional"; the docs IR version bumps
-  and the schema mirror stays byte-for-byte aligned per ADR-003.
+  and the schema mirror stays byte-for-byte aligned per ADR-0003.
 - **Keep omitting `skip_serializing_if` for booleans.** `strip_nulls` already
   removes `None`, so absence survives, while `Some(false)` must serialize as
   `false` to clear lower layers. Adding the skip hook would erase the
@@ -1352,7 +1354,7 @@ Observable success: a config file that sets `enabled = true` combined with
   (guarded by `ir_version_matches_ortho_config` and the round-trip case in
   `schema/tests/mod.rs`). Both trees are split into the same families, so the
   alignment is file-for-file as well as type-for-type.
-- ADR-003: new optional metadata fields need explicit defaults for older
+- ADR-0003: new optional metadata fields need explicit defaults for older
   derives.
 - Code files stay within 400 lines; 80-column Markdown prose; en-GB-oxendict
   spelling.
@@ -1392,12 +1394,12 @@ Governing documents this plan conforms to:
 - `docs/agent-native-cli-design.md` §5 — no auto-generated `--no-x` negation
   pairs. This is why the plan adopts a single value-taking flag rather than a
   two-flag pair.
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` — the
-  documentation IR and the `cargo-orthohelp` schema mirror move together; new
-  fields need an explicit default so older derives keep parsing.
-- `docs/adr-013-optional-value-boolean-cli-metadata.md` — added by this branch;
-  records the `value_optional` marker, the IR version bump, and the rejected
-  alternatives.
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md` —
+  the documentation IR and the `cargo-orthohelp` schema mirror move together;
+  new fields need an explicit default so older derives keep parsing.
+- `docs/adrs/adr-0013-optional-value-boolean-cli-metadata.md` — added by this
+  branch; records the `value_optional` marker, the IR version bump, and the
+  rejected alternatives.
 - `AGENTS.md` — 400-line code files, 80-column Markdown prose, en-GB-oxendict
   spelling.
 

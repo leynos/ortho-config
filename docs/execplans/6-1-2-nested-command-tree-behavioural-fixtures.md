@@ -93,12 +93,13 @@ these requires escalation in `Decision Log`, not a workaround.
   `HeadingIds`, etc.). Do not add or rename clap-attribute keys
   (`#[ortho_config(...)]`, `#[command(...)]`, `#[clap(...)]`). Additive new
   helper functions inside `ortho_config_macros` are out of scope.
-- Preserve the boundary established by ADR-003
-  (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`) and
-  re-affirmed by ADR-005 (`docs/adr-005-subcommand-docs-companion-trait.md`).
-  Test fixtures and golden snapshots belong to the human-documentation IR
-  contract; they must not introduce dependencies on the agent-context schema,
-  the bridge, or policy reports.
+- Preserve the boundary established by ADR-0003
+  (`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`)
+  and re-affirmed by ADR-0005
+  (`docs/adrs/adr-0005-subcommand-docs-companion-trait.md`). Test fixtures and
+  golden snapshots belong to the human-documentation IR contract; they must not
+  introduce dependencies on the agent-context schema, the bridge, or policy
+  reports.
 - Keep the mirrored schema in `cargo-orthohelp/src/schema/mod.rs`
   byte-for-byte aligned with `ortho_config/src/docs/ir.rs`. The
   version-alignment test in `cargo-orthohelp/src/schema/tests.rs` must continue
@@ -328,7 +329,7 @@ The implementation must keep aligned with:
   and "Adding or changing behavioural tests" sections);
 - `docs/documentation-style-guide.md` (ADR template, design-document
   guidance, en-GB-oxendict rules);
-- `docs/adr-005-subcommand-docs-companion-trait.md` (the trait shape this
+- `docs/adrs/adr-0005-subcommand-docs-companion-trait.md` (the trait shape this
   plan relies on);
 - `docs/execplans/6-1-1-recursive-doc-metadata-subcommands-values.md` (the
   precursor plan whose outcomes this plan extends).
@@ -595,7 +596,7 @@ Steps:
    approval. Record the approval date in `Progress`. Update `Status:` to
    `APPROVED`.
 2. No ADR is required: this plan adds tests and snapshots; it makes no
-   design or schema decisions beyond those already recorded in ADR-005. If
+   design or schema decisions beyond those already recorded in ADR-0005. If
    review surfaces a design decision (for example, "snapshots belong in
    `tests/snapshots/`, not `tests/golden/`"), record it in `Decision Log`
    instead of opening a new ADR.

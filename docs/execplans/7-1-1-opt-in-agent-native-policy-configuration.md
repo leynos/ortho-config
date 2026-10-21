@@ -41,9 +41,9 @@ except that this plan must leave 7.1.2 a clean seam to plug rules into.
 Hard invariants that must hold throughout implementation. Violation requires
 escalation, not workarounds.
 
-- Schema ownership follows ADR-003
-  (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`): the
-  policy-report schema stays in `cargo_orthohelp::policy`; reusable
+- Schema ownership follows ADR-0003
+  (`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`):
+  the policy-report schema stays in `cargo_orthohelp::policy`; reusable
   agent-context types stay in `ortho_config::agent_context`. Do not move either
   schema between crates.
 - `ORTHO_POLICY_REPORT_SCHEMA_VERSION` stays at `"1"`. Only additive,
@@ -117,7 +117,7 @@ escalation, not workarounds.
   low. Likelihood: medium. Mitigation: the report artefact (`summary.deny`) is
   documented as the authoritative CI signal; if `write_policy_report` fails,
   `run_policy_check` returns that error before calling `write_summary`, so no
-  advisory stderr summary is attempted. ADR-008 records that the exit code is
+  advisory stderr summary is attempted. ADR-0008 records that the exit code is
   provisional until roadmap 7.2.3/7.2.5 document stable exit classes.
 
 ## Progress
@@ -254,9 +254,9 @@ escalation, not workarounds.
     `make check-fmt` plus `cargo clippy` (pedantic) clean after removing the
     unnecessary `Result` wraps from the three infallible `given` steps
     (`unnecessary_wraps`).
-- [x] Milestone 5b: documentation, ADR-008, CHANGELOG, roadmap tick.
-  - `docs/adr-008-agent-native-policy-configuration.md` added (house template;
-    records D1, D3/D12, D5/D6, D7, D9, D11, D13, D14) and listed in
+- [x] Milestone 5b: documentation, ADR-0008, CHANGELOG, roadmap tick.
+  - `docs/adrs/adr-0008-agent-native-policy-configuration.md` added (house
+    template; records D1, D3/D12, D5/D6, D7, D9, D11, D13, D14) and listed in
     `docs/contents.md`. `docs/agent-native-cli-design.md` §3.3 reconciled per
     D4 (always-write report wording; nested `location` example shape;
     configuration surface, two defaults, exceptions visibility).
@@ -289,7 +289,7 @@ escalation, not workarounds.
   default; Decision D9 separates the two.
 - Observation: `cargo_orthohelp::policy::PolicyMode` and
   `ortho_config::agent_context::PolicyMode` are two distinct types (the mirror
-  pattern required by ADR-003). Evidence: both modules define the enum
+  pattern required by ADR-0003). Evidence: both modules define the enum
   independently. Impact: Milestone 4 needs an explicit, single-point conversion
   (Decision D12 names it) so the mirrors cannot drift silently.
 - Observation: the `cargo-orthohelp` *binary* crate (`src/main.rs`)
@@ -324,7 +324,7 @@ revision note at the end of this document).
   `[package.metadata.ortho_config.policy]` in the target package's
   `Cargo.toml`, parsed by extending `OrthoConfigMetadata` in
   `cargo-orthohelp/src/metadata.rs`. A dedicated policy file is deferred.
-  ADR-008 explicitly reserves a `rules` key inside the policy table so roadmap
+  ADR-0008 explicitly reserves a `rules` key inside the policy table so roadmap
   7.1.2/7.1.3 can add per-rule levels additively (the ESLint/Cargo-`[lints]`
   shape); `mode` is documented as a global ceiling. Rationale:
   `package.metadata.*` is Cargo's documented third-party extension point, the
@@ -391,7 +391,7 @@ revision note at the end of this document).
   termination, which prints the Debug representation; the human-facing channel
   is therefore the D5 stderr summary, which is printed before the error is
   returned after a successful artefact write. If the artefact write fails, the
-  error is returned before the summary is attempted. ADR-008 records that exit
+  error is returned before the summary is attempted. ADR-0008 records that exit
   code 1 is shared with generic tool failure, that `policy-report.json`
   (`summary.deny`) is the authoritative CI signal, and that the code is
   provisional until roadmap 7.2.3 documents stable exit classes. Rationale:
@@ -413,7 +413,7 @@ revision note at the end of this document).
   optional `--` prefix normalization, is empty or contains whitespace, or a
   `verb` exception whose name is empty, contains whitespace, or begins with
   `-`. A deny-severity finding in `warn` mode is reported but non-fatal,
-  exactly as design §3.3 specifies mode handling; ADR-008 documents this
+  exactly as design §3.3 specifies mode handling; ADR-0008 documents this
   explicitly so nobody mistakes warn-mode tolerance for a bug. Rationale:
   shipping a checker whose deny mode is unreachable would leave the exit path
   and report pipeline untested until 7.1.2, and the precise definitions prevent
@@ -441,7 +441,7 @@ revision note at the end of this document).
   mode. The transient `--policy-mode` command-line override affects the policy
   *report*'s effective mode but never the generated agent context, which
   records what the project has committed to, not what one invocation used.
-  ADR-008 explains the two defaults side by side. Rationale: resolves the
+  ADR-0008 explains the two defaults side by side. Rationale: resolves the
   collision between the opt-in `off` default and the shipped `warn`
   advertisement without rewriting published snapshot values or misrepresenting
   a one-off CI override as a project commitment. Date/Author: 2026-08-06,
@@ -512,7 +512,7 @@ revision note at the end of this document).
   [package.metadata.ortho_config.policy] table found); nothing was
   checked`,
   and the users' guide documents a CI recipe asserting the mode
-  (`jq -e '.mode != "off"' policy-report.json`) to reject off mode. ADR-008
+  (`jq -e '.mode != "off"' policy-report.json`) to reject off mode. ADR-0008
   also records the residual typo gap honestly: strict unknown-key handling
   applies *inside* the policy table; a misspelt table name still resolves to
   `off`, which is why the loud summary and CI recipe exist. Rationale: the
@@ -528,7 +528,7 @@ revision note at the end of this document).
   `PolicyReport::with_details(mode, results, exceptions, vocabulary)`
   constructor so `evaluate` never mutates public fields post-construction (the
   type's rustdoc already warns that direct mutation breaks the summary
-  invariant). ADR-008 notes that 7.1.2 will pass the bridge IR through
+  invariant). ADR-0008 notes that 7.1.2 will pass the bridge IR through
   `PolicyInputs` (an additive field) and will add an additive
   `replacement: Option<String>` to `PolicyResult` so canonical replacements
   stay machine-readable. Rationale: 7.1.2's rules need the command tree; growing
@@ -562,7 +562,7 @@ Delivered surface (verified by the acceptance suite in
   `orthohelp_policy.feature` behavioural suite, golden policy-report and
   agent-context snapshots, unit/property coverage for configuration and
   evaluation, output round-trip coverage, and trybuild API-contract tests.
-- ADR-008, design updates (§3.3, §6.3.2, §12), users'- and developers'-guide
+- ADR-0008, design updates (§3.3, §6.3.2, §12), users'- and developers'-guide
   updates, the Unreleased changelog entries, and the roadmap 7.1.1 tick.
 
 The rounds went to plan: each milestone ended with green gates (recorded per
@@ -701,7 +701,7 @@ Extend `OrthoConfigMetadata` in `cargo-orthohelp/src/metadata.rs` with
 `[package.metadata.ortho_config.policy]`, with `mode = "off" | "warn" | "deny"`
 and an `exceptions` array of tables. Unknown keys inside the policy table are a
 deserialization error (strict), per the D7 discriminator: structural
-configuration problems fail in all modes. ADR-008 records the strictness
+configuration problems fail in all modes. ADR-0008 records the strictness
 trade-off and its version-skew consequence (an older pinned tool hard-fails on
 newer policy keys; 7.1.2+ additions must note a minimum tool version), plus the
 reserved `rules` key (D1).
@@ -805,7 +805,7 @@ packages, matching the existing agent-context behavioural tests.
 
 ### Milestone 5b — documentation, ADR, roadmap
 
-- New ADR-008 (`docs/adr-008-agent-native-policy-configuration.md`, house
+- New ADR-0008 (`docs/adrs/adr-0008-agent-native-policy-configuration.md`, house
   template): records D1 (metadata table surface, reserved `rules` key), D3/D12
   (exception shape, reason confinement), D5/D6 (report channel, shared exit
   code, authoritative signal), D7 (discriminator and finding codes), D9

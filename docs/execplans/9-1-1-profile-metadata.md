@@ -66,7 +66,7 @@ to roadmap 9.1.2 but the type shapes chosen here must not block it.
 - Documentation IR: the intermediate representation (`DocMetadata` in
   `ortho_config/src/docs/ir.rs`) emitted by the derive and bridged by
   `cargo-orthohelp` into the agent context. Versioned independently
-  (`ORTHO_DOCS_IR_VERSION`) per ADR-003.
+  (`ORTHO_DOCS_IR_VERSION`) per ADR-0003.
 - Derive macro: `#[derive(OrthoConfig)]` in `ortho_config_macros`, which
   generates the layer-composition code (`build_compose_layers_impl` in
   `ortho_config_macros/src/derive/load_impl.rs`) and therefore enforces merge
@@ -99,7 +99,7 @@ Hard invariants. Violation requires escalation, not a workaround.
 4. OrthoConfig owns generic mechanics only. No application-specific literals
    (profile names, app names) may enter the library. Downstream applications
    own domain behaviour, mirroring the boundary in RFC 0002
-   (`docs/rfcs/0002-config-layer-resolution-policy.md`).
+   (`docs/rfcs/rfc-0002-config-layer-resolution-policy.md`).
 5. No circular dependencies between workspace crates. The dependency
    direction stays `ortho_config_macros` → (generates code against) →
    `ortho_config`; `cargo-orthohelp` depends on `ortho_config`, never the
@@ -290,7 +290,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   runtime concern, exposed through `SelectedProfile` (D14), which downstream
   `context --json` commands may embed; the static generated context documents
   the mechanism, not the moment. Rationale: keeps the wire change additive
-  while satisfying roadmap 9.1.1; the static/runtime split follows ADR-007;
+  while satisfying roadmap 9.1.1; the static/runtime split follows ADR-0007;
   honest labelling of the Rust-level break replaces the earlier, incorrect "all
   additive" claim. Rejected: a parallel sibling field on `AgentContext` leaving
   `profiles` untouched (permanently confusing vocabulary for a one-time pre-1.0
@@ -345,7 +345,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   Implemented): profile extraction is specified as a consumer of "the ordered
   post-`extends` file values", which is exactly the seam RFC 0002 names
   `FileLayerOutcome`. This plan implements extraction against today's discovery
-  output; ADR-012 records as a design obligation that if RFC 0002 lands,
+  output; ADR-0012 records as a design obligation that if RFC 0002 lands,
   `FileLayerOutcome` must expose the ordered file values profile extraction
   needs, and the extraction helper is written against the ordered layer vector
   so the two can be joined without a change to extraction's own semantics.
@@ -362,7 +362,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   keeps the ordinary candidate walk through `ConfigDiscovery::compose_layers`.
   Routing that walk through the policy engine would change resolution semantics
   rather than perform a mechanical re-seat, so it is left as is; both paths
-  emit the same ordered layer vector. ADR-012's "Relationship with RFC 0002"
+  emit the same ordered layer vector. ADR-0012's "Relationship with RFC 0002"
   section records the reconciliation.
 - D14 — Post-load selection surfacing: opted-in structs gain a generated
   associated function
@@ -375,7 +375,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   `SelectedProfile { name: ProfileName, source: ProfileSource }` and
   `#[non_exhaustive] ProfileSource { Flag, Environment }` are plain runtime
   types without serde implementations: downstream `context --json` commands own
-  their JSON mapping per ADR-003's ownership split, and the users' guide shows
+  their JSON mapping per ADR-0003's ownership split, and the users' guide shows
   the recommended snake_case rendering. Rationale: the original plan asserted
   selection would be "available after load" without designing the surface;
   deciding it now prevents an improvised public API mid-milestone. Rejected:
@@ -431,7 +431,8 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
 - Risk: RFC 0002 later restructures file-layer assembly underneath profile
   extraction. Severity: medium. Likelihood: medium. Mitigation: D13 —
   extraction written against the ordered layer vector, which both discovery
-  paths emit; ADR-012 records the `FileLayerOutcome` obligation, now discharged.
+  paths emit; ADR-0012 records the `FileLayerOutcome` obligation, now
+  discharged.
 - Risk: fixture sprawl — one schema field touches the wire-contract JSON,
   contract-support helpers, round-trip property strategy, the agent-context
   insta snapshot, three `cargo-orthohelp` goldens, and the three
@@ -458,7 +459,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       approved by the maintainer; implementation started.
 - [ ] Optional before approval: run the scaling and operational-cost review
       lens that did not complete.
-- [x] (2026-08-09) Milestone 1: ADR-012 and design documentation. The ADR
+- [x] (2026-08-09) Milestone 1: ADR-0012 and design documentation. The ADR
       (then numbered 011) drafted and accepted; `design.md` precedence
       statements (§3, §4.3, §4.10, §4.17),
       `agent-native-cli-design.md` §6.7/§8.1/§8.2, `contents.md`, and
@@ -640,7 +641,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
          `exceptions` and this branch with `profiles`. Merged into a four-field
          tuple that keeps both `profiles_declaration()` and
          `any_policy_exception()`.
-      4. `docs/contents.md` — both sides added an ADR-008 entry and an ExecPlan
+      4. `docs/contents.md` — both sides added an ADR-0008 entry and an ExecPlan
          entry. Both kept; this branch's ADR renumbered (see below).
       5. `docs/v0-10-0-migration-guide.md` — both sides added a section and a
          link definition. Both kept; the `[users-guide-policy]` definition
@@ -650,22 +651,24 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
          entries kept in order.
 - [x] (2026-09-25) **ADR renumbered 008 → 009.** This is the one genuine
       semantic collision of the rebase: both this branch and `main` created
-      `ADR-008`. `main`'s (`adr-008-agent-native-policy-configuration.md`)
+      `ADR-0008`. `main`'s (`../adrs/adr-0008-agent-native-policy-configuration.md`)
       landed 2026-09-24; this branch's profile ADR was authored 2026-08-09 but
       is still unmerged, so the unlanded record yields. The file was renamed to
-      `docs/adr-009-profile-selection-and-layering.md`, its H1 and all link
-      text updated, and every reference repointed: `docs/contents.md`,
+      `docs/adr-009-profile-selection-and-layering.md` at the time, and now
+      lives at `docs/adrs/adr-0012-profile-selection-and-layering.md`. Its H1
+      and all link text were updated, and every reference repointed:
+      `docs/contents.md`,
       `docs/design.md` (3 sites), `docs/roadmap.md`, `docs/agent-native-cli-
       design.md` (4 sites), and this ExecPlan (8 sites). The two
       `agent-native-cli-design.md` mentions that refer to the *policy* ADR
       (the enforcement/advertisement defaults discussion) deliberately kept
-      their `ADR-008` label. `main`'s `[adr-008]` link definition in
+      their `ADR-0008` label. `main`'s `[adr-008]` link definition in
       `contents.md` is untouched. Verified: no `adr-008-profile-selection`
       reference survives anywhere in the tree. (This branch's profile ADR was
       numbered 009 at the time of this entry, and is
-      `adr-012-profile-selection-and-layering.md` after the 2026-10-13 third
-      rebase renumber, which found `main` holding both ADR-010 and the
-      identifier-artefact ADR that claimed 011 first.)
+      `docs/adrs/adr-0012-profile-selection-and-layering.md` after the
+      2026-10-13 third rebase renumber, which found `main` holding both
+      ADR-0010 and the identifier-artefact ADR that claimed 011 first.)
 - [x] (2026-09-25) Rebase verified before gate re-run: `origin/main` is an
       ancestor of the branch head, the tree is clean, no conflict markers
       survive anywhere in the repository, `cargo metadata --locked` exits 0,
@@ -904,7 +907,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       because it never reports an unknown profile. The only scenario that
       requires a parse error and an unknown-profile error to coexist is the
       malformed *flag* case, which has a valid config file and is unaffected,
-      so ADR-012's "parse errors take precedence" rule still holds. Regression
+      so ADR-0012's "parse errors take precedence" rule still holds. Regression
       tests `discovery_failure_suppresses_the_unknown_profile_error` and
       `no_discovery_failure_still_reports_the_unknown_profile` pin both sides.
 - [x] (2026-09-28) Rebased onto `origin/main` (`0c498068`) as instructed, then
@@ -1018,7 +1021,9 @@ Progress entries from milestone 1 onward must carry timestamps.
         (`tests.rs:313`). Fixed in `b2a23ea7`.
       - *"is able to"* (4253415124) — removed tree-wide; the ADR the finding
         anchored at has been renumbered `docs/adr-011-…` → `adr-012-…`.
-        Fixed in `8308fc61`.
+        It now lives at
+        `docs/adrs/adr-0012-profile-selection-and-layering.md`. Fixed in
+        `8308fc61`.
       - *`EnvVariable` retention* (4253415129) — `retain_environment_values`
         splits the two call sites (`cli.rs:43` `false`, `cli.rs:173` `true`),
         with the regression scenario at
@@ -1088,10 +1093,10 @@ Progress entries from milestone 1 onward must carry timestamps.
          downstream code can consume the result and its public fields through
          type inference. The qualification is about nameability, not access,
          and it does not establish a need for the proposed refactor.
-      The D13 re-seat obligation is already recorded in ADR-012 and the
+      The D13 re-seat obligation is already recorded in ADR-0012 and the
       helper is written against the ordered layer vector, so the eventual
       re-seat is tracked rather than lost. No new issue raised: filing one
-      against a documented, tracked obligation would duplicate ADR-012.
+      against a documented, tracked obligation would duplicate ADR-0012.
       Both dispositions (CodeScene and Domain Architecture) were posted to
       their threads and to the PR as reconciliation comments.
 - [x] (2026-10-13) Reconciled the pre-merge walkthrough (comment 5861267343,
@@ -1262,7 +1267,7 @@ Progress entries from milestone 1 onward must carry timestamps.
   (`ortho_config/src/discovery/load.rs`) maps each `(value, path)` entry to its
   own `MergeLayer::file` with the source path attached. Impact: D12's rule is
   implementable directly against `DiscoveryLayersOutcome.value`; no escalation
-  per tolerance 6 was needed, and ADR-012 records the confirmed chain order.
+  per tolerance 6 was needed, and ADR-0012 records the confirmed chain order.
 - Observation (2026-08-09, milestone 1): the `markdownlint` gate embeds the
       `typos` spelling gate, whose first run over the milestone-1 diff flagged
       `recognize` in this plan (Oxford spelling requires `-ize`). Evidence:
@@ -1360,9 +1365,10 @@ Progress entries from milestone 1 onward must carry timestamps.
 - Observation (2026-09-25, second rebase): two branches can allocate the same
       ADR number, and git reports that as a clean merge rather than a conflict.
       Evidence: this branch added `docs/adr-008-profile-selection-and-
-      layering.md` on 2026-08-09; `main` added
-      `docs/adr-008-agent-native-policy-configuration.md` on 2026-09-24. The
-      rebase produced *two* distinct `ADR-008` records with no conflict marker
+      layering.md` on 2026-08-09; that record is now
+      `docs/adrs/adr-0012-profile-selection-and-layering.md`. `main` added
+      `docs/adrs/adr-0008-agent-native-policy-configuration.md` on 2026-09-24. The
+      rebase produced *two* distinct `ADR-0008` records with no conflict marker
       anywhere, because the filenames differ and neither commit modified the
       other's file — the collision was visible only in the shared
       `docs/contents.md` ADR list, which is where it was caught. Impact: an ADR
@@ -1594,8 +1600,8 @@ Progress entries from milestone 1 onward must carry timestamps.
 - Observation (2026-10-12, ADR numbering): `main` has now claimed **both** 009
       and 010, so this branch's profile ADR moved 009 → **011**, the third
       number it has held (008 → 009 → 011). `main`'s
-      `adr-009-linux-build-test-runner-placement.md` landed 2026-09-29
-      (`89996787`, #534) and `adr-010-behavioural-metadata-attribute-surface.md`
+      `../adrs/adr-0009-linux-build-test-runner-placement.md` landed 2026-09-29
+      (`89996787`, #534) and `../adrs/adr-0010-behavioural-metadata-attribute-surface.md`
       arrived with the 7.2.1 work, so no number at or below 010 is free. The
       rename follows the 7.2.1 precedent exactly: the file and H1 moved, every
       live citation was repointed, and the three in-document notes that
@@ -1733,7 +1739,7 @@ Progress entries from milestone 1 onward must carry timestamps.
   resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
   was needed. Status moved to APPROVED; milestone work proceeds per the plan.
   Date/Author: 2026-08-07, implementing agent.
-- Decision: milestone 1 (ADR-012 and design documentation) completed and the
+- Decision: milestone 1 (ADR-0012 and design documentation) completed and the
   ADR (then numbered 011) flipped to Accepted. The ADR was verified against the
   approved plan — decisions D1–D8 and D11–D15, the five-tier merge order, the
   reserved selector projections, the migration and rollback stories — and the
@@ -1919,7 +1925,7 @@ experiment settled it rather than argument:
 selector reaches profile `ci` and yields 7, distinguishing it from the struct
 default 1 and the file base 3) and then a case with a `0xFF`-suffixed selector,
 which fails with "invalid UTF-8" rather than returning the base value. The doc
-comment and ADR-012's known-risks list now record why the two paths report
+comment and ADR-0012's known-risks list now record why the two paths report
 through different channels on purpose, so the same misreading does not
 regenerate the row.
 
@@ -1963,7 +1969,7 @@ The workspace (`/` is the repository root) contains:
   profiles), §8.1 (schema v1 defaulting table), and §8.2 (compatibility policy,
   including the null-versus-omitted asymmetry paragraph that milestone 1
   amends), `docs/design.md` §3, §4.10 and §4.17 (current four-tier precedence
-  statements), `docs/roadmap.md` §9.1, ADR-003 (schema ownership), ADR-007
+  statements), `docs/roadmap.md` §9.1, ADR-0003 (schema ownership), ADR-0007
   (`context --json` naming), RFC 0002 (file-layer resolution policy,
   Implemented).
 
@@ -1992,19 +1998,19 @@ First, run the D12 spike (read-only): confirm in `ortho_config/src/discovery/`
 and the generated layer code that per-file values survive `extends` resolution
 as distinct layers. If not, stop (tolerance 6).
 
-Then write `docs/adr-012-profile-selection-and-layering.md` following the ADR
-template in `docs/documentation-style-guide.md`. Author it as Proposed in the
-first commit; flip to Accepted in the same milestone once its text is verified
-against the approved plan. It must capture D1–D8 and D11–D15, including: the
-exact five-tier merge order; per-file profile layers (D2); the reserved
-`profile` root key and selector-stripping rule (constraint 7); the subcommand
-boundary and `cmds` rejection (D11); the `extends` rule (D12); the RFC 0002
-`FileLayerOutcome` obligation (D13); the flag-equals-default resolution (risk
-3); the Rust-level break on `AgentContext.profiles` with its migration note for
-§2.2 soft-tier consumers (Weaver/Netsuke adapters), including the rollback
-story: removing `#[ortho_config(profiles)]` restores pre-profile behaviour at
-the cost of deleting the `--profile` flag users may have scripted against, and
-flips agent context back to unsupported.
+Then write `docs/adrs/adr-0012-profile-selection-and-layering.md` following the
+ADR template in `docs/documentation-style-guide.md`. Author it as Proposed in
+the first commit; flip to Accepted in the same milestone once its text is
+verified against the approved plan. It must capture D1–D8 and D11–D15,
+including: the exact five-tier merge order; per-file profile layers (D2); the
+reserved `profile` root key and selector-stripping rule (constraint 7); the
+subcommand boundary and `cmds` rejection (D11); the `extends` rule (D12); the
+RFC 0002 `FileLayerOutcome` obligation (D13); the flag-equals-default
+resolution (risk 3); the Rust-level break on `AgentContext.profiles` with its
+migration note for §2.2 soft-tier consumers (Weaver/Netsuke adapters),
+including the rollback story: removing `#[ortho_config(profiles)]` restores
+pre-profile behaviour at the cost of deleting the `--profile` flag users may
+have scripted against, and flips agent context back to unsupported.
 
 Update `docs/design.md` precedence statements (§3 provider list, §4.10
 `extends` ordering, §4.17) to insert the selected-profile tier, marked as
@@ -2272,7 +2278,7 @@ Every milestone is an ordinary commit on `9-1-1-profile-metadata`; recovery is
 `git revert` or resetting to the previous milestone commit. Snapshot updates go
 through `cargo insta review` so accidental acceptance is visible in the diff.
 No step mutates state outside the worktree except `/tmp` logs. The downstream
-rollback story (removing the opt-in attribute) is recorded in ADR-012
+rollback story (removing the opt-in attribute) is recorded in ADR-0012
 (milestone 1).
 
 ## Artefacts and notes
@@ -2498,7 +2504,7 @@ Read before implementing:
   contract and its compatibility policy.
 - `docs/design.md` §3, §4.3, §4.10, §4.11, §4.17 — merge architecture and
   the subcommand path.
-- `docs/rfcs/0002-config-layer-resolution-policy.md` — ownership boundary
+- `docs/rfcs/rfc-0002-config-layer-resolution-policy.md` — ownership boundary
   and the D13 seam.
 - `docs/documentation-style-guide.md` — ADR template and Markdown rules.
 - `docs/rust-testing-with-rstest-fixtures.md`,
@@ -2516,7 +2522,7 @@ Skills to load during implementation: `leta` (navigation/refactoring),
 `rust-router` then `rust-types-and-apis` (newtype and schema shapes),
 `rust-errors` (new error variants), `rust-unit-testing` (rstest/googletest/
 insta discipline), `proptest` (precedence invariant), `arch-crate-design`
-(boundary checks), `arch-decision-records` (ADR-012),
+(boundary checks), `arch-decision-records` (ADR-0012),
 `addressing-whitaker-findings` (if the lint gate reports findings),
 `commit-message`, `comenq-coderabbit` (review loop), and `rebase` if `main`
 moves.
@@ -2572,11 +2578,11 @@ the 7.1.1 agent-native policy configuration work (#416), which had landed while
 the first review round was in flight. Six files conflicted and were resolved by
 keeping both branches' intent; the profile and policy features are orthogonal
 apart from their shared extension points in `agent_context`. The one real
-collision was an ADR number: both branches had created `ADR-008`, which git
+collision was an ADR number: both branches had created `ADR-0008`, which git
 reported as a *clean* merge because the filenames differ. This branch's
-unmerged record yielded and was renumbered to `ADR-009` — it is
-`adr-012-profile-selection-and-layering.md` after the 2026-10-13 renumber —
-with every reference repointed and the two policy-ADR mentions in
+unmerged record yielded and was renumbered to `ADR-0009` — it is
+`../adrs/adr-0012-profile-selection-and-layering.md` after the 2026-10-13
+renumber — with every reference repointed and the two policy-ADR mentions in
 `agent-native-cli-design.md` deliberately left at 008. `Cargo.lock` took
 `main`'s resolution plus this branch's two dev dependencies. Details in
 Progress and Surprises & discoveries.

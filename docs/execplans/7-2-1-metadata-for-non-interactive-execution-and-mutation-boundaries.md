@@ -71,7 +71,7 @@ escalation, not workarounds.
   removed. New code maps onto them.
 - Dependency direction must not change: `ortho_config_macros` →
   `ortho_config` → `cargo-orthohelp`. The `ortho_config::docs` module must not
-  depend on `ortho_config::agent_context` or vice versa (ADR-003 ownership
+  depend on `ortho_config::agent_context` or vice versa (ADR-0003 ownership
   split); the bridge transform in `cargo-orthohelp` is the only place the two
   meet. Schema types owned by `cargo_orthohelp::policy` must not gain a `clap`
   derive; the CLI layer defines its own value enums. No new circular dependency
@@ -138,7 +138,7 @@ escalation, not workarounds.
   (7.2.2 dual renderer, 7.2.3 structured output) that will add more metadata.
   Severity: medium. Likelihood: medium. Mitigation: use one nested
   `behaviour(...)` attribute group scoped to runtime execution semantics only,
-  with the admission criterion recorded in ADR-010 (output-contract metadata
+  with the admission criterion recorded in ADR-0010 (output-contract metadata
   gets sibling groups such as `output(...)` in later items).
 - Risk: `#[ortho_config(...)]` parsing silently discards unknown keys at
   struct and field level (`discard_unknown` in
@@ -204,7 +204,7 @@ escalation, not workarounds.
   groups is rejected. Parser unit tests cover both group orders; trybuild
   fixture `behaviour_noninteractive_bypass_split.rs` (+ `.stderr`) added.
 - [x] Milestone F: documentation (design doc §8.1 rows, users' guide,
-  developers' guide, ADR-010), roadmap ticked, final gates, final CodeRabbit
+  developers' guide, ADR-0010), roadmap ticked, final gates, final CodeRabbit
   pass.
 - [x] (2026-08-16) Milestone F closure: users' guide gained
   `behaviour(...)` and `--check-agent-native[=off|warn|deny]` sections (report
@@ -277,8 +277,8 @@ escalation, not workarounds.
   channel, and the exit-code-3 contract were removed from `docs/users-guide.md`,
   `docs/developers-guide.md`, `docs/cargo-orthohelp-design.md`,
   `docs/agent-native-cli-design.md`, `docs/v0-10-0-migration-guide.md`, and the
-  behavioural ADR-010. The `guide-check-report` example gained the `exceptions`
-  and `vocabulary` blocks the shipped evaluator emits, and
+  behavioural ADR-0010. The `guide-check-report` example gained the
+  `exceptions` and `vocabulary` blocks the shipped evaluator emits, and
   `guide-check-command` now shows the actual library call, because the
   behaviour rules consume a compiled agent context that the policy-only run
   deliberately does not build.
@@ -349,8 +349,9 @@ escalation, not workarounds.
   rationale are recorded under Revision 6 below.
 - [x] (2026-10-02) Renumbered the behavioural ADR a second time, from 009 to
   **010**, because `main` independently published
-  `adr-009-linux-build-test-runner-placement.md`. See Revision 6 for why main's
-  number cannot move and how the five live references were traced and updated.
+  `../adrs/adr-0009-linux-build-test-runner-placement.md`. See Revision 6 for
+  why main's number cannot move and how the five live references were traced
+  and updated.
 - [x] (2026-10-02) Repaired two gate failures the replay introduced but could
   not see, in `2977e75e`. The gates on the rebased head were run first and
   found both; each was a pair of textually disjoint changes whose interaction
@@ -379,7 +380,7 @@ escalation, not workarounds.
 - [x] (2026-10-12) Closed the three completeness-assessment gaps as commit
   `b746a3e6`: the behaviour-report snapshot (named-file, with an
   `every_rule_context` fixture whose commands each isolate one rule), the
-  ADR-010 goal corrected to
+  ADR-0010 goal corrected to
   library-API-with-deferred-`PolicyInputs`-integration, and the scope exception
   recorded in the decision log with measured figures. All six gates green; push
   verified over SSH against the remote head.
@@ -438,7 +439,7 @@ escalation, not workarounds.
   and `range` onto each result, but the implemented `PolicyResult` nests them
   under `location`. Evidence: `cargo-orthohelp/src/policy/mod.rs` versus design
   doc lines 248–288. Impact: milestone E follows the implemented Rust types
-  (the schema owner per ADR-003) and milestone F corrects the design-doc
+  (the schema owner per ADR-0003) and milestone F corrects the design-doc
   example to match.
 - Observation: `init_tracing` in `cargo-orthohelp/src/main.rs` uses the
   `tracing_subscriber::fmt()` default writer, which is stdout, and the codebase
@@ -529,16 +530,17 @@ escalation, not workarounds.
   `policy-report.json` into `out_dir`, and signals deny findings with
   `OrthohelpError::PolicyViolation`; 7.2.1 took the mode inline on the flag,
   wrote the report to stdout with a stderr summary, and used
-  `std::process::exit(3)`. Both also claimed **ADR-008** for different
+  `std::process::exit(3)`. Both also claimed **ADR-0008** for different
   decisions (ours was numbered 009 at the time of this entry, and is
-  `adr-010-behavioural-metadata-attribute-surface.md` after the Revision 6
-  renumber; main's is `adr-008-agent-native-policy-configuration.md`, already
-  indexed in `docs/contents.md`), and both created a
-  `cargo-orthohelp/src/generation.rs` with different contents (ours untracked).
-  This is exactly the contingency the Decision log anticipated when it recorded
-  that the flag "carries the mode" only "because the 7.1.1 policy configuration
-  file does not exist yet, so when 7.1.1 lands the flag becomes an override" —
-  7.1.1 has now landed, so that sentence is the resolution direction to follow.
+  `../adrs/adr-0010-behavioural-metadata-attribute-surface.md` after the
+  Revision 6 renumber; main's is
+  `../adrs/adr-0008-agent-native-policy-configuration.md`, already indexed in
+  `docs/contents.md`), and both created a `cargo-orthohelp/src/generation.rs`
+  with different contents (ours untracked). This is exactly the contingency the
+  Decision log anticipated when it recorded that the flag "carries the mode"
+  only "because the 7.1.1 policy configuration file does not exist yet, so when
+  7.1.1 lands the flag becomes an override" — 7.1.1 has now landed, so that
+  sentence is the resolution direction to follow.
 - Observation (2026-09-25): the Whitaker `module_max_lines` lint *does* fire for
   nested `mod` items while exempting crate roots. Adding 12 lines of doc
   comments to `cargo-orthohelp/src/agent_context/tests.rs` (393 -> 405) failed
@@ -563,11 +565,11 @@ escalation, not workarounds.
   execution semantics only; later roadmap items add sibling groups (for example
   `output(...)`) rather than growing this one indefinitely. Rationale:
   struct-level attributes already flow through the `StructAttrs`/
-  `DocStructAttrs` parse path and reach subcommand metadata via the ADR-005
+  `DocStructAttrs` parse path and reach subcommand metadata via the ADR-0005
   companion-trait delegation (`metadata_expr` overwrites only `app_name` and
   `about_id`, verified in review). Variant-level attributes have no parse path
   today and would duplicate state. The admission criterion is recorded in
-  ADR-010. Date/Author: 2026-08-06, planning session; scope rule added after
+  ADR-0010. Date/Author: 2026-08-06, planning session; scope rule added after
   expert review.
 - Decision: represent §6.1's three states ("non-interactive, may prompt, or
   requires a bypass flag") as the pair `interaction` × `bypass`:
@@ -576,9 +578,9 @@ escalation, not workarounds.
   treats the bypass flag as a property ("which flag bypasses prompting"), not a
   distinct mode; adding a v1 wire-enum variant needs an unknown-variant
   fallback contract for no expressive gain. This mirrors the MCP annotation
-  style of orthogonal hints. ADR-010 records the explicit mapping so the choice
-  is not reopened. Date/Author: 2026-08-06, planning session; confirmed by
-  expert review.
+  style of orthogonal hints. ADR-0010 records the explicit mapping so the
+  choice is not reopened. Date/Author: 2026-08-06, planning session; confirmed
+  by expert review.
 - Decision: the derive rejects `interaction = "non_interactive"` combined
   with `bypass = ...` as a contradictory declaration (compile error), and the
   destructive-bypass lint exempts commands declared `non_interactive`.
@@ -590,7 +592,7 @@ escalation, not workarounds.
   review.
 - Decision: bump `ORTHO_DOCS_IR_VERSION` from `"1.1"` to `"1.2"` for the new
   optional `behaviour` block, and record the IR compatibility reasoning in
-  ADR-010, including the skew contract: an older reader given 1.2 IR ignores
+  ADR-0010, including the skew contract: an older reader given 1.2 IR ignores
   `behaviour` (no `deny_unknown_fields`); a newer reader given 1.1 IR gets
   `behaviour: None` via `#[serde(default)]`. Rationale: prior execplans treat
   IR schema additions as requiring an IR version bump plus an ADR; the design
@@ -624,7 +626,7 @@ escalation, not workarounds.
   `ortho_config::agent_context::PolicyMode`). Rationale: the 7.1.1 policy
   configuration file does not exist yet, so the flag carries the mode; when
   7.1.1 lands the flag becomes an override. Keeping clap out of the policy
-  module preserves the ADR-003 ownership split and matches the existing
+  module preserves the ADR-0003 ownership split and matches the existing
   `OutputFormat` precedent; `require_equals` avoids the optional-value
   ambiguity footgun. Date/Author: 2026-08-06, revised after expert review.
 - Decision: `check_behaviour` is a total function: for `PolicyMode::Off` it
@@ -668,18 +670,18 @@ escalation, not workarounds.
   migration a breaking change — so the string shape must be chosen now.
   Trade-off accepted: the tri-state bool's "declared absent" state is lost;
   absence of declaration means unknown, and an explicit declared-absent marker
-  is deferred until a consumer needs it (recorded in ADR-010). Date/Author:
+  is deferred until a consumer needs it (recorded in ADR-0010). Date/Author:
   2026-08-06, revised after expert review (two review lenses disagreed;
   symmetry and §8.2 irreversibility decided it).
 - Decision: `mutation = "submit"` neither requires nor implies the existing
   `async_submission` contract on `AgentCommand`; 7.2.1 does not couple them and
-  the lint does not cross-check them. Recorded in ADR-010 so 7.2.3 inherits a
+  the lint does not cross-check them. Recorded in ADR-0010 so 7.2.3 inherits a
   stated position rather than an ambiguity. Date/Author: 2026-08-06, added
   after expert review.
 - Decision: the declared bypass grammar is pinned: a bypass value must match
   `--[a-z0-9]+(-[a-z0-9]+)*`. The same grammar applies to `dry_run` values.
   Rationale: "plausible long flag" is unreviewable; a pinned grammar goes in
-  ADR-010 and the trybuild `.stderr` goldens. Date/Author: 2026-08-06, added
+  ADR-0010 and the trybuild `.stderr` goldens. Date/Author: 2026-08-06, added
   after expert review.
 - Decision: use `proptest` for serde round-trip invariants of the new types
   and the sampled no-panic/severity-monotonicity of `check_behaviour`; skip both
@@ -876,7 +878,7 @@ labelled explicitly. The relevant crates are:
   remains absent at this layer. That module also declares the traits
   `OrthoConfigDocs` (`get_doc_metadata() -> DocMetadata`) and
   `OrthoConfigSubcommandDocs`
-  (`get_subcommand_doc_metadata() -> Vec<DocMetadata>`, ADR-005).
+  (`get_subcommand_doc_metadata() -> Vec<DocMetadata>`, ADR-0005).
   `ortho_config/src/agent_context/mod.rs` owns the compact agent-facing schema:
   `AgentContext`, `AgentCommand`, and
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION = "1"`. The existing `interaction_mode`
@@ -1072,7 +1074,7 @@ Follow the documented end-to-end pattern for a new struct-level key (the
    `ortho_config_macros/src/derive/parse/tests/`; IR-shape tests in
    `ortho_config/tests/docs_ir.rs` and
    `ortho_config/tests/docs_ir_subcommands.rs` proving behaviour metadata flows
-   through the ADR-005 subcommand delegation unchanged, including a test
+   through the ADR-0005 subcommand delegation unchanged, including a test
    pinning that an args struct reused as both root and subcommand carries
    identical behaviour in both positions (correct by design; the test stops
    anyone "fixing" it later). Trybuild compile-fail fixtures with `.stderr`
@@ -1243,7 +1245,7 @@ error, recorded as the red evidence.
    rows (status v1, default `null`) to the §8.1 table; correct the §3.3 example
    to the implemented `location` nesting; note in §6.1/§6.4 that the metadata
    is now realized.
-2. New `docs/adr-010-behavioural-metadata-attribute-surface.md` (per
+2. New `docs/adrs/adr-0010-behavioural-metadata-attribute-surface.md` (per
    `docs/documentation-style-guide.md`): records the attribute shape and its
    admission criterion (runtime execution semantics only), the §6.1 three-state
    mapping onto the interaction × bypass pair, the non-interactive/bypass
@@ -1459,7 +1461,7 @@ match arms, the grammar/contradiction checks, the generate-side
 `build_behaviour_metadata`, and the emission wiring in `generate_docs_impl`,
 all 10 parser unit tests pass and the full `ortho_config_macros` lib suite is
 green (133 passed). The integration tests in `ortho_config/tests/docs_ir.rs` (3
-new derive-emission cases) and `docs_ir_subcommands.rs` (3 new ADR-005
+new derive-emission cases) and `docs_ir_subcommands.rs` (3 new ADR-0005
 delegation cases, including the reused-args pinning test) pass. Full workspace
 `make test` reports 902 passed / 0 failed (up from 886 in Milestone B).
 
@@ -1471,7 +1473,7 @@ Two implementation adaptations worth recording:
   values surfaced as a confusing "expected `=`" parse error.
 - The flag grammar requires the `--` prefix: `strip_prefix("--").unwrap_or(...)`
   would accept a bare word. `unwrap_or("")` makes `force` invalid and `--force`
-  valid, matching ADR-010's pinned grammar.
+  valid, matching ADR-0010's pinned grammar.
 
 Trybuild compile-fail fixtures (7) added under `ortho_config/tests/ui/` with
 `.stderr` goldens: `behaviour_invalid_interaction.rs`,
@@ -1511,7 +1513,7 @@ by the derive, committed as `a2ee0e5` and pushed.
   `generate/docs/mod.rs`. `unreachable!` arms were replaced with total
   `None`-mapping matches during gate fixing (clippy denies `unreachable`).
 - Tests: rstest parser tests (`parse/tests/behaviour_attrs.rs`), derive
-  emission tests in `ortho_config/tests/docs_ir.rs`, ADR-005 subcommand
+  emission tests in `ortho_config/tests/docs_ir.rs`, ADR-0005 subcommand
   delegation tests in `docs_ir_subcommands.rs`, seven trybuild compile-fail
   fixtures (`tests/ui/behaviour_*.rs` + `.stderr`), and an extended doctest in
   `ortho_config/src/docs/mod.rs`.
@@ -1584,7 +1586,7 @@ At the end of the work these items exist:
   `policy-report.json`; tracing on stderr). The inline-mode flag and the
   `cargo_orthohelp::cli::CheckMode` enum this entry originally recorded were
   removed in the 2026-09-25 rebase reconciliation.
-- `docs/adr-010-behavioural-metadata-attribute-surface.md`, updated design
+- `docs/adrs/adr-0010-behavioural-metadata-attribute-surface.md`, updated design
   doc, users' guide, developers' guide, and a ticked roadmap entry 7.2.1.
 
 No new external dependencies.
@@ -1609,7 +1611,7 @@ three panels). What changed and why:
   errors (1) and clap usage errors (2); BDD asserts the exact code plus a
   well-formed report.
 - Replaced direct reuse of the schema `PolicyMode` in clap with a CLI-layer
-  `CheckMode` value enum plus `From` impl, keeping clap out of the ADR-003
+  `CheckMode` value enum plus `From` impl, keeping clap out of the ADR-0003
   schema type; added `require_equals = true`.
 - Changed `dry_run` from `Option<bool>` to a flag-name string
   (`dry_run_flag: Option<String>`), symmetrical with `bypass`, because §8.2
@@ -1626,7 +1628,7 @@ three panels). What changed and why:
   emitted context's `policy.agent_native` stays at its default until 7.1.1, and
   stated the bridge-failure contract (no report emitted).
 - Widened the IR-version work to replace hard-coded `"1.1"` literals with
-  the constant; documented the version-skew contract for ADR-010; isolated the
+  the constant; documented the version-skew contract for ADR-0010; isolated the
   two snapshot-churn sources in separate commits; softened the
   independent-revert claim.
 - Added trybuild fixtures for the unknown-nested-key, contradiction, and
@@ -1634,7 +1636,7 @@ three panels). What changed and why:
   of being silently discarded.
 - Expanded Milestone F documentation duties (first-run `undeclared` noise
   warning in the users' guide; stream and exit-code contract in the developers'
-  guide) and the ADR-010 contents list; recorded deferred items (per-code
+  guide) and the ADR-0010 contents list; recorded deferred items (per-code
   summary counts, verb/mutation contradiction advisory, source spans).
 
 Effect on remaining work: milestone count drops to five (B–F); Milestone E
@@ -1650,8 +1652,8 @@ Revised after the rebase reconciliation with the shipped 7.1.1 framework:
   directory) and marked Milestone E as superseded, retaining its text as the
   historical record.
 - Renumbered the behavioural ADR from 008 to 009, because `main` had already
-  published `adr-008-agent-native-policy-configuration.md` and
-  `docs/contents.md` indexed that one. Both files had claimed ADR-008, making
+  published `../adrs/adr-0008-agent-native-policy-configuration.md` and
+  `docs/contents.md` indexed that one. Both files had claimed ADR-0008, making
   every bare prose reference ambiguous.
 - Recorded the integration boundary between the two rule sources in
   `Outcomes & retrospective`: the manifest-driven policy check cannot build the
@@ -1693,7 +1695,7 @@ The two sides now overlap in eight files, and two of those overlaps share
 nothing but their path:
 
 - **`docs/contents.md`.** Both sides insert a new ADR entry immediately after
-  ADR-008 and both append a link definition after `[adr-008]`. The two
+  ADR-0008 and both append a link definition after `[adr-008]`. The two
   insertions land at the same lines, and the two link definitions both use
   `[adr-009]` while resolving to *different* files. A textual merge of this
   hunk cannot be correct: whichever definition wins would silently repoint the
@@ -1703,16 +1705,16 @@ nothing but their path:
   the other relative to the shared base, so the usual byte-identity argument
   from Revision 5 does not apply and the file must be regenerated.
 
-**The ADR-009 collision, and why it recurs.** Revision 4 renumbered this
+**The ADR-0009 collision, and why it recurs.** Revision 4 renumbered this
 branch's behavioural ADR from 008 to 009 because `main` had published
-`adr-008-agent-native-policy-configuration.md`. The numbering scheme is
-first-come across the whole repository, and `main` has since claimed 009 as
-well: `adr-009-linux-build-test-runner-placement.md` shipped in the same
-window. Both decisions are real, independent, and published on `main` already,
-so `main`'s assignment cannot move — a public document number that other
-branches may already cite must not be re-used for a different subject. This
-branch's ADR is the movable one, and there is no higher number in the tree
-(`adr-010` is free), so the behavioural ADR becomes **ADR-010**. Five live
+`../adrs/adr-0008-agent-native-policy-configuration.md`. The numbering scheme
+is first-come across the whole repository, and `main` has since claimed 009 as
+well: `../adrs/adr-0009-linux-build-test-runner-placement.md` shipped in the
+same window. Both decisions are real, independent, and published on `main`
+already, so `main`'s assignment cannot move — a public document number that
+other branches may already cite must not be re-used for a different subject.
+This branch's ADR is the movable one, and there is no higher number in the tree
+(`adr-010` is free), so the behavioural ADR becomes **ADR-0010**. Five live
 references follow it: two in `docs/agent-native-cli-design.md`, one in
 `docs/contents.md`, one in `docs/developers-guide.md`, and the execplan's own
 historical notes.
@@ -1768,7 +1770,7 @@ the wrap, which is why four of `main`'s added lines appear "missing" under a
 naive line-equality check while the paragraph is in fact a superset of main's.
 
 *Conflict 2 — `docs/contents.md`, in `104734b5`.* Both sides inserted an ADR
-list entry immediately after ADR-008 and both appended an `[adr-009]` link
+list entry immediately after ADR-0008 and both appended an `[adr-009]` link
 definition pointing at different files. This is not a textual conflict that any
 merge tool can settle correctly, because the *meaning* of the shared label
 differs. Nor was it the only site of the collision: the same number was claimed
@@ -1782,21 +1784,21 @@ exists at the target. References were enumerated by grep rather than from
 memory, which is how the two Rust doc comments in the derive and agent-context
 test modules were found alongside the three markdown sites:
 
-- `docs/contents.md` — list entry renamed to ADR-010; main's `[adr-009]` link
-  definition kept as merged; ADR-010 uses an inline link, matching the style
-  ADR-007 already uses in the same list.
+- `docs/contents.md` — list entry renamed to ADR-0010; main's `[adr-009]` link
+  definition kept as merged; ADR-0010 uses an inline link, matching the style
+  ADR-0007 already uses in the same list.
 - `docs/agent-native-cli-design.md` (2 sites), `docs/developers-guide.md`,
-  `docs/design.md` — renumbered to ADR-010.
+  `docs/design.md` — renumbered to ADR-0010.
 - `cargo-orthohelp/src/agent_context/tests.rs`,
   `ortho_config/src/agent_context/tests_round_trip.rs`,
   `ortho_config_macros/src/derive/parse/behaviour_attrs.rs` and its test module
-  — five bare `ADR-009` citations in doc comments renumbered to `ADR-010`.
+  — five bare `ADR-0009` citations in doc comments renumbered to `ADR-0010`.
 - The execplan's own historical entries were renumbered too, and the one note
   that recorded the *original* 008→009 decision was reworded instead, since a
   blanket rename would have made it self-contradictory: it now says the ADR
   "was numbered 009 at the time of this entry, and is
-  `adr-010-behavioural-metadata-attribute-surface.md` after the Revision 6
-  renumber".
+  `../adrs/adr-0010-behavioural-metadata-attribute-surface.md` after the
+  Revision 6 renumber".
 
 **Audit evidence.**
 

@@ -126,7 +126,7 @@ Stop and escalate (do not work around) when any of these is reached.
    on every new public item with a `# Panics` section; add a `#[should_panic]`
    negative test at the trait/free-function level; record the panic-as-contract
    decision and tie its acceptability to 11.1.3's compile-time `compile_error!`
-   guard (Decision Log D-5, ADR-006 amendment).
+   guard (Decision Log D-5, ADR-0006 amendment).
 2. Risk: the migration silently drops the load-bearing `.with_cmd(&command)`
    enrichment on the `from_arg_matches` error path, degrading the
    missing-subcommand translation (it loses `valid_subcommands`). The two error
@@ -212,7 +212,7 @@ commit. Run gates sequentially (build caching), never in parallel.
   rate-limit message. Log:
   `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-milestone-4.out`.
 - Observation: 2026-06-15 final documentation sweep updated the users' guide,
-  developers' guide, design document, ADR-006, `hello_world` README, and
+  developers' guide, design document, ADR-0006, `hello_world` README, and
   roadmap. `localised_help.rs` now asserts `--help` and `--version` display
   requests exit successfully, write stdout, and leave stderr empty. Final gates
   passed: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
@@ -232,7 +232,7 @@ commit. Run gates sequentially (build caching), never in parallel.
   flattening the example to the default single-segment base (`hello-world-*`)
   deletes the multi-segment base demonstration that 11.1.3's
   `OrthoConfigLocalization` derive depends on, and contradicts the existing
-  users' guide guidance and ADR-006. The free function (D-2) lets the example
+  users' guide guidance and ADR-0006. The free function (D-2) lets the example
   drop the copy-pasted glue *without* abandoning its base. Date/Author:
   2026-06-14, planning session (logisphere-experts panel).
 
@@ -291,10 +291,10 @@ commit. Run gates sequentially (build caching), never in parallel.
   `parse_localized_command` and the `LocalizedParse` methods inherit
   `LocalizeCmd::localize`'s panic on Fluent-unsafe or colliding identifiers. We
   keep the panic (an illegal identifier is a command-declaration bug, per
-  ADR-006 and `identifier.rs`'s module doc) rather than introducing a fallible
+  ADR-0006 and `identifier.rs`'s module doc) rather than introducing a fallible
   `try_*` variant in 11.1.2. We document it loudly and note the ordering risk:
   until 11.1.3 lands the compile-time `compile_error!` guard, 11.1.2 ships a
-  runtime panic with no compile-time check. ADR-006 is amended to record that
+  runtime panic with no compile-time check. ADR-0006 is amended to record that
   the blanket trait widens the reachable panic surface to every `clap::Parser`.
   Rationale: Doggylump failure-mode review. A fallible variant is recorded as
   possible future work, out of scope here. Date/Author: 2026-06-14, planning
@@ -376,8 +376,8 @@ Signposted documentation and skills:
 1. Design: `docs/cli-localization-design.md` §4.1 (identifier convention), §4.2
    (the `try_parse_localized` helpers — the contract for this task), §8.1/§8.2
    (the 11.1.3 derive that this must stay compatible with).
-2. ADR: `docs/adr/adr-006-identifier-derivation-panics.md` (the panic contract
-   to amend, per D-5).
+2. ADR: `docs/adrs/adr-0006-identifier-derivation-panics.md` (the panic
+   contract to amend, per D-5).
 3. Testing guides: `docs/rust-testing-with-rstest-fixtures.md`,
    `docs/rust-doctest-dry-guide.md`,
    `docs/reliable-testing-in-rust-via-dependency-injection.md`,
@@ -388,7 +388,7 @@ Signposted documentation and skills:
    and `arch-crate-design` (public-surface/re-export placement);
    `rust-unit-testing` (rstest fixtures, table tests, googletest/insta); `leta`
    for navigation and the example migration; `arch-decision-records` for the
-   ADR-006 amendment; `pr-creation` for the draft PR.
+   ADR-0006 amendment; `pr-creation` for the draft PR.
 
 ## Plan of work
 
@@ -609,7 +609,7 @@ the `localised_help.rs` snapshots and BDD scenarios are unchanged (Constraint
      and the base-agnostic `parse_localized_command` primitive is documented as
      the seam the trait wraps. Record the naming clarification (env-based method
      is the unsuffixed `try_parse_localized`).
-   - `docs/adr/adr-006-identifier-derivation-panics.md`: amend per D-5 to note
+   - `docs/adrs/adr-0006-identifier-derivation-panics.md`: amend per D-5 to note
      the blanket trait widens the reachable panic surface and the 11.1.3
      ordering relationship.
    - `examples/hello_world/README.md`: update the two `try_parse_localized_env`
