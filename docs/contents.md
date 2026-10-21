@@ -70,7 +70,7 @@
   review the accepted `value_optional` marker, the documentation IR version
   bump, and the rejected alternatives for expressing the new boolean flag
   surface.
-- [ADR-014: Documentation build and process ownership](adrs/adr-0014-documentation-build-ownership.md):
+- [ADR-0014: Documentation build and process ownership](adrs/adr-0014-documentation-build-ownership.md):
   review the test-only build-cache ownership, process supervision, and timeout
   policy for executable documentation.
 - [ADR-0015: Reusable localization runtime](adrs/adr-0015-localization-runtime-boundary.md):
@@ -83,7 +83,7 @@
 - [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
   review the pinned Kani and Verus boundary, the bundled-solver decision, the
   opt-in integration evidence, and the limits of a fixture proof.
-- [ADR-014: Adopt a dated nightly and the development build standard](adr-014-adopt-a-dated-nightly-and-the-development-build-standard.md):
+- [ADR-0014: Adopt a dated nightly and the development build standard](adrs/adr-0014-adopt-a-dated-nightly-and-the-development-build-standard.md):
   review the pinned dated nightly, the Cargo defaults restated in Make recipes,
   the routes kept outside the standard, and build-tool provisioning.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed

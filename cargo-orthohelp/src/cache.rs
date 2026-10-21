@@ -9,6 +9,25 @@ use std::io::Read;
 use crate::error::OrthohelpError;
 use crate::hex::to_lower_hex;
 
+/// Number of digest bytes rendered into the cache-directory name.
+///
+/// The digest names a directory under the workspace target directory, and from
+/// cargo 1.100 every artefact of a build lives under
+/// `target/debug/build/<crate>/<hash>/out/` rather than `target/debug/deps/`.
+/// That layout lengthens every path the linker is handed, and Windows still
+/// applies a 260-character `MAX_PATH` to the file names `link.exe` opens, so a
+/// 64-digit directory name can push an otherwise ordinary build over the
+/// limit. `orthohelp_policy_warn_fixture` reached 262 characters on a hosted
+/// runner and failed with `LNK1104`.
+///
+/// Sixteen bytes (128 bits, 32 digits) halves the directory's contribution.
+/// It remains far wider than the input space: a collision needs two distinct
+/// cache inputs whose digests agree in 128 bits, and the consequences of one
+/// are a stale IR reuse rather than a corrupt result. [`CacheKey::hash`] is
+/// still computed over the full SHA-256 digest, so the truncation happens at
+/// rendering time and cannot mask a defect in how the inputs are combined.
+pub(crate) const CACHE_DIRECTORY_DIGEST_BYTES: usize = 16;
+
 /// Cache key inputs for the bridge IR.
 #[derive(Debug, Clone)]
 pub struct CacheKey {
@@ -25,7 +44,19 @@ pub struct CacheKey {
 }
 
 impl CacheKey {
-    /// Hashes the cache inputs into a stable identifier.
+    /// Hashes the cache inputs into a stable directory name.
+    ///
+    /// The returned identifier is 32 lowercase hexadecimal digits, the leading
+    /// [`CACHE_DIRECTORY_DIGEST_BYTES`] bytes of the SHA-256 digest over every
+    /// input. It is a name, not a security boundary: see that constant for why
+    /// the digest is truncated and what a collision would cost.
+    ///
+    /// # Examples
+    ///
+    /// Two keys differing in any single input hash to different names, so an
+    /// edited package or a changed generator version never reuses the previous
+    /// entry. The example is stated in prose rather than as a doctest because
+    /// the inputs are crate-private.
     pub fn hash(&self) -> String {
         let mut hasher = Sha256::new();
         hasher.update(self.fingerprint.as_bytes());
@@ -37,9 +68,24 @@ impl CacheKey {
             Some(hash) => hasher.update(hash.as_bytes()),
             None => hasher.update(b"none"),
         }
-        to_lower_hex(&hasher.finalize())
+        // Copy the digest prefix into a fixed-size array rather than slicing
+        // it: the workspace denies `clippy::indexing_slicing`, and a total
+        // copy keeps the rendering free of a panic path. `Sha256` always
+        // yields 32 bytes, so the copy is complete in practice; the const
+        // assertion below makes that a compile-time guarantee rather than a
+        // comment.
+        let mut prefix = [0_u8; CACHE_DIRECTORY_DIGEST_BYTES];
+        for (slot, byte) in prefix.iter_mut().zip(hasher.finalize().iter()) {
+            *slot = *byte;
+        }
+        to_lower_hex(&prefix)
     }
 }
+
+const _: () = assert!(
+    CACHE_DIRECTORY_DIGEST_BYTES <= 32,
+    "the cache directory digest cannot be wider than a SHA-256 digest"
+);
 
 /// Computes a hash of the workspace `Cargo.lock`, if present.
 pub fn lockfile_fingerprint(workspace_root: &Utf8Path) -> Result<Option<String>, OrthohelpError> {
@@ -213,142 +259,5 @@ fn try_open_dir(dir: &Dir, path: &Utf8Path) -> Result<Option<Dir>, OrthohelpErro
 }
 
 #[cfg(test)]
-mod tests {
-    //! Tests for cache fingerprinting.
-
-    use super::*;
-    use cap_std::fs_utf8::OpenOptions;
-    use rstest::{fixture, rstest};
-    use std::io::Write;
-
-    /// Error type for cache test helpers; kept generic since these helpers
-    /// only surface diagnostics for test failures, not production callers.
-    type CacheTestError = Box<dyn std::error::Error>;
-
-    /// Well-known SHA-256 digest of `b"abc"`. Pinning a canonical vector keeps
-    /// the digest rendering honest: a self-consistent but wrongly ordered or
-    /// zero-truncated encoder would still satisfy change-detection assertions.
-    const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-
-    #[rstest]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions report fingerprint mismatches more clearly than errors"
-    )]
-    fn fingerprint_changes_on_file_update(
-        temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
-    ) -> Result<(), CacheTestError> {
-        let (_tempdir, root, dir) = temp_root?;
-        dir.create_dir_all("src")?;
-
-        write_file(&dir, "Cargo.toml", "[package]\nname = \"demo\"\n")?;
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 1 }\n")?;
-
-        let first = fingerprint_package(&root)?;
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 2 }\n")?;
-        let second = fingerprint_package(&root)?;
-
-        assert_ne!(first, second, "fingerprint should change when files change");
-        assert!(
-            is_sha256_hex(&first),
-            "package fingerprint should render as lowercase hex: {first}"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions report fingerprint mismatches more clearly than errors"
-    )]
-    fn lockfile_fingerprint_matches_known_digest_vector(
-        temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
-    ) -> Result<(), CacheTestError> {
-        let (_tempdir, root, dir) = temp_root?;
-        write_file(&dir, "Cargo.lock", "abc")?;
-
-        let fingerprint = lockfile_fingerprint(&root)?;
-
-        assert_eq!(fingerprint.as_deref(), Some(ABC_SHA256));
-        Ok(())
-    }
-
-    #[rstest]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions report fingerprint mismatches more clearly than errors"
-    )]
-    fn lockfile_fingerprint_is_absent_without_a_lockfile(
-        temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
-    ) -> Result<(), CacheTestError> {
-        let (_tempdir, root, _dir) = temp_root?;
-
-        let fingerprint = lockfile_fingerprint(&root)?;
-
-        assert_eq!(fingerprint, None, "absent lockfile should not fingerprint");
-        Ok(())
-    }
-
-    #[rstest]
-    fn cache_key_hash_renders_lowercase_hex() {
-        let hash = cache_key().hash();
-
-        assert!(
-            is_sha256_hex(&hash),
-            "cache key hash should be 64 lowercase hex digits: {hash}"
-        );
-    }
-
-    #[rstest]
-    #[case::fingerprint(CacheKey { fingerprint: "other".to_owned(), ..cache_key() })]
-    #[case::root_type(CacheKey { root_type: "workspace".to_owned(), ..cache_key() })]
-    #[case::tool_version(CacheKey { tool_version: "0.9.0".to_owned(), ..cache_key() })]
-    #[case::ir_version(CacheKey { ir_version: "2".to_owned(), ..cache_key() })]
-    #[case::lockfile_hash(CacheKey { lockfile_hash: None, ..cache_key() })]
-    fn cache_key_hash_tracks_every_input(#[case] varied: CacheKey) {
-        assert_ne!(
-            cache_key().hash(),
-            varied.hash(),
-            "hash should change when any input changes"
-        );
-    }
-
-    /// Baseline cache key whose fields each differ, so a hash that ignores or
-    /// transposes one field is detectable.
-    fn cache_key() -> CacheKey {
-        CacheKey {
-            fingerprint: "fingerprint".to_owned(),
-            root_type: "package".to_owned(),
-            tool_version: "0.8.0".to_owned(),
-            ir_version: "1".to_owned(),
-            lockfile_hash: Some("lockfile".to_owned()),
-        }
-    }
-
-    /// Reports whether `value` is a 64-digit lowercase hexadecimal string, the
-    /// shape every SHA-256 digest in this module must render as.
-    fn is_sha256_hex(value: &str) -> bool {
-        value.len() == 64
-            && value
-                .bytes()
-                .all(|digit| digit.is_ascii_digit() || (b'a'..=b'f').contains(&digit))
-    }
-
-    #[fixture]
-    fn temp_root() -> Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError> {
-        let tempdir = tempfile::tempdir()?;
-        let root = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
-            .map_err(|path| format!("tempdir path is not UTF-8: {}", path.display()))?;
-        let dir = Dir::open_ambient_dir(&root, ambient_authority())?;
-        Ok((tempdir, root, dir))
-    }
-
-    fn write_file(dir: &Dir, path: &str, contents: &str) -> Result<(), CacheTestError> {
-        let mut file = dir.open_with(
-            path,
-            OpenOptions::new().write(true).create(true).truncate(true),
-        )?;
-        file.write_all(contents.as_bytes())?;
-        Ok(())
-    }
-}
+#[path = "cache_tests.rs"]
+mod tests;
