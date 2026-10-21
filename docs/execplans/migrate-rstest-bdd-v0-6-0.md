@@ -105,13 +105,13 @@ Thresholds that trigger escalation when breached.
 
 Known uncertainties identified upfront, with mitigations.
 
-- Risk: the step-return classification change (ADR-019) alters runtime
-  behaviour for the 175 `-> Result<()>` steps, whose `Ok(())` payload now
-  becomes eligible to override a matching `()`. This is benign only while at
-  most one `Slot<()>` is in scope per scenario. Severity: medium Likelihood:
-  medium Mitigation: enumerate every `Slot<()>` fixture and the scenarios that
-  bind them; run the behavioural suite and compare per-scenario outcomes, not
-  merely the aggregate pass count.
+- Historical pre-verification risk, now closed: the step-return classification
+  change (ADR-019) was assessed as a possible runtime change for the 175
+  `-> Result<()>` steps. Upstream 0.6.0 normalizes a unit payload to `None`
+  before the runner inserts anything, so `Ok(())` cannot override a fixture.
+  The regression test asserts that `None` and the generated scenario drives the
+  same alias through the runner. Status: closed by upstream design and
+  regression coverage.
 - Risk: `scenarios!` generated test names, and therefore the nextest
   `binary(rstest_bdd)` filter and the `rstest_bdd` serial test-group in
   `.config/nextest.toml`, may change shape. Severity: low Likelihood: low
@@ -780,12 +780,15 @@ Record every significant decision made while working on the plan.
   the override. Date/Author: 2026-10-17, migration agent.
 - Decision: keep the focused bridge tests alongside the new runner-boundary
   scenarios rather than replacing them. Rationale: the runner cannot express
-  displacement of an earlier override, a payload with no matching fixture, or
-  the `NotMutable` observation that proves `Ok(())` recorded nothing; those
-  need the manual `insert_value` call. Conversely the bridge tests cannot
+  displacement of an earlier override or a payload with no matching fixture;
+  those need the manual `insert_value` call. Conversely the bridge tests cannot
   notice a defect in the code that calls `insert_value`. The two modules are
   complements, and each now documents which mutations it owns. Date/Author:
-  2026-10-19, migration agent.
+  2026-10-19, migration agent. Revised 2026-10-21: the `NotMutable` observation
+  originally listed here proved nothing, because `execute_step` never calls
+  `insert_value`, so a fixture inserted by shared reference stays non-mutable
+  whatever the step returned. The unit claim rests on the direct `Ok(None)`
+  assertion instead.
 - Decision: pin the scoped `not_found` telemetry spelling with an in-crate unit
   test that drives the dispatcher directly, rather than through a discovery
   run. Rationale: the dispatcher arm exists but no production path reaches it,
@@ -1021,8 +1024,8 @@ its verification method.
   "fail against the pre-migration tree" red stage recorded here originally was
   **not achievable as written**, for two independent reasons.
   1. The regression module cannot compile against 0.5.0 at all. It uses
-     `InsertOutcome` and `FixtureBorrowError`, which 0.5.0 does not export, and
-     its `insert_value` returns `Option<Box<dyn Any>>` rather than
+     `InsertOutcome` and `step_return`, which 0.5.0 does not export, and its
+     `insert_value` returns `Option<Box<dyn Any>>` rather than
      `InsertOutcome`. A test that cannot be built cannot stage a red.
   2. The originally specified mutation — two `Slot<()>` flags with the first
      asserted to survive a succeeding step — would not distinguish anything
@@ -1389,3 +1392,13 @@ type-checks direct calls in `main`, but does not execute the fixture; runtime
 step-return behaviour is covered by the registered feature scenarios. The
 historical `IN PROGRESS` status above is now explicitly tied to the 2026-10-18
 revision; the current status and final local validation are recorded earlier.
+
+Revision, 2026-10-21: closed the five findings of the review at `f7316c0e`. The
+review showed that the unit-return case's `NotMutable` assertion proved nothing:
+`execute_step` does not call `insert_value`, so a fixture inserted by shared
+reference is non-mutable for every step outcome. The assertion is gone and the
+direct `Ok(None)` check now carries the claim. Alongside it, the `Ok(())` risk
+moved to historical and closed; the document provenance gained a correct
+account of the vendor-spelling history and of the users' guide's one relative
+link; and the contents entry was rewrapped to 80 columns. No production code
+changed: the edit touches two documents, this plan and one test module.

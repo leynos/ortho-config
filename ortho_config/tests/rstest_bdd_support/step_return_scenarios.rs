@@ -157,13 +157,12 @@ fn boxed_alias_payload_reaches_a_later_step(level: Level) {
     let _ = level;
 }
 
-/// `Ok(())` must record no override, so the fixture keeps its seeded value.
+/// Runs the aliased unit step through the generated scenario runner.
 ///
-/// A recorded unit payload would have nothing to match — a scenario fixture
-/// can never supply a `()` — so the observable difference is the absence of
-/// any change. The exact "no payload escaped the wrapper at all" mutation is
-/// pinned by `aliased_unit_ok_injects_nothing` in the regression module,
-/// where the `FixtureBorrowError` variant makes it visible.
+/// The direct `Ok(None)` assertion in `aliased_unit_ok_injects_nothing` pins
+/// that the wrapper emits no unit payload. This binding also exercises the
+/// alias through the runner; adjacent scenarios cover non-unit payload
+/// insertion.
 #[scenario(
     path = "tests/features/step_return.feature",
     name = "An aliased unit step produces no override"

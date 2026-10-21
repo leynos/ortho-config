@@ -22,15 +22,19 @@
 //! coverage of runner behaviour: [`step_return_scenarios`](super::step_return_scenarios)
 //! runs the same aliases through the generated scenario runner, so a defect
 //! in the code that calls `insert_value` fails there. This module keeps the
-//! mutations a scenario cannot express — displacement of an earlier override,
-//! a payload with no matching fixture, and the `NotMutable` proof that
-//! `Ok(())` recorded nothing.
+//! mutations a scenario cannot express — displacement of an earlier override
+//! and a payload with no matching fixture.
+//!
+//! It also pins unit normalization directly. `Ok(None)` is the proof that an
+//! aliased `Ok(())` carries no payload for the runner to insert; a helper
+//! that returned `Some(())` would be caught here but would show up in a
+//! scenario only as a silently ignored warning.
 
 use std::any::Any;
 
 use rstest::rstest;
 use rstest_bdd::{
-    FixtureBorrowError, InsertOutcome, StepContext, StepError, StepKeyword,
+    InsertOutcome, StepContext, StepError, StepKeyword,
     execution::{ExecutionError, StepExecutionRequest, execute_step},
 };
 
@@ -201,30 +205,11 @@ fn aliased_ok_injects_the_inner_payload(#[case] shape: AliasShape) {
 /// path that this test exercises.
 #[test]
 fn aliased_unit_ok_injects_nothing() {
-    let unit_fixture = ();
-    let mut ctx = StepContext::default();
-    ctx.insert("flag", &unit_fixture);
-
-    let outcome = run_step(
-        StepKeyword::Given,
-        "a step return alias succeeds with no payload",
-        &mut ctx,
-    );
-    match outcome {
+    match outcome_of_given("a step return alias succeeds with no payload") {
         Ok(None) => {}
         Ok(Some(_)) => panic!("Ok(()) must not box a payload"),
         Err(error) => panic!("Ok(()) must not fail the scenario: {error}"),
     }
-
-    // A recorded override would be mutable even though the fixture was
-    // inserted by shared reference, so `NotMutable` proves no override exists.
-    assert!(
-        matches!(
-            ctx.try_borrow_mut::<()>("flag"),
-            Err(FixtureBorrowError::NotMutable { .. })
-        ),
-        "a unit payload must leave a unit fixture untouched"
-    );
 }
 
 /// A recorded payload must reach a later step through fixture binding.

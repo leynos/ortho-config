@@ -70,13 +70,11 @@ repository-authored text. Nothing of ours was lost.
 | `docs/rstest-bdd-users-guide.md`            | 1919 lines, an import of the upstream v0.5.0 guide | 86 lines differed from upstream's v0.5.0 copy, every one of them a reflow of the same prose, an en-GB spelling correction, or Mermaid node-label quoting. No repository term appears anywhere in the file.        |
 | `docs/rstest-bdd-v0-5-0-migration-guide.md` | 290 lines, an import of the upstream v0.5.0 guide  | 107 lines differed from upstream's v0.6.0 copy of the same file, again all of them reflow or en-GB spelling. Line counts differ (290 against 222) because the upstream copy dropped a section in a later release. |
 
-The en-GB spelling corrections are the interesting part: upstream uses United
-States spellings for two words whose second syllable this repository's policy
-requires to be written the British way (the "-ise" form, and the "-ised" past
-participle of the first). That is a repository convention applied to a vendor
-file, and the v0.6.0 import trades it away for byte-for-byte integrity. The
-checksum table above is the authority; a future edit that "restores" the
-spelling would silently break it.
+The earlier copies changed two particular upstream words to the repository's
+spelling convention. The v0.6.0 import restores the upstream wording, trading
+those two repository-specific changes for byte-for-byte integrity. The checksum
+table above is the authority; a future edit that reintroduces them would
+silently break it.
 
 The overwrite destroyed no uncommitted work. This repository's session log for
 the migration records the opening `git status` as `(clean)`, so the working
@@ -114,8 +112,14 @@ The first five resolve only within an upstream checkout. The upstream anchor
 
 ### `docs/rstest-bdd-users-guide.md`
 
-The only relative links are external URLs to `docs.rs`, the Visual Studio
-Marketplace, and similar sites. No sibling document is required to read it.
+The `[gpui-migration]` reference targets
+`v0-6-0-migration-guide.md#migrate-a-stateful-gpui-test`, and so resolves to
+this repository's own `docs/v0-6-0-migration-guide.md`, which has no such
+anchor; the intended upstream section is the one of that name in
+`docs/rstest-bdd-v0-6-0-migration-guide.md`. All other link targets are absolute
+`https://` URLs, rendered by the Markdown linter as unannotated bare links at
+`docs/rstest-bdd-users-guide.md:2784`, `:2785` and `:3229`; the remaining
+examples below read as external links of the same kind.
 
 ### `docs/rstest-bdd-v0-5-0-migration-guide.md`
 
