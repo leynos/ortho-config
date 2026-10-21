@@ -509,7 +509,58 @@ The failing logs are preserved beside the round-3 certificates, under `/tmp`, as
 `lint-FAILED-whitaker-tree-d61be027-…out`, so each repair can be read against
 the diagnostic that prompted it.
 
-No milestone CLI review has been run for EP-M3 yet.
+### EP-M3 milestone CLI review (2026-10-21)
+
+`coderabbit review --agent` (CLI 0.9.1) ran over the committed tree at
+`f357813d` and returned 17 findings across 11 files: 13 minor and 4 trivial.
+Every finding was checked against the committed source rather than the
+worktree. Two findings in the same round contradict each other, and the
+contradiction was resolved first.
+
+| #   | Finding                                          | Disposition                                      |
+| --- | ------------------------------------------------ | ------------------------------------------------ |
+| 1   | Workflow contract docstring spelling             | Valid; repaired in `b82f182e`                    |
+| 2   | `closure` module prose spelling                  | Valid; repaired                                  |
+| 3   | `package_set` module prose spelling              | Valid; repaired                                  |
+| 4   | Workflow contract asserted a bare `-p` token     | Valid; now reads `_flag_values("-p")`            |
+| 5   | `manifests` prose spelling                       | Valid; repaired                                  |
+| 6   | `metadata` prose and error text spelling         | Valid; repaired                                  |
+| 7   | Packaged set hard-codes the release version      | Valid; now `CARGO_PKG_VERSION`                   |
+| 8   | Harness uses `std` paths, not `fs_utf8`/`camino` | Valid; migrated (settles #17)                    |
+| 9   | Consumer hard-codes the release version          | Duplicate of #7; same constant                   |
+| 10  | Test name and doc claim wider than the check     | Valid; renamed, doc narrowed                     |
+| 11  | ExecPlan status statements out of date           | Valid; repaired                                  |
+| 12  | ExecPlan crate delta inconsistent (25 vs 24)     | Valid; both derivations now recorded as 24       |
+| 13  | Parameterize the negative controls               | Valid; merged into one `#[rstest]` case per edge |
+| 14  | `fixture_cargo` prose spelling                   | Valid; repaired                                  |
+| 15  | ExecPlan CI budget arithmetic                    | Valid; `2×2,700 + 3,600 + 900` at both sites     |
+| 16  | `consumer/library` prose spelling                | Valid; repaired                                  |
+| 17  | Remove the "unused" `fs_utf8` feature            | Rejected; premise falsified by #8                |
+
+Two dispositions need their reasoning recorded because the suggestion was not
+adopted verbatim.
+
+Finding 17 asked for the `fs_utf8` feature to be dropped, on the premise that
+the boundary tests use `cap_std::fs::Dir`. That premise was about to become
+false: finding 8 asks for the opposite migration, and `cargo-orthohelp` already
+uses `cap_std::fs_utf8` with `camino` across roughly twenty files. The
+repository therefore has a precedent for the UTF-8 API, the paths in these
+fixtures are rendered into manifests and compared as crate-root names, and the
+feature is load-bearing after #8. Rejecting #17 and accepting #8 is the only
+pairing under which both the rule and the precedent hold.
+
+Finding 13 proposed deleting the redundant test rather than merging behaviour
+into it. The two loops did duplicate work, but the second loop's assertion
+subsumes the first's: a diagnostic that names the injected crate cannot be
+empty. The repair keeps one `#[rstest]` function with a `#[values]` case per
+injection, which drops the duplicated nested Cargo run, attributes a failure to
+one injection instead of stopping at the first in enum order, and lets nextest
+schedule the four remaining runs independently. `Injection::ALL` became dead
+and was removed; `Dependency::ALL` is still read and stays.
+
+Repairs are committed as `b82f182e`. The sequential gate run against that tree
+and the reassessment follow, and the milestone checkbox stays open until the
+reassessment reports no valid concern.
 
 ## Surprises & discoveries
 
