@@ -3581,9 +3581,9 @@ tier two did not exist at all.
 | Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
 | ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                          |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                         |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 2,300 s (38 m 20 s)                                                                     |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 3,300 s (55 m)                                                                          |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 190 m in `ci.yml`, 140 m in `coverage-main.yml`                                         |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3703,19 +3703,65 @@ the contract rather than silently left on the base allowance:
 and `boolean_cli_trybuild` arrived that way from branches, and the contract is
 what caught each.
 
-The 960 s allowance is lower than the 1,800 s whole-run budget, which the
+The 960 s allowance is lower than the 2,300 s whole-run budget, which the
 ordering contract asserts. That comparison does not by itself guarantee a test
 using its full allowance finishes before the run deadline, since a test that
 starts late spends part of the budget waiting to be scheduled; it establishes
 that the allowance cannot exhaust the run on its own.
 
-The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
-It has to fit inside the watchdog with nextest's termination procedure and a
-cold build counted, which is 1,800 s plus 70 s plus 600 s, or 2,470 s. The
-watchdog was 1,800 s and could not have carried it, so it rises to 2,700 s.
-That is what moves the ceilings: the requirement is the watchdogs a job
-contains plus the work outside them plus the margin, and each job runs the
-action twice.
+The whole-run budget has to fit inside the watchdog with nextest's termination
+procedure and a cold build counted, which is 2,300 s plus 70 s plus 600 s, or
+2,970 s, so the watchdog rises to 3,300 s. That is what moves the ceilings: the
+requirement is the watchdogs a job contains plus the work outside them plus the
+margin, and each job runs the action twice.
+
+### The whole-run budget was resized from a cold run
+
+The budget was 1,800 s, about 1.76 times the 1,023.6 s warm sample above.
+Pinning the dated nightly invalidated that sample, and it is now 2,300 s, sized
+from a run that was cancelled rather than from one that finished.
+
+`sccache` keys its entries by compiler, so the toolchain change cold-missed the
+whole Windows dependency graph. The leg's hit rate fell from 89.00 % — 2,282
+hits against 282 misses — on the previous toolchain to 35.67 %, or 824 hits
+against 1,486 misses, on this one.
+
+A cold cache does not merely move the build out of the way. It lands inside
+nextest's clock, because the binaries whose tests spawn their own `cargo` each
+pay for a fresh dependency build. Three of them more than quadrupled while the
+tests that compile nothing rose by under half again:
+
+| Binary                               | Previous toolchain | Pinned nightly | Ratio |
+| ------------------------------------ | ------------------ | -------------- | ----- |
+| `cargo-orthohelp::compile_time`      | 71.4 s             | 335.9 s        | 4.7   |
+| `ortho_config::compile_fail`         | 45.2 s             | 195.8 s        | 4.3   |
+| `ortho_config::boolean_cli_trybuild` | 37.7 s             | 178.0 s        | 4.7   |
+| `documentation_examples_rust_tests`  | 235.7 s            | 315.3 s        | 1.3   |
+| `cargo-orthohelp::golden_tests`      | 96.5 s             | 136.0 s        | 1.4   |
+
+*Table: the Windows `build-test` leg's first coverage pass, run 39633413142 on
+the previous toolchain against run 39658769738 on the pin. Both ran 2,070 tests
+with the same features.*
+
+Over that same work the leg ran 1,044.1 s on the old toolchain and 1,810.1 s on
+the pin, where nextest cancelled it with two tests still running:
+
+```text
+Cancelling due to global timeout: 2 tests still running
+Summary [1810.068s] 2070 tests run: 2068 passed (17 slow), 2 failed, 30 skipped
+```
+
+Both survivors were far inside their own 600 s allowance — 192.3 s and 157.3 s
+— so no per-test tier is what failed. At 2,300 s the run completes with about
+400 s to spare.
+
+Raising the figure again would be the wrong repair. The lever is letting the
+nested builds reach `sccache` at all, which cannot happen while
+`ortho_config/tests/documentation_examples/cargo_runner.rs` clears the
+environment and restores no `RUSTC_WRAPPER`
+([issue 614](https://github.com/leynos/ortho-config/issues/614)). A cold cache
+is inherent to a dated nightly that Dependabot moves daily, so the budget has
+to carry it rather than the sample that predates the pin.
 
 [Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
 measurements and named the constraint they had to satisfy, that each coverage
@@ -3766,8 +3812,8 @@ ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
 
 On the Windows leg the work outside the coverage steps is dominated by cache
 saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15. With the
-watchdog at 2,700 s and two coverage steps per job, the requirements are 165
-and 120 minutes: 5,400 s of watchdog, plus the lane's allowance, plus a 900 s
+watchdog at 3,300 s and two coverage steps per job, the requirements are 190
+and 140 minutes: 6,600 s of watchdog, plus the lane's allowance, plus a 900 s
 margin. The margin is a term of the requirement rather than slack above it,
 because a ceiling equal to the sum it contains cancels the job at the moment
 the watchdog would have reported the overrun, and the report is the only thing
@@ -3820,7 +3866,7 @@ it happens to be the case somebody wrote.
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
 table nextest never consults, and reports a budget the runner does not use.
-`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering
+`.config/nextest.toml` sets `global-timeout = "2300s"`, and the ordering
 assertion requires that value to sit above the largest per-test allowance and
 inside the watchdog; it skips only when no whole-run budget is set at all. A
 scraping reader would read a commented-out or filtered budget as one in force,
@@ -3961,7 +4007,7 @@ the tier in question, which is what a maintainer can act on.
 
 It also pins how many coverage steps each job runs. The ceiling's requirement
 is the sum of the watchdogs found, so deleting one of a job's two coverage
-steps lowers that requirement by 2,700 s and every timing assertion still
+steps lowers that requirement by 3,300 s and every timing assertion still
 passes while the lane measures half of what it did.
 
 `tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
