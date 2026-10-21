@@ -310,12 +310,18 @@ fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), OrthohelpError>
     // against spurious cache misses (e.g. Windows path-normalization
     // differences that cause read_cached_ir to return Ok(None) even when the
     // file exists) and prevents unnecessary I/O on repeated invocations.
-    if let Ok(Some(existing)) = read_cached_ir(paths)
-        && existing == json
-    {
-        observability::completed("bridge_ir_cache_publish", "unchanged", started);
-        telemetry::ir_cache_unchanged(paths);
-        return Ok(());
+    //
+    // A missing cache is the ordinary first-build case and falls through to
+    // the write. Any other failure to read an existing file is propagated:
+    // treating it as a cache miss would overwrite a file whose contents were
+    // never inspected, hiding the very fault the read reported.
+    match read_cached_ir(paths)? {
+        Some(existing) if existing == json => {
+            observability::completed("bridge_ir_cache_publish", "unchanged", started);
+            telemetry::ir_cache_unchanged(paths);
+            return Ok(());
+        }
+        Some(_) | None => {}
     }
     let mut file =
         tempfile::NamedTempFile::new_in(paths.cache_dir.as_std_path()).map_err(|source| {

@@ -4,6 +4,7 @@ use super::RunContext;
 use super::capture::{Reader, Snapshot};
 use std::ffi::OsStr;
 use std::fmt::{self, Write as _};
+use std::path::PathBuf;
 use std::process::Command;
 
 #[cfg(test)]
@@ -90,16 +91,28 @@ fn append_cleanup_evidence(diagnostic: &mut String, evidence: &[String]) {
     }
 }
 
+/// Name the directory a subprocess runs in, never failing to report something.
+///
+/// A command-local directory wins because it overrides inheritance. When it is
+/// absent the process working directory is queried explicitly, and a failed
+/// query is reported as such: the previous `ok()` chain collapsed "the query
+/// failed" into the same string as "no directory is configured", which hides
+/// an environmental fault exactly when the failure diagnostic matters.
 pub(super) fn workspace_identity(command: &Command) -> String {
-    command
-        .get_current_dir()
-        .map(|path| path.display().to_string())
-        .or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .map(|path| path.display().to_string())
-        })
-        .unwrap_or_else(|| "unavailable".to_owned())
+    // `map_or_else` takes the fallback lazily, so a command-local directory is
+    // still reported without ever consulting the ambient working directory.
+    command.get_current_dir().map_or_else(
+        || inherited_workspace_identity(std::env::current_dir),
+        |path| path.display().to_string(),
+    )
+}
+
+/// Render the inherited working directory, naming an explicit query failure.
+fn inherited_workspace_identity(query: impl FnOnce() -> std::io::Result<PathBuf>) -> String {
+    query().map_or_else(
+        |error| format!("unavailable: querying the inherited working directory failed with {error}"),
+        |path| path.display().to_string(),
+    )
 }
 
 pub(super) fn environment_evidence(command: &Command) -> String {

@@ -164,6 +164,33 @@ fn bridge_manifest_disables_the_default_binary_target() {
     ));
 }
 
+/// An unreadable cache entry fails the publish instead of being overwritten.
+///
+/// The cache path is a directory rather than a file, so opening it as
+/// `ir.json` fails with a kind that is neither `NotFound` nor platform
+/// specific. A publish step that treated every read failure as a cache miss
+/// would report success after destroying evidence of the fault.
+#[test]
+fn write_ir_cache_propagates_a_non_missing_read_failure() {
+    let tmp = tempdir().expect("temp dir");
+    let bridge_dir = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).expect("UTF-8 path");
+    let ir_path = bridge_dir.join("ir.json");
+    std::fs::create_dir(&ir_path).expect("create directory where the cache file belongs");
+    let paths = BridgeCache {
+        cache_dir: bridge_dir.clone(),
+        target_dir: bridge_dir.join("target"),
+        ir_path,
+    };
+
+    let error = write_ir_cache(&paths, r#"{"ir_version":"1.0.0"}"#)
+        .expect_err("an unreadable cache entry must not be overwritten");
+
+    assert!(
+        matches!(error, OrthohelpError::Io { .. }),
+        "cache-read failure surfaced as {error:?}"
+    );
+}
+
 #[test]
 fn write_ir_cache_is_idempotent() {
     const CONTENT: &str = r#"{"ir_version":"1.0.0"}"#;

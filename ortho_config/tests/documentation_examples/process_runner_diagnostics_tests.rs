@@ -2,6 +2,8 @@
 
 use super::super::RunContext;
 use anyhow::{Result, ensure};
+use std::io;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -46,5 +48,37 @@ fn safe_environment_presence_does_not_expose_secret_values() -> Result<()> {
             && !diagnostic.contains("/private/toolchain/rustc-wrapper"),
         "diagnostic exposed a command environment value: {diagnostic}"
     );
+    Ok(())
+}
+
+/// A failed working-directory query is named, not collapsed into a blank.
+///
+/// The queried directory is supplied rather than provoked: no portable
+/// environmental change makes `std::env::current_dir` fail on demand.
+#[test]
+fn a_failed_working_directory_query_is_reported_explicitly() {
+    let identity = super::inherited_workspace_identity(|| {
+        Err(io::Error::from(io::ErrorKind::PermissionDenied))
+    });
+
+    assert!(
+        identity.starts_with("unavailable: "),
+        "failed query was not named: {identity}"
+    );
+    assert!(
+        identity.contains("permission denied"),
+        "failed query omitted why it failed: {identity}"
+    );
+}
+
+/// A command-local directory wins and never consults the ambient directory.
+#[test]
+fn a_command_directory_overrides_the_inherited_workspace() -> Result<()> {
+    let mut command = Command::new("cargo");
+    command.current_dir(PathBuf::from("/private/command/directory"));
+
+    let identity = super::workspace_identity(&command);
+
+    ensure!(identity == "/private/command/directory");
     Ok(())
 }

@@ -57,6 +57,15 @@ pub(super) fn cleanup_remove_failed() {
     );
 }
 
+/// Report the outcome of removing generated bridge outputs after a snapshot.
+pub(super) fn cleanup_completed(outcome: &'static str) {
+    tracing::debug!(
+        operation = "bridge_output_cleanup",
+        outcome,
+        "generated bridge output cleanup completed"
+    );
+}
+
 /// Report that an owned Cargo child resisted termination on scope exit.
 pub(super) fn owned_child_kill_failed(error_kind: std::io::ErrorKind) {
     tracing::warn!(

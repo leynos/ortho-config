@@ -9,6 +9,9 @@ mod cleanup;
 mod diagnostics;
 #[path = "bridge_build_outputs.rs"]
 mod outputs;
+#[cfg(test)]
+#[path = "bridge_build_outputs_tests.rs"]
+mod outputs_tests;
 #[path = "bridge_build_process.rs"]
 mod process;
 #[path = "bridge_build_protocol.rs"]

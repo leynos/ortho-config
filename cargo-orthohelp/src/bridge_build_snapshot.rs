@@ -7,6 +7,7 @@ use std::io;
 use std::time::Instant;
 
 use super::protocol::binary_file_name;
+use super::telemetry;
 use super::{CargoBuild, CargoStatus, GeneratedTarget, io_error, message_error, open_directory};
 use crate::bridge_observability as observability;
 use crate::error::OrthohelpError;
@@ -46,12 +47,21 @@ pub(super) fn finish_build(
                 return Err(error);
             }
         };
-    super::outputs::remove_generated_outputs(
+    let cleanup = super::outputs::remove_generated_outputs(
         target.directory,
         target.binary_name,
         &build.messages.generated_outputs,
     );
-    observability::completed("bridge_snapshot", "success", started);
+    // Cleanup is best effort: the snapshot is already private, so a surviving
+    // generated output degrades evidence rather than failing the IR build.
+    // Reporting the "success" outcome unconditionally would claim the target
+    // was left clean even when it could not even be opened.
+    telemetry::cleanup_completed(cleanup.label());
+    if cleanup.is_complete() {
+        observability::completed("bridge_snapshot", "success", started);
+    } else {
+        observability::failed("bridge_snapshot", cleanup.label(), started);
+    }
     Ok(private_executable)
 }
 
