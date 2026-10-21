@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0001: Replace `serde_yaml` with `serde-saphyr` for YAML Parsing
+# Architectural decision record (ADR) 0001: Replace `serde_yaml` with `serde-saphyr` for YAML parsing
 
 Date: 2025-10-17
 

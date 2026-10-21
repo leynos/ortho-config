@@ -235,12 +235,13 @@ rediscover them.
    `CLI_BASE_MESSAGE_ID = "hello_world.cli"` consts. Impact: the example must
    use `with_base("hello_world.cli")`; this is the canonical "multi-segment
    catalogue" demonstration of `with_base`.
-8. Observation: **ADR location follows the existing flat docs convention.**
-   Evidence: `docs/contents.md` indexes ADR-0001 through ADR-0005 at
-   `docs/adr-00x-...md`, not under `docs/adr/`. Impact: ADR-0006 was added as
-   `docs/adrs/adr-0006-identifier-derivation-panics.md` to match the
-   repository's current convention despite the generic ADR skill mentioning
-   `docs/adr/`.
+8. Observation: **ADR location has since moved to the four-digit layout.**
+   At the time of writing, `docs/contents.md` indexed ADR-0001 through ADR-0005
+   at the flat `docs/adr-00x-....md` paths, so ADR-0006 was added as
+   `docs/adrs/adr-0006-identifier-derivation-panics.md` to match that then
+   current convention. A later change adopted the documentation style guide's
+   four-digit scheme, which moved every ADR under `docs/adrs/` as
+   `adr-nnnn-title-slug.md`; the flat layout is now historical.
 9. Observation: **CodeRabbit can wedge during sandbox preparation.**
    Evidence: the second Milestone 0 review stayed at
    `{"phase":"setup","status":"preparing_sandbox"}` for about 18 minutes after
