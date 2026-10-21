@@ -17,6 +17,24 @@
 
 use super::BridgeCache;
 
+/// Report that a cache lookup reused the cached bridge IR.
+pub(super) fn ir_cache_hit() {
+    tracing::debug!(
+        operation = "bridge_cache_lookup",
+        outcome = "hit",
+        "reusing cached bridge IR"
+    );
+}
+
+/// Report that a cache lookup found no cached bridge IR.
+pub(super) fn ir_cache_miss() {
+    tracing::debug!(
+        operation = "bridge_cache_lookup",
+        outcome = "miss",
+        "bridge IR cache lookup missed"
+    );
+}
+
 /// Report that the cached IR already matches, so the write was skipped.
 ///
 /// Each emission lives in its own function so `write_ir_cache` holds at most

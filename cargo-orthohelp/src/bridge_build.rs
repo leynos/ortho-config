@@ -15,6 +15,8 @@ mod process;
 mod protocol;
 #[path = "bridge_build_snapshot.rs"]
 mod snapshot;
+#[path = "bridge_build_telemetry.rs"]
+pub(super) mod telemetry;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
@@ -51,8 +53,28 @@ pub(super) struct GeneratedTarget<'a> {
 /// the command and the snapshot, while Cargo itself retains ownership of its
 /// shared registry and build cache. The caller must place `snapshot_directory`
 /// under a private invocation directory; this helper creates it when absent.
-#[tracing::instrument(skip_all, fields(operation = "bridge_build_and_snapshot"))]
 pub(super) fn build_and_snapshot(
+    command: &mut Command,
+    target_directory: &Utf8Path,
+    snapshot_directory: &Utf8Path,
+    binary_name: &str,
+) -> Result<Utf8PathBuf, OrthohelpError> {
+    let span = tracing::info_span!(
+        "bridge_build_and_snapshot",
+        operation = "bridge_build_and_snapshot"
+    );
+    span.in_scope(|| {
+        build_and_snapshot_inner(command, target_directory, snapshot_directory, binary_name)
+    })
+}
+
+/// Build and snapshot with the `tracing` attribute expanded by hand.
+///
+/// The `#[tracing::instrument]` attribute expands into a branch ladder that
+/// counts against the workspace's cognitive-complexity ceiling, so the span is
+/// constructed explicitly and the body lives in a function the attribute would
+/// otherwise wrap.
+fn build_and_snapshot_inner(
     command: &mut Command,
     target_directory: &Utf8Path,
     snapshot_directory: &Utf8Path,
@@ -100,12 +122,7 @@ fn build_and_snapshot_with(
             if failure.writer_lifetime_confirmed {
                 remove_marker_after_failure(&marker);
             } else {
-                tracing::warn!(
-                    operation = "bridge_build_and_snapshot",
-                    outcome = "writer_lifetime_unconfirmed",
-                    marker_retained = true,
-                    "bridge child lifetime is unconfirmed; recovery marker retained"
-                );
+                telemetry::writer_lifetime_unconfirmed();
                 observability::failed(
                     "bridge_cargo_cleanup",
                     "writer_lifetime_unconfirmed",
@@ -258,12 +275,7 @@ fn open_directory(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
 fn refuse_stale_marker(directory: &Dir, target_directory: &Utf8Path) -> Result<(), OrthohelpError> {
     match directory.symlink_metadata(MARKER_FILE) {
         Ok(_) => {
-            tracing::warn!(
-                operation = "bridge_build_marker",
-                outcome = "stale_marker_rejected",
-                marker_retained = true,
-                "bridge build requires owner recovery after an interrupted build"
-            );
+            telemetry::stale_marker_rejected();
             Err(message_error(&format!(
                 "bridge target requires owner recovery after an interrupted build: {}; confirm no Cargo or rustc process still uses the target directory, then remove the marker and rerun",
                 target_directory.join(MARKER_FILE)

@@ -78,8 +78,21 @@ pub fn prepare_cache(selection: &PackageSelection, cache_key: &CacheKey) -> Brid
 }
 
 /// Loads cached IR or builds the bridge to produce fresh IR JSON.
-#[tracing::instrument(skip_all, fields(operation = "bridge_ir_load_or_build"))]
 pub fn load_or_build_ir(
+    config: &BridgeConfig,
+    paths: &BridgeCache,
+    should_use_cache: bool,
+    should_skip_build: bool,
+) -> Result<String, OrthohelpError> {
+    let span = tracing::info_span!(
+        "bridge_ir_load_or_build",
+        operation = "bridge_ir_load_or_build"
+    );
+    span.in_scope(|| load_or_build_ir_inner(config, paths, should_use_cache, should_skip_build))
+}
+
+/// Apply the cache policy and otherwise build, without owning the span.
+fn load_or_build_ir_inner(
     config: &BridgeConfig,
     paths: &BridgeCache,
     should_use_cache: bool,
@@ -90,20 +103,12 @@ pub fn load_or_build_ir(
         match read_cached_ir(paths) {
             Ok(Some(cached)) => {
                 observability::completed("bridge_cache_lookup", "hit", lookup_started);
-                tracing::debug!(
-                    operation = "bridge_cache_lookup",
-                    outcome = "hit",
-                    "reusing cached bridge IR"
-                );
+                telemetry::ir_cache_hit();
                 return Ok(cached);
             }
             Ok(None) => {
                 observability::completed("bridge_cache_lookup", "miss", lookup_started);
-                tracing::debug!(
-                    operation = "bridge_cache_lookup",
-                    outcome = "miss",
-                    "bridge IR cache lookup missed"
-                );
+                telemetry::ir_cache_miss();
             }
             Err(error) => {
                 observability::failed("bridge_cache_lookup", "read_failed", lookup_started);

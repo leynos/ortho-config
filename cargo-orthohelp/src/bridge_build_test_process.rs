@@ -63,11 +63,20 @@ fn reap_after_kill(child: &mut Child) {
             Ok(Some(_)) => break,
             Ok(None) => thread::sleep(POLL_INTERVAL),
             Err(error) => {
-                tracing::warn!(error = %error, "failed to reap controlled test probe");
+                report_reap_failure(&error);
                 break;
             }
         }
     }
+}
+
+/// Report a probe whose exit status could not be collected.
+///
+/// Separate from `reap_after_kill` so the polling loop keeps at most its own
+/// branches: a `tracing` event expands into a branch ladder that counts against
+/// the workspace's cognitive-complexity ceiling.
+fn report_reap_failure(error: &std::io::Error) {
+    tracing::warn!(error = %error, "failed to reap controlled test probe");
 }
 
 fn kill_probe(child: &mut Child) {

@@ -8,6 +8,7 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 
 use super::protocol::is_generated_output_name;
+use super::telemetry;
 
 /// Remove reported outputs after snapshotting, warning without failing the IR build.
 pub(super) fn remove_generated_outputs(
@@ -16,37 +17,30 @@ pub(super) fn remove_generated_outputs(
     outputs: &[camino::Utf8PathBuf],
 ) {
     let Ok(target) = Dir::open_ambient_dir(target_directory, ambient_authority()) else {
-        tracing::warn!(
-            operation = "bridge_output_cleanup",
-            outcome = "target_open_failed",
-            "could not open Cargo target to remove generated bridge outputs"
-        );
+        telemetry::cleanup_target_open_failed();
         return;
     };
 
     for output in outputs {
         let Some(relative) = output.strip_prefix(target_directory).ok() else {
-            tracing::warn!(
-                operation = "bridge_output_cleanup",
-                outcome = "outside_target_ignored",
-                "ignored generated bridge output outside its Cargo target"
-            );
+            telemetry::cleanup_output_outside_target();
             continue;
         };
-        let Some(file_name) = relative.file_name() else {
-            continue;
-        };
-        if !is_generated_output_name(file_name, binary_name) {
-            continue;
-        }
-        if let Err(error) = target.remove_file(relative.as_str())
-            && error.kind() != std::io::ErrorKind::NotFound
-        {
-            tracing::warn!(
-                operation = "bridge_output_cleanup",
-                outcome = "remove_failed",
-                "failed to remove generated bridge Cargo output after snapshot"
-            );
-        }
+        remove_reported_output(&target, relative, binary_name);
+    }
+}
+
+/// Remove one reported output when its name identifies this bridge binary.
+fn remove_reported_output(target: &Dir, relative: &Utf8Path, binary_name: &str) {
+    let Some(file_name) = relative.file_name() else {
+        return;
+    };
+    if !is_generated_output_name(file_name, binary_name) {
+        return;
+    }
+    if let Err(error) = target.remove_file(relative.as_str())
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        telemetry::cleanup_remove_failed();
     }
 }

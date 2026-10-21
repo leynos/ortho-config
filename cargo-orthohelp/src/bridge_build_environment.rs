@@ -223,10 +223,7 @@ fn is_safe_value(environment_name: &OsStr, value: &OsStr) -> bool {
             .any(|character| matches!(character, '@' | '?' | '#'))
     });
     if !is_safe {
-        tracing::warn!(
-            variable = raw_name,
-            "omitted credential-bearing Cargo build setting; configure proxy and registry credentials in Cargo configuration under CARGO_HOME"
-        );
+        super::bridge_build::telemetry::credential_bearing_setting_omitted(raw_name);
     }
     is_safe
 }

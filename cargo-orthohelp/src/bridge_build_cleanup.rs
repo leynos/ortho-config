@@ -8,6 +8,8 @@ use std::process::{Child, ExitStatus};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::telemetry;
+
 /// Maximum time to wait for the owned Cargo process to exit after killing it.
 const CHILD_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 /// Interval between non-blocking child-exit checks during bounded cleanup.
@@ -123,7 +125,7 @@ impl<Process: ChildCleanup> Drop for OwnedChild<Process> {
             return;
         }
         if let Err(error) = self.child.kill() {
-            tracing::warn!(error_kind = ?error.kind(), "failed to terminate owned Cargo child");
+            telemetry::owned_child_kill_failed(error.kind());
         }
     }
 }
