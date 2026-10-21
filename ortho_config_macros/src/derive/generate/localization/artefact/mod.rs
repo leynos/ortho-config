@@ -372,6 +372,22 @@ mod lock_fixture;
 #[path = "artefact_lock_tests.rs"]
 mod lock_tests;
 
+// Turns a still-held lock into a report naming the process and descriptor that
+// hold it, split from the pure evidence vocabulary it prints so neither half
+// outgrows the file-length cap; `lock_report_tests` proves it against a hold
+// this process really owns.
+#[cfg(test)]
+#[path = "artefact_lock_diagnostics.rs"]
+mod lock_diagnostics;
+
+#[cfg(test)]
+#[path = "artefact_lock_evidence.rs"]
+mod lock_evidence;
+
+#[cfg(test)]
+#[path = "artefact_lock_report_tests.rs"]
+mod lock_report_tests;
+
 #[cfg(test)]
 #[path = "artefact_publication_tests.rs"]
 mod publication_tests;
