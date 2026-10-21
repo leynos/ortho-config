@@ -1,4 +1,4 @@
-//! Materialises the three crates as a stranger would receive them.
+//! Materializes the three crates as a stranger would receive them.
 //!
 //! A path dependency in this workspace proves nothing about the published
 //! graph. Cargo rewrites a member's `path` dependency into a registry version
@@ -36,8 +36,8 @@ use super::fixture_cargo::{
     toml_string,
 };
 use anyhow::{Context, Result, bail, ensure};
-use cap_std::fs::Dir;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::fs_utf8::Dir;
 use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -61,12 +61,12 @@ pub(crate) struct PackagedCrate {
     /// Version every packaged crate in this release shares.
     pub(crate) version: &'static str,
     /// Unpacked root, holding `Cargo.toml` and `src/`.
-    pub(crate) root: PathBuf,
+    pub(crate) root: Utf8PathBuf,
 }
 
 impl PackagedCrate {
     /// Path of the unpacked root's normalized manifest.
-    pub(crate) fn manifest(&self) -> PathBuf {
+    pub(crate) fn manifest(&self) -> Utf8PathBuf {
         self.root.join("Cargo.toml")
     }
 
@@ -78,21 +78,30 @@ impl PackagedCrate {
     pub(crate) fn read_manifest(&self) -> Result<String> {
         let path = self.manifest();
         let directory = Dir::open_ambient_dir(&self.root, cap_std::ambient_authority())
-            .with_context(|| format!("open packaged root {}", self.root.display()))?;
+            .with_context(|| format!("open packaged root {}", self.root))?;
         directory
             .read_to_string("Cargo.toml")
-            .with_context(|| format!("read packaged manifest {}", path.display()))
+            .with_context(|| format!("read packaged manifest {path}"))
     }
 }
 
+/// The version every crate in this release shares.
+///
+/// Taken from the crate under test rather than written out, because
+/// `cargo package` names the unpacked root and the archive after the version in
+/// the manifest. A release bump would otherwise leave these contracts looking
+/// for `0.9.0` directories that no longer exist, and every packaged contract
+/// would fail for a reason unrelated to the boundary claim.
+pub(crate) const PACKAGED_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// The three crates this release publishes, in dependency order.
 pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
-    ("ortho_l10n", "0.9.0"),
-    ("ortho_config_macros", "0.9.0"),
-    ("ortho_config", "0.9.0"),
+    ("ortho_l10n", PACKAGED_VERSION),
+    ("ortho_config_macros", PACKAGED_VERSION),
+    ("ortho_config", PACKAGED_VERSION),
 ];
 
-/// Materialise (once per test process) and return the packaged set.
+/// Materialize (once per test process) and return the packaged set.
 ///
 /// The first caller packages and unpacks; every later caller reads the same
 /// directory. A failure is cached too, so a broken packaging step is reported
@@ -126,8 +135,8 @@ pub(crate) fn packaged_crate(name: &str) -> Result<&'static PackagedCrate> {
 ///
 /// # Errors
 ///
-/// Returns an error when the packaged set cannot be materialised.
-pub(crate) fn unpacked_directory() -> Result<PathBuf> {
+/// Returns an error when the packaged set cannot be materialized.
+pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
     let first = packaged_set()?
         .first()
         .context("the packaged set is empty")?;
@@ -145,7 +154,7 @@ fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
         .join(super::fixture_cargo::BOUNDARY_ROOT)
         .join("packaging-target");
     Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
-        .with_context(|| format!("create packaging target {}", target.display()))?;
+        .with_context(|| format!("create packaging target {target}"))?;
 
     package_sources(
         &repository,
@@ -178,20 +187,25 @@ pub(crate) fn assert_packaged_set_complete() -> Result<()> {
         ensure!(
             packaged.manifest().is_file(),
             "{} has no unpacked manifest; the packaging step did not produce it",
-            packaged.manifest().display(),
+            packaged.manifest(),
         );
         let archive = unpacked.join(format!("{}-{}.crate", packaged.name, packaged.version));
-        ensure!(archive.is_file(), "{} was not written", archive.display());
+        ensure!(archive.is_file(), "{archive} was not written");
     }
     Ok(())
 }
 
 /// Run one `cargo package` invocation for `crates`, patching `sibling`.
-fn package_sources(repository: &Path, target: &Path, crates: &[&str], sibling: &str) -> Result<()> {
+fn package_sources(
+    repository: &Utf8Path,
+    target: &Utf8Path,
+    crates: &[&str],
+    sibling: &str,
+) -> Result<()> {
     // The subcommand comes first: `--manifest-path` is a per-command flag.
     let mut args = vec![String::from("package")];
     args.push(String::from("--manifest-path"));
-    args.push(repository.join("Cargo.toml").to_string_lossy().into_owned());
+    args.push(repository.join("Cargo.toml").into_string());
     args.push(String::from("--offline"));
     // The worktree is usually dirty while a milestone is being built; the
     // contract is about the sources as they are, not about what is committed.
@@ -229,12 +243,11 @@ fn package_sources(repository: &Path, target: &Path, crates: &[&str], sibling: &
 ///
 /// Cargo resolves a `--config` patch path against the working directory, so a
 /// relative spelling is both correct and stable across checkouts.
-fn sibling_path(repository: &Path, sibling: &str) -> Result<String> {
+fn sibling_path(repository: &Utf8Path, sibling: &str) -> Result<String> {
     let path = repository.join(sibling);
     ensure!(
         path.join("Cargo.toml").is_file(),
-        "the sibling patch source {} is not a crate root",
-        path.display(),
+        "the sibling patch source {path} is not a crate root",
     );
     Ok(sibling.to_owned())
 }

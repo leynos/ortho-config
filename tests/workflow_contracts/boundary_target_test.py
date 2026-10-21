@@ -15,7 +15,7 @@ resolve that silently reached crates.io would prove something about the
 network rather than about the shipped graph.
 
 A third property is deliberately *not* asserted as a whole: the recipe must
-not claim a cold measurement. The fixtures keep ``target/localisation-boundary``
+not claim a cold measurement. The fixtures keep ``target/localization-boundary``
 between runs, so a run is warm by design and the comment says so. Nothing here
 executes the suite — it takes minutes and builds foreign crates, which belongs
 to the gate runner and not to a contract test.
@@ -86,7 +86,9 @@ def test_the_target_selects_the_boundary_test_of_ortho_l10n() -> None:
     run does not duplicate ``make test``.
     """
     tokens = _invocation()
-    assert PACKAGE in tokens, f"the recipe does not select -p {PACKAGE}: {tokens}"
+    assert PACKAGE in _flag_values("-p"), (
+        f"the recipe does not select -p {PACKAGE}: {tokens}"
+    )
     assert TEST_TARGET in _flag_values("--test"), (
         f"the recipe does not select --test {TEST_TARGET}: {tokens}"
     )
@@ -108,7 +110,7 @@ def test_the_target_does_not_widen_the_selection() -> None:
 
 @pytest.mark.parametrize("flag", ["--offline"])
 def test_the_target_resolves_from_the_shared_package_cache(flag: str) -> None:
-    """Offline is evidence, not an optimisation.
+    """Offline is evidence, not an optimization.
 
     Scenario: the boundary contracts resolve from the local cache. Invariant:
     the recipe passes the flag, so a run that reached the network cannot be

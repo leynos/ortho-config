@@ -21,9 +21,10 @@
 mod library;
 
 use super::fixture_cargo::{absolute_member, repository_root, toml_string};
+use super::package_set::PACKAGED_VERSION;
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use std::fmt::Write as _;
-use std::path::Path;
 
 /// The package name every rendered consumer root uses.
 pub(crate) const CONSUMER_PACKAGE: &str = "boundary-consumer";
@@ -75,7 +76,7 @@ pub(crate) enum DependencySource {
     /// A published version, patched to the unpacked package roots.
     Packaged {
         /// Directory `cargo package` unpacked the crates into.
-        unpacked: std::path::PathBuf,
+        unpacked: camino::Utf8PathBuf,
     },
 }
 
@@ -158,10 +159,10 @@ fn write_workspace_dependencies(manifest: &mut String, dependency: Dependency) -
 fn write_packaged_dependencies(
     manifest: &mut String,
     dependency: Dependency,
-    unpacked: &Path,
+    unpacked: &Utf8Path,
 ) -> Result<()> {
     for crate_name in dependency.crates() {
-        writeln!(manifest, "{crate_name} = \"0.9.0\"")?;
+        writeln!(manifest, "{crate_name} = \"{PACKAGED_VERSION}\"")?;
     }
     writeln!(manifest)?;
     writeln!(
@@ -176,20 +177,19 @@ fn write_packaged_dependencies(
 }
 
 /// Write one `[patch.crates-io]` entry pointing at an unpacked package root.
-fn write_patch_entry(manifest: &mut String, unpacked: &Path, crate_name: &str) -> Result<()> {
-    let crate_root = unpacked.join(format!("{crate_name}-0.9.0"));
+fn write_patch_entry(manifest: &mut String, unpacked: &Utf8Path, crate_name: &str) -> Result<()> {
+    let crate_root = unpacked.join(format!("{crate_name}-{PACKAGED_VERSION}"));
     let absolute = crate_root
-        .canonicalize()
-        .with_context(|| format!("canonicalize packaged root {}", crate_root.display()))?;
+        .canonicalize_utf8()
+        .with_context(|| format!("canonicalize packaged root {crate_root}"))?;
     ensure!(
         absolute.join("Cargo.toml").is_file(),
-        "{} is not an unpacked package root",
-        absolute.display(),
+        "{absolute} is not an unpacked package root",
     );
     writeln!(
         manifest,
         "{crate_name} = {{ path = {} }}",
-        toml_string(&absolute.to_string_lossy()),
+        toml_string(absolute.as_str()),
     )?;
     Ok(())
 }

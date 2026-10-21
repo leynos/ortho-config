@@ -23,10 +23,10 @@ pub(crate) use environment::{cargo_binary, inherited_toolchain};
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
 
 use anyhow::{Context, Result, bail, ensure};
-use cap_std::fs::Dir;
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::fs_utf8::Dir;
 use environment::CARGO_DEADLINE;
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt as _;
@@ -36,7 +36,7 @@ use wait_timeout::ChildExt as _;
 /// One directory for the whole boundary suite means the packaging step, the
 /// nested consumer targets, and the shared package cache live together and can
 /// be discarded together.
-pub(crate) const BOUNDARY_ROOT: &str = "target/localisation-boundary";
+pub(crate) const BOUNDARY_ROOT: &str = "target/localization-boundary";
 
 /// One disposable foreign package root and its private target directory.
 ///
@@ -44,10 +44,13 @@ pub(crate) const BOUNDARY_ROOT: &str = "target/localisation-boundary";
 /// between runs on purpose: a warm package cache and a warm target make two
 /// sibling fixtures comparable, and neither is a cold-download claim.
 pub(crate) struct FixtureCargo {
-    /// Disposable package root, deleted when the fixture is dropped.
-    root: tempfile::TempDir,
+    /// The temporary root's drop guard. It is never read: its only job is to
+    /// delete the root when the fixture is dropped.
+    _tempdir: tempfile::TempDir,
+    /// The temporary root as a UTF-8 path, which manifests are rendered from.
+    root: Utf8PathBuf,
     /// Target directory shared by the fixtures of one contract family.
-    target: PathBuf,
+    target: Utf8PathBuf,
 }
 
 impl FixtureCargo {
@@ -55,26 +58,34 @@ impl FixtureCargo {
     ///
     /// # Errors
     ///
-    /// Returns an error when the boundary directory cannot be created or the
-    /// temporary root cannot be allocated beneath it.
+    /// Returns an error when the boundary directory cannot be created, when the
+    /// temporary root cannot be allocated beneath it, or when `tempfile` reports
+    /// that root as a non-UTF-8 path.
     pub(crate) fn new() -> Result<Self> {
         let repository = repository_root()?;
         let boundary = repository.join(BOUNDARY_ROOT);
         Dir::create_ambient_dir_all(&boundary, cap_std::ambient_authority())
-            .with_context(|| format!("create boundary root {}", boundary.display()))?;
-        let root = tempfile::Builder::new()
+            .with_context(|| format!("create boundary root {boundary}"))?;
+        let tempdir = tempfile::Builder::new()
             .prefix("fixture-")
             .tempdir_in(&boundary)
-            .with_context(|| format!("create fixture root under {}", boundary.display()))?;
+            .with_context(|| format!("create fixture root under {boundary}"))?;
+        // `tempfile` reports a `std` path and this is the only place the harness
+        // converts one. Every manifest the fixtures render names a path, so a
+        // non-UTF-8 root is rejected here rather than silently rendered as a
+        // lossy string that Cargo would then fail to find.
+        let root = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("the fixture root {} is not UTF-8", path.display()))?;
         Ok(Self {
+            _tempdir: tempdir,
             root,
             target: boundary.join("cargo-target"),
         })
     }
 
     /// Path of this fixture's package root.
-    pub(crate) fn root(&self) -> &Path {
-        self.root.path()
+    pub(crate) fn root(&self) -> &Utf8Path {
+        &self.root
     }
 
     /// Write `contents` to `relative_path` beneath the fixture root.
@@ -85,7 +96,7 @@ impl FixtureCargo {
     /// written.
     pub(crate) fn write(&self, relative_path: &str, contents: &str) -> Result<()> {
         let directory = Dir::open_ambient_dir(self.root(), cap_std::ambient_authority())
-            .with_context(|| format!("open fixture root {}", self.root().display()))?;
+            .with_context(|| format!("open fixture root {}", self.root()))?;
         if let Some((parent, _)) = relative_path.rsplit_once('/') {
             directory
                 .create_dir_all(parent)
@@ -100,7 +111,7 @@ impl FixtureCargo {
     ///
     /// The child receives the allow-listed toolchain environment, a
     /// `CARGO_TARGET_DIR` pointed at this fixture's private target, and
-    /// `--offline`. Offline is not an optimisation: a boundary contract has to
+    /// `--offline`. Offline is not an optimization: a boundary contract has to
     /// prove resolution from the shared package cache, and a network fetch
     /// would make it prove something about crates.io instead.
     ///
@@ -118,10 +129,10 @@ impl FixtureCargo {
         // are per-command flags, not global ones, so `cargo --manifest-path X
         // metadata` is a usage error.
         command
-            .current_dir(self.root.path())
+            .current_dir(self.root.as_std_path())
             .args(args)
             .arg("--manifest-path")
-            .arg(self.root.path().join("Cargo.toml"))
+            .arg(self.root.join("Cargo.toml").as_std_path())
             .arg("--offline")
             .env_clear()
             .envs(inherited_toolchain())
@@ -248,11 +259,11 @@ fn drain<R: std::io::Read + Send + 'static>(
 /// # Errors
 ///
 /// Returns an error when `CARGO_MANIFEST_DIR` has no parent.
-pub(crate) fn repository_root() -> Result<PathBuf> {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+pub(crate) fn repository_root() -> Result<Utf8PathBuf> {
+    let manifest = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
     manifest
         .parent()
-        .map(Path::to_path_buf)
+        .map(Utf8Path::to_path_buf)
         .context("locate repository root from ortho_l10n manifest directory")
 }
 
@@ -300,7 +311,7 @@ pub(crate) fn toml_string(value: &str) -> String {
     toml::Value::String(value.to_owned()).to_string()
 }
 
-/// Canonicalise a workspace member's crate root, for a manifest `path` key.
+/// Canonicalize a workspace member's crate root, for a manifest `path` key.
 ///
 /// The spelling is absolute because a rendered consumer lives under `target/`,
 /// not beside the members: Cargo resolves a relative path dependency against
@@ -310,17 +321,16 @@ pub(crate) fn toml_string(value: &str) -> String {
 /// # Errors
 ///
 /// Returns an error when the directory does not exist or holds no manifest.
-pub(crate) fn absolute_member(repository: &Path, member: &str) -> Result<String> {
+pub(crate) fn absolute_member(repository: &Utf8Path, member: &str) -> Result<String> {
     let crate_root = repository.join(member);
     let absolute = crate_root
-        .canonicalize()
-        .with_context(|| format!("canonicalize workspace member {}", crate_root.display()))?;
+        .canonicalize_utf8()
+        .with_context(|| format!("canonicalize workspace member {crate_root}"))?;
     ensure!(
         absolute.join("Cargo.toml").is_file(),
-        "{} is not a crate root",
-        absolute.display(),
+        "{absolute} is not a crate root",
     );
-    Ok(absolute.to_string_lossy().into_owned())
+    Ok(absolute.into_string())
 }
 
 /// Every dependency edge a manifest *declares*, as its tables name them.

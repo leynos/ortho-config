@@ -1,7 +1,7 @@
 //! Dependency-closure contracts for a standalone runtime consumer.
 //!
 //! The claim under test is a *removal*: an application that only formats
-//! localised messages must not compile configuration discovery, the derive
+//! localized messages must not compile configuration discovery, the derive
 //! macros, Figment, or Clap. A closure claim is easy to state and easy to
 //! weaken, so this module enforces it three ways:
 //!
@@ -150,14 +150,6 @@ pub(crate) enum Injection {
 }
 
 impl Injection {
-    /// Every injection, so a new variant cannot be forgotten.
-    pub(crate) const ALL: [Self; 4] = [
-        Self::NormalClap,
-        Self::BuildClap,
-        Self::DevClap,
-        Self::DevTestHelpers,
-    ];
-
     /// The crate the injection pulls in, which the failure must name.
     pub(crate) const fn injected_crate(self) -> &'static str {
         match self {

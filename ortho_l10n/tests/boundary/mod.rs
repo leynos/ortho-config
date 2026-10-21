@@ -12,7 +12,7 @@
 //! - [`fixture_cargo`] owns the disposable root, its closed child environment,
 //!   and the reading of Cargo's metadata document;
 //! - [`consumer`] renders the package roots a stranger would write;
-//! - [`package_set`] materialises the crates as `cargo package` publishes them;
+//! - [`package_set`] materializes the crates as `cargo package` publishes them;
 //! - [`closure`] states the removal claim and the negative controls that keep
 //!   it honest.
 

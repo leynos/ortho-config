@@ -33,6 +33,10 @@ proptest.workspace = true
 # and TOML rendering for the manifests they write.
 anyhow = "1"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
+# Paths inside the fixtures are UTF-8 throughout (they are rendered into
+# manifests and compared as crate-root names), so `cap_std::fs_utf8`'s own
+# `camino` types are spelled directly rather than converted from `std` paths.
+camino = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"

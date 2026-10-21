@@ -88,7 +88,7 @@ impl Metadata {
     ///
     /// Returns an error when the package has no resolve node, when an edge
     /// names an id the package list does not contain, or when Cargo reports an
-    /// edge kind this suite does not recognise.
+    /// edge kind this suite does not recognize.
     pub(crate) fn edges(&self, name: &str) -> Result<Vec<DependencyEdge>> {
         let id = self.id_of(name)?;
         let node = self
@@ -206,7 +206,7 @@ impl EdgeKind {
             None => Ok(Self::Normal),
             Some("build") => Ok(Self::Build),
             Some("dev") => Ok(Self::Dev),
-            Some(other) => bail!("unrecognised Cargo dependency edge kind {other:?}"),
+            Some(other) => bail!("unrecognized Cargo dependency edge kind {other:?}"),
         }
     }
 }

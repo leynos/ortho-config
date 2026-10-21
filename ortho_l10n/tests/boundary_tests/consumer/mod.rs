@@ -29,7 +29,7 @@ fn workspace_runtime_consumer_builds_and_tests() -> Result<()> {
 /// Build and test a facade consumer resolved from workspace path dependencies.
 ///
 /// The facade consumer is what existing applications already do. It must keep
-/// resolving `ortho_config`, and it must reach the localiser through the
+/// resolving `ortho_config`, and it must reach the localizer through the
 /// facade's re-export rather than through a direct runtime dependency.
 #[test]
 fn workspace_facade_consumer_builds_and_tests() -> Result<()> {

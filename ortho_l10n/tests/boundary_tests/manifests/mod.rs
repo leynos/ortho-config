@@ -1,7 +1,7 @@
 //! Contract tests: the packaged manifests declare what the release claims.
 //!
 //! `cargo package` rewrites every `path` dependency into a version
-//! requirement and emits a normalised manifest. That normalised file - not the
+//! requirement and emits a normalized manifest. That normalized file - not the
 //! workspace's - is what a stranger's resolver reads, so it is where two
 //! separate claims have to hold:
 //!
@@ -44,15 +44,16 @@ fn packaged_runtime_declares_only_its_runtime_crates() -> Result<()> {
     Ok(())
 }
 
-/// No packaged manifest may declare a forbidden crate as a normal edge.
+/// The packaged *runtime* must declare no forbidden crate as a normal edge.
 ///
-/// The forbidden list is the issue's removal claim, so it is applied to every
-/// published root rather than only to the runtime: a facade that leaked Clap
-/// into the runtime's *build* graph would be a different defect, and this test
-/// deliberately says nothing about the facade's own Clap edge, which is
-/// expected.
+/// The forbidden list is the issue's removal claim, and the runtime is the root
+/// that claim is about. It is deliberately not applied to the facade: the
+/// facade is expected to declare Clap itself, so widening the check to it would
+/// fail for the correct behaviour. The facade's runtime-facing edges are
+/// covered separately by
+/// [`packaged_facade_declares_the_runtime_and_the_macros`].
 #[test]
-fn no_packaged_manifest_declares_a_forbidden_runtime_edge() -> Result<()> {
+fn packaged_runtime_declares_no_forbidden_edge() -> Result<()> {
     assert_packaged_set_complete()?;
     let packaged = packaged_crate("ortho_l10n")?;
     let declared = declared_dependencies(&packaged.read_manifest()?)?;

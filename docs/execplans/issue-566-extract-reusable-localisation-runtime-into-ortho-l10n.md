@@ -166,13 +166,13 @@ same-version edges need Cargo's local registry overlay. Full workspace tests
 may contain unrelated infrastructure failures; preserve logs and distinguish
 unavailable infrastructure from source failures.
 
-EP-M3 measured that cost: +25 crates and +13.25 s on a from-scratch macro
+EP-M3 measured that cost: +24 crates and +13.25 s on a from-scratch macro
 build, about 10 %, and nothing on an incremental one. The figure is a
 warm-cache delta, not a download cost, and it was taken under a fully held
 admission pool with sccache unavailable for part of the HEAD run. Treat it as
 an upper bound.
 
-The boundary suite writes 1.7 G under `target/localisation-boundary`, and the
+The boundary suite writes 1.7 G under `target/localization-boundary`, and the
 CI runner is sized for disk rather than time. `discard_build_trees.py` cannot
 name that tree — it accepts one relative component directly under the target
 root and the workflow's invocation is pinned — so the tree is discarded only by
@@ -320,8 +320,9 @@ approaches; they are no longer outstanding work.
   built and green locally; the `make boundary` target and its workflow contract
   are in place. Committed as `f357813d`, after two gate repairs (14 Clippy
   findings, then one Whitaker `bumpy_road_function`) and a clean re-run of all
-  seven gates on tree `7b2ce374`. The milestone CLI review is outstanding, so
-  the milestone checkbox stays open until it passes.
+  seven gates on tree `7b2ce374`. The milestone CLI review has run; its
+  findings are being dispositioned, so the milestone checkbox stays open until
+  none is outstanding.
 - [ ] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR.
@@ -334,7 +335,7 @@ changed.
 
 - **CI budget is exactly consumed.** `build-test` has a 165-minute ceiling
   (9,900 seconds). Its watchdog plus outside-watchdog allowance plus ceiling
-  margin already total 2×2,700 + 3,600 + 900 + 900 = 9,900, so no further
+  margin already total 2×2,700 + 3,600 + 900 = 9,900, so no further
   coverage-invoking step fits in that job. Any new EP-M3 gate must be a
   Makefile target that the existing Linux leg already runs, or a new job with
   its own budget entry.
@@ -385,10 +386,10 @@ changed.
 
 ### EP-M3 boundary suite (2026-10-21)
 
-Twelve files, 2,390 lines, untracked until the milestone commit. The declared
-`[[test]] name = "boundary"` target in `ortho_l10n/Cargo.toml` reaches
-`tests/boundary_tests/mod.rs`; the fixtures below it are rendered foreign
-package roots, not tests.
+Twelve files, 2,390 lines as committed in `f357813d` (the counts below are the
+committed ones). The declared `[[test]] name = "boundary"` target in
+`ortho_l10n/Cargo.toml` reaches `tests/boundary_tests/mod.rs`; the fixtures
+below it are rendered foreign package roots, not tests.
 
 | File                                                 | Lines           | What it owns                                          |
 | ---------------------------------------------------- | --------------- | ----------------------------------------------------- |
@@ -417,16 +418,16 @@ libtest's in-process threads contend for one shared packaging `OnceLock`; that
 is a scheduling property of the harness, not suite cost.
 
 The suite is 1.7 G on disk (938 M `cargo-target`, 745 M `packaging-target`),
-all under the git-ignored `target/localisation-boundary`. `BOUNDARY_ROOT`
+all under the git-ignored `target/localization-boundary`. `BOUNDARY_ROOT`
 appears at three sites, all inside `ortho_l10n/tests/`.
 
 **The target is already in CI.** `generate-coverage` defaults to
 `cargo llvm-cov nextest` with `all-targets` off; nextest's default filter still
 runs every test binary in the workspace, so both coverage steps execute
 `boundary` today. No workflow edit is needed, and none is made: the
-`build-test` ceiling is exactly consumed (2×2,700 + 3,600 + 900 + 900 = 9,900
-s), the platform-keyed step set is closed at 16 entries, and `DISCARD_COMMAND`
-is pinned as an exact string that cannot name a new tree.
+`build-test` ceiling is exactly consumed (2×2,700 + 3,600 + 900 = 9,900 s), the
+platform-keyed step set is closed at 16 entries, and `DISCARD_COMMAND` is
+pinned as an exact string that cannot name a new tree.
 
 Offline resolution under `target/` means the children emit their own
 `LLVM_PROFILE_FILE` profiles, which the coverage step never collects. CI
@@ -457,18 +458,22 @@ package cache. **The cache was warm; no figure is a cold-download claim.**
 | Measurement                                             | Wall     | Crates compiled |
 | ------------------------------------------------------- | -------- | --------------- |
 | Macro crate, baseline `f99d9234` (no `ortho_l10n` edge) | 129.74 s | 14              |
-| Macro crate, HEAD `21ad3e3f`                            | 142.99 s | 38 (25 more)    |
+| Macro crate, HEAD `21ad3e3f`                            | 142.99 s | 38 (24 more)    |
 | Runtime consumer, `ortho_l10n` only, packaged 0.9.0     | 24.53 s  | 31              |
 | Facade consumer, `ortho_config` only, packaged 0.9.0    | 62 s     | 103             |
 
-The 25 crates the macro build gains are `ortho_l10n` and its transitive closure
-(`fluent-bundle`, `fluent-syntax`, `fluent-langneg`, `intl-memoizer`,
-`intl_pluralrules`, `unic-langid*`, `thiserror`, `tracing`, `type-map`,
-`self_cell`, `once_cell`, `smallvec`, `pin-project-lite`, `rustc-hash`,
-`tinystr`, `displaydoc`, `proc-macro-hack`). Nothing was removed. So the macro
-normal dependency is a real host-build cost: **+13.25 s and +24 crates** over a
-from-scratch build, about 10 %, and **zero** for an incremental rebuild (0.10 s
-warm).
+The 24 crates the macro build gains are `ortho_l10n` and the packages reachable
+only through it: `displaydoc`, `fluent-bundle`, `fluent-langneg`,
+`fluent-syntax`, `intl-memoizer`, `intl_pluralrules`, `once_cell`,
+`pin-project-lite`, `proc-macro-hack`, `rustc-hash`, `self_cell`, `smallvec`,
+`thiserror`, `thiserror-impl`, `tinystr`, `tracing`, `tracing-attributes`,
+`tracing-core`, `type-map`, `unic-langid`, `unic-langid-impl`,
+`unic-langid-macros`, and `unic-langid-macros-impl`. Nothing was removed. The
+count is the same whether it is read as the measured 38 − 14 compiled crates or
+as a `cargo tree --prune ortho_l10n` set difference, which is why it is
+recorded as 24 rather than 25. So the macro normal dependency is a real
+host-build cost: **+13.25 s and +24 crates** over a from-scratch build, about
+10 %, and **zero** for an incremental rebuild (0.10 s warm).
 
 Consumer closure, same packaged set: the runtime root resolves **36** packages
 with no `ortho_config`, `ortho_config_macros`, `figment`, `clap`, or
@@ -607,7 +612,7 @@ s per-test allowance, so an override would encode a contention figure as policy.
 
 2026-10-21 (EP-M3): Keep the macro's `ortho_l10n` dependency as a normal
 dependency and record the measured host cost rather than hiding it behind a
-build-script or feature gate. The 25 extra crates are the price of one fallible
+build-script or feature gate. The 24 extra crates are the price of one fallible
 identifier owner shared by macro-expansion time and runtime; the alternative is
 a second copy of the normalizer, which is the defect the extraction exists to
 remove.
@@ -631,10 +636,11 @@ boundary contracts green under three scheduling regimes, the negative controls
 proved to fail for their injected dependency by name, the packaged set built
 from two `cargo package` invocations, the macro host cost measured against
 `f99d9234`, and the focused `make boundary` target pinned by a workflow
-contract. What remains before the checkbox closes is the sequential gate run
-and the milestone CLI review, neither of which had started when this note was
-written. The measured +25-crate macro closure is recorded as a risk with an
-upper-bound caveat rather than as a settled performance claim.
+contract. The sequential gate run passed on tree `7b2ce374` and the milestone
+CLI review has since run, so what remains before the checkbox closes is that
+review round's disposition and repair. The measured +24-crate macro closure is
+recorded as a risk with an upper-bound caveat rather than as a settled
+performance claim.
 
 Decision log note (2026-10-21): The earlier guidance to use explicit result
 branches at the Clap collision panic boundaries is superseded. Those sites now

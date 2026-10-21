@@ -1,7 +1,7 @@
 //! The library bodies a rendered consumer root compiles and tests.
 //!
 //! A consumer root is only evidence if its body does something an application
-//! would do: build a localiser, look a message up, fall back when there is no
+//! would do: build a localizer, look a message up, fall back when there is no
 //! translation, and observe a formatting failure. The bodies here do exactly
 //! that, and nothing more, so a failure names one of five things:
 //!
@@ -26,7 +26,7 @@
 //! expected values spell Fluent's bidi isolation characters as `\u{2068}` and
 //! `\u{2069}` escape text rather than the invisible characters themselves;
 //! they are part of the contract, because an assertion that stripped them
-//! would also pass for a localiser that never interpolated anything.
+//! would also pass for a localizer that never interpolated anything.
 
 use super::Dependency;
 
@@ -48,7 +48,7 @@ pub(crate) fn body(dependency: Dependency) -> String {
 /// Written as an application would write it: a catalogue of its own, one
 /// interpolation, one deliberate miss, and one message whose pattern cannot be
 /// formatted because its argument is absent.
-const RUNTIME_BODY: &str = r#"//! A consumer of the standalone localisation runtime.
+const RUNTIME_BODY: &str = r#"//! A consumer of the standalone localization runtime.
 //!
 //! Written as an application would write it: a catalogue of its own, one
 //! interpolation, one deliberate miss, and one message whose pattern cannot be
@@ -78,7 +78,7 @@ pub struct Observations {
     pub reported: Vec<String>,
 }
 
-/// Build a localiser, exercise it, and return what it did.
+/// Build a localizer, exercise it, and return what it did.
 pub fn observe() -> Observations {
     let reported: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&reported);
@@ -97,7 +97,7 @@ pub fn observe() -> Observations {
     let greeting = localizer.lookup("welcome", Some(&args));
     // `broken` references an argument the caller never supplies. Looking it up
     // is what exercises the reporting path; asserting on the list without
-    // looking it up would pass for a localiser that never reported anything.
+    // looking it up would pass for a localizer that never reported anything.
     let unformattable = localizer.lookup("broken", None);
     Observations {
         greeting,
@@ -144,12 +144,12 @@ mod tests {
 
 /// A consumer of the configuration facade alone.
 ///
-/// Existing applications import the localiser through `ortho_config`. This
+/// Existing applications import the localizer through `ortho_config`. This
 /// body pins that path: it must keep naming the same runtime items, and the
 /// facade's embedded catalogue must still be reachable through them.
 const CONFIGURATION_BODY: &str = r#"//! A consumer of the configuration facade alone.
 //!
-//! Existing applications import the localiser through `ortho_config`. This
+//! Existing applications import the localizer through `ortho_config`. This
 //! body pins that path: it must keep naming the same runtime items, and the
 //! facade's embedded catalogue must still be reachable through them.
 use ortho_config::{FluentLocalizer, Localizer, langid};
@@ -163,7 +163,7 @@ pub struct Observations {
     pub layered: Option<String>,
 }
 
-/// Build a facade localiser and look up one message from each catalogue.
+/// Build a facade localizer and look up one message from each catalogue.
 pub fn observe() -> Observations {
     let localizer = FluentLocalizer::builder(langid!("en-GB"))
         .with_consumer_resources(["welcome = Hello from the facade consumer"])
@@ -240,13 +240,13 @@ pub fn runtime_localizer() -> RuntimeLocalizer {
         .expect("the consumer catalogue is valid")
 }
 
-/// Hand a runtime-built localiser to a function declaring the facade's type.
+/// Hand a runtime-built localizer to a function declaring the facade's type.
 pub fn greet_through_the_facade() -> Option<String> {
     let localizer: FacadeLocalizer = runtime_localizer();
     greet(&localizer)
 }
 
-/// Build a localiser through the facade and use the runtime's trait on it.
+/// Build a localizer through the facade and use the runtime's trait on it.
 pub fn greet_through_the_runtime() -> Option<String> {
     let localizer = FacadeLocalizer::builder(facade_langid!("en-GB"))
         .with_consumer_resources(["welcome = Hello, { $name }!"])

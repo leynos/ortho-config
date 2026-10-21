@@ -19,6 +19,7 @@ use crate::boundary::fixture_cargo::{
 };
 use crate::boundary::package_set::{ConsumerFixture, unpacked_directory};
 use anyhow::{Context, Result, ensure};
+use rstest::rstest;
 
 /// Resolve a runtime consumer from path dependencies and assert its closure.
 ///
@@ -114,47 +115,44 @@ fn no_forbidden_package_appears_in_a_workspace_runtime_consumer() -> Result<()> 
 
 /// Each negative control must fail, and fail *for its injected edge*.
 ///
+/// One case per injection rather than a loop, so a failure names the injection
+/// that produced it instead of stopping at the first one in enum order, and
+/// nextest can schedule the four nested Cargo runs independently. Each case
+/// spawns a `cargo metadata` of its own; each is deadline-bounded by the
+/// fixture's own [`CARGO_DEADLINE`], and they share one fixture target
+/// directory, so running them concurrently costs one warm resolve rather than
+/// four cold ones.
+///
 /// Two outcomes are legitimate and both are accepted: Cargo may refuse the
 /// injected crate during resolution, or resolve it and have the closure check
 /// reject it by name. The control only counts as evidence when one of those
-/// happened; a fixture that failed for an unrelated reason is an error here,
-/// not a pass.
-#[test]
-fn negative_controls_reject_every_injected_edge() -> Result<()> {
-    for injection in Injection::ALL {
-        let outcome = run_negative_control(injection).with_context(|| {
-            format!(
-                "the {} negative control did not behave",
-                injection.describe()
-            )
-        })?;
-        ensure!(
-            !diagnostic_of(&outcome).is_empty(),
-            "the {} negative control produced no diagnostic detail",
-            injection.describe(),
-        );
-    }
-    Ok(())
-}
-
-/// The failure must show the injected dependency's path, by name.
-///
-/// `run_negative_control` returns the diagnostic line rather than asserting
-/// on it, because the two legitimate outcomes print different text. This test
-/// is the assertion: whichever outcome occurred, the diagnostic has to name
-/// the injected crate, so a reader can see which edge an injection produced.
-#[test]
-fn negative_controls_name_the_injected_dependency() -> Result<()> {
-    for injection in Injection::ALL {
-        let outcome = run_negative_control(injection)?;
-        ensure!(
-            diagnostic_of(&outcome).contains(injection.injected_crate()),
-            "the {} control failed without naming {}: {}",
-            injection.describe(),
-            injection.injected_crate(),
-            diagnostic_of(&outcome),
-        );
-    }
+/// happened *and* the diagnostic names the injected crate; a fixture that
+/// failed for an unrelated reason is an error here, not a pass. Both
+/// conditions are asserted in one case because the second subsumes the first:
+/// a diagnostic that names a crate is not empty.
+#[rstest]
+fn negative_controls_reject_every_injected_edge(
+    #[values(
+        Injection::NormalClap,
+        Injection::BuildClap,
+        Injection::DevClap,
+        Injection::DevTestHelpers
+    )]
+    injection: Injection,
+) -> Result<()> {
+    let outcome = run_negative_control(injection).with_context(|| {
+        format!(
+            "the {} negative control did not behave",
+            injection.describe()
+        )
+    })?;
+    let diagnostic = diagnostic_of(&outcome);
+    ensure!(
+        diagnostic.contains(injection.injected_crate()),
+        "the {} control failed without naming {}: {diagnostic}",
+        injection.describe(),
+        injection.injected_crate(),
+    );
     Ok(())
 }
 
