@@ -4,50 +4,54 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use cap_std::fs_utf8::OpenOptions;
 use std::io;
+use std::time::Instant;
 
-use super::{
-    CargoBuild, CargoStatus, GeneratedTarget, binary_file_name, io_error, message_error,
-    open_directory,
-};
+use super::protocol::binary_file_name;
+use super::{CargoBuild, CargoStatus, GeneratedTarget, io_error, message_error, open_directory};
+use crate::bridge_observability as observability;
 use crate::error::OrthohelpError;
 
 /// Validate Cargo's status and protocol state, then snapshot its binary.
+#[tracing::instrument(skip_all, fields(operation = "bridge_snapshot"))]
 pub(super) fn finish_build(
     build: CargoBuild,
     target: &GeneratedTarget<'_>,
     snapshot_directory: &Utf8Path,
     snapshot: &Dir,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
+    let started = Instant::now();
     if let CargoStatus::Failure(status) = build.status {
+        observability::failed("bridge_snapshot", "cargo_nonzero_exit", started);
         return Err(OrthohelpError::BridgeBuildFailure {
             status,
             message: "Cargo build failed; rendered diagnostics were forwarded to stderr".to_owned(),
         });
     }
     if let Some(error) = build.messages.protocol_error {
+        observability::failed("bridge_snapshot", "protocol_error", started);
         return Err(error);
     }
-    let executable = build.messages.executable.ok_or_else(|| {
-        message_error(&format!(
+    let Some(executable) = build.messages.executable else {
+        observability::failed("bridge_snapshot", "executable_missing", started);
+        return Err(message_error(&format!(
             "Cargo build succeeded without a bin {} artifact",
             target.binary_name
-        ))
-    })?;
-    let private_executable = snapshot_executable(&executable, target, snapshot_directory, snapshot)
-        .map_err(|error| {
-            tracing::warn!(
-                target_directory = %target.directory,
-                artifact = %executable,
-                error = %error,
-                "bridge snapshot failed after Cargo exited"
-            );
-            error
-        })?;
+        )));
+    };
+    let private_executable =
+        match snapshot_executable(&executable, target, snapshot_directory, snapshot) {
+            Ok(path) => path,
+            Err(error) => {
+                observability::failed("bridge_snapshot", "copy_failed", started);
+                return Err(error);
+            }
+        };
     super::outputs::remove_generated_outputs(
         target.directory,
         target.binary_name,
         &build.messages.generated_outputs,
     );
+    observability::completed("bridge_snapshot", "success", started);
     Ok(private_executable)
 }
 
@@ -96,11 +100,11 @@ fn snapshot_executable(
         .and_then(|()| destination.sync_all());
     if let Err(copy_error) = copied {
         let primary = io_error(&destination_path, copy_error);
-        if let Err(cleanup) = snapshot.remove_file(executable_name.as_str()) {
+        if snapshot.remove_file(executable_name.as_str()).is_err() {
             tracing::warn!(
-                path = %destination_path,
-                error = %cleanup,
-                primary = %primary,
+                operation = "bridge_snapshot_cleanup",
+                outcome = "incomplete_copy_retained",
+                cleanup_pending = true,
                 "failed to remove incomplete bridge snapshot"
             );
         }

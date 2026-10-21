@@ -6,23 +6,19 @@ import re
 import tomllib
 from pathlib import Path
 
-from nextest_budgets import global_timeout, profile_allowance
+from nextest_budgets import budget_of, global_timeout, profile_allowance
 from timeout_budgets import NEXTEST_CONFIG
 
 SUPPORT = Path(__file__).resolve().parents[2] / "ortho_config/tests/documentation_examples"
 
 
 def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None:
-    """Fit this binary's default allowance, not the larger trybuild override."""
+    """Keep documentation and BDD budgets inside their per-test ceilings."""
     policy = (SUPPORT / "process_runner_policy.rs").read_text(encoding="utf-8")
     execution_policy = (SUPPORT / "process_runner_execution_policy.rs").read_text(
         encoding="utf-8"
     )
     scenario = (SUPPORT / "scenario.rs").read_text(encoding="utf-8")
-    bdd_scenarios = (
-        Path(__file__).resolve().parents[2]
-        / "cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps.rs"
-    ).read_text(encoding="utf-8")
     operations = {
         kind: int(seconds)
         for kind, seconds in re.findall(
@@ -39,15 +35,8 @@ def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None
         policy,
     )
     scenario_match = re.search(r"PER_TEST_SECONDS:\s*u64\s*=\s*(\d+)", scenario)
-    bdd_deadline_match = re.search(
-        r"SCENARIO_TIMEOUT_SECS:\s*u64\s*=\s*(\d+)",
-        bdd_scenarios,
-    )
     assert cleanup_match is not None, "Policy::new must declare a cleanup_timeout"
     assert scenario_match is not None, "scenario.rs must declare PER_TEST_SECONDS"
-    assert bdd_deadline_match is not None, (
-        "BDD scenarios must declare SCENARIO_TIMEOUT_SECS for their fixed deadline"
-    )
     cleanup = int(cleanup_match[1])
     per_test = int(scenario_match[1])
     nextest = NEXTEST_CONFIG.read_text(encoding="utf-8")
@@ -55,20 +44,84 @@ def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None
     assert 0 < operations["discovery"] < operations["execution"] < operations["build"], (
         f"operation budgets must increase: {operations}"
     )
-    assert per_test == profile_allowance(nextest), (
-        "PER_TEST_SECONDS must equal the nextest default per-test allowance"
+    assert per_test == _documentation_scenario_allowance(nextest), (
+        "PER_TEST_SECONDS must equal the documentation scenario test allowance"
+    )
+    assert per_test > profile_allowance(nextest), (
+        "documentation scenarios must use their measured per-test override"
     )
     whole_run = global_timeout(nextest)
     assert whole_run is not None, "nextest default profile must set global-timeout"
     envelope = per_test - 2 * cleanup
     assert envelope > 0, "two cleanup allowances must fit inside the per-test allowance"
-    assert int(bdd_deadline_match[1]) == envelope, (
-        "BDD scenario deadline must match the documented-test scenario envelope"
-    )
     assert operations["build"] <= envelope, "build budget exceeds the effective scenario deadline"
     assert envelope + cleanup < per_test, "reporting must keep one cleanup allowance"
     assert per_test < whole_run, "per-test allowance must fit inside the whole-run budget"
-    assert "saturating_mul(2)" in scenario, "scenario must reserve two cleanup allowances"
+    _assert_bdd_scenario_budget(nextest, cleanup)
+
+
+def _documentation_scenario_allowance(nextest: str) -> float:
+    """Read the shared nextest allowance for binaries using scenario.rs."""
+    overrides = tomllib.loads(nextest)["profile"]["default"]["overrides"]
+    binaries = (
+        "documented_command",
+        "documentation_examples_rust_tests",
+        "identifier_artefact_e2e",
+    )
+    allowances: set[float] = set()
+    for binary in binaries:
+        matching = [
+            override
+            for override in overrides
+            if re.search(rf"binary\({re.escape(binary)}\)", override.get("filter", ""))
+        ]
+        assert len(matching) == 1, f"{binary} must have one nextest timeout override"
+        override = matching[0]
+        assert override.get("test-group") == "orthohelp_cache"
+        assert "slow-timeout" in override, f"{binary} must have a finite test timeout"
+        allowances.add(
+            budget_of(
+                f"profile.default.overrides.{binary}", override["slow-timeout"]
+            )
+        )
+    assert len(allowances) == 1, "documentation scenario binaries must share one allowance"
+    return allowances.pop()
+
+
+def _assert_bdd_scenario_budget(nextest: str, cleanup: int) -> None:
+    """Match the BDD operation deadline to its dedicated nextest allowance."""
+    repository = Path(__file__).resolve().parents[2]
+    bdd_source = (
+        repository / "cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps.rs"
+    ).read_text(encoding="utf-8")
+    deadline_match = re.search(r"SCENARIO_TIMEOUT_SECS:\s*u64\s*=\s*(\d+)", bdd_source)
+    assert deadline_match is not None, "BDD scenarios must declare their fixed deadline"
+
+    nextest_document = tomllib.loads(nextest)
+    bdd_overrides = [
+        override
+        for override in nextest_document["profile"]["default"]["overrides"]
+        if "binary(rstest_bdd)" in override.get("filter", "")
+    ]
+    assert len(bdd_overrides) == 1, "rstest_bdd must have one measured timeout override"
+    bdd_override = bdd_overrides[0]
+    assert bdd_override.get("test-group") == "orthohelp_cache"
+    bdd_allowance = budget_of(
+        "profile.default.overrides.rstest_bdd", bdd_override["slow-timeout"]
+    )
+    bdd_envelope = int(deadline_match[1])
+    whole_run = global_timeout(nextest)
+    assert whole_run is not None, "nextest default profile must set global-timeout"
+    assert bdd_envelope + 2 * cleanup == bdd_allowance, (
+        "BDD scenario deadline must reserve cleanup and reporting inside its override"
+    )
+    assert bdd_envelope > profile_allowance(nextest), (
+        "measured BDD envelope must use its larger override"
+    )
+    assert bdd_allowance < whole_run, "BDD allowance must fit inside the whole-run budget"
+    assert "saturating_mul(2)" in (SUPPORT / "scenario.rs").read_text(encoding="utf-8"), (
+        "documentation scenario must reserve two cleanup allowances"
+    )
 
 
 def test_shared_documentation_builds_start_after_peer_tests() -> None:
@@ -83,7 +136,7 @@ def test_shared_documentation_builds_start_after_peer_tests() -> None:
         for override in nextest["profile"]["default"]["overrides"]
         if override.get("test-group") == "orthohelp_cache"
     ]
-    assert len(cache_filters) == 1, "shared-cache binaries need one nextest group"
+    assert cache_filters, "shared-cache binaries need a nextest group"
     required_binaries = {
         "rstest_bdd",
         "powershell_windows",
@@ -98,7 +151,7 @@ def test_shared_documentation_builds_start_after_peer_tests() -> None:
     missing = {
         binary
         for binary in required_binaries
-        if f"binary({binary})" not in cache_filters[0]
+        if not any(f"binary({binary})" in cache_filter for cache_filter in cache_filters)
     }
     assert not missing, f"shared documentation cache users escaped serialization: {missing}"
 

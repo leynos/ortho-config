@@ -30,7 +30,7 @@ fn operation_policies_select_distinct_timeouts() {
     let execution = crate::process_runner_execution_policy::policy();
     let discovery = Policy::discovery();
 
-    assert_eq!(build.timeout(), Duration::from_secs(596));
+    assert_eq!(build.timeout(), Duration::from_secs(956));
     assert!(build.timeout() > execution.timeout());
     assert!(execution.timeout() > discovery.timeout());
 }

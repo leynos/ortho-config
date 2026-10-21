@@ -24,6 +24,7 @@ use std::os::fd::OwnedFd;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::process::Command;
+use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
@@ -49,7 +50,11 @@ pub type StepError = Box<dyn std::error::Error + Send + Sync>;
 /// Result type for step definition operations.
 pub type StepResult<T> = Result<T, StepError>;
 
-const SCENARIO_TIMEOUT_SECS: u64 = 596;
+// The 593.838s package-cache wait measured locally gets 1.61x headroom here.
+// The 960s nextest ceiling leaves two seconds for cleanup and two for reporting.
+pub(super) const SCENARIO_TIMEOUT_SECS: u64 = 956;
+
+static BDD_SCENARIO_OWNERSHIP: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
 /// Scenario state for cargo-orthohelp scenarios.
 #[derive(Debug, ScenarioState)]
@@ -69,6 +74,22 @@ pub struct OrthoHelpContext {
 #[derive(Debug)]
 pub(super) struct CacheOwnership {
     _lock: CacheLock,
+    _process_lock: ProcessCacheLock,
+}
+
+/// Serializes cache scenarios launched by one libtest process.
+#[derive(Debug)]
+struct ProcessCacheLock {
+    _guard: MutexGuard<'static, ()>,
+}
+
+impl ProcessCacheLock {
+    fn acquire() -> Self {
+        let guard = BDD_SCENARIO_OWNERSHIP
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        Self { _guard: guard }
+    }
 }
 
 /// Holds an advisory lock for the lifetime of its capability-opened file.
@@ -86,7 +107,11 @@ struct CacheLock {
 }
 
 impl CacheOwnership {
-    fn acquire(target_dir: &Utf8Path, deadline: Instant) -> StepResult<Self> {
+    fn acquire(
+        target_dir: &Utf8Path,
+        deadline: Instant,
+        process_lock: ProcessCacheLock,
+    ) -> StepResult<Self> {
         let root = target_dir.join("orthohelp-bdd");
         Dir::create_ambient_dir_all(&root, ambient_authority())?;
         let directory = Dir::open_ambient_dir(&root, ambient_authority())?;
@@ -96,6 +121,7 @@ impl CacheOwnership {
         )?;
         Ok(Self {
             _lock: acquire_cache_lock(lock_file, deadline)?,
+            _process_lock: process_lock,
         })
     }
 }
@@ -244,13 +270,18 @@ pub fn orthohelp_context() -> OrthoHelpContext {
     };
     let ctx = OrthoHelpContext::default();
     ctx.workspace_root.set(workspace_root.clone());
+    // Direct `cargo test` runs scenario functions concurrently, unlike the
+    // configured nextest group. Queue locally before starting the bounded
+    // scenario operation; the filesystem lease still bounds cross-process
+    // contention, including any Cargo or compiler admission delay.
+    let process_lock = ProcessCacheLock::acquire();
     let deadline = Instant::now() + Duration::from_secs(SCENARIO_TIMEOUT_SECS);
     ctx.deadline.set(deadline);
     let target_dir = match resolve_target_dir(&workspace_root, deadline) {
         Ok(target) => target,
         Err(err) => panic!("Cargo target should be discoverable: {err}"),
     };
-    let ownership = match CacheOwnership::acquire(&target_dir, deadline) {
+    let ownership = match CacheOwnership::acquire(&target_dir, deadline, process_lock) {
         Ok(ownership) => ownership,
         Err(err) => panic!("shared BDD cache should be owned: {err}"),
     };
@@ -264,4 +295,20 @@ pub fn orthohelp_context() -> OrthoHelpContext {
     };
     ctx.out_dir.set(out_dir);
     ctx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BDD_SCENARIO_OWNERSHIP, ProcessCacheLock};
+    use std::sync::TryLockError;
+
+    #[test]
+    fn process_cache_ownership_excludes_another_local_scenario() {
+        let _ownership = ProcessCacheLock::acquire();
+
+        assert!(matches!(
+            BDD_SCENARIO_OWNERSHIP.try_lock(),
+            Err(TryLockError::WouldBlock)
+        ));
+    }
 }

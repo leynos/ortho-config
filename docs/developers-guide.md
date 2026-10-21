@@ -77,9 +77,10 @@ single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
 `documentation_examples_rust_tests`, `agent_context_contract`,
 `policy_report_contract`, `golden_tests` and `identifier_artefact_e2e`. These
 binaries can clear the shared BDD cache or build documented examples against
-Cargo's shared target. A process-local `Mutex` cannot serialize separate
-nextest processes or direct `cargo test` runs; filesystem locks also protect
-ownership across those processes.
+Cargo's shared target. A named process-local `Mutex` serializes scenarios
+within one test process, including direct `cargo test`. It cannot coordinate
+independent test processes, so filesystem leases also protect cache ownership
+across them.
 
 The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
 same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
@@ -998,12 +999,18 @@ success, on every supported platform. The mechanism is platform-specific; the
 contract is not. This ownership applies only to test subprocesses and must not
 terminate unrelated processes or shared cache services.
 
-Each documentation scenario starts a fixed 596-second monotonic envelope inside
-nextest's 600-second per-test ceiling, reserving two two-second cleanup
-allowances. Individual build, execution, and discovery operations have 596, 60,
-and 30-second caps, each further limited by the scenario time remaining. Output
-does not reset either deadline. The workflow contract checks this ordering
-against nextest's 1,800-second whole-run limit, the 2,700-second Cargo
+Documentation example scenarios start a fixed 956-second monotonic envelope
+inside their 960-second nextest override, reserving two two-second cleanup
+allowances. Individual build, execution, and discovery operations have 956, 60,
+and 30-second caps, each further limited by the scenario time remaining. The
+`cargo-orthohelp` BDD target uses the same 956-second operation envelope. A
+local direct-Cargo run reached its 595.791-second build deadline with only
+repeated Cargo package-cache lock messages and no compiler-progress evidence.
+The 956-second envelope is 1.60 times that observed lower bound. Its deadline
+counts cache and compiler-admission waits without estimating or subtracting
+them, and preserves two seconds for child cleanup and two for test reporting.
+Output does not reset either deadline. The workflow contract checks this
+ordering against nextest's 1,800-second whole-run limit, the 2,700-second Cargo
 watchdog, and the enclosing job ceiling. See
 [Test timeouts](#test-timeouts-the-tiers-this-repository-sets) and
 `documentation_budget_test.py`.
@@ -2562,23 +2569,25 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                          |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                          |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                         |
 
 *Table: the timers that can end a run, innermost first.*
 
 ### Documentation subprocess budgets on shared hosts
 
-The executable documentation tests use the fixed 596-second scenario envelope
-described above. Build, execution, and discovery are capped at 596, 60, and 30
+Executable documentation examples use the fixed 956-second scenario envelope
+described above. Build, execution, and discovery are capped at 956, 60, and 30
 seconds respectively; each operation also inherits the scenario's remaining
-time. These limits are the same in local runs and CI. There is no environment
-override that can extend them; controlled regression tests inject short-lived
-policies directly so they cannot change parallel test processes.
+time. `cargo-orthohelp` BDD scenarios use the same 956-second envelope. These
+scenarios run under a 960-second nextest allowance, count Cargo lock and
+compiler admission time, and have no environment override; controlled
+regression tests inject short-lived policies directly so they cannot change
+parallel test processes.
 
 The earlier separate-target implementation of the documented CLI flow took 56.5
 s and 120.7 s on hosted runners, 588.0 s and 593.6 s on a shared host, and
@@ -2707,7 +2716,7 @@ ceiling here. It is answered above.
 ### Documentation subprocess and cache ownership
 
 The documentation process runner applies a hard overall deadline to each
-subprocess. Build, execution, and discovery budgets are 596, 60, and 30
+subprocess. Build, execution, and discovery budgets are 956, 60, and 30
 seconds, with two seconds reserved for bounded cleanup. A fixed scenario
 deadline is never extended by output. The runner drains both streams while
 retaining at most 1 MiB per stream, reports truncation and available evidence

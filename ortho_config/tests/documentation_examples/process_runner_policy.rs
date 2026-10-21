@@ -16,7 +16,7 @@ impl Policy {
     pub(crate) const fn build() -> Self {
         Self::new(
             "build",
-            Duration::from_secs(596),
+            Duration::from_secs(956),
             Duration::from_secs(2),
             1024 * 1024,
         )

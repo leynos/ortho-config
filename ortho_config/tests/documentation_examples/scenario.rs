@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 // The workflow contract pins this to the actual nextest configuration. Reserve
 // two cleanup allowances: child cleanup and time for the test to report it.
-pub(super) const PER_TEST_SECONDS: u64 = 600;
+pub(super) const PER_TEST_SECONDS: u64 = 960;
 
 /// Start one immutable wall-clock envelope; output never extends it.
 pub(super) fn deadline() -> Instant {

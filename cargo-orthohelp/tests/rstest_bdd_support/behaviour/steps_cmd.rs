@@ -22,7 +22,7 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::steps::{
     OrthoHelpContext, StepResult, get_out_dir, get_workspace_root, scenario_target_dir,
@@ -147,7 +147,7 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
     let default_policy = if args.contains(&"--no-build") {
         crate::process_runner_execution_policy::policy()
     } else {
-        crate::process_runner::Policy::build()
+        bdd_build_policy()
     };
     let timeout = remaining
         .saturating_sub(default_policy.cleanup_timeout())
@@ -163,6 +163,18 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
     .map_err(|error| classify_runner_error(&error))
 }
 
+fn bdd_build_policy() -> crate::process_runner::Policy {
+    let policy = crate::process_runner::Policy::build();
+    let timeout = Duration::from_secs(super::steps::SCENARIO_TIMEOUT_SECS)
+        .saturating_sub(policy.cleanup_timeout());
+    crate::process_runner::Policy::new(
+        policy.kind_name(),
+        timeout,
+        policy.cleanup_timeout(),
+        policy.output_limit(),
+    )
+}
+
 fn classify_runner_error(error: &anyhow::Error) -> super::steps::StepError {
     let category = if crate::process_runner::deadline_exceeded(error) {
         "subprocess deadline exceeded"
@@ -172,4 +184,22 @@ fn classify_runner_error(error: &anyhow::Error) -> super::steps::StepError {
         "subprocess failed"
     };
     format!("cargo-orthohelp BDD {category}: {error:#}").into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bdd_build_policy;
+    use crate::rstest_bdd_support::behaviour::steps::SCENARIO_TIMEOUT_SECS;
+    use std::time::Duration;
+
+    #[test]
+    fn bdd_build_and_cleanup_budgets_fit_the_scenario_deadline() {
+        let policy = bdd_build_policy();
+
+        assert_eq!(policy.kind_name(), "build");
+        assert_eq!(
+            policy.timeout() + policy.cleanup_timeout(),
+            Duration::from_secs(SCENARIO_TIMEOUT_SECS)
+        );
+    }
 }

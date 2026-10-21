@@ -197,6 +197,14 @@ truncation notice when needed. The stable IR cache entry and path are
 unchanged; publication remains atomic and skips replacement when the existing
 file already contains identical content.
 
+The production bridge emits tracing spans and outcome events for cache lookup,
+target-lock acquisition, Cargo build, snapshot, execution, and IR publication.
+Events contain stable operation and outcome values plus elapsed time; they omit
+paths, cache keys, error strings, and child output. `cargo-orthohelp` is a
+one-shot CLI that installs a tracing subscriber but no metrics recorder, so it
+reports per-invocation evidence through tracing instead of emitting metrics
+that the default invocation would silently discard.
+
 Build-tool environment preparation uses a narrow, explicit allow-list separate
 from application environment isolation. It preserves the configured Cargo home,
 shared package cache, Cargo configuration, toolchain selectors, `RUSTC_WRAPPER`,
@@ -285,24 +293,36 @@ helper may not terminate unrelated processes or restart shared cache services.
 
 ## Timeout policy and validation status
 
-The existing 600-second nextest per-test ceiling, 1,800-second whole-run
-ceiling, 2,700-second Cargo watchdog, and workflow job ceilings remain in
-force. Each documentation scenario starts with a 596-second operation envelope,
-preserving two 2-second allowances within the per-test ceiling for child
-cleanup and test reporting. A subprocess receives the smaller of its operation
-budget and the scenario's remaining time. The current 596-second build policy
-matches the scenario envelope and cannot extend the scenario deadline. The
-60-second execution and 30-second discovery policies are provisional pending
-measurements.
+The 600-second nextest per-test ceiling remains the default. The BDD target and
+the serialized documentation-scenario group have 960-second overrides. The
+1,800-second whole-run ceiling, 2,700-second Cargo watchdog, and workflow job
+ceilings remain in force. Documentation scenarios use a 956-second operation
+envelope, preserving two 2-second allowances within the 960-second per-test
+ceiling for child cleanup and test reporting. A subprocess receives the smaller
+of its operation budget and the scenario's remaining time. The 60-second
+execution and 30-second discovery policies remain independent of that build
+budget.
+
+The BDD scenario's 956-second envelope starts after its in-process ownership
+gate. A direct-Cargo run serialized those scenarios before starting each
+deadline, but one nested bridge build then spent 593.838 seconds waiting on
+Cargo's shared package-cache lock and produced no compiler progress. A later
+`documented_command` run reached its 595.791-second effective deadline with
+only repeated package-cache lock messages, no structured compiler progress, and
+no correlated admission telemetry. The 956-second envelope is 1.60 times that
+observed lower bound. It counts Cargo-cache and compiler-admission waits
+without estimating or subtracting them; the filesystem lease still bounds
+ownership across separate test processes.
 
 The attempted corrected cold build exceeded 600 seconds while admission slots
 were held and sccache was unavailable. The run did not produce a successful
 cold-cache duration. Queued children and full capacity confirm contention was
-present; they do not quantify the time it added to this build. A later
+present; they do not quantify the time it added to that build. A later
 fresh-target probe completed in 66 seconds, but cache hit and miss state was
-unavailable. These results do not justify increasing the build budget. Cache
-service availability remains an environment-owner prerequisite when it is the
-cause of uncached compilation.
+unavailable. The 956-second documentation envelope is sized from the observed
+package-cache wait, not inferred compiler-admission delay; the bound continues
+to include all queue time. Cache-service availability remains an
+environment-owner prerequisite when it causes uncached compilation.
 
 Validation exercises focused runner, workspace, documented-example, and
 Cargo-subcommand tests, followed by the repository's sequential gates and

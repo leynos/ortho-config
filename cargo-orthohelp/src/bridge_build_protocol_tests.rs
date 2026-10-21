@@ -8,6 +8,9 @@ use std::io::Cursor;
 
 const TARGET_NAME: &str = "orthohelp_bridge_fixture";
 
+#[path = "bridge_build_protocol_property_tests.rs"]
+mod property_tests;
+
 #[test]
 fn compiler_diagnostics_are_returned_without_a_presentation_sink() -> Result<()> {
     let target_directory = generated_target_directory()?;

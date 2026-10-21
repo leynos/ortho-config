@@ -121,6 +121,17 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 [test-groups]
 orthohelp_cache = { max-threads = 1 }
 
+# A documented-command run reached 595.9s with only Cargo package-cache lock
+# waits before its 596s operation deadline. The 956s scenario envelope is 1.60
+# times that measured lower bound; two seconds remain for cleanup and two for
+# nextest reporting. This includes lock and admission delays without guessing
+# how much time they added.
 [[profile.default.overrides]]
-filter = 'binary(rstest_bdd) | binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e)'
+filter = 'binary(rstest_bdd)'
 test-group = 'orthohelp_cache'
+slow-timeout = { period = "120s", terminate-after = 8 }
+
+[[profile.default.overrides]]
+filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e)'
+test-group = 'orthohelp_cache'
+slow-timeout = { period = "120s", terminate-after = 8 }

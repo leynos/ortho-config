@@ -6,6 +6,7 @@
 
 pub mod agent_context;
 mod bridge;
+mod bridge_observability;
 mod cache;
 mod cli;
 mod error;

@@ -7,6 +7,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
+#[path = "process_runner_capture_property_tests.rs"]
+mod property_tests;
+
 const PIPE_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug)]
@@ -17,21 +21,21 @@ pub(crate) struct Snapshot {
 }
 
 #[derive(Default)]
-struct Progress {
+pub(super) struct Progress {
     bytes: Vec<u8>,
     bytes_seen: u64,
     truncated: bool,
 }
 
 impl Progress {
-    fn append(&mut self, bytes: &[u8], limit: usize) {
+    pub(super) fn append(&mut self, bytes: &[u8], limit: usize) {
         self.bytes_seen = self.bytes_seen.saturating_add(bytes.len() as u64);
         let remaining = limit.saturating_sub(self.bytes.len());
         self.bytes.extend(bytes.iter().take(remaining).copied());
         self.truncated |= remaining < bytes.len();
     }
 
-    fn snapshot(&self) -> Snapshot {
+    pub(super) fn snapshot(&self) -> Snapshot {
         Snapshot {
             bytes: self.bytes.clone(),
             bytes_seen: self.bytes_seen,

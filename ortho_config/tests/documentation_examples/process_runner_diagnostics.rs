@@ -6,6 +6,10 @@ use std::ffi::OsStr;
 use std::fmt::{self, Write as _};
 use std::process::Command;
 
+#[cfg(test)]
+#[path = "process_runner_diagnostics_tests.rs"]
+mod tests;
+
 pub(super) fn capture_snapshots(readers: &[Reader]) -> Vec<(&'static str, Snapshot)> {
     readers
         .iter()

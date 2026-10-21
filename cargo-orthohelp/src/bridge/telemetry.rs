@@ -25,6 +25,8 @@ use super::BridgeCache;
 /// ladder that counts against the workspace's cognitive-complexity ceiling.
 pub(super) fn ir_cache_unchanged(paths: &BridgeCache) {
     tracing::debug!(
+        operation = "bridge_ir_cache_publish",
+        outcome = "unchanged",
         path = %paths.ir_path,
         "skipping ir.json write: cached content is identical"
     );
@@ -33,6 +35,8 @@ pub(super) fn ir_cache_unchanged(paths: &BridgeCache) {
 /// Report that the IR cache is about to be written, with its size.
 pub(super) fn ir_cache_write(paths: &BridgeCache, bytes: usize) {
     tracing::debug!(
+        operation = "bridge_ir_cache_publish",
+        outcome = "updated",
         path = %paths.ir_path,
         bytes,
         "writing ir.json cache"

@@ -1,6 +1,6 @@
 //! Regressions for private bridge snapshots and their failure cleanup.
 
-use super::super::{GeneratedTarget, binary_file_name};
+use super::super::{GeneratedTarget, protocol::binary_file_name};
 use super::snapshot_executable;
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;

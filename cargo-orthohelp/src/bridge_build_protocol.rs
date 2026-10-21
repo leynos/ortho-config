@@ -7,13 +7,19 @@ use camino::Utf8PathBuf;
 use serde_json::Value;
 use std::io::{self, BufRead};
 
-use super::{GeneratedTarget, binary_file_name};
+use super::GeneratedTarget;
 use crate::error::OrthohelpError;
 
 /// Maximum retained size for one newline-delimited Cargo JSON record.
 const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
 /// Maximum rendered compiler diagnostics retained before they are truncated.
 const MAX_CARGO_DIAGNOSTIC_BYTES: usize = 1024 * 1024;
+
+/// Return the generated bridge executable name with its host suffix.
+pub(super) fn binary_file_name(binary_name: &str) -> String {
+    format!("{binary_name}{}", std::env::consts::EXE_SUFFIX)
+}
+
 /// Relevant build output collected while draining Cargo's JSON stream.
 pub(super) struct CargoMessages {
     /// Absolute path reported for the bridge executable, when present.

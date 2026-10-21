@@ -41,7 +41,7 @@ struct FixtureArtifactPaths {
 }
 
 pub(super) fn binary_file_name(binary_name: &str) -> String {
-    super::super::binary_file_name(binary_name)
+    super::super::protocol::binary_file_name(binary_name)
 }
 
 pub(super) fn utf8_path(path: std::path::PathBuf) -> Result<Utf8PathBuf> {

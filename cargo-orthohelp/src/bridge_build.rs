@@ -5,8 +5,12 @@
 
 #[path = "bridge_build_cleanup.rs"]
 mod cleanup;
+#[path = "bridge_build_diagnostics.rs"]
+mod diagnostics;
 #[path = "bridge_build_outputs.rs"]
 mod outputs;
+#[path = "bridge_build_process.rs"]
+mod process;
 #[path = "bridge_build_protocol.rs"]
 mod protocol;
 #[path = "bridge_build_snapshot.rs"]
@@ -16,12 +20,14 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, OpenOptions};
 use fs4::FileExt;
-use protocol::{CargoMessages, read_cargo_messages};
-use std::io::{self, BufReader, Write};
-use std::process::{Command, Stdio};
+use process::run_cargo;
+use protocol::CargoMessages;
+use std::io::{self, Write};
+use std::process::Command;
+use std::time::Instant;
 
+use crate::bridge_observability as observability;
 use crate::error::OrthohelpError;
-use cleanup::OwnedChild;
 
 /// Stable OS lock name shared by production bridge build callers.
 const LOCK_FILE: &str = "orthohelp-bridge-build.lock";
@@ -45,13 +51,15 @@ pub(super) struct GeneratedTarget<'a> {
 /// the command and the snapshot, while Cargo itself retains ownership of its
 /// shared registry and build cache. The caller must place `snapshot_directory`
 /// under a private invocation directory; this helper creates it when absent.
+#[tracing::instrument(skip_all, fields(operation = "bridge_build_and_snapshot"))]
 pub(super) fn build_and_snapshot(
     command: &mut Command,
     target_directory: &Utf8Path,
     snapshot_directory: &Utf8Path,
     binary_name: &str,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
-    build_and_snapshot_with(target_directory, snapshot_directory, binary_name, || {
+    let started = Instant::now();
+    let result = build_and_snapshot_with(target_directory, snapshot_directory, binary_name, || {
         run_cargo(
             command,
             GeneratedTarget {
@@ -59,7 +67,12 @@ pub(super) fn build_and_snapshot(
                 binary_name,
             },
         )
-    })
+    });
+    match &result {
+        Ok(_) => observability::completed("bridge_build_and_snapshot", "success", started),
+        Err(_) => observability::failed("bridge_build_and_snapshot", "failure", started),
+    }
+    result
 }
 
 /// Acquire build ownership, run Cargo, and snapshot its reported executable.
@@ -69,6 +82,7 @@ fn build_and_snapshot_with(
     binary_name: &str,
     run: impl FnOnce() -> Result<CargoBuild, CargoFailure>,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
+    let started = Instant::now();
     let target = GeneratedTarget {
         directory: target_directory,
         binary_name,
@@ -84,12 +98,18 @@ fn build_and_snapshot_with(
         Ok(build) => build,
         Err(failure) => {
             if failure.writer_lifetime_confirmed {
-                remove_marker_after_failure(&marker, &failure.error);
+                remove_marker_after_failure(&marker);
             } else {
                 tracing::warn!(
-                    target_directory = %target_directory,
-                    error = %failure.error,
+                    operation = "bridge_build_and_snapshot",
+                    outcome = "writer_lifetime_unconfirmed",
+                    marker_retained = true,
                     "bridge child lifetime is unconfirmed; recovery marker retained"
+                );
+                observability::failed(
+                    "bridge_cargo_cleanup",
+                    "writer_lifetime_unconfirmed",
+                    started,
                 );
             }
             return Err(failure.error);
@@ -103,7 +123,7 @@ fn build_and_snapshot_with(
             Ok(executable)
         }
         Err(primary) => {
-            remove_marker_after_failure(&marker, &primary);
+            remove_marker_after_failure(&marker);
             Err(primary)
         }
     }
@@ -119,6 +139,7 @@ struct BuildOwnership {
 
 impl BuildOwnership {
     /// Create the target directory and wait for its cross-process build lock.
+    #[tracing::instrument(skip_all, fields(operation = "bridge_target_lock_acquire"))]
     fn acquire(target_directory: &Utf8Path) -> Result<Self, OrthohelpError> {
         Dir::create_ambient_dir_all(target_directory, ambient_authority())
             .map_err(|error| io_error(target_directory, error))?;
@@ -131,7 +152,12 @@ impl BuildOwnership {
             )
             .map_err(|error| io_error(&lock_path, error))?
             .into_std();
-        FileExt::lock(&lock).map_err(|error| io_error(&lock_path, error))?;
+        let lock_started = Instant::now();
+        if let Err(error) = FileExt::lock(&lock) {
+            observability::failed("bridge_target_lock", "acquire_failed", lock_started);
+            return Err(io_error(&lock_path, error));
+        }
+        observability::completed("bridge_target_lock", "acquired", lock_started);
         Ok(Self {
             directory,
             _lock: lock,
@@ -163,13 +189,10 @@ impl<'a> BuildMarker<'a> {
             .and_then(|()| marker.sync_all())
         {
             let primary = io_error(&path, error);
-            remove_marker_after_failure(
-                &Self {
-                    directory,
-                    path: path.clone(),
-                },
-                &primary,
-            );
+            remove_marker_after_failure(&Self {
+                directory,
+                path: path.clone(),
+            });
             return Err(primary);
         }
         Ok(Self { directory, path })
@@ -226,81 +249,6 @@ impl CargoFailure {
     }
 }
 
-/// Run Cargo with a piped JSON stream and return its status and parsed messages.
-fn run_cargo(
-    command: &mut Command,
-    target: GeneratedTarget<'_>,
-) -> Result<CargoBuild, CargoFailure> {
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::inherit());
-    let child = command
-        .spawn()
-        .map_err(|error| CargoFailure::confirmed(io_error(target.directory, error)))?;
-    let mut owned_child = OwnedChild::new(child);
-    let Some(stdout) = owned_child.child.stdout.take() else {
-        let primary = message_error("Cargo build stdout was not piped");
-        let cleanup = owned_child.stop_bounded();
-        return Err(CargoFailure::unconfirmed(with_cleanup_evidence(
-            primary, &cleanup,
-        )));
-    };
-
-    let mut reader = BufReader::new(stdout);
-    let messages = match read_cargo_messages(&mut reader, &target) {
-        Ok(messages) => messages,
-        Err(error) => {
-            drop(reader);
-            let cleanup = owned_child.stop_bounded();
-            return Err(CargoFailure::unconfirmed(with_cleanup_evidence(
-                io_error(target.directory, error),
-                &cleanup,
-            )));
-        }
-    };
-    drop(reader);
-
-    let status = match owned_child.wait() {
-        Ok(status) => status,
-        Err(error) => {
-            let cleanup = owned_child.stop_bounded();
-            return Err(CargoFailure::unconfirmed(with_cleanup_evidence(
-                io_error(target.directory, error),
-                &cleanup,
-            )));
-        }
-    };
-    if let Err(error) = forward_cargo_diagnostics(&messages) {
-        tracing::warn!(
-            target_directory = %target.directory,
-            error = %error,
-            "could not forward bounded Cargo diagnostics to stderr"
-        );
-    }
-
-    let cargo_status = if status.success() {
-        CargoStatus::Success
-    } else {
-        CargoStatus::Failure(status.code().unwrap_or(-1))
-    };
-    Ok(CargoBuild {
-        status: cargo_status,
-        messages,
-    })
-}
-
-/// Forward bounded parser output at the Cargo process boundary.
-fn forward_cargo_diagnostics(messages: &CargoMessages) -> io::Result<()> {
-    let mut stderr = io::stderr().lock();
-    stderr.write_all(messages.diagnostics.as_bytes())?;
-    if messages.diagnostics_truncated {
-        writeln!(
-            stderr,
-            "\n[bridge] additional Cargo diagnostics omitted after 1 MiB"
-        )?;
-    }
-    stderr.flush()
-}
-
 /// Open a directory with ambient authority and retain path context on failure.
 fn open_directory(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
     Dir::open_ambient_dir(path, ambient_authority()).map_err(|error| io_error(path, error))
@@ -309,22 +257,30 @@ fn open_directory(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
 /// Refuse to reuse a target carrying evidence of an interrupted prior owner.
 fn refuse_stale_marker(directory: &Dir, target_directory: &Utf8Path) -> Result<(), OrthohelpError> {
     match directory.symlink_metadata(MARKER_FILE) {
-        Ok(_) => Err(message_error(&format!(
-            "bridge target requires owner recovery after an interrupted build: {}; confirm no Cargo or rustc process still uses the target directory, then remove the marker and rerun",
-            target_directory.join(MARKER_FILE)
-        ))),
+        Ok(_) => {
+            tracing::warn!(
+                operation = "bridge_build_marker",
+                outcome = "stale_marker_rejected",
+                marker_retained = true,
+                "bridge build requires owner recovery after an interrupted build"
+            );
+            Err(message_error(&format!(
+                "bridge target requires owner recovery after an interrupted build: {}; confirm no Cargo or rustc process still uses the target directory, then remove the marker and rerun",
+                target_directory.join(MARKER_FILE)
+            )))
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(io_error(&target_directory.join(MARKER_FILE), error)),
     }
 }
 
 /// Try to remove a recovery marker without replacing the primary build error.
-fn remove_marker_after_failure(marker: &BuildMarker<'_>, primary: &OrthohelpError) {
-    if let Err(cleanup) = marker.remove() {
+fn remove_marker_after_failure(marker: &BuildMarker<'_>) {
+    if marker.remove().is_err() {
         tracing::warn!(
-            marker = %marker.path,
-            error = %cleanup,
-            primary = %primary,
+            operation = "bridge_build_marker_cleanup",
+            outcome = "remove_failed",
+            marker_retained = true,
             "failed to remove bridge recovery marker after a returned error"
         );
     }
@@ -333,8 +289,9 @@ fn remove_marker_after_failure(marker: &BuildMarker<'_>, primary: &OrthohelpErro
 /// Record bounded-cleanup evidence while returning the original build failure.
 fn with_cleanup_evidence(primary: OrthohelpError, cleanup: &str) -> OrthohelpError {
     tracing::warn!(
-        error = %primary,
-        cleanup = %cleanup,
+        operation = "bridge_child_cleanup",
+        outcome = "writer_lifetime_unconfirmed",
+        cleanup_evidence_present = !cleanup.is_empty(),
         "bridge child cleanup was bounded; writer lifetime remains unconfirmed"
     );
     primary
@@ -351,11 +308,6 @@ fn io_error(path: &Utf8Path, source: io::Error) -> OrthohelpError {
 /// Create a bridge-build domain error without attaching an unrelated path.
 fn message_error(message: &str) -> OrthohelpError {
     OrthohelpError::Message(message.to_owned())
-}
-
-/// Return the bridge executable name with its host platform suffix.
-fn binary_file_name(binary_name: &str) -> String {
-    format!("{binary_name}{}", std::env::consts::EXE_SUFFIX)
 }
 
 #[cfg(test)]

@@ -6,7 +6,9 @@ use cap_std::fs_utf8::{Dir, OpenOptions};
 use std::fmt::Write as FmtWrite;
 use std::io::{Read, Write};
 use std::process::Command;
+use std::time::Instant;
 
+use crate::bridge_observability as observability;
 use crate::cache::CacheKey;
 use crate::error::OrthohelpError;
 use crate::fs_helpers::open_optional_dir;
@@ -15,11 +17,14 @@ use crate::metadata::{OrthoConfigDependency, PackageSelection};
 mod bridge_build;
 #[path = "../bridge_build_environment.rs"]
 mod bridge_build_environment;
+#[path = "../bridge_execution.rs"]
+mod execution;
 #[path = "../bridge_workspace.rs"]
 mod workspace;
 mod telemetry;
 
 use bridge_build_environment::BuildEnvironment;
+use execution::run_bridge;
 use workspace::BridgeWorkspace;
 
 /// Stable IR cache identity and Cargo-owned compiler state.
@@ -73,6 +78,7 @@ pub fn prepare_cache(selection: &PackageSelection, cache_key: &CacheKey) -> Brid
 }
 
 /// Loads cached IR or builds the bridge to produce fresh IR JSON.
+#[tracing::instrument(skip_all, fields(operation = "bridge_ir_load_or_build"))]
 pub fn load_or_build_ir(
     config: &BridgeConfig,
     paths: &BridgeCache,
@@ -80,13 +86,29 @@ pub fn load_or_build_ir(
     should_skip_build: bool,
 ) -> Result<String, OrthohelpError> {
     if should_use_cache || should_skip_build {
-        if let Some(cached) = read_cached_ir(paths)? {
-            tracing::debug!(
-                cache_dir = %paths.cache_dir,
-                ir_path = %paths.ir_path,
-                "reusing cached bridge IR"
-            );
-            return Ok(cached);
+        let lookup_started = Instant::now();
+        match read_cached_ir(paths) {
+            Ok(Some(cached)) => {
+                observability::completed("bridge_cache_lookup", "hit", lookup_started);
+                tracing::debug!(
+                    operation = "bridge_cache_lookup",
+                    outcome = "hit",
+                    "reusing cached bridge IR"
+                );
+                return Ok(cached);
+            }
+            Ok(None) => {
+                observability::completed("bridge_cache_lookup", "miss", lookup_started);
+                tracing::debug!(
+                    operation = "bridge_cache_lookup",
+                    outcome = "miss",
+                    "bridge IR cache lookup missed"
+                );
+            }
+            Err(error) => {
+                observability::failed("bridge_cache_lookup", "read_failed", lookup_started);
+                return Err(error);
+            }
         }
         if should_skip_build {
             return Err(OrthohelpError::MissingCache(paths.ir_path.clone()));
@@ -269,30 +291,6 @@ fn build_bridge_command(paths: &BridgePaths, environment: &BuildEnvironment) -> 
     command
 }
 
-/// Executes the compiled bridge binary and returns its stdout as a JSON string.
-fn run_bridge(executable: &camino::Utf8Path) -> Result<String, OrthohelpError> {
-    let output = Command::new(executable.as_str())
-        .output()
-        .map_err(|io_err| OrthohelpError::Io {
-            path: executable.to_path_buf(),
-            source: io_err,
-        })?;
-
-    if !output.status.success() {
-        let status = output.status.code().unwrap_or(-1);
-        let message = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        return Err(OrthohelpError::BridgeExecutionFailure { status, message });
-    }
-
-    let json = String::from_utf8_lossy(&output.stdout).to_string();
-    let value: serde_json::Value = serde_json::from_str(&json)?;
-    serde_json::to_string_pretty(&value).map_err(OrthohelpError::IrJson)
-}
-
 /// Writes `json` to the cached IR file, skipping the write when the file
 /// already contains identical content.
 ///
@@ -301,6 +299,7 @@ fn run_bridge(executable: &camino::Utf8Path) -> Result<String, OrthohelpError> {
 /// invocations even when path-normalization differences cause `read_cached_ir`
 /// to return `None` spuriously.
 fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), OrthohelpError> {
+    let started = Instant::now();
     // Skip writing if the existing cache file already holds identical content.
     // This preserves the file's mtime, making cache-validity checks robust
     // against spurious cache misses (e.g. Windows path-normalization
@@ -309,6 +308,7 @@ fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), OrthohelpError>
     if let Ok(Some(existing)) = read_cached_ir(paths)
         && existing == json
     {
+        observability::completed("bridge_ir_cache_publish", "unchanged", started);
         telemetry::ir_cache_unchanged(paths);
         return Ok(());
     }
@@ -330,6 +330,7 @@ fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), OrthohelpError>
             path: paths.ir_path.clone(),
             source: error.error,
         })?;
+    observability::completed("bridge_ir_cache_publish", "updated", started);
     Ok(())
 }
 

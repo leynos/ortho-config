@@ -958,6 +958,15 @@ needed. IR cache publication remains atomic and skips replacement when the
 existing cache already contains identical content, preserving the established
 path and idempotent-write behaviour.
 
+The bridge cache lookup, target lock, Cargo build, executable snapshot, bridge
+execution, and IR publication emit named tracing spans or events. Outcome
+events use a closed operation and outcome vocabulary and include elapsed time;
+they omit paths, cache keys, error strings, and child output. The one-shot CLI
+installs a tracing subscriber but no metrics recorder, so this path reports
+per-invocation evidence through tracing rather than emitting metrics that the
+default invocation would silently discard. This boundary is recorded in
+[ADR-014](adr-014-documentation-build-ownership.md#decision-outcome).
+
 An interrupted build whose writer lifetime cannot be confirmed leaves a
 fail-closed ownership marker. A later invocation must not treat that marker as
 stale automatically. Recovery requires confirming that the bridge's Cargo and

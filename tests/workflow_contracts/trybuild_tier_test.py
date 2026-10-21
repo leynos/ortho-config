@@ -28,7 +28,6 @@ from tomllib import TOMLDecodeError
 
 import pytest
 from nextest_budgets import (
-    largest_test_allowance,
     override_allowances,
     profile_allowance,
 )
@@ -56,14 +55,8 @@ def nextest_config() -> str:
     return NEXTEST_CONFIG.read_text(encoding="utf-8")
 
 
-def _trybuild_filter(config_text: str) -> str:
-    """Return the ``filter`` of the override carrying the largest allowance.
-
-    That entry is the trybuild one: its allowance is the largest in the
-    file. A second entry claiming the same figure would make this
-    ambiguous, so the ambiguity is refused rather than resolved by position,
-    because reading the wrong filter would have this contract certify a
-    coverage gap it was written to find.
+def _trybuild_override(config_text: str) -> tuple[str, str, float]:
+    """Find the unique larger override selecting exactly the trybuild class.
 
     Parameters
     ----------
@@ -72,31 +65,38 @@ def _trybuild_filter(config_text: str) -> str:
 
     Returns
     -------
-    str
-        That entry's ``filter`` expression.
+    tuple[str, str, float]
+        The override path, filter expression, and effective allowance.
 
     Raises
     ------
     AssertionError
         If no entry, or more than one, carries the largest allowance.
     """
-    largest = largest_test_allowance(config_text)
-    carrying = [
-        (path, expression)
-        for path, expression, budget in override_allowances(config_text)
-        if budget == pytest.approx(largest)
-    ]
-    assert len(carrying) == 1, (
-        f"expected exactly one overrides entry at the largest per-test allowance "
-        f"({largest:.0f}s); found {[path for path, _ in carrying]}. The trybuild "
-        f"filter is read from that entry, so an ambiguous one is not read at all"
+    base = profile_allowance(config_text)
+    trybuild = trybuild_binaries()
+    other_binaries = non_trybuild_binaries()
+    candidates = []
+    for path, expression, budget in override_allowances(config_text):
+        if expression is None or budget <= base:
+            continue
+        selected = binaries_selected_by(
+            expression, sorted(trybuild | other_binaries)
+        )
+        chosen = {name for name, covered in selected.items() if covered}
+        if chosen == trybuild:
+            candidates.append((path, expression, budget))
+
+    assert len(candidates) == 1, (
+        "expected one above-base override selecting exactly the trybuild class; "
+        f"found {[path for path, _, _ in candidates]}"
     )
-    path, expression = carrying[0]
-    assert expression is not None, (
-        f"{path} carries the largest per-test allowance but declares no filter, "
-        f"so it selects every test rather than the trybuild class; this contract "
-        f"reads a filterset from that entry and cannot read a platform gate as one"
-    )
+    return candidates[0]
+
+
+def _trybuild_filter(config_text: str) -> str:
+    """Return the unique above-base filter for the trybuild class."""
+    _, expression, _ = _trybuild_override(config_text)
     return expression
 
 
@@ -152,7 +152,7 @@ def test_the_trybuild_allowance_is_above_the_base_one() -> None:
     """
     config_text = NEXTEST_CONFIG.read_text(encoding="utf-8")
     base = profile_allowance(config_text)
-    override = largest_test_allowance(config_text)
+    _, _, override = _trybuild_override(config_text)
     assert override > base, (
         f"the trybuild override allows {override:.0f}s and the default profile "
         f"allows {base:.0f}s; an override no larger than the profile does not "

@@ -15,23 +15,20 @@ pub(super) fn remove_generated_outputs(
     binary_name: &str,
     outputs: &[camino::Utf8PathBuf],
 ) {
-    let target = match Dir::open_ambient_dir(target_directory, ambient_authority()) {
-        Ok(target) => target,
-        Err(error) => {
-            tracing::warn!(
-                target_directory = %target_directory,
-                error = %error,
-                "could not open Cargo target to remove generated bridge outputs"
-            );
-            return;
-        }
+    let Ok(target) = Dir::open_ambient_dir(target_directory, ambient_authority()) else {
+        tracing::warn!(
+            operation = "bridge_output_cleanup",
+            outcome = "target_open_failed",
+            "could not open Cargo target to remove generated bridge outputs"
+        );
+        return;
     };
 
     for output in outputs {
         let Some(relative) = output.strip_prefix(target_directory).ok() else {
             tracing::warn!(
-                target_directory = %target_directory,
-                output = %output,
+                operation = "bridge_output_cleanup",
+                outcome = "outside_target_ignored",
                 "ignored generated bridge output outside its Cargo target"
             );
             continue;
@@ -46,10 +43,8 @@ pub(super) fn remove_generated_outputs(
             && error.kind() != std::io::ErrorKind::NotFound
         {
             tracing::warn!(
-                target_directory = %target_directory,
-                binary_name,
-                output = %output,
-                error = %error,
+                operation = "bridge_output_cleanup",
+                outcome = "remove_failed",
                 "failed to remove generated bridge Cargo output after snapshot"
             );
         }
