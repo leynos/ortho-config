@@ -299,6 +299,8 @@ pub fn orthohelp_context() -> OrthoHelpContext {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for scenario cache ownership serialization.
+
     use super::{BDD_SCENARIO_OWNERSHIP, ProcessCacheLock};
     use std::sync::TryLockError;
 

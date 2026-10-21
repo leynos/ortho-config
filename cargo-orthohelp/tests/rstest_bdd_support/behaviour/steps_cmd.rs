@@ -163,7 +163,7 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
     .map_err(|error| classify_runner_error(&error))
 }
 
-fn bdd_build_policy() -> crate::process_runner::Policy {
+const fn bdd_build_policy() -> crate::process_runner::Policy {
     let policy = crate::process_runner::Policy::build();
     let timeout = Duration::from_secs(super::steps::SCENARIO_TIMEOUT_SECS)
         .saturating_sub(policy.cleanup_timeout());
@@ -188,6 +188,8 @@ fn classify_runner_error(error: &anyhow::Error) -> super::steps::StepError {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the BDD build subprocess budget.
+
     use super::bdd_build_policy;
     use crate::rstest_bdd_support::behaviour::steps::SCENARIO_TIMEOUT_SECS;
     use std::time::Duration;
