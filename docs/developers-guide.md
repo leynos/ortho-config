@@ -372,11 +372,14 @@ holds the same inode — cases that call for opposite fixes. The test-only
 `artefact_lock_diagnostics` module turns a hold into a report naming the lock
 file, the `device`/`inode` it was observed on, every matching `/proc/locks`
 record, the process and parent of each recorded owner, their relation to the
-reporting process, and each descriptor that still refers to the file. It then
-re-probes once after `SHORT_WAIT_THRESHOLD`, which separates a lock released a
-moment late from one with a live owner. The caller's own expectation stays the
-first line; diagnostic faults are folded into the report text and never replace
-the primary failure.
+reporting process, and the descriptors each recorded owner still holds on the
+file. A child that inherited the open file description is not scanned, so the
+report names the recorded owner and says it has no descriptor of its own
+instead of naming the child. It then re-probes once after
+`SHORT_WAIT_THRESHOLD`, which separates a lock released a moment late from one
+with a live owner. The caller's own expectation stays the first line;
+diagnostic faults are folded into the report text and never replace the primary
+failure.
 
 Two assertions exist and the split between them is deliberate.
 `ensure_released` demands the lock be free at the instant it is probed, and is

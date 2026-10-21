@@ -6,11 +6,14 @@
 //! say only that a released lock looked held, and a report that is well-formed
 //! but names nobody would leave the defect exactly as undiagnosable as before.
 //!
-//! These tests take the lock for real, so they exist only where the lock itself
-//! does — on Linux, where the probe's read-only handle is documented to acquire
-//! the `flock`-backed exclusive lock without complaint.
+//! The tests that take the lock for real exist only where the lock itself does
+//! — on Linux, where the probe's read-only handle is documented to acquire the
+//! `flock`-backed exclusive lock without complaint. `accepts_a_lock_that_is_free`
+//! is deliberately ungated: it asserts only that a free lock passes, which every
+//! platform can answer, and it keeps the module compiling where the gated tests
+//! are removed.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 
 /// Verifies a process is named by its command, parent, and relation.
 #[cfg(target_os = "linux")]
@@ -41,8 +44,12 @@ fn names_the_reporting_process_as_such() {
 #[cfg(target_os = "linux")]
 #[test]
 fn reports_the_process_and_descriptor_that_still_hold_the_lock() -> Result<()> {
+    // Imported inside this Linux-gated test rather than at module scope: the
+    // module still compiles on every target, where the gate removes the only
+    // caller and a module-level import would be an unused one.
     use super::artefact_lock::{create_lock, lock};
     use super::fragment_tests::TempRoot;
+    use anyhow::ensure;
 
     let root = TempRoot::new()?;
     create_lock(root.path()).context("create the lock file for the holder")?;
