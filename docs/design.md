@@ -513,6 +513,18 @@ Every field is a `&'static str` drawn from a closed set declared in
 carry an environment variable's value, a resolved filesystem path, a
 configuration value, file contents, or a raw error string.
 
+The vocabulary and the emitters are separate modules. `telemetry.rs` declares
+the label constants and holds the callsites whose field lists are fixed.
+`telemetry_events.rs` holds one callsite per field subset, because a `tracing`
+event's field names are fixed in its static metadata by the macro's field list:
+recording `None` omits a value but leaves the name, so a field documented as
+"omitted" needs its own call. `telemetry.rs` dispatches to those emitters and
+is the only module that calls them. The counters sit behind the `metrics`
+feature in `telemetry_counters.rs`. The
+[developers' guide](developers-guide.md) records the one-emission-per-function
+rule that shapes these callsites and the metadata-level test that pins the
+field names.
+
 ### Aggregated errors
 
 To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`

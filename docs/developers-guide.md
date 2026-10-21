@@ -1293,46 +1293,23 @@ counter families use only the bounded `operation`, `source`, `outcome`, and
 `none` for its outcome and category. No metrics recorder is installed by the
 library.
 
-## Digest rendering
-
-`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
-lowercase hexadecimal digits. From `sha2` 0.11 the `finalize` and `digest`
-methods return `hybrid_array::Array<u8, _>`, which dereferences to `[u8]` but
-does not implement `core::fmt::LowerHex`, so the `{:x}` formatting the cache
-previously used no longer compiles. `sha2` 0.11 also no longer implements
-`std::io::Write`, so `std::io::copy` cannot stream into a hasher.
-
-- Render digest bytes through the crate-internal `to_lower_hex` helper. It is
-  scoped to `cargo-orthohelp`, owns no state, and may be called from any
-  crate-internal site that needs lowercase hex. Do not reintroduce `{:x}` or
-  per-byte `format!` calls.
-- The helper maps each nibble arithmetically rather than indexing a digit
-  table, because the workspace denies `clippy::indexing_slicing`. Keep it that
-  way instead of adding a scoped suppression.
-- Keep the helper private. The crate exposes no hex-encoding contract to
-  downstream consumers, and publishing one would commit it to supporting that
-  contract. Add a dedicated dependency such as `hex` only if a public surface
-  genuinely needs one.
-- Pass the digest by reference, as in `to_lower_hex(&hasher.finalize())`, so
-  `Array` coerces to `&[u8]` through `Deref`.
-- Feed a hasher with `update` from a bounded buffered read loop, or through a
-  small `std::io::Write` adapter newtype that forwards to `update`. Do not
-  reach for `std::io::copy` with a hasher as the sink.
-- The sibling RustCrypto crates move in lockstep and carry the same break:
-  `sha1`, `sha3`, and `md-5` go to 0.11, and `hmac`, `hkdf`, and `pbkdf2` go to
-  0.13. Apply the same rules when introducing any of them.
-
-The rendered form is byte-for-byte identical to the previous `{:x}` output, so
-the change does not invalidate cache directories. A bounded exhaustive unit
-test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
-digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
-encoder cannot pass.
-
 ### Discovery telemetry
 
-`discovery/telemetry.rs` is the only place configuration discovery emits
-events, and it is written so that a leak is a compile-time impossibility rather
-than a review responsibility.
+Configuration discovery emits its events from two co-located modules, both of
+which are written so that a leak is a compile-time impossibility rather than a
+review responsibility:
+
+- `discovery/telemetry.rs` owns the closed label vocabulary, the three counter
+  families, and six event callsites whose field lists are fixed;
+- `discovery/telemetry_events.rs` owns the remaining event callsites, one per
+  field subset, because a `tracing` event's field *names* are fixed at the
+  macro call even when a value is absent.
+
+The split is described under [emitter structure](#emitter-structure) below.
+Nothing outside these two modules emits a `discovery.*` event, and nothing
+outside `telemetry.rs` calls the second module: the entrypoints that choose a
+field subset are dispatchers, so a caller states which facts it has and the
+dispatcher picks the callsite whose static metadata matches.
 
 | Event                       | Fields                                                                                                                                                                                                                                                                                                                                            | Emitted from                |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
@@ -1369,19 +1346,173 @@ Rules for extending this set:
   log, and callers cannot pass one through a function that accepts only the
   closed vocabulary. The same property keeps the `metrics` labels bounded; an
   unbounded label here becomes an unbounded time-series in a consumer's
-  monitoring system.
+  monitoring system. Declare the constant in `telemetry.rs` even when its only
+  callsite is in `telemetry_events.rs`: one module owning the whole vocabulary
+  is what makes the closed set readable in one place.
+- **Add an event spelling, not a parameter.** A new combination of optional
+  fields is a new function in `telemetry_events.rs` plus a new arm in its
+  dispatcher, never a wider signature on an existing emitter.
 - **The discovery telemetry suite enforces it.** The suite feeds discovery
   distinctive values and asserts no captured field contains any of them. Adding
   a field that formats a path fails that test rather than shipping.
+- **A separate suite pins field *names*, not just values.**
+  `ortho_config/tests/discovery_telemetry_metadata.rs` reads `Metadata::fields`
+  for events whose optional fields are absent and asserts the name is missing —
+  the check a value-level assertion cannot make, because a `None` value already
+  renders as nothing.
 - **Counters go behind the optional `metrics` feature**, per the library
   and application boundary above. The `tracing` events are unconditional.
+
+#### Emitter structure
+
+`tracing` builds an event's static `Metadata` from the macro's *field list*.
+Recording a `None` for an `Option` field records no value, but the field's name
+stays in the metadata either way, so a subscriber filtering on
+`Metadata::fields` would see a field the design document promises is absent.
+"Omitted" therefore has to mean omitted from the metadata, and the only way to
+write that is one macro call per field combination. `telemetry_events.rs` holds
+those callsites:
+
+- `policy_resolution_with_selector` and `policy_resolution_without_selector`
+  for `discovery.policy`;
+- `candidate_failure_scoped` and `candidate_failure_unscoped` for
+  `discovery.candidate`, whose `scope` is present only on a scoped walk;
+- four `load_outcome_*` emitters for `discovery.load`, where the independent
+  `source` and `scope` options combine into four spellings.
+
+Three small declarative macros provide the bodies, so each function expands to
+a single statement. The bodies would otherwise be near-identical, because the
+difference between them *is* the field list, and hand-writing them drew a
+measured `CodeScene` duplicacy finding. Keep the macros private to the module:
+the contract is the set of functions and the metadata each produces, not the
+expansion.
+
+Two rules keep this structure from decaying:
+
+- **One `tracing` emission per function.** When a dependent crate enables
+  `tracing`'s `log` bridge, Cargo's feature unification expands every event
+  into a branch ladder, and those branches count against the workspace's
+  `cognitive-complexity-threshold` in `clippy.toml` (9). In this workspace the
+  enabling crate is `rstest-bdd`, a dev-dependency, so the ladder appears in
+  every test build even though the shipped libraries never enable it. A
+  function that reports two facts therefore delegates each to a small
+  `fn log_<fact>` helper, as `bridge/telemetry.rs` and the atomic-write helpers
+  in `output/mod.rs` do; their module docs record the reason.
+- **Split by size, not by taste.** The vocabulary, the entrypoints and their
+  documentation together reach the 400-line module cap, which is why the
+  emitters and the counters live in sibling modules. Moving code back would
+  fail that cap before it failed a test.
+
+When adding an event, add its row below, its constants to `telemetry.rs`, its
+emitter or dispatcher arm to the module that owns the relevant shape, and a
+metadata-level assertion to `discovery_telemetry_metadata.rs` if it carries an
+optional field.
 
 One trap worth recording: `tracing`'s global maximum level is recomputed as
 dispatchers register and drop, so concurrent tests each installing a
 thread-local subscriber can drop the maximum out from under one another and
-silently lose events. `pin_global_max_level` in that test file holds one
-dispatcher for the lifetime of the binary. This was an observed intermittent
-failure, not a precaution.
+silently lose events. `pin_global_max_level` in the shared test support holds
+one dispatcher for the lifetime of the binary. This was an observed
+intermittent failure, not a precaution.
+
+### `cargo-orthohelp` bridge and output telemetry
+
+`cargo-orthohelp`'s diagnostics follow the same one-emission rule but a
+different boundary rule: every event here is diagnostic only. None decides
+anything, none is a contract a consumer may filter against, and no control flow
+returns through an emitter. The modules are grouped by the fact they report:
+
+- `bridge/telemetry.rs` — the ephemeral bridge build (`succeeded`, `failed`
+  with the child's standard error) and the IR cache (`unchanged`, `write`).
+  `bridge/mod.rs` additionally logs a cache hit when it returns cached IR.
+- `output/mod.rs` — the atomic JSON write: the start, the completion with its
+  byte count, the stdout path, and one failure event per fallible step
+  (prepare, open, write, flush, sync, rename, and parent-directory sync).
+- `output/agent_context.rs` — the agent-context document's own
+  start/completion/failure trio.
+
+These carry real paths, artefact names, byte counts, and error renderings, so
+they are not held to discovery's closed-vocabulary rule. Treat that as a
+boundary, not a licence: the bridge's `failed` event includes the child's
+standard error because a bridge build failure is otherwise opaque to the user,
+and that text is the only way to diagnose one. Do not extend the same treatment
+to `discovery`, whose inputs are configuration values and are exactly what the
+closed vocabulary exists to keep out.
+
+## Digest rendering
+
+`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
+lowercase hexadecimal digits. From `sha2` 0.11 the `finalize` and `digest`
+methods return `hybrid_array::Array<u8, _>`, which dereferences to `[u8]` but
+does not implement `core::fmt::LowerHex`, so the `{:x}` formatting the cache
+previously used no longer compiles. `sha2` 0.11 also no longer implements
+`std::io::Write`, so `std::io::copy` cannot stream into a hasher.
+
+- Render digest bytes through the crate-internal `to_lower_hex` helper. It is
+  scoped to `cargo-orthohelp`, owns no state, and may be called from any
+  crate-internal site that needs lowercase hex. Do not reintroduce `{:x}` or
+  per-byte `format!` calls.
+- The helper maps each nibble arithmetically rather than indexing a digit
+  table, because the workspace denies `clippy::indexing_slicing`. Keep it that
+  way instead of adding a scoped suppression.
+- Keep the helper private. The crate exposes no hex-encoding contract to
+  downstream consumers, and publishing one would commit it to supporting that
+  contract. Add a dedicated dependency such as `hex` only if a public surface
+  genuinely needs one.
+- Pass the digest by reference, as in `to_lower_hex(&hasher.finalize())`, so
+  `Array` coerces to `&[u8]` through `Deref`.
+- Feed a hasher with `update` from a bounded buffered read loop, or through a
+  small `std::io::Write` adapter newtype that forwards to `update`. Do not
+  reach for `std::io::copy` with a hasher as the sink.
+- The sibling RustCrypto crates move in lockstep and carry the same break:
+  `sha1`, `sha3`, and `md-5` go to 0.11, and `hmac`, `hkdf`, and `pbkdf2` go to
+  0.13. Apply the same rules when introducing any of them.
+
+The rendered form is byte-for-byte identical to the previous `{:x}` output, so
+the change does not invalidate cache directories. A bounded exhaustive unit
+test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
+digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
+encoder cannot pass.
+
+### Rustflags sanitization for bridge builds
+
+The bridge build spawns `cargo build` and so inherits the parent environment.
+Under `cargo-llvm-cov` that environment contains `-Cinstrument-coverage` in
+`RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS`, which would make the bridge binary
+write profiling data into the test run. `cargo-orthohelp/src/rustflags.rs`
+sanitizes both variables before the child is spawned:
+`apply_sanitized_rustflags` is called only from `bridge::build_bridge_command`,
+which also removes `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`,
+`LLVM_PROFILE_FILE`, `CARGO_LLVM_COV_TARGET_DIR`, and `CARGO_TARGET_DIR` from
+the child.
+
+The contract, which `rustflags_proptests.rs` checks against an independent
+reference filter:
+
+- **Two variables, two delimiters.** `RUSTFLAGS` splits on ASCII whitespace and
+  rejoins with a single space; `CARGO_ENCODED_RUSTFLAGS` splits and rejoins on
+  Cargo's unit separator (`U+001F`). The delimiter is chosen once and used in
+  both directions, so a value is never split on one separator and joined with
+  the other. Do not merge the two paths into one string-typed helper.
+- **What counts as a coverage token.** A compact `-Cinstrument-coverage`,
+  including the `-Cinstrument-coverage=<value>` form, or a bare `-C` whose
+  successor is `instrument-coverage` or starts with `instrument-coverage=`. The
+  split pair is removed as a pair, so the successor cannot survive as a stray
+  token.
+- **Surviving tokens keep their order.** Nothing is sorted, deduplicated, or
+  re-spaced.
+- **An unchanged value passes through byte-for-byte**, spaces included, rather
+  than being re-rendered from its tokens.
+- **An emptied value removes the variable** rather than setting it to the empty
+  string. An empty `RUSTFLAGS` is not the same as no `RUSTFLAGS` to Cargo.
+- **Every change is logged.** A partial strip and a full removal each emit one
+  `debug` event naming the variable but not its value. The unchanged path emits
+  nothing, because it has nothing to report.
+
+`apply_sanitized_rustflags` reads the current process environment directly
+rather than taking an injected source. The module is therefore tested through
+those pure functions and the property filter, never by mutating the test
+process's environment.
 
 ## Scoped and policy-based configuration discovery
 
