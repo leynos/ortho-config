@@ -10,7 +10,12 @@ from scripts.bump_version import (
     _update_markdown_versions,
     replace_fences,
     replace_version_in_toml,
+    _update_member_version,
 )
+
+
+
+"""Tests for version updates in manifests and release documentation."""
 
 
 @pytest.mark.parametrize(
@@ -177,6 +182,45 @@ def test_replace_version_in_toml_preserves_suffix(
 def test_replace_version_in_toml_no_dependency_returns_input(snippet: str) -> None:
     """Return the input unchanged when no ortho_config dependency exists."""
     assert replace_version_in_toml(snippet, "1") == snippet
+
+
+def test_member_bump_updates_every_internal_dependency(tmp_path: Path) -> None:
+    """A member's version and *all* its internal requirements move together.
+
+    ``ortho_config`` requires two internal crates, one of them in both the
+    normal and the dev table. All three entries must reach the new version: a
+    packaged crate whose requirement is stale names a version crates.io does
+    not have, and the failure appears only in the publish dry run.
+    """
+    member = tmp_path / "Cargo.toml"
+    member.write_text(
+        """[package]
+name = "ortho_config"
+version = "0.9.0"
+
+[dependencies]
+ortho_l10n = { path = "../ortho_l10n", version = "0.9.0" }
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.9.0" }
+serde = "1"
+
+[dev-dependencies]
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.9.0" }
+test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers", version = "0.9.0" }
+""",
+        encoding="utf-8",
+    )
+
+    assert _update_member_version(member, "1.2.3") is False
+
+    document = tomlkit.parse(member.read_text(encoding="utf-8"))
+    assert document["package"]["version"] == "1.2.3"
+    for table in ("dependencies", "dev-dependencies"):
+        for name, entry in document[table].items():
+            if "path" in entry:
+                assert entry["version"] == "1.2.3", (
+                    f"{table}.{name} kept a stale requirement"
+                )
+    assert document["dependencies"]["serde"] == "1"
 
 
 def test_replace_fences_preserves_indentation() -> None:

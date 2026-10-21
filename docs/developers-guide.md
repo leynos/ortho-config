@@ -2445,6 +2445,24 @@ tarball verification resolves the re-export against the published crate and
 fails with "no `OrthoConfigSubcommandDocs` in the root". Nothing else in CI
 sees that.
 
+The order is a claim about the workspace graph, so it is checked against the
+graph rather than restated beside it.
+`tests/workflow_contracts/publish_order_test.py` derives the published set from
+the manifests (a member publishes unless it sets `publish = false`) and the
+edges from the `path` dependencies they declare. It asserts that the order
+names exactly the publishable members, and that a crate appears after
+everything it depends on. A wrong order still builds locally, because Cargo
+resolves the path; it fails only when a publisher asks crates.io for a version
+that is not there yet.
+
+Dev dependencies are real edges here, with one exception. `ortho_config`
+depends on `ortho_config_macros`, and the macros crate dev-depends back on
+`ortho_config` to test the macros it generates, so the pair is cyclic and no
+order satisfies both; the contract exempts mutually reachable pairs only. Every
+other edge is enforced, including `ortho_config`'s dev dependency on
+`ortho_config_test_helpers`, which is why the helper crate is published before
+it. That edge has already been broken once.
+
 Before it packages, lading runs a pre-flight:
 `cargo check --workspace --all-targets`, then `cargo test`, both into a
 throwaway target directory. `lading.toml` sets `preflight.unit_tests_only`,
@@ -2545,6 +2563,14 @@ one, so a tooling-only release is a patch bump of that crate alone. Edit
 `cargo-orthohelp/Cargo.toml`, refresh the lock with
 `cargo update -p cargo-orthohelp`, and tag `v<version>`. Use
 `scripts/bump_version.py` only when the whole workspace is being released.
+
+That script discovers the internal dependency requirements instead of naming
+them. For each member manifest it bumps every dependency declared with a
+`path`, across the normal, dev, and build tables. A hand-kept list of crates
+went stale as soon as `ortho_l10n` joined the graph: `ortho_config` kept
+requiring a version the release would never publish, and the resulting failure
+would have surfaced only in the publish dry run. External requirements are left
+alone, so a dependency on a third-party crate is never rewritten.
 
 ### Verifying the packaging locally
 

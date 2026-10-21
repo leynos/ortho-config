@@ -330,7 +330,114 @@ approaches; they are no longer outstanding work.
   against `#566`'s own work is outstanding. Closed 2026-10-22 with PR #607
   recorded as an open delivery dependency.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
-      PR.
+      PR. In progress: publish order and its workflow contract are done (see
+      "EP-M4 publish order"); version discovery, guides, and publication
+      checks remain.
+
+### EP-M4 publish order (2026-10-22)
+
+`lading.toml` listed four crates and the workspace publishes five: `ortho_l10n`
+was never in the order, so `make publish-check` would not have packaged it at
+all. Red was observed first. The contract is
+`tests/workflow_contracts/publish_order_test.py`, four tests, run with
+`pytest tests/workflow_contracts/`.
+
+Writing the contract found three defects in itself before it found any in the
+repository. Each is recorded because each one produced a *green* result that
+meant nothing:
+
+- The published predicate read `publish != []`, which treats `publish = false`
+  as publishable, because `False != []` is true. It reported the example and
+  all five fixtures as missing from the order. Cargo's rule is that `false`
+  means never, a list means only those registries, and a missing key means
+  anywhere; the predicate now spells out all three, which also matters because
+  `test_helpers` uses the list form.
+- A `path` dependency is written relative to the manifest that declares it. The
+  first version resolved it against the process's working directory, so no edge
+  ever matched, and the ordering test passed against an empty edge set. The
+  check only became meaningful once the path resolved against the declaring
+  manifest's directory.
+- `ortho_config` declares the helper crate under the alias `test_helpers` with
+  `package = "ortho_config_test_helpers"`. The edge table is keyed by the
+  *published* name, so an assertion written against the alias failed. The
+  correct behaviour was already right; the assertion was not.
+
+The ordering check also had to learn one fact about the graph. `ortho_config`
+depends on `ortho_config_macros`, and `ortho_config_macros` has a dev
+dependency on `ortho_config`, so the pair is cyclic and no order satisfies
+both. The cycle is not an artefact of this branch: `git show v0.9.0:` of both
+manifests carries the same two edges, and v0.9.0 shipped with this order. The
+check therefore exempts mutually reachable pairs only.
+
+That exemption is dangerous in exactly one direction. `ortho_config` also
+dev-depends on the helper crate, and *that* edge has no return path, so
+`ortho_config_test_helpers` must still precede `ortho_config`. Commit
+`e1ca1a4c` ("Publish test_helpers before ortho_config") exists because that
+requirement was broken once: its message cites "cargo publish verification
+requirements for dev dependencies that must resolve from crates.io during
+package checks". A blanket "dev dependencies are not real edges" rule would
+re-break it silently, because the workspace supplies the path either way. A
+dedicated test pins the non-exemption, and it asserts the edge exists first, so
+deleting the dependency cannot make the guard vacuous.
+
+Evidence, all run before the change was committed:
+
+| Probe                                   | Observation                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `ortho_l10n` absent from the order      | `missing: ['ortho_l10n']`, and nothing unexpected                                                 |
+| `ortho_l10n` moved last                 | both real edges fire: `ortho_config`, `ortho_config_macros` depend on it                          |
+| helper crate moved after `ortho_config` | `ortho_config` depends on it; the dedicated guard also fails (`assert 3 < 2`)                     |
+| `lading.toml` restored after each probe | `diff -q` against the pre-probe copy, taken with `cp` because `git checkout --` reverts the index |
+
+The final order is `ortho_l10n`, `ortho_config_macros`,
+`ortho_config_test_helpers`, `ortho_config`, `cargo-orthohelp`. Four contract
+tests pass.
+
+### EP-M4 version discovery (2026-10-22)
+
+`scripts/bump_version.py` mapped one package name to one dependency:
+
+```python
+dep = "ortho_config_macros" if package_name == "ortho_config" else None
+```
+
+That covered `ortho_config`'s dependency on the macro crate and nothing else.
+`ortho_config` now also requires `ortho_l10n`, and it dev-depends on
+`ortho_config_test_helpers`, which was never bumped either; `cargo-orthohelp`
+requires both `ortho_config` and the helper crate. A whole-workspace release
+would therefore have shipped members whose internal requirements named the
+previous version.
+
+Red was observed first: the new test
+`test_member_bump_updates_every_internal_dependency` failed with
+`dependencies.ortho_l10n kept a stale requirement` before any script change.
+
+The fix derives the list instead of naming it. `_internal_dependencies(doc)`
+returns every dependency declared with a `path`, across the normal, dev, and
+build tables, deduplicated in first-seen order; `_set_version` now takes that
+list. A dependency's identity is the table key, not its `path` value, so an
+aliased dependency is handled. External requirements have no `path` and are
+untouched, which is what keeps a third-party version like `serde = "1"` from
+being rewritten.
+
+Two checks beyond the unit test, because a synthetic test can agree with a
+wrong rule:
+
+| Check                                  | Observation                                                                                                                                                                      |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Derived edges from every real manifest | `ortho_config` -> `ortho_l10n`, `ortho_config_macros`, `test_helpers`; `cargo-orthohelp` -> `ortho_config`, `test_helpers`; each fixture -> `ortho_config`; `ortho_l10n` -> none |
+| Full script run in a throwaway copy    | Every `path` requirement reaches the new version, in all three tables, and every changed line is a package version or an internal requirement                                    |
+
+The throwaway run also showed `cargo-orthohelp`'s own version being replaced
+with the workspace version. That is pre-existing and correct for this script:
+the developer's guide reserves it for a whole-workspace release and documents
+the per-crate release as a hand edit plus a `v<version>` tag.
+
+Documentation updated in the same milestone: the developer's guide now states
+the publish-order contract and the cycle exemption, and states that the bump
+script discovers requirements; `CHANGELOG.md` records the new crate under
+`## Unreleased`. `docs/design.md` already described the crate, and
+`ortho_l10n/README.md` already documents the standalone use.
 
 ### EP-M3 reconnaissance (2026-10-21)
 

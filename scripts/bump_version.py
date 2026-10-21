@@ -20,13 +20,20 @@ import os
 import re
 import sys
 import tempfile
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from pathlib import Path
 from typing import Callable
 
 import tomlkit
 from markdown_it import MarkdownIt
 from tomlkit.exceptions import TOMLKitError
+
+#: Dependency tables that can carry an internal, path-linked requirement.
+DEPENDENCY_TABLES: tuple[str, ...] = (
+    "dependencies",
+    "dev-dependencies",
+    "build-dependencies",
+)
 
 
 def _is_matching_fence_token(tok, lang: str) -> bool:
@@ -250,6 +257,45 @@ def _update_dependency_in_table(
         _update_string_dependency(deps, dependency, entry, version)
 
 
+def _internal_dependencies(doc: MutableMapping[str, object]) -> list[str]:
+    """Return the names of ``doc``'s internal dependencies.
+
+    An internal dependency is one declared with a ``path``: it names a crate
+    this workspace publishes, and its requirement has to move with the
+    workspace version. External entries carry no ``path`` and are left alone.
+
+    Deriving the list from the manifest, rather than naming the crates here,
+    is what keeps the script correct as the graph changes. This module used to
+    map one package name to one dependency, so adding ``ortho_l10n`` left
+    ``ortho_config`` requiring a version the release would never publish.
+
+    A crate can appear in several tables - ``ortho_config_macros`` is both a
+    dependency and a dev dependency of ``ortho_config`` - so each name is
+    returned once, in first-seen order.
+
+    Examples
+    --------
+    >>> import tomlkit
+    >>> doc = tomlkit.parse('''[dependencies]
+    ... internal = { path = "../internal", version = "0.1" }
+    ... serde = "1"
+    ...
+    ... [dev-dependencies]
+    ... internal = { path = "../internal", version = "0.1" }''')
+    >>> _internal_dependencies(doc)
+    ['internal']
+    """
+    names: dict[str, None] = {}
+    for table in DEPENDENCY_TABLES:
+        entries = doc.get(table)
+        if not entries:
+            continue
+        for name, entry in entries.items():
+            if isinstance(entry, Mapping) and "path" in entry:
+                names[name] = None
+    return list(names)
+
+
 def _update_dependency_version(
     doc: MutableMapping[str, object],
     dependency: str,
@@ -281,7 +327,7 @@ def _update_dependency_version(
     >>> 'foo = "^1.2.3"' in tomlkit.dumps(doc)
     True
     """
-    for table in ("dependencies", "dev-dependencies", "build-dependencies"):
+    for table in DEPENDENCY_TABLES:
         deps = doc.get(table)
         if not deps or dependency not in deps:
             continue
@@ -291,10 +337,10 @@ def _update_dependency_version(
 def _set_version(
     toml_path: Path,
     version: str,
-    dependency: str | None = None,
+    dependencies: Iterable[str] = (),
     doc: MutableMapping[str, object] | None = None,
 ) -> None:
-    """Set package and optional dependency version in a ``Cargo.toml``.
+    """Set package and internal dependency versions in a ``Cargo.toml``.
 
     Parameters
     ----------
@@ -302,8 +348,8 @@ def _set_version(
         Path to the ``Cargo.toml`` file.
     version
         Version string to apply.
-    dependency
-        Optional dependency to update alongside the package version.
+    dependencies
+        Internal dependencies to update alongside the package version.
     doc
         Pre-parsed document to update. If provided, the file is not re-read.
     """
@@ -313,7 +359,7 @@ def _set_version(
 
     _update_package_version(doc, version)
 
-    if dependency:
+    for dependency in dependencies:
         _update_dependency_version(doc, dependency, version)
 
     text = tomlkit.dumps(doc)
@@ -420,12 +466,12 @@ def _update_member_version(member_path: Path, version: str) -> bool:
     ('[package]\\nname = "demo"\\nversion = "1.2.3"\\n', False)
     """
     try:
-        # Derive from the actual package name to avoid coupling to directory names
+        # Derive both the package identity and its internal edges from the
+        # manifest itself: naming either here couples the script to a layout
+        # that changes whenever the dependency graph does.
         with member_path.open("r", encoding="utf-8") as fh:
             doc = tomlkit.parse(fh.read())
-        package_name = doc.get("package", {}).get("name")
-        dep = "ortho_config_macros" if package_name == "ortho_config" else None
-        _set_version(member_path, version, dep, doc)
+        _set_version(member_path, version, _internal_dependencies(doc), doc)
     except (
         TOMLKitError,
         OSError,
@@ -595,6 +641,8 @@ def main(argv: list[str]) -> int:
         return 1
     members = data.get("workspace", {}).get("members", [])
     try:
+        # The root manifest declares no internal dependency: every member is
+        # reached through `workspace.members`, so there are no edges to bump.
         _set_version(workspace, version, doc=data)
     except (TOMLKitError, OSError, TypeError, ValueError) as exc:
         print(

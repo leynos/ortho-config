@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Add the `ortho_l10n` crate, a reusable Fluent catalogue and identifier
+  runtime that applications can depend on directly. It carries the embedded
+  English and Japanese resources, `Localizer`, `FluentLocalizer` and its
+  builder, the formatting-issue reporter, and the fallible identifier
+  convention, without configuration discovery, derive macros, Figment, or Clap.
+  `ortho_config` re-exports the same types, so existing imports keep working;
+  see [ADR-015](docs/adr-015-localization-runtime-boundary.md).
+
 - Add behavioural metadata for non-interactive execution and mutation
   boundaries (roadmap 7.2.1): the struct-level
   `#[ortho_config(behaviour(interaction = …, mutation = …, bypass = …,
