@@ -128,9 +128,9 @@ normative prose references for this command convention.
 
 ## References
 
-- [Agent-native CLI assistance design](agent-native-cli-design.md) §3.2 and
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §3.2 and
   §5.
-- [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md)
+- [OrthoConfig IR documentation design for cargo-orthohelp](../cargo-orthohelp-design.md)
   §6.3.1.
 - [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 - [Trevin Chow, "10 Principles for Agent-Native CLIs"](https://trevinsays.com/p/10-principles-for-agent-native-clis).

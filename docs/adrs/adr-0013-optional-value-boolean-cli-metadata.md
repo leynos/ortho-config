@@ -64,7 +64,7 @@ Boolean fields would generate an extra `--no-flag` argument alongside `--flag`.
 This is rejected. It breaks the one-argument-identifier-per-field model that
 the derive relies on for extraction, and it contradicts the preference against
 auto-generated `--no-x` pairs recorded in
-[Agent-native CLI assistance design](agent-native-cli-design.md) §5.
+[Agent-native CLI assistance design](../agent-native-cli-design.md) §5.
 
 ## Decision outcome
 
@@ -163,7 +163,7 @@ profile-specific gate remains in `build_profile_cli_layer_tokens`.
 ## References
 
 - [ADR-0012: Profile selection and layering](adr-0012-profile-selection-and-layering.md).
-- [Agent-native CLI assistance design](agent-native-cli-design.md) §5.
-- [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md).
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §5.
+- [OrthoConfig IR documentation design for cargo-orthohelp](../cargo-orthohelp-design.md).
 - [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 - [clap `Arg::num_args` documentation](https://docs.rs/clap/latest/clap/struct.Arg.html#method.num_args).

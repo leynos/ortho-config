@@ -23,7 +23,7 @@ four layers (defaults, files, environment, CLI), the derive macro generates no
 `--profile` flag, and the agent-context schema hard-codes
 `"profiles": { "supported": false }`.
 
-[Agent-native CLI assistance design](agent-native-cli-design.md) §6.7, titled
+[Agent-native CLI assistance design](../agent-native-cli-design.md) §6.7, titled
 "Persistent profiles", names the contract: profile support should be optional,
 must use a canonical root flag when present, and should follow the recommended
 precedence
@@ -35,7 +35,7 @@ named config overlays, the exact merge order and migration impact are
 documented before code is changed. Roadmap item 9.1.1 tasks OrthoConfig with
 designing and implementing that optional profile metadata. This record is the
 required documentation; the governing execution plan is
-[9.1.1 profile metadata](execplans/9-1-1-profile-metadata.md).
+[9.1.1 profile metadata](../execplans/9-1-1-profile-metadata.md).
 
 Prior art surveyed before deciding: AWS CLI (named `[profile x]` sections in
 shared INI files), kubectl and gcloud (named contexts plus a persisted
@@ -386,7 +386,7 @@ additions do not repeat the break. The wire contract is unaffected; a
 byte-identity test proves the unsupported serialization is unchanged.
 
 Profiles are a soft ship-time dependency per
-[agent-native-cli-design.md](agent-native-cli-design.md) §2.2: Weaver and
+[agent-native-cli-design.md](../agent-native-cli-design.md) §2.2: Weaver and
 Netsuke may carry temporary `--profile` parsing adapters until 9.1 ships, and
 must replace them within their next release once it does; on shape conflict,
 the OrthoConfig shape wins. Those adapters should parse only, mirroring the
@@ -439,13 +439,13 @@ unknown keys. Downstream rollback notes should say both things.
 
 ## References
 
-- [Agent-native CLI assistance design](agent-native-cli-design.md) §2.2,
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §2.2,
   §6.7, §8.1, and §8.2.
-- [Roadmap](roadmap.md) §9.1.
-- [ExecPlan: 9.1.1 profile metadata](execplans/9-1-1-profile-metadata.md).
+- [Roadmap](../roadmap.md) §9.1.
+- [ExecPlan: 9.1.1 profile metadata](../execplans/9-1-1-profile-metadata.md).
 - [RFC 0002: Customizable configuration layering policy](../rfcs/rfc-0002-config-layer-resolution-policy.md).
 - [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 - [ADR-0007: Downstream context command naming](adr-0007-downstream-context-command-naming.md).
-- [Design Document: The `OrthoConfig` Crate](design.md) §4.3 and §4.10.
+- [Design Document: The `OrthoConfig` Crate](../design.md) §4.3 and §4.10.
 - [Cargo book: profiles](https://doc.rust-lang.org/cargo/reference/profiles.html).
 - [AWS CLI: named profiles](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
