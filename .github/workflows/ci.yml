@@ -33,17 +33,17 @@ jobs:
     runs-on: >-
       ${{ github.event.pull_request.head.repo.fork
       && matrix.fork-runner || matrix.runner }}
-    # Two coverage steps run in this job, each under its own 2,700 s cargo
+    # Two coverage steps run in this job, each under its own 3,300 s cargo
     # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
     # contain both before it contains anything else. On the Windows leg the
     # work outside them, dominated by cache save and restore, reached 3,257 s
     # on run 33447440225, read across 103 jobs of every conclusion. The
     # contract allows 60 minutes for that, making the requirement
-    # 5,400 + 3,600 = 9,000 s = 150 minutes, and asks for 15 minutes above it
+    # 6,600 + 3,600 = 10,200 s = 170 minutes, and asks for 15 minutes above it
     # so a ceiling never fires at the moment the watchdog would have
     # reported. The job had no ceiling at all before this and so inherited
     # GitHub's six-hour default.
-    timeout-minutes: 165
+    timeout-minutes: 190
     permissions:
       contents: read
     env:
@@ -65,7 +65,7 @@ jobs:
       # seconds (default 600). The windows coverage run legitimately takes
       # ~12 min (the compile_fail trybuild test alone is ~200s), and the
       # 927edd4 action now emits full per-line data, so raise the ceiling.
-      RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '3300'
       # sccache. The shared Rust setup action installs it and, from this
       # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
       # installed. Before this pin it installed sccache and exported
