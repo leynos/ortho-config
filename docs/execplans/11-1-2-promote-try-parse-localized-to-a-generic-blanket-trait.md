@@ -376,7 +376,7 @@ Signposted documentation and skills:
 1. Design: `docs/cli-localization-design.md` §4.1 (identifier convention), §4.2
    (the `try_parse_localized` helpers — the contract for this task), §8.1/§8.2
    (the 11.1.3 derive that this must stay compatible with).
-2. ADR: `docs/adr/../adrs/adr-0006-identifier-derivation-panics.md` (the panic
+2. ADR: `docs/adrs/adr-0006-identifier-derivation-panics.md` (the panic
    contract to amend, per D-5).
 3. Testing guides: `docs/rust-testing-with-rstest-fixtures.md`,
    `docs/rust-doctest-dry-guide.md`,
@@ -609,8 +609,7 @@ the `localised_help.rs` snapshots and BDD scenarios are unchanged (Constraint
      and the base-agnostic `parse_localized_command` primitive is documented as
      the seam the trait wraps. Record the naming clarification (env-based method
      is the unsuffixed `try_parse_localized`).
-   - `docs/adr/../adrs/adr-0006-identifier-derivation-panics.md`: amend per D-5
-     to note
+   - `docs/adrs/adr-0006-identifier-derivation-panics.md`: amend per D-5 to note
      the blanket trait widens the reachable panic surface and the 11.1.3
      ordering relationship.
    - `examples/hello_world/README.md`: update the two `try_parse_localized_env`

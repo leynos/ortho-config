@@ -256,8 +256,7 @@ escalation, not workarounds.
     (`unnecessary_wraps`).
 - [x] Milestone 5b: documentation, ADR-0008, CHANGELOG, roadmap tick.
   - `docs/adrs/adr-0008-agent-native-policy-configuration.md` added (house
-    template;
-    records D1, D3/D12, D5/D6, D7, D9, D11, D13, D14) and listed in
+    template; records D1, D3/D12, D5/D6, D7, D9, D11, D13, D14) and listed in
     `docs/contents.md`. `docs/agent-native-cli-design.md` §3.3 reconciled per
     D4 (always-write report wording; nested `location` example shape;
     configuration surface, two defaults, exceptions visibility).
