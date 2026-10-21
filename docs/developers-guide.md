@@ -1331,13 +1331,23 @@ the `tracing` event fields above.
 
 Rules for extending this set:
 
+- **Extend only through the closed-vocabulary constants in `telemetry.rs`.**
+  A new event or field starts as a `pub(super) const` in that module, next to
+  the set it belongs to, and the emission helper takes it as a `&'static str`.
+  That type accepts any string literal, so the vocabulary is a convention the
+  call sites follow, not something the signature enforces. The helpers are
+  `pub(super)`, so no downstream crate can reach them, and there is
+  deliberately no helper that accepts caller-formatted text.
 - **Every field is a `&'static str` from a constant declared in
   `telemetry.rs`, or a `bool`.** Discovery's inputs and outputs — variable
   values, resolved paths, file contents — are exactly what must not reach a
-  log, and callers cannot pass one through a function that accepts only the
-  closed vocabulary. The same property keeps the `metrics` labels bounded; an
-  unbounded label here becomes an unbounded time-series in a consumer's
-  monitoring system.
+  log. The module-private helpers, plus the discipline of passing the declared
+  constants, keep them out of it; the type alone would not, because a
+  handwritten literal also satisfies `&'static str`. In particular, the
+  discovery telemetry carries no environment values, raw paths, file contents,
+  or configuration values. The same property keeps the `metrics` labels
+  bounded; an unbounded label here becomes an unbounded time-series in a
+  consumer's monitoring system.
 - **The discovery telemetry suite enforces it.** The suite feeds discovery
   distinctive values and asserts no captured field contains any of them. Adding
   a field that formats a path fails that test rather than shipping.
@@ -1721,6 +1731,11 @@ variables for tests.
   not scan. Callers can use one `Arc<MapEnv>` by coercing cloned `Arc`s to
   `SharedEnvSource` and `SharedScanEnvSource`;
   [#412](https://github.com/leynos/ortho-config/issues/412) completed this path.
+- **`EnvSource` injection into `CsvEnv` remains out of scope.** The merge
+  layer accepts only the scanning capability; `EnvSource` is discovery-only.
+  Adding an `EnvSource`-shaped constructor to `CsvEnv` would either require
+  enumeration on that trait — voiding the guarantee above — or silently read
+  the process environment behind an injected-looking API.
 - **Injected merge providers are declarative.** Injected `CsvEnv` loading
   replays only the declarative prefix, case, split, and CSV options. Calling
   `CsvEnv::with_source` after `map()` or `filter_map()` is rejected because
