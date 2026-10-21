@@ -38,3 +38,8 @@ rstest = "0.27.0"
 serde = { version = "1", features = ["derive"] }
 figment = { version = "0.10", default-features = false, features = ["test"] }
 proptest = "1.11.0"
+# `syn`'s `Debug`/`PartialEq` impls live behind `extra-traits` in syn 3, and
+# `derive/parse/tests/type_utils.rs` compares `syn::Type` values directly. The
+# test build needs the feature; production does not, so it is declared here
+# rather than on the normal dependency.
+syn = { version = "3", features = ["extra-traits"] }
