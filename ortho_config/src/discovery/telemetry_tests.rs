@@ -14,6 +14,7 @@ use super::telemetry::{
     CATEGORY_VALIDATION, PRESENCE_ABSENT, PRESENCE_EMPTY, PRESENCE_PRESENT, error_category,
     presence,
 };
+use super::telemetry_test_support;
 
 /// Every `OrthoError` variant maps to its closed-set category.
 ///
@@ -60,4 +61,42 @@ fn presence_distinguishes_absent_empty_and_present() {
     assert_eq!(presence(None), PRESENCE_ABSENT);
     assert_eq!(presence(Some(&OsString::new())), PRESENCE_EMPTY);
     assert_eq!(presence(Some(&OsString::from("/xdg"))), PRESENCE_PRESENT);
+}
+
+/// A scoped `not_found` load declares `scope` and no `source`.
+///
+/// `docs/design.md` documents three `discovery.load` spellings with an
+/// optional field: `source` only, `scope` only, and both. The integration
+/// metadata suite drives the first and the third through real discovery runs;
+/// this one has no reachable caller, because the scoped walk emits its
+/// per-scope terminal only when a candidate won. Driving the dispatcher
+/// directly is therefore the only way to pin the spelling, and doing so keeps
+/// a future not-found path from reusing the bare emitter unnoticed.
+///
+/// The assertion is on metadata, not recorded values: a single emitter that
+/// listed both options would record the same values but declare both names,
+/// which is exactly the collapse this case exists to catch.
+#[test]
+fn a_scoped_not_found_load_declares_scope_but_not_source() {
+    let events = telemetry_test_support::capture_events(|| {
+        super::telemetry::load_outcome(
+            super::telemetry::OPERATION_COMPOSE_LAYERS,
+            super::telemetry::OUTCOME_NOT_FOUND,
+            None,
+            Some(super::telemetry::SCOPE_USER),
+        );
+    });
+    let load = events
+        .iter()
+        .find(|event| event.field("event") == "discovery.load")
+        .expect("the dispatcher must emit a discovery.load event");
+    assert!(
+        load.declares("scope"),
+        "a scoped not_found load must declare scope"
+    );
+    assert!(
+        !load.declares("source"),
+        "a scoped not_found load must not declare source"
+    );
+    assert!(load.declares("operation") && load.declares("outcome"));
 }

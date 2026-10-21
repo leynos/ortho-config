@@ -17,6 +17,15 @@ use input::build_input;
 mod policy;
 pub use policy::apply_policy_to_context;
 
+/// The long-option spelling of a profile selector flag, without a leading `--`.
+///
+/// The selector reaches three helpers that must agree on that convention, and
+/// [`profile_selector_input`] turns the same value into both the input's name
+/// and its long option. A newtype keeps the convention at the type level
+/// rather than in three doc comments.
+#[derive(Clone, Copy)]
+struct SelectorFlag<'a>(&'a str);
+
 /// Builds an agent-context document from bridge documentation metadata.
 ///
 /// The transform is deterministic: command paths and command inputs are sorted
@@ -73,11 +82,7 @@ pub fn bridge_ir_to_agent_context(
     package: &str,
     localizer: Option<&dyn Localizer>,
 ) -> AgentContext {
-    tracing::debug!(
-        package = %package,
-        root = %meta.app_name,
-        "starting bridge IR to agent-context transformation",
-    );
+    log_bridge_start(package, &meta.app_name);
     let mut context = AgentContext::new(package);
     if let Some(profiles) = &meta.profiles {
         context.profiles = ProfilesDeclaration::supported(ProfileSelectionContract {
@@ -95,12 +100,31 @@ pub fn bridge_ir_to_agent_context(
             .inputs
             .sort_by(|left, right| left.name.cmp(&right.name));
     }
+    log_bridge_complete(package, context.commands.len());
+    context
+}
+
+/// Announce the start of the IR-to-agent-context bridge.
+///
+/// Extracted so [`bridge_ir_to_agent_context`] holds at most one `tracing`
+/// call: when a dependent crate enables `tracing`'s `log` bridge, Cargo's
+/// feature unification expands every event into a branch ladder that counts
+/// against the workspace's cognitive-complexity ceiling.
+fn log_bridge_start(package: &str, root: &str) {
     tracing::debug!(
         package = %package,
-        command_count = context.commands.len(),
+        root = %root,
+        "starting bridge IR to agent-context transformation",
+    );
+}
+
+/// Announce the end of the IR-to-agent-context bridge.
+fn log_bridge_complete(package: &str, command_count: usize) {
+    tracing::debug!(
+        package = %package,
+        command_count,
         "bridge IR to agent-context transformation complete",
     );
-    context
 }
 
 /// Exposes the profile selector as an input on every command.
@@ -128,7 +152,7 @@ fn expose_profile_selector(profiles: &ProfilesDeclaration, commands: &mut [Agent
     let Some(selection) = profiles.selection.as_ref() else {
         return;
     };
-    let flag = selection.flag.as_str();
+    let flag = SelectorFlag(selection.flag.as_str());
     for command in commands.iter_mut() {
         if !command
             .inputs
@@ -152,8 +176,8 @@ fn expose_profile_selector(profiles: &ProfilesDeclaration, commands: &mut [Agent
 /// The name is not consulted: `AgentInput` carries the invocation spelling in
 /// `long`, so that field is what decides whether the selector's flag exists on
 /// the command.
-fn exposes_long_option(input: &AgentInput, long: &str) -> bool {
-    input.long.as_deref() == Some(long)
+fn exposes_long_option(input: &AgentInput, long: SelectorFlag<'_>) -> bool {
+    input.long.as_deref() == Some(long.0)
 }
 
 /// Builds the agent-context input describing the profile selector.
@@ -162,10 +186,10 @@ fn exposes_long_option(input: &AgentInput, long: &str) -> bool {
 /// the operator's configuration files, not in the command surface, so the IR
 /// cannot enumerate them. Declaring a closed set here would be a lie an agent
 /// might act on.
-fn profile_selector_input(flag: &str) -> AgentInput {
+fn profile_selector_input(flag: SelectorFlag<'_>) -> AgentInput {
     AgentInput {
-        name: flag.to_owned(),
-        long: Some(flag.to_owned()),
+        name: flag.0.to_owned(),
+        long: Some(flag.0.to_owned()),
         value_type: Some(String::from("string")),
         required: false,
         default: None,

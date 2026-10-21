@@ -6,6 +6,7 @@ fn public_api_contracts_compile_for_downstream_crates() {
     let t = trybuild::TestCases::new();
     t.pass("tests/trybuild/public_api_contracts.rs");
     t.pass("tests/trybuild/source_aware_composition.rs");
+    t.pass("tests/trybuild/step_return_aliases.rs");
 }
 
 #[test]

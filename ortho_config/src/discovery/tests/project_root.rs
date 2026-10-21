@@ -116,8 +116,10 @@ fn explicit_roots_suppress_the_resolver(isolated_builder: crate::ConfigDiscovery
 /// Pin the complete rendering of a representative telemetry event.
 ///
 /// The captured field map is fully injected and path-free, so the exact
-/// `Debug` snapshot is stable on every host; any new field must be
-/// reviewed here before it can ship, keeping values out of events.
+/// `Debug` snapshot is stable on every host; any new member must be
+/// reviewed here before it can ship, keeping values out of events. The
+/// `names` set is the callsite's declared field names, not a value, so it
+/// names only the same three bounded identifiers the event records.
 #[rstest]
 fn a_failed_resolution_event_renders_exactly(isolated_builder: crate::ConfigDiscoveryBuilder) {
     let events = capture_events(|| {
@@ -138,7 +140,8 @@ fn a_failed_resolution_event_renders_exactly(isolated_builder: crate::ConfigDisc
         "CapturedEvent { fields: {\
          \"event\": \"discovery.project_root\", \
          \"message\": \"working directory unavailable; no default project root added\", \
-         \"state\": \"cwd_unavailable\"} }"
+         \"state\": \"cwd_unavailable\"}, \
+         names: {\"event\", \"message\", \"state\"} }"
     );
 }
 

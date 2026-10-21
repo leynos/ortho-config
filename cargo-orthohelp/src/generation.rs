@@ -52,18 +52,27 @@ pub fn generate_agent_context_if_requested(
     context: &GenerationContext<'_>,
 ) -> Result<(), OrthohelpError> {
     if !needs_agent_context(args.format) {
-        tracing::debug!(
-            package = %context.selection.package_name,
-            format = ?args.format,
-            "agent-context generation skipped for requested format",
-        );
+        log_agent_context_skipped(context, args.format);
         return Ok(());
     }
-    tracing::debug!(
-        package = %context.selection.package_name,
-        format = "agent-context",
-        "starting agent-context transformation",
-    );
+    log_agent_context_started(context);
+    let agent_context = build_agent_context(context);
+    log_agent_context_bridged(&agent_context);
+    output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
+    if !args.check_agent_native {
+        output::write_agent_context_stdout(&agent_context)?;
+    }
+    Ok(())
+}
+
+/// Bridge the IR into an agent context and apply the package's policy.
+///
+/// Split out of [`generate_agent_context_if_requested`] so the two `tracing`
+/// emissions there each sit in a function of their own: when a dependent crate
+/// enables `tracing`'s `log` bridge, Cargo's feature unification expands every
+/// event into a branch ladder that counts against the workspace's
+/// cognitive-complexity ceiling.
+fn build_agent_context(context: &GenerationContext<'_>) -> ortho_config::AgentContext {
     let summary_localizer = context
         .en_us_localizer
         .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
@@ -78,16 +87,34 @@ pub fn generate_agent_context_if_requested(
         .as_ref()
         .map(policy::config::PolicyConfig::from);
     agent_context::apply_policy_to_context(&mut agent_context, policy_config.as_ref());
+    agent_context
+}
+
+/// Report that the requested format does not need agent-context output.
+fn log_agent_context_skipped(context: &GenerationContext<'_>, format: OutputFormat) {
+    tracing::debug!(
+        package = %context.selection.package_name,
+        format = ?format,
+        "agent-context generation skipped for requested format",
+    );
+}
+
+/// Report the start of the agent-context transformation.
+fn log_agent_context_started(context: &GenerationContext<'_>) {
+    tracing::debug!(
+        package = %context.selection.package_name,
+        format = "agent-context",
+        "starting agent-context transformation",
+    );
+}
+
+/// Report the end of the agent-context transformation.
+fn log_agent_context_bridged(agent_context: &ortho_config::AgentContext) {
     tracing::debug!(
         package = %agent_context.package,
         command_count = agent_context.commands.len(),
         "agent-context transformation complete",
     );
-    output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
-    if !args.check_agent_native {
-        output::write_agent_context_stdout(&agent_context)?;
-    }
-    Ok(())
 }
 
 /// Builds the optional en-US localizer shared by agent-context and localized output.
@@ -101,10 +128,15 @@ pub fn build_agent_context_localizer_if_requested(
     match build_en_us_localizer(&selection.package_root) {
         Ok(localizer) => Some(localizer),
         Err(error) => {
-            tracing::warn!(error = %error, "no en-US localizer; agent-context summaries omitted");
+            warn_missing_localizer(&error);
             None
         }
     }
+}
+
+/// Report that en-US resources were unavailable, so summaries are omitted.
+fn warn_missing_localizer(error: &OrthohelpError) {
+    tracing::warn!(error = %error, "no en-US localizer; agent-context summaries omitted");
 }
 
 /// Builds an en-US localizer from the package's consumer resources.

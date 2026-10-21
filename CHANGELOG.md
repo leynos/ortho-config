@@ -117,6 +117,15 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Migrate the behavioural suites from `rstest-bdd` 0.5.0 to 0.6.0. The runtime,
+  macro, pattern and policy crates move together, and the newly non-optional
+  `rstest-bdd-harness` crate enters `Cargo.lock` as a transitive dependency of
+  `rstest-bdd-macros`. The existing `compile-time-validation` and
+  `strict-compile-time-validation` settings are unchanged. No step definition,
+  feature file or scenario needed editing; the 0.6.0 changes are additive for
+  this repository's usage and are covered by a new regression module. See
+  [the migration guide](docs/rstest-bdd-v0-6-0-migration-guide.md) and
+  [the documentation provenance record](docs/rstest-bdd-doc-provenance.md).
 - Remove the remaining fixture `#[path]` attributes by moving the
   `cargo-orthohelp` PowerShell fixture under `tests/golden/` and restructuring
   the BDD support modules around top-level integration-test entry points (closes

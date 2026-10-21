@@ -83,9 +83,7 @@ pub fn run_policy_check(
     let report = evaluate(&config, &PolicyInputs::default());
     let report_path = output::write_policy_report(out_dir, &report)?;
     output::write_policy_report_stdout(&report)?;
-    if let Err(error) = write_summary(&report, &report_path, table_found, &package.name) {
-        tracing::debug!(error = %error, "failed to write advisory policy summary");
-    }
+    write_summary_best_effort(&report, &report_path, table_found, &package.name);
     if config.mode == PolicyMode::Deny && report.summary.deny > 0 {
         return Err(OrthohelpError::PolicyViolation {
             deny_count: report.summary.deny,
@@ -108,6 +106,28 @@ fn policy_table_in_metadata(metadata: &serde_json::Value) -> bool {
     metadata
         .get("ortho_config")
         .is_some_and(|value| value.get("policy").is_some())
+}
+
+/// Prints the short human summary to standard error, ignoring a failure.
+fn write_summary_best_effort(
+    report: &PolicyReport,
+    report_path: &Utf8Path,
+    table_found: bool,
+    package_name: &str,
+) {
+    if let Err(error) = write_summary(report, report_path, table_found, package_name) {
+        log_summary_failure(&error);
+    }
+}
+
+/// Report that the advisory human summary could not be printed.
+///
+/// Extracted so [`write_summary_best_effort`] holds at most one `tracing`
+/// call: when a dependent crate enables `tracing`'s `log` bridge, Cargo's
+/// feature unification expands every event into a branch ladder that counts
+/// against the workspace's cognitive-complexity ceiling.
+fn log_summary_failure(error: &std::io::Error) {
+    tracing::debug!(%error, "failed to write advisory policy summary");
 }
 
 /// Prints the short human summary to standard error.

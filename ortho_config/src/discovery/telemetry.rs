@@ -6,10 +6,20 @@
 //! *decision* rather than the datum the decision was made from.
 //!
 //! That is enforced by construction: each field is a `&'static str` drawn from
-//! a closed set declared in this module, or a `bool`. No caller can pass a path
-//! or a variable value through these functions, and the same property keeps the
-//! metric labels bounded — a cardinality bug here would otherwise show up as an
-//! unbounded time-series in a consumer's monitoring system.
+//! a closed set declared in this module, a `bool`, or an `Option` of one of
+//! those for a field that is meaningful only in some runs. No caller can pass a
+//! path or a variable value through these functions, and the same property
+//! keeps the metric labels bounded — a cardinality bug here would otherwise
+//! show up as an unbounded time-series in a consumer's monitoring system.
+//!
+//! An optional field is absent from an event in two senses, and both are
+//! preserved here. A `None` records no *value*: `tracing` implements `Value`
+//! for `Option<T>` by recording nothing for `None`. The field *name* is a
+//! different matter — the macro's field list fixes it in the callsite's static
+//! metadata whether or not a value follows, so a subscriber filtering on
+//! `Metadata::fields` would still see it. A field that must be absent in both
+//! senses therefore needs its own macro call; the [`super::telemetry_events`]
+//! module holds one emitter per field subset for exactly that reason.
 //!
 //! Metrics are emitted through the [`metrics`] facade behind the optional
 //! `metrics` feature. The facade is inert unless the consuming binary installs
@@ -19,6 +29,7 @@
 use std::ffi::OsString;
 
 use super::telemetry_counters::{count_attempt, count_candidate_failure, count_outcome};
+use super::telemetry_events as events;
 
 /// Discovery consulted the live process environment.
 pub(super) const SOURCE_PROCESS: &str = "process";
@@ -215,19 +226,9 @@ pub(super) fn attempt(operation: &'static str) {
 /// carried on the selector as a private field instead of being derived from
 /// either.
 pub(super) fn policy_resolution(selector_class: Option<&'static str>) {
-    if let Some(class) = selector_class {
-        tracing::debug!(
-            event = "discovery.policy",
-            operation = OPERATION_POLICY_RESOLVE,
-            selector_class = class,
-            "configuration file policy resolved its layers"
-        );
-    } else {
-        tracing::debug!(
-            event = "discovery.policy",
-            operation = OPERATION_POLICY_RESOLVE,
-            "configuration file policy resolved its layers"
-        );
+    match selector_class {
+        Some(class) => events::policy_resolution_with_selector(class),
+        None => events::policy_resolution_without_selector(),
     }
 }
 
@@ -283,35 +284,22 @@ pub(super) fn candidate_failure(fields: &CandidateFailureFields) {
         category,
         scope,
     } = *fields;
-    let outcome = if required {
-        OUTCOME_REQUIRED_FAILURE
-    } else {
-        OUTCOME_OPTIONAL_FAILURE
-    };
-    if let Some(label) = scope {
-        tracing::debug!(
-            event = "discovery.candidate",
-            operation,
-            outcome,
-            required,
-            source,
-            category,
-            scope = label,
-            "configuration candidate rejected"
-        );
-    } else {
-        tracing::debug!(
-            event = "discovery.candidate",
-            operation,
-            outcome,
-            required,
-            source,
-            category,
-            "configuration candidate rejected"
-        );
+    let outcome = failure_outcome(required);
+    match scope {
+        Some(label) => events::candidate_failure_scoped(fields, outcome, label),
+        None => events::candidate_failure_unscoped(fields, outcome),
     }
     count_outcome(operation, outcome);
     count_candidate_failure(operation, source, category);
+}
+
+/// Name the outcome a candidate failure has, given whether it was required.
+const fn failure_outcome(required: bool) -> &'static str {
+    if required {
+        OUTCOME_REQUIRED_FAILURE
+    } else {
+        OUTCOME_OPTIONAL_FAILURE
+    }
 }
 
 /// Record that no working directory was available for the project-root
@@ -331,16 +319,16 @@ pub(super) fn project_root_cwd_unavailable() {
 /// actually asks: "which location did this configuration come from?" It is
 /// `None` for the outcomes that have no winner, and the field is then omitted
 /// rather than rendered empty — an absent field cannot be mistaken for a rung.
-/// That is why the branches below exist: a `tracing` event's fields are
-/// fixed at the macro call, so a conditional field means a conditional call.
+/// That is why the branches below exist: a `tracing` event's fields are fixed
+/// at the macro call, so a conditional field means a conditional call.
 ///
 /// `scope` is the scope that produced the winner, and is present only where a
 /// scope is meaningful — the scoped walk, where the same `source` label can
 /// belong to either the machine-wide or the per-user scope. It is `None`
 /// elsewhere: the flat first-wins walk has no scope concept, and a policy
 /// resolves explicit paths before automatic discovery begins. The two optional
-/// fields combine into four spellings, which is why this is written as nested
-/// conditions rather than one flat macro call.
+/// fields combine into four spellings, which is why this is written as a
+/// four-arm match rather than one flat macro call.
 ///
 /// The metric is deliberately left alone: `count_outcome` keeps its existing
 /// `operation`/`outcome` label pair. `source` would multiply that series by the
@@ -353,34 +341,12 @@ pub(super) fn load_outcome(
     scope: Option<&'static str>,
 ) {
     match (source, scope) {
-        (Some(rung), Some(label)) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            source = rung,
-            scope = label,
-            "configuration discovery finished"
-        ),
-        (Some(rung), None) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            source = rung,
-            "configuration discovery finished"
-        ),
-        (None, Some(label)) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            scope = label,
-            "configuration discovery finished"
-        ),
-        (None, None) => tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            "configuration discovery finished"
-        ),
+        (Some(rung), Some(label)) => {
+            events::load_outcome_source_and_scope(operation, outcome, rung, label);
+        }
+        (Some(rung), None) => events::load_outcome_source(operation, outcome, rung),
+        (None, Some(label)) => events::load_outcome_scope(operation, outcome, label),
+        (None, None) => events::load_outcome_bare(operation, outcome),
     }
     count_outcome(operation, outcome);
 }

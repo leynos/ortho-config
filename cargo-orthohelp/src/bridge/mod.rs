@@ -13,6 +13,8 @@ use crate::fs_helpers::open_optional_dir;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
 use crate::rustflags::apply_sanitized_rustflags;
 
+mod telemetry;
+
 /// Paths used when building the ephemeral bridge crate.
 pub struct BridgePaths {
     /// Root directory for the bridge crate.
@@ -227,20 +229,11 @@ fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
         })?;
 
     if output.status.success() {
-        tracing::debug!(
-            manifest = %paths.manifest_path,
-            status = %output.status,
-            "bridge build succeeded"
-        );
+        telemetry::bridge_build_succeeded(paths, output.status);
         return Ok(());
     }
 
-    tracing::debug!(
-        manifest = %paths.manifest_path,
-        status = %output.status,
-        stderr = %String::from_utf8_lossy(&output.stderr),
-        "bridge build failed"
-    );
+    telemetry::bridge_build_failed(paths, &output);
     let status = output.status.code().unwrap_or(-1);
     let message = format!(
         "{}{}",
@@ -312,18 +305,11 @@ fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError>
     if let Ok(Some(existing)) = read_cached_ir(paths)
         && existing == json
     {
-        tracing::debug!(
-            path = %paths.ir_path,
-            "skipping ir.json write: cached content is identical"
-        );
+        telemetry::ir_cache_unchanged(paths);
         return Ok(());
     }
     let mut file = open_bridge_file(paths, "ir.json", &paths.ir_path)?;
-    tracing::debug!(
-        path = %paths.ir_path,
-        bytes = json.len(),
-        "writing ir.json cache"
-    );
+    telemetry::ir_cache_write(paths, json.len());
     file.write_all(json.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
             path: paths.ir_path.clone(),
@@ -370,5 +356,5 @@ fn open_bridge_file(
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
+#[path = "../tests.rs"]
 mod tests;
