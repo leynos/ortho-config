@@ -19,9 +19,9 @@ mod bridge_build;
 mod bridge_build_environment;
 #[path = "../bridge_execution.rs"]
 mod execution;
+mod telemetry;
 #[path = "../bridge_workspace.rs"]
 mod workspace;
-mod telemetry;
 
 use bridge_build_environment::BuildEnvironment;
 use execution::run_bridge;

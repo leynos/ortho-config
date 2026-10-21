@@ -63,7 +63,10 @@ fn bounded_build_policy_keeps_its_other_limits() {
     // assertion about the invariant rather than about a constant that the
     // build budget can outgrow.
     let looser_than_policy = build.timeout() + Duration::from_secs(1);
-    assert_eq!(build.bounded_by(looser_than_policy).timeout(), build.timeout());
+    assert_eq!(
+        build.bounded_by(looser_than_policy).timeout(),
+        build.timeout()
+    );
 }
 
 #[test]
