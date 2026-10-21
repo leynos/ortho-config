@@ -323,9 +323,12 @@ approaches; they are no longer outstanding work.
   seven gates on tree `7b2ce374`. The milestone CLI review has run; its
   findings are being dispositioned, so the milestone checkbox stays open until
   none is outstanding.
-- [ ] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
-  The follow-up review's four findings are repaired; the gates and the closing
-  assessment against the repaired tree are what remain.
+- [x] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
+  All eight gates pass against the repaired tree `3c22ba57` plus the
+  Markdown-only repair `71ac7873`, and the closing review's four unique
+  findings are all base-owned (see "EP-M3 closing review"), so no concern
+  against `#566`'s own work is outstanding. Closed 2026-10-22 with PR #607
+  recorded as an open delivery dependency.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR.
 
@@ -698,6 +701,63 @@ broke: freeze HEAD *and* stop writing to it. The plan text is part of the
 candidate when a gate reads Markdown, so a "living document" is not exempt from
 a gate freeze. The re-run below starts only after the tree has stopped changing.
 
+### EP-M3 closing review (2026-10-22)
+
+The closing `coderabbit review --agent` (CLI 0.9.1) ran over the tree at
+`94ac0219` and returned five findings, which the CLI's `complete` record counts
+as four unique after collapsing one exact duplicate of another. The scope is
+attested rather than inferred this time: `reviewedFiles` is 131 paths and
+`git diff --name-only origin/main...HEAD` is the same 131 paths, with an empty
+symmetric difference. The fence held at both ends — HEAD
+`94ac0219497d37b59def9660d17ffab0e0b85a99`, tree
+`dd02f83703eabf90ea4eb3d62e1f81c972a1041a`, `git status --porcelain` empty
+before and after, `dirty=0`, `untracked=0`, exit 0, 667 seconds, empty stderr,
+no rate-limit notice.
+
+None of the four is a finding against this milestone, and that is a scope
+result rather than a quality one. **This branch is stacked on PR #607**, whose
+tip has advanced since the base this branch was built on. A review with
+`--base main` on a stacked branch compares 131 files; only 56 of them belong to
+`#566`. The other 75 are the stack's, and every finding landed in that 75:
+
+- All four named files are `cargo-orthohelp/` sources or `docs/users-guide.md`.
+  Zero of the twelve `#566` commits touch any of those paths;
+  `git log 1334cc88..HEAD -- cargo-orthohelp/` is empty.
+- `git blame` at `94ac0219` attributes every flagged line to the base
+  (`867849ba`, `a8d70338`, `92161017`), not to a `#566` commit.
+- Two of the four are already repaired at the base's current tip `579fab25`:
+  `--message-format=json` replaces the `json-render-diagnostics` spelling at
+  `bridge/mod.rs:288`, and `is_generated_output_name` matches the `.pdb` file at
+  `bridge_build_protocol.rs:188`. Repairing them here would duplicate the
+  base's own fix, which is how a stacked PR is made to conflict.
+
+| #   | Finding                                         | Disposition                                                            |
+| --- | ----------------------------------------------- | ---------------------------------------------------------------------- |
+| 1   | `.pdb` and incremental artefacts escape cleanup | Base-owned; `.pdb` half already fixed at `579fab25`; not repaired here |
+| 2   | Interrupted-build marker undocumented           | Base-owned; `docs/users-guide.md` untouched by `#566`                  |
+| 3   | Bespoke `flock`/`LockFileEx` in BDD steps       | Base-owned; fix belongs with the code in `#607`                        |
+| 4   | `--message-format=json` for the diagnostic cap  | Base-owned, and already fixed at `579fab25`                            |
+| 5   | Duplicate of #3                                 | Collapsed into #3 by the CLI's own record                              |
+
+Two conclusions follow, and they point in opposite directions, so both are
+recorded. The first is that the milestone's own repair set is not re-litigated:
+none of the five touches the deadline, the `environment` allow-list, the `-ize`
+prose, or the `binary(boundary)` serialization. The second is that a clean
+result was never available from this command on this branch — asking the same
+question again would return the base's findings again, and the closure
+condition for EP-M3 is about `#566`'s work, not `#607`'s.
+
+The stack is therefore the open delivery risk, not a milestone defect. PR #607
+is open with `mergeStateStatus: CLEAN` and `reviewDecision: CHANGES_REQUESTED`
+at `579fab25`, which is 30 commits ahead of the base this branch was built on
+and has been rebased since; `1334cc88` is no longer an ancestor of it. Until
+`#607` merges, this branch carries 75 files it does not own, and any hosted
+review of it will keep reporting them. The disposition is to record the
+dependency rather than absorb it, which is also what the plan's tolerance for
+"a missing prerequisite that cannot be independently scoped" asks for: it is
+recorded here as a delivery dependency and handed to `pr-babysitting` with the
+PR, rather than repaired across a stack boundary.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
@@ -822,6 +882,16 @@ edit to the candidate, and it silently voids the round in a way that looks like
 a source failure. The first re-run after `3c22ba57` was discarded for exactly
 this reason. Plan maintenance and gate execution are therefore sequenced, not
 interleaved: settle the text, commit it, then freeze and gate.
+
+2026-10-22 (EP-M3 close): Scope a stacked branch's review findings by
+authorship, not by file path. A `--base main` review of this branch compares
+131 files, but 75 of them belong to the stack beneath it, so "the file is in
+the diff" does not mean "the milestone introduced it". The discriminator
+applied here was whether any `#566` commit touches the flagged path and what
+`git blame` says at the flagged line; both put all four closing findings on the
+base. The findings were recorded and left to `#607` rather than repaired across
+the stack boundary, because a duplicate repair of a line the base already fixes
+is how a stacked PR becomes conflicting.
 
 2026-10-21 (EP-M3): Keep the macro's `ortho_l10n` dependency as a normal
 dependency and record the measured host cost rather than hiding it behind a
