@@ -1489,20 +1489,24 @@ the child.
 The contract, which `rustflags_proptests.rs` checks against an independent
 reference filter:
 
-- **Two variables, two delimiters.** `RUSTFLAGS` splits on ASCII whitespace and
-  rejoins with a single space; `CARGO_ENCODED_RUSTFLAGS` splits and rejoins on
-  Cargo's unit separator (`U+001F`). The delimiter is chosen once and used in
-  both directions, so a value is never split on one separator and joined with
-  the other. Do not merge the two paths into one string-typed helper.
+- **Two variables, two delimiters.** `RUSTFLAGS` uses
+  `str::split_whitespace`, so any run of Unicode whitespace separates its
+  tokens; `CARGO_ENCODED_RUSTFLAGS` splits on Cargo's unit separator
+  (`U+001F`). The delimiter is chosen once and used in both directions, so a
+  value is never split on one separator and joined with the other. Do not merge
+  the two paths into one string-typed helper.
 - **What counts as a coverage token.** A compact `-Cinstrument-coverage`,
   including the `-Cinstrument-coverage=<value>` form, or a bare `-C` whose
   successor is `instrument-coverage` or starts with `instrument-coverage=`. The
   split pair is removed as a pair, so the successor cannot survive as a stray
   token.
-- **Surviving tokens keep their order.** Nothing is sorted, deduplicated, or
-  re-spaced.
-- **An unchanged value passes through byte-for-byte**, spaces included, rather
-  than being re-rendered from its tokens.
+- **Surviving tokens keep their order.** Nothing is sorted or deduplicated.
+  When coverage removal changes the value, the survivors are rejoined with the
+  delimiter's separator — one ASCII space for `RUSTFLAGS`, `U+001F` for
+  `CARGO_ENCODED_RUSTFLAGS` — so separator runs are normalized on that path.
+- **An unchanged value passes through byte-for-byte**, whitespace runs
+  included, rather than being re-rendered from its tokens. Original spacing is
+  preserved only here, on the path that removes nothing.
 - **An emptied value removes the variable** rather than setting it to the empty
   string. An empty `RUSTFLAGS` is not the same as no `RUSTFLAGS` to Cargo.
 - **Every change is logged.** A partial strip and a full removal each emit one

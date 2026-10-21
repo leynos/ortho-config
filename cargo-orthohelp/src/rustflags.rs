@@ -145,7 +145,8 @@ fn sanitize_encoded(flags: RustflagsValue<'_>) -> Option<String> {
 /// on the other.
 #[derive(Clone, Copy)]
 enum Delimiter {
-    /// `RUSTFLAGS`: any run of ASCII whitespace, as `split_whitespace` finds.
+    /// `RUSTFLAGS`: any run of Unicode whitespace, as `split_whitespace`
+    /// finds.
     Whitespace,
     /// `CARGO_ENCODED_RUSTFLAGS`: Cargo's unit separator.
     UnitSeparator,
