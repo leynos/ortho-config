@@ -67,8 +67,10 @@ const SETTLE_INTERVAL: Duration = Duration::from_millis(10);
 /// while `/proc/locks` still names the parent — the first thing to suspect when
 /// the reported holder is the process doing the reporting.
 #[cfg(target_os = "linux")]
-const FLOCK_INHERITANCE_NOTE: &str = "a FLOCK record names the process that acquired the lock, so a \
-     descriptor inherited by a child keeps it held under this name";
+const FLOCK_INHERITANCE_NOTE: &str = concat!(
+    "a FLOCK record names the process that acquired the lock, so a ",
+    "descriptor inherited by a child keeps it held under this name",
+);
 
 /// Asserts that the publication lock below `root` is free, explaining a hold.
 ///
@@ -78,6 +80,11 @@ const FLOCK_INHERITANCE_NOTE: &str = "a FLOCK record names the process that acqu
 /// was held on, the current process, every `/proc/locks` record matching that
 /// file, whichever process and descriptor still refer to it, and one delayed
 /// re-probe that separates "still held" from "released late".
+///
+/// The report says the lock "is still held" rather than that it *remained* held
+/// after a release, because this assertion does not know what released it: its
+/// callers include a probe with no guard to drop, so naming a guard release
+/// would misdescribe the common case.
 ///
 /// # Errors
 ///
@@ -139,7 +146,7 @@ fn report_hold(root: &Path, expectation: &str, metadata: &fs::Metadata) -> anyho
     let mut lines = vec![
         expectation.to_owned(),
         format!(
-            "the artefact lock {} is still held after its guard was released",
+            "the artefact lock {} is still held",
             lock_path(root).display()
         ),
     ];

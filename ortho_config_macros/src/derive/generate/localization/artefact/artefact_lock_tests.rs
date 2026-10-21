@@ -139,8 +139,10 @@ fn probing_releases_the_lock_it_takes() -> Result<()> {
     ensure_settles_free(root.path(), "an unheld lock must be reported free")?;
     ensure_settles_free(
         root.path(),
-        "a probe must release the lock it took, so a second probe still finds \
-         it free",
+        concat!(
+            "a probe must release the lock it took, so a second probe still finds ",
+            "it free",
+        ),
     )
 }
 
