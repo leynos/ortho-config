@@ -318,8 +318,10 @@ approaches; they are no longer outstanding work.
   milestone commit is the delivery point.
 - [x] 2026-10-21: EP-M3 boundary fixtures, package graph, and measurements
   built and green locally; the `make boundary` target and its workflow contract
-  are in place. Gates and the milestone CLI review are outstanding, so the
-  milestone checkbox stays open until they pass.
+  are in place. Committed as `f357813d`, after two gate repairs (14 Clippy
+  findings, then one Whitaker `bumpy_road_function`) and a clean re-run of all
+  seven gates on tree `7b2ce374`. The milestone CLI review is outstanding, so
+  the milestone checkbox stays open until it passes.
 - [ ] EP-M3: Boundary fixtures, package graph, measurements, gates, review.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR.
@@ -481,8 +483,28 @@ recorded none, so the HEAD number is if anything pessimistic. A first attempt
 placed a doubled `$PWD/…` target path and compiled into a stray tree; that tree
 was deleted and those figures were discarded rather than reported.
 
-No tracked file, gate, commit, or review has been produced for EP-M3 beyond
-what is recorded above.
+### EP-M3 gate results (2026-10-21)
+
+Three gate rounds, each against a frozen HEAD/tree pair, all through the
+scrutineer with redirection rather than pipes so the status read was make's:
+
+| Round | Tree       | Outcome                                           |
+| ----- | ---------- | ------------------------------------------------- |
+| 1     | `44164c01` | red: Clippy, 14 findings in the new tree          |
+| 2     | `d61be027` | red: Clippy green, Whitaker `bumpy_road_function` |
+| 3     | `7b2ce374` | green: all seven gates, both lint halves          |
+
+Round 3, the certificate for the committed tree: `check-fmt` 1 s, `typecheck` 1
+s, `lint` 32 s (rustdoc, Clippy, and Whitaker all ran and passed), `test` 425 s
+with the boundary target green, `markdownlint` 14 s, `test-workflow-contracts`
+5 s (330 passed, 1 skipped), `nixie` 1 s.
+
+The failing logs are preserved beside the round-3 certificates, under `/tmp`, as
+`lint-FAILED-21ad3e3f-tree-44164c01-…out` and
+`lint-FAILED-whitaker-tree-d61be027-…out`, so each repair can be read against
+the diagnostic that prompted it.
+
+No milestone CLI review has been run for EP-M3 yet.
 
 ## Surprises & discoveries
 
