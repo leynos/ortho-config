@@ -68,6 +68,12 @@ fn build_bridge_command_applies_the_selected_build_environment() {
     let environment = BuildEnvironment::from_lookup(|name| supplied.get(name).cloned());
     let command = build_bridge_command(&dummy_paths(), &environment);
     let arguments = command.get_args().collect::<Vec<_>>();
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| *argument == OsStr::new("--message-format=json")),
+        "the bridge build must keep rendered diagnostics inside the bounded JSON stream: {arguments:?}"
+    );
     assert!(arguments.windows(2).any(|pair| {
         pair.first()
             .copied()

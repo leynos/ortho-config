@@ -175,10 +175,17 @@ fn is_generated_output(path: &Utf8PathBuf, target: &GeneratedTarget<'_>, file_na
         && is_generated_output_name(file_name, target.binary_name)
 }
 
-/// Recognize a bridge executable, its dep-info, or its hashed compiler output.
+/// Recognize a bridge executable, its dep-info, debug symbols, or hashed output.
+///
+/// The MSVC linker uplift leaves a `<binary_name>.pdb` beside the executable in
+/// a profile directory; Cargo reports it in `filenames`, so it is the build's
+/// own output and must be collected if cleanup is to remove it. The name is
+/// unique per invocation because the generated target name is derived from the
+/// invocation directory, so an uncollected PDB accumulates in a shared target.
 pub(super) fn is_generated_output_name(file_name: &str, binary_name: &str) -> bool {
     let executable_name = binary_file_name(binary_name);
     file_name == executable_name
+        || file_name == format!("{binary_name}.pdb")
         || file_name == format!("{binary_name}.d")
         || file_name == format!("{executable_name}.d")
         || file_name.starts_with(&format!("{binary_name}-"))

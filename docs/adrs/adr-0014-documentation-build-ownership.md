@@ -181,10 +181,12 @@ generated target name also prevents an ordinary workspace build of
 After the private snapshot succeeds, the helper removes only Cargo-reported
 files named for that invocation's generated binary. Missing files are already
 clean; other cleanup failures are warnings and do not discard the valid
-snapshot. Dependency outputs and shared Cargo caches remain owned by Cargo. The
-helper is private to the production bridge build path and is not a general
-application subprocess API. The similar documentation-test helper remains
-test-only and cannot be imported by the binary.
+snapshot. Dependency outputs and shared Cargo caches remain owned by Cargo. On
+MSVC an uplifted `<binary_name>.pdb` is part of that same Cargo-reported output
+set, so the ownership rule covers it too. The helper is private to the
+production bridge build path and is not a general application subprocess API.
+The similar documentation-test helper remains test-only and cannot be imported
+by the binary.
 
 Production bridge builds retain the configured compiler and documentation
 wrappers, applicable wrapper configuration, job limits, warning enforcement,
@@ -193,9 +195,11 @@ fingerprint, and the default shared Cargo cache is unchanged. The Cargo JSON
 reader retains at most 1 MiB of rendered compiler diagnostics and indicates
 when output is truncated; it has no presentation sink. The `run_cargo` boundary
 forwards that bounded output to stderr after draining the records and prints a
-truncation notice when needed. The stable IR cache entry and path are
-unchanged; publication remains atomic and skips replacement when the existing
-file already contains identical content.
+truncation notice when needed. The nested build asks for Cargo's plain `json`
+message format so rustc's rendered diagnostics stay inside that bounded stream
+and the inherited stderr cannot bypass the bound. The stable IR cache entry and
+path are unchanged; publication remains atomic and skips replacement when the
+existing file already contains identical content.
 
 The production bridge emits tracing spans and outcome events for cache lookup,
 target-lock acquisition, Cargo build, snapshot, execution, and IR publication.
@@ -363,8 +367,8 @@ controlled run provides usable cold-build evidence.
 - [Descriptor locking with `fs4`][file-lock]
 
 [design-infrastructure]:
-  design.md#419-executable-documentation-test-build-ownership
-[developer-guidance]: developers-guide.md#public-documentation-examples
+  ../design.md#419-executable-documentation-test-build-ownership
+[developer-guidance]: ../developers-guide.md#public-documentation-examples
 [timeout-guidance]:
-  developers-guide.md#test-timeouts-the-tiers-this-repository-sets
+  ../developers-guide.md#test-timeouts-the-tiers-this-repository-sets
 [file-lock]: https://docs.rs/fs4/1.1.0/fs4/trait.FileExt.html

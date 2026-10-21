@@ -924,21 +924,18 @@ compiling a second, instrumentation-free copy. Those variables are therefore
 not sanitized: rewriting them would split the fingerprint and defeat the shared
 cache.
 
-The allow-list is closed in the sense that unlisted application variables do
-not cross it, but two families of Cargo setting are recognized structurally
-rather than by name. Target-specific `LINKER` and `RUSTFLAGS` settings are
-forwarded, as are registry `INDEX` locations. Proxy endpoints and registry
-indexes are forwarded only when their values contain no user information,
-query, or fragment, because a URL can carry credentials that a name check
-cannot see. Registry tokens, authenticated proxy URLs, `SSH_AUTH_SOCK`,
-`ACTIONS_RUNTIME_TOKEN`, cache credentials, application secrets, and other
-unlisted variables do not cross this boundary. Cargo still reads its project
-and home configuration, including configured credentials, and the non-secret
-`SCCACHE_GHA_ENABLED` cache-mode setting is preserved. Documented binaries
-receive only the non-sensitive Windows runtime variables, LLVM profile-output
-controls, deterministic home directories, and deliberate scenario overrides
-named by the workspace policy. Do not clear or relocate the shared Cargo cache
-to make a test pass.
+The allow-list is closed: unlisted application variables do not cross it.
+Target-specific forwarding is limited to
+`CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER`. Proxy and registry settings come
+from Cargo's project and home configuration, including configured credentials;
+the documentation-test environment forwards no proxy or registry environment
+variable. Registry tokens, `SSH_AUTH_SOCK`, `ACTIONS_RUNTIME_TOKEN`, cache
+credentials, application secrets, and other unlisted variables do not cross
+this boundary. The non-secret `SCCACHE_GHA_ENABLED` cache-mode setting is
+preserved. Documented binaries receive only the non-sensitive Windows runtime
+variables, LLVM profile-output controls, deterministic home directories, and
+deliberate scenario overrides named by the workspace policy. Do not clear or
+relocate the shared Cargo cache to make a test pass.
 
 Documentation Rust examples use Cargo's resolved parent target for compiler
 artefacts. Their separate ownership state and OS-level lock live under
@@ -1066,7 +1063,15 @@ job limits, warning flags, and coverage settings remain active. The helper does
 not rewrite Rust flags or relocate the default shared Cargo cache. Its Cargo
 JSON reader retains at most 1 MiB of rendered diagnostics; `run_cargo` forwards
 that bounded output to the supervising CLI after draining the stream and marks
-truncation explicitly. See the
+truncation explicitly. The nested build asks for Cargo's plain `json` message
+format, so rustc's rendered diagnostics travel in that bounded stream rather
+than through inherited stderr. The build environment is an explicit allow-list,
+and three families of Cargo setting are also recognized structurally rather
+than by name: target-specific `LINKER` and `RUSTFLAGS` settings, and registry
+`INDEX` locations. Proxy endpoints and registry indexes cross only when their
+values contain no user information, query, or fragment, because a URL can carry
+credentials that a name check cannot see. An omitted value is reported by
+variable name, never by value. See the
 [cargo-orthohelp bridge design][bridge-build-ownership] for the ownership and
 data-flow details.
 

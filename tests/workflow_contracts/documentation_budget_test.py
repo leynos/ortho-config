@@ -77,7 +77,9 @@ def _documentation_scenario_allowance(nextest: str) -> float:
         ]
         assert len(matching) == 1, f"{binary} must have one nextest timeout override"
         override = matching[0]
-        assert override.get("test-group") == "orthohelp_cache"
+        assert override.get("test-group") == "orthohelp_cache", (
+            f"{binary} must run in the serialized orthohelp_cache group"
+        )
         assert "slow-timeout" in override, f"{binary} must have a finite test timeout"
         allowances.add(
             budget_of(
@@ -105,7 +107,9 @@ def _assert_bdd_scenario_budget(nextest: str, cleanup: int) -> None:
     ]
     assert len(bdd_overrides) == 1, "rstest_bdd must have one measured timeout override"
     bdd_override = bdd_overrides[0]
-    assert bdd_override.get("test-group") == "orthohelp_cache"
+    assert bdd_override.get("test-group") == "orthohelp_cache", (
+        "rstest_bdd must run in the serialized orthohelp_cache group"
+    )
     bdd_allowance = budget_of(
         "profile.default.overrides.rstest_bdd", bdd_override["slow-timeout"]
     )
@@ -129,7 +133,9 @@ def test_shared_documentation_builds_start_after_peer_tests() -> None:
     repository = Path(__file__).resolve().parents[2]
     nextest = tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
     groups = nextest["test-groups"]
-    assert groups["orthohelp_cache"]["max-threads"] == 1
+    assert groups["orthohelp_cache"]["max-threads"] == 1, (
+        "orthohelp_cache must allow exactly one concurrent test"
+    )
 
     cache_filters = [
         override["filter"]

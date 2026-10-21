@@ -67,6 +67,9 @@ fn bridge_artifact_records_keep_only_generated_target_outputs() -> Result<()> {
         .join("debug")
         .join("deps")
         .join(format!("{TARGET_NAME}-abc123"));
+    let debug_info = target_directory
+        .join("debug")
+        .join(format!("{TARGET_NAME}.pdb"));
     let decoy = target_directory
         .join("debug")
         .join("deps")
@@ -80,6 +83,7 @@ fn bridge_artifact_records_keep_only_generated_target_outputs() -> Result<()> {
         TARGET_NAME,
         &[
             executable_text.clone(),
+            debug_info.to_string(),
             dep_info.to_string(),
             hashed.to_string(),
             decoy.to_string(),
@@ -91,8 +95,9 @@ fn bridge_artifact_records_keep_only_generated_target_outputs() -> Result<()> {
     let messages = read_records(&[record], &target)?;
 
     ensure!(messages.protocol_error.is_none());
-    ensure!(messages.generated_outputs.len() == 3);
+    ensure!(messages.generated_outputs.len() == 4);
     ensure!(messages.generated_outputs.contains(&executable));
+    ensure!(messages.generated_outputs.contains(&debug_info));
     ensure!(messages.generated_outputs.contains(&dep_info));
     ensure!(messages.generated_outputs.contains(&hashed));
     Ok(())
@@ -198,6 +203,54 @@ fn conflicting_executable_records_are_rejected() -> Result<()> {
     ];
 
     assert_protocol_error(&records, &target, "multiple generated bridge executables")
+}
+
+#[test]
+fn debug_symbols_named_for_the_bridge_are_collected() -> Result<()> {
+    let target_directory = generated_target_directory()?;
+    let target = generated_target(&target_directory);
+    let executable = target_directory
+        .join("debug")
+        .join(binary_file_name(TARGET_NAME));
+    let executable_text = executable.to_string();
+    let debug_info = target_directory
+        .join("debug")
+        .join(format!("{TARGET_NAME}.pdb"));
+    let record = artifact_record(
+        TARGET_NAME,
+        &[executable_text.clone(), debug_info.to_string()],
+        Some(&executable_text),
+    );
+
+    let messages = read_records(&[record], &target)?;
+
+    ensure!(messages.protocol_error.is_none());
+    ensure!(messages.generated_outputs.contains(&debug_info));
+    Ok(())
+}
+
+#[test]
+fn a_debug_symbol_name_for_another_binary_is_not_collected() -> Result<()> {
+    let target_directory = generated_target_directory()?;
+    let target = generated_target(&target_directory);
+    let executable = target_directory
+        .join("debug")
+        .join(binary_file_name(TARGET_NAME));
+    let executable_text = executable.to_string();
+    let foreign_debug_info = target_directory
+        .join("debug")
+        .join(format!("{TARGET_NAME}_other.pdb"));
+    let record = artifact_record(
+        TARGET_NAME,
+        &[executable_text.clone(), foreign_debug_info.to_string()],
+        Some(&executable_text),
+    );
+
+    let messages = read_records(&[record], &target)?;
+
+    ensure!(messages.protocol_error.is_none());
+    ensure!(!messages.generated_outputs.contains(&foreign_debug_info));
+    Ok(())
 }
 
 fn generated_target_directory() -> Result<Utf8PathBuf> {

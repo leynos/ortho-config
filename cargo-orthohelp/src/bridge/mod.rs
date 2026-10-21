@@ -285,7 +285,7 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
 fn build_bridge_command(paths: &BridgePaths, environment: &BuildEnvironment) -> Command {
     let mut command = Command::new("cargo");
     command
-        .args(["build", "--message-format=json-render-diagnostics"])
+        .args(["build", "--message-format=json"])
         .arg("--bin")
         .arg(&paths.binary_name)
         .arg("--manifest-path")
