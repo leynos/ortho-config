@@ -181,8 +181,8 @@ readers accept 1.1 IR with `behaviour: None`.
 
 ## References
 
-- [Agent-native CLI assistance design](../agent-native-cli-design.md) §6.1, §6.4,
-  §8.1, §8.2.
+- [Agent-native CLI assistance design](../agent-native-cli-design.md) §6.1,
+  §6.4, §8.1, §8.2.
 - [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 - [ADR-0005: Subcommand docs companion trait](adr-0005-subcommand-docs-companion-trait.md).
 - [ADR-0007: Downstream context command naming](adr-0007-downstream-context-command-naming.md).

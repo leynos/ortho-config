@@ -23,10 +23,10 @@ four layers (defaults, files, environment, CLI), the derive macro generates no
 `--profile` flag, and the agent-context schema hard-codes
 `"profiles": { "supported": false }`.
 
-[Agent-native CLI assistance design](../agent-native-cli-design.md) §6.7, titled
-"Persistent profiles", names the contract: profile support should be optional,
-must use a canonical root flag when present, and should follow the recommended
-precedence
+[Agent-native CLI assistance design](../agent-native-cli-design.md) §6.7,
+titled "Persistent profiles", names the contract: profile support should be
+optional, must use a canonical root flag when present, and should follow the
+recommended precedence
 `built-in defaults < config files < selected profile < environment < flags`.
 The word "persistent" there describes profiles that live in configuration files
 and survive across invocations; it does not require persisted *selection*
