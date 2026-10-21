@@ -1146,7 +1146,7 @@ by the remaining scenario time. Output activity does not extend a deadline.
 Each stream retains at most 1 MiB and continues draining, and owned
 process-tree cleanup is bounded. The helpers are scoped to documentation tests
 and the production bridge; they are not general application subprocess APIs. See
-[ADR-014](adr-014-documentation-build-ownership.md).
+[ADR-014](adrs/adr-0014-documentation-build-ownership.md).
 
 ## 5. Dependency Strategy
 

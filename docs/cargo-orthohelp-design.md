@@ -965,7 +965,7 @@ they omit paths, cache keys, error strings, and child output. The one-shot CLI
 installs a tracing subscriber but no metrics recorder, so this path reports
 per-invocation evidence through tracing rather than emitting metrics that the
 default invocation would silently discard. This boundary is recorded in
-[ADR-014](adr-014-documentation-build-ownership.md#decision-outcome).
+[ADR-014](adrs/adr-0014-documentation-build-ownership.md#decision-outcome).
 
 An interrupted build whose writer lifetime cannot be confirmed leaves a
 fail-closed ownership marker. A later invocation must not treat that marker as
