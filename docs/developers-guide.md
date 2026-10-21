@@ -1831,7 +1831,7 @@ closed vocabulary exists to keep out.
 
 ## Digest rendering
 
-`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
+`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as
 lowercase hexadecimal digits. From `sha2` 0.11 the `finalize` and `digest`
 methods return `hybrid_array::Array<u8, _>`, which dereferences to `[u8]` but
 does not implement `core::fmt::LowerHex`, so the `{:x}` formatting the cache
@@ -1851,6 +1851,10 @@ previously used no longer compiles. `sha2` 0.11 also no longer implements
   genuinely needs one.
 - Pass the digest by reference, as in `to_lower_hex(&hasher.finalize())`, so
   `Array` coerces to `&[u8]` through `Deref`.
+- Render only a prefix by `zip`ping the digest into a fixed-size array, never
+  by slicing. The workspace denies `clippy::indexing_slicing`, and a zipped
+  copy has no panic path; a `const` assertion pairs with it to prove the array
+  cannot be wider than the digest it is filled from.
 - Feed a hasher with `update` from a bounded buffered read loop, or through a
   small `std::io::Write` adapter newtype that forwards to `update`. Do not
   reach for `std::io::copy` with a hasher as the sink.
@@ -1863,6 +1867,77 @@ the change does not invalidate cache directories. A bounded exhaustive unit
 test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
 digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
 encoder cannot pass.
+
+### The bridge cache key
+
+`CacheKey::hash` names the bridge directory under `target/orthohelp/`, and that
+name is one component of every path the bridge's `cargo build` hands to the
+linker. It renders the leading `CACHE_DIRECTORY_DIGEST_BYTES` bytes of the full
+SHA-256 digest — 16 bytes, 32 hexadecimal digits — rather than all 64.
+
+The limit is not a tuning choice. Cargo 1.100 made the new build-directory
+layout unconditional, so every artefact of the bridge build lands in
+`target/debug/build/<package>/<hash>/out/` instead of `target/debug/deps/`.
+That adds roughly 50 characters, and Windows still applies a 260-character
+`MAX_PATH` to the file names `link.exe` opens. Halving the directory name
+bought back 32 of them; `build-test (windows)` had failed with `LNK1104` on
+`orthohelp_policy_warn_fixture` before the change.
+
+Two rules follow from this:
+
+- The truncation happens at rendering time, in `CacheKey::hash`. Keep it there.
+  The digest is still computed over the full SHA-256 output, so truncation
+  cannot mask a defect in how the inputs are combined.
+- Treat the width as a path-length budget, not a security boundary. A
+  collision costs a stale IR reuse, not a corrupt result, and 128 bits is
+  already far wider than the input space. A test asserting the exact rendered
+  length lives beside the hash, and `cargo-orthohelp/src/tests.rs` reconstructs
+  the hosted Windows runner's longest linker path so the next lengthening fails
+  on Linux instead.
+
+### Rustflags sanitization for bridge builds
+
+The bridge build spawns `cargo build` and so inherits the parent environment.
+Under `cargo-llvm-cov` that environment contains `-Cinstrument-coverage` in
+`RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS`, which would make the bridge binary
+write profiling data into the test run. `cargo-orthohelp/src/rustflags.rs`
+sanitizes both variables before the child is spawned:
+`apply_sanitized_rustflags` is called only from `bridge::build_bridge_command`,
+which also removes `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`,
+`LLVM_PROFILE_FILE`, `CARGO_LLVM_COV_TARGET_DIR`, and `CARGO_TARGET_DIR` from
+the child.
+
+The contract, which `rustflags_proptests.rs` checks against an independent
+reference filter:
+
+- **Two variables, two delimiters.** `RUSTFLAGS` uses
+  `str::split_whitespace`, so any run of Unicode whitespace separates its
+  tokens; `CARGO_ENCODED_RUSTFLAGS` splits on Cargo's unit separator
+  (`U+001F`). The delimiter is chosen once and used in both directions, so a
+  value is never split on one separator and joined with the other. Do not merge
+  the two paths into one string-typed helper.
+- **What counts as a coverage token.** A compact `-Cinstrument-coverage`,
+  including the `-Cinstrument-coverage=<value>` form, or a bare `-C` whose
+  successor is `instrument-coverage` or starts with `instrument-coverage=`. The
+  split pair is removed as a pair, so the successor cannot survive as a stray
+  token.
+- **Surviving tokens keep their order.** Nothing is sorted or deduplicated.
+  When coverage removal changes the value, the survivors are rejoined with the
+  delimiter's separator — one ASCII space for `RUSTFLAGS`, `U+001F` for
+  `CARGO_ENCODED_RUSTFLAGS` — so separator runs are normalized on that path.
+- **An unchanged value passes through byte-for-byte**, whitespace runs
+  included, rather than being re-rendered from its tokens. Original spacing is
+  preserved only here, on the path that removes nothing.
+- **An emptied value removes the variable** rather than setting it to the empty
+  string. An empty `RUSTFLAGS` is not the same as no `RUSTFLAGS` to Cargo.
+- **Every change is logged.** A partial strip and a full removal each emit one
+  `debug` event naming the variable but not its value. The unchanged path emits
+  nothing, because it has nothing to report.
+
+`apply_sanitized_rustflags` reads the current process environment directly
+rather than taking an injected source. The module is therefore tested through
+those pure functions and the property filter, never by mutating the test
+process's environment.
 
 ## Scoped and policy-based configuration discovery
 
@@ -2872,9 +2947,20 @@ Dependabot proposes the bump. A human reviewing the pull request must:
    `identifier_artefact_e2e.rs` ("fixture identifier artefact was not emitted")
    after a complete build. Tests should ask where an artefact is, by bounded
    search or Cargo's JSON `out_dir`, rather than encode one layout.
-4. Re-read the re-measurement instruction in the "Cranelift qualification"
+4. Check the length of the longest path the Windows leg builds. Cargo 1.100
+   made the new build directory layout unconditional: every artefact now lands
+   in `target/<profile>/build/<package>/<hash>/out/`, and there is no flag to
+   restore `deps/`. On the pin at the time of writing this moved
+   `orthohelp_policy_warn_fixture`'s `.rlib` from 210 to 262 characters on a
+   hosted Windows runner, over the 260-character `MAX_PATH` that `link.exe`
+   still applies, and `build-test (windows)` failed with `LNK1104`. The bridge
+   cache-directory name was shortened from 64 to 32 hexadecimal digits to make
+   room; see [*The bridge cache key*](#the-bridge-cache-key). Platform-specific
+   length limits are invisible to a Linux-only gate, so check them by hand
+   rather than waiting for the runner to say so.
+5. Re-read the re-measurement instruction in the "Cranelift qualification"
    section of this guide.
-5. Run `make install-build-tools` and `make check-build-tools` locally to pick
+6. Run `make install-build-tools` and `make check-build-tools` locally to pick
    up and verify the new channel.
 
 ### The MSRV lane
@@ -2961,7 +3047,7 @@ way the standard would have carried it: `-Zcodegen-backend=cranelift` in
 `rustflags`, together with `-Zthreads=8` and `-Clink-arg=-fuse-ld=mold`. A
 `[profile.dev] codegen-backend` key was rejected on other grounds; see Option A
 in
-[ADR-014](adr-014-adopt-a-dated-nightly-and-the-development-build-standard.md).
+[ADR-014](adrs/adr-0014-adopt-a-dated-nightly-and-the-development-build-standard.md).
 
 ### The probe
 
