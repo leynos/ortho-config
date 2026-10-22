@@ -269,6 +269,45 @@ def marker_binaries(base: Path) -> dict[str, frozenset[str]]:
     return {label: frozenset(names) for label, names in found.items()}
 
 
+def _binaries_where(base: Path, *, carries: bool) -> frozenset[str]:
+    """Return every audited binary whose child-cargo use is ``carries``.
+
+    Both halves of the partition are read here so they cannot disagree about
+    which binaries exist: :func:`child_cargo_binaries` asks for the carrying
+    ones and :func:`non_child_cargo_binaries` for the rest, and the two calls
+    are the same walk with one predicate inverted.
+
+    Parameters
+    ----------
+    base : pathlib.Path
+        The repository root.
+    carries : bool
+        Which half to return.
+
+    Returns
+    -------
+    frozenset of str
+        The matching binary names.
+
+    Raises
+    ------
+    ScanError
+        If a source a binary compiles cannot be read.
+
+    Examples
+    --------
+    A directory with no crates contributes nothing:
+
+    >>> _binaries_where(Path("/nonexistent"), carries=True)
+    frozenset()
+    """
+    return frozenset(
+        name
+        for name, found in _workspace_test_binaries(base).items()
+        if found is carries
+    )
+
+
 def child_cargo_binaries(base: Path) -> frozenset[str]:
     """Return the name of every test binary that drives a child cargo.
 
@@ -298,9 +337,7 @@ def child_cargo_binaries(base: Path) -> frozenset[str]:
     >>> child_cargo_binaries(Path("/nonexistent"))
     frozenset()
     """
-    return frozenset(
-        name for name, carries in _workspace_test_binaries(base).items() if carries
-    )
+    return _binaries_where(base, carries=True)
 
 
 def non_child_cargo_binaries(base: Path) -> frozenset[str]:
@@ -334,9 +371,7 @@ def non_child_cargo_binaries(base: Path) -> frozenset[str]:
     >>> non_child_cargo_binaries(Path("/nonexistent"))
     frozenset()
     """
-    return frozenset(
-        name for name, carries in _workspace_test_binaries(base).items() if not carries
-    )
+    return _binaries_where(base, carries=False)
 
 
 def binaries_selected_by(

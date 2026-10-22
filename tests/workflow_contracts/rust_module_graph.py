@@ -193,6 +193,46 @@ def _declarations(text: str) -> typ.Iterator[tuple[str, str | None]]:
         yield declaration.group("name"), (attribute.group("path") if attribute else None)
 
 
+def _declared_sources(
+    source: Path, text: str, resolves_from_parent: bool
+) -> list[tuple[Path, bool]]:
+    """Return the files ``source``'s ``mod`` declarations name.
+
+    Each result carries the rule its own declarations will be resolved with,
+    which is the declaring file's answer and not the parent's: ``#[path]``
+    names a file by an explicit route, so what that file declares is resolved
+    beside itself.
+
+    Split out of :func:`sources_reached` so the walk stays a walk: the
+    declaration rule is a property of one file, and reading it here keeps the
+    reader's own loop free of the resolution's branches.
+
+    Raises
+    ------
+    ScanError
+        If a ``mod`` declaration resolves to more than one file.
+
+    Examples
+    --------
+    Text with no file-loading declaration names nothing:
+
+    >>> _declared_sources(Path("/nonexistent.rs"), "", True)
+    []
+    """
+    directory = module_directory(source, resolves_from_parent=resolves_from_parent)
+    declared: list[tuple[Path, bool]] = []
+    for name, attribute in _declarations(text):
+        resolved = _resolve(directory, source, name, attribute)
+        if len(resolved) > 1:
+            message = (
+                f"{source} declares `mod {name};`, which resolves to more "
+                f"than one file: {[str(path) for path in resolved]}"
+            )
+            raise ScanError(message)
+        declared.extend((path, attribute is not None) for path in resolved)
+    return declared
+
+
 def sources_reached(root: Path) -> dict[Path, str]:
     """Return every source ``root`` compiles, mapped to its text.
 
@@ -239,14 +279,5 @@ def sources_reached(root: Path) -> dict[Path, str]:
         seen.add(source)
         text = scan(source, source.read_text, encoding="utf-8")
         reached[source] = text
-        directory = module_directory(source, resolves_from_parent=resolves_from_parent)
-        for name, attribute in _declarations(text):
-            resolved = _resolve(directory, source, name, attribute)
-            if len(resolved) > 1:
-                message = (
-                    f"{source} declares `mod {name};`, which resolves to more "
-                    f"than one file: {[str(path) for path in resolved]}"
-                )
-                raise ScanError(message)
-            pending.extend((path, attribute is not None) for path in resolved)
+        pending.extend(_declared_sources(source, text, resolves_from_parent))
     return reached
