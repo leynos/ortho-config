@@ -186,7 +186,7 @@ mod tests {
     use super::{declared_dependencies, declared_path_dependencies};
     use crate::boundary::closure::FORBIDDEN_PACKAGES;
     use crate::boundary::fixture_cargo::{DependencyEdge, EdgeKind};
-    use anyhow::Result;
+    use anyhow::{Result, ensure};
 
     /// A manifest header every fixture below shares.
     const HEADER: &str = concat!(
@@ -197,10 +197,14 @@ mod tests {
     );
 
     /// Assert that `manifest` declares `expected` as an edge.
-    fn assert_declares(manifest: &str, expected: DependencyEdge) -> Result<()> {
+    ///
+    /// The expectation is borrowed rather than taken by value: the helper only
+    /// compares against it, and a `Result`-returning test helper that panicked
+    /// on mismatch would hide the graph it was given instead of reporting it.
+    fn assert_declares(manifest: &str, expected: &DependencyEdge) -> Result<()> {
         let declared = declared_dependencies(manifest)?;
-        assert!(
-            declared.contains(&expected),
+        ensure!(
+            declared.contains(expected),
             "the reader reported {declared:?}, which does not contain {expected}",
         );
         Ok(())
@@ -211,7 +215,7 @@ mod tests {
         let manifest = format!("{HEADER}\n[dev-dependencies]\nclap = \"4\"\n");
         assert_declares(
             &manifest,
-            DependencyEdge {
+            &DependencyEdge {
                 package: String::from("clap"),
                 kind: EdgeKind::Dev,
             },
@@ -223,7 +227,7 @@ mod tests {
         let manifest = format!("{HEADER}\n[build-dependencies]\nclap = \"4\"\n");
         assert_declares(
             &manifest,
-            DependencyEdge {
+            &DependencyEdge {
                 package: String::from("clap"),
                 kind: EdgeKind::Build,
             },
@@ -243,7 +247,7 @@ mod tests {
         );
         assert_declares(
             manifest,
-            DependencyEdge {
+            &DependencyEdge {
                 package: String::from("clap"),
                 kind: EdgeKind::Dev,
             },
@@ -257,7 +261,7 @@ mod tests {
         );
         assert_declares(
             &manifest,
-            DependencyEdge {
+            &DependencyEdge {
                 package: String::from("clap"),
                 kind: EdgeKind::Normal,
             },
@@ -282,9 +286,10 @@ mod tests {
             "[dev-dependencies]\n",
             "helpers = { package = \"ortho_config_test_helpers\", path = \"../test_helpers\" }\n",
         );
-        assert_eq!(
-            declared_path_dependencies(manifest)?,
-            vec![String::from("ortho_config_test_helpers")],
+        ensure!(
+            declared_path_dependencies(manifest)?
+                == vec![String::from("ortho_config_test_helpers")],
+            "the path dependency was not reported under its package name",
         );
         Ok(())
     }
@@ -305,7 +310,7 @@ mod tests {
             "name = \"boundary\"\n",
             "path = \"tests/boundary.rs\"\n",
         );
-        assert!(
+        ensure!(
             declared_path_dependencies(manifest)?.is_empty(),
             "a package's own source paths were reported as dependencies",
         );
