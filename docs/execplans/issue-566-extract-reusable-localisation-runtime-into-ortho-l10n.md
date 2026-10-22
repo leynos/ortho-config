@@ -357,8 +357,8 @@ approaches; they are no longer outstanding work.
   findings are all base-owned (see "EP-M3 closing review"), so no concern
   against `#566`'s own work is outstanding. Closed 2026-10-22 with PR #607
   recorded as an open delivery dependency.
-- [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
-      PR. In progress: publish order and its workflow contract are done (see
+- [x] EP-M4: Release tooling, documentation, publication checks, review, draft
+      PR. Complete: publish order and its workflow contract are done (see
       "EP-M4 publish order"), as are version discovery and the guides. Eight
       gates pass against the repaired tree `14c51513` (see "EP-M4 gate
       certificate against the repaired tree"), superseding the seven-gate
@@ -368,7 +368,9 @@ approaches; they are no longer outstanding work.
       review"): one real defect in this milestone's own repair, repaired and
       re-gated, and two duplicates of the upstream block. The follow-up review
       returned zero findings over the same eight files, so the review condition
-      is closed. Only the draft PR and delivery remain.
+      is closed. PR 617 was published as a draft and has since been marked
+      ready; the pre-readiness assessments and the hosted gates are recorded in
+      "Delivery status" below. Closed 2026-10-22.
 
 ### EP-M4 publish order (2026-10-22)
 
@@ -1977,12 +1979,26 @@ usable signal instead of permanently firing noise.
 
 ### Delivery status (2026-10-22)
 
-All four milestones are implemented and the branch is published as a draft pull
-request (PR 617), not as a branch alone. Every gate passes against the rebased
-candidate and hosted CI concluded green on it, including the
-`build-test (windows)` leg that the portability repair was for. What remains is
-the delivery sequence `pr-babysitting` owns: the pre-readiness assessments,
-readiness, and the formal review.
+All four milestones are implemented and published as PR 617, now ready for
+review rather than draft. Every gate passes against the rebased candidate, and
+hosted CI concluded green on head `32af5d76`: run `39760319881` passed all
+seven jobs, including both required checks — `build-test (linux)` and
+`build-test (windows)` — the Windows leg being the one the portability repair
+was for. The pre-readiness completeness assessment returned seven findings and
+verified all seven resolved; its one remaining item, a historical log-count
+correction, it withdrew itself after re-measuring. There is no proof artefact
+in this PR to assess, and that was asked and answered rather than assumed.
+
+The formal review on head `36d751b9` returned six findings. All six were
+repaired at `32af5d76` and every review thread is resolved. Two were corrected
+beyond the finding as written: §4.2.1 named the wrong owner *and* a file that
+does not hold the catalogue, and the deleted `null`-tolerance sentence was one
+the code never supported. On the fifth, CodeRabbit withdrew its own request to
+delete the test once the rewritten form was shown to preserve the invariant.
+
+The count of boundary cases is 27 at this head; the `17/17` figures recorded
+below were accurate when measured, before later cases were added, and are
+retained as the record of those runs.
 
 `make publish-check` is still not claimed. The first-publication dry run aborts
 upstream in `leynos/lading#367` — a new crate produces Cargo's absent-package
