@@ -230,6 +230,15 @@ def test_every_test_group_binary_is_covered_by_a_raised_tier(
     tables rather than from :func:`nextest_budgets.override_allowances`, which
     skips an entry declaring no ``slow-timeout`` and so cannot see the shape
     this test exists to catch.
+
+    This test alone therefore proves membership, not a raised allowance. The
+    conclusion comes from chaining it with
+    :func:`test_every_child_cargo_binary_is_covered_by_an_override`, which
+    asserts the other direction: serialized names are a subset of the class,
+    and the class is a subset of the binaries resolved to an above-base tier.
+    Neither half is redundant -- a group entry that declares ``test-group``
+    and no ``slow-timeout`` still serializes, so the omission this test catches
+    is invisible to anything reading allowances alone.
     """
     grouped = [
         (path, entry)
