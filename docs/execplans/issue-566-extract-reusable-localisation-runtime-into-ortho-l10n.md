@@ -1190,12 +1190,12 @@ Function Arguments finding. The baseline rules out inherited noise: the check
 passed on all ten recently merged PRs #594–#610. `cs check` (CLI 1.0.52)
 reproduced each finding at the same line the hosted summary named.
 
-| File | Finding | Disposition |
-| ---- | ------- | ----------- |
-| `ortho_l10n/tests/boundary/fixture_cargo/mod.rs` | Bumpy Road Ahead, L369 | Decomposed into `dependency_names` and `target_tables` |
-| `ortho_l10n/tests/boundary_tests/manifests/mod.rs` | Bumpy Road Ahead, L141 | Decomposed the same way, into `dependency_entries` and `target_tables` |
-| `scripts/bump_version.py` | Bumpy Road Ahead, L260 | Table scan extracted into `_internal_names`, with a doctest per branch |
-| `ortho_l10n/tests/boundary/fixture_cargo/mod.rs` | String Heavy Function Arguments | `write`'s `relative_path` and `absolute_member`'s `member` retyped as `&Utf8Path` |
+| File                                               | Finding                         | Disposition                                                                       |
+| -------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------- |
+| `ortho_l10n/tests/boundary/fixture_cargo/mod.rs`   | Bumpy Road Ahead, L369          | Decomposed into `dependency_names` and `target_tables`                            |
+| `ortho_l10n/tests/boundary_tests/manifests/mod.rs` | Bumpy Road Ahead, L141          | Decomposed the same way, into `dependency_entries` and `target_tables`            |
+| `scripts/bump_version.py`                          | Bumpy Road Ahead, L260          | Table scan extracted into `_internal_names`, with a doctest per branch            |
+| `ortho_l10n/tests/boundary/fixture_cargo/mod.rs`   | String Heavy Function Arguments | `write`'s `relative_path` and `absolute_member`'s `member` retyped as `&Utf8Path` |
 
 Two changes were needed at call sites rather than in the flagged functions:
 `FixtureCargo::write` now takes a `&Utf8Path`, so its four callers spell
@@ -1203,10 +1203,11 @@ Two changes were needed at call sites rather than in the flagged functions:
 what the contracts assert changed, which the seventeen boundary tests confirm.
 
 Local verification before the gate round: `cs check` reports 10.00 for all
-three files, `cargo fmt --check` is clean, `cargo clippy --all-targets
---all-features -D warnings` is clean for `ortho_l10n`, the boundary suite is 17
-passed / 0 failed, and the Python suite is 119 passed / 5 skipped (one more
-passing doctest than before, from `_internal_names`).
+three files, `cargo fmt --check` is clean,
+`cargo clippy --all-targets --all-features -D warnings` is clean for
+`ortho_l10n`, the boundary suite is 17 passed / 0 failed, and the Python suite
+is 119 passed / 5 skipped (one more passing doctest than before, from
+`_internal_names`).
 
 Two mistakes were caught during this work and are worth recording. The first
 draft of the commit message said the string arguments were "argued", a
