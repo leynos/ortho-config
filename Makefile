@@ -85,9 +85,9 @@ test: python-test-deps ## Run tests with warnings treated as errors
 	$(PYTEST) $(PYTEST_FLAGS)
 
 # The boundary contracts are the evidence that an application depending on the
-# localisation runtime alone never resolves the configuration facade, the derive
+# localization runtime alone never resolves the configuration facade, the derive
 # macros, Figment, or Clap. They build and test foreign package roots under
-# `target/localisation-boundary`, so they cost minutes rather than seconds and
+# `target/localization-boundary`, so they cost minutes rather than seconds and
 # are worth a target of their own: a boundary failure should be identifiable
 # without re-running the whole workspace.
 #

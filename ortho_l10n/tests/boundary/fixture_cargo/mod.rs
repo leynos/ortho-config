@@ -318,36 +318,6 @@ pub(crate) fn repository_root() -> Result<Utf8PathBuf> {
         .context("locate repository root from ortho_l10n manifest directory")
 }
 
-/// Assert that a captured Cargo failure mentions `needle`.
-///
-/// A negative control is only evidence if its failure names the offending
-/// dependency: an unrelated resolution error would satisfy a bare
-/// "did not succeed" check while proving nothing.
-///
-/// # Errors
-///
-/// Returns an error when Cargo succeeded, or when neither stream mentions the
-/// expected text.
-pub(crate) fn ensure_failure_names(output: &Output, needle: &str) -> Result<()> {
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    ensure!(
-        !output.status.success(),
-        "the negative control succeeded; its forbidden dependency was accepted\nstdout:\n{stdout}"
-    );
-    ensure!(
-        stdout.contains(needle) || stderr.contains(needle),
-        concat!(
-            "the negative control failed for a reason that does not name {needle:?}, ",
-            "so it cannot show the injected edge was rejected\nstdout:\n{}\nstderr:\n{}"
-        ),
-        stdout,
-        stderr,
-        needle = needle,
-    );
-    Ok(())
-}
-
 /// Describe the edges that were found, for a missing-or-forbidden message.
 pub(crate) fn describe_edges(edges: &[DependencyEdge]) -> String {
     edges

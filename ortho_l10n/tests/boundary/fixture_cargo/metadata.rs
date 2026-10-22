@@ -124,9 +124,7 @@ impl Metadata {
     /// excluded them would leave the crate's test graph unexamined.
     ///
     /// The result is a sorted, de-duplicated list of package names, which makes
-    /// a failure message readable and the ordering deterministic. A `deps` or
-    /// `dep_kinds` field may be `null` rather than absent - Cargo omits them
-    /// for a package with no dependencies - so both are read tolerantly.
+    /// a failure message readable and the ordering deterministic.
     ///
     /// # Errors
     ///

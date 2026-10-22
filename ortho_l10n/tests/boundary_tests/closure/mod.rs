@@ -17,8 +17,8 @@ use crate::boundary::consumer::{
 };
 use crate::boundary::fixture_cargo::environment::CARGO_DEADLINE;
 use crate::boundary::fixture_cargo::{
-    FixtureCargo, Metadata, cargo_binary, describe_edges, ensure_failure_names,
-    inherited_toolchain, repository_root, run_with_deadline,
+    FixtureCargo, Metadata, cargo_binary, describe_edges, inherited_toolchain, repository_root,
+    run_with_deadline,
 };
 use crate::boundary::package_set::{ConsumerFixture, unpacked_directory};
 use anyhow::{Context, Result, ensure};
@@ -160,19 +160,38 @@ fn negative_controls_reject_every_injected_edge(
 
 /// A fixture that cannot resolve at all must not read as a rejection.
 ///
-/// The guard is what keeps the four controls above honest: if the fixture
-/// root were malformed, every one of them would fail for that reason alone
-/// and still exit non-zero. This manifest has no package name, so Cargo
-/// rejects it before considering any dependency, and the failure must not
-/// name the injected crate.
+/// This is the guard that keeps the four controls above honest, and it is
+/// stated against the path those controls actually take rather than against a
+/// helper.
+///
+/// [`run_negative_control`] separates the two outcomes at Cargo's exit status:
+/// a non-zero exit becomes its `Refused` failure, while a successful run is
+/// parsed as a metadata document and then checked. A refused resolve is
+/// therefore already an error before any closure check runs, and "non-zero exit
+/// that mentions the crate" is never accepted as evidence.
+///
+/// What the test below states is the premise that separation rests on: a
+/// manifest Cargo rejects produces no parseable document, so the two outcomes
+/// really are distinguishable rather than both surfacing as a graph the closure
+/// check would read as clean.
+///
+/// The manifest has no package name, so Cargo rejects it before considering any
+/// dependency, and its diagnostic must not be mistaken for the closure check
+/// naming the injected crate.
 #[test]
 fn an_unrelated_failure_does_not_satisfy_a_control() -> Result<()> {
     let fixture = FixtureCargo::new()?;
     fixture.write(Utf8Path::new("Cargo.toml"), "[package]\n")?;
     let output = fixture.cargo(&["metadata", "--format-version=1"])?;
     ensure!(
-        ensure_failure_names(&output, "clap").is_err(),
-        "a manifest Cargo cannot read was accepted as an injected-Clap rejection",
+        !output.status.success(),
+        "a manifest with no package name was accepted by Cargo",
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    ensure!(
+        Metadata::parse(&stdout).is_err(),
+        "a refused resolve still produced a metadata document, so a control \
+         could read the refusal as evidence",
     );
     Ok(())
 }

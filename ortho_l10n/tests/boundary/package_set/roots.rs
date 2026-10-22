@@ -9,7 +9,7 @@
 //! `boundary_packaging_test.py`, which checks its invocation count and deadline
 //! against nextest's per-test allowance, so it belongs in one clearly readable
 //! place. Everything here is instead read by the consumer and manifest
-//! contracts, which care about paths and normalised manifests rather than about
+//! contracts, which care about paths and normalized manifests rather than about
 //! how the archives were produced.
 
 use super::super::fixture_cargo::{BOUNDARY_ROOT, repository_root};

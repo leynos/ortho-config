@@ -76,7 +76,7 @@ fn packaged_runtime_declares_no_forbidden_edge() -> Result<()> {
     ensure!(
         offending.is_empty(),
         "the packaged runtime declares forbidden edges: {}\nall edges: {}",
-        join_edges(&offending),
+        describe_edges(&offending),
         describe_edges(&declared),
     );
     Ok(())
@@ -142,15 +142,6 @@ fn forbidden_edges(declared: &[DependencyEdge]) -> Vec<DependencyEdge> {
         .filter(|edge| FORBIDDEN_PACKAGES.contains(&edge.package.as_str()))
         .cloned()
         .collect()
-}
-
-/// Describe a set of edges for a failure message.
-fn join_edges(edges: &[DependencyEdge]) -> String {
-    edges
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 /// The normal edges of `declared`, as package names.
