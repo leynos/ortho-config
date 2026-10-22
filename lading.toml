@@ -16,4 +16,4 @@ strip_patches = "all"
 unit_tests_only = true
 
 [bump.documentation]
-globs = ["README.md", "docs/users-guide.md"]
+globs = ["README.md", "ortho_config/README.md", "ortho_l10n/README.md", "docs/users-guide.md"]
