@@ -40,6 +40,7 @@ PYTHON_VENV ?= scripts/.venv
 UV ?= uv
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
+GIT ?= git
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_trees.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
 	scripts/verify_release_archives.py scripts/tests -q
@@ -117,15 +118,28 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
-# The inventory is discovered inside the recipe and handed over NUL-separated:
+# The inventory is discovered inside the recipe and handed over NUL-separated.
 # `$(shell ...)` splits on whitespace and has no way to quote a path, so a file
-# named `local helper.py` would reach interrogate as two arguments. `xargs -0`
-# execs the command directly instead of re-parsing, and one invocation keeps a
-# single combined coverage verdict. `--` stops a leading `-` in a filename
-# being read as an option.
+# named `local helper.py` would reach interrogate as two arguments; `xargs -0`
+# execs the command directly instead of re-parsing. `xargs` may still split a
+# large inventory into batches, which is sound here because every batch must
+# itself reach 100%: the conjunction over batches is equivalent to requiring
+# the whole inventory at 100%.
+#
+# Discovery writes to a file rather than straight into the pipe: a pipeline
+# reports the status of its last command, so a failing `git ls-files` would
+# otherwise let an empty batch pass the gate. `set -e` aborts the recipe on a
+# discovery failure. `-r` keeps a genuinely empty inventory from invoking
+# interrogate with no paths, and `--` stops a leading `-` in a filename being
+# read as an option.
 docstring-coverage: ## Require complete docstrings for every Python source file
-	git ls-files -z --cached --others --exclude-standard -- '*.py' '*.pyi' \
-		| xargs -0 -r $(UV_RUN) interrogate --fail-under 100 --ext pyi --
+	set -eu; \
+	inventory=$$(mktemp); \
+	trap 'rm -f "$$inventory"' EXIT; \
+	$(GIT) ls-files -z --cached --others --exclude-standard -- '*.py' '*.pyi' \
+		> "$$inventory"; \
+	xargs -0 -r $(UV_RUN) interrogate --fail-under 100 --ext pyi -- \
+		< "$$inventory"
 
 typecheck: ## Typecheck workspace (cargo check)
 	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)

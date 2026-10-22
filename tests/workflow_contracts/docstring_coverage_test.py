@@ -1,15 +1,16 @@
 """Contract for the ``docstring-coverage`` gate and its file discovery.
 
 ``make lint`` runs ``interrogate`` over every tracked and non-ignored untracked
-Python file. Reading the Makefile cannot confirm three parts of that promise:
-that the discovered paths arrive as paths rather than as words, that they
-arrive in one invocation, and that the documented exclusions really hold.
+Python file. Reading the Makefile cannot confirm that promise: the discovered
+paths could arrive split into words, a failing discovery could be swallowed by
+the pipeline's exit status, and the documented exclusions could fail to hold.
 
 Each test runs the repository's own Makefile against a throwaway Git repository
 with ``make -C <fixture> -f <repository>/Makefile``, so the recipe's discovery
 and shell expansion are the things under test. ``UV_RUN`` is replaced by a stub
 that records its arguments, which avoids needing ``uv`` or ``interrogate``
-while still proving exactly what the gate hands over.
+while still proving exactly what the gate hands over. ``GIT`` and ``MAKE``
+are replaced where a test needs to make one of them fail.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -205,14 +206,16 @@ def test_gate_passes_every_discovered_path_as_one_argument(tmp_path: Path) -> No
         )
 
 
-def test_gate_invokes_interrogate_once_over_the_whole_inventory(
+def test_gate_invokes_interrogate_with_the_documented_flags(
     tmp_path: Path,
 ) -> None:
-    """The gate makes one call, carrying the documented flags and every path.
+    """The gate's single fixture-sized call carries every path and the flags.
 
-    Scenario: the inventory holds several files. Invariant: one invocation
-    covers all of them, so a per-file loop cannot report a per-file verdict in
-    place of the combined one.
+    Scenario: the inventory holds several files. Invariant: the tool is asked
+    for 100% with ``--ext pyi``, and every discovered path appears in the
+    invocation. ``xargs`` may batch a very large inventory, so this asserts the
+    flags and the inventory here, not an unconditional one-call guarantee: at
+    a 100% threshold each batch must independently pass.
     """
     _build_fixture_repository(tmp_path)
     stub, log = _fake_runner(tmp_path, exit_status=0)
@@ -224,7 +227,7 @@ def test_gate_invokes_interrogate_once_over_the_whole_inventory(
     )
     scanned = [name for name in arguments if name in ALL_SCANNED]
     assert sorted(scanned) == sorted(ALL_SCANNED), (
-        f"one invocation must carry the whole inventory; saw {scanned}"
+        f"the invocation must carry the whole inventory; saw {scanned}"
     )
 
 
@@ -269,6 +272,51 @@ def test_gate_fails_when_interrogate_fails(tmp_path: Path) -> None:
     result = _run_make(tmp_path, f"UV_RUN={stub}")
     assert result.returncode != 0, (
         "`make docstring-coverage` must fail when interrogate fails"
+    )
+
+
+def test_gate_fails_when_discovery_fails(tmp_path: Path) -> None:
+    """A failing ``git ls-files`` fails the target rather than passing it.
+
+    Scenario: discovery fails before producing a path. Invariant: the recipe
+    exits non-zero. A pipeline would report the status of its last command, so
+    this is the case that would otherwise let an empty batch pass the gate.
+    """
+    _build_fixture_repository(tmp_path)
+    stub, log = _fake_runner(tmp_path, exit_status=0)
+    broken_git = tmp_path / "broken-git"
+    broken_git.write_text("#!/bin/sh\nexit 128\n", encoding="utf-8")
+    broken_git.chmod(broken_git.stat().st_mode | stat.S_IXUSR)
+    result = _run_make(tmp_path, f"UV_RUN={stub}", f"GIT={broken_git}")
+    assert result.returncode != 0, (
+        "`make docstring-coverage` must fail when discovery fails; "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert _arguments(log) == [], (
+        "no inventory means no interrogate invocation; "
+        f"saw {_arguments(log)}"
+    )
+
+
+def test_gate_succeeds_on_a_genuinely_empty_inventory(tmp_path: Path) -> None:
+    """An empty inventory is a pass, and does not run ``interrogate`` bare.
+
+    Scenario: a repository holds no Python file at all. Invariant: the target
+    succeeds and the tool is not invoked without paths. This is the valid
+    counterpart to the failing-discovery case: absence of an inventory is not
+    itself an error.
+    """
+    _run_git(tmp_path, "init", "--quiet", "--initial-branch", "main")
+    _run_git(tmp_path, "config", "user.email", "contract@example.invalid")
+    _run_git(tmp_path, "config", "user.name", "Contract")
+    (tmp_path / "README.md").write_text("# empty\n", encoding="utf-8")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "commit", "--quiet", "-m", "fixture")
+    stub, log = _fake_runner(tmp_path, exit_status=0)
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
+    assert result.returncode == 0, result.stderr
+    assert _arguments(log) == [], (
+        f"an empty inventory must not invoke interrogate; saw {_arguments(log)}"
     )
 
 

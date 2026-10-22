@@ -21,12 +21,19 @@ hidden directories and does not restrict the scan to package and test
 directories, so Python sources used by GitHub workflows and actions, scripts,
 tests, tools, and benchmarks are covered as well.
 
-The inventory is discovered inside the recipe and passed NUL-separated
-(`git ls-files -z … | xargs -0`), not through a `$(shell …)` variable. A
-`$(shell …)` expansion splits its output on whitespace and cannot quote what it
-finds, so a file named `local helper.py` would reach `interrogate` as two
-arguments. `xargs -0` execs the command directly, keeping every path whole, and
-a single invocation still yields one combined coverage verdict.
+The inventory is discovered inside the recipe and passed NUL-separated through
+`xargs -0`, not through a `$(shell …)` variable. A `$(shell …)` expansion
+splits its output on whitespace and cannot quote what it finds, so a file named
+`local helper.py` would reach `interrogate` as two arguments; `xargs -0` execs
+the command directly and keeps every path whole. `xargs` may batch a very large
+inventory, which is sound at a 100% threshold because each batch must itself
+reach 100%.
+
+Discovery writes to a temporary file instead of straight into a pipe. A
+pipeline reports the status of its last command, so a failing `git ls-files`
+would otherwise let an empty batch pass the gate; the recipe runs under
+`set -e` and aborts on that failure. A genuinely empty inventory still passes,
+and `xargs -r` keeps it from invoking `interrogate` with no paths.
 
 The shared workspace Clippy policy denies `missing_docs_in_private_items`.
 Document private modules with `//!` and private items with `///`, including
