@@ -533,6 +533,34 @@ Decisions taken:
   only under `workflow_dispatch` (`.github/workflows/ci.yml`, step "Publish dry
   run"), so no pull-request check depends on it and PR #607 is unaffected.
 
+### EP-M4 gate certificate (2026-10-22)
+
+Run by the scrutineer, sequentially, against the frozen candidate
+`f0d1feac4018478d13f8f1234ee4a4e36bfe7a33` with a clean tree. The milestone's
+changed file classes are 4 Markdown, 3 Python, 1 TOML and no Rust, so the gate
+set was chosen for those classes rather than for a Rust-shaped diff.
+
+| Gate                           | Status | Duration |
+| ------------------------------ | ------ | -------- |
+| `make check-fmt`               | pass   | 1 s      |
+| `make markdownlint`            | pass   | 12 s     |
+| `make nixie`                   | pass   | 1 s      |
+| `make test-workflow-contracts` | pass   | 4 s      |
+| Python script suite            | pass   | 1 s      |
+| `make lint-clippy`             | pass   | 2 s      |
+| `make lint` (with Whitaker)    | pass   | 80 s     |
+
+`make markdownlint` reported `current: typos.toml`, so the generated spelling
+configuration was not rewritten. The workflow-contract suite recorded 338
+passed and 1 skipped; the script suite recorded 117 passed and 5 skipped. The
+run emitted eight notices that the managed sccache server was not serving
+compilations and compiled uncached; per the host rules that is a cache miss,
+not a failure, and both lint gates still exited zero with no diagnostics.
+
+`make publish-check` was excluded deliberately, not skipped by oversight: it is
+the upstream defect above. No gate failed, so the certificate carries no
+findings.
+
 ### EP-M3 reconnaissance (2026-10-21)
 
 Read-only survey before any EP-M3 tracked edit. All probes ran under the
