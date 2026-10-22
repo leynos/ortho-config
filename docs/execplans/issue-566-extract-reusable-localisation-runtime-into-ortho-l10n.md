@@ -1384,6 +1384,25 @@ references — but it is worth recording that *no automated gate detected it*,
 for the same reason as the EP-M3 note above: a merge is textually clean when
 the other branch relocates a class of file rather than editing one.
 
+Two corroborations arrived afterwards, and both are worth recording because
+they change what the repair is evidence *of*. First, PR #607 had already made
+the identical move for ADR-014 (`daf5c1ab`, "Adopt main's four-digit ADR layout
+for ADR-014") with the same reasoning in its commit message, so the choice here
+converges with the sibling branch rather than being a local stylistic
+preference. Second, the delta from the eight-gate certificate `14c51513` to
+this repair is 8 paths, every one `.md`, but that fact did *not* license a
+Markdown-only re-gate: `tests/workflow_contracts/sccache_wiring_test.py` reads
+`docs/developers-guide.md` and scans it for commit-like tokens, so one of the
+eight changed files is a real gate input. `make test-workflow-contracts` was
+therefore re-run as well, and `make check-fmt`, `make markdownlint` and
+`make nixie` were run with it. A file extension does not decide which lane a
+change belongs to; the readers do.
+
+The merged-tree probe against `origin/main` alone still shows a flat
+`docs/adr-014-documentation-build-ownership.md`, because ADR-014 is #607's
+record and #607 has not landed. That is #607's repair to make, not one this
+branch should pre-empt: this branch owns ADR-0015 and no other record.
+
 ## Outcomes & retrospective
 
 EP-M1 is complete, reviewed with zero outstanding findings, and published as a
