@@ -8,11 +8,17 @@ use super::protocol::binary_file_name;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
+#[cfg(unix)]
+use cap_std::fs_utf8::PermissionsExt as _;
 use cap_std::fs_utf8::{Dir, OpenOptions};
 use std::io::Write;
 use tempfile::TempDir;
 
 const TARGET_NAME: &str = "orthohelp_bridge_fixture";
+
+/// Name of the file that checks whether the target directory still accepts
+/// writes once its mode denies them.
+const DENIAL_PROBE: &str = "denial-probe";
 
 /// Removing every reported output leaves no bridge artefact behind.
 #[test]
@@ -48,12 +54,18 @@ fn an_unopenable_target_directory_is_reported_rather_than_assumed_clean() -> Res
 }
 
 /// An output that survives removal is reported instead of logged and dropped.
+///
+/// A process that can write a read-only directory cannot provoke a removal
+/// failure, so the case is skipped there rather than asserting an outcome the
+/// environment makes unreachable.
 #[cfg(unix)]
 #[test]
 fn an_output_that_cannot_be_removed_is_reported() -> Result<()> {
     let fixture = CleanupFixture::new()?;
     let protected = fixture.write_output(&format!("{TARGET_NAME}.d"))?;
-    fixture.deny_removal()?;
+    if !fixture.deny_removal()? {
+        return Ok(());
+    }
 
     let outcome = fixture.remove(std::slice::from_ref(&protected));
 
@@ -118,17 +130,36 @@ impl CleanupFixture {
         Ok(self.target.symlink_metadata(name).is_ok())
     }
 
-    /// Make the containing directory read-only so removal must fail.
+    /// Make the containing directory read-only and report whether that took.
     ///
     /// `remove_file` needs write permission on the directory, not on the file,
-    /// so changing the file's own mode would leave the test vacuous.
+    /// so changing the file's own mode would leave the test vacuous. A process
+    /// that may ignore directory permissions, such as a root-owned container
+    /// job, still removes the file; the probe below distinguishes that case so
+    /// the caller can skip rather than assert an unreachable outcome.
     #[cfg(unix)]
-    fn deny_removal(&self) -> Result<()> {
-        use std::os::unix::fs::PermissionsExt as _;
+    fn deny_removal(&self) -> Result<bool> {
+        self.set_target_mode(0o555)?;
+        let probe = self.target.open_with(
+            DENIAL_PROBE,
+            OpenOptions::new().write(true).create_new(true),
+        );
+        if probe.is_ok() {
+            self.target.remove_file(DENIAL_PROBE)?;
+        }
+        Ok(probe.is_err())
+    }
 
-        let mut permissions = std::fs::metadata(&self.target_path)?.permissions();
-        permissions.set_mode(0o555);
-        std::fs::set_permissions(&self.target_path, permissions)?;
+    /// Apply an unix mode to the fixture's target directory through its handle.
+    ///
+    /// The directory is already held as a capability, so permissions are read
+    /// and written through that same handle rather than reopening its ambient
+    /// path.
+    #[cfg(unix)]
+    fn set_target_mode(&self, mode: u32) -> Result<()> {
+        let mut permissions = self.target.dir_metadata()?.permissions();
+        permissions.set_mode(mode);
+        self.target.set_permissions(".", permissions)?;
         Ok(())
     }
 }
@@ -136,13 +167,7 @@ impl CleanupFixture {
 #[cfg(unix)]
 impl Drop for CleanupFixture {
     fn drop(&mut self) {
-        use std::os::unix::fs::PermissionsExt as _;
-
         // Restore write access so TempDir can remove its tree.
-        if let Ok(metadata) = std::fs::metadata(&self.target_path) {
-            let mut permissions = metadata.permissions();
-            permissions.set_mode(0o755);
-            let _restored = std::fs::set_permissions(&self.target_path, permissions);
-        }
+        let _restored = self.set_target_mode(0o755);
     }
 }

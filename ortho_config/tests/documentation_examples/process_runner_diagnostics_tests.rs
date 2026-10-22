@@ -88,9 +88,11 @@ fn a_failed_working_directory_query_is_reported_explicitly() {
 
 /// A command-local directory wins and never consults the inherited query.
 ///
-/// The injected query records its own invocation, so a `map_or_else` whose
-/// default closure were eager would consult the ambient directory even though
-/// the command already names its own.
+/// The injected query records its own invocation, so a fallback that ran
+/// eagerly or before the command-local branch were tested would consult the
+/// ambient directory even though the command already names its own. Both a
+/// successful and a failing query are supplied: the identity must be the same,
+/// which proves the branch never depended on the query's result.
 #[test]
 fn a_command_directory_overrides_the_inherited_workspace() -> Result<()> {
     let mut command = Command::new("cargo");
@@ -101,8 +103,20 @@ fn a_command_directory_overrides_the_inherited_workspace() -> Result<()> {
         was_queried.set(true);
         Ok(PathBuf::from("/inherited/workspace"))
     });
-
     ensure!(identity == "/private/command/directory");
+    ensure!(
+        !was_queried.get(),
+        "the inherited directory query ran despite a command-local directory"
+    );
+
+    let after_failure = super::workspace_identity(&command, || {
+        was_queried.set(true);
+        Err(io::Error::from(io::ErrorKind::PermissionDenied))
+    });
+    ensure!(
+        after_failure == "/private/command/directory",
+        "a failing inherited query changed the command-local identity"
+    );
     ensure!(
         !was_queried.get(),
         "the inherited directory query ran despite a command-local directory"
