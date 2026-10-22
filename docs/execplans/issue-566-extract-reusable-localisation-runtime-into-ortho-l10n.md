@@ -1307,6 +1307,45 @@ Verification: `make lint` is green with Whitaker checking `ortho_l10n` and no
 including the packaged paths that resolve through the moved root lookup; and
 `boundary_packaging_test.py` plus `publish_order_test.py` are 8 passed.
 
+### EP-M4: the #607 stack is not a dependency (2026-10-22)
+
+This branch was stacked on PR #607 at its `1334cc88` tip, and recorded #607 as
+an open delivery dependency. That was wrong, and the cost was visible: PR #617
+reported `mergeable=CONFLICTING` against `main`, and a push to its branch fired
+`pull_request_target` but never `pull_request`. The latter is explained by the
+former. GitHub builds `refs/pull/617/merge` only when the merge is possible,
+and the `CI` workflow triggers on `pull_request` alone, so a conflicted PR gets
+no `build-test (linux)` or `build-test (windows)` check at all.
+
+The conflict is manufactured by the stack rather than by either side's work.
+The branch carries its own copy of #607's commits — 15 by patch identity — and
+main has since advanced past them through #600 (rstest-bdd 0.6.0), #559 (syn
+3) and #609 (four-digit ADR filenames). The branch's copy of that work was
+fixed before those migrations, so it diverges from the state main now requires.
+
+The decisive test was a throwaway replay of the 32 #566 commits onto
+`origin/main` as a single rebase onto the merge base `3c4e2565`. It reached 32
+commits with conflicts in six files, every one a reconciliation of main's
+migrations with this branch's copy of the same-era work: `Cargo.toml` and
+`ortho_config_macros/Cargo.toml` (main's `rstest-bdd` 0.6.0 and `syn` 3 against
+the branch's older pins), `Cargo.lock` (regenerated rather than hand-merged),
+`.config/nextest.toml` (main splits one shared cache group into three; the
+branch adds a fourth), and `docs/contents.md` plus
+`docs/cli-localization-design.md` (four-digit ADR paths). None is in
+`ortho_l10n/` product code.
+
+The replayed tree then typechecked across the whole workspace and passed the
+boundary suite 17/17. That tree contains no #607 content at all: no
+`bridge_build*.rs`, and neither `5c7e1c8a`'s nor `c912e934`'s MSVC linker pin
+in `ci.yml`. So #566 has no dependency on #607, and does not need the linker
+fix it inherited. Main's own Windows leg is green on #619, #618, #609, #600 and
+#559 without that fix, which is consistent: the failure this branch copied was
+caused by its own stale copy, not by main.
+
+Consequence: rebase onto `main` and drop the stack. The prerequisite rule asks
+for a prerequisite PR when remediation needs out-of-scope work underneath; here
+the work underneath was never needed.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
