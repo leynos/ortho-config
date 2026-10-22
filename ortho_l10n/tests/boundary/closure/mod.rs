@@ -14,6 +14,23 @@
 //! The third property is what keeps the first two honest. Without it a typo in
 //! a crate name, or a fixture that failed to resolve at all, would read as
 //! success.
+//!
+//! # The graph is the host's, and the manifests are every platform's
+//!
+//! Two of the three checks read a resolved graph, and that graph is narrowed to
+//! the host triple. It has to be: `cargo metadata` otherwise includes every
+//! platform's dependencies, and under `--offline` it must then download crates
+//! the host will never build. A runner whose cache was warmed by building the
+//! host has no reason to hold those - `figment` gates `atomic` on
+//! `target_pointer_width`, which a 64-bit runner never satisfies - so the
+//! resolve failed for a reason that had nothing to do with the edge under test.
+//!
+//! Narrowing does not weaken the claim. Whether the runtime *builds* without
+//! the forbidden crates is a host question, and the host graph answers it
+//! exactly. Whether it *declares* one is a platform-independent question about
+//! manifest text, and [`declared_dependencies`] answers that over every
+//! platform's tables at once, including `[target.'cfg(windows)'.dependencies]`
+//! on a Linux runner.
 
 use super::fixture_cargo::{
     DependencyEdge, EdgeKind, FixtureCargo, Metadata, absolute_member, describe_edges,
@@ -64,10 +81,25 @@ pub(crate) const CONSUMER_PACKAGE: &str = "boundary-consumer";
 /// Returns an error naming every forbidden package that resolved, with its
 /// version and source, so the message shows where the edge came from.
 pub(crate) fn assert_no_forbidden_packages(metadata: &Metadata) -> Result<()> {
+    assert_absent_packages(metadata, FORBIDDEN_PACKAGES)
+}
+
+/// Assert that none of `forbidden` appears anywhere in `metadata`.
+///
+/// The forbidden set is a parameter so a negative control can forbid *only* the
+/// crate it injected. Checking the full list instead is vacuous: the
+/// `DevTestHelpers` injection also drags in `figment`, so the control stayed
+/// green on `figment`'s account even with the helper crate removed from
+/// [`FORBIDDEN_PACKAGES`], proving nothing about the edge under test.
+///
+/// # Errors
+///
+/// Returns an error naming every forbidden package that resolved.
+pub(crate) fn assert_absent_packages(metadata: &Metadata, forbidden: &[&str]) -> Result<()> {
     let offending = metadata
         .packages
         .iter()
-        .filter(|package| FORBIDDEN_PACKAGES.contains(&package.name.as_str()))
+        .filter(|package| forbidden.contains(&package.name.as_str()))
         .map(|package| {
             let source = package.source.as_deref().unwrap_or("a path package");
             format!("{} {} from {source}", package.name, package.version)
@@ -210,9 +242,9 @@ pub(crate) enum ControlOutcome {
 ///
 /// Two outcomes are legitimate, and both are reported rather than flattened:
 /// resolution may refuse the injected crate outright, or it may resolve and be
-/// caught by [`assert_no_forbidden_packages`]. Anything else - a fixture that
-/// failed for an unrelated reason, or an injection that slipped through - is an
-/// error.
+/// caught by [`assert_absent_packages`] naming that crate. Anything else - a
+/// fixture that failed for an unrelated reason, or an injection that slipped
+/// through - is an error.
 ///
 /// # Errors
 ///
@@ -225,7 +257,10 @@ pub(crate) fn run_negative_control(injection: Injection) -> Result<ControlOutcom
         Utf8Path::new("Cargo.toml"),
         &negative_control_manifest(injection)?,
     )?;
-    let output = fixture.cargo(&["metadata", "--format-version=1", "--all-features"])?;
+    // Resolve through the fixture's one host-narrowed entry point: a control
+    // that built its own argument list could drift from the contracts it is
+    // meant to guard, and did.
+    let output = fixture.resolve()?;
     if !output.status.success() {
         ensure_failure_names(&output, injection.injected_crate())?;
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -238,10 +273,17 @@ pub(crate) fn run_negative_control(injection: Injection) -> Result<ControlOutcom
         return Ok(ControlOutcome::Rejected { detail });
     }
     // Resolution succeeded: the injected edge is real, so the closure check
-    // must be the thing that refuses it.
+    // must be the thing that refuses it - and it must refuse it *because of the
+    // injected crate*. Forbidding the whole list instead is vacuous:
+    // `DevTestHelpers` also drags in `figment`, so the control stayed green on
+    // `figment`'s account even with the helper crate removed from
+    // `FORBIDDEN_PACKAGES`. It was re-proving that `figment` is forbidden,
+    // which the runtime-closure contracts already prove, and saying nothing
+    // about the edge under test.
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let metadata = Metadata::parse(&stdout)?;
-    let detail = assert_no_forbidden_packages(&metadata)
+    let injected = injection.injected_crate();
+    let detail = assert_absent_packages(&metadata, &[injected])
         .err()
         .with_context(|| {
             format!(

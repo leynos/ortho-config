@@ -14,19 +14,21 @@
 //! because it is the part a reviewer most needs to be able to check at a
 //! glance. The shape of Cargo's metadata document is a separate module too,
 //! [`metadata`], because it is an external tool contract rather than fixture
-//! plumbing.
+//! plumbing. Reading a manifest *as data* - which edges a document declares,
+//! including under a platform table - is a third responsibility, [`manifest`].
 
 pub(crate) mod environment;
+pub(crate) mod manifest;
 pub(crate) mod metadata;
 
 pub(crate) use environment::{cargo_binary, inherited_toolchain};
+pub(crate) use manifest::declared_dependencies;
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use environment::CARGO_DEADLINE;
-use std::collections::BTreeSet;
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt as _;
@@ -164,14 +166,59 @@ impl FixtureCargo {
         Ok(stdout)
     }
 
-    /// Resolve `cargo metadata` for the fixture root and parse it as JSON.
+    /// Resolve `cargo metadata` for the fixture root, as the host sees it.
+    ///
+    /// Every contract that resolves must go through here rather than building
+    /// its own argument list, so the host narrowing cannot be present in one
+    /// call site and missing in another. It was missing in the negative
+    /// controls, which is where the Windows failure appeared.
+    ///
+    /// The resolve is narrowed to the host, which is what makes it portable.
+    /// Under `--offline` an unfiltered resolve must download every platform's
+    /// dependencies, including crates the host never builds and a warm runner
+    /// cache therefore does not hold; `figment` gates `atomic` on
+    /// `target_pointer_width`, so a 64-bit runner never fetched it and the
+    /// Windows leg failed on exactly that. `host-tuple` is Cargo's own name for
+    /// the running host. Narrowing costs no coverage: these contracts read a
+    /// *host* build graph, and the platform-independent half - that no manifest
+    /// *declares* a forbidden edge, target tables included - is asserted over
+    /// the manifest text by [`declared_dependencies`], on every platform.
+    ///
+    /// The raw output is returned as well as the parsed document, because the
+    /// negative controls must inspect a *failed* resolve's diagnostic, which
+    /// has no document to parse.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Cargo cannot be spawned or exceeds the deadline.
+    /// A non-zero exit is not an error here; the caller decides.
+    pub(crate) fn resolve(&self) -> Result<Output> {
+        self.cargo(&[
+            "metadata",
+            "--format-version=1",
+            "--all-features",
+            "--filter-platform",
+            "host-tuple",
+        ])
+    }
+
+    /// Resolve and parse the fixture root, requiring Cargo to succeed.
     ///
     /// # Errors
     ///
     /// Returns an error when Cargo fails or emits something other than the
     /// single JSON document the contract expects.
     pub(crate) fn metadata(&self) -> Result<Metadata> {
-        let stdout = self.cargo_checked(&["metadata", "--format-version=1", "--all-features"])?;
+        let output = self.resolve()?;
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        if !output.status.success() {
+            bail!(
+                "cargo metadata failed with {}\nstdout:\n{}\nstderr:\n{}",
+                output.status,
+                stdout,
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
         Metadata::parse(&stdout)
     }
 }
@@ -331,67 +378,4 @@ pub(crate) fn absolute_member(repository: &Utf8Path, member: &Utf8Path) -> Resul
         "{absolute} is not a crate root",
     );
     Ok(absolute.into_string())
-}
-
-/// Every dependency edge a manifest *declares*, as its tables name them.
-///
-/// This reads the packaged manifest as data rather than as text, so a crate
-/// that a comment or a feature table merely mentions is not mistaken for a
-/// declared edge. Target-conditional tables are walked too: an edge declared
-/// for one platform is still an edge a stranger's platform may resolve.
-///
-/// The kind is the table the edge sits under, which is what distinguishes a
-/// published edge from a test-only one. A dependency that Cargo inherited into
-/// a platform table is reported once per table, matching how it was declared.
-///
-/// # Errors
-///
-/// Returns an error when `manifest` is not a TOML document.
-pub(crate) fn declared_dependencies(manifest: &str) -> Result<Vec<DependencyEdge>> {
-    let document: toml::Table =
-        toml::from_str(manifest).context("parse a packaged manifest as a TOML document")?;
-    let mut edges = BTreeSet::new();
-    collect_declared_dependencies(&document, &mut edges);
-    Ok(edges
-        .into_iter()
-        .map(|(package, kind)| DependencyEdge { package, kind })
-        .collect())
-}
-
-/// The manifest tables whose keys are dependency names, with their kinds.
-const DEPENDENCY_TABLES: [(&str, EdgeKind); 3] = [
-    ("dependencies", EdgeKind::Normal),
-    ("dev-dependencies", EdgeKind::Dev),
-    ("build-dependencies", EdgeKind::Build),
-];
-
-/// The keys of one dependency table, or nothing when it is not declared.
-fn dependency_names<'a>(table: &'a toml::Table, heading: &str) -> impl Iterator<Item = &'a String> {
-    table
-        .get(heading)
-        .and_then(toml::Value::as_table)
-        .into_iter()
-        .flat_map(toml::Table::keys)
-}
-
-/// The platform-conditional tables a manifest nests its edges in.
-fn target_tables(table: &toml::Table) -> impl Iterator<Item = &toml::Table> {
-    table
-        .get("target")
-        .and_then(toml::Value::as_table)
-        .into_iter()
-        .flat_map(toml::Table::values)
-        .filter_map(toml::Value::as_table)
-}
-
-/// Walk `table`, collecting declared edges from it and its target sections.
-fn collect_declared_dependencies(table: &toml::Table, edges: &mut BTreeSet<(String, EdgeKind)>) {
-    for (heading, kind) in DEPENDENCY_TABLES {
-        for name in dependency_names(table, heading) {
-            edges.insert((name.clone(), kind));
-        }
-    }
-    for section in target_tables(table) {
-        collect_declared_dependencies(section, edges);
-    }
 }

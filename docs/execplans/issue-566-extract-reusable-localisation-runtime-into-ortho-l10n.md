@@ -815,19 +815,24 @@ changed.
 
 ### EP-M3 boundary suite (2026-10-21)
 
-Twelve files, 2,390 lines as committed in `f357813d` (the counts below are the
-committed ones). The declared `[[test]] name = "boundary"` target in
-`ortho_l10n/Cargo.toml` reaches `tests/boundary_tests/mod.rs`; the fixtures
-below it are rendered foreign package roots, not tests.
+Thirteen files. The counts below are current as of the Windows repair recorded
+under
+[EP-M3: the Windows `build-test` red](#ep-m3-the-windows-build-test-red-its-root-cause-and-a-vacuity-2026-10-22);
+the original commit `f357813d` had twelve files and 2,390 lines, and the split
+that added `fixture_cargo/manifest.rs` moved text rather than adding it. The
+declared `[[test]] name = "boundary"` target in `ortho_l10n/Cargo.toml` reaches
+`tests/boundary_tests/mod.rs`; the fixtures below it are rendered foreign
+package roots, not tests.
 
 | File                                                 | Lines           | What it owns                                          |
 | ---------------------------------------------------- | --------------- | ----------------------------------------------------- |
-| `boundary/fixture_cargo/mod.rs`                      | 372             | disposable root, deadline-bounded child, TOML reading |
+| `boundary/fixture_cargo/mod.rs`                      | 381             | disposable root, deadline-bounded child, host resolve |
+| `boundary/fixture_cargo/manifest.rs`                 | 82              | reading a manifest as declared edges, all platforms   |
 | `boundary/fixture_cargo/environment.rs`              | 161             | the closed child environment                          |
 | `boundary/fixture_cargo/metadata.rs`                 | 229             | the `cargo metadata` document contract                |
 | `boundary/consumer/mod.rs`                           | 195             | consumer manifests, workspace and packaged            |
 | `boundary/consumer/library/mod.rs`                   | 289             | the three consumer bodies                             |
-| `boundary/closure/mod.rs`                            | 316             | forbidden names, expected edges, negative controls    |
+| `boundary/closure/mod.rs`                            | 357             | forbidden names, expected edges, negative controls    |
 | `boundary/package_set/mod.rs`                        | 335             | the two-invocation packaging recipe                   |
 | `boundary_tests/{closure,consumer,manifests}/mod.rs` | 208 / 145 / 156 | the 17 cases, from 15 test functions                  |
 | `boundary/mod.rs`, `boundary_tests/mod.rs`           | 29 / 14         | module wiring                                         |
@@ -1445,6 +1450,76 @@ here: **no gate runs doctests.** `Makefile`'s test target uses
 `cargo test --doc -p ortho_l10n` directly. That run discharges this plan's
 obligation; it does not make doctests a gated surface, and it is not part of
 the commit certificate.
+
+### EP-M3: the Windows `build-test` red, its root cause, and a vacuity (2026-10-22)
+
+The replayed candidate's Windows leg went red. The failure was not in product
+code: `boundary` failed to download a crate. The cause is a platform gate the
+Linux runner can never satisfy:
+
+```toml
+# figment 0.10.19
+[target."cfg(any(target_pointer_width = \"8\", target_pointer_width = \"16\", target_pointer_width = \"32\"))".dependencies.atomic]
+version = "0.6.0"
+```
+
+A 64-bit runner never enables that table, so building the host never downloads
+`atomic`. But `cargo metadata` without a platform filter resolves *every*
+platform, and under `--offline` it must therefore materialize a `.crate` for
+each one. A warm runner cache holds what the host built and nothing else, so
+the resolve failed with `failed to download 'atomic v0.6.1'` — a fact about
+cache contents, not about the dependency-closure claim under test. The Linux
+runner passed only because some other package in its cache had already pulled
+that version down; the contract was latent-broken on every platform.
+
+`--filter-platform host-tuple` is Cargo's documented narrowing, and
+`host-tuple` is its own name for the running host. The fix is one entry point,
+[`FixtureCargo::resolve`], so the narrowing cannot be present in one call site
+and absent in another. It had been absent in exactly one: the negative controls
+built their own `cargo metadata` argument list.
+
+Narrowing costs no coverage, and that is the part worth stating precisely. Two
+questions were being conflated:
+
+- *Does the runtime build without the forbidden crates?* This is a host
+  question. The host graph answers it exactly.
+- *Does any manifest declare a forbidden edge?* This is platform-independent
+  text. [`declared_dependencies`] answers it by parsing, and it walks
+  `target.*.*` tables — so a Linux runner still sees a `cfg(windows)` table and
+  a Windows runner still sees a `cfg(unix)` one.
+
+The fix was reproduced rather than assumed. A pruned `CARGO_HOME` holding every
+cached crate except `atomic-0.6.1` is the Windows cache state; against it an
+unfiltered resolve exits 101 with the production diagnostic, and the narrowed
+resolve exits 0 with `figment` present and `atomic` pruned. The full boundary
+suite passes 17/17 under that cache.
+
+**The vacuity.** Extracting the argument list exposed a pre-existing defect in
+the negative controls, and it is the more serious finding.
+`run_negative_control` called `assert_no_forbidden_packages`, which checks the
+whole `FORBIDDEN_PACKAGES` list. The `DevTestHelpers` injection also drags in
+`figment`, so the control was satisfied by `figment`'s presence regardless of
+whether the injected crate was caught. Proved by mutation: removing
+`ortho_config_test_helpers` from the list left the control **passing**.
+
+The repair parameterizes the check. `assert_no_forbidden_packages` is now a
+delegating wrapper over `assert_absent_packages(metadata, forbidden)`, and the
+control passes `&[injection.injected_crate()]` — it must be refused *because of
+the crate it injected*. The mutation that now discriminates is to have the
+control check a different crate than it injects: with `&["clap"]` hard-coded,
+`DevTestHelpers` fails and the three Clap injections still pass, which is the
+signature of a check keyed to the injected crate. Note that removing an entry
+from `FORBIDDEN_PACKAGES` is *no longer* a discriminating mutation, because the
+control no longer reads that list; that decoupling is the fix.
+
+Cost of the repair, beyond the defect: `fixture_cargo/mod.rs` reached 414 lines
+and `make lint` failed with
+`Module fixture_cargo spans 414 lines, exceeding the allowed 400.`
+Integration-test modules are not exempt from Whitaker's `module-max-lines`;
+three files in this suite already exceed 400 and the lint names only the one
+that grew. The TOML-reading responsibility moved to `fixture_cargo/manifest.rs`
+(82 lines), which is a seam the module doc had already described as distinct —
+reading a manifest is not resolving a graph and not judging one.
 
 ## Surprises & discoveries
 
