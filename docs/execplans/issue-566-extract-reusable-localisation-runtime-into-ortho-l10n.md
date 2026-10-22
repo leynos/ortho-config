@@ -1206,9 +1206,20 @@ Local verification before the gate round: `cs check` reports 10.00 for all
 three files, `cargo fmt --check` is clean, `cargo clippy --all-targets
 --all-features -D warnings` is clean for `ortho_l10n`, the boundary suite is 17
 passed / 0 failed, and the Python suite is 119 passed / 5 skipped (one more
-passing doctest than before, from `_internal_names`). These are local results;
-the hosted comparison against `main` can only be read after the repair is
-pushed.
+passing doctest than before, from `_internal_names`).
+
+Two mistakes were caught during this work and are worth recording. The first
+draft of the commit message said the string arguments were "argued", a
+transposition of "unarguable" that was not what the sentence meant; the gate
+round is where a reader would have met it. More usefully, the first four call
+sites of `absolute_member` were updated with `Utf8Path::new(…)` before the
+`camino` import existed in `closure/mod.rs`, so the crate did not compile until
+the import was added — the diagnostics named the missing type, not the missing
+import, which is worth knowing when the same edit is next made by hand.
+
+These are local results. The hosted comparison is against `main` and can only
+be read after the repair is pushed, so the plan does not claim the check has
+turned green.
 
 ## Surprises & discoveries
 
