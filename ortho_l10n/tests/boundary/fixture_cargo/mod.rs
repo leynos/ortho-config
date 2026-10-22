@@ -153,17 +153,7 @@ impl FixtureCargo {
     /// Returns an error carrying both streams when Cargo exits non-zero.
     pub(crate) fn cargo_checked(&self, args: &[&str]) -> Result<String> {
         let output = self.cargo(args)?;
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        if !output.status.success() {
-            bail!(
-                "cargo {} failed with {}\nstdout:\n{}\nstderr:\n{}",
-                args.join(" "),
-                output.status,
-                stdout,
-                String::from_utf8_lossy(&output.stderr),
-            );
-        }
-        Ok(stdout)
+        checked_stdout(&output, &format!("cargo {}", args.join(" ")))
     }
 
     /// Resolve `cargo metadata` for the fixture root, as the host sees it.
@@ -210,17 +200,31 @@ impl FixtureCargo {
     /// single JSON document the contract expects.
     pub(crate) fn metadata(&self) -> Result<Metadata> {
         let output = self.resolve()?;
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        if !output.status.success() {
-            bail!(
-                "cargo metadata failed with {}\nstdout:\n{}\nstderr:\n{}",
-                output.status,
-                stdout,
-                String::from_utf8_lossy(&output.stderr),
-            );
-        }
-        Metadata::parse(&stdout)
+        Metadata::parse(&checked_stdout(&output, "cargo metadata")?)
     }
+}
+
+/// Unwrap a successful run's standard output, or report both streams.
+///
+/// The two callers differ only in whether they mean "every command this
+/// fixture runs" or "the metadata resolve in particular", so the label is a
+/// parameter and the failure handling has exactly one implementation. A
+/// duplicated copy here would let the two drift: whichever one a future edit
+/// missed would report a truncated failure, and the negative controls rely on
+/// a failing resolve's diagnostic being reported in full.
+///
+/// # Errors
+///
+/// Returns an error naming `label` when the child exited non-zero.
+fn checked_stdout(output: &Output, label: &str) -> Result<String> {
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    ensure!(
+        output.status.success(),
+        "{label} failed with {}\nstdout:\n{stdout}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+    Ok(stdout)
 }
 
 /// Run `command` to completion or the deadline, whichever comes first.
