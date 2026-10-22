@@ -87,8 +87,8 @@ The membership is not a hand-maintained list, and
 becoming one. That contract reads which test binaries drive a child `cargo` out
 of the Rust sources, and fails when one of them is not raised by the
 configuration. `cli_dispatch` was absent from the list here and from every
-raised allowance in the configuration: it spawned `cargo orthohelp` on the 600 s
-base tier, and no other assertion could see the omission, because every other
+raised allowance in the configuration: it spawned `cargo orthohelp` on the base
+tier, and no other assertion could see the omission, because every other
 reading begins from the same list that omitted it.
 
 Coverage is read as an *effective* allowance rather than as a union of entries
@@ -97,12 +97,13 @@ override that matches and sets it. A configuration can therefore list a binary
 in a 960 s entry and still run it at 600 s, if an earlier entry matches it and
 carries the base figure. A union of above-base entries cannot see that: the
 raised entry still names the binary, so the union reports it covered.
-`tests/workflow_contracts/nextest_precedence.py` walks the entries in file order
-and applies that rule, and
+`tests/workflow_contracts/nextest_precedence.py` walks the entries in file
+order and applies that rule, and
 `test_a_base_tier_entry_above_a_raised_one_removes_coverage` is the negative
-control, driven by inserting the shadowing entry into the fixture's copy of this
-file. The resolver reads only `[profile.default]`'s own list and does not apply
-`platform` gates, which is exact for the Linux lane that runs these contracts.
+control, driven by inserting the shadowing entry into the fixture's copy of
+this file. The resolver reads only `[profile.default]`'s own list and does not
+apply `platform` gates, which is exact for the Linux lane that runs these
+contracts.
 
 Group membership and raised-allowance coverage are separate questions, and the
 contract asks a different thing of each. Every binary a group *serializes* must
