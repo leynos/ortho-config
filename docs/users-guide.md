@@ -1114,6 +1114,14 @@ with `parse_localized_command` when catalogue identifiers must use an explicit
 root rather than the binary name. Missing translations fall back to the original
 `clap` text and emit a warning event, so users still receive a useful error.
 
+The localization runtime is also published as its own crate. An application
+that only needs Fluent lookup and formatting can depend on `ortho_l10n`
+directly and avoid configuration discovery, the derive macros, Figment, and
+Clap entirely. The types are the same ones `ortho_config` re-exports, so code
+that mixes imports from both names the same types and needs no adapter. See the
+[ortho_l10n README](../ortho_l10n/README.md)
+for its API.
+
 ## Add production diagnostics
 
 OrthoConfig emits structured `tracing` events for discovery attempts, selected

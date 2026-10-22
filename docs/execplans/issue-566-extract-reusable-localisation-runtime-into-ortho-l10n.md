@@ -179,6 +179,16 @@ root and the workflow's invocation is pinned — so the tree is discarded only b
 `cargo clean` or by hand. On a 150 GB runner against 1.7 G this is not a disk
 risk, but it is a local one on a full workstation.
 
+**The publish dry run cannot pass while `ortho_l10n` is unpublished.** lading
+does not classify Cargo's `no matching package named` diagnostic, so the
+dry-run override never sees the failure and the gate aborts on the first
+dependent crate. This is an upstream defect
+([leynos/lading#367](https://github.com/leynos/lading/issues/367)); the gate
+must not be weakened locally to hide it. It is self-clearing once `ortho_l10n`
+has been published once, and it is only reachable on the `workflow_dispatch`
+path, so no pull-request check is red because of it. Tracked in "EP-M4
+publication check blocked upstream".
+
 ## Progress
 
 - [x] 2026-10-20: Rebased `make check-fmt`, `make test`, and
@@ -331,8 +341,10 @@ approaches; they are no longer outstanding work.
   recorded as an open delivery dependency.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR. In progress: publish order and its workflow contract are done (see
-      "EP-M4 publish order"); version discovery, guides, and publication
-      checks remain.
+      "EP-M4 publish order"), as are version discovery and the guides. The
+      publication check is blocked upstream, not locally (see "EP-M4
+      publication check blocked upstream"); code gates, milestone review, and
+      the draft PR remain.
 
 ### EP-M4 publish order (2026-10-22)
 
@@ -438,6 +450,88 @@ the publish-order contract and the cycle exemption, and states that the bump
 script discovers requirements; `CHANGELOG.md` records the new crate under
 `## Unreleased`. `docs/design.md` already described the crate, and
 `ortho_l10n/README.md` already documents the standalone use.
+
+### EP-M4 publication check blocked upstream (2026-10-22)
+
+`make publish-check` fails, and the failure is not in this workspace. It is the
+first-publication case for a brand-new crate, and lading does not recognize the
+diagnostic Cargo emits for it. Filed as
+[leynos/lading#367](https://github.com/leynos/lading/issues/367); the evidence
+and the reasoning for not working around it are recorded here.
+
+The run: 169 s pre-flight, then `ortho_l10n` packaged successfully (1/5, 12.7
+s), then `ortho_config_macros` failed with exit 101:
+
+```text
+error: failed to prepare local package for uploading
+
+Caused by:
+  no matching package named `ortho_l10n` found
+  location searched: crates.io index
+  required by package `ortho_config_macros v0.9.0`
+```
+
+The dry-run override was active in the same log
+(`INFO: Allowing unpublished workspace dependencies during dry-run publish`),
+and the order was satisfied: `ortho_l10n` is first in `lading.toml` and had
+just been packaged. Neither was the problem.
+
+Cargo has two index-miss diagnostics, and lading matches one:
+
+| Index state of the sibling      | Cargo wording                                                     | lading  |
+| ------------------------------- | ----------------------------------------------------------------- | ------- |
+| Package present, version absent | `failed to select a version for the requirement \`x = "^0.8.0"\`` | handled |
+| Package absent entirely         | `no matching package named \`x\` found`                           | ignored |
+
+`_INDEX_MISSING_VERSION_MARKERS` in `cargo_output_adapter.py` requires
+`failed to select a version for the requirement`, which the second wording does
+not contain, so `parse_index_lookup_failure` returns `None`, the failure is
+never typed as an index miss, and neither the override nor its ordering check
+is consulted. The name regex would miss it too:
+`no matching package named \`x\`` has no `=` to anchor on.
+
+The gap is against lading's own documented contract. Its user guide, §"Dry-run
+limitations with unpublished workspace dependencies", describes "crates
+released together for the first time" and shows only the version-mismatch
+diagnostic; the override text then promises the dry run "completes end-to-end".
+The absent-package case is that same scenario and is not covered. The defect is
+present unchanged at lading's `origin/main` (`16b2c1a`), so re-pinning the
+Makefile's `LADING_REF` would not help.
+
+Why this is this branch's failure rather than a pre-existing one: at the stack
+base `1334cc88`, `ortho_config_macros` has no `ortho_l10n` dependency at all.
+`a4fc4435` (`Extract localization runtime into ortho_l10n (#566)`) added it, so
+this branch is the first to require a sibling that has never been published.
+Earlier releases only ever needed the version-absent shape, which lading
+handles.
+
+No override is available in the interval: `cargo package` is invoked by lading
+itself (as `cargo package --allow-dirty`, with no user-supplied arguments), and
+a workspace `[patch]` would be stripped anyway because `lading.toml` sets
+`strip_patches = "all"`. A patch-injected `cargo package` *does* pass on
+today's tree, which is what isolates the defect to the classification rather
+than to the manifests:
+
+```sh
+cargo package --offline -p ortho_config_macros --allow-dirty \
+  --config 'patch.crates-io.ortho_l10n.path="ortho_l10n"'
+# exit 0; the child build compiles ortho_l10n from the workspace path
+```
+
+Decisions taken:
+
+- **Do not weaken the gate in this repository to make it green.** Deleting the
+  step, skipping the crate, or pinning a local lading fork would hide the one
+  check that sees what a published crate exports (issue #414 is this
+  repository's own instance of that). The gate stays red until upstream is
+  fixed or the crate has been published once.
+- **The blocking condition expires on its own.** After `ortho_l10n`'s first real
+  publication the package exists in the index and Cargo emits the
+  version-mismatch wording, which lading already handles. The blockage is a
+  property of a *first* release, not of the crate's steady state.
+- **Exposure is limited to the dispatch path.** CI runs `make publish-check`
+  only under `workflow_dispatch` (`.github/workflows/ci.yml`, step "Publish dry
+  run"), so no pull-request check depends on it and PR #607 is unaffected.
 
 ### EP-M3 reconnaissance (2026-10-21)
 
@@ -944,6 +1038,17 @@ branch disappeared instead of being split into helpers: a fourth shape adds a
 row, not a conditional. The general lesson is that a repaired lint half does
 not grade the other half until the whole `make lint` target is re-run.
 
+EP-M4: "a crate needs the same treatment as its predecessors" held for the
+publish order but not for the first publication. Every earlier release of this
+workspace bumped an existing crate, so Cargo always found the package in the
+index and reported a *version* mismatch, which lading downgrades. A brand-new
+crate produces a different diagnostic — the package is absent, not the version
+— and that one lading does not classify, so the dry run aborts even with the
+override on and the order correct. A new member changes the *shape* of the
+release, not just its contents. The `publish_order_test.py` contract could not
+catch this, because it checks the order against the graph and the order was
+right.
+
 ## Decision log
 
 2026-10-15: Treat the user's detailed coding plan and explicit implementation
@@ -999,6 +1104,16 @@ applied here was whether any `#566` commit touches the flagged path and what
 base. The findings were recorded and left to `#607` rather than repaired across
 the stack boundary, because a duplicate repair of a line the base already fixes
 is how a stacked PR becomes conflicting.
+
+2026-10-22 (EP-M4): Report the publish-check failure upstream rather than
+working around it here. The gate is the only step that builds each crate from
+its packaged sources, and issue #414 is this repository's own evidence of what
+that catches, so relabelling the gate, excluding the crate, or pinning a local
+lading fork would trade a real signal for a green tick. lading's own user guide
+already promises the behaviour that fails, which makes this a defect rather
+than a missing feature, and it is self-clearing after `ortho_l10n`'s first
+publication. Filed as leynos/lading#367 and recorded as a risk; the milestone
+does not claim this gate passed.
 
 2026-10-21 (EP-M3): Keep the macro's `ortho_l10n` dependency as a normal
 dependency and record the measured host cost rather than hiding it behind a
