@@ -97,7 +97,7 @@ The workspace will be composed of four main parts:
 3. **Localization Runtime (`ortho_l10n`):** The reusable catalogue and
    identifier layer. Applications that only need Fluent lookup and formatting
    depend on it directly, without configuration discovery, derives, Figment, or
-   Clap. See [ADR-015](adr-015-localization-runtime-boundary.md).
+   Clap. See [ADR-0015](adrs/adr-0015-localization-runtime-boundary.md).
 4. **Dependencies:** It will be built upon the shoulders of established
    community crates: `clap`, `figment`, `serde`, `fluent-bundle`, and
    `syn`/`quote`.
@@ -881,7 +881,7 @@ layered over built-in defaults; `ortho_config` re-exports those types and owns
 the Clap adapters. Consumers can therefore opt into internationalization
 without giving up a working baseline, and applications that never load
 configuration can use the runtime directly. See
-[ADR-015](adr-015-localization-runtime-boundary.md).
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md).
 
 - **Trait surface:** The trait exposes a single lookup entry point,
   `fn lookup(&self, id: &str, args: Option<&HashMap<&str, FluentValue<'_>>>)`,

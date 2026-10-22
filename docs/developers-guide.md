@@ -451,8 +451,8 @@ time.
 `ortho_l10n` owns the shared fallible identifier normalizer. The runtime panic
 and macro spanned diagnostics wrap that implementation; argument fragments use
 the shared separator without imposing the root rule. See
-[ADR-015](adr-015-localization-runtime-boundary.md). Generated docs IR receives
-mounted paths through path-aware trait methods; handwritten trait
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md). Generated docs IR
+receives mounted paths through path-aware trait methods; handwritten trait
 implementations use their provided fallback. The optional identifier artefact
 uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
 schema has standalone scope until a downstream consumer joins it to docs IR.

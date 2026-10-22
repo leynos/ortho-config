@@ -151,7 +151,7 @@ EP-M4 acceptance evidence, per requirement:
 | Every internal requirement moves with the bump  | `test_member_bump_updates_every_internal_dependency`                                     |
 | An external namesake is left alone              | `test_member_bump_leaves_an_external_namesake_alone`                                     |
 | Guides describe the order and discovery rules   | `docs/developers-guide.md` "Publish dry run" and the bump-script paragraph               |
-| Users know `ortho_l10n` is separately published | `docs/users-guide.md`, linked to `ortho_l10n/README.md` and ADR-015                      |
+| Users know `ortho_l10n` is separately published | `docs/users-guide.md`, linked to `ortho_l10n/README.md` and ADR-0015                     |
 | The packaged-source check still runs            | unchanged `make publish-check`; blocked upstream, recorded above                         |
 
 Proof inventory: not applicable. EP-M3 introduces no CrossHair, Kani, Verus, or
@@ -332,7 +332,7 @@ approaches; they are no longer outstanding work.
   documentation findings (`b50d56b0`), and complete fresh CodeRabbit review
   with zero findings across all six files. Publish over SSH with an explicit
   absent-branch lease; HEAD, remote, and origin tracking all match `b50d56b0`.
-- [x] 2026-10-20: Begin EP-M2. Record ADR-015 before introducing the crate
+- [x] 2026-10-20: Begin EP-M2. Record ADR-0015 before introducing the crate
   and shared fallible identifier API, as repository abstraction policy
   requires. This brings the planned boundary ADR forward from EP-M4 without
   changing ownership or scope. CodeGraph impact identifies 12 direct and 30
@@ -1367,6 +1367,22 @@ table or entry shape would have to be taught to both. Returning `(table, name)`
 and writing only to that table gives the property one home, and the writer no
 longer needs to know why an entry was selected. The cost is a wider signature
 on a private helper with one caller in the module.
+
+2026-10-22 (EP-M4): Move ADR-0015 into `docs/adrs/` under a four-digit name and
+repoint its inbound links, rather than leaving it in the `docs/adr-015-…` form
+this branch was written against. `main` adopted the four-digit layout in #609
+while this branch was open, so the branch's own style guide still prescribes
+`docs/adr-NNN-…` and no gate rejected the original. A merge-tree probe showed
+the consequence plainly: a merged tree would carry `docs/adr-015-…` beside a
+populated `docs/adrs/`, with no conflict to flag it, because the two changes
+never touch the same path. The move is corrected here rather than deferred to
+the replay onto #607, because the ADR's filename, heading, and inbound links
+are EP-M4's own deliverable; deferring would have shipped a known
+nonconformance through review on the argument that a later rebase would fix it.
+The repair is mechanical — one rename, one heading digit, and six files'
+references — but it is worth recording that *no automated gate detected it*,
+for the same reason as the EP-M3 note above: a merge is textually clean when
+the other branch relocates a class of file rather than editing one.
 
 ## Outcomes & retrospective
 

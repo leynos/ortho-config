@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
   builder, the formatting-issue reporter, and the fallible identifier
   convention, without configuration discovery, derive macros, Figment, or Clap.
   `ortho_config` re-exports the same types, so existing imports keep working;
-  see [ADR-015](docs/adr-015-localization-runtime-boundary.md).
+  see [ADR-0015](docs/adrs/adr-0015-localization-runtime-boundary.md).
 
 - Add behavioural metadata for non-interactive execution and mutation
   boundaries (roadmap 7.2.1): the struct-level
