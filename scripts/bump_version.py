@@ -296,13 +296,34 @@ def _internal_dependencies(
     """
     found: dict[tuple[str, str], None] = {}
     for table in DEPENDENCY_TABLES:
-        entries = doc.get(table)
-        if not entries:
-            continue
-        for name, entry in entries.items():
-            if isinstance(entry, Mapping) and "path" in entry:
-                found[(table, name)] = None
+        for name in _internal_names(doc.get(table)):
+            found[(table, name)] = None
     return list(found)
+
+
+def _internal_names(entries: object) -> Iterable[str]:
+    """Return the names in ``entries`` that name a workspace crate.
+
+    A dependency table that is absent, empty, or is not a table contributes
+    nothing; only a mapping whose entry carries a ``path`` key names a crate
+    this workspace publishes.
+
+    Examples
+    --------
+    >>> import tomlkit
+    >>> doc = tomlkit.parse('''[dependencies]
+    ... internal = { path = "../internal", version = "0.1" }
+    ... serde = "1"''')
+    >>> list(_internal_names(doc['dependencies']))
+    ['internal']
+    >>> list(_internal_names(None))
+    []
+    """
+    if not isinstance(entries, Mapping):
+        return
+    for name, entry in entries.items():
+        if isinstance(entry, Mapping) and "path" in entry:
+            yield name
 
 
 def _update_dependency_version(

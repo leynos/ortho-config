@@ -308,8 +308,10 @@ impl ConsumerFixture {
     ///
     /// Returns an error when the manifest or library cannot be written.
     pub(crate) fn write_consumer(self, consumer: &super::consumer::Consumer) -> Result<Self> {
-        self.cargo.write("Cargo.toml", &consumer.manifest)?;
-        self.cargo.write("src/lib.rs", &consumer.library)?;
+        self.cargo
+            .write(Utf8Path::new("Cargo.toml"), &consumer.manifest)?;
+        self.cargo
+            .write(Utf8Path::new("src/lib.rs"), &consumer.library)?;
         Ok(self)
     }
 

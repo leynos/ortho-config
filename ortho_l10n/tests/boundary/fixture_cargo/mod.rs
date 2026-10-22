@@ -94,10 +94,10 @@ impl FixtureCargo {
     ///
     /// Returns an error when the parent directory or the file cannot be
     /// written.
-    pub(crate) fn write(&self, relative_path: &str, contents: &str) -> Result<()> {
+    pub(crate) fn write(&self, relative_path: &Utf8Path, contents: &str) -> Result<()> {
         let directory = Dir::open_ambient_dir(self.root(), cap_std::ambient_authority())
             .with_context(|| format!("open fixture root {}", self.root()))?;
-        if let Some((parent, _)) = relative_path.rsplit_once('/') {
+        if let Some(parent) = relative_path.parent() {
             directory
                 .create_dir_all(parent)
                 .with_context(|| format!("create {parent} in fixture root"))?;
@@ -321,7 +321,7 @@ pub(crate) fn toml_string(value: &str) -> String {
 /// # Errors
 ///
 /// Returns an error when the directory does not exist or holds no manifest.
-pub(crate) fn absolute_member(repository: &Utf8Path, member: &str) -> Result<String> {
+pub(crate) fn absolute_member(repository: &Utf8Path, member: &Utf8Path) -> Result<String> {
     let crate_root = repository.join(member);
     let absolute = crate_root
         .canonicalize_utf8()
@@ -365,18 +365,33 @@ const DEPENDENCY_TABLES: [(&str, EdgeKind); 3] = [
     ("build-dependencies", EdgeKind::Build),
 ];
 
+/// The keys of one dependency table, or nothing when it is not declared.
+fn dependency_names<'a>(table: &'a toml::Table, heading: &str) -> impl Iterator<Item = &'a String> {
+    table
+        .get(heading)
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(toml::Table::keys)
+}
+
+/// The platform-conditional tables a manifest nests its edges in.
+fn target_tables(table: &toml::Table) -> impl Iterator<Item = &toml::Table> {
+    table
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(toml::Table::values)
+        .filter_map(toml::Value::as_table)
+}
+
 /// Walk `table`, collecting declared edges from it and its target sections.
 fn collect_declared_dependencies(table: &toml::Table, edges: &mut BTreeSet<(String, EdgeKind)>) {
     for (heading, kind) in DEPENDENCY_TABLES {
-        if let Some(entries) = table.get(heading).and_then(toml::Value::as_table) {
-            for name in entries.keys() {
-                edges.insert((name.clone(), kind));
-            }
+        for name in dependency_names(table, heading) {
+            edges.insert((name.clone(), kind));
         }
     }
-    if let Some(sections) = table.get("target").and_then(toml::Value::as_table) {
-        for section in sections.values().filter_map(toml::Value::as_table) {
-            collect_declared_dependencies(section, edges);
-        }
+    for section in target_tables(table) {
+        collect_declared_dependencies(section, edges);
     }
 }

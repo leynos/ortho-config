@@ -1182,6 +1182,34 @@ dependency rather than absorb it, which is also what the plan's tolerance for
 recorded here as a delivery dependency and handed to `pr-babysitting` with the
 PR, rather than repaired across a stack boundary.
 
+### EP-M4 CodeScene repair (2026-10-22)
+
+The hosted `CodeScene Code Health Review (main)` check failed on #617's head
+with three critical Bumpy Road Ahead findings and one advisory String Heavy
+Function Arguments finding. The baseline rules out inherited noise: the check
+passed on all ten recently merged PRs #594–#610. `cs check` (CLI 1.0.52)
+reproduced each finding at the same line the hosted summary named.
+
+| File | Finding | Disposition |
+| ---- | ------- | ----------- |
+| `ortho_l10n/tests/boundary/fixture_cargo/mod.rs` | Bumpy Road Ahead, L369 | Decomposed into `dependency_names` and `target_tables` |
+| `ortho_l10n/tests/boundary_tests/manifests/mod.rs` | Bumpy Road Ahead, L141 | Decomposed the same way, into `dependency_entries` and `target_tables` |
+| `scripts/bump_version.py` | Bumpy Road Ahead, L260 | Table scan extracted into `_internal_names`, with a doctest per branch |
+| `ortho_l10n/tests/boundary/fixture_cargo/mod.rs` | String Heavy Function Arguments | `write`'s `relative_path` and `absolute_member`'s `member` retyped as `&Utf8Path` |
+
+Two changes were needed at call sites rather than in the flagged functions:
+`FixtureCargo::write` now takes a `&Utf8Path`, so its four callers spell
+`Utf8Path::new(…)`, and `absolute_member` likewise for its two. Nothing about
+what the contracts assert changed, which the seventeen boundary tests confirm.
+
+Local verification before the gate round: `cs check` reports 10.00 for all
+three files, `cargo fmt --check` is clean, `cargo clippy --all-targets
+--all-features -D warnings` is clean for `ortho_l10n`, the boundary suite is 17
+passed / 0 failed, and the Python suite is 119 passed / 5 skipped (one more
+passing doctest than before, from `_internal_names`). These are local results;
+the hosted comparison against `main` can only be read after the repair is
+pushed.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
@@ -1402,6 +1430,36 @@ The merged-tree probe against `origin/main` alone still shows a flat
 `docs/adr-014-documentation-build-ownership.md`, because ADR-014 is #607's
 record and #607 has not landed. That is #607's repair to make, not one this
 branch should pre-empt: this branch owns ADR-0015 and no other record.
+
+2026-10-22 (delivery): Decompose the three Bumpy Road functions instead of
+raising a threshold or suppressing the findings. The hosted CodeScene check
+failed on #617 with three critical Bumpy Road Ahead findings and one advisory
+String Heavy Function Arguments finding, and the baseline is not noise: the
+check was `success` on all ten recently merged PRs #594–#610, and `cs check`
+reproduced every finding locally against the same lines.
+
+All three critical findings had one shape. `collect_declared_dependencies`,
+`collect_path_dependencies` and `_internal_dependencies` each scanned the
+dependency tables and then descended into a manifest's `target` sections, which
+is two nested conditionals *inside one function* — the second bump. Splitting
+each into a named table-scan helper and a named `target`-section walk removes
+the bump without changing what is collected, which the seventeen boundary
+contracts confirm: they still pass, including the four negative controls that
+must fail for each injected forbidden edge.
+
+The advisory finding was not about tests being elaborate. Forty-three per cent
+of the module's function arguments were `&str`, and two of them —
+`FixtureCargo::write`'s `relative_path` and `absolute_member`'s `member` — are
+paths rather than text. This module already speaks `Utf8Path` everywhere else,
+including `root()` and `repository`, so the string spelling was the outlier.
+Typing them as `&Utf8Path` says what they are, moves the responsibility for a
+well-formed path to the caller, and lets `write` use `Path::parent` instead of
+splitting on a separator. Either change alone clears the rule; both are made
+because both arguments are genuinely paths.
+
+The local `cs check` score is 10.00 for all three files. That is a local
+measurement, not a hosted verdict: the hosted comparison is against `main`, and
+this branch has to be re-pushed before the check can be read again.
 
 ## Outcomes & retrospective
 

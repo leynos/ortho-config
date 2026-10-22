@@ -20,6 +20,7 @@ use super::fixture_cargo::{
     ensure_failure_names, repository_root, toml_string,
 };
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use std::fmt::Write as _;
 
 /// Packages that must never appear in a standalone runtime consumer's graph.
@@ -219,8 +220,11 @@ pub(crate) enum ControlOutcome {
 /// the injected edge resolves and the closure check accepts it.
 pub(crate) fn run_negative_control(injection: Injection) -> Result<ControlOutcome> {
     let fixture = FixtureCargo::new()?;
-    fixture.write("src/lib.rs", "//! Negative control.\n")?;
-    fixture.write("Cargo.toml", &negative_control_manifest(injection)?)?;
+    fixture.write(Utf8Path::new("src/lib.rs"), "//! Negative control.\n")?;
+    fixture.write(
+        Utf8Path::new("Cargo.toml"),
+        &negative_control_manifest(injection)?,
+    )?;
     let output = fixture.cargo(&["metadata", "--format-version=1", "--all-features"])?;
     if !output.status.success() {
         ensure_failure_names(&output, injection.injected_crate())?;
@@ -257,8 +261,11 @@ pub(crate) fn run_negative_control(injection: Injection) -> Result<ControlOutcom
 /// anything about the injected edge.
 fn negative_control_manifest(injection: Injection) -> Result<String> {
     let repository = repository_root()?;
-    let runtime_path = toml_string(&absolute_member(&repository, "ortho_l10n")?);
-    let helpers_path = toml_string(&absolute_member(&repository, "test_helpers")?);
+    let runtime_path = toml_string(&absolute_member(&repository, Utf8Path::new("ortho_l10n"))?);
+    let helpers_path = toml_string(&absolute_member(
+        &repository,
+        Utf8Path::new("test_helpers"),
+    )?);
 
     // A normal injection shares `[dependencies]` with the runtime, so both
     // entries are written under one heading. Emitting a heading twice is a TOML

@@ -19,6 +19,7 @@ use crate::boundary::fixture_cargo::{
 };
 use crate::boundary::package_set::{ConsumerFixture, unpacked_directory};
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use rstest::rstest;
 
 /// Resolve a runtime consumer from path dependencies and assert its closure.
@@ -174,7 +175,7 @@ fn diagnostic_of(outcome: &ControlOutcome) -> &str {
 #[test]
 fn an_unrelated_failure_does_not_satisfy_a_control() -> Result<()> {
     let fixture = FixtureCargo::new()?;
-    fixture.write("Cargo.toml", "[package]\n")?;
+    fixture.write(Utf8Path::new("Cargo.toml"), "[package]\n")?;
     let output = fixture.cargo(&["metadata", "--format-version=1"])?;
     ensure!(
         ensure_failure_names(&output, "clap").is_err(),

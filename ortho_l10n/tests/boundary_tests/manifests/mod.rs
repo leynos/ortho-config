@@ -137,20 +137,38 @@ fn path_dependencies(document: &toml::Table) -> Vec<String> {
     offenders
 }
 
+/// The entries of one dependency table, or nothing when it is not declared.
+fn dependency_entries<'a>(
+    table: &'a toml::Table,
+    heading: &str,
+) -> impl Iterator<Item = (&'a String, &'a toml::Value)> {
+    table
+        .get(heading)
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(toml::Table::iter)
+}
+
+/// The platform-conditional tables a manifest nests its edges in.
+fn target_tables(table: &toml::Table) -> impl Iterator<Item = &toml::Table> {
+    table
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(toml::Table::values)
+        .filter_map(toml::Value::as_table)
+}
+
 /// Walk the dependency tables of `table`, including target-scoped ones.
 fn collect_path_dependencies(table: &toml::Table, offenders: &mut Vec<String>) {
     for heading in ["dependencies", "dev-dependencies", "build-dependencies"] {
-        let entries = table.get(heading).and_then(toml::Value::as_table);
-        for (name, entry) in entries.into_iter().flat_map(toml::Table::iter) {
+        for (name, entry) in dependency_entries(table, heading) {
             if entry.get("path").is_some() {
                 offenders.push(name.clone());
             }
         }
     }
-    let sections = table.get("target").and_then(toml::Value::as_table);
-    for scope in sections.into_iter().flat_map(toml::Table::values) {
-        if let Some(scope_table) = scope.as_table() {
-            collect_path_dependencies(scope_table, offenders);
-        }
+    for scope in target_tables(table) {
+        collect_path_dependencies(scope, offenders);
     }
 }

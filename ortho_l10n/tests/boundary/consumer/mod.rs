@@ -145,7 +145,7 @@ fn manifest_for(dependency: Dependency, source: &DependencySource) -> Result<Str
 fn write_workspace_dependencies(manifest: &mut String, dependency: Dependency) -> Result<()> {
     let repository = repository_root()?;
     for crate_name in dependency.crates() {
-        let member = absolute_member(&repository, crate_name)?;
+        let member = absolute_member(&repository, Utf8Path::new(crate_name))?;
         writeln!(
             manifest,
             "{crate_name} = {{ path = {} }}",
