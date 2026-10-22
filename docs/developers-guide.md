@@ -3669,15 +3669,18 @@ fired, had started at 1,652.8 s; its own allowance would have let it run until
 figure 2,300 s was chosen against: it covers the bound with 47 s to spare,
 where 1,800 s fell 452.8 s short of it.
 
-The bound is not a comfortable margin, and run 39681374732 does not widen it.
-That run was the second on the pin, so it inherited the entries the cancelled
-run had written: its hit rate was 88.77 % — 2,285 hits against 289 misses —
-which is main's 89.00 % rather than the cold 35.67 %. Both of its Windows
-passes completed inside the budget:
+The bound is not a comfortable margin, and neither of the first two runs on the
+enlarged budget widens it. Both were later runs on the pin, so both inherited
+the entries the cancelled run had written: run 39681374732 at an 88.77 % hit
+rate — 2,285 hits against 289 misses — and run 39690235953 at 89.04 %, which
+are main's 89.00 % rather than the cold 35.67 %. All four Windows passes
+completed inside the budget:
 
 ```text
 Summary [1519.887s] 2070 tests run: 2070 passed (16 slow), 30 skipped
 Summary [1142.681s] 2042 tests run: 2042 passed (12 slow), 30 skipped
+Summary [1507.403s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [1164.063s] 2042 tests run: 2042 passed (12 slow), 30 skipped
 ```
 
 Even warm, that is a third slower than main's 1,044.1 s over the same 2,070
@@ -3685,8 +3688,8 @@ tests at the same hit rate, so the pin costs time with the cache already behind
 it and the cold figure is not an anomaly to be explained away. What recurs is
 the cold case: Dependabot moves the pin, every entry keyed by the old compiler
 becomes unreachable, and the first run on the new pin pays the whole graph
-again. The warm 1,519.9 s measures the floor, not the peak, and the cold budget
-rests on the bound above.
+again. The warm 1,519.9 s and 1,507.4 s measure the floor, not the peak, and
+the cold budget rests on the bound above.
 
 That the margin is 47 s is the argument for fixing the cause rather than the
 figure.
