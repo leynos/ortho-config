@@ -210,30 +210,24 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn a_dev_dependency_is_a_declared_edge() -> Result<()> {
-        let manifest = format!("{HEADER}\n[dev-dependencies]\nclap = \"4\"\n");
+    #[rstest::rstest]
+    #[case::dev("[dev-dependencies]", EdgeKind::Dev)]
+    #[case::build("[build-dependencies]", EdgeKind::Build)]
+    #[case::normal("[dependencies]", EdgeKind::Normal)]
+    fn a_clap_edge_is_a_declared_edge(#[case] heading: &str, #[case] kind: EdgeKind) -> Result<()> {
+        let manifest = format!("{HEADER}\n{heading}\nclap = \"4\"\n");
         assert_declares(
             &manifest,
             &DependencyEdge {
                 package: String::from("clap"),
-                kind: EdgeKind::Dev,
+                kind,
             },
         )
     }
 
-    #[test]
-    fn a_build_dependency_is_a_declared_edge() -> Result<()> {
-        let manifest = format!("{HEADER}\n[build-dependencies]\nclap = \"4\"\n");
-        assert_declares(
-            &manifest,
-            &DependencyEdge {
-                package: String::from("clap"),
-                kind: EdgeKind::Build,
-            },
-        )
-    }
-
+    /// The target table is where a host-narrowed resolve cannot look, so this
+    /// case is a different question from the three above rather than a fourth
+    /// instance of it.
     #[test]
     fn a_target_specific_dev_dependency_is_a_declared_edge() -> Result<()> {
         let manifest = concat!(
@@ -254,6 +248,8 @@ mod tests {
         )
     }
 
+    /// The alias is the local spelling; the `package` field is the identity a
+    /// forbidden list matches. This is the case a key-reading walker fails.
     #[test]
     fn a_renamed_dependency_is_declared_under_its_package_name() -> Result<()> {
         let manifest = format!(
