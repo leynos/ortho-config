@@ -151,20 +151,28 @@ def _fake_runner(directory: Path, exit_status: int) -> tuple[Path, Path]:
     return stub, log
 
 
-def _run_gate(fixture: Path, runner: Path) -> subprocess.CompletedProcess[str]:
-    """Run the gate from ``fixture`` using the repository's Makefile."""
+def _run_make(
+    fixture: Path, *overrides: str
+) -> subprocess.CompletedProcess[str]:
+    """Run the gate from ``fixture`` using the repository's Makefile.
+
+    Parameters
+    ----------
+    fixture : Path
+        The throwaway repository the recipe runs in.
+    *overrides : str
+        ``NAME=value`` assignments, used to replace ``UV_RUN`` or
+        ``PYTHON_DEPS_FILE`` for the run.
+
+    Returns
+    -------
+    subprocess.CompletedProcess of str
+        The finished process, with its output captured.
+    """
     make = shutil.which("make")
     assert make is not None, "make must be available to run the contract"
     return subprocess.run(  # noqa: S603 - fixed argument vector, no shell
-        [
-            make,
-            "-C",
-            str(fixture),
-            "-f",
-            str(MAKEFILE),
-            GATE_TARGET,
-            f"UV_RUN={runner}",
-        ],
+        [make, "-C", str(fixture), "-f", str(MAKEFILE), GATE_TARGET, *overrides],
         capture_output=True,
         text=True,
         check=False,
@@ -188,7 +196,7 @@ def test_gate_passes_every_discovered_path_as_one_argument(tmp_path: Path) -> No
     """
     _build_fixture_repository(tmp_path)
     stub, log = _fake_runner(tmp_path, exit_status=0)
-    result = _run_gate(tmp_path, stub)
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
     assert result.returncode == 0, result.stderr
     arguments = _arguments(log)
     for relative in ALL_SCANNED:
@@ -208,7 +216,7 @@ def test_gate_invokes_interrogate_once_over_the_whole_inventory(
     """
     _build_fixture_repository(tmp_path)
     stub, log = _fake_runner(tmp_path, exit_status=0)
-    result = _run_gate(tmp_path, stub)
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
     assert result.returncode == 0, result.stderr
     arguments = _arguments(log)
     assert tuple(arguments[: len(GATE_ARGUMENTS)]) == GATE_ARGUMENTS, (
@@ -229,7 +237,7 @@ def test_gate_leaves_ignored_and_non_python_files_out(tmp_path: Path) -> None:
     """
     _build_fixture_repository(tmp_path)
     stub, log = _fake_runner(tmp_path, exit_status=0)
-    result = _run_gate(tmp_path, stub)
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
     assert result.returncode == 0, result.stderr
     arguments = _arguments(log)
     assert IGNORED_PYTHON not in arguments, (
@@ -258,29 +266,9 @@ def test_gate_fails_when_interrogate_fails(tmp_path: Path) -> None:
     """
     _build_fixture_repository(tmp_path)
     stub, _log = _fake_runner(tmp_path, exit_status=4)
-    result = _run_gate(tmp_path, stub)
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
     assert result.returncode != 0, (
         "`make docstring-coverage` must fail when interrogate fails"
-    )
-
-
-def _run_real_gate(fixture: Path) -> subprocess.CompletedProcess[str]:
-    """Run the gate with the real ``uv run`` and ``interrogate``."""
-    make = shutil.which("make")
-    assert make is not None, "make must be available to run the contract"
-    return subprocess.run(  # noqa: S603 - fixed argument vector, no shell
-        [
-            make,
-            "-C",
-            str(fixture),
-            "-f",
-            str(MAKEFILE),
-            GATE_TARGET,
-            f"PYTHON_DEPS_FILE={REPOSITORY_ROOT / 'scripts/requirements-test.txt'}",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
     )
 
 
@@ -297,14 +285,15 @@ def test_real_interrogate_fails_on_an_undocumented_file(tmp_path: Path) -> None:
     the fixture's awkward names, without depending on ``interrogate``'s output
     format.
     """
+    deps = f"PYTHON_DEPS_FILE={REPOSITORY_ROOT / 'scripts/requirements-test.txt'}"
     _build_fixture_repository(tmp_path)
-    failed = _run_real_gate(tmp_path)
+    failed = _run_make(tmp_path, deps)
     assert failed.returncode != 0, (
         "an undocumented Python file must fail the gate; "
         f"stdout={failed.stdout!r} stderr={failed.stderr!r}"
     )
     _write(tmp_path, UNDOCUMENTED_FILE, DOCUMENTED)
-    repaired = _run_real_gate(tmp_path)
+    repaired = _run_make(tmp_path, deps)
     assert repaired.returncode == 0, (
         "documenting the only undocumented file must make the fixture pass; "
         f"stdout={repaired.stdout!r} stderr={repaired.stderr!r}"
