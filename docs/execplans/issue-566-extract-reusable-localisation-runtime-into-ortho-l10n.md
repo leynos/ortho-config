@@ -627,9 +627,9 @@ the first certificate was wrong in a way worth stating plainly: the gate set
 was chosen from the *milestone's* changed file classes, but a certificate
 describes a *tree*. `make test` executes no Markdown gate and the Markdown
 gates execute no Rust, so a set chosen from the delta is only complete when the
-delta is the whole distance from the last certified tree. Here it is not —
-`3c22ba57..HEAD` leaves the Rust surface untouched, but it leaves
-`docs/users-guide.md` changed, and that file is a test input:
+delta is the whole distance from the last certified tree. Here it is not: no
+Rust file changed between the EP-M3 repair and this tree, yet
+`docs/users-guide.md` did, and that file is a test input —
 `ortho_config/tests/documentation_examples/mod.rs` parses its fences and
 asserts every one carries a `tested-example` marker. A compile-only certificate
 would have taken "the guide's prose changed" as sufficient evidence that the
@@ -648,6 +648,23 @@ failed, so this certificate carries no findings either — and it names
 `14c51513`, so the commit that carries it is again a later tree. The same rule
 applies: the Markdown lane is re-run against the post-record head and its
 result recorded beside this note.
+
+That re-run was the first thing to disagree with the paragraph above, which is
+worth keeping rather than tidying away. The three Markdown gates ran against
+the post-record head and two passed; `make markdownlint` failed in its spelling
+phase on a token inside the new prose. The offending text was a bare commit
+abbreviation in an inline code span, and the typos gate reads inline code, so
+naming a revision split into letters and digits produced a word the dictionary
+does not hold. The repair is a rewording that drops the revision — the sentence
+now says "no Rust file changed between the EP-M3 repair and this tree", which
+carries the same meaning without a token the gate can misread. No
+`typos.local.toml` exception was added, for the same reason as the EP-M3
+instance: an exemption would have to be argued forever, while a reworded
+sentence is simply true.
+
+The detection is the point. A Markdown-only delta is exactly the case where "no
+other gate reads this" is tempting and wrong, and the gate that disproved it is
+one this certificate had already declared green on the previous tree.
 
 ### EP-M4 milestone CLI review (2026-10-22)
 
