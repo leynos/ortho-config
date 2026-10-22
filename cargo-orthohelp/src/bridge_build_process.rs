@@ -6,7 +6,6 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::time::Instant;
 
 use super::cleanup::OwnedChild;
-use super::diagnostics::forward_cargo_diagnostics;
 use super::protocol::{CargoMessages, read_cargo_messages};
 use super::{
     CargoBuild, CargoFailure, CargoStatus, GeneratedTarget, io_error, message_error,
@@ -21,11 +20,32 @@ pub(super) fn run_cargo(
     command: &mut Command,
     target: GeneratedTarget<'_>,
 ) -> Result<CargoBuild, CargoFailure> {
+    run_cargo_with(
+        command,
+        target,
+        super::diagnostics::forward_cargo_diagnostics,
+    )
+}
+
+/// Run Cargo and report its retained diagnostics through `forward`.
+///
+/// The forwarding step is a parameter so the ordering this function guarantees
+/// — drain the whole protocol stream, wait for the child, then forward — stays
+/// observable through this boundary. Tests supply their own sink; the
+/// production caller forwards to stderr.
+fn run_cargo_with<Forward>(
+    command: &mut Command,
+    target: GeneratedTarget<'_>,
+    forward: Forward,
+) -> Result<CargoBuild, CargoFailure>
+where
+    Forward: FnOnce(&CargoMessages) -> std::io::Result<()>,
+{
     let started = Instant::now();
     let mut child = spawn_cargo(command, target.directory, started)?;
     let messages = read_cargo_protocol(&mut child, target, started)?;
     let status = wait_for_cargo(&mut child, target.directory, started)?;
-    forward_diagnostics(&messages);
+    forward_diagnostics(&messages, forward);
     record_outcome(&messages, status, started);
     Ok(CargoBuild {
         status: cargo_status(status),
@@ -102,8 +122,11 @@ fn cleanup_failure(
 }
 
 /// Forward retained compiler diagnostics without exposing them as log fields.
-fn forward_diagnostics(messages: &CargoMessages) {
-    if let Err(error) = forward_cargo_diagnostics(messages) {
+fn forward_diagnostics<Forward>(messages: &CargoMessages, forward: Forward)
+where
+    Forward: FnOnce(&CargoMessages) -> std::io::Result<()>,
+{
+    if let Err(error) = forward(messages) {
         tracing::warn!(
             operation = "cargo_diagnostic_forward",
             outcome = "failed",
@@ -137,3 +160,7 @@ fn cargo_status(status: ExitStatus) -> CargoStatus {
         CargoStatus::Failure(status.code().unwrap_or(-1))
     }
 }
+
+#[cfg(test)]
+#[path = "bridge_build_process_tests.rs"]
+mod tests;

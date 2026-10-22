@@ -1097,13 +1097,39 @@ its "Configure MSVC for nested Cargo builds" step; reproduce the equivalent
 environment locally.
 
 Prerequisites are Visual Studio with the **Desktop development with C++**
-workload and the x64 compiler tools. Discover the installation with `vswhere`,
-which hosted runners ship at
+workload and the x64 compiler tools. Discovery uses `vswhere`, which hosted
+runners ship at
 `${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe`,
-filtering on `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. Then run
-`VsDevCmd.bat -arch=x64 -host_arch=x64` and export the variables it prints:
-`INCLUDE`, `LIB`, `LIBPATH`, `VCINSTALLDIR`, `VSINSTALLDIR`,
-`VSCMD_ARG_TGT_ARCH`, `WindowsSdkDir`, and `WindowsSDKVersion`.
+filtered on `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`.
+
+`VsDevCmd.bat -arch=x64 -host_arch=x64` configures the x64 toolchain by setting
+environment variables in the process that runs it; it does not print those
+values for a parent PowerShell or Bash shell to export. Keep that process in
+the ancestry of the build instead. The simplest route is to open an **x64
+Native Tools Command Prompt** for the installed Visual Studio and run the gates
+from it, so every gate inherits the `INCLUDE`, `LIB`, `LIBPATH`, and SDK
+variables the script set.
+
+A shell that cannot inherit them, such as the Bash coverage step the hosted
+lane runs, has to read them back from a child `cmd.exe` that calls the script
+and then lists its environment:
+
+```powershell
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+$installation = & $vswhere -latest -products '*' `
+  -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+  -property installationPath | Select-Object -First 1
+$env:MSVC_VSDEVCMD = Join-Path $installation 'Common7\Tools\VsDevCmd.bat'
+$environment = & $env:COMSPEC /d /s /c `
+  'call "%MSVC_VSDEVCMD%" -arch=x64 -host_arch=x64 >nul && set'
+```
+
+`>nul` hides the script's banner so only the resulting `NAME=value` lines
+remain, and `set` with no arguments prints every variable the child now holds.
+Import only the toolchain names the gates need — `INCLUDE`, `LIB`, `LIBPATH`,
+`VCINSTALLDIR`, `VSINSTALLDIR`, `VSCMD_ARG_TGT_ARCH`, `WindowsSdkDir`, and
+`WindowsSDKVersion` — rather than the whole environment, which also carries
+application credentials.
 
 Two checks make the setup fail closed rather than produce a confusing linker
 error later. `LIB` must be present, and at least one directory on it must
