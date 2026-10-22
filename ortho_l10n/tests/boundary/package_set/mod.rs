@@ -94,10 +94,29 @@ const PACKAGE_DEADLINE: Duration = Duration::from_secs(240);
 /// array's length and [`PACKAGE_DEADLINE`] to check that the whole set can
 /// reach its own deadlines before nextest stops the test. The array length is
 /// part of the type, so rustc checks it against the initializers.
-const PACKAGING_INVOCATIONS: [(&[&str], &[(&str, &str)]); 2] = [
-    (ORTHO_L10N_AND_CONFIG, ORTHO_CONFIG_DEPENDENCIES),
-    (&["ortho_config_macros"], &[ORTHO_L10N]),
+const PACKAGING_INVOCATIONS: [PackageInvocation; 2] = [
+    PackageInvocation {
+        crates: ORTHO_L10N_AND_CONFIG,
+        patched: ORTHO_CONFIG_DEPENDENCIES,
+    },
+    PackageInvocation {
+        crates: &["ortho_config_macros"],
+        patched: &[ORTHO_L10N],
+    },
 ];
+
+/// One `cargo package` invocation: what it packages, and what it patches.
+///
+/// A struct rather than a tuple because the two fields are both slices of
+/// small tuples and the nesting loses the reader: `(&[&str], &[(&str, &str)])`
+/// says nothing about which slice is which, and Clippy rejects the spelling
+/// outright as a complex type.
+struct PackageInvocation {
+    /// Crates to package, by package name.
+    crates: &'static [&'static str],
+    /// Workspace members to patch, as `(package name, directory)`.
+    patched: &'static [(&'static str, &'static str)],
+}
 
 /// The crates the first invocation packages: the runtime and the facade.
 const ORTHO_L10N_AND_CONFIG: &[&str] = &["ortho_l10n", "ortho_config"];
@@ -237,8 +256,8 @@ fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
     Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
         .with_context(|| format!("create packaging target {target}"))?;
 
-    for (crates, sibling) in PACKAGING_INVOCATIONS {
-        package_sources(&repository, &target, crates, sibling)?;
+    for invocation in &PACKAGING_INVOCATIONS {
+        package_sources(&repository, &target, invocation)?;
     }
 
     let package_directory = target.join(PACKAGE_DIRECTORY);
@@ -272,12 +291,11 @@ pub(crate) fn assert_packaged_set_complete() -> Result<()> {
     Ok(())
 }
 
-/// Run one `cargo package` invocation for `crates`, patching `patched`.
+/// Run one `cargo package` invocation.
 fn package_sources(
     repository: &Utf8Path,
     target: &Utf8Path,
-    crates: &[&str],
-    patched: &[(&str, &str)],
+    invocation: &PackageInvocation,
 ) -> Result<()> {
     // The subcommand comes first: `--manifest-path` is a per-command flag.
     let mut args = vec![String::from("package")];
@@ -287,11 +305,11 @@ fn package_sources(
     // The worktree is usually dirty while a milestone is being built; the
     // contract is about the sources as they are, not about what is committed.
     args.push(String::from("--allow-dirty"));
-    for crate_name in crates {
+    for crate_name in invocation.crates {
         args.push(String::from("-p"));
         args.push((*crate_name).to_owned());
     }
-    for (package, directory) in patched {
+    for (package, directory) in invocation.patched {
         args.push(String::from("--config"));
         args.push(format!(
             "patch.crates-io.{package}.path={}",
@@ -306,7 +324,7 @@ fn package_sources(
         .env_clear()
         .envs(inherited_toolchain())
         .env("CARGO_TARGET_DIR", target);
-    let description = format!("cargo package for {}", crates.join(", "));
+    let description = format!("cargo package for {}", invocation.crates.join(", "));
     let output = run_with_deadline(command, PACKAGE_DEADLINE, &description)?;
     if !output.status.success() {
         bail!(

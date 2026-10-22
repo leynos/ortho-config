@@ -163,7 +163,7 @@ def test_the_packaging_deadline_fits_inside_the_allowance() -> None:
     )
     invocations = int(
         _single_match(
-            r"PACKAGING_INVOCATIONS:\s*\[\(&\[&str\],\s*&\[\(&str,\s*&str\)\]\);\s*(\d+)\]",
+            r"PACKAGING_INVOCATIONS:\s*\[PackageInvocation;\s*(\d+)\]",
             source,
             "PACKAGING_INVOCATIONS array length",
         )[1]
