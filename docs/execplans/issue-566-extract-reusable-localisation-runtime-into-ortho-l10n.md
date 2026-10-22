@@ -1400,6 +1400,52 @@ appeared as `b3e42806`, and the `pull_request` `synchronize` event created run
 dispatched: the missing check contexts were a symptom of the conflict, not of
 `workflow_dispatch`.
 
+### EP-M4: hosted review of the replay and its repair (2026-10-22)
+
+The replayed candidate drew a hosted CodeRabbit round of its own, unsolicited,
+over the whole 63-path diff. It raised six findings. Each was checked against
+source before repair, and each was valid:
+
+| ID  | Path              | Defect                                                   | Repair                     |
+| --- | ----------------- | -------------------------------------------------------- | -------------------------- |
+| F1  | ADR-0006          | link `adrs/adr-0015-…`; no `docs/adrs/adrs/` exists      | sibling path               |
+| F2  | ADR-0015          | link `../adr-006-…` escapes `docs/adrs/`                 | sibling path               |
+| F3  | developers' guide | described a live dev-dependency cycle the branch removed | history, not present tense |
+| F4  | `identifier.rs`   | `EmptyPath { input: Vec<String> }` always `vec![]`       | unit variant               |
+| F5  | this plan         | first person in the reassessment record                  | "self-inflicted"           |
+| F6  | developers' guide | packaging heading swallowed the Windows paragraphs       | block moved below them     |
+
+Two of these are worth more than their severity suggests. F1 and F2 are the
+same class as the line-start hazard above: the link text was never wrong, so
+nothing a reader would notice pointed at it, and only a target check finds it.
+A sweep of all 319 relative links under `docs/` now leaves 28 broken, and all
+28 are pre-existing in files this branch does not touch. F3 is the one that
+would have misled a maintainer: the guide asserted a cycle as current fact, and
+a reader following it would have concluded the publish-order contract could not
+be enforced.
+
+F4 went further than the review asked. Dropping the unused field is the
+finding; adding `#[non_exhaustive]` is a second decision, taken because
+`ortho_config` applies it to every public enum, so a future variant cannot
+break a downstream exhaustive `match`. That makes the commit surface a public
+API change in a separately published crate, which is why it was gated as Rust
+rather than as a documentation delta.
+
+Nine gates passed against the repair, sequential and scrutineer-run, with the
+worktree unchanged before, between and after: `make fmt` as a fixed point over
+the same six files, `check-fmt`, `markdownlint`, `nixie`,
+`test-workflow-contracts`, `lint-clippy`, `lint` (Whitaker and therefore
+`module-max-lines`), and `test` (2,093 passed / 0 failed). No `E0004`
+non-exhaustive-pattern error appeared anywhere.
+
+A gap was found while validating this repair and is recorded rather than fixed
+here: **no gate runs doctests.** `Makefile`'s test target uses
+`cargo test --all-targets`, which excludes them, and no CI workflow passes
+`--doc`. The `identifier.rs` doctests were therefore checked by running
+`cargo test --doc -p ortho_l10n` directly. That run discharges this plan's
+obligation; it does not make doctests a gated surface, and it is not part of
+the commit certificate.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
