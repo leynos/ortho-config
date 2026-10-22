@@ -54,7 +54,6 @@ from child_cargo_tier import (
 from nextest_budgets import override_allowances, profile_allowance
 from nextest_document import budget_tables
 from nextest_precedence import (
-    REFUSES,
     EffectiveTier,
     effective_allowances,
     selected_by_universe,
@@ -129,8 +128,7 @@ def _effective_tiers(config_text: str) -> dict[str, EffectiveTier]:
     return effective_allowances(
         config_text,
         sorted(class_members),
-        selected_by=selected_by_universe(universe),
-        refuses=REFUSES,
+        reader=selected_by_universe(universe),
     )
 
 
@@ -464,8 +462,7 @@ def test_a_source_backed_member_with_no_override_is_reported(
     tiers = effective_allowances(
         certified,
         sorted(child_cargo_binaries(fixture)),
-        selected_by=selected_by_universe(universe),
-        refuses=REFUSES,
+        reader=selected_by_universe(universe),
     )
     on_base = sorted(name for name, tier in tiers.items() if not tier.is_above_base)
     assert on_base == ["a_binary_no_override_names"], (

@@ -45,7 +45,55 @@ from nextest_budgets import profile_allowance
 from nextest_document import budget_tables
 from nextest_filterset import UnreadableMatcherError, binaries_selected_by
 
-__all__ = ["EffectiveTier", "effective_allowances", "overrides_in_order"]
+__all__ = [
+    "EffectiveTier",
+    "FilterReader",
+    "effective_allowances",
+    "overrides_in_order",
+    "selected_by_universe",
+]
+
+
+class Override(typ.NamedTuple):
+    """One entry in a profile's override list, as nextest applies it.
+
+    Attributes
+    ----------
+    path : str
+        The entry's dotted path, for messages and for reporting which entry
+        supplied an allowance.
+    expression : str or None
+        Its ``filter`` value, or ``None`` for an entry selecting without a
+        filterset -- one gated on ``platform``, for instance.
+    entry : dict
+        The parsed table, so a caller can read the settings it configures.
+    """
+
+    path: str
+    expression: str | None
+    entry: dict[str, object]
+
+
+class FilterReader(typ.NamedTuple):
+    """A reader of filter expressions, with the refusal it raises.
+
+    The callable and the exception are one value because neither is usable
+    without the other. A caller holding only the callable cannot tell an
+    expression the reader *refused* -- a shape outside its model -- from one
+    that selects nothing, and would silently treat an unreadable entry as a
+    non-matching one. That is the error this instance records rather than
+    leaves to each caller to remember.
+
+    Attributes
+    ----------
+    read : callable
+        Maps an expression to each candidate's selection.
+    refuses : type
+        The exception ``read`` raises for an expression it cannot evaluate.
+    """
+
+    read: typ.Callable[[str], typ.Mapping[str, bool]]
+    refuses: type[Exception]
 
 
 class EffectiveTier(typ.NamedTuple):
@@ -75,9 +123,7 @@ class EffectiveTier(typ.NamedTuple):
     is_unresolved: bool
 
 
-def overrides_in_order(
-    config_text: str, profile: str = "default"
-) -> list[tuple[str, str | None, dict[str, object]]]:
+def overrides_in_order(config_text: str, profile: str = "default") -> list[Override]:
     """Return one profile's overrides in the order nextest applies them.
 
     Only the named profile's own list is read. An ``[[overrides]]`` entry
@@ -94,10 +140,10 @@ def overrides_in_order(
 
     Returns
     -------
-    list of (str, str or None, dict)
-        Each entry's path, its filter expression, and its parsed table, in
-        declaration order. The expression is ``None`` for an entry that
-        selects without a filterset, such as one gated on ``platform``.
+    list of Override
+        Each entry in declaration order. The expression is ``None`` for an
+        entry that selects without a filterset, such as one gated on
+        ``platform``.
 
     Examples
     --------
@@ -105,7 +151,7 @@ def overrides_in_order(
     ...     '[profile.default]\\nslow-timeout = "60s"\\n'
     ...     '[[profile.default.overrides]]\\nfilter = "binary(a)"\\n'
     ... )
-    [('profile.default.overrides[0]', 'binary(a)', {'filter': 'binary(a)'})]
+    [Override(path='profile.default.overrides[0]', expression='binary(a)', entry={'filter': 'binary(a)'})]
     >>> overrides_in_order(
     ...     '[profile.default]\\nslow-timeout = "60s"\\n'
     ...     '[[profile.ci]]\\nslow-timeout = "30s"\\n'
@@ -114,10 +160,10 @@ def overrides_in_order(
     """
     prefix = f"profile.{profile}.overrides["
     return [
-        (
-            path,
-            entry["filter"] if isinstance(entry.get("filter"), str) else None,
-            entry,
+        Override(
+            path=path,
+            expression=entry["filter"] if isinstance(entry.get("filter"), str) else None,
+            entry=entry,
         )
         for path, entry in budget_tables(config_text)
         if path.startswith(prefix)
@@ -145,26 +191,117 @@ def _could_name(expression: str, name: str) -> bool:
     return name in expression
 
 
+def _tier_from(override: Override, base: float) -> EffectiveTier:
+    """Return the tier one entry gives a name it selects.
+
+    Examples
+    --------
+    A ``slow-timeout`` above the base figures as raised:
+
+    >>> _tier_from(
+    ...     Override("profile.default.overrides[1]", "binary(a)",
+    ...              {"slow-timeout": {"period": "120s", "terminate-after": 8}}),
+    ...     600.0,
+    ... )
+    EffectiveTier(allowance=960.0, path='profile.default.overrides[1]', is_above_base=True, is_unresolved=False)
+    """
+    allowance = budget_of(override.path, override.entry["slow-timeout"])
+    return EffectiveTier(
+        allowance=allowance,
+        path=override.path,
+        is_above_base=allowance > base,
+        is_unresolved=False,
+    )
+
+
+def _shadowed(tier: EffectiveTier, override: Override, name: str) -> EffectiveTier:
+    """Mark ``tier`` unresolved if a refused entry might still select ``name``.
+
+    Asked only where the reader refused an expression. Such an entry does not
+    end the walk -- it configures nothing this module reads -- but it may
+    shadow the allowance a later entry would supply, so the name is marked
+    rather than left with a figure that may not be the one nextest applies.
+
+    Examples
+    --------
+    An expression naming the binary is enough to mark the tier, and the test
+    is a substring one, so ``cli_dispatch`` matches while an unrelated name
+    does not:
+
+    >>> base = EffectiveTier(600.0, "profile.default", False, False)
+    >>> _shadowed(
+    ...     base,
+    ...     Override("profile.default.overrides[0]", "binary(cli_dispatch)", {}),
+    ...     "cli_dispatch",
+    ... )
+    EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=True)
+    >>> _shadowed(
+    ...     base,
+    ...     Override("profile.default.overrides[0]", "binary(cli_dispatch)", {}),
+    ...     "other_binary",
+    ... )
+    EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=False)
+    """
+    if _could_name(override.expression, name):
+        return tier._replace(is_unresolved=True)
+    return tier
+
+
+def _resolve_one(
+    name: str,
+    entries: typ.Iterable[Override],
+    reader: FilterReader,
+    baseline: EffectiveTier,
+) -> EffectiveTier:
+    """Return the tier nextest gives ``name``, walking the entries in order.
+
+    The first entry that both selects the name and configures ``slow-timeout``
+    supplies it, which is nextest's per-setting rule: an entry setting only
+    ``test-group`` does not shadow an earlier or later allowance. ``baseline``
+    is the tier in force when no override supplies one, and carries both the
+    figure and the profile path a name falls back to.
+
+    Examples
+    --------
+    An entry selecting nothing leaves the baseline in place:
+
+    >>> base = EffectiveTier(600.0, 'profile.default', False, False)
+    >>> _resolve_one("b", [
+    ...     Override("profile.default.overrides[0]", "binary(a)",
+    ...              {"slow-timeout": {"period": "120s", "terminate-after": 8}}),
+    ... ], selected_by_universe(["a", "b"]), base)
+    EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=False)
+    """
+    tier = baseline
+    for override in entries:
+        if "slow-timeout" not in override.entry or override.expression is None:
+            continue
+        try:
+            chosen = reader.read(override.expression)
+        except reader.refuses:
+            tier = _shadowed(tier, override, name)
+            continue
+        if chosen.get(name):
+            return _tier_from(override, baseline.allowance)
+    return tier
+
+
 def effective_allowances(
     config_text: str,
     names: typ.Iterable[str],
     *,
-    selected_by: typ.Callable[[str], typ.Mapping[str, bool]],
-    refuses: type[Exception],
+    reader: FilterReader,
     profile: str = "default",
 ) -> dict[str, EffectiveTier]:
     """Return the tier nextest gives each name, resolving shadowing.
 
     The entries are walked in file order and the first that selects a name
     *and* configures ``slow-timeout`` supplies it, which is nextest's rule.
-    An entry that selects the name but configures another setting does not
-    shadow, because precedence is resolved per setting.
-
-    An entry that selects through ``platform`` alone is skipped: this reader
-    has no platform decision to apply, and neither skipping nor applying it
-    can be shown correct here for a name that entry might select. That is
-    exact for the entries this repository writes, which name the binaries
-    their own filter selects.
+    An entry that selects a name but configures another setting does not
+    shadow it, because precedence is resolved per setting. An entry selecting
+    through ``platform`` alone is skipped, since this reader has no platform
+    decision to apply -- exact for the entries this repository writes, which
+    name the binaries their own filter selects.
 
     Parameters
     ----------
@@ -172,13 +309,10 @@ def effective_allowances(
         The nextest configuration file's text.
     names : iterable of str
         The binary names to resolve.
-    selected_by : callable
-        Given a filter expression, returns which of the caller's candidates
-        it selects. Passed in because the universe is the caller's -- the
-        class and its complement -- and this reader must not invent one.
-    refuses : type
-        The exception ``selected_by`` raises for an expression it cannot
-        evaluate.
+    reader : FilterReader
+        Reads a filter expression into each candidate's selection. Passed in
+        because the universe is the caller's -- the class and its complement
+        -- and this reader must not invent one.
     profile : str
         The profile to resolve under.
 
@@ -189,8 +323,10 @@ def effective_allowances(
 
     Examples
     --------
-    A base-tier entry above a raised one is what nextest applies, so the name
-    resolves to the base figure rather than to the raised one below it:
+    ``a``'s first entry carries the base figure, so it wins and ``a`` is not
+    raised despite the raised entry below. ``b``'s first entry sets only
+    ``test-group``, which does not shadow that setting, so ``b`` takes the
+    raised entry:
 
     >>> config = (
     ...     '[profile.default]\\nslow-timeout = { period = "60s", '
@@ -199,74 +335,30 @@ def effective_allowances(
     ...     'slow-timeout = { period = "60s", terminate-after = 10 }\\n'
     ...     '[[profile.default.overrides]]\\nfilter = "binary(a)"\\n'
     ...     'slow-timeout = { period = "120s", terminate-after = 8 }\\n'
-    ... )
-    >>> resolved = effective_allowances(
-    ...     config,
-    ...     ["a"],
-    ...     selected_by=lambda expression: {"a": True},
-    ...     refuses=ValueError,
-    ... )
-    >>> (resolved["a"].path, resolved["a"].allowance, resolved["a"].is_above_base)
-    ('profile.default.overrides[0]', 600.0, False)
-
-    Precedence is per setting, so the same entry setting only ``test-group``
-    does *not* take the raised allowance away:
-
-    >>> grouped = (
-    ...     '[profile.default]\\nslow-timeout = { period = "60s", '
-    ...     'terminate-after = 10 }\\n'
-    ...     '[[profile.default.overrides]]\\nfilter = "binary(a)"\\n'
+    ...     '[[profile.default.overrides]]\\nfilter = "binary(b)"\\n'
     ...     'test-group = "shared"\\n'
-    ...     '[[profile.default.overrides]]\\nfilter = "binary(a)"\\n'
+    ...     '[[profile.default.overrides]]\\nfilter = "binary(b)"\\n'
     ...     'slow-timeout = { period = "120s", terminate-after = 8 }\\n'
     ... )
     >>> resolved = effective_allowances(
-    ...     grouped,
-    ...     ["a"],
-    ...     selected_by=lambda expression: {"a": True},
-    ...     refuses=ValueError,
+    ...     config, ["a", "b"], reader=selected_by_universe(["a", "b"])
     ... )
-    >>> (resolved["a"].path, resolved["a"].is_above_base)
-    ('profile.default.overrides[1]', True)
+    >>> [(n, resolved[n].path, resolved[n].is_above_base) for n in ("a", "b")]
+    [('a', 'profile.default.overrides[0]', False), ('b', 'profile.default.overrides[3]', True)]
     """
     base = profile_allowance(config_text, profile)
+    baseline = EffectiveTier(
+        allowance=base,
+        path=f"profile.{profile}",
+        is_above_base=False,
+        is_unresolved=False,
+    )
     entries = overrides_in_order(config_text, profile)
-    resolved: dict[str, EffectiveTier] = {}
-    for name in names:
-        tier = EffectiveTier(
-            allowance=base,
-            path=f"profile.{profile}",
-            is_above_base=False,
-            is_unresolved=False,
-        )
-        for path, expression, entry in entries:
-            if "slow-timeout" not in entry or expression is None:
-                continue
-            try:
-                chosen = selected_by(expression)
-            except refuses:
-                # The reader refused this expression -- a shape outside the
-                # model -- and it may still shadow the allowance about to be
-                # attributed to a later entry. Marked rather than trusted.
-                if _could_name(expression, name):
-                    tier = tier._replace(is_unresolved=True)
-                continue
-            if chosen.get(name):
-                allowance = budget_of(path, entry["slow-timeout"])
-                tier = tier._replace(
-                    allowance=allowance,
-                    path=path,
-                    is_above_base=allowance > base,
-                )
-                break
-        resolved[name] = tier
-    return resolved
+    return {name: _resolve_one(name, entries, reader, baseline) for name in names}
 
 
-def selected_by_universe(
-    candidates: typ.Iterable[str],
-) -> typ.Callable[[str], dict[str, bool]]:
-    """Return a ``selected_by`` reader over a fixed set of candidates.
+def selected_by_universe(candidates: typ.Iterable[str]) -> FilterReader:
+    """Return a :class:`FilterReader` over a fixed set of candidates.
 
     A convenience for callers, and the one this module's own tests use, so
     the reader passed to :func:`effective_allowances` is the same reader the
@@ -279,21 +371,25 @@ def selected_by_universe(
 
     Returns
     -------
-    callable
-        A function from a filter expression to each candidate's selection.
+    FilterReader
+        A reader from a filter expression to each candidate's selection,
+        carrying :data:`REFUSES` as the exception it raises for a shape it
+        cannot evaluate.
 
     Examples
     --------
     >>> reader = selected_by_universe(["a", "b"])
-    >>> reader('binary(a)')
+    >>> reader.read('binary(a)')
     {'a': True, 'b': False}
+    >>> reader.refuses is REFUSES
+    True
     """
     universe = list(candidates)
 
     def read(expression: str) -> dict[str, bool]:
         return binaries_selected_by(expression, universe)
 
-    return read
+    return FilterReader(read=read, refuses=REFUSES)
 
 
 #: Re-exported so a caller can name the exception it passes as ``refuses``
