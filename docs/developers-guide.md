@@ -21,6 +21,13 @@ hidden directories and does not restrict the scan to package and test
 directories, so Python sources used by GitHub workflows and actions, scripts,
 tests, tools, and benchmarks are covered as well.
 
+The inventory is discovered inside the recipe and passed NUL-separated
+(`git ls-files -z … | xargs -0`), not through a `$(shell …)` variable. A
+`$(shell …)` expansion splits its output on whitespace and cannot quote what it
+finds, so a file named `local helper.py` would reach `interrogate` as two
+arguments. `xargs -0` execs the command directly, keeping every path whole, and
+a single invocation still yields one combined coverage verdict.
+
 The shared workspace Clippy policy denies `missing_docs_in_private_items`.
 Document private modules with `//!` and private items with `///`, including
 build support, examples, and shared fixtures. Explain internal contracts such

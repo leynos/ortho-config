@@ -40,7 +40,6 @@ PYTHON_VENV ?= scripts/.venv
 UV ?= uv
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
-PYTHON_SOURCES := $(shell git ls-files --cached --others --exclude-standard -- '*.py' '*.pyi')
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_trees.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
 	scripts/verify_release_archives.py scripts/tests -q
@@ -118,8 +117,15 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
+# The inventory is discovered inside the recipe and handed over NUL-separated:
+# `$(shell ...)` splits on whitespace and has no way to quote a path, so a file
+# named `local helper.py` would reach interrogate as two arguments. `xargs -0`
+# execs the command directly instead of re-parsing, and one invocation keeps a
+# single combined coverage verdict. `--` stops a leading `-` in a filename
+# being read as an option.
 docstring-coverage: ## Require complete docstrings for every Python source file
-	$(UV_RUN) interrogate --fail-under 100 --ext pyi $(PYTHON_SOURCES)
+	git ls-files -z --cached --others --exclude-standard -- '*.py' '*.pyi' \
+		| xargs -0 -r $(UV_RUN) interrogate --fail-under 100 --ext pyi --
 
 typecheck: ## Typecheck workspace (cargo check)
 	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
