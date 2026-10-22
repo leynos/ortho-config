@@ -367,7 +367,8 @@ approaches; they are no longer outstanding work.
       milestone review returned three findings (see "EP-M4 milestone CLI
       review"): one real defect in this milestone's own repair, repaired and
       re-gated, and two duplicates of the upstream block. The follow-up review
-      and the draft PR remain.
+      returned zero findings over the same eight files, so the review condition
+      is closed. Only the draft PR and delivery remain.
 
 ### EP-M4 publish order (2026-10-22)
 
@@ -739,6 +740,21 @@ reported upstream as leynos/lading#367 rather than worked around here. The
 findings are therefore excluded as duplicates of a recorded upstream defect,
 not dismissed: the release gate is a delivery blocker either way, and the plan
 does not claim `make publish-check` passed.
+
+The follow-up review ran against the repaired candidate
+`88b3c58190d800e94f7a032043f2cfa9071476c6`, tree
+`71850fb1924aed00eedf02fbdb8591e068d86174`, with the same
+`--base-commit 94ac0219` scope, and returned zero findings over the same eight
+files in 306 seconds. It completed rather than erroring: `outcome: completed`,
+four heartbeats, no rate-limit, credit or authentication text in the log. HEAD,
+tree and `git status --porcelain` were checked before and after and were
+unchanged, so it reviewed the tree it names.
+
+That closes the milestone's review condition, and the two excluded findings
+stay excluded rather than becoming a second round: both say the same thing as
+leynos/lading#367, and the review that reported them did not dispute the
+upstream diagnosis. What changed between the two rounds is only the defect this
+milestone could fix. EP-M4's remaining work is delivery, not review.
 
 ### EP-M3 reconnaissance (2026-10-21)
 
