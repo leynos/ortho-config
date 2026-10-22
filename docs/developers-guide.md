@@ -105,6 +105,18 @@ this file. The resolver reads only `[profile.default]`'s own list and does not
 apply `platform` gates, which is exact for the Linux lane that runs these
 contracts.
 
+A gate and a filter are independent keys, and an entry may carry both: the gate
+narrows the filter rather than replacing it. The Windows-only trybuild entry
+below does exactly that, so the resolver checks the gate before it reads an
+expression and never infers "no gate" from "has a filter". An entry it cannot
+evaluate — gated, or a filter language it refuses — supplies nothing and marks
+the binary unresolved if it might have matched, and that mark survives a later
+match. Reading such an entry's filter while ignoring its gate is the failure
+the direction matters in: it applies a Windows-only entry to a Linux reading
+and reports a binary as raised when nextest gives it the earlier figure.
+`nextest_precedence_test.py` covers both shapes and the surviving mark, each
+with the wrong answer it would have produced.
+
 Group membership and raised-allowance coverage are separate questions, and the
 contract asks a different thing of each. Every binary a group *serializes* must
 be a class member, because the raised allowance is written for the class and a

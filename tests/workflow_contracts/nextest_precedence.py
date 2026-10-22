@@ -26,12 +26,20 @@ Two behaviours are deliberately *not* modelled, and both are refused rather
 than approximated. Profile inheritance is not walked: only the named profile's
 own override list is read, which is exact for ``default`` -- the profile these
 contracts assert -- and would under-read a custom profile that inherits
-``default``'s entries. Platform gates are not applied: an entry gated on
-``cfg(windows)`` is recorded but not treated as selecting a name, because
-nothing here knows which platform is running. The contract that uses this
+``default``'s entries. Platform gates are not applied: nothing here knows which
+platform is running, so an entry carrying ``platform`` never supplies an
+allowance, and a name it might select is reported unresolved rather than
+resolved to a figure the run may never give it. The contract that uses this
 asserts a configuration read for the Linux lane, which is where
 ``make test-workflow-contracts`` runs; a caller wanting the Windows reading
 must supply that decision rather than receive it silently.
+
+A gate and a filter are independent keys, and an entry may carry both: the gate
+then narrows the filter rather than replacing it. Reading such an entry's
+filter and ignoring its gate applies a Windows-only entry to a Linux run, which
+reports a shadowed binary as raised -- the error direction that matters. Both
+shapes are therefore treated alike, which is why the gate is checked before the
+expression rather than inferred from its absence.
 
 See "Test timeouts" in ``docs/developers-guide.md``.
 """
@@ -72,6 +80,17 @@ class Override(typ.NamedTuple):
     path: str
     expression: str | None
     entry: dict[str, object]
+
+    @property
+    def is_platform_gated(self) -> bool:
+        """Whether applying this entry needs a platform decision.
+
+        An entry can carry *both* a ``filter`` and a ``platform`` key, and the
+        gate then narrows the filter rather than replacing it. Reading the
+        filter and ignoring the gate would apply a Windows-only entry to a
+        Linux run -- the direction that reports a shadowed binary as raised.
+        """
+        return "platform" in self.entry
 
 
 class FilterReader(typ.NamedTuple):
@@ -215,12 +234,17 @@ def _tier_from(override: Override, base: float) -> EffectiveTier:
 
 
 def _shadowed(tier: EffectiveTier, override: Override, name: str) -> EffectiveTier:
-    """Mark ``tier`` unresolved if a refused entry might still select ``name``.
+    """Mark ``tier`` unresolved if an unevaluable entry might still select ``name``.
 
-    Asked only where the reader refused an expression. Such an entry does not
-    end the walk -- it configures nothing this module reads -- but it may
+    Asked where this module cannot decide whether an entry applies: the reader
+    refused its expression, or it is platform-gated. Such an entry does not end
+    the walk -- it supplies nothing this module can attribute -- but it may
     shadow the allowance a later entry would supply, so the name is marked
     rather than left with a figure that may not be the one nextest applies.
+
+    An entry with no expression is treated as possibly naming anything: with no
+    filterset it selects every test the platform admits, so no name can be
+    ruled out.
 
     Examples
     --------
@@ -241,8 +265,12 @@ def _shadowed(tier: EffectiveTier, override: Override, name: str) -> EffectiveTi
     ...     "other_binary",
     ... )
     EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=False)
+    >>> _shadowed(
+    ...     base, Override("profile.default.overrides[0]", None, {}), "any_binary"
+    ... )
+    EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=True)
     """
-    if _could_name(override.expression, name):
+    if override.expression is None or _could_name(override.expression, name):
         return tier._replace(is_unresolved=True)
     return tier
 
@@ -261,6 +289,22 @@ def _resolve_one(
     is the tier in force when no override supplies one, and carries both the
     figure and the profile path a name falls back to.
 
+    Three entry shapes never supply an allowance, because this module cannot
+    show that the run nextest performs is the one being read:
+
+    - Platform-gated entries are skipped outright. Applying one would read a
+      ``cfg(windows)`` entry into a Linux assertion; the gate narrows an
+      entry's filter rather than replacing it, so an entry carrying both keys
+      is not detectable by looking for a missing expression.
+    - An entry the reader refused shadows rather than supplies. It may match
+      the name, but its figure is not attributable.
+    - An entry with no expression at all selects every test, so it is treated
+      the same way.
+
+    An earlier shadowing mark survives a later match: ``unresolved`` records
+    that *some* entry above the one supplying this figure might have claimed
+    the name first, which a match further down does not dispel.
+
     Examples
     --------
     An entry selecting nothing leaves the baseline in place:
@@ -271,10 +315,28 @@ def _resolve_one(
     ...              {"slow-timeout": {"period": "120s", "terminate-after": 8}}),
     ... ], selected_by_universe(["a", "b"]), base)
     EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=False)
+
+    A platform-gated entry is skipped, so the raised entry below it supplies
+    the figure on the lane this contract reads:
+
+    >>> gated = Override(
+    ...     "profile.default.overrides[0]", "binary(a)",
+    ...     {"platform": "cfg(windows)",
+    ...      "slow-timeout": {"period": "60s", "terminate-after": 10}},
+    ... )
+    >>> raised = Override(
+    ...     "profile.default.overrides[1]", "binary(a)",
+    ...     {"slow-timeout": {"period": "120s", "terminate-after": 8}},
+    ... )
+    >>> _resolve_one("a", [gated, raised], selected_by_universe(["a"]), base)
+    EffectiveTier(allowance=960.0, path='profile.default.overrides[1]', is_above_base=True, is_unresolved=False)
     """
     tier = baseline
     for override in entries:
-        if "slow-timeout" not in override.entry or override.expression is None:
+        if "slow-timeout" not in override.entry or override.is_platform_gated:
+            continue
+        if override.expression is None:
+            tier = _shadowed(tier, override, name)
             continue
         try:
             chosen = reader.read(override.expression)
@@ -282,7 +344,9 @@ def _resolve_one(
             tier = _shadowed(tier, override, name)
             continue
         if chosen.get(name):
-            return _tier_from(override, baseline.allowance)
+            return _tier_from(override, baseline.allowance)._replace(
+                is_unresolved=tier.is_unresolved
+            )
     return tier
 
 
