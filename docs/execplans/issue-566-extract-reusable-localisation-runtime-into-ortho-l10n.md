@@ -2000,6 +2000,47 @@ The count of boundary cases is 27 at this head; the `17/17` figures recorded
 below were accurate when measured, before later cases were added, and are
 retained as the record of those runs.
 
+A CodeRabbit pre-merge report then raised five more items against `36d751b9`
+while `a3b74ca6` was already the head. Its association was stale, so each claim
+was checked against current source rather than dismissed. Four were valid and
+are repaired at `1cd7afb9`, which also raises the boundary case count to 30:
+
+- `packaged_crate`, `packaged_set`, and `unpacked_directory` read as lookups
+  but ran two `cargo package` invocations, and `FixtureCargo::metadata` read as
+  an accessor while spawning Cargo. The packaging step is now the explicit
+  `prepare_packaged_set` command, and the `OnceLock` it fills is a private
+  store the queries only read. The warm-cache behaviour is unchanged: the
+  packaged-source contracts still call it once and later calls are no-ops. A
+  contract that forgets it fails immediately with "the packaged set was never
+  prepared" rather than silently re-packaging. The Cargo calls are renamed
+  `resolve_metadata` so a call site states that it runs a subprocess.
+- The v0.10.0 migration guide, indexed at `docs/contents.md`, did not mention
+  `ortho_l10n` at all; it now has an adoption section.
+- "Embedded defaults remain future work" was true of the `localized_default`
+  derive attribute but had come to read as a claim about catalogues, now that
+  `FluentLocalizer::embedded` and the bundled catalogues exist. It names the
+  attribute and links ADR-0015.
+- `Metadata::reachable` had no property tests despite being the closure the
+  whole boundary claim rests on. Three properties now run against an
+  independent least-fixed-point oracle. Non-vacuity was proved by mutation: a
+  one-hop closure fails two properties and an unsorted result fails one. A
+  third mutation, silently skipping an unresolvable node, at first survived
+  because `name_of_id` still rejected the dangling id further along; the case
+  where the id has a package entry but no resolve node was added, and that
+  mutation then fails.
+
+The fifth item, asking for a test and its helper to be deleted, was already
+satisfied: the helper was dead and is gone, and the test asserts an invariant
+nothing else covers.
+
+One edit in this round was withdrawn before publication. Reassigning "Clap
+coverage" from the core localizer to `ortho_l10n` would have contradicted the
+code and the design: `LocalizeCmd` and `ArgLocalizationIds` are defined in
+`ortho_config/src/localizer/`, and the `ClapErrorCoverage` proposal requires
+`ortho_config/build.rs` to emit the error-kind count. Only the
+`localized_default` ambiguity was addressed, and the ownership sentence keeps
+its original wording.
+
 `make publish-check` is still not claimed. The first-publication dry run aborts
 upstream in `leynos/lading#367` — a new crate produces Cargo's absent-package
 diagnostic, which lading does not classify — and this branch deliberately does
