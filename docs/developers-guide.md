@@ -2570,7 +2570,10 @@ them. For each member manifest it bumps every dependency declared with a
 went stale as soon as `ortho_l10n` joined the graph: `ortho_config` kept
 requiring a version the release would never publish, and the resulting failure
 would have surfaced only in the publish dry run. External requirements are left
-alone, so a dependency on a third-party crate is never rewritten.
+alone, so a dependency on a third-party crate is never rewritten. Selection
+works on the table and the name together rather than on the name alone, so a
+crate whose name is also an external dependency's is rewritten only in the
+table where it is declared with a `path`.
 
 ### Verifying the packaging locally
 

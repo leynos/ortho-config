@@ -38,7 +38,7 @@ def test_updates_dependency_version(
 ) -> None:
     """Update string and table dependencies while preserving adjacent data."""
     doc = tomlkit.parse(f"[{section}]\n{body}")
-    _update_dependency_version(doc, "foo", "1.2.3")
+    _update_dependency_version(doc, section, "foo", "1.2.3")
     dumped = tomlkit.dumps(doc)
     assert expected in dumped
     if extra:
@@ -48,7 +48,7 @@ def test_updates_dependency_version(
 def test_preserves_trailing_comment_on_string_dependency() -> None:
     """Keep a trailing comment attached to a string dependency."""
     doc = tomlkit.parse('[dependencies]\nfoo = "^0.1"  # pinned for CI\n')
-    _update_dependency_version(doc, 'foo', '1.2.3')
+    _update_dependency_version(doc, 'dependencies', 'foo', '1.2.3')
     dumped = tomlkit.dumps(doc)
     assert '# pinned for CI' in dumped, "must preserve trailing comment on value node"
 
@@ -56,7 +56,7 @@ def test_preserves_trailing_comment_on_string_dependency() -> None:
 def test_preserves_quote_style_on_string_dependency() -> None:
     """Retain single quotes when replacing a dependency version."""
     doc = tomlkit.parse("[dependencies]\nfoo = '0.1'  # single quoted\n")
-    _update_dependency_version(doc, "foo", "1.2.3")
+    _update_dependency_version(doc, "dependencies", "foo", "1.2.3")
     dumped = tomlkit.dumps(doc)
     assert "foo = '1.2.3'" in dumped, (
         f"expected single quotes preserved, got:\n{dumped}"
@@ -67,14 +67,14 @@ def test_missing_dependency_no_change() -> None:
     """Leave the manifest unchanged when the named dependency is absent."""
     snippet = '[dependencies]\nbar = "0.1"'
     doc = tomlkit.parse(snippet)
-    _update_dependency_version(doc, 'foo', '1.2.3')
+    _update_dependency_version(doc, 'dependencies', 'foo', '1.2.3')
     assert tomlkit.dumps(doc).strip() == snippet, "should be a no-op when dependency is absent"
 
 
 def test_workspace_dependency_no_version_written() -> None:
     """Do not add a version to a workspace-inherited dependency."""
     doc = tomlkit.parse('[dependencies]\nfoo = { workspace = true }\n')
-    _update_dependency_version(doc, 'foo', '1.2.3')
+    _update_dependency_version(doc, 'dependencies', 'foo', '1.2.3')
     deps = doc['dependencies']['foo']
     assert 'version' not in deps, 'must not add version when workspace is true'
 
@@ -221,6 +221,37 @@ test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers"
                     f"{table}.{name} kept a stale requirement"
                 )
     assert document["dependencies"]["serde"] == "1"
+
+
+def test_member_bump_leaves_an_external_namesake_alone(tmp_path: Path) -> None:
+    """Only the entry declaring a ``path`` moves; a same-named external stays.
+
+    A dependency name is not globally internal. ``foo`` can be a workspace
+    sibling in ``[dependencies]`` and an unrelated crates.io package in
+    ``[build-dependencies]``. Selecting by name alone would rewrite both, so
+    the requirement of a crate this workspace does not own would start naming
+    a version that was never published.
+    """
+    member = tmp_path / "Cargo.toml"
+    member.write_text(
+        """[package]
+name = "demo"
+version = "0.9.0"
+
+[dependencies]
+shared = { path = "../shared", version = "0.9.0" }
+
+[build-dependencies]
+shared = "1"
+""",
+        encoding="utf-8",
+    )
+
+    assert _update_member_version(member, "1.2.3") is False
+
+    document = tomlkit.parse(member.read_text(encoding="utf-8"))
+    assert document["dependencies"]["shared"]["version"] == "1.2.3"
+    assert document["build-dependencies"]["shared"] == "1"
 
 
 def test_replace_fences_preserves_indentation() -> None:

@@ -257,20 +257,29 @@ def _update_dependency_in_table(
         _update_string_dependency(deps, dependency, entry, version)
 
 
-def _internal_dependencies(doc: MutableMapping[str, object]) -> list[str]:
-    """Return the names of ``doc``'s internal dependencies.
+def _internal_dependencies(
+    doc: MutableMapping[str, object],
+) -> list[tuple[str, str]]:
+    """Return ``(table, name)`` for each internal dependency in ``doc``.
 
     An internal dependency is one declared with a ``path``: it names a crate
     this workspace publishes, and its requirement has to move with the
     workspace version. External entries carry no ``path`` and are left alone.
 
-    Deriving the list from the manifest, rather than naming the crates here,
-    is what keeps the script correct as the graph changes. This module used to
-    map one package name to one dependency, so adding ``ortho_l10n`` left
-    ``ortho_config`` requiring a version the release would never publish.
+    The table is part of the answer, not just the name. A name is not
+    globally internal - ``foo`` can be a sibling in ``[dependencies]`` and an
+    unrelated crates.io package in ``[build-dependencies]`` - so returning
+    names alone let the caller rewrite the external entry too. Pairing the
+    table with the name means the caller can only address the entry this
+    function actually selected.
+
+    Deriving the selection from the manifest, rather than naming the crates
+    here, is what keeps the script correct as the graph changes. This module
+    used to map one package name to one dependency, so adding ``ortho_l10n``
+    left ``ortho_config`` requiring a version the release would never publish.
 
     A crate can appear in several tables - ``ortho_config_macros`` is both a
-    dependency and a dev dependency of ``ortho_config`` - so each name is
+    dependency and a dev dependency of ``ortho_config`` - so each pair is
     returned once, in first-seen order.
 
     Examples
@@ -283,61 +292,71 @@ def _internal_dependencies(doc: MutableMapping[str, object]) -> list[str]:
     ... [dev-dependencies]
     ... internal = { path = "../internal", version = "0.1" }''')
     >>> _internal_dependencies(doc)
-    ['internal']
+    [('dependencies', 'internal'), ('dev-dependencies', 'internal')]
     """
-    names: dict[str, None] = {}
+    found: dict[tuple[str, str], None] = {}
     for table in DEPENDENCY_TABLES:
         entries = doc.get(table)
         if not entries:
             continue
         for name, entry in entries.items():
             if isinstance(entry, Mapping) and "path" in entry:
-                names[name] = None
-    return list(names)
+                found[(table, name)] = None
+    return list(found)
 
 
 def _update_dependency_version(
     doc: MutableMapping[str, object],
+    table: str,
     dependency: str,
     version: str,
 ) -> None:
-    """Update ``dependency`` across dependency tables in ``doc``.
+    """Update ``dependency`` in one dependency ``table`` of ``doc``.
+
+    The table is named rather than searched, because a dependency name is not
+    unique across tables and not uniformly internal. Sweeping every table
+    would rewrite an external namesake, which is precisely what
+    :func:`_internal_dependencies` selected against.
 
     Maintains caret or tilde prefixes and preserves formatting.
 
     Examples
     --------
     >>> doc = tomlkit.parse('''[dependencies]
-    ... foo = "^0.1"''')
-    >>> _update_dependency_version(doc, 'foo', '1.2.3')
+    ... foo = { path = "../foo", version = "^0.1" }''')
+    >>> _update_dependency_version(doc, 'dependencies', 'foo', '1.2.3')
     >>> tomlkit.dumps(doc).strip() == '''[dependencies]
-    ... foo = "^1.2.3"'''
+    ... foo = { path = "../foo", version = "^1.2.3" }'''
     True
 
     >>> snippet = '''[dependencies]
-    ... foo = { version = "~0.1", features = ["a"] }'''
+    ... foo = { path = "../foo", version = "~0.1", features = ["a"] }'''
     >>> doc = tomlkit.parse(snippet)
-    >>> _update_dependency_version(doc, 'foo', '1.2.3')
+    >>> _update_dependency_version(doc, 'dependencies', 'foo', '1.2.3')
     >>> 'version = "~1.2.3"' in tomlkit.dumps(doc)
     True
 
-    >>> doc = tomlkit.parse('''[dev-dependencies]
-    ... foo = "^0.1"''')
-    >>> _update_dependency_version(doc, 'foo', '1.2.3')
-    >>> 'foo = "^1.2.3"' in tomlkit.dumps(doc)
-    True
+    A table the dependency is not declared in is left untouched:
+
+    >>> doc = tomlkit.parse('''[dependencies]
+    ... foo = { path = "../foo", version = "^0.1" }
+    ...
+    ... [build-dependencies]
+    ... foo = "1"''')
+    >>> _update_dependency_version(doc, 'dependencies', 'foo', '1.2.3')
+    >>> doc['build-dependencies']['foo']
+    '1'
     """
-    for table in DEPENDENCY_TABLES:
-        deps = doc.get(table)
-        if not deps or dependency not in deps:
-            continue
-        _update_dependency_in_table(deps, dependency, version)
+    deps = doc.get(table)
+    if not deps or dependency not in deps:
+        return
+    _update_dependency_in_table(deps, dependency, version)
 
 
 def _set_version(
     toml_path: Path,
     version: str,
-    dependencies: Iterable[str] = (),
+    dependencies: Iterable[tuple[str, str]] = (),
     doc: MutableMapping[str, object] | None = None,
 ) -> None:
     """Set package and internal dependency versions in a ``Cargo.toml``.
@@ -349,7 +368,10 @@ def _set_version(
     version
         Version string to apply.
     dependencies
-        Internal dependencies to update alongside the package version.
+        ``(table, name)`` pairs for internal dependencies to update alongside
+        the package version. Each pair names the exact entry selected by
+        :func:`_internal_dependencies`, so an external namesake in another
+        table is never touched.
     doc
         Pre-parsed document to update. If provided, the file is not re-read.
     """
@@ -359,8 +381,8 @@ def _set_version(
 
     _update_package_version(doc, version)
 
-    for dependency in dependencies:
-        _update_dependency_version(doc, dependency, version)
+    for table, dependency in dependencies:
+        _update_dependency_version(doc, table, dependency, version)
 
     text = tomlkit.dumps(doc)
     temp_dir = toml_path.parent
