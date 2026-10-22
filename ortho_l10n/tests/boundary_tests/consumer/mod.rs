@@ -13,7 +13,7 @@
 use crate::boundary::consumer::{Dependency, DependencySource};
 use crate::boundary::fixture_cargo::Metadata;
 use crate::boundary::package_set::{
-    ConsumerFixture, assert_packaged_set_complete, unpacked_directory,
+    ConsumerFixture, assert_packaged_set_complete, prepare_packaged_set, unpacked_directory,
 };
 use anyhow::{Context, Result, ensure};
 
@@ -22,7 +22,7 @@ use anyhow::{Context, Result, ensure};
 fn workspace_runtime_consumer_builds_and_tests() -> Result<()> {
     let fixture = consumer_fixture(Dependency::Runtime, &DependencySource::Workspace)?;
     fixture.test()?;
-    assert_runtime_only_edges(&fixture.metadata()?)?;
+    assert_runtime_only_edges(&fixture.resolve_metadata()?)?;
     Ok(())
 }
 
@@ -35,7 +35,7 @@ fn workspace_runtime_consumer_builds_and_tests() -> Result<()> {
 fn workspace_facade_consumer_builds_and_tests() -> Result<()> {
     let fixture = consumer_fixture(Dependency::Configuration, &DependencySource::Workspace)?;
     fixture.test()?;
-    let metadata = fixture.metadata()?;
+    let metadata = fixture.resolve_metadata()?;
     ensure!(
         metadata.package("ortho_l10n").is_ok(),
         "the facade consumer did not resolve ortho_l10n through ortho_config",
@@ -53,7 +53,7 @@ fn workspace_facade_consumer_builds_and_tests() -> Result<()> {
 fn workspace_mixed_consumer_builds_and_tests() -> Result<()> {
     let fixture = consumer_fixture(Dependency::Mixed, &DependencySource::Workspace)?;
     fixture.test()?;
-    assert_both_crates_resolve(&fixture.metadata()?)?;
+    assert_both_crates_resolve(&fixture.resolve_metadata()?)?;
     Ok(())
 }
 
@@ -65,6 +65,7 @@ fn workspace_mixed_consumer_builds_and_tests() -> Result<()> {
 /// exactly this graph.
 #[test]
 fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
+    prepare_packaged_set()?;
     assert_packaged_set_complete()?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
@@ -77,7 +78,7 @@ fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
         );
         let fixture = consumer_fixture(dependency, &source).with_context(|| shape.clone())?;
         fixture.test().with_context(|| shape.clone())?;
-        assert_paths_for(dependency, &fixture.metadata()?).with_context(|| shape)?;
+        assert_paths_for(dependency, &fixture.resolve_metadata()?).with_context(|| shape)?;
     }
     Ok(())
 }

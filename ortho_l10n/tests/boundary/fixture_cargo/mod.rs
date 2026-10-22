@@ -21,6 +21,10 @@ pub(crate) mod environment;
 pub(crate) mod manifest;
 pub(crate) mod metadata;
 
+#[cfg(test)]
+#[path = "metadata_proptests.rs"]
+mod metadata_proptests;
+
 pub(crate) use environment::{cargo_binary, inherited_toolchain};
 pub(crate) use manifest::{declared_dependencies, declared_path_dependencies};
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
@@ -194,11 +198,15 @@ impl FixtureCargo {
 
     /// Resolve and parse the fixture root, requiring Cargo to succeed.
     ///
+    /// Spawns Cargo, so it is named for the command rather than for the
+    /// document it returns; [`Self::resolve`] is the same call without the
+    /// success requirement.
+    ///
     /// # Errors
     ///
     /// Returns an error when Cargo fails or emits something other than the
     /// single JSON document the contract expects.
-    pub(crate) fn metadata(&self) -> Result<Metadata> {
+    pub(crate) fn resolve_metadata(&self) -> Result<Metadata> {
         let output = self.resolve()?;
         Metadata::parse(&checked_stdout(&output, "cargo metadata")?)
     }

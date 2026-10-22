@@ -20,7 +20,7 @@ use crate::boundary::fixture_cargo::{
     FixtureCargo, Metadata, cargo_binary, describe_edges, inherited_toolchain, repository_root,
     run_with_deadline,
 };
-use crate::boundary::package_set::{ConsumerFixture, unpacked_directory};
+use crate::boundary::package_set::{ConsumerFixture, prepare_packaged_set, unpacked_directory};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use rstest::rstest;
@@ -36,7 +36,7 @@ use std::process::Command;
 fn workspace_runtime_consumer_has_no_facade_closure() -> Result<()> {
     let consumer = Consumer::render(Dependency::Runtime, &DependencySource::Workspace)?;
     let fixture = ConsumerFixture::new()?.write_consumer(&consumer)?;
-    let metadata = fixture.metadata()?;
+    let metadata = fixture.resolve_metadata()?;
 
     assert_no_forbidden_packages(&metadata)?;
     assert_runtime_normal_edges(&metadata)?;
@@ -55,12 +55,13 @@ fn workspace_runtime_consumer_has_no_facade_closure() -> Result<()> {
 /// one cannot.
 #[test]
 fn packaged_runtime_consumer_has_no_facade_closure() -> Result<()> {
+    prepare_packaged_set()?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
     };
     let consumer = Consumer::render(Dependency::Runtime, &source)?;
     let fixture = ConsumerFixture::new()?.write_consumer(&consumer)?;
-    let metadata = fixture.metadata()?;
+    let metadata = fixture.resolve_metadata()?;
 
     assert_no_forbidden_packages(&metadata)?;
     assert_runtime_normal_edges(&metadata)?;
@@ -106,7 +107,7 @@ fn no_forbidden_package_appears_in_a_workspace_runtime_consumer() -> Result<()> 
     let consumer = Consumer::render(Dependency::Runtime, &DependencySource::Workspace)?;
     let metadata = ConsumerFixture::new()?
         .write_consumer(&consumer)?
-        .metadata()?;
+        .resolve_metadata()?;
     let resolved = metadata.package_names();
     for forbidden in FORBIDDEN_PACKAGES {
         ensure!(
@@ -312,7 +313,7 @@ fn the_rendered_consumer_is_the_package_the_closure_reads() -> Result<()> {
     let consumer = Consumer::render(Dependency::Runtime, &DependencySource::Workspace)?;
     let metadata = ConsumerFixture::new()?
         .write_consumer(&consumer)?
-        .metadata()?;
+        .resolve_metadata()?;
     let edges = metadata.edges(CONSUMER_PACKAGE)?;
     let described = describe_edges(&edges);
     ensure!(

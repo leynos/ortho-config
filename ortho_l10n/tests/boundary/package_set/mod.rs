@@ -142,7 +142,7 @@ mod roots;
 // Re-exported so the contracts keep naming one module for the packaged set.
 pub(crate) use roots::{
     PACKAGED_CRATES, PACKAGED_VERSION, assert_packaged_set_complete, packaged_crate,
-    unpacked_directory,
+    prepare_packaged_set, unpacked_directory,
 };
 
 /// Run one `cargo package` invocation.
@@ -237,13 +237,18 @@ impl ConsumerFixture {
         Ok(self)
     }
 
-    /// Resolve the consumer root and parse its metadata graph.
+    /// Spawn `cargo metadata` for the consumer root and parse the result.
+    ///
+    /// Named for the command it runs, not for the document it returns. A
+    /// `metadata()` accessor would read as a field lookup; this spawns Cargo,
+    /// takes the package-cache lock, and can fail for reasons that have
+    /// nothing to do with the consumer.
     ///
     /// # Errors
     ///
     /// Returns an error when Cargo fails or emits an unreadable document.
-    pub(crate) fn metadata(&self) -> Result<super::fixture_cargo::Metadata> {
-        self.cargo.metadata()
+    pub(crate) fn resolve_metadata(&self) -> Result<super::fixture_cargo::Metadata> {
+        self.cargo.resolve_metadata()
     }
 
     /// Build and test the consumer root.

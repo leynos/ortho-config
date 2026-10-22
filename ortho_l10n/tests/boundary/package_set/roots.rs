@@ -70,11 +70,26 @@ pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
     ("ortho_config", PACKAGED_VERSION),
 ];
 
-/// Materialize (once per test process) and return the packaged set.
+/// The packaged set, materialized once per test process by
+/// [`prepare_packaged_set`].
 ///
-/// The first caller packages and unpacks; every later caller reads the same
-/// directory. A failure is cached too, so a broken packaging step is reported
-/// once rather than retried by every contract.
+/// This is a *store*, not a lookup, and it is module-private for that reason:
+/// a caller reading it is a caller that cannot spawn packaging or Cargo, which
+/// is what keeps the contracts' own queries free of side effects.
+static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
+
+/// Package and unpack this release's crates, once per test process.
+///
+/// This is the command half of the module. It runs the packaging invocations
+/// and populates the store; every other function here and in the contract
+/// modules only reads the result. Keeping the two apart is what lets a
+/// contract say "resolve this consumer" without also meaning "package the
+/// workspace", and it means the packaging boundary appears exactly once in the
+/// suite.
+///
+/// The first caller packages and unpacks; every later caller is a no-op that
+/// reads the same directory. A failure is cached too, so a broken packaging
+/// step is reported once rather than retried by every contract.
 ///
 /// That cache is process-local, and nextest runs each test in its own process,
 /// so in a full run several of these packaged contracts package the same target
@@ -90,15 +105,34 @@ pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
 ///
 /// Returns an error when either packaging invocation fails or when one of the
 /// expected unpacked roots is missing afterwards.
+pub(crate) fn prepare_packaged_set() -> Result<()> {
+    let packaged =
+        PACKAGED.get_or_init(|| build_packaged_set().map_err(|error| format!("{error:#}")));
+    packaged
+        .as_deref()
+        .map(|_roots| ())
+        .map_err(|error| anyhow::anyhow!("{error}"))
+}
+
+/// The materialized packaged set.
+///
+/// # Errors
+///
+/// Returns an error when [`prepare_packaged_set`] has not run, or when it
+/// failed. Both are reported rather than retried: this function cannot package
+/// anything, by design.
 fn packaged_set() -> Result<&'static [PackagedCrate]> {
-    static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
-    PACKAGED
-        .get_or_init(|| build_packaged_set().map_err(|error| format!("{error:#}")))
+    let cached = PACKAGED
+        .get()
+        .context("the packaged set was never prepared; call prepare_packaged_set first")?;
+    cached
         .as_deref()
         .map_err(|error| anyhow::anyhow!("{error}"))
 }
 
 /// Look up one packaged crate by name.
+///
+/// A pure lookup over a set [`prepare_packaged_set`] already materialized.
 ///
 /// # Errors
 ///
@@ -112,9 +146,11 @@ pub(crate) fn packaged_crate(name: &str) -> Result<&'static PackagedCrate> {
 
 /// The directory holding all unpacked roots.
 ///
+/// A pure derivation from the prepared set, like [`packaged_crate`].
+///
 /// # Errors
 ///
-/// Returns an error when the packaged set cannot be materialized.
+/// Returns an error when the set is empty or was never prepared.
 pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
     let first = packaged_set()?
         .first()
@@ -151,9 +187,15 @@ fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
 
 /// Assert every packaged root and archive exists.
 ///
+/// A pure query over the prepared set: it inspects the filesystem, changes
+/// nothing, and does not trigger packaging. A caller that expected packaging
+/// to have happened must call [`prepare_packaged_set`] first, and gets a
+/// "never prepared" error rather than a silent re-run if it did not.
+///
 /// # Errors
 ///
-/// Returns an error naming the first missing artefact.
+/// Returns an error naming the first missing artefact, or when the set was
+/// never prepared.
 pub(crate) fn assert_packaged_set_complete() -> Result<()> {
     let unpacked = unpacked_directory()?;
     for packaged in packaged_set()? {

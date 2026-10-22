@@ -28,7 +28,9 @@ use crate::boundary::closure::{FORBIDDEN_PACKAGES, RUNTIME_NORMAL_EDGES};
 use crate::boundary::fixture_cargo::{
     DependencyEdge, EdgeKind, declared_dependencies, declared_path_dependencies, describe_edges,
 };
-use crate::boundary::package_set::{PACKAGED_CRATES, assert_packaged_set_complete, packaged_crate};
+use crate::boundary::package_set::{
+    PACKAGED_CRATES, assert_packaged_set_complete, packaged_crate, prepare_packaged_set,
+};
 use anyhow::{Context, Result, ensure};
 
 /// The runtime's published edges must be exactly its runtime crates.
@@ -38,6 +40,7 @@ use anyhow::{Context, Result, ensure};
 /// declares, so the packaged manifest is the stronger statement.
 #[test]
 fn packaged_runtime_declares_only_its_runtime_crates() -> Result<()> {
+    prepare_packaged_set()?;
     assert_packaged_set_complete()?;
     let packaged = packaged_crate("ortho_l10n")?;
     let declared = declared_dependencies(&packaged.read_manifest()?)?;
@@ -69,6 +72,7 @@ fn packaged_runtime_declares_only_its_runtime_crates() -> Result<()> {
 /// question.
 #[test]
 fn packaged_runtime_declares_no_forbidden_edge() -> Result<()> {
+    prepare_packaged_set()?;
     assert_packaged_set_complete()?;
     let packaged = packaged_crate("ortho_l10n")?;
     let declared = declared_dependencies(&packaged.read_manifest()?)?;
@@ -89,6 +93,7 @@ fn packaged_runtime_declares_no_forbidden_edge() -> Result<()> {
 /// show: the facade's own normal edges are what a stranger resolves.
 #[test]
 fn packaged_facade_declares_the_runtime_and_the_macros() -> Result<()> {
+    prepare_packaged_set()?;
     assert_packaged_set_complete()?;
     let packaged = packaged_crate("ortho_config")?;
     let declared = declared_dependencies(&packaged.read_manifest()?)?;
@@ -116,6 +121,7 @@ fn packaged_facade_declares_the_runtime_and_the_macros() -> Result<()> {
 /// files inside the package.
 #[test]
 fn packaged_manifests_carry_no_path_dependencies() -> Result<()> {
+    prepare_packaged_set()?;
     assert_packaged_set_complete()?;
     for (name, _version) in PACKAGED_CRATES {
         let manifest = packaged_crate(name)?.read_manifest()?;
