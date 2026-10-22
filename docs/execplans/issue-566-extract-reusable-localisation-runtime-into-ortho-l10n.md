@@ -359,15 +359,15 @@ approaches; they are no longer outstanding work.
   recorded as an open delivery dependency.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR. In progress: publish order and its workflow contract are done (see
-      "EP-M4 publish order"), as are version discovery and the guides. Seven
-      gates pass against `f0d1feac` (see "EP-M4 gate certificate"), and the
-      Markdown lane passes against the later record commits. The publication
-      check is blocked upstream, not locally (see "EP-M4 publication check
-      blocked upstream"). The milestone review returned three findings (see
-      "EP-M4 milestone CLI review"): one real defect in this milestone's own
-      repair, repaired and re-gated, and two duplicates of the upstream block.
-      Re-gating against the repaired tree and the follow-up review remain, as
-      does the draft PR.
+      "EP-M4 publish order"), as are version discovery and the guides. Eight
+      gates pass against the repaired tree `14c51513` (see "EP-M4 gate
+      certificate against the repaired tree"), superseding the seven-gate
+      certificate over `f0d1feac`. The publication check is blocked upstream,
+      not locally (see "EP-M4 publication check blocked upstream"). The
+      milestone review returned three findings (see "EP-M4 milestone CLI
+      review"): one real defect in this milestone's own repair, repaired and
+      re-gated, and two duplicates of the upstream block. The follow-up review
+      and the draft PR remain.
 
 ### EP-M4 publish order (2026-10-22)
 
@@ -600,6 +600,54 @@ this paragraph is a later tree, and no gate ran against *that* one. The delta
 is Markdown only. Rather than assume a prose edit cannot matter — it can, and
 these gates read prose — the Markdown lane was re-run against the post-record
 head and its result is recorded beside this note.
+
+### EP-M4 gate certificate against the repaired tree (2026-10-22)
+
+The certificate above predates the milestone review's one valid finding, so it
+certifies a tree that no longer exists. This one covers the repair. The
+scrutineer ran the gates sequentially against the frozen candidate
+`14c515136001fbda75aea76740079e7dd54475e6`, tree
+`59f8ec33d491cc8f90566883e4817f40bd100e40`, and re-checked HEAD, tree, index and
+`git status --porcelain` after the last gate. All were unchanged.
+
+| Gate                           | Status | Duration | Evidence                                       |
+| ------------------------------ | ------ | -------- | ---------------------------------------------- |
+| `make check-fmt`               | pass   | 1 s      | 90 files unchanged                             |
+| `make markdownlint`            | pass   | 12 s     | 0 issues; `current: typos.toml`                |
+| `make nixie`                   | pass   | 1 s      | every diagram validated                        |
+| `make test-workflow-contracts` | pass   | 3 s      | 338 passed, 1 skipped                          |
+| Python script suite            | pass   | 1 s      | 118 passed, 5 skipped, doctests included       |
+| `make lint-clippy`             | pass   | 1 s      | rustdoc and Clippy, both `-D warnings`         |
+| `make lint`                    | pass   | 13 s     | includes Whitaker, `nightly-2026-05-28`        |
+| `make test`                    | pass   | 128 s    | 2,066 passed, 0 failed, 29 ignored; pytest 118 |
+
+`make test` is in this round and was not in the previous one, and that is the
+difference between the two certificates rather than an afterthought. Recording
+the first certificate was wrong in a way worth stating plainly: the gate set
+was chosen from the *milestone's* changed file classes, but a certificate
+describes a *tree*. `make test` executes no Markdown gate and the Markdown
+gates execute no Rust, so a set chosen from the delta is only complete when the
+delta is the whole distance from the last certified tree. Here it is not —
+`3c22ba57..HEAD` leaves the Rust surface untouched, but it leaves
+`docs/users-guide.md` changed, and that file is a test input:
+`ortho_config/tests/documentation_examples/mod.rs` parses its fences and
+asserts every one carries a `tested-example` marker. A compile-only certificate
+would have taken "the guide's prose changed" as sufficient evidence that the
+guide still satisfies a Rust test's contract.
+
+The run was warm: `Finished test profile in 0.21s`, admission idle at launch
+(`capacity 4, held 0`), no queueing and no sccache fallback. The 128 s figure
+is a warm-cache figure and would not hold for a cold tree. Eleven of the 106
+Rust binaries ran zero tests; all are fixture crates, shared test-helper
+modules, a Windows-only target, and example binaries. The 29 ignored tests all
+carry an explicit reason, and the classes are the two the repository already
+documents as platform- or supervisor-driven.
+
+`make publish-check` is excluded again, for the reason recorded above. No gate
+failed, so this certificate carries no findings either — and it names
+`14c51513`, so the commit that carries it is again a later tree. The same rule
+applies: the Markdown lane is re-run against the post-record head and its
+result recorded beside this note.
 
 ### EP-M4 milestone CLI review (2026-10-22)
 
