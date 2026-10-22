@@ -145,14 +145,14 @@ EP-M3 acceptance evidence, per criterion:
 
 EP-M4 acceptance evidence, per requirement:
 
-| Requirement                                       | Evidence                                                                                        |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Publish order matches the declared internal edges | `make test-workflow-contracts`, 4 contract tests over `lading.toml` and the workspace manifests |
-| Every internal requirement moves with the bump    | `test_member_bump_updates_every_internal_dependency`                                            |
-| An external namesake is left alone                | `test_member_bump_leaves_an_external_namesake_alone`                                            |
-| Guides describe the order and discovery rules     | `docs/developers-guide.md` "Publish dry run" and the bump-script paragraph                      |
-| Users know `ortho_l10n` is separately published   | `docs/users-guide.md`, linked to `ortho_l10n/README.md` and ADR-0015                            |
-| The packaged-source check still runs              | unchanged `make publish-check`; blocked upstream, recorded above                                |
+| Requirement                                       | Evidence                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Publish order matches the declared internal edges | `make test-workflow-contracts`, 4 contract tests over `lading.toml` and the workspace manifests. The contract parses manifests; it never invokes Cargo, expands no member glob, and does not descend into `target.*` tables, so its claim is scoped to this workspace's all-top-level path edges |
+| Every internal requirement moves with the bump    | `test_member_bump_updates_every_internal_dependency`                                                                                                                                                                                                                                             |
+| An external namesake is left alone                | `test_member_bump_leaves_an_external_namesake_alone`                                                                                                                                                                                                                                             |
+| Guides describe the order and discovery rules     | `docs/developers-guide.md` "Publish dry run" and the bump-script paragraph                                                                                                                                                                                                                       |
+| Users know `ortho_l10n` is separately published   | `docs/users-guide.md`, linked to `ortho_l10n/README.md` and ADR-0015                                                                                                                                                                                                                             |
+| The packaged-source check still runs              | unchanged `make publish-check`; blocked upstream, recorded above                                                                                                                                                                                                                                 |
 
 Proof inventory: not applicable. EP-M3 introduces no CrossHair, Kani, Verus, or
 LemmaScript artefact. Its claims are about a resolved dependency graph and a
@@ -1491,8 +1491,10 @@ that version down; the contract was latent-broken on every platform.
 and absent in another. It had been absent in exactly one: the negative controls
 built their own `cargo metadata` argument list.
 
-Narrowing costs no coverage, and that is the part worth stating precisely. Two
-questions were being conflated:
+Narrowing costs no coverage *for the two questions actually being asked*, and
+that qualification is the part worth stating precisely. It does not make the
+host resolve equivalent to a per-target one, and the difference is recorded
+below rather than claimed away. The two questions were being conflated:
 
 - *Does the runtime build without the forbidden crates?* This is a host
   question. The host graph answers it exactly.
@@ -1505,7 +1507,13 @@ The fix was reproduced rather than assumed. A pruned `CARGO_HOME` holding every
 cached crate except `atomic-0.6.1` is the Windows cache state; against it an
 unfiltered resolve exits 101 with the production diagnostic, and the narrowed
 resolve exits 0 with `figment` present and `atomic` pruned. The full boundary
-suite passes 17/17 under that cache.
+suite passes 17/17 under that cache. The Windows run's own log agrees with the
+reproduction: of the eleven lines in run `39734333475` that contain `atomic`,
+three are `Compiling`/`Downloaded` lines for `atomic-waker v1.1.2` during the
+Merman install, four are the `atomic_write_reports_invalid_destination` test
+name, and four are the word "atomically". No line mentions `atomic v0.6.1` and
+no line contains `failed to download`, so the original failure mode is absent
+rather than merely unreported.
 
 **The vacuity.** Extracting the argument list exposed a pre-existing defect in
 the negative controls, and it is the more serious finding.
