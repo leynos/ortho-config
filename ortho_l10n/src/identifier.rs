@@ -6,14 +6,19 @@ use thiserror::Error;
 pub const MESSAGE_ID_SEPARATOR: &str = "-";
 
 /// Invalid input to the shared Fluent identifier convention.
+///
+/// `#[non_exhaustive]` because this is published API in its own crate: adding
+/// a variant later would otherwise break every downstream exhaustive `match`.
+/// The same reason `ortho_config` gives for its own public enums.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum IdentifierError {
     /// No root segment was supplied.
+    ///
+    /// Carries no input field. The offending path is empty by construction, so
+    /// a field could only ever hold `vec![]`; the error message already says so.
     #[error("Fluent identifier must start with an ASCII letter: missing command root")]
-    EmptyPath {
-        /// Offending command path, which is empty.
-        input: Vec<String>,
-    },
+    EmptyPath,
     /// A path or suffix segment was empty.
     #[error("invalid Fluent identifier segment: segment must not be empty")]
     EmptySegment {
@@ -85,7 +90,7 @@ pub fn try_normalize_segment(raw: &str) -> Result<String, IdentifierError> {
 /// ```
 pub fn try_join_identifier(segments: &[impl AsRef<str>]) -> Result<String, IdentifierError> {
     if segments.is_empty() {
-        return Err(IdentifierError::EmptyPath { input: Vec::new() });
+        return Err(IdentifierError::EmptyPath);
     }
     let normalized = segments
         .iter()
@@ -123,7 +128,7 @@ pub fn try_message_id_for(
     // Report a missing root before validating suffix segments, as the legacy
     // API did.
     if command_path.is_empty() {
-        return Err(IdentifierError::EmptyPath { input: Vec::new() });
+        return Err(IdentifierError::EmptyPath);
     }
     let segments = command_path
         .iter()

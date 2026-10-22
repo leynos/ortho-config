@@ -134,35 +134,6 @@ stop the test first, and the error naming the invocation that hung would never
 be printed. `boundary_packaging_test.py` reads the group, the manifest and the
 deadline so neither half can drift from the other.
 
-#### Packaging must resolve the way a clean runner resolves
-
-The packaged contracts are the only place in this repository that exercises a
-stranger's dependency graph, and the failure they are most likely to hide is
-resolution that only works on a developer's machine. Two rules keep them honest.
-
-**Patch every internal edge the invocation resolves, not just the ones it
-packages.** `cargo package` builds every dependency table, dev-dependencies
-included, so a path member that is only a dev-dependency still has to be
-patched, or its rewritten version requirement is looked up in an index that may
-never have seen it. Patches are keyed by *package* name, which is not always
-the directory name: `ortho_config_test_helpers` lives in `test_helpers`.
-
-**Do not remove `--verify` to get past a packaging failure.** It is the step
-that unpacks each `.crate` into the `package/<name>-<version>/` root every
-consumer and manifest contract reads. `--no-verify` writes the archives and
-unpacks nothing, so the failure moves from packaging to path resolution. The
-remedy for a verify-time failure is to remove the cause - a dev-dependency
-cycle is the one that has actually bitten here, because verifying the macros
-tarball pulled the patched library back in through its normal edge and
-duplicated the package under verification.
-
-A packaging failure on a *clean* registry is not reproducible by re-running the
-command locally: the developer's `CARGO_HOME` already holds the index entries
-the runner lacks. Reproduce it with an isolated `CARGO_HOME` that has the
-internal crates' entries removed, and check the output for
-`patch … was not used in the crate graph` - that warning means the patch under
-test was never consulted, and the probe proved nothing.
-
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
 `ortho_config::crate_path_trybuild`, `ortho_config::declarative_merge_trybuild`,
@@ -197,6 +168,35 @@ same four binaries was measured as an alternative on run 36264533224. It saved
 no wall time (52.9 min), and `must_use_compile_tests`, still competing with the
 rest of the suite, took 523.5 s of its 600 s allowance, so the reservation was
 kept.
+
+#### Packaging must resolve the way a clean runner resolves
+
+The packaged contracts are the only place in this repository that exercises a
+stranger's dependency graph, and the failure they are most likely to hide is
+resolution that only works on a developer's machine. Two rules keep them honest.
+
+**Patch every internal edge the invocation resolves, not just the ones it
+packages.** `cargo package` builds every dependency table, dev-dependencies
+included, so a path member that is only a dev-dependency still has to be
+patched, or its rewritten version requirement is looked up in an index that may
+never have seen it. Patches are keyed by *package* name, which is not always
+the directory name: `ortho_config_test_helpers` lives in `test_helpers`.
+
+**Do not remove `--verify` to get past a packaging failure.** It is the step
+that unpacks each `.crate` into the `package/<name>-<version>/` root every
+consumer and manifest contract reads. `--no-verify` writes the archives and
+unpacks nothing, so the failure moves from packaging to path resolution. The
+remedy for a verify-time failure is to remove the cause - a dev-dependency
+cycle is the one that has actually bitten here, because verifying the macros
+tarball pulled the patched library back in through its normal edge and
+duplicated the package under verification.
+
+A packaging failure on a *clean* registry is not reproducible by re-running the
+command locally: the developer's `CARGO_HOME` already holds the index entries
+the runner lacks. Reproduce it with an isolated `CARGO_HOME` that has the
+internal crates' entries removed, and check the output for
+`patch … was not used in the crate graph` - that warning means the patch under
+test was never consulted, and the probe proved nothing.
 
 ## Subcommand dispatch changes
 
@@ -2484,11 +2484,12 @@ everything it depends on. A wrong order still builds locally, because Cargo
 resolves the path; it fails only when a publisher asks crates.io for a version
 that is not there yet.
 
-Dev dependencies are real edges here, with one exception. `ortho_config`
-depends on `ortho_config_macros`, and the macros crate dev-depends back on
-`ortho_config` to test the macros it generates, so the pair is cyclic and no
-order satisfies both; the contract exempts mutually reachable pairs only. Every
-other edge is enforced, including `ortho_config`'s dev dependency on
+Dev dependencies are real edges here. The workspace has no dev-dependency cycle
+today: the macros crate once dev-depended back on `ortho_config`, which made
+the pair mutually dependent, and that edge has since been removed. The contract
+keeps a narrow exemption for mutually dependent pairs, so a future cycle cannot
+fail the ordering check for a reason no order can fix. Every other edge is
+enforced, including `ortho_config`'s dev dependency on
 `ortho_config_test_helpers`, which is why the helper crate is published before
 it. That edge has already been broken once.
 

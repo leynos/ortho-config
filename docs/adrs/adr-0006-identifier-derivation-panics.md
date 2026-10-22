@@ -166,6 +166,6 @@ fragment, `try_join_identifier` validates a complete identifier, and
 `try_message_id_for` composes the command path and dotted suffix. Structured
 errors carry the offending input; existing panic text and macro spans remain
 unchanged. Collision detection remains in the configuration adapters and derive
-pass. [ADR-0015](adrs/adr-0015-localization-runtime-boundary.md) supersedes the
+pass. [ADR-0015](adr-0015-localization-runtime-boundary.md) supersedes the
 paired-normalizer decision without moving configuration metadata into the
 runtime.

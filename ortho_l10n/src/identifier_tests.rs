@@ -142,7 +142,7 @@ proptest! {
 #[rstest]
 #[case::missing(
     vec![], "bad/name",
-    IdentifierError::EmptyPath { input: vec![] },
+    IdentifierError::EmptyPath,
     "Fluent identifier must start with an ASCII letter: missing command root",
 )]
 #[case::empty_segment(

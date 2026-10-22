@@ -1094,13 +1094,14 @@ frozen tree rather than to whatever was on disk at the end.
 sccache, with no queued requests, so nothing in this round was coloured by
 admission.
 
-The one failure was mine, and it is the gate catching a category of error no
-other gate can see. The reassessment record above quoted the misspelling it was
-describing, in backticks. The typos gate reads inline code inside Markdown
-prose, so naming the word reintroduced exactly the fault the sentence reported.
-The repair is a rewording rather than an exception: the sentence now refers to
-the strings by their role, so there is no token for the gate to read and no new
-`typos.local.toml` entry whose scope would have to be argued.
+The one failure was self-inflicted, and it is the gate catching a category of
+error no other gate can see. The reassessment record above quoted the
+misspelling it was describing, in backticks. The typos gate reads inline code
+inside Markdown prose, so naming the word reintroduced exactly the fault the
+sentence reported. The repair is a rewording rather than an exception: the
+sentence now refers to the strings by their role, so there is no token for the
+gate to read and no new `typos.local.toml` entry whose scope would have to be
+argued.
 
 The repair is `71ac7873`, and its delta from the certified tree `3c22ba57` is
 one Markdown file. Only the three Markdown-reading gates are re-run against it;

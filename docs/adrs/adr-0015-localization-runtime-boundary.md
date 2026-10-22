@@ -90,7 +90,7 @@ configuration machinery separately.
 ## References
 
 - [CLI localization design](../cli-localization-design.md).
-- [ADR-0006: Identifier panics](../adr-006-identifier-derivation-panics.md).
+- [ADR-0006: Identifier panics](adr-0006-identifier-derivation-panics.md).
 - [Issue #566](https://github.com/leynos/ortho-config/issues/566).
 - [Identifier contract PR #536](https://github.com/leynos/ortho-config/pull/536).
 - [Netsuke documentation IR #779](https://github.com/leynos/netsuke/issues/779).
