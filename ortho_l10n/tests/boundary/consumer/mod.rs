@@ -66,6 +66,23 @@ impl Dependency {
             Self::Mixed => &["ortho_l10n", "ortho_config"],
         }
     }
+
+    /// The unpacked roots this shape's dependency graph reaches.
+    ///
+    /// A packaged root declares its own internal edges by version, so the patch
+    /// table has to name them even when this shape does not. The runtime stands
+    /// alone; the facade reaches the runtime and the derive macros, which in
+    /// turn reach the runtime. Naming only the direct dependency would leave
+    /// the transitive edge resolving from the registry, where no version of
+    /// these crates exists yet.
+    const fn patched_crates(self) -> &'static [&'static str] {
+        match self {
+            Self::Runtime => &["ortho_l10n"],
+            Self::Configuration | Self::Mixed => {
+                &["ortho_l10n", "ortho_config", "ortho_config_macros"]
+            }
+        }
+    }
 }
 
 /// Which source a consumer root resolves its dependencies from.
@@ -156,6 +173,13 @@ fn write_workspace_dependencies(manifest: &mut String, dependency: Dependency) -
 }
 
 /// Spell the required crates by version, patched to unpacked package roots.
+///
+/// The patch table covers the transitive internal edges as well as the ones
+/// this shape names: a packaged facade declares its runtime and derive-macro
+/// edges by version, and those have to resolve to the unpacked roots too or the
+/// consumer would be resolving them from the registry. Only the crates this
+/// shape actually reaches are patched, so a runtime-only consumer does not
+/// silently acquire a derive-macro root it never asked for.
 fn write_packaged_dependencies(
     manifest: &mut String,
     dependency: Dependency,
@@ -170,7 +194,7 @@ fn write_packaged_dependencies(
         "# Point every same-version internal edge at the unpacked package roots."
     )?;
     writeln!(manifest, "[patch.crates-io]")?;
-    for crate_name in ["ortho_l10n", "ortho_config", "ortho_config_macros"] {
+    for crate_name in dependency.patched_crates() {
         write_patch_entry(manifest, unpacked, crate_name)?;
     }
     Ok(())

@@ -15,13 +15,25 @@
 //!
 //! # The two-invocation recipe
 //!
-//! `ortho_config` and `ortho_config_macros` each depend on the others by
-//! version, and no published version exists yet. Packaging them therefore needs
-//! the same-version edges patched to the sibling sources, and packaging all
-//! three in one invocation fails: Cargo verifies a crate against the lockfile
-//! it just generated, and the sibling that the first invocation patched is not
-//! the one the second invocation's lockfile records. Two invocations, each
-//! patching the crate it does not package, produce all three roots.
+//! `ortho_config` depends on `ortho_config_macros` and `ortho_l10n` by version,
+//! `ortho_config_macros` depends on `ortho_l10n` by version, and no published
+//! version exists yet, so every same-version edge has to be patched to the
+//! sibling sources before a crate can be packaged at all. That much is solved
+//! by the patch list below. What is not solved by patching is *verification*:
+//! `cargo package` builds every dependency table, dev-dependencies included, so
+//! [`ORTHO_L10N_AND_CONFIG`] needs the facade's dev-dependency on
+//! `ortho_config_test_helpers` patched as well - a path member a clean runner
+//! has never fetched an index entry for. Packaging all three crates in one
+//! invocation then fails for a different reason: Cargo verifies a crate against
+//! the lockfile it just generated, and the sibling that the first invocation
+//! patched is not the one the second invocation's lockfile records. Two
+//! invocations, each patching the edges of the crates it does not package,
+//! produce all three roots with `--verify` intact.
+//!
+//! Verification is not optional here. It is the step that unpacks each
+//! `.crate` into `package/<name>-<version>/`, which is the root every consumer
+//! and manifest contract reads. `--no-verify` skips the unpacking along with
+//! the compile, so the archives would be written and nothing would unpack them.
 //!
 //! # Cost
 //!
@@ -30,6 +42,15 @@
 //! of target directory. The result is shared across the contract tests and
 //! reused between runs, because the validation is a property of the sources,
 //! not of the test that reads it.
+//!
+//! # Why the patch list is per invocation
+//!
+//! A patch only helps if something actually resolves through it, and Cargo says
+//! so loudly when it does not: "patch ... was not used in the crate graph". The
+//! second invocation therefore patches `ortho_l10n` alone rather than copying
+//! the first's list, and the first patches each crate that `ortho_config`
+//! declares by path under *its package name*, which is not always its
+//! directory name (`ortho_config_test_helpers` lives in `test_helpers`).
 
 use super::fixture_cargo::{
     FixtureCargo, cargo_binary, inherited_toolchain, repository_root, run_with_deadline,
@@ -62,15 +83,42 @@ const PACKAGE_DEADLINE: Duration = Duration::from_secs(240);
 
 /// The `cargo package` invocations that together produce all three roots.
 ///
-/// Each entry names the crates it packages and the sibling it patches to the
-/// workspace sources. They are data rather than two call statements because
-/// the per-test allowance is shared between them: `boundary_packaging_test.py`
-/// reads this array's length and [`PACKAGE_DEADLINE`] to check that the whole
-/// set can reach its own deadlines before nextest stops the test. The array
-/// length is part of the type, so rustc checks it against the initializers.
-const PACKAGING_INVOCATIONS: [(&[&str], &str); 2] = [
-    (&["ortho_l10n", "ortho_config"], "ortho_config_macros"),
-    (&["ortho_config_macros"], "ortho_l10n"),
+/// Each entry names the crates it packages and the workspace members it
+/// patches to their sources, as `(package name, directory)` pairs. The two
+/// differ for `ortho_config_test_helpers`, which lives in `test_helpers`: a
+/// patch is keyed by package name, so spelling the directory there would
+/// silently patch nothing.
+///
+/// They are data rather than two call statements because the per-test
+/// allowance is shared between them: `boundary_packaging_test.py` reads this
+/// array's length and [`PACKAGE_DEADLINE`] to check that the whole set can
+/// reach its own deadlines before nextest stops the test. The array length is
+/// part of the type, so rustc checks it against the initializers.
+const PACKAGING_INVOCATIONS: [(&[&str], &[(&str, &str)]); 2] = [
+    (ORTHO_L10N_AND_CONFIG, ORTHO_CONFIG_DEPENDENCIES),
+    (&["ortho_config_macros"], &[ORTHO_L10N]),
+];
+
+/// The crates the first invocation packages: the runtime and the facade.
+const ORTHO_L10N_AND_CONFIG: &[&str] = &["ortho_l10n", "ortho_config"];
+
+/// A workspace member as a `cargo patch` needs it: package name, then
+/// directory. The two differ when a member's package is renamed, as
+/// `ortho_config_test_helpers` is.
+const ORTHO_L10N: (&str, &str) = ("ortho_l10n", "ortho_l10n");
+
+/// Every same-version edge of `ortho_config`, by package name.
+///
+/// The runtime and the derive macros are normal dependencies; the test helpers
+/// are a dev-dependency. All three are path dependencies in the workspace, so
+/// `cargo package` rewrites each into a version requirement, and verification
+/// resolves each from them. Leaving the helpers out is what made this
+/// invocation fail on a clean runner: the facade's dev-dependency was looked
+/// up in an index that has never seen it.
+const ORTHO_CONFIG_DEPENDENCIES: &[(&str, &str)] = &[
+    ORTHO_L10N,
+    ("ortho_config_macros", "ortho_config_macros"),
+    ("ortho_config_test_helpers", "test_helpers"),
 ];
 
 /// Directory `cargo package` writes into, relative to the shared target root.
@@ -224,12 +272,12 @@ pub(crate) fn assert_packaged_set_complete() -> Result<()> {
     Ok(())
 }
 
-/// Run one `cargo package` invocation for `crates`, patching `sibling`.
+/// Run one `cargo package` invocation for `crates`, patching `patched`.
 fn package_sources(
     repository: &Utf8Path,
     target: &Utf8Path,
     crates: &[&str],
-    sibling: &str,
+    patched: &[(&str, &str)],
 ) -> Result<()> {
     // The subcommand comes first: `--manifest-path` is a per-command flag.
     let mut args = vec![String::from("package")];
@@ -243,11 +291,13 @@ fn package_sources(
         args.push(String::from("-p"));
         args.push((*crate_name).to_owned());
     }
-    args.push(String::from("--config"));
-    args.push(format!(
-        "patch.crates-io.{sibling}.path={}",
-        toml_string(&sibling_path(repository, sibling)?),
-    ));
+    for (package, directory) in patched {
+        args.push(String::from("--config"));
+        args.push(format!(
+            "patch.crates-io.{package}.path={}",
+            toml_string(&sibling_path(repository, directory)?),
+        ));
+    }
 
     let mut command = Command::new(cargo_binary());
     command
@@ -268,17 +318,17 @@ fn package_sources(
     Ok(())
 }
 
-/// Spell `sibling` as a path relative to the repository, for a Cargo patch.
+/// Spell `directory` as a path relative to the repository, for a Cargo patch.
 ///
 /// Cargo resolves a `--config` patch path against the working directory, so a
 /// relative spelling is both correct and stable across checkouts.
-fn sibling_path(repository: &Utf8Path, sibling: &str) -> Result<String> {
-    let path = repository.join(sibling);
+fn sibling_path(repository: &Utf8Path, directory: &str) -> Result<String> {
+    let path = repository.join(directory);
     ensure!(
         path.join("Cargo.toml").is_file(),
         "the sibling patch source {path} is not a crate root",
     );
-    Ok(sibling.to_owned())
+    Ok(directory.to_owned())
 }
 
 /// A foreign consumer root that can be written and resolved.

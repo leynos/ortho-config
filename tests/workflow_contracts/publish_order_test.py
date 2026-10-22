@@ -20,13 +20,22 @@ edge cannot be added without this contract reading it.
 
 # Dev-dependency cycles
 
-``ortho_config`` and ``ortho_config_macros`` depend on each other: the macros
-crate is a real dependency of the library, and the library is a *dev*
-dependency of the macros crate, which needs it to test the macros it generates.
-No order can put both first, so the ordered check exempts any pair that reaches
-each other and enforces the rest.
+The workspace currently has none, so the ordered check exempts nothing. The
+exemption is kept anyway, because a cycle here is a real hazard rather than a
+hypothesis: until it was removed, the macros crate carried a dev dependency on
+the library to test the macros it generates, which made the pair mutually
+dependent and meant no order could put both first. That edge existed for no test
+- every ``ortho_config::`` spelling in the macros crate is inside ``quote!``
+token text or an ignored doc fence - but it still cost real behaviour:
+verifying the packaged macros tarball pulls the patched library in through its
+*normal* edge and duplicates the very package being verified, which Cargo
+refuses as a lockfile collision. Keeping the exemption means a future cycle
+still cannot fail the ordering check for a reason no order can fix. It is not
+covered by a test of its own; the only cycle it ever had is the one described
+here, and manufacturing one to test the exemption would put a fictional edge in
+the graph this contract exists to read.
 
-That exemption has to stay narrow. ``ortho_config`` also has a dev dependency on
+The exemption has to stay narrow. ``ortho_config`` has a dev dependency on
 ``test_helpers``, and that edge is *not* cyclic, so it is still ordered:
 ``test_helpers`` must be published before ``ortho_config``. That requirement is
 easy to break by accident and invisible locally, because the workspace supplies

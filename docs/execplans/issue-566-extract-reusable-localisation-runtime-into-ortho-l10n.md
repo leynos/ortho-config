@@ -1222,6 +1222,62 @@ These are local results. The hosted comparison is against `main` and can only
 be read after the repair is pushed, so the plan does not claim the check has
 turned green.
 
+### EP-M4 Linux packaging failure (2026-10-22)
+
+The first hosted `CI` run of this branch (run `39705023181`, head `5b4746af`,
+`workflow_dispatch`) failed on Linux with exactly one test:
+`ortho_l10n::boundary closure::packaged_runtime_consumer_has_no_facade_closure`.
+The cause was not the contract. The fixture's first `cargo package` invocation
+died in `failed to prepare local package for uploading`, because the packaged
+facade's *dev*-dependency on `ortho_config_test_helpers` is rewritten to a
+version requirement like every other path edge, and a clean runner's index has
+no entry for it.
+
+Reproducing this needed care. Re-running the command locally passed, but Cargo
+printed `patch ... was not used in the crate graph` for the two patches under
+test, which proved the local `CARGO_HOME` was resolving from its own populated
+index cache rather than from the patches. The failure only reproduces against
+an isolated `CARGO_HOME` with the internal crates' index entries removed, where
+it appears byte-identically to CI.
+
+Three candidate repairs were measured before one was chosen.
+
+| Repair                           | Outcome                                                                    |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| Patch the missing dev-dependency | Clears invocation 1; invocation 2 then fails on its own dev-dependency     |
+| Drop `--verify`                  | Clears both, but writes archives and unpacks no roots                      |
+| Remove the dev-dependency cycle  | Clears both invocations with `--verify` intact and unpacks all three roots |
+
+The third is the systemic one. `ortho_config_macros` declared a dev-dependency
+on `ortho_config` "to test the macros it generates", but no test used it: every
+`ortho_config::` spelling in that crate is inside `quote!` token text or an
+ignored doc fence, and the crate has never had a `tests/` directory. The edge
+made the pair mutually dependent, and verifying the packaged macros tarball
+then pulled the patched library back in through its *normal* edge, duplicating
+the package under verification into a `package collision in the lockfile`.
+Removing it was proved safe by compiling and running the crate's 276 tests
+without it.
+
+`--verify` was kept deliberately. It is the only step that produces the
+`package/<name>-<version>/` roots that `unpacked_directory()`,
+`assert_packaged_set_complete()` and every consumer contract read;
+`--no-verify` writes the `.crate` archives and nothing else. The repair
+therefore patches every internal edge the invocation resolves, keyed by package
+name so `ortho_config_test_helpers` maps to `test_helpers`.
+
+Verification: the boundary suite is 17 passed / 0 failed against an isolated
+`CARGO_HOME` whose only absent internal crate is `ortho_l10n` - the state
+crates.io is actually in - with all three roots unpacked by `--verify` and zero
+`patch ... was not used` warnings. `make test-workflow-contracts` is 338 passed
+/ 1 skipped after the accompanying regex update in `boundary_packaging_test.py`.
+
+The same run also failed the Windows leg, but on a different step and for an
+inherited reason: `hello_world`'s BDD harness failed to link because Git's
+`/usr/bin/link` shadowed MSVC's `link.exe`. PR #607 fixes exactly that in
+`5c7e1c8a` and `c912e934`, both of which are ancestors of #607's tip
+`ce3ee560`. That failure is not this branch's regression and is not claimed as
+repaired here.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
@@ -1472,6 +1528,32 @@ because both arguments are genuinely paths.
 The local `cs check` score is 10.00 for all three files. That is a local
 measurement, not a hosted verdict: the hosted comparison is against `main`, and
 this branch has to be re-pushed before the check can be read again.
+
+2026-10-22 (EP-M4): Remove the dead `ortho_config_macros` dev-dependency on
+`ortho_config` rather than teaching the packaging fixture to work around it.
+The edge was declared "to test the macros it generates", but no test used it:
+every `ortho_config::` spelling in that crate is inside `quote!` token text or
+an `ignore`d doc fence, and the crate has never had a `tests/` directory. It
+was, however, doing real harm — it made the pair mutually dependent, so
+verifying the packaged macros tarball pulled the patched library in through its
+*normal* edge and duplicated the package under verification into a lockfile
+collision. Two alternatives were measured first and rejected. Patching the
+missing dev-dependency clears invocation 1 but leaves invocation 2 failing on
+its own rewritten dev-dependency, so it fixes one instance of a class and
+leaves the next. Dropping `--verify` clears both and is the tempting one, but
+it removes the only step that unpacks the `.crate` archives into the roots
+every consumer contract reads; the failure would move from packaging to path
+resolution, and the suite that exists to prove the published graph would be
+reading directories nothing created. Removing the cycle keeps verification and
+is provable by compiling: the crate's 276 tests pass without the edge.
+
+The rejected workaround also had a cost the chosen one does not. A blanket
+"patch every internal crate in every invocation" rule makes Cargo print
+`patch ... was not used in the crate graph` for the patches that resolve
+nothing, which is precisely the warning that exposed the first, vacuous probe
+in this investigation. Keeping each invocation's patch list per-invocation, and
+keyed by package name rather than directory name, leaves that warning as a
+usable signal instead of permanently firing noise.
 
 ## Outcomes & retrospective
 
