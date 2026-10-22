@@ -79,8 +79,18 @@ CHILD_CARGO_TIER_CRATES: typ.Final[tuple[str, ...]] = ("ortho_config", "cargo-or
 #: `prepare_cargo_command` marker did exactly that after the helper it named
 #: was renamed, and the replacement carries the old name in its pattern so the
 #: rename cannot recur silently.
+#: The direct-spawn pattern excludes a ``clap::``-qualified ``Command``, which
+#: is a *builder*: ``clap::Command::new("cargo")`` names a command for a help
+#: screen and starts no process. Reading it as a spawn puts a binary in the
+#: class that pays no nested build, and the contract then reports the
+#: configuration's filter as too wide -- blaming the configuration for a
+#: misreading of the Rust. Only the ``clap`` path is excluded: a
+#: ``std::process::`` qualification is a real spawn and is still read. The
+#: repository has one such builder, in ``ortho_config/src/cargo/mod.rs``,
+#: outside every test binary, so the exclusion changes no member today; it is
+#: here so that a test file using clap cannot be misread as spawning cargo.
 CARGO_MARKERS: typ.Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
-    ("cargo-spawn", re.compile(r'Command::new\(\s*"cargo"\s*\)')),
+    ("cargo-spawn", re.compile(r'(?<!clap::)Command::new\(\s*"cargo"\s*\)')),
     ("binary-loader", re.compile(r"\bcargo_orthohelp_exe\b")),
     (
         "cargo-runner",
