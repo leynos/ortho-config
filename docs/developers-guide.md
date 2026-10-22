@@ -2877,10 +2877,21 @@ Which binaries a raised allowance covers is a question about the Rust sources,
 so that contract reads them rather than a list. `child_cargo_tier.py` decides
 which test binaries drive a child `cargo` of their own, `rust_module_graph.py`
 answers which files a binary compiles, and `child_cargo_tier_test.py` compares
-the class with what `.config/nextest.toml` selects. `trybuild_tier.py` does the
-same for its own class and shares the module-graph reading; the two classes ask
-the same question of the same sources and differ only in the marker each looks
-for.
+the class with what `.config/nextest.toml` selects. `trybuild_tier.py` decides
+the trybuild class on its own, naming its marker in `TRYBUILD_CALL`, and reads
+the two classes the same way otherwise.
+
+The two differ in how far they follow the language, and the difference is
+deliberate rather than an inconsistency to tidy away. `trybuild_tier.py` scans a
+`mod.rs` root's whole directory, which *over*-approximates the module graph:
+it does not follow `mod` declarations and `#[path]` can reach outside the tree
+it scans. Over-approximating is the safe direction for that class, because a
+call that is not reachable costs the filter an entry it did not need, while one
+that is reachable and missed hides a binary that runs compile tests on the base
+allowance. `child_cargo_tier.py` resolves the graph properly instead, because
+its markers are the kind a shared helper carries: an over-approximation there
+would attribute a helper's marker to any binary that happened to sit in the
+same directory, which is the false positive its own module docstring records.
 
 Membership is decided by reaching files, not by grepping the `tests/` tree, and
 the difference is not academic. A grep for `Command::new("cargo")` also matches
