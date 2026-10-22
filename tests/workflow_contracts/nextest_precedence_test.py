@@ -49,10 +49,10 @@ def test_a_gated_entry_alongside_a_filter_does_not_supply_an_allowance() -> None
     The gate and the filter are independent keys: nextest accepts an entry
     carrying both, and the gate then narrows the filter rather than replacing
     it. The mistake this guards is reading such an entry's filter and ignoring
-    its gate, which applies a ``cfg(windows)`` entry to the Linux lane these
-    contracts assert. Measured on the real configuration, the trybuild entry
-    that reserves every nextest slot on Windows has exactly this shape, so it
-    is not a hypothetical.
+    its gate, which applies an entry to a lane where it may not run at all.
+    Measured on the real configuration, the trybuild entry that reserves every
+    nextest slot on Windows has exactly this shape, so it is not a
+    hypothetical.
 
     Wrong answer: ``a`` resolves to ``overrides[0]`` at the base figure with
     ``is_above_base`` false, because the gated entry is read as a plain base
@@ -63,33 +63,84 @@ def test_a_gated_entry_alongside_a_filter_does_not_supply_an_allowance() -> None
     gated = (
         "[[profile.default.overrides]]\n"
         'filter = "binary(a)"\n'
-        "platform = 'cfg(windows)'\n"
+        "platform = 'cfg(unix)'\n"
         'slow-timeout = { period = "60s", terminate-after = 10 }\n'
     )
     resolved = _resolve(BASE_60 + gated + RAISED_120, "a")["a"]
     assert resolved.path == "profile.default.overrides[1]", (
         f"the platform-gated entry at overrides[0] supplied {resolved.path}; a "
-        f"gate this reader cannot evaluate must not be applied, or a "
-        f"Windows-only entry decides a Linux reading"
+        f"gate this reader cannot evaluate must not be applied, or an entry "
+        f"reserved for another platform decides this lane's reading"
     )
     assert resolved.is_above_base, (
         "the raised entry below the gate is the one nextest applies on Linux, "
         "so the binary must resolve as raised"
     )
-    assert not resolved.is_unresolved, (
-        "a gated entry naming this binary cannot shadow it: nextest skips it "
-        "on the lane being read, so nothing above the match is in doubt"
+
+
+def test_a_gated_entry_that_might_claim_the_name_leaves_it_unresolved() -> None:
+    """A gate is not evidence the entry does not apply; only its filter is.
+
+    The gate is refused because the platform is unknown, not because the entry
+    cannot match. The same gate is true on one lane and false on another, so an
+    entry carrying ``cfg(unix)`` above a raised entry shadows it on the very
+    lane these contracts assert, and reporting the raised figure as certain is
+    the fail-open direction: coverage is claimed for a configuration whose
+    member nextest may run at the earlier figure.
+
+    Wrong answer: ``is_unresolved`` false, from skipping the gated entry
+    instead of marking it.
+    """
+    gated = (
+        "[[profile.default.overrides]]\n"
+        'filter = "binary(a)"\n'
+        "platform = 'cfg(unix)'\n"
+        'slow-timeout = { period = "60s", terminate-after = 10 }\n'
+    )
+    resolved = _resolve(BASE_60 + gated + RAISED_120, "a")["a"]
+    assert resolved.is_unresolved, (
+        "a gate naming this binary may apply on the lane being read, so the "
+        "figure below it is not known to be the one nextest applies"
     )
 
 
-def test_an_ungated_platform_entry_is_skipped_like_a_gated_one() -> None:
-    """The expression-less shape is read the same way as the gated one.
+def test_a_gated_entry_whose_filter_excludes_the_name_does_not_mark_it() -> None:
+    """The readable half of a gated entry still settles the question.
+
+    A gate *narrows* its filter rather than replacing it, so a name the filter
+    excludes is excluded on every platform and no decision is pending for it.
+    This is what keeps the mark usable: the real configuration's Windows-only
+    trybuild entry names four binaries this class does not contain, and marking
+    every member for it would make the contract's unresolved assertion fire on
+    a configuration that is correct.
+
+    Wrong answer: ``is_unresolved`` true, from treating every gated entry as
+    possibly naming anything.
+    """
+    gated = (
+        "[[profile.default.overrides]]\n"
+        'filter = "binary(other_binary)"\n'
+        "platform = 'cfg(windows)'\n"
+        'slow-timeout = { period = "60s", terminate-after = 10 }\n'
+    )
+    resolved = _resolve(BASE_60 + gated + RAISED_120, "a")["a"]
+    assert not resolved.is_unresolved, (
+        "the gated entry's readable filter excludes this name, so the platform "
+        "decision cannot change whether it claims it"
+    )
+    assert resolved.path == "profile.default.overrides[1]"
+    assert resolved.is_above_base
+
+
+def test_an_ungated_platform_entry_marks_every_name() -> None:
+    """An expression-less entry is marked the same way as a gated one.
 
     An entry selecting by ``platform`` alone carries no ``filter``, so it names
-    no binary this reader can evaluate. Treating it as supplying nothing is the
-    same decision as the test above, reached through the other of the two
-    shapes an unevaluable entry takes; the pair is what shows the rule is about
-    evaluability rather than about the ``filter`` key's absence.
+    no binary this reader can evaluate and no name can be ruled out. Treating
+    it as supplying nothing is the same decision as the gated case, reached
+    through the other of the two shapes an unevaluable entry takes; the pair is
+    what shows the rule is about what can be decided rather than about the
+    ``filter`` key's absence.
     """
     bare = (
         "[[profile.default.overrides]]\n"
@@ -99,7 +150,7 @@ def test_an_ungated_platform_entry_is_skipped_like_a_gated_one() -> None:
     resolved = _resolve(BASE_60 + bare + RAISED_120, "a")["a"]
     assert resolved.path == "profile.default.overrides[1]"
     assert resolved.is_above_base
-    assert not resolved.is_unresolved
+    assert resolved.is_unresolved
 
 
 def test_a_refused_expression_shadows_and_does_not_supply() -> None:
