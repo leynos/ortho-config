@@ -1127,9 +1127,9 @@ normal relative components only.
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:
 
-- `documentation_examples_tests.rs` owns the closed identifier registry, README
-  parity with the packaged crate README, and static contracts for data fences
-  such as configuration files, JSON documents, and command spellings;
+- `documentation_examples_tests.rs` owns the closed identifier registry, the
+  packaging contract for the README, and static contracts for data fences such
+  as configuration files, JSON documents, and command spellings;
 - `documentation_installation_tests.rs` owns installation and upgrade
   manifests. It sweeps every TOML fence that depends on `ortho_config` and
   requires the version to equal `CARGO_PKG_VERSION`, so `lading bump`, which
@@ -1153,6 +1153,13 @@ then run the binary under the conditions each command line names and compare
 the output with the lines that follow it. Placeholder package names in command
 examples, such as `my-cli`, are mapped onto workspace fixture packages whose
 manifests carry the documented configuration.
+
+The `ortho_config` crate publishes the repository README itself: its manifest
+sets `readme = "../README.md"`, and `cargo package` copies that file into the
+crate root. Do not add `ortho_config/README.md`; it would collide with the
+copied file and reintroduce a second README to keep in step. Because crates.io
+and docs.rs render the README away from the repository, every link in it must
+be absolute, which `repository_readme_links_are_absolute` enforces.
 
 ### Production bridge build ownership
 

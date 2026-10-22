@@ -87,16 +87,59 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "readme-run",
 ];
 
+/// The crate packages the repository README directly, so there is no copy to
+/// keep in step. `cargo package` copies a readme from outside the package
+/// into the crate root, and a second `ortho_config/README.md` would collide
+/// with it.
 #[test]
-fn published_crate_readme_matches_repository_readme() -> Result<()> {
+fn published_crate_packages_the_repository_readme() -> Result<()> {
     let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
-    let repository_readme = repository.read_to_string("README.md")?;
-    let crate_readme = repository.read_to_string("ortho_config/README.md")?;
+    let manifest: toml::Value =
+        toml::from_str(&repository.read_to_string("ortho_config/Cargo.toml")?)
+            .context("parse the ortho_config manifest")?;
+    let readme = manifest
+        .get("package")
+        .and_then(|package| package.get("readme"))
+        .and_then(toml::Value::as_str);
     ensure!(
-        crate_readme == repository_readme,
-        "the packaged ortho_config README should match the repository README"
+        readme == Some("../README.md"),
+        "ortho_config should package the repository README, got {readme:?}"
+    );
+    ensure!(
+        !repository.exists("ortho_config/README.md"),
+        "remove ortho_config/README.md; the crate packages the repository README"
     );
     Ok(())
+}
+
+/// crates.io and docs.rs render the README away from the repository, so a
+/// relative link would resolve against the wrong base.
+#[test]
+fn repository_readme_links_are_absolute() -> Result<()> {
+    let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
+    let readme = repository.read_to_string("README.md")?;
+    let relative: Vec<&str> = link_targets(&readme)
+        .filter(|target| !(target.starts_with("https://") || target.starts_with('#')))
+        .collect();
+    ensure!(
+        relative.is_empty(),
+        "README links must be absolute: {relative:?}"
+    );
+    Ok(())
+}
+
+/// Targets of inline links (`](target)`) and reference definitions
+/// (`[label]: target`), ignoring any link title.
+fn link_targets(markdown: &str) -> impl Iterator<Item = &str> {
+    let inline = markdown
+        .split("](")
+        .skip(1)
+        .filter_map(|rest| rest.split([')', ' ']).next());
+    let references = markdown.lines().filter_map(|line| {
+        let (label, target) = line.strip_prefix('[')?.split_once("]: ")?;
+        (!label.is_empty()).then(|| target.split(' ').next().unwrap_or_default())
+    });
+    inline.chain(references)
 }
 
 #[test]
