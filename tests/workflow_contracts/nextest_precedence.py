@@ -34,6 +34,14 @@ asserts a configuration read for the Linux lane, which is where
 ``make test-workflow-contracts`` runs; a caller wanting the Windows reading
 must supply that decision rather than receive it silently.
 
+Narrowing the mark to the names a gate could actually claim is what keeps it
+usable. A gate narrows its filter rather than replacing it, so an entry
+carrying both keys is read exactly where that filter is readable: a name the
+filter excludes cannot be claimed whatever the platform decides, and does not
+raise the mark. Where there is nothing to read -- no expression, or one this
+reader refuses -- every name remains possible, which is why the mark is a
+per-name question rather than a per-file one.
+
 A gate and a filter are independent keys, and an entry may carry both: the gate
 then narrows the filter rather than replacing it. Reading such an entry's
 filter and ignoring its gate applies a Windows-only entry to a Linux run, which
@@ -233,46 +241,71 @@ def _tier_from(override: Override, base: float) -> EffectiveTier:
     )
 
 
-def _shadowed(tier: EffectiveTier, override: Override, name: str) -> EffectiveTier:
-    """Mark ``tier`` unresolved if an unevaluable entry might still select ``name``.
+def _decide(override: Override, name: str, reader: FilterReader) -> bool | None:
+    """Whether an entry supplies a figure to ``name``: yes, no, or undecidable.
 
-    Asked where this module cannot decide whether an entry applies: the reader
-    refused its expression, or it is platform-gated. Such an entry does not end
-    the walk -- it supplies nothing this module can attribute -- but it may
-    shadow the allowance a later entry would supply, so the name is marked
-    rather than left with a figure that may not be the one nextest applies.
+    Three outcomes rather than two, because the walk asks two things of the
+    same entry and they need different information. An entry supplies a figure
+    only when it decides *yes*. It leaves the name unresolved when the decision
+    is *undecidable*, and does nothing at all on a decided *no*.
 
-    An entry with no expression is treated as possibly naming anything: with no
-    filterset it selects every test the platform admits, so no name can be
-    ruled out.
+    Nothing here reports an entry as applying that this reader cannot show
+    applies. A filter this reader can read is answered exactly, which is what a
+    platform-gated entry needs: a gate *narrows* its filter rather than
+    replacing it, so a filter that reads and excludes the name excludes it
+    whatever the platform decides. Where the filter selects the name and the
+    gate is present, the platform is unknown, so the answer is ``None``. Only
+    where nothing at all can be read -- no expression, or one the reader
+    refused -- is the answer the deliberate over-approximation of
+    :func:`_could_name`.
 
     Examples
     --------
-    An expression naming the binary is enough to mark the tier, and the test
-    is a substring one, so ``cli_dispatch`` matches while an unrelated name
-    does not:
+    A readable expression is answered from the selection, not from a substring:
 
-    >>> base = EffectiveTier(600.0, "profile.default", False, False)
-    >>> _shadowed(
-    ...     base,
+    >>> reader = selected_by_universe(["cli_dispatch", "other_binary"])
+    >>> _decide(
     ...     Override("profile.default.overrides[0]", "binary(cli_dispatch)", {}),
     ...     "cli_dispatch",
+    ...     reader,
     ... )
-    EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=True)
-    >>> _shadowed(
-    ...     base,
+    True
+    >>> _decide(
     ...     Override("profile.default.overrides[0]", "binary(cli_dispatch)", {}),
     ...     "other_binary",
+    ...     reader,
     ... )
-    EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=False)
-    >>> _shadowed(
-    ...     base, Override("profile.default.overrides[0]", None, {}), "any_binary"
+    False
+
+    A gated entry whose filter excludes the name is still a decided no, and one
+    whose filter includes it is undecidable rather than applied:
+
+    >>> gated = Override(
+    ...     "profile.default.overrides[0]", "binary(cli_dispatch)", {"platform": "cfg(unix)"}
     ... )
-    EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=True)
+    >>> (_decide(gated, "cli_dispatch", reader), _decide(gated, "other_binary", reader))
+    (None, False)
+
+    An entry selecting without any expression names anything it is admitted
+    for, so no name can be ruled out, and a refused expression falls back to a
+    substring test that ``other_binary`` passes:
+
+    >>> _decide(Override("profile.default.overrides[0]", None, {}), "x", reader)
+    >>> _decide(
+    ...     Override("profile.default.overrides[0]", "binary(cli_dispatch) & test(x)", {}),
+    ...     "cli_dispatch",
+    ...     reader,
+    ... )
     """
-    if override.expression is None or _could_name(override.expression, name):
-        return tier._replace(is_unresolved=True)
-    return tier
+    if override.expression is None:
+        return None
+    try:
+        chosen = bool(reader.read(override.expression).get(name))
+    except reader.refuses:
+        return None if _could_name(override.expression, name) else False
+    if chosen:
+        return None if override.is_platform_gated else True
+    return False
 
 
 def _resolve_one(
@@ -289,17 +322,13 @@ def _resolve_one(
     is the tier in force when no override supplies one, and carries both the
     figure and the profile path a name falls back to.
 
-    Three entry shapes never supply an allowance, because this module cannot
-    show that the run nextest performs is the one being read:
-
-    - Platform-gated entries are skipped outright. Applying one would read a
-      ``cfg(windows)`` entry into a Linux assertion; the gate narrows an
-      entry's filter rather than replacing it, so an entry carrying both keys
-      is not detectable by looking for a missing expression.
-    - An entry the reader refused shadows rather than supplies. It may match
-      the name, but its figure is not attributable.
-    - An entry with no expression at all selects every test, so it is treated
-      the same way.
+    Whether an entry supplies a figure is :func:`_decide`'s three-way answer,
+    and the walk treats each outcome as one case: *yes* returns the figure,
+    *no* leaves the tier alone, and *undecidable* supplies nothing but marks
+    the name. The mark is what keeps the two unreadable readings
+    distinguishable from a decided ``no``: a name no gated entry can select
+    resolves cleanly and unmarked, while one a gate might claim is refused by
+    the caller rather than reported at a figure nextest may not give it.
 
     An earlier shadowing mark survives a later match: ``unresolved`` records
     that *some* entry above the one supplying this figure might have claimed
@@ -316,34 +345,35 @@ def _resolve_one(
     ... ], selected_by_universe(["a", "b"]), base)
     EffectiveTier(allowance=600.0, path='profile.default', is_above_base=False, is_unresolved=False)
 
-    A platform-gated entry is skipped, so the raised entry below it supplies
-    the figure on the lane this contract reads:
+    A platform-gated entry supplies nothing and the raised entry below it
+    supplies the figure. Whether the name is marked depends on one thing: a
+    gate narrows its filter rather than replacing it, so a readable filter
+    that excludes the name settles the question, and one that includes it
+    leaves the platform undecided:
 
-    >>> gated = Override(
-    ...     "profile.default.overrides[0]", "binary(a)",
-    ...     {"platform": "cfg(windows)",
-    ...      "slow-timeout": {"period": "60s", "terminate-after": 10}},
-    ... )
     >>> raised = Override(
     ...     "profile.default.overrides[1]", "binary(a)",
     ...     {"slow-timeout": {"period": "120s", "terminate-after": 8}},
     ... )
-    >>> _resolve_one("a", [gated, raised], selected_by_universe(["a"]), base)
+    >>> def gated(expression):
+    ...     return Override(
+    ...         "profile.default.overrides[0]", expression,
+    ...         {"platform": "cfg(unix)",
+    ...          "slow-timeout": {"period": "60s", "terminate-after": 10}},
+    ...     )
+    >>> _resolve_one("a", [gated("binary(b)"), raised], selected_by_universe(["a"]), base)
     EffectiveTier(allowance=960.0, path='profile.default.overrides[1]', is_above_base=True, is_unresolved=False)
+    >>> _resolve_one("a", [gated("binary(a)"), raised], selected_by_universe(["a"]), base)
+    EffectiveTier(allowance=960.0, path='profile.default.overrides[1]', is_above_base=True, is_unresolved=True)
     """
     tier = baseline
     for override in entries:
-        if "slow-timeout" not in override.entry or override.is_platform_gated:
+        if "slow-timeout" not in override.entry:
             continue
-        if override.expression is None:
-            tier = _shadowed(tier, override, name)
-            continue
-        try:
-            chosen = reader.read(override.expression)
-        except reader.refuses:
-            tier = _shadowed(tier, override, name)
-            continue
-        if chosen.get(name):
+        supplies = _decide(override, name, reader)
+        if supplies is None:
+            tier = tier._replace(is_unresolved=True)
+        elif supplies:
             return _tier_from(override, baseline.allowance)._replace(
                 is_unresolved=tier.is_unresolved
             )
@@ -362,10 +392,10 @@ def effective_allowances(
     The entries are walked in file order and the first that selects a name
     *and* configures ``slow-timeout`` supplies it, which is nextest's rule.
     An entry that selects a name but configures another setting does not
-    shadow it, because precedence is resolved per setting. An entry selecting
-    through ``platform`` alone is skipped, since this reader has no platform
-    decision to apply -- exact for the entries this repository writes, which
-    name the binaries their own filter selects.
+    shadow it, because precedence is resolved per setting. An entry this
+    reader cannot attribute a figure to -- gated, expression-less, or one it
+    refused -- supplies nothing, and marks a name it might select unresolved
+    rather than being skipped.
 
     Parameters
     ----------

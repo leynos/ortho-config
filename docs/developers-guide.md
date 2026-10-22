@@ -101,20 +101,26 @@ raised entry still names the binary, so the union reports it covered.
 order and applies that rule, and
 `test_a_base_tier_entry_above_a_raised_one_removes_coverage` is the negative
 control, driven by inserting the shadowing entry into the fixture's copy of
-this file. The resolver reads only `[profile.default]`'s own list and does not
-apply `platform` gates, which is exact for the Linux lane that runs these
-contracts.
+this file. The resolver reads only `[profile.default]`'s own list and applies no
+`platform` gate, which is exact for the Linux lane that runs these contracts.
 
 A gate and a filter are independent keys, and an entry may carry both: the gate
 narrows the filter rather than replacing it. The Windows-only trybuild entry
 below does exactly that, so the resolver checks the gate before it reads an
-expression and never infers "no gate" from "has a filter". An entry it cannot
-evaluate — gated, or a filter language it refuses — supplies nothing and marks
-the binary unresolved if it might have matched, and that mark survives a later
-match. Reading such an entry's filter while ignoring its gate is the failure
-the direction matters in: it applies a Windows-only entry to a Linux reading
-and reports a binary as raised when nextest gives it the earlier figure.
-`nextest_precedence_test.py` covers both shapes and the surviving mark, each
+expression and never infers "no gate" from "has a filter". Applying neither
+direction blindly is the point: a gated entry supplies nothing, because this
+reader cannot say whether the gate holds on the lane being read, and one whose
+readable filter the name survives marks that name unresolved rather than
+reporting a figure nextest may not give it. The mark is narrowed by the filter
+rather than raised for every name, which is what leaves the real configuration
+resolving cleanly: the Windows trybuild entry names four binaries this class
+does not contain, so no member is marked for it. Reading a gated entry's filter
+while ignoring its gate is the failure the direction matters in, because it
+applies a Windows-only entry to a Linux reading and reports a binary as raised
+when nextest gives it the earlier figure; skipping a gated entry rather than
+marking it is the opposite failure, and the one a `cfg(unix)` gate above a
+raised entry produces. `nextest_precedence_test.py` covers both gated outcomes,
+the expression-less shape, the refused expression, and the surviving mark, each
 with the wrong answer it would have produced.
 
 Group membership and raised-allowance coverage are separate questions, and the
