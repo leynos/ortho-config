@@ -16,11 +16,15 @@ in both directions, so neither an omission nor an over-broad filter can pass.
 
 The overrides are found by **membership**, not by allowance. Three overrides in
 this file carry 960s, so keying on the figure is ambiguous and would refuse to
-read at all. Coverage is what matters instead: the class's members may be
-spread across more than one above-base entry -- they are here, because
-``rstest_bdd`` has its own measured 956-second scenario envelope -- so the
-contract reads the union of every above-base entry that selects a class member,
-and requires that union to be the class.
+read at all. What the contract asserts instead is the allowance nextest
+*resolves* for each member: the entries are walked in file order, and a member
+takes the first one that both selects it and supplies a ``slow-timeout``.
+Naming a member in a raised entry is therefore not the same as raising it -- an
+entry above it that matches and carries the base figure wins, and a union of the
+entries that merely mention the member cannot see that. The class's members may
+also be spread across more than one above-base entry; they are here, because
+``rstest_bdd`` has its own measured 956-second scenario envelope. Per-member
+resolution handles both without a union.
 
 Two further assertions protect the shared serialization. Every binary a test
 group serializes must be a class member, because the raised allowance is
