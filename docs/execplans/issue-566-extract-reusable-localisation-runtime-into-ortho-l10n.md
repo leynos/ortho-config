@@ -666,6 +666,29 @@ The detection is the point. A Markdown-only delta is exactly the case where "no
 other gate reads this" is tempting and wrong, and the gate that disproved it is
 one this certificate had already declared green on the previous tree.
 
+The reworded tree was re-run and the lane is green. The scrutineer ran
+`make check-fmt`, `make markdownlint` and `make nixie` sequentially against
+`7d458dd03965b12b3062ee69fb67ebab1923bf37`, tree
+`47ee9c7622674bb2167256fa440d3f80f49654e9`, and re-checked HEAD, tree and
+`git status --porcelain` afterwards; all were unchanged. Every gate passed:
+`90 files left unchanged.`, `Summary: 0 issues in 0 files`, and all diagrams
+validated.
+
+One observation from that run bounds the lesson. The same abbreviation still
+appears in five other inline spans in this file and the gate passes, so the
+fault was local to that one span rather than a property of commit
+abbreviations. That is the shape of the failure worth remembering: a spelling
+gate over inline code is sensitive to the *combination* of characters a span
+produces, so a phrase that reads fine to a person can still tokenize into
+something the dictionary rejects. Rewording is the repair because it removes
+the combination; an exemption would have removed the check.
+
+This section also ends the edit-then-retest regress rather than repeating it.
+Writing this paragraph changes the tree again, so the Markdown lane is run one
+final time against the commit that carries it, and that result is recorded in
+the pull-request description and the delivery ledger rather than back here. The
+tracked file stops changing, and the certificate is not chasing its own prose.
+
 ### EP-M4 milestone CLI review (2026-10-22)
 
 The milestone `coderabbit review --agent` (CLI 0.9.1) ran with
