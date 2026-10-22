@@ -826,7 +826,7 @@ package roots, not tests.
 
 | File                                                 | Lines           | What it owns                                          |
 | ---------------------------------------------------- | --------------- | ----------------------------------------------------- |
-| `boundary/fixture_cargo/mod.rs`                      | 381             | disposable root, deadline-bounded child, host resolve |
+| `boundary/fixture_cargo/mod.rs`                      | 385             | disposable root, deadline-bounded child, host resolve |
 | `boundary/fixture_cargo/manifest.rs`                 | 82              | reading a manifest as declared edges, all platforms   |
 | `boundary/fixture_cargo/environment.rs`              | 161             | the closed child environment                          |
 | `boundary/fixture_cargo/metadata.rs`                 | 229             | the `cargo metadata` document contract                |
@@ -1520,6 +1520,47 @@ three files in this suite already exceed 400 and the lint names only the one
 that grew. The TOML-reading responsibility moved to `fixture_cargo/manifest.rs`
 (82 lines), which is a seam the module doc had already described as distinct —
 reading a manifest is not resolving a graph and not judging one.
+
+### EP-M3: the host narrowing's own duplication (2026-10-22)
+
+A local CodeScene delta of the Windows repair — the same base/head comparison
+the hosted check makes — reported one introduced finding against the repaired
+candidate:
+
+> `ortho_l10n/tests/boundary/fixture_cargo/mod.rs` — Code Duplication, score
+> 9.38: "the module contains 2 functions with similar structure:
+> `FixtureCargo.cargo_checked`, `FixtureCargo.metadata`".
+
+The finding was accurate and it was ours. Extracting `resolve` had left
+`metadata` carrying a near-copy of `cargo_checked`'s fail-on-non-zero block,
+differing only in the label printed. CodeScene's default disposition would be
+to accept it as style advice; here it was a correctness risk, because the
+negative controls depend on a *failing* resolve's diagnostic being reported in
+full. Two copies means a future edit that reached only one would silently
+truncate exactly the evidence the controls exist to produce, and the controls
+would fail for a reason that looks like a broken fixture rather than a broken
+check. The duplication and the vacuity above are the same class of defect: in
+both, the mechanism that is supposed to report a failure can stop doing so
+without any test turning red.
+
+The repair in `a7d8002d` is one `checked_stdout(output: &Output, label: &str)`
+helper that owns the failure handling, with the label as a parameter. The
+diagnostic format string is unchanged and no test matches on its prefix — the
+controls match the injected crate's name, which is untouched. Clippy rejected
+the first version of the helper for taking `Output` by value
+(`needless_pass_by_value`); borrowing is also the truer signature, since the
+caller keeps ownership. The boundary suite passes 17/17 including all four
+negative controls, and `cs delta origin/main HEAD` is empty afterwards.
+
+Cost of the repair: one file, +25/−21, and a full nine-gate re-certification,
+because a new commit is a new candidate and no certificate transfers across one.
+
+The larger lesson is about gate coverage. Neither the CodeScene finding nor the
+vacuity would have been caught by any local gate: the gates were green at
+`37e7c330` with both defects present. The vacuity was found by mutating the
+check and watching it pass when it should have failed; the duplication was
+found only by running CodeScene's delta locally. A green gate set is evidence
+that the gates' assertions hold, not that the assertions are the right ones.
 
 ## Surprises & discoveries
 
