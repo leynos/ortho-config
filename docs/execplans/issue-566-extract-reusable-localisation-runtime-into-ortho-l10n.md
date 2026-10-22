@@ -1507,13 +1507,15 @@ The fix was reproduced rather than assumed. A pruned `CARGO_HOME` holding every
 cached crate except `atomic-0.6.1` is the Windows cache state; against it an
 unfiltered resolve exits 101 with the production diagnostic, and the narrowed
 resolve exits 0 with `figment` present and `atomic` pruned. The full boundary
-suite passes 17/17 under that cache. The Windows run's own log agrees with the
+suite passes 17/17 under that cache. The run's own log agrees with the
 reproduction: of the eleven lines in run `39734333475` that contain `atomic`,
 three are `Compiling`/`Downloaded` lines for `atomic-waker v1.1.2` during the
 Merman install, four are the `atomic_write_reports_invalid_destination` test
-name, and four are the word "atomically". No line mentions `atomic v0.6.1` and
-no line contains `failed to download`, so the original failure mode is absent
-rather than merely unreported.
+name, and four are the word "atomically". Six of the eleven are in the Windows
+job and five in the Linux job, so a per-job count taken on its own reads
+differently from the run total. No line anywhere in the run mentions
+`atomic v0.6.1` and no line contains `failed to download`, so the original
+failure mode is absent rather than merely unreported.
 
 **The vacuity.** Extracting the argument list exposed a pre-existing defect in
 the negative controls, and it is the more serious finding.
