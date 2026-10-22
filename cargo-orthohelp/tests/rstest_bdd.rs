@@ -6,5 +6,12 @@
 //! shared test helpers, including binary-path discovery for the generated
 //! command.
 
+#[path = "../../ortho_config/tests/documentation_examples/cargo_environment.rs"]
+mod cargo_environment;
+#[path = "../../ortho_config/tests/documentation_examples/process_runner_support.rs"]
+mod process_runner;
+#[path = "../../ortho_config/tests/documentation_examples/process_runner_execution_policy.rs"]
+mod process_runner_execution_policy;
+
 mod fixtures;
 mod rstest_bdd_support;

@@ -20,6 +20,7 @@ ignore = [
   # fixtures. Keep inline-code spelling enabled for every other span.
   "`--color auto\\|always\\|never`",
   "`artifact_path`",
+  "`compiler-artifact`",
   "`color`",
   "`behavior`",
   "`behavior\\(\\.\\.\\.\\)`",

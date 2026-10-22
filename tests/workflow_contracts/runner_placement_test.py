@@ -223,6 +223,7 @@ def test_the_lint_trees_go_before_coverage(ci: WorkflowDocument) -> None:
 #: wrong platform, or on the old runner label, would skip or run the wrong leg
 #: with no failure to show for it.
 PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
+    "Configure MSVC for nested Cargo builds": "${{ matrix.platform == 'windows' }}",
     "Install mdtablefix": LINUX_ONLY,
     "Check formatting": LINUX_ONLY,
     "Check Rust formatting": "${{ matrix.platform != 'linux' }}",
@@ -291,6 +292,48 @@ def test_no_other_step_is_keyed_on_the_platform_or_a_runner_label(ci: WorkflowDo
         if "matrix.os" in _condition(step) or "ubuntu-latest" in _condition(step)
     ]
     assert not stale, f"steps still key on a runner label: {stale}"
+
+
+def test_windows_nested_cargo_build_pins_msvc_linker_before_coverage(
+    ci: WorkflowDocument,
+) -> None:
+    """Nested Windows Cargo builds receive the MSVC and SDK toolchain paths."""
+    steps = _steps(ci)
+    matching = [
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name") == "Configure MSVC for nested Cargo builds"
+    ]
+    assert len(matching) == 1, f"found {len(matching)} MSVC linker setup steps"
+    (index, step), = matching
+    assert step.get("shell") == "pwsh", "linker discovery runs in PowerShell"
+    command = str(step.get("run", ""))
+    assert "vswhere.exe" in command, "the linker path comes from the installed Visual Studio"
+    assert "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" in command, (
+        "Visual Studio discovery requires the x64 MSVC tools component"
+    )
+    assert "VsDevCmd.bat" in command, "the SDK and MSVC library paths come from Visual Studio"
+    assert "-arch=x64 -host_arch=x64" in command, "VsDevCmd.bat must select the x64 host and target"
+    assert "'INCLUDE', 'LIB', 'LIBPATH'" in command, "the step must export the MSVC search paths"
+    assert "kernel32.lib" in command, "fail early if the Windows SDK library path is absent"
+    assert "$env:GITHUB_PATH" in command, "nested build tools resolve from the MSVC directory"
+    assert "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=" in command, (
+        "nested Cargo builds receive the selected MSVC linker"
+    )
+    assert "$env:GITHUB_ENV" in command, "Cargo receives the linker in later workflow steps"
+    assert "did not expose the MSVC library search path" in command, (
+        "the step must fail when LIB is absent"
+    )
+    assert "throw 'vswhere did not find the x64 MSVC linker'" in command, (
+        "the step must fail when the x64 linker is absent"
+    )
+    coverage = [
+        position
+        for position, candidate in enumerate(steps)
+        if "/generate-coverage@" in str(candidate.get("uses", ""))
+    ]
+    assert coverage, "the Windows coverage step is present"
+    assert index < min(coverage), "linker setup must precede Windows coverage"
 
 
 def test_the_discard_follows_lint_and_precedes_both_coverage_passes(ci: WorkflowDocument) -> None:

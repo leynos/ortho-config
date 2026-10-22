@@ -6,6 +6,7 @@
 
 pub mod agent_context;
 mod bridge;
+mod bridge_observability;
 mod cache;
 mod cli;
 mod error;
@@ -19,7 +20,6 @@ mod output;
 pub mod policy;
 pub mod powershell;
 pub mod roff;
-mod rustflags;
 pub mod schema;
 #[cfg(test)]
 mod test_support;
@@ -148,8 +148,8 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
         lockfile_hash,
     };
 
-    let paths = bridge::prepare_paths(&selection, &cache_key);
-    let config = build_bridge_config(&selection);
+    let paths = bridge::prepare_cache(&selection, &cache_key);
+    let config = build_bridge_config(&selection, &metadata.workspace_root);
 
     let should_use_cache = args.cache.should_cache;
     let should_skip_build = args.cache.should_skip_build;
@@ -210,8 +210,12 @@ fn log_dispatched() {
 }
 
 /// Copies the selected package identity and dependency details into bridge-owned config.
-fn build_bridge_config(selection: &PackageSelection) -> BridgeConfig {
+fn build_bridge_config(
+    selection: &PackageSelection,
+    workspace_root: &camino::Utf8Path,
+) -> BridgeConfig {
     BridgeConfig {
+        workspace_root: workspace_root.to_path_buf(),
         package_root: selection.package_root.clone(),
         package_name: selection.package_name.clone(),
         root_type: selection.root_type.clone(),

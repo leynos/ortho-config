@@ -470,9 +470,9 @@ use std::sync::Arc;
 
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "ACME_")]
-struct Config {
+pub struct Config {
     #[serde(default)]
-    port: u16,
+    pub port: u16,
 }
 
 fn main() {

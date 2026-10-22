@@ -159,6 +159,8 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use camino::Utf8PathBuf;
+    use std::ffi::{OsStr, OsString};
+    use std::path::Path;
     use std::process::Stdio;
     use tempfile::TempDir;
 
@@ -178,11 +180,9 @@ mod tests {
                 .write("main.rs", source)
                 .context("write test binary source")?;
             let bin_path = dir.path().join("bin");
+            let linker = host_rustc_linker();
             let status = Command::new("rustc")
-                .arg("--edition=2021")
-                .arg(&src_path)
-                .arg("-o")
-                .arg(&bin_path)
+                .args(rustc_compile_args(&src_path, &bin_path, linker.as_deref()))
                 .status()
                 .context("compile test binary")?;
             if !status.success() {
@@ -214,6 +214,67 @@ mod tests {
 
     fn ensure_rustc_available() -> bool {
         rustc_available()
+    }
+
+    /// Return the runner-configured linker only for native Windows MSVC tests.
+    fn host_rustc_linker() -> Option<OsString> {
+        #[cfg(all(windows, target_env = "msvc"))]
+        {
+            std::env::var_os("CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER")
+        }
+        #[cfg(not(all(windows, target_env = "msvc")))]
+        {
+            None
+        }
+    }
+
+    /// Build rustc arguments while keeping configured linker paths in one OS argument.
+    fn rustc_compile_args(source: &Path, binary: &Path, linker: Option<&OsStr>) -> Vec<OsString> {
+        let mut args = vec![
+            OsString::from("--edition=2021"),
+            source.as_os_str().to_owned(),
+            OsString::from("-o"),
+            binary.as_os_str().to_owned(),
+        ];
+        if let Some(linker_path) = linker {
+            let mut linker_setting = OsString::from("linker=");
+            linker_setting.push(linker_path);
+            args.extend([OsString::from("-C"), linker_setting]);
+        }
+        args
+    }
+
+    #[test]
+    fn rustc_compile_args_keep_linker_paths_with_spaces_as_one_argument() {
+        let linker = OsStr::new(r"C:\Program Files\Visual Studio\link.exe");
+        let args = rustc_compile_args(Path::new("main.rs"), Path::new("helper.exe"), Some(linker));
+
+        assert_eq!(
+            args,
+            [
+                OsString::from("--edition=2021"),
+                OsString::from("main.rs"),
+                OsString::from("-o"),
+                OsString::from("helper.exe"),
+                OsString::from("-C"),
+                OsString::from(r"linker=C:\Program Files\Visual Studio\link.exe"),
+            ]
+        );
+    }
+
+    #[test]
+    fn rustc_compile_args_leave_the_host_default_linker_unmodified() {
+        let args = rustc_compile_args(Path::new("main.rs"), Path::new("helper"), None);
+
+        assert_eq!(
+            args,
+            [
+                OsString::from("--edition=2021"),
+                OsString::from("main.rs"),
+                OsString::from("-o"),
+                OsString::from("helper"),
+            ]
+        );
     }
 
     #[test]

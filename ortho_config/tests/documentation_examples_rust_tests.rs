@@ -10,8 +10,13 @@ mod documentation_examples;
 #[path = "documentation_examples/env_alias_chain.rs"]
 mod env_alias_chain;
 
-#[path = "documentation_examples/process_runner.rs"]
+#[path = "documentation_examples/process_runner_test_support.rs"]
 mod process_runner;
+#[path = "documentation_examples/process_runner_execution_policy.rs"]
+mod process_runner_execution_policy;
+
+#[path = "documentation_examples/rust_flows.rs"]
+mod example_flows;
 
 #[path = "documentation_examples/workspace.rs"]
 mod workspace;
@@ -47,6 +52,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
 
 /// Compiles and runs the public Rust examples, checking their documented contracts.
 #[test]
+#[serial_test::serial(documentation_build)]
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     for id in STANDARD_RUST_EXAMPLES {
@@ -58,9 +64,9 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 
     let (policy_version, agent_context_version) = api_guide::schema_versions(&mut workspace)?;
 
-    assert_standard_example_runs(&mut workspace)?;
+    example_flows::assert_standard_example_runs(&mut workspace)?;
     assert_env_alias_chain(&mut workspace)?;
-    assert_tracing_flow(&mut workspace)?;
+    example_flows::assert_tracing_flow(&mut workspace)?;
     assert_run(
         &mut workspace,
         ExampleId("guide-orthohelp-metadata"),
@@ -95,8 +101,8 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 
     assert_boolean_override_flow(&mut workspace)?;
 
-    assert_error_flow(&mut workspace)?;
-    assert_console_flows(&mut workspace)?;
+    example_flows::assert_error_flow(&mut workspace)?;
+    example_flows::assert_console_flows(&mut workspace)?;
 
     assert_run(
         &mut workspace,
@@ -107,6 +113,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial(documentation_build)]
 fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {
     let example = documented_example("guide-cargo-external-subcommand")?;
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
@@ -170,94 +177,8 @@ fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result
     Ok(())
 }
 
-/// Run each standard guide example and check its documented output.
-fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> {
-    assert_run(
-        workspace,
-        ExampleId("readme-main"),
-        ["--host", "0.0.0.0", "--port", "3000"],
-        "Listening on 0.0.0.0:3000\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-first-cli"),
-        [
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "3000",
-            "--log-level",
-            "debug",
-        ],
-        "host=0.0.0.0 port=3000 log_level=debug\n",
-    )?;
-    assert_run(workspace, ExampleId("guide-discovery"), [], "port=8080\n")?;
-    assert_run(
-        workspace,
-        ExampleId("guide-hermetic-discovery"),
-        [],
-        "candidate=/srv/acme/server.toml\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-load-first-outcomes"),
-        [],
-        "discovery=absent\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-compose-layers-with-sources"),
-        [],
-        "composition=ready\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-subcommand"),
-        ["serve", "--port", "3000"],
-        "port=Some(3000)\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-subcommand-sources"),
-        [],
-        "port=Some(9000)\n",
-    )?;
-    assert_run(
-        workspace,
-        ExampleId("guide-localization"),
-        [],
-        "verbose=true\n",
-    )
-}
-
-fn assert_error_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
-    let output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
-    ensure!(
-        output.status.success(),
-        "guide-errors should handle its error"
-    );
-    ensure!(
-        String::from_utf8_lossy(&output.stderr).contains("invalid value"),
-        "guide-errors should render clap's parse failure"
-    );
-    Ok(())
-}
-
-fn assert_tracing_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
-    let output = workspace.run(ExampleId("guide-tracing"), std::iter::empty::<&str>())?;
-    ensure!(output.status.success(), "guide-tracing should succeed");
-    ensure!(
-        output.stdout == b"port=8080\n",
-        "guide-tracing stdout should stay clean"
-    );
-    ensure!(
-        String::from_utf8_lossy(&output.stderr).contains("discovery.attempt"),
-        "guide-tracing should emit debug discovery diagnostics"
-    );
-    Ok(())
-}
-
 #[test]
+#[serial_test::serial(documentation_build)]
 fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
     workspace.add_binary(documented_example("guide-alias-derive")?)?;
@@ -342,51 +263,6 @@ fn assert_sanitized_binary_environment(workspace: &mut ExampleWorkspace) -> Resu
     ensure!(Path::new(value("home")?) == current);
     ensure!(Path::new(value("xdg")?) == current.join("xdg"));
     ensure!(value("path_present")? == "false");
-    Ok(())
-}
-
-fn assert_console_flows(workspace: &mut ExampleWorkspace) -> Result<()> {
-    let readme_console = documented_example("readme-run")?;
-    ensure!(
-        readme_console.body
-            == "$ cargo run -- --host 0.0.0.0 --port 3000\nListening on 0.0.0.0:3000\n",
-        "README command contract drifted"
-    );
-
-    let config_file = documented_example("guide-file")?;
-    workspace.write_run_file(
-        ExampleId("guide-first-cli"),
-        RunFile {
-            path: Path::new(".acme.toml"),
-            contents: &config_file.body,
-        },
-    )?;
-    let output = workspace.run_with_environment(
-        ExampleId("guide-first-cli"),
-        ["--port", "3000"],
-        [EnvironmentVariable {
-            name: "ACME_HOST",
-            value: "api.internal",
-        }],
-    )?;
-    ensure!(
-        output.status.success(),
-        "file-backed guide command should succeed"
-    );
-    let stdout = String::from_utf8(output.stdout).context("guide output should be UTF-8")?;
-    ensure!(
-        stdout == "host=api.internal port=3000 log_level=debug\n",
-        "file-backed guide output differed: {stdout:?}"
-    );
-    let guide_console = documented_example("guide-file-run")?;
-    ensure!(
-        guide_console.body
-            == concat!(
-                "$ ACME_HOST=api.internal cargo run -- --port 3000\n",
-                "host=api.internal port=3000 log_level=debug\n",
-            ),
-        "user's-guide command contract drifted"
-    );
     Ok(())
 }
 

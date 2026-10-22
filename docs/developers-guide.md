@@ -71,21 +71,22 @@ the use local to the module that needs it.
 
 ### Nextest test-group serialization
 
-`.config/nextest.toml` assigns two test binaries to single-threaded groups:
+`.config/nextest.toml` places nine documentation and cache users in the
+single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
+`nested_subcommand_end_to_end`, `documented_command`,
+`documentation_examples_rust_tests`, `agent_context_contract`,
+`policy_report_contract`, `golden_tests` and `identifier_artefact_e2e`. These
+binaries can clear the shared BDD cache or build documented examples against
+Cargo's shared target. A named process-local `Mutex` serializes scenarios
+within one test process, including direct `cargo test`. It cannot coordinate
+independent test processes, so filesystem leases also protect cache ownership
+across them.
 
-- **`rstest_bdd`** — each BDD scenario runs in its own OS process under nextest,
-  so a process-local `Mutex` cannot protect the shared `target/orthohelp` cache
-  directory. Setting `max-threads = 1` for this binary ensures scenarios run
-  sequentially and do not race on cache reads or `remove_dir_all` calls.
-- **`powershell_windows`** — both test cases invoke
-  `cargo-orthohelp --format ps` for the same package, which writes to the same
-  ephemeral bridge directory (`target/orthohelp/<hash>/`). On Windows,
-  `cargo build` holds a read lock on `Cargo.toml`; a concurrent
-  truncate-and-rewrite from the second invocation violates that lock.
-  Serializing the binary prevents the race.
-
-Do not remove the `max-threads = 1` constraint from either group without first
-verifying that the underlying shared-state access has been eliminated.
+The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
+same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
+Windows, `cargo build` holds a read lock on `Cargo.toml`; a concurrent
+truncate-and-rewrite from another invocation violates that lock. Keep the whole
+group serialized unless the shared-state access has been eliminated.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -905,21 +906,246 @@ an exact fence body. A workspace has one owner: operations that add, build,
 run, or write require an exclusive mutable borrow. Concurrent scenarios must
 create an independent workspace per thread rather than share one workspace. The
 helper may add the dependencies needed to compile a published example, but it
-must not rewrite that source. Keep the expected identifier registry closed so
-adding an example without choosing its behavioural contract fails a test. The
-documentation-example Cargo runner owns isolated Cargo process setup for these
-documentation tests; reuse it only when executing a documented Cargo workflow
-with a caller-owned temporary state directory. Run Cargo and child binaries
-with cleared environments. Cargo receives only the toolchain and platform paths
-it needs; binaries receive only the non-sensitive Windows runtime variables
-named by the workspace allow-list and deliberate scenario overrides. Keep
-fallible host-tool discovery and environment preparation at the runner
-boundary; command construction consumes the prepared values without starting
-subprocesses or writing files. The process-runner helper owns bounded execution
-for these documentation tests only: route Cargo, host-tool, and
-documented-binary commands through it, while keeping command construction and
-exit-status policy with their existing owners. Run-file paths must contain
+must not rewrite that source. Workspace setup copies the repository's
+`Cargo.lock`, when present, into the private example workspace to reuse its
+dependency versions without editing the parent lockfile. This helper belongs to
+the documentation layout and is separate from production bridge seeding. Keep
+the expected identifier registry closed so adding an example without choosing
+its behavioural contract fails a test. The documentation-example Cargo runner
+owns isolated Cargo process setup for these documentation tests; reuse it only
+when executing a documented Cargo workflow with caller-owned temporary state.
+The build-tool environment is a closed allow-list, separate from the narrower
+environment used by documented applications. It retains the configured Cargo
+home and shared package cache, Rust toolchain, compiler and documentation
+wrappers, applicable wrapper settings, build-job limits, warning flags, and
+platform paths. It also forwards `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`,
+`CARGO_LLVM_COV`, and the LLVM profile-output controls unchanged, so a nested
+build reuses the parent's compiler flags and dependency fingerprints instead of
+compiling a second, instrumentation-free copy. Those variables are therefore
+not sanitized: rewriting them would split the fingerprint and defeat the shared
+cache.
+
+The allow-list is closed: unlisted application variables do not cross it.
+Target-specific forwarding is limited to
+`CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER`. Proxy and registry settings come
+from Cargo's project and home configuration, including configured credentials;
+the documentation-test environment forwards no proxy or registry environment
+variable. Registry tokens, `SSH_AUTH_SOCK`, `ACTIONS_RUNTIME_TOKEN`, cache
+credentials, application secrets, and other unlisted variables do not cross
+this boundary. The non-secret `SCCACHE_GHA_ENABLED` cache-mode setting is
+preserved. Documented binaries receive only the non-sensitive Windows runtime
+variables, LLVM profile-output controls, deterministic home directories, and
+deliberate scenario overrides named by the workspace policy. Do not clear or
+relocate the shared Cargo cache to make a test pass.
+
+Documentation Rust examples use Cargo's resolved parent target for compiler
+artefacts. Their separate ownership state and OS-level lock live under
+`<parent-target>/documentation-examples/v2`; this is not another Cargo target.
+The shared test-only `BuildState` module handles metadata discovery, lock
+ownership, and the recovery marker for both Rust-example builds and the CLI
+documentation integration test. The Rust-example build helper additionally
+parses compiler-reported Cargo JSON paths and snapshots those executables into
+private workspaces. This protects same-named binaries across separate test
+processes; a process-local mutex is insufficient. Cargo 1.89 released its
+profile build lock before running tests in the observed workflow. A regression
+test checks this lock-order contract; it can report an inconclusive result when
+another Cargo process owns the profile lock.
+
+The CLI integration test lives in the `cargo-orthohelp` package and snapshots
+the executable path Cargo supplies through `CARGO_BIN_EXE_cargo-orthohelp` into
+a private run directory. It does not rebuild that CLI executable from Cargo
+JSON while another test might be using it. The test then runs the documented
+Cargo external-subcommand flow; its generated bridge is built and snapshotted
+by the production bridge helper. Keep manifests, source inputs, run
+directories, and copied executables private to their owner. A successful
+operation requires confirmation that the owned process tree has completed and
+its output streams have drained; root exit and pipe EOF alone do not establish
+that descendants have stopped. If that completion cannot be confirmed within
+the cleanup deadline, fail the operation and retain any cache ownership marker
+for owner recovery.
+
+A direct Cargo build error from the subprocess runner retains its marker even
+when OS-tree cleanup completes: an externally admitted compiler may outlive the
+cancelled Cargo process, so its lifetime is unconfirmed. A fully observed Cargo
+nonzero exit and preparation or snapshot errors keep the existing cleanup path;
+remove the marker only after owned-process completion is confirmed. An opaque
+nested CLI callback error retains its marker because internal capture pipes
+hide compiler writer lifetime from the outer runner. Never clear an unconfirmed
+marker automatically or terminate an unrelated process.
+
+During `cargo llvm-cov`, `show-env` exports its selected target as
+`CARGO_LLVM_COV_TARGET_DIR`, not `CARGO_TARGET_DIR`. Metadata discovery
+promotes that value to `CARGO_TARGET_DIR`, so it resolves the instrumented
+parent target instead of silently selecting a cold default target. Otherwise
+metadata follows the caller's Cargo target configuration. Nested Cargo builds
+preserve coverage flags and LLVM profile-output variables, while omitting the
+coverage CLI from `RUSTC_WRAPPER`; configured Cargo wrappers and warning policy
+remain active. Regression cases cover target precedence, wrapper selection, and
+secret exclusion.
+
+Keep fallible host-tool discovery and environment preparation at the runner
+boundary; command construction consumes prepared values without starting
+subprocesses or writing files. The process runner is test infrastructure for
+these documentation tests only: route Cargo, host-tool, and documented-binary
+commands through it, while command construction and exit-status policy remain
+with their existing owners. Its build, execution, discovery, and cleanup
+policies use one monotonic overall scenario deadline, keep per-stream capture
+to 1 MiB while continuing to drain output, and report truncation and
+unavailable evidence on failure. Output activity does not extend a deadline.
+The runner must prove that owned descendants have completed before it reports
+success, on every supported platform. The mechanism is platform-specific; the
+contract is not. This ownership applies only to test subprocesses and must not
+terminate unrelated processes or shared cache services.
+
+Documentation example scenarios start a fixed 956-second monotonic envelope
+inside their 960-second nextest override, reserving two two-second cleanup
+allowances. Individual build, execution, and discovery operations have 956, 60,
+and 30-second caps, each further limited by the scenario time remaining. The
+`cargo-orthohelp` BDD target uses the same 956-second operation envelope. A
+local direct-Cargo run reached its 595.791-second build deadline with only
+repeated Cargo package-cache lock messages and no compiler-progress evidence.
+The 956-second envelope is 1.60 times that observed lower bound. Its deadline
+counts cache and compiler-admission waits without estimating or subtracting
+them, and preserves two seconds for child cleanup and two for test reporting.
+Output does not reset either deadline. The workflow contract checks this
+ordering against nextest's 1,800-second whole-run limit, the 2,700-second Cargo
+watchdog, and the enclosing job ceiling. See
+[Test timeouts](#test-timeouts-the-tiers-this-repository-sets) and
+`documentation_budget_test.py`.
+
+Shared Cargo-runner and process-runner regressions live in the owning
+`documentation_examples_rust_tests` target. Other callers use runtime-only
+wrappers, so the same child-process probes do not run again in each integration
+binary. Build-heavy Rust documentation tests share a named in-process serial
+lock, and the matching nextest binaries share one test group. This prevents a
+test from spending its scenario deadline waiting behind another test that owns
+the same build-and-snapshot lock. The independent-workspace regression still
+performs its two workspace operations concurrently inside one test.
+
+Nested Cargo commands discover the configured target directory with
+`cargo metadata` and reuse that target and Cargo's default shared package
+cache. Documentation workspaces keep their source, manifest, run files, and
+executable snapshots in private directories; a sidecar `fs4` lock protects
+build-and-snapshot ownership across processes. The BDD scenarios use a separate
+filesystem lease under the selected target while reading and updating their
+shared bridge cache. The identifier-artefact test owns a private target nested
+under the configured workspace target, so `cargo clean -p` cannot remove
+workspace test executables. It still uses Cargo's default shared package cache.
+Cargo retains compiler wrappers, job limits, warning enforcement, coverage
+settings, and allow-listed native build inputs. Application secrets and
+arbitrary application variables are excluded. Run-file paths must contain
 normal relative components only.
+
+### Production bridge build ownership
+
+The production bridge used by `cargo-orthohelp` has a separate build helper
+from the documentation-test workspace helper. The stable IR cache entry stays
+under `target/orthohelp/<hash>/`; each invocation writes its generated
+manifest, bridge source, a private copy of the selected workspace's
+`Cargo.lock` when present, and its executable snapshot into a temporary
+directory under that entry. Cargo builds into the selected package's
+Cargo-resolved target. This reuses compiler output across cache keys without
+sharing mutable bridge inputs or running a binary from an artefact path that
+another build can overwrite.
+
+The production helper is scoped to bridge compilation. It uses an `fs4`
+operating-system file lock in Cargo's selected target directory across the
+JSON-reported build, its copy into the private run directory, and cleanup of
+the generated binary outputs. The generated manifest selects a target name
+derived from the package root and private invocation directory, so an ordinary
+workspace binary named `orthohelp_bridge` cannot replace the reported
+executable after Cargo releases its own target lock. Once the private snapshot
+succeeds, the helper removes only Cargo-reported files whose names belong to
+that generated binary. Missing files are accepted; other cleanup failures are
+logged without invalidating the snapshot. Dependencies and the shared Cargo
+cache remain under Cargo's ownership. The generated IR cache path and its
+atomic, idempotent publication remain unchanged. Cargo's configured wrappers,
+job limits, warning flags, and coverage settings remain active. The helper does
+not rewrite Rust flags or relocate the default shared Cargo cache. Its Cargo
+JSON reader retains at most 1 MiB of rendered diagnostics; `run_cargo` forwards
+that bounded output to the supervising CLI after draining the stream and marks
+truncation explicitly. The nested build asks for Cargo's plain `json` message
+format, so rustc's rendered diagnostics travel in that bounded stream rather
+than through inherited stderr. The build environment is an explicit allow-list,
+and three families of Cargo setting are also recognized structurally rather
+than by name: target-specific `LINKER` and `RUSTFLAGS` settings, and registry
+`INDEX` locations. Proxy endpoints and registry indexes cross only when their
+values contain no user information, query, or fragment, because a URL can carry
+credentials that a name check cannot see. An omitted value is reported by
+variable name, never by value. See the
+[cargo-orthohelp bridge design][bridge-build-ownership] for the ownership and
+data-flow details.
+
+[bridge-build-ownership]:
+  cargo-orthohelp-design.md#633-bridge-build-ownership-and-recovery
+
+The lock is not a recovery signal. The fail-closed marker is
+`<selected-target>/orthohelp-bridge-build.in-progress`. If an interruption
+leaves it behind, confirm no Cargo, rustc, or wrapper-managed build process is
+still using that target before removing only the marker file and rerunning the
+command. Let healthy compiler admission and Cargo lock waits complete; do not
+infer that a build has stopped from a queued wrapper alone. The bridge helper
+must not clear an unconfirmed marker, kill unrelated processes, remove the
+shared cache, or restart a cache service. The existing nextest serialization
+groups remain until their shared-state assumptions are independently disproven.
+
+#### Windows nested Cargo builds
+
+The bridge performs a nested Cargo build, so a Windows developer or CI runner
+needs a discoverable MSVC toolchain and Windows SDK before any gate that
+compiles Rust. The hosted `build-test (windows)` lane performs this setup in
+its "Configure MSVC for nested Cargo builds" step; reproduce the equivalent
+environment locally.
+
+Prerequisites are Visual Studio with the **Desktop development with C++**
+workload and the x64 compiler tools. Discovery uses `vswhere`, which hosted
+runners ship at
+`${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe`,
+filtered on `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`.
+
+`VsDevCmd.bat -arch=x64 -host_arch=x64` configures the x64 toolchain by setting
+environment variables in the process that runs it; it does not print those
+values for a parent PowerShell or Bash shell to export. Keep that process in
+the ancestry of the build instead. The simplest route is to open an **x64
+Native Tools Command Prompt** for the installed Visual Studio and run the gates
+from it, so every gate inherits the `INCLUDE`, `LIB`, `LIBPATH`, and SDK
+variables the script set.
+
+A shell that cannot inherit them, such as the Bash coverage step the hosted
+lane runs, has to read them back from a child `cmd.exe` that calls the script
+and then lists its environment:
+
+```powershell
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+$installation = & $vswhere -latest -products '*' `
+  -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+  -property installationPath | Select-Object -First 1
+$env:MSVC_VSDEVCMD = Join-Path $installation 'Common7\Tools\VsDevCmd.bat'
+$environment = & $env:COMSPEC /d /s /c `
+  'call "%MSVC_VSDEVCMD%" -arch=x64 -host_arch=x64 >nul && set'
+```
+
+`>nul` hides the script's banner so only the resulting `NAME=value` lines
+remain, and `set` with no arguments prints every variable the child now holds.
+Import only the toolchain names the gates need — `INCLUDE`, `LIB`, `LIBPATH`,
+`VCINSTALLDIR`, `VSINSTALLDIR`, `VSCMD_ARG_TGT_ARCH`, `WindowsSdkDir`, and
+`WindowsSDKVersion` — rather than the whole environment, which also carries
+application credentials.
+
+Two checks make the setup fail closed rather than produce a confusing linker
+error later. `LIB` must be present, and at least one directory on it must
+contain `kernel32.lib`, which proves the Windows SDK search path resolved. The
+x64 `link.exe` found under `VC\Tools\MSVC\**\bin\Hostx64\x64` is then placed on
+`PATH`, and its full path is exported as
+`CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` so the nested build selects it
+rather than whatever `PATH` resolves first.
+
+That ordering matters: the coverage action runs under Bash, and Git's
+`/usr/bin` precedes Visual Studio on `PATH`. Configure MSVC before coverage or
+any other step that builds Rust, or the nested bridge build links against the
+wrong tools. The setup is a CI and local-development requirement only; it does
+not change the production allow-list beyond the linker variable already
+documented above.
 
 ### Python docstring examples
 
@@ -1474,50 +1700,6 @@ the change does not invalidate cache directories. A bounded exhaustive unit
 test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
 digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
 encoder cannot pass.
-
-### Rustflags sanitization for bridge builds
-
-The bridge build spawns `cargo build` and so inherits the parent environment.
-Under `cargo-llvm-cov` that environment contains `-Cinstrument-coverage` in
-`RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS`, which would make the bridge binary
-write profiling data into the test run. `cargo-orthohelp/src/rustflags.rs`
-sanitizes both variables before the child is spawned:
-`apply_sanitized_rustflags` is called only from `bridge::build_bridge_command`,
-which also removes `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`,
-`LLVM_PROFILE_FILE`, `CARGO_LLVM_COV_TARGET_DIR`, and `CARGO_TARGET_DIR` from
-the child.
-
-The contract, which `rustflags_proptests.rs` checks against an independent
-reference filter:
-
-- **Two variables, two delimiters.** `RUSTFLAGS` uses
-  `str::split_whitespace`, so any run of Unicode whitespace separates its
-  tokens; `CARGO_ENCODED_RUSTFLAGS` splits on Cargo's unit separator
-  (`U+001F`). The delimiter is chosen once and used in both directions, so a
-  value is never split on one separator and joined with the other. Do not merge
-  the two paths into one string-typed helper.
-- **What counts as a coverage token.** A compact `-Cinstrument-coverage`,
-  including the `-Cinstrument-coverage=<value>` form, or a bare `-C` whose
-  successor is `instrument-coverage` or starts with `instrument-coverage=`. The
-  split pair is removed as a pair, so the successor cannot survive as a stray
-  token.
-- **Surviving tokens keep their order.** Nothing is sorted or deduplicated.
-  When coverage removal changes the value, the survivors are rejoined with the
-  delimiter's separator — one ASCII space for `RUSTFLAGS`, `U+001F` for
-  `CARGO_ENCODED_RUSTFLAGS` — so separator runs are normalized on that path.
-- **An unchanged value passes through byte-for-byte**, whitespace runs
-  included, rather than being re-rendered from its tokens. Original spacing is
-  preserved only here, on the path that removes nothing.
-- **An emptied value removes the variable** rather than setting it to the empty
-  string. An empty `RUSTFLAGS` is not the same as no `RUSTFLAGS` to Cargo.
-- **Every change is logged.** A partial strip and a full removal each emit one
-  `debug` event naming the variable but not its value. The unchanged path emits
-  nothing, because it has nothing to report.
-
-`apply_sanitized_rustflags` reads the current process environment directly
-rather than taking an injected source. The module is therefore tested through
-those pure functions and the property filter, never by mutating the test
-process's environment.
 
 ## Scoped and policy-based configuration discovery
 
@@ -2451,43 +2633,34 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                          |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                          |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                         |
 
 *Table: the timers that can end a run, innermost first.*
 
 ### Documentation subprocess budgets on shared hosts
 
-The executable documentation tests own an additional subprocess deadline in
-`ortho_config/tests/documentation_examples/process_runner.rs`. It defaults to
-1,200 seconds. A documented command can compile both the CLI and a generated
-bridge in separate target directories, so shared Cargo locks and compiler
-admission count towards that deadline. A shared-host run reached the deadline
-while its bridge was still compiling dependencies after healthy admission.
+Executable documentation examples use the fixed 956-second scenario envelope
+described above. Build, execution, and discovery are capped at 956, 60, and 30
+seconds respectively; each operation also inherits the scenario's remaining
+time. `cargo-orthohelp` BDD scenarios use the same 956-second envelope. These
+scenarios run under a 960-second nextest allowance, count Cargo lock and
+compiler admission time, and have no environment override; controlled
+regression tests inject short-lived policies directly so they cannot change
+parallel test processes.
 
-Select a finite budget before starting the gate when those queues require more
-time:
-
-```sh
-ORTHO_CONFIG_DOC_TEST_TIMEOUT_SECS=7200 make test
-```
-
-The override accepts whole seconds from 1 to 86,400. Invalid input fails before
-spawning a subprocess. This setting belongs only to the documentation-test
-runner; it preserves the default for CI, output capture limits, and the
-explicit short deadline used by its stalled-process regression test. It does
-not change nextest or workflow watchdogs. Tests cover both pure budget parsing
-and the environment boundary used by `run_command`. The process runner's
-`tests/environment.rs` module owns child-process probes for that boundary;
-these probes are private test fixtures, not shared command-building helpers.
-They inject or remove the override with `Command::env` and `env_remove`, so a
-one-second regression budget cannot affect parallel documentation tests. An
-independent outer deadline bounds each probe, including failures of the
-environment wiring itself.
+The earlier separate-target implementation of the documented CLI flow took 56.5
+s and 120.7 s on hosted runners, 588.0 s and 593.6 s on a shared host, and
+600.5 s on a saturated shared host, where the old 600-second limit ended the
+run. Those wall times did not include correlated admission-delay or reliable
+cache hit/miss evidence. This change reuses Cargo's configured target and
+shared cache, removing the duplicate cold dependency build. The finite scenario
+ceiling remains tied to nextest's per-test allowance rather than being
+increased to absorb unmeasured queue time.
 
 ### The outermost tier was missing
 
@@ -2604,41 +2777,26 @@ measurements and named the constraint they had to satisfy, that each coverage
 job invokes the action twice so raising the watchdog costs twice as much
 ceiling here. It is answered above.
 
-### The in-process bound on a documentation subprocess
+### Documentation subprocess and cache ownership
 
-The four tiers above are not the only timer on a test. The executable
-documentation tests run their subject through
-`ortho_config/tests/documentation_examples/process_runner.rs`, which kills a
-child that outlives `DEFAULT_TIMEOUT`. The child is a nested `cargo run` in a
-target directory of its own, so it pays a cold dependency build, and on a
-developer host that build is admitted to the same shared compiler pool as every
-other agent's, which is what its duration actually tracks.
+The documentation process runner applies a hard overall deadline to each
+subprocess. Build, execution, and discovery budgets are 956, 60, and 30
+seconds, with two seconds reserved for bounded cleanup. A fixed scenario
+deadline is never extended by output. The runner drains both streams while
+retaining at most 1 MiB per stream, reports truncation and available evidence
+on timeout or wait failure, and limits reader completion during cleanup.
 
-The figure was 600 s and is now 1,200 s, doubled to twice the worst run that
-finished. The measurements that set it:
-
-| Where                     | Duration | Of its budget |
-| ------------------------- | -------- | ------------- |
-| `build-test` runner       | 56.5 s   | 0.09 of 600 s |
-| `build-test` runner       | 120.7 s  | 0.20 of 600 s |
-| developer host            | 588.0 s  | 0.98 of 600 s |
-| developer host            | 593.6 s  | 0.99 of 600 s |
-| developer host, saturated | 600.5 s  | killed        |
-
-*Table: the durations `documented_orthohelp_command_generates_agent_context`
-took, read from the run logs. The runner figures come from run 36405408699; the
-developer-host ones from three local runs of the same code.*
-
-The two populations differ by an order of magnitude, and it is the shared host
-that reaches the ceiling. At 0.99 of budget the old figure was already too
-small by the same reading applied to the trybuild allowance above, so it was
-measuring host load rather than catching a hang. Doubling it leaves the tiers
-sound rather than inverted: the coverage lane runs nextest, where the base
-`slow-timeout` is 600 s and bounds the test more tightly than this does, and
-its runners are not shared, so on the lane that gates a merge the outer timer
-still fires first. Under `make test`, which invokes `cargo test` with no
-nextest bounds at all, this is the only timer on the child, which is why it has
-to carry the host's variance rather than the runner's.
+These operations do not create a new Cargo target for each example workspace.
+They resolve the caller's configured target directory, including the target
+selected by `cargo llvm-cov`, and reuse Cargo's default shared package cache. An
+`fs4` sidecar lease under `target/documentation-examples/v2` serializes
+documentation builds through their JSON artefact snapshot; Cargo remains the
+owner of compiler output and package-cache locking. Each example's generated
+manifest, run directory, inputs, and executable snapshots remain private. BDD
+scenarios hold their own cross-process lease while exercising the shared bridge
+cache. These helpers are confined to documentation tests and do not change
+application environment policy or terminate processes outside the owned
+subprocess tree.
 
 ### What the ceilings are sized against
 

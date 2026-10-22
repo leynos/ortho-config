@@ -112,30 +112,26 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 filter = 'binary(boolean_cli_trybuild) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
-# Serialise orthohelp BDD scenarios: each runs in its own nextest process,
-# so inter-process races on the shared orthohelp cache must be prevented
-# at the nextest level rather than with a process-local mutex.
-# Serialise powershell_windows cases: both cases write to the same bridge
-# directory under target/orthohelp/<hash>/ and Windows file-sharing semantics
-# prevent concurrent truncate+write while cargo holds a read lock on the manifest.
-# Serialise nested_subcommand_end_to_end: its rstest cases spawn concurrent
-# bridge builds that share the target/orthohelp/<hash>/ cache, and an
-# inter-process race on that shared Cargo.toml intermittently yields
-# BridgeBuildFailure ("manifest is missing either a [package] or a
-# [workspace]") under coverage runs.
+# The BDD cache scenarios remove `target/orthohelp` to verify a cold cache,
+# while documentation builds share `target/documentation-examples/v2`. Keep
+# every nextest binary that can clear either cache or build against those
+# ownership locks in one process-wide group. This prevents scenarios from
+# spending their own deadlines waiting behind peer tests. Production locks
+# still protect build-and-snapshot operations across separate processes.
 [test-groups]
-rstest_bdd = { max-threads = 1 }
-powershell_windows = { max-threads = 1 }
-nested_subcommand_end_to_end = { max-threads = 1 }
+orthohelp_cache = { max-threads = 1 }
 
+# A documented-command run reached 595.9s with only Cargo package-cache lock
+# waits before its 596s operation deadline. The 956s scenario envelope is 1.60
+# times that measured lower bound; two seconds remain for cleanup and two for
+# nextest reporting. This includes lock and admission delays without guessing
+# how much time they added.
 [[profile.default.overrides]]
 filter = 'binary(rstest_bdd)'
-test-group = 'rstest_bdd'
+test-group = 'orthohelp_cache'
+slow-timeout = { period = "120s", terminate-after = 8 }
 
 [[profile.default.overrides]]
-filter = 'binary(powershell_windows)'
-test-group = 'powershell_windows'
-
-[[profile.default.overrides]]
-filter = 'binary(nested_subcommand_end_to_end)'
-test-group = 'nested_subcommand_end_to_end'
+filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e)'
+test-group = 'orthohelp_cache'
+slow-timeout = { period = "120s", terminate-after = 8 }

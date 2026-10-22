@@ -769,7 +769,8 @@ help_info_uri = "https://example.com/help/MyApp"
 1. Discover the package with `cargo metadata`.
 2. Determine the root type from CLI or metadata. If missing, emit an error
    with remediation guidance.
-3. Build the ephemeral bridge under `target/orthohelp/<hash>/`:
+3. Select the ephemeral bridge's IR cache entry under
+   `target/orthohelp/<hash>/`, then create invocation-private bridge inputs:
    - Dependencies: `user_crate`, `ortho_config`.
    - `main.rs` invokes
      `<root_type as OrthoConfigDocs>::get_doc_metadata()` and serializes the
@@ -777,6 +778,11 @@ help_info_uri = "https://example.com/help/MyApp"
    - `cargo-orthohelp` keeps a local copy of the IR schema (mirroring
      `ortho_config::docs`) so publish checks can build against the latest
      crates.io release while the workspace evolves.
+   - The generated manifest, source, copied workspace `Cargo.lock` when
+     present, and executable snapshot live in an invocation-owned temporary
+     directory beneath the stable IR cache entry.
+   - Cargo builds into the selected package's Cargo-resolved target directory,
+     reusing compiler artefacts across bridge invocations.
 4. Run the bridge and capture the IR.
 5. For each locale, instantiate `FluentLocalizer` and resolve IDs to strings.
 6. Emit the requested outputs into `--out-dir`.
@@ -890,6 +896,82 @@ check alone writes `policy-report.json` and exits. This mirrors the
 `--format agent-context` stage's placement under §6.2 without requiring
 generator preconditions (`root_type`, a library target, or an `ortho_config`
 dependency).
+
+### 6.3.3 Bridge build ownership and recovery
+
+The `target/orthohelp/<hash>/` directory remains the stable identity for cached
+IR. It is not a Cargo target directory. Each uncached bridge generation creates
+private inputs and a private executable run directory beneath that entry, then
+builds those inputs using the selected package's Cargo-resolved target
+directory. In ordinary use this is the target chosen for the selected CLI
+package. In the documentation-test caller, Cargo's resolved parent target is
+also reused. The bridge does not create a new dependency target for each IR
+cache key.
+
+When the selected workspace has a `Cargo.lock`, the bridge copies it into its
+private generated crate before Cargo resolves dependencies. Cargo may update
+that copy for the generated root package; it does not edit the selected
+workspace's lockfile. Each invocation owns its generated manifest, source,
+copied lockfile, and executable snapshot. Cargo compiler artefacts remain in
+the target it selected, and the bridge binary runs from its private snapshot.
+Cargo JSON `compiler-artifact` records provide the generated bridge executable
+path; bridge code must not infer it from `target/debug` or another
+target-layout assumption. The documentation integration test gets the
+`cargo-orthohelp` executable from Cargo's `CARGO_BIN_EXE_cargo-orthohelp`
+variable and snapshots that binary into its private run directory. It does not
+rebuild the CLI binary as part of the test; only the generated bridge uses the
+JSON build-and-snapshot path described here.
+
+The generated manifest disables automatic binary discovery and names its
+explicit bridge target from the selected package root and unique invocation
+directory. This keeps the executable path private to that invocation, even when
+an ordinary workspace target is named `orthohelp_bridge`, while preserving the
+selected target directory and shared dependency cache.
+
+A bridge-only build helper holds an operating-system file lock in the selected
+Cargo target directory across the Cargo build and executable snapshot. Cargo's
+own build lock ends before the bridge can copy its output. The generated binary
+name includes the unique invocation directory, so an ordinary workspace build
+cannot replace the reported executable during that interval. The additional
+lock serializes bridge invocations sharing the selected target and protects
+their marker lifecycle. This helper is private to the production bridge
+pipeline. The documentation-test `BuildState` helper is test-only and shared by
+the Rust-example and CLI documentation test targets; compilation and artefact
+extraction stay with the Rust-example helper. Neither helper is a general
+application subprocess API.
+
+The bridge build retains Cargo's configured compiler and documentation
+wrappers, wrapper settings, job limits, warning flags, and coverage
+instrumentation. Metadata discovery maps `cargo llvm-cov show-env`'s
+`CARGO_LLVM_COV_TARGET_DIR` value to `CARGO_TARGET_DIR`; the former is the
+tool-selected target even though `show-env` does not export the latter. This
+keeps nested metadata on the instrumented parent target. A nested build does
+not forward the coverage CLI as `RUSTC_WRAPPER`, because that CLI cannot act as
+the compiler wrapper for a second Cargo process. Coverage flags and profile
+output remain enabled, and configured Cargo wrappers continue to apply. The
+bridge does not sanitize Rust flags to force a separate compiler fingerprint or
+change the default shared Cargo cache. The Cargo JSON reader retains at most 1
+MiB of rendered compiler diagnostics and records when it truncates output. It
+has no presentation sink; `run_cargo` forwards the retained diagnostics to
+stderr after draining the JSON stream and emits a truncation notice when
+needed. IR cache publication remains atomic and skips replacement when the
+existing cache already contains identical content, preserving the established
+path and idempotent-write behaviour.
+
+The bridge cache lookup, target lock, Cargo build, executable snapshot, bridge
+execution, and IR publication emit named tracing spans or events. Outcome
+events use a closed operation and outcome vocabulary and include elapsed time;
+they omit paths, cache keys, error strings, and child output. The one-shot CLI
+installs a tracing subscriber but no metrics recorder, so this path reports
+per-invocation evidence through tracing rather than emitting metrics that the
+default invocation would silently discard. This boundary is recorded in
+[ADR-014](adrs/adr-0014-documentation-build-ownership.md#decision-outcome).
+
+An interrupted build whose writer lifetime cannot be confirmed leaves a
+fail-closed ownership marker. A later invocation must not treat that marker as
+stale automatically. Recovery requires confirming that the bridge's Cargo and
+compiler processes have exited before removing it; unrelated processes and
+shared cache services are outside the bridge's ownership.
 
 ## 6.4 Localized IR JSON output
 

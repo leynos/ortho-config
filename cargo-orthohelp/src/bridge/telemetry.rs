@@ -1,4 +1,4 @@
-//! Diagnostic emissions for the bridge build and its IR cache.
+//! Diagnostic emissions for the bridge IR cache.
 //!
 //! Split from the parent `bridge` module for two reasons. The first is the
 //! workspace's 400-line module cap, which the parent reaches once each event
@@ -10,30 +10,28 @@
 //!
 //! Nothing here decides anything: every function reports a fact the caller has
 //! already established, and no control flow returns through this module.
+//!
+//! The bridge *build* reports through its own modules: a failed build carries
+//! child output that `bridge_build` already owns, so it has no fact to
+//! contribute here.
 
-use super::BridgePaths;
+use super::BridgeCache;
 
-/// Report a successful bridge build.
-///
-/// Each emission lives in its own function so `build_bridge` holds at most
-/// one `tracing` call: when a dependent crate enables `tracing`'s `log`
-/// bridge, Cargo's feature unification expands every event into a branch
-/// ladder that counts against the workspace's cognitive-complexity ceiling.
-pub(super) fn bridge_build_succeeded(paths: &BridgePaths, status: std::process::ExitStatus) {
+/// Report that a cache lookup reused the cached bridge IR.
+pub(super) fn ir_cache_hit() {
     tracing::debug!(
-        manifest = %paths.manifest_path,
-        status = %status,
-        "bridge build succeeded"
+        operation = "bridge_cache_lookup",
+        outcome = "hit",
+        "reusing cached bridge IR"
     );
 }
 
-/// Report a failed bridge build with the child process's standard error.
-pub(super) fn bridge_build_failed(paths: &BridgePaths, output: &std::process::Output) {
+/// Report that a cache lookup found no cached bridge IR.
+pub(super) fn ir_cache_miss() {
     tracing::debug!(
-        manifest = %paths.manifest_path,
-        status = %output.status,
-        stderr = %String::from_utf8_lossy(&output.stderr),
-        "bridge build failed"
+        operation = "bridge_cache_lookup",
+        outcome = "miss",
+        "bridge IR cache lookup missed"
     );
 }
 
@@ -43,16 +41,20 @@ pub(super) fn bridge_build_failed(paths: &BridgePaths, output: &std::process::Ou
 /// one `tracing` call: when a dependent crate enables `tracing`'s `log`
 /// bridge, Cargo's feature unification expands every event into a branch
 /// ladder that counts against the workspace's cognitive-complexity ceiling.
-pub(super) fn ir_cache_unchanged(paths: &BridgePaths) {
+pub(super) fn ir_cache_unchanged(paths: &BridgeCache) {
     tracing::debug!(
+        operation = "bridge_ir_cache_publish",
+        outcome = "unchanged",
         path = %paths.ir_path,
         "skipping ir.json write: cached content is identical"
     );
 }
 
 /// Report that the IR cache is about to be written, with its size.
-pub(super) fn ir_cache_write(paths: &BridgePaths, bytes: usize) {
+pub(super) fn ir_cache_write(paths: &BridgeCache, bytes: usize) {
     tracing::debug!(
+        operation = "bridge_ir_cache_publish",
+        outcome = "updated",
         path = %paths.ir_path,
         bytes,
         "writing ir.json cache"
