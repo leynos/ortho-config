@@ -186,7 +186,7 @@ fn dependency(target: &PackageId) -> ResolveDependency {
 fn node(id: &PackageId, targets: &[PackageId]) -> ResolveNode {
     ResolveNode {
         id: id.0.clone(),
-        deps: targets.iter().map(|target| dependency(target)).collect(),
+        deps: targets.iter().map(dependency).collect(),
     }
 }
 
