@@ -18,6 +18,7 @@ const TARGET_NAME: &str = "orthohelp_bridge_fixture";
 
 /// Name of the file that checks whether the target directory still accepts
 /// writes once its mode denies them.
+#[cfg(unix)]
 const DENIAL_PROBE: &str = "denial-probe";
 
 /// Removing every reported output leaves no bridge artefact behind.
