@@ -1336,10 +1336,10 @@ branch adds a fourth), and `docs/contents.md` plus
 
 The replayed tree then typechecked across the whole workspace and passed the
 boundary suite 17/17. That tree contains no #607 content at all: no
-`bridge_build*.rs`, and neither `5c7e1c8a`'s nor `c912e934`'s MSVC linker pin
-in `ci.yml`. So #566 has no dependency on #607, and does not need the linker
-fix it inherited. Main's own Windows leg is green on #619, #618, #609, #600 and
-#559 without that fix, which is consistent: the failure this branch copied was
+`bridge_build*.rs`, and neither `5c7e1c8a`'s nor `c912e934`'s MSVC linker pin in
+`ci.yml`. So #566 has no dependency on #607, and does not need the linker fix
+it inherited. Main's own Windows leg is green without that fix across every
+change merged since, which is consistent: the failure this branch copied was
 caused by its own stale copy, not by main.
 
 Consequence: rebase onto `main` and drop the stack. The prerequisite rule asks
