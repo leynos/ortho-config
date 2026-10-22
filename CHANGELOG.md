@@ -158,7 +158,8 @@ _Applications upgrading from 0.9 should follow the
   declare their own `serde_json` feature. The derive emitted a
   `#[cfg(feature = "serde_json")]` guard, which tested the calling crate's
   features rather than OrthoConfig's; the guard now lives in `ortho_config`,
-  behind a hidden gate macro.
+  behind a hidden gate macro
+  ([#620](https://github.com/leynos/ortho-config/pull/620)).
 - Merge a layer list that supplies no values without failing on a `Null`
   accumulator. The generated declarative state seeds its accumulator with
   `serde_json::Value::default()`, which is `Null`, and `merge_layer` skips
