@@ -493,8 +493,16 @@ crate surface. `LocalizeCmd`, `LocalizedParse`, and `parse_localized_command`
 are implemented; `#[derive(OrthoConfig)]` also emits the public
 `OrthoConfigLocalization` contract and supports opt-in identifier artefacts.
 Their current contracts are documented above. `localized_default` is recognized
-by the derive but rejected with a deferral diagnostic; embedded defaults remain
-future work.
+by the derive but rejected with a deferral diagnostic, so the derive-level
+default-value feature remains future work.
+
+That deferral is about the derive attribute, not about catalogues. `ortho_l10n`
+now owns the runtime and its embedded English and Japanese resources;
+`FluentLocalizer::embedded` loads them, and `FluentLocalizer::builder` layers a
+consumer's catalogue over them. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md) for why the runtime
+is a separate crate and why `ortho_config` re-exports its actual types instead
+of adding bridge traits.
 
 The remaining proposals belong at clear ownership boundaries: locale lifecycle,
 Clap coverage, and translation interfaces in the core localizer; identifier
