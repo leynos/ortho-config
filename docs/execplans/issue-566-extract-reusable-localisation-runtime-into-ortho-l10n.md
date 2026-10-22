@@ -341,10 +341,11 @@ approaches; they are no longer outstanding work.
   recorded as an open delivery dependency.
 - [ ] EP-M4: Release tooling, documentation, publication checks, review, draft
       PR. In progress: publish order and its workflow contract are done (see
-      "EP-M4 publish order"), as are version discovery and the guides. The
-      publication check is blocked upstream, not locally (see "EP-M4
-      publication check blocked upstream"); code gates, milestone review, and
-      the draft PR remain.
+      "EP-M4 publish order"), as are version discovery and the guides. Seven
+      gates pass against `f0d1feac` (see "EP-M4 gate certificate"), and the
+      Markdown lane passes against the later record commits. The publication
+      check is blocked upstream, not locally (see "EP-M4 publication check
+      blocked upstream"). The milestone review and the draft PR remain.
 
 ### EP-M4 publish order (2026-10-22)
 
