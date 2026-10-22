@@ -1346,6 +1346,59 @@ Consequence: rebase onto `main` and drop the stack. The prerequisite rule asks
 for a prerequisite PR when remediation needs out-of-scope work underneath; here
 the work underneath was never needed.
 
+### EP-M4: replay executed and certified (2026-10-22)
+
+The replay was then performed for real:
+`git rebase --onto origin/main 1334cc88`, with the pre-replay candidate
+preserved as tag `backup/pre-replay-617` at `83649a73`. It completed at 33
+commits. The six expected conflicts were resolved as described above, and
+`Cargo.lock` was regenerated on the clean tree rather than hand-merged —
+`cargo metadata --offline` exits 101 while any manifest still holds conflict
+markers, so regeneration has to wait for `rebase --continue`. The regenerated
+lockfile is 141 insertions and 267 deletions, dropping duplicated
+`cap-primitives` and `io-extras` generations that the pre-migration graph had
+left behind.
+
+`git merge-tree --write-tree origin/main HEAD` exits 0 with no conflicts, and
+the diff against `origin/main` is 63 files, down from 136. The branch is 35
+commits ahead of `main@5c749132`.
+
+One defect surfaced only after the replay: `make fmt` was not a fixed point on
+the replayed tree, so the first gate run stopped at gate 1. Two independent
+Markdown faults, both genuine rather than tool artefacts:
+
+- `docs/contents.md` carried the new ADR-0015 index entry wrapped at 112
+  columns, over the 80-column prose limit.
+- This section originally listed the merged PR numbers inline, and
+  `mdtablefix --renumber` reflowed `#559` to the start of a line. A line whose
+  first character is `#` is an ATX heading, so the paragraph rendered as a
+  top-level heading and `markdownlint` reported MD025 and MD022.
+
+The repair (`ce45742f`) removes the PR-number enumeration rather than
+respelling it. A list of `#NNN` references is a standing hazard: any reflow can
+move one to a line start, so the fix has to delete the hazard, not this
+instance of it. This is the same class as the earlier finding that `mdtablefix`
+eats a bare `NN.` at line start — the wrap is correct, but the token it
+produces is syntax.
+
+Nine gates then passed against `ce45742f` (tree `360fc6f6`), sequential and
+scrutineer-run, with the worktree empty before and after: `make fmt`,
+`check-fmt`, `markdownlint`, `nixie`, `test-workflow-contracts` (334 passed / 1
+skipped), `lint-clippy`, `lint` (Whitaker included), `test` (2,093 passed / 0
+failed / 35 ignored across 104 targets, plus 119 pytest), and
+`make typecheck` — added because the repository's own `all` target names it and
+the original gate list omitted it. No `module-max-lines` and no
+`clippy::type_complexity` diagnostic appeared.
+
+The branch was then force-pushed with an explicit lease
+(`--force-with-lease=refs/heads/<branch>:f79b0f28`), the remote head verified
+equal to local `ce45742f`, and the tracking ref refreshed through a leading-`+`
+refspec. The PR flipped `CONFLICTING` → `MERGEABLE`, `refs/pull/617/merge`
+appeared as `b3e42806`, and the `pull_request` `synchronize` event created run
+`39720646790` with both required `build-test` legs. Nothing had to be
+dispatched: the missing check contexts were a symptom of the conflict, not of
+`workflow_dispatch`.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
