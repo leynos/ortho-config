@@ -95,6 +95,30 @@ fn a_successful_exit_with_malformed_output_reports_invalid_json() {
     );
 }
 
+/// Invalid UTF-8 inside an otherwise valid document is rejected, not repaired.
+///
+/// A lossy conversion would substitute U+FFFD for the offending byte and the
+/// document would still parse, so the caller could cache a name the bridge
+/// never produced.
+#[test]
+fn invalid_utf8_inside_a_document_is_reported_rather_than_repaired() {
+    let executable = Utf8PathBuf::from("/private/bridge/runtime");
+
+    let error = run_bridge_with(&executable, |_| {
+        Ok(BridgeOutput {
+            status: 0,
+            stdout: b"{\"name\":\"\xff\"}".to_vec(),
+            stderr: Vec::new(),
+        })
+    })
+    .expect_err("repaired output must not be accepted");
+
+    assert!(
+        matches!(error, OrthohelpError::IrJson(_)),
+        "invalid UTF-8 surfaced as {error:?}"
+    );
+}
+
 /// A successful exit returns the document pretty-printed for the caller.
 #[test]
 fn a_successful_exit_returns_the_pretty_printed_document() {

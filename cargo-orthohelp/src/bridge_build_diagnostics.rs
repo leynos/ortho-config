@@ -17,7 +17,13 @@ pub(super) fn forward_cargo_diagnostics(messages: &CargoMessages) -> io::Result<
 ///
 /// The sink parameter keeps the forwarding contract testable: a no-op
 /// implementation would satisfy any assertion made against the parser alone.
-fn write_cargo_diagnostics(sink: &mut impl Write, messages: &CargoMessages) -> io::Result<()> {
+/// The caller-level build tests use the same function rather than copying the
+/// parsed field, so the head and tail of the user-visible stream are pinned to
+/// the production writer.
+pub(super) fn write_cargo_diagnostics(
+    sink: &mut impl Write,
+    messages: &CargoMessages,
+) -> io::Result<()> {
     sink.write_all(messages.diagnostics.as_bytes())?;
     if messages.diagnostics_truncated {
         writeln!(sink, "{TRUNCATION_NOTICE}")?;

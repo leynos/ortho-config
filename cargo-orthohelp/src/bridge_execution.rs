@@ -95,9 +95,13 @@ fn failed_execution(output: &BridgeOutput) -> OrthohelpError {
 }
 
 /// Validate the bridge's JSON document and return it pretty-printed.
+///
+/// The parser reads the child's bytes directly rather than converting them to a
+/// string first: a lossy conversion would replace invalid UTF-8 with U+FFFD,
+/// which still parses, so a repaired document could be cached as though the
+/// bridge had produced it.
 fn render_bridge_json(stdout: &[u8], started: Instant) -> Result<String, OrthohelpError> {
-    let json = String::from_utf8_lossy(stdout).to_string();
-    let value: serde_json::Value = serde_json::from_str(&json).map_err(|error| {
+    let value: serde_json::Value = serde_json::from_slice(stdout).map_err(|error| {
         observability::failed("bridge_execution", "invalid_json", started);
         OrthohelpError::IrJson(error)
     })?;
