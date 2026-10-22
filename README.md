@@ -44,7 +44,7 @@ Add OrthoConfig and Serde to `Cargo.toml`:
 <!-- tested-example: readme-install -->
 ```toml
 [dependencies]
-ortho_config = "0.9.0"
+ortho_config = "0.10.0"
 serde = { version = "1.0", features = ["derive"] }
 ```
 

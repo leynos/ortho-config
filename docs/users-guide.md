@@ -50,7 +50,7 @@ subcommand parser:
 ```toml
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
-ortho_config = "0.9.0"
+ortho_config = "0.10.0"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -649,7 +649,7 @@ already work in that format:
 <!-- tested-example: guide-yaml-install -->
 ```toml
 [dependencies]
-ortho_config = { version = "0.9.0", features = ["yaml"] }
+ortho_config = { version = "0.10.0", features = ["yaml"] }
 ```
 
 YAML uses YAML 1.2 semantics: legacy words such as `yes` and `on` remain
@@ -1462,7 +1462,7 @@ recorder:
 <!-- tested-example: guide-metrics-install -->
 ```toml
 [dependencies]
-ortho_config = { version = "0.9.0", features = ["metrics"] }
+ortho_config = { version = "0.10.0", features = ["metrics"] }
 ```
 
 The feature emits bounded counters for discovery, merging, and subcommand path
@@ -1478,7 +1478,7 @@ that alias, which is useful in workspaces that reserve the canonical crate name:
 <!-- tested-example: guide-alias-install -->
 ```toml
 [dependencies]
-config_layer = { package = "ortho_config", version = "0.9.0" }
+config_layer = { package = "ortho_config", version = "0.10.0" }
 serde = { version = "1.0", features = ["derive"] }
 ```
 
