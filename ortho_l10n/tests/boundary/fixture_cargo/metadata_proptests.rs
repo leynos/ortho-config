@@ -48,10 +48,16 @@ fn edge(count: usize) -> impl Strategy<Value = (usize, usize)> {
 
 /// A generated graph: its package names, its edges, and the root to close over.
 ///
-/// Names come from a set, so they are unique and sorted - two packages cannot
-/// share a name in one resolve, and generating a duplicate would ask a
-/// question about a document Cargo never emits. The root is drawn from the
-/// same names, so a generated case is never an accidental missing-root control.
+/// Names come from a set, so they are unique and sorted. That is a narrowing of
+/// the documents Cargo actually emits, not a law about them: two *versions* of
+/// one package resolve under distinct ids that share a name, and
+/// `name_of_id`-based reachability has to traverse through both before
+/// de-duplicating. These generated cases therefore cover graph *shape*, with
+/// one id per name, and [`reachable_merges_two_ids_that_share_a_name`] covers
+/// the shared-name case deliberately rather than by sampling.
+///
+/// The root is drawn from the same names, so a generated case is never an
+/// accidental missing-root control.
 fn graph() -> impl Strategy<Value = (Vec<String>, Vec<(usize, usize)>, String)> {
     btree_set(package_name(), 1..8).prop_flat_map(|generated| {
         let names: Vec<String> = generated.into_iter().collect();
@@ -117,6 +123,38 @@ fn render(names: &[String], edges: &[(usize, usize)]) -> Metadata {
     Metadata {
         packages,
         resolve: Resolve { nodes },
+    }
+}
+
+/// One package entry carrying `name` under the given `id`.
+///
+/// Separate from [`render`] because the version-split case needs two packages
+/// with one name, which a name-keyed builder cannot express.
+fn package(name: &str, id: &str) -> MetadataPackage {
+    MetadataPackage {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        version: String::from("0.0.0"),
+        source: None,
+    }
+}
+
+/// A resolve dependency on `target`, with no dep-kind qualifiers.
+fn dependency(target: &str) -> ResolveDependency {
+    ResolveDependency {
+        pkg: target.to_owned(),
+        dep_kinds: Vec::new(),
+    }
+}
+
+/// A resolve node for `id` with edges onto each of `targets`.
+///
+/// `targets` are package *ids* rather than names: in a version-split graph a
+/// name does not identify one node.
+fn node(id: &str, targets: &[&str]) -> ResolveNode {
+    ResolveNode {
+        id: id.to_owned(),
+        deps: targets.iter().map(|target| dependency(target)).collect(),
     }
 }
 
@@ -236,4 +274,71 @@ proptest! {
             "an edge to the unresolved identity {missing} must be reported",
         );
     }
+}
+
+/// A version-split package must be traversed through every id it owns.
+///
+/// `reachable` walks package *ids* and only then maps them to names and
+/// de-duplicates. That order is load-bearing, and the generated families above
+/// cannot show it: they give one id per name, so a closure that stopped after
+/// the first id bearing a name, or de-duplicated ids before traversing, would
+/// still agree with the oracle on every case they produce.
+///
+/// One name with two versions is the ordinary Cargo document that exposes the
+/// difference. Both ids are distinct, both are reachable, and their
+/// dependency branches are disjoint, so collapsing to one id drops a reachable
+/// package entirely while the shared name still appears once.
+///
+/// The `edges` helper resolves a name to its *first* id, so it cannot describe
+/// a version-split graph either; the assertion below therefore names the id
+/// rather than asking for edges by name.
+#[test]
+fn reachable_merges_two_ids_that_share_a_name() {
+    // `old` and `new` are two versions of one package. Each has its own
+    // dependency, so the branches are distinguishable in the result.
+    let split = "split";
+    let old = format!("{ID_PREFIX}old");
+    let new = format!("{ID_PREFIX}new");
+    let graph = Metadata {
+        packages: vec![
+            package("root", &id("root")),
+            package(split, &old),
+            package(split, &new),
+            package("left", &id("left")),
+            package("right", &id("right")),
+        ],
+        resolve: Resolve {
+            nodes: vec![
+                ResolveNode {
+                    id: id("root"),
+                    deps: vec![dependency(&old), dependency(&new)],
+                },
+                node(&old, &[&id("left")]),
+                node(&new, &[&id("right")]),
+                node(&id("left"), &[]),
+                node(&id("right"), &[]),
+            ],
+        },
+    };
+
+    let reachable = graph
+        .reachable("root")
+        .expect("a version-split graph is a document Cargo emits");
+
+    // Both branches survived, which is what proves traversal continued past
+    // the first id rather than stopping at the name it had already seen.
+    assert!(
+        reachable.contains(&"left"),
+        "left is reachable: {reachable:?}"
+    );
+    assert!(
+        reachable.contains(&"right"),
+        "right is reachable through the second id: {reachable:?}"
+    );
+    // The shared name appears, and appears once.
+    assert_eq!(
+        reachable.iter().filter(|name| **name == split).count(),
+        1,
+        "the shared name is reported exactly once: {reachable:?}",
+    );
 }
