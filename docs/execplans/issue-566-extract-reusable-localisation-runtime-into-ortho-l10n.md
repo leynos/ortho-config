@@ -1278,6 +1278,35 @@ inherited reason: `hello_world`'s BDD harness failed to link because Git's
 `ce3ee560`. That failure is not this branch's regression and is not claimed as
 repaired here.
 
+### EP-M4 lint repair: `package_set` over the module line cap (2026-10-22)
+
+Gating the packaging repair surfaced two lints in turn, both in
+`ortho_l10n/tests/boundary/package_set/mod.rs`. The first was a
+`clippy::type_complexity` on the invocation table's anonymous
+`(&[&str], &[(&str, &str)])` row type; it was repaired by naming the row
+`PackageInvocation`, because two slices of small tuples say nothing about which
+is which. That repair added lines to a file already near the cap, and the
+second gate then failed Whitaker's `module-max-lines` at 405 of an allowed 400.
+
+The lints pull in opposite directions at that size, so the repair had to shed
+lines rather than trade them. The module held two responsibilities: the
+packaging *recipe* (deadline, invocation table, packaging command, path helper)
+and the *result* of that recipe (the unpacked roots, their shared version, and
+the per-process cache). The second was moved verbatim to
+`ortho_l10n/tests/boundary/package_set/roots.rs` and re-exported, leaving the
+module at 259 lines.
+
+The split is not free to place anywhere. `boundary_packaging_test.py` reads
+`PACKAGE_DEADLINE` and `PACKAGING_INVOCATIONS` from `package_set/mod.rs` by
+path, and its `_single_match` helper treats *zero* matches as a failure rather
+than as "nothing to check", so both declarations must stay physically in that
+file. They do; the moved code is the half no workflow contract reads.
+
+Verification: `make lint` is green with Whitaker checking `ortho_l10n` and no
+`module-max-lines` diagnostic; the boundary suite is 17 passed / 0 failed,
+including the packaged paths that resolve through the moved root lookup; and
+`boundary_packaging_test.py` plus `publish_order_test.py` are 8 passed.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources

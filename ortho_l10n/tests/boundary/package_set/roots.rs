@@ -1,0 +1,169 @@
+//! The unpacked package roots the boundary contracts read.
+//!
+//! `package_set` owns the recipe: which crates to package, which sibling
+//! sources to patch, and how long each invocation may run. This module owns the
+//! result of that recipe - the roots `cargo package --verify` unpacks, the
+//! version they share, and the cache that materializes them once per process.
+//!
+//! The split is by responsibility rather than by size. The recipe is read by
+//! `boundary_packaging_test.py`, which checks its invocation count and deadline
+//! against nextest's per-test allowance, so it belongs in one clearly readable
+//! place. Everything here is instead read by the consumer and manifest
+//! contracts, which care about paths and normalised manifests rather than about
+//! how the archives were produced.
+
+use super::super::fixture_cargo::{BOUNDARY_ROOT, repository_root};
+use super::{PACKAGING_INVOCATIONS, package_sources};
+use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
+use cap_std::fs_utf8::Dir;
+use std::sync::OnceLock;
+
+/// Directory `cargo package` writes into, relative to the shared target root.
+const PACKAGE_DIRECTORY: &str = "package";
+
+/// One unpacked package root, with the paths a consumer patch needs.
+#[derive(Debug, Clone)]
+pub(crate) struct PackagedCrate {
+    /// Crate name as spelled in a manifest.
+    pub(crate) name: &'static str,
+    /// Version every packaged crate in this release shares.
+    pub(crate) version: &'static str,
+    /// Unpacked root, holding `Cargo.toml` and `src/`.
+    pub(crate) root: Utf8PathBuf,
+}
+
+impl PackagedCrate {
+    /// Path of the unpacked root's normalized manifest.
+    pub(crate) fn manifest(&self) -> Utf8PathBuf {
+        self.root.join("Cargo.toml")
+    }
+
+    /// Read the unpacked root's normalized manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the manifest cannot be read.
+    pub(crate) fn read_manifest(&self) -> Result<String> {
+        let path = self.manifest();
+        let directory = Dir::open_ambient_dir(&self.root, cap_std::ambient_authority())
+            .with_context(|| format!("open packaged root {}", self.root))?;
+        directory
+            .read_to_string("Cargo.toml")
+            .with_context(|| format!("read packaged manifest {path}"))
+    }
+}
+
+/// The version every crate in this release shares.
+///
+/// Taken from the crate under test rather than written out, because
+/// `cargo package` names the unpacked root and the archive after the version in
+/// the manifest. A release bump would otherwise leave these contracts looking
+/// for `0.9.0` directories that no longer exist, and every packaged contract
+/// would fail for a reason unrelated to the boundary claim.
+pub(crate) const PACKAGED_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The three crates this release publishes, in dependency order.
+pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
+    ("ortho_l10n", PACKAGED_VERSION),
+    ("ortho_config_macros", PACKAGED_VERSION),
+    ("ortho_config", PACKAGED_VERSION),
+];
+
+/// Materialize (once per test process) and return the packaged set.
+///
+/// The first caller packages and unpacks; every later caller reads the same
+/// directory. A failure is cached too, so a broken packaging step is reported
+/// once rather than retried by every contract.
+///
+/// That cache is process-local, and nextest runs each test in its own process,
+/// so in a full run several of these packaged contracts package the same target
+/// directory side by side. Cargo's own lock does not cover that: it does not
+/// hold readers out while a package root is removed and unpacked, so one
+/// process can replace a root another is reading. `binary(boundary)` is
+/// therefore serialized as its own nextest test group; see
+/// `.config/nextest.toml` and "Nextest test-group serialization" in
+/// `docs/developers-guide.md`. Without that entry this function is safe only
+/// under `make boundary`, which runs one process.
+///
+/// # Errors
+///
+/// Returns an error when either packaging invocation fails or when one of the
+/// expected unpacked roots is missing afterwards.
+fn packaged_set() -> Result<&'static [PackagedCrate]> {
+    static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
+    PACKAGED
+        .get_or_init(|| build_packaged_set().map_err(|error| format!("{error:#}")))
+        .as_deref()
+        .map_err(|error| anyhow::anyhow!("{error}"))
+}
+
+/// Look up one packaged crate by name.
+///
+/// # Errors
+///
+/// Returns an error when the crate is not in the packaged set.
+pub(crate) fn packaged_crate(name: &str) -> Result<&'static PackagedCrate> {
+    packaged_set()?
+        .iter()
+        .find(|packaged| packaged.name == name)
+        .with_context(|| format!("the packaged set does not contain {name}"))
+}
+
+/// The directory holding all unpacked roots.
+///
+/// # Errors
+///
+/// Returns an error when the packaged set cannot be materialized.
+pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
+    let first = packaged_set()?
+        .first()
+        .context("the packaged set is empty")?;
+    let parent = first
+        .root
+        .parent()
+        .context("a packaged root has no parent directory")?;
+    Ok(parent.to_path_buf())
+}
+
+/// Run both packaging invocations and collect the unpacked roots.
+fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
+    let repository = repository_root()?;
+    let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
+    Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
+        .with_context(|| format!("create packaging target {target}"))?;
+
+    for invocation in &PACKAGING_INVOCATIONS {
+        package_sources(&repository, &target, invocation)?;
+    }
+
+    let package_directory = target.join(PACKAGE_DIRECTORY);
+    let mut roots = Vec::new();
+    for (name, version) in PACKAGED_CRATES {
+        roots.push(PackagedCrate {
+            name,
+            version,
+            root: package_directory.join(format!("{name}-{version}")),
+        });
+    }
+    Ok(roots)
+}
+
+/// Assert every packaged root and archive exists.
+///
+/// # Errors
+///
+/// Returns an error naming the first missing artefact.
+pub(crate) fn assert_packaged_set_complete() -> Result<()> {
+    let unpacked = unpacked_directory()?;
+    for packaged in packaged_set()? {
+        ensure!(
+            packaged.manifest().is_file(),
+            "{} has no unpacked manifest; the packaging step did not produce it",
+            packaged.manifest(),
+        );
+        let archive = unpacked.join(format!("{}-{}.crate", packaged.name, packaged.version));
+        ensure!(archive.is_file(), "{archive} was not written");
+    }
+    Ok(())
+}
