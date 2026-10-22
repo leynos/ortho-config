@@ -71,16 +71,36 @@ the use local to the module that needs it.
 
 ### Nextest test-group serialization
 
-`.config/nextest.toml` places nine documentation and cache users in the
+`.config/nextest.toml` places ten documentation and cache users in the
 single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
 `nested_subcommand_end_to_end`, `documented_command`,
 `documentation_examples_rust_tests`, `agent_context_contract`,
-`policy_report_contract`, `golden_tests` and `identifier_artefact_e2e`. These
-binaries can clear the shared BDD cache or build documented examples against
-Cargo's shared target. A named process-local `Mutex` serializes scenarios
-within one test process, including direct `cargo test`. It cannot coordinate
-independent test processes, so filesystem leases also protect cache ownership
-across them.
+`policy_report_contract`, `golden_tests`, `identifier_artefact_e2e` and
+`cli_dispatch`. These binaries can clear the shared BDD cache or build
+documented examples against Cargo's shared target. A named process-local
+`Mutex` serializes scenarios within one test process, including direct
+`cargo test`. It cannot coordinate independent test processes, so filesystem
+leases also protect cache ownership across them.
+
+The membership is not a hand-maintained list, and
+`tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from
+becoming one. That contract reads which test binaries drive a child `cargo` out
+of the Rust sources, compares the set with what the group's filter selects, and
+fails on a difference in either direction. `cli_dispatch` was absent from the
+list here and from every raised allowance in the configuration: it spawned
+`cargo orthohelp` on the 600 s base tier, and no other assertion could see the
+omission, because every other reading begins from the same list that omitted it.
+
+That is a wider class than the group. A binary can drive a child `cargo` and
+not touch the shared caches the group serializes, so membership of the raised
+allowances and membership of the group are separate questions: the contract
+requires every *group* member to be a class member, because the raised
+allowance is written for the class and a serialized non-member would fall
+through to the base tier, while the class itself may be raised without being
+serialized. `cli_dispatch` is the case in point: its child cargo was measured
+at 0.04 s on a warm tree, so it takes the raised allowance the class's nested
+build can reach rather than a place in a group whose members hold their
+envelope for up to 956 s.
 
 The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
 same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
@@ -2633,12 +2653,12 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                          |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                         |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                      |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for the trybuild and child-cargo classes |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                     |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                     |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                    |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -2852,6 +2872,34 @@ coverage-invoking job that declares no ceiling at all. The readings it rests on
 live in `nextest_budgets.py`, `nextest_document.py`, `nextest_durations.py`,
 `nextest_errors.py`, `timeout_budgets.py` and `coverage_lanes.py`, and are
 driven with controlled values in `timeout_reading_test.py`.
+
+Which binaries a raised allowance covers is a question about the Rust sources,
+so that contract reads them rather than a list. `child_cargo_tier.py` decides
+which test binaries drive a child `cargo` of their own, `rust_module_graph.py`
+answers which files a binary compiles, and `child_cargo_tier_test.py` compares
+the class with what `.config/nextest.toml` selects. `trybuild_tier.py` does the
+same for its own class and shares the module-graph reading; the two classes ask
+the same question of the same sources and differ only in the marker each looks
+for.
+
+Membership is decided by reaching files, not by grepping the `tests/` tree, and
+the difference is not academic. A grep for `Command::new("cargo")` also matches
+`clap::Command::new` and a probe that re-runs the test binary, and it matches
+every binary that merely mentions a helper without declaring it, so it is wrong
+in both directions at once. `#[path = "test_utils.rs"] mod other_name;` is
+legal and this repository uses it, so a rule keyed on the declared name would
+link a binary to a file it never compiles. Both readings are therefore taken
+from what each crate root actually compiles.
+
+A marker that has gone dead is the failure this reading is most exposed to,
+because the class simply comes back smaller and every downstream comparison
+agrees with it. `child_cargo_tier.marker_binaries` therefore reports each label
+separately and the contract requires every one of the three to select a binary
+somewhere in the audited crates — workspace-wide, not per crate, since
+`cargo_orthohelp_exe` is a `cargo-orthohelp`-only export and no honest
+`ortho_config` source could supply it. A bare `prepare_cargo_command` marker
+did go dead when the helper it named was renamed, and the replacement carries
+the old name in its pattern so the same rename cannot recur silently.
 
 Run them with `make test-workflow-contracts`. The target provisions `pytest`,
 `pyyaml` and `hypothesis` through `uv run --with` rather than from the
