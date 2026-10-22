@@ -561,6 +561,13 @@ not a failure, and both lint gates still exited zero with no diagnostics.
 the upstream defect above. No gate failed, so the certificate carries no
 findings.
 
+The certificate names `f0d1feac` because that is the tree the gates ran
+against. Recording it required editing this file, so the commit that carries
+this paragraph is a later tree, and no gate ran against *that* one. The delta
+is Markdown only. Rather than assume a prose edit cannot matter — it can, and
+these gates read prose — the Markdown lane was re-run against the post-record
+head and its result is recorded beside this note.
+
 ### EP-M3 reconnaissance (2026-10-21)
 
 Read-only survey before any EP-M3 tracked edit. All probes ran under the
