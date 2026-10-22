@@ -15,25 +15,33 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
-`make lint` also runs `interrogate --fail-under 100` over every tracked and
-non-ignored untracked `*.py` and `*.pyi` file. Git path discovery includes
-hidden directories and does not restrict the scan to package and test
-directories, so Python sources used by GitHub workflows and actions, scripts,
-tests, tools, and benchmarks are covered as well.
+`make lint` also runs `interrogate` over every tracked and non-ignored untracked
+`*.py` and `*.pyi` file. Git path discovery includes hidden directories and
+does not restrict the scan to package and test directories, so Python sources
+used by GitHub workflows and actions, scripts, tests, tools, and benchmarks are
+covered as well.
 
 The inventory is discovered inside the recipe and passed NUL-separated through
 `xargs -0`, not through a `$(shell …)` variable. A `$(shell …)` expansion
 splits its output on whitespace and cannot quote what it finds, so a file named
 `local helper.py` would reach `interrogate` as two arguments; `xargs -0` execs
-the command directly and keeps every path whole. `xargs` may batch a very large
-inventory, which is sound at a 100% threshold because each batch must itself
-reach 100%.
+the command directly and keeps every path whole.
+
+Coverage is judged by two checks, because `--fail-under 100` alone is not
+enough. `interrogate` rounds the percentage to the precision of the threshold
+before comparing it, so a run missing one docstring in 2000 reports `100.0%`
+and passes. The recipe therefore also reads the `Miss` column of the verbose
+summary, which is an exact count, and fails on any non-zero total. Because
+`xargs` may split a large inventory into batches, every batch's `TOTAL` row is
+summed rather than just the last one: the missing item need not fall in the
+final batch.
 
 Discovery writes to a temporary file instead of straight into a pipe. A
 pipeline reports the status of its last command, so a failing `git ls-files`
 would otherwise let an empty batch pass the gate; the recipe runs under
-`set -e` and aborts on that failure. A genuinely empty inventory still passes,
-and `xargs -r` keeps it from invoking `interrogate` with no paths.
+`set -e` and aborts on that failure. A genuinely empty inventory still passes
+and does not invoke `interrogate` at all, which keeps it distinct from a run
+that produced no summary.
 
 The shared workspace Clippy policy denies `missing_docs_in_private_items`.
 Document private modules with `//!` and private items with `///`, including

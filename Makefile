@@ -122,24 +122,59 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 # `$(shell ...)` splits on whitespace and has no way to quote a path, so a file
 # named `local helper.py` would reach interrogate as two arguments; `xargs -0`
 # execs the command directly instead of re-parsing. `xargs` may still split a
-# large inventory into batches, which is sound here because every batch must
-# itself reach 100%: the conjunction over batches is equivalent to requiring
-# the whole inventory at 100%.
+# large inventory into batches.
+#
+# `--fail-under 100` alone is not enough: interrogate rounds the coverage
+# percentage to the precision of the threshold before comparing it, so a run
+# missing one docstring in 2000 reports `100.0%` and passes. The gate therefore
+# also reads the summary's TOTAL row and fails on any `Miss`. That column is an
+# exact count and does not depend on rounding. Every TOTAL row is summed, since
+# a batched run reports one per batch and the first batches may include the
+# missing item while the last one does not.
 #
 # Discovery writes to a file rather than straight into the pipe: a pipeline
 # reports the status of its last command, so a failing `git ls-files` would
 # otherwise let an empty batch pass the gate. `set -e` aborts the recipe on a
-# discovery failure. `-r` keeps a genuinely empty inventory from invoking
-# interrogate with no paths, and `--` stops a leading `-` in a filename being
-# read as an option.
+# discovery failure, and `--` stops a leading `-` in a filename being read as
+# an option.
+#
+# An empty inventory is a pass, and `interrogate` is not invoked at all for it:
+# that is what keeps the TOTAL check below from misreading "nothing was
+# scanned" as "the summary is missing". The report is kept rather than streamed
+# so the TOTAL row can be read after interrogate finishes, and a failing run
+# still prints its output before the recipe exits. `xargs` runs from inside this
+# shell so the workflow contracts can override `UV_RUN` without a recursive make.
 docstring-coverage: ## Require complete docstrings for every Python source file
 	set -eu; \
 	inventory=$$(mktemp); \
-	trap 'rm -f "$$inventory"' EXIT; \
+	report=$$(mktemp); \
+	trap 'rm -f "$$inventory" "$$report"' EXIT; \
 	$(GIT) ls-files -z --cached --others --exclude-standard -- '*.py' '*.pyi' \
 		> "$$inventory"; \
-	xargs -0 -r $(UV_RUN) interrogate --fail-under 100 --ext pyi -- \
-		< "$$inventory"
+	if [ -s "$$inventory" ]; then \
+		status=0; \
+		xargs -0 $(UV_RUN) interrogate -v --fail-under 100 --ext pyi \
+			--no-color -- < "$$inventory" > "$$report" || status=$$?; \
+		cat "$$report"; \
+		if [ "$$status" -ne 0 ]; then exit "$$status"; fi; \
+		awk -F'|' '$$2 ~ /TOTAL/ { \
+			column = $$4; \
+			gsub(/ /, "", column); \
+			missing += column; \
+			found = 1; \
+		} END { \
+			if (!found) { \
+				print "docstring-coverage: no TOTAL row in interrogate output" \
+					> "/dev/stderr"; \
+				exit 1; \
+			} \
+			if (missing != 0) { \
+				printf "docstring-coverage: %s undocumented item(s)\n", \
+					missing > "/dev/stderr"; \
+				exit 1; \
+			} \
+		}' "$$report"; \
+	fi
 
 typecheck: ## Typecheck workspace (cargo check)
 	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)

@@ -32,14 +32,17 @@ MAKEFILE: typ.Final[Path] = REPOSITORY_ROOT / "Makefile"
 GATE_TARGET: typ.Final[str] = "docstring-coverage"
 LINT_TARGET: typ.Final[str] = "lint"
 
-#: The fixed arguments the gate passes before the inventory. The trailing `--`
-#: keeps a leading `-` in a filename from being read as an option.
+#: The fixed arguments the gate passes before the inventory. `-v` carries the
+#: per-file summary the gate reads its exact `Miss` count from, and the trailing
+#: `--` keeps a leading `-` in a filename from being read as an option.
 GATE_ARGUMENTS: typ.Final[tuple[str, ...]] = (
     "interrogate",
+    "-v",
     "--fail-under",
     "100",
     "--ext",
     "pyi",
+    "--no-color",
     "--",
 )
 
@@ -127,15 +130,49 @@ def _build_fixture_repository(directory: Path) -> None:
         _write(directory, relative, DOCUMENTED)
 
 
-def _fake_runner(directory: Path, exit_status: int) -> tuple[Path, Path]:
+#: What a passing ``interrogate -v`` run ends with. The gate reads the ``Miss``
+#: column — the fourth field when a row is split on ``|`` — because that count
+#: is exact, unlike the percentage interrogate rounds before comparing it.
+PASSING_REPORT: typ.Final[str] = (
+    "| Name | Total | Miss | Cover | Cover% |\n"
+    "|------|-------|------|-------|--------|\n"
+    "| TOTAL | 2 | 0 | 2 | 100.0% |\n"
+    "--------------- RESULT: PASSED (minimum: 100.0%, actual: 100.0%) ----\n"
+)
+
+#: The boundary the rounding defect lets through: one missing item in 2001 is
+#: 99.95%, which interrogate rounds to `100.0%` at a threshold of 100 and then
+#: passes. Only the exact ``Miss`` count of 1 catches it.
+ROUNDED_REPORT: typ.Final[str] = (
+    "| Name | Total | Miss | Cover | Cover% |\n"
+    "|------|-------|------|-------|--------|\n"
+    "| TOTAL | 2001 | 1 | 2000 | 100.0% |\n"
+    "--------------- RESULT: PASSED (minimum: 100.0%, actual: 100.0%) ----\n"
+)
+
+#: What ``xargs`` produces once the inventory outgrows one command: one report
+#: per batch, each with its own TOTAL row, concatenated. Here the missing item
+#: falls in the first batch and the final batch is clean, so reading only the
+#: last TOTAL row would pass.
+BATCHED_REPORT: typ.Final[str] = (
+    "| TOTAL | 1500 | 1 | 1499 | 99.9% |\n"
+    "| TOTAL | 501 | 0 | 501 | 100.0% |\n"
+)
+
+
+def _fake_runner(
+    directory: Path, exit_status: int, report: str = PASSING_REPORT
+) -> tuple[Path, Path]:
     """Write a runner stub that records each argument on its own line.
 
     Parameters
     ----------
     directory : Path
-        Where the stub and its argument log are created.
+        Where the stub, its argument log, and its report are created.
     exit_status : int
         The status the stub exits with.
+    report : str
+        The ``interrogate -v`` output the stub prints.
 
     Returns
     -------
@@ -143,9 +180,12 @@ def _fake_runner(directory: Path, exit_status: int) -> tuple[Path, Path]:
         The stub's path and the file its arguments are appended to.
     """
     log = directory / "arguments.log"
+    report_file = directory / "report.txt"
+    report_file.write_text(report, encoding="utf-8")
     stub = directory / "fake-uv-run"
     stub.write_text(
-        f'#!/bin/sh\nprintf "%s\\n" "$@" >> "{log}"\nexit {exit_status}\n',
+        f'#!/bin/sh\nprintf "%s\\n" "$@" >> "{log}"\n'
+        f'cat "{report_file}"\nexit {exit_status}\n',
         encoding="utf-8",
     )
     stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
@@ -272,6 +312,69 @@ def test_gate_fails_when_interrogate_fails(tmp_path: Path) -> None:
     result = _run_make(tmp_path, f"UV_RUN={stub}")
     assert result.returncode != 0, (
         "`make docstring-coverage` must fail when interrogate fails"
+    )
+
+
+def test_gate_fails_on_a_rounding_boundary_pass(tmp_path: Path) -> None:
+    """One missing docstring in 2001 fails even though interrogate passes it.
+
+    Scenario: a run covering 2000 of 2001 items, which interrogate rounds to
+    ``100.0%`` and reports as ``PASSED``. Invariant: the target still fails,
+    because the summary's exact ``Miss`` count is read as well as the exit
+    status. Without that second check this is precisely the case the threshold
+    alone lets through.
+    """
+    _build_fixture_repository(tmp_path)
+    stub, _log = _fake_runner(tmp_path, exit_status=0, report=ROUNDED_REPORT)
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
+    assert result.returncode != 0, (
+        "a rounded-to-100 report with one missing item must fail; "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "undocumented item" in result.stderr, (
+        f"the failure must name the missing count; stderr={result.stderr!r}"
+    )
+
+
+def test_gate_fails_when_a_batched_run_misses_in_an_earlier_batch(
+    tmp_path: Path,
+) -> None:
+    """A missing item outside the final batch still fails the target.
+
+    Scenario: ``xargs`` split the inventory, and the batch carrying the missing
+    item is not the last one. Invariant: the target fails, so the exact check
+    covers the whole run rather than only the batch whose summary happens to
+    come last.
+    """
+    _build_fixture_repository(tmp_path)
+    stub, _log = _fake_runner(tmp_path, exit_status=0, report=BATCHED_REPORT)
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
+    assert result.returncode != 0, (
+        "a missing item in an earlier batch must fail the gate; "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "undocumented item" in result.stderr, (
+        f"the failure must name the missing count; stderr={result.stderr!r}"
+    )
+
+
+def test_gate_fails_when_the_report_has_no_total_row(tmp_path: Path) -> None:
+    """A report with no ``TOTAL`` row fails rather than passing silently.
+
+    Scenario: the invocation exits 0 but prints no summary, which is what an
+    unrecognised output format looks like. Invariant: the target fails, so a
+    change to interrogate's output cannot quietly turn the exact check into a
+    no-op.
+    """
+    _build_fixture_repository(tmp_path)
+    stub, _log = _fake_runner(tmp_path, exit_status=0, report="no summary here\n")
+    result = _run_make(tmp_path, f"UV_RUN={stub}")
+    assert result.returncode != 0, (
+        "a report with no TOTAL row must fail the gate; "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "no TOTAL row" in result.stderr, (
+        f"the failure must name the missing summary; stderr={result.stderr!r}"
     )
 
 

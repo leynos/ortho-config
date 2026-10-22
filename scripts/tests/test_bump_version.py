@@ -130,7 +130,11 @@ ortho_config = { version = \"0.5.0-beta1\", features = [\"json5\", \"yaml\"] }
 
     _update_markdown_versions(md_path, "0.5.0")
 
-    updated_lines = md_path.read_text().splitlines()
+    updated = md_path.read_text()
+    # Checked on the raw text: `splitlines()` discards the terminator, so the
+    # line assertions below would still pass if the rewrite dropped it.
+    assert updated.endswith("\n"), "must keep the file's trailing newline"
+    updated_lines = updated.splitlines()
     assert 'version = "0.5.0"' in "\n".join(updated_lines), "must bump version inside TOML fence"
     assert updated_lines[-2] == (
         "# Enabling these features expands file formats; precedence stays: "
