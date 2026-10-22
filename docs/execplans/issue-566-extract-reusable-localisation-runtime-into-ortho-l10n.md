@@ -143,11 +143,29 @@ EP-M3 acceptance evidence, per criterion:
 | The render and the resolved graph agree                           | `the_rendered_consumer_is_the_package_the_closure_reads`                                                                                                                              |
 | A focused entry point exists                                      | `make boundary`, pinned by `boundary_target_test.py`                                                                                                                                  |
 
+EP-M4 acceptance evidence, per requirement:
+
+| Requirement                                     | Evidence                                                                                 |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Publish order matches the dependency graph      | `make test-workflow-contracts`, 4 contract tests over `lading.toml` and `cargo metadata` |
+| Every internal requirement moves with the bump  | `test_member_bump_updates_every_internal_dependency`                                     |
+| An external namesake is left alone              | `test_member_bump_leaves_an_external_namesake_alone`                                     |
+| Guides describe the order and discovery rules   | `docs/developers-guide.md` "Publish dry run" and the bump-script paragraph               |
+| Users know `ortho_l10n` is separately published | `docs/users-guide.md`, linked to `ortho_l10n/README.md` and ADR-015                      |
+| The packaged-source check still runs            | unchanged `make publish-check`; blocked upstream, recorded above                         |
+
 Proof inventory: not applicable. EP-M3 introduces no CrossHair, Kani, Verus, or
 LemmaScript artefact. Its claims are about a resolved dependency graph and a
 compiled consumer, which are checked by building and resolving the real graph
 rather than by a model of it; a model checker over crate names would restate
 the fixture it reads.
+
+EP-M4 proof inventory: not applicable, for the same reason. Its claims are
+about a manifest's parsed contents and about a release tool's behaviour on real
+crates. The bump rule is exercised by unit tests over real TOML and by an
+end-to-end run over this workspace's own manifests; the publish gate builds
+each crate from its packaged sources. A formal model would restate the parser
+and the package manager rather than check them.
 
 ## Tolerances (exception triggers)
 
@@ -345,7 +363,11 @@ approaches; they are no longer outstanding work.
       gates pass against `f0d1feac` (see "EP-M4 gate certificate"), and the
       Markdown lane passes against the later record commits. The publication
       check is blocked upstream, not locally (see "EP-M4 publication check
-      blocked upstream"). The milestone review and the draft PR remain.
+      blocked upstream"). The milestone review returned three findings (see
+      "EP-M4 milestone CLI review"): one real defect in this milestone's own
+      repair, repaired and re-gated, and two duplicates of the upstream block.
+      Re-gating against the repaired tree and the follow-up review remain, as
+      does the draft PR.
 
 ### EP-M4 publish order (2026-10-22)
 
@@ -428,10 +450,20 @@ Red was observed first: the new test
 The fix derives the list instead of naming it. `_internal_dependencies(doc)`
 returns every dependency declared with a `path`, across the normal, dev, and
 build tables, deduplicated in first-seen order; `_set_version` now takes that
-list. A dependency's identity is the table key, not its `path` value, so an
+list. A dependency's identity is its table key, not its `path` value, so an
 aliased dependency is handled. External requirements have no `path` and are
 untouched, which is what keeps a third-party version like `serde = "1"` from
 being rewritten.
+
+The first cut of that fix returned bare names and then swept all three tables,
+which reintroduced the same class of error one level down: a name is not
+globally internal, so `shared` declared with a `path` in `[dependencies]` and
+declared externally in `[build-dependencies]` had *both* requirements moved.
+The review caught it and it is repaired by making the table part of the
+selection: `_internal_dependencies` returns `(table, name)` pairs and
+`_update_dependency_version` names the table it writes to instead of searching
+for one. `test_member_bump_leaves_an_external_namesake_alone` covers the mixed
+case and was observed red (`assert '1.2.3' == '1'`) before the repair.
 
 Two checks beyond the unit test, because a synthetic test can agree with a
 wrong rule:
@@ -568,6 +600,57 @@ this paragraph is a later tree, and no gate ran against *that* one. The delta
 is Markdown only. Rather than assume a prose edit cannot matter — it can, and
 these gates read prose — the Markdown lane was re-run against the post-record
 head and its result is recorded beside this note.
+
+### EP-M4 milestone CLI review (2026-10-22)
+
+The milestone `coderabbit review --agent` (CLI 0.9.1) ran with
+`baseCommit: 94ac0219`, the EP-M3 closing head, so the comparison base is the
+milestone rather than `main` and the stacked-branch contamination that affected
+EP-M3's closing review does not apply. HEAD during the run was
+`f710a266717a7d16275b752b15c48a47fb1c6e4a`, tree
+`3ee5c12b2188a291d2a8f65e65357b8c757650c1`; `git status --porcelain` was empty.
+The `complete` record reports 3 findings over 8 reviewed files, and
+`git diff --name-only 94ac0219..HEAD` is those same 8 paths.
+
+| #   | Finding                                               | Disposition                                                            |
+| --- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| 1   | Only `path`-linked dependency entries should move     | Valid, and a real defect in this milestone's own fix; repaired         |
+| 2   | First-publication dry run blocked on the absent crate | Valid diagnosis; repair is upstream-only, tracked as leynos/lading#367 |
+| 3   | Same as #2                                            | Exact duplicate: same file, line, defect, and remedy                   |
+
+Finding 1 is correct that the repair in `_internal_dependencies` was half a
+repair. Returning names and then sweeping all three tables kept the original
+error one level down: a name is only internal in the table that declares it
+with a `path`, so a crate declared internally in `[dependencies]` and
+externally in `[build-dependencies]` had both requirements moved. That
+contradicted the guarantee the paragraph above finding 1 states.
+
+Reproduced before repairing, with the exact case the review describes:
+`[dependencies] shared = { path = "../shared", version = "0.9.0" }` beside
+`[build-dependencies] shared = "1"` left the external entry at
+`shared = "2.0.0"`. Red was observed first —
+`test_member_bump_leaves_an_external_namesake_alone` failed with
+`assert '1.2.3' == '1'` — and the repair then made the table part of the
+selection: `_internal_dependencies` returns `(table, name)` pairs,
+`_update_dependency_version` names the table instead of searching for it, and
+`_set_version` takes the pairs. The five pre-existing call sites now pass a
+table. The module's doctests were rewritten to use `path`-linked entries, since
+that is the shape the caller now selects; the unit tests keep their bare-string
+fixtures, because the mutation helper does not depend on how an entry was
+selected and that keeps the comment- and quote-preservation cases small.
+
+Findings 2 and 3 are the publish-check block recorded above under "EP-M4
+publication check blocked upstream", arriving through a different door. Both
+were checked against current source rather than accepted: the only change this
+milestone makes to `lading.toml` is inserting `ortho_l10n` into `order`, and
+`strip_patches` and the packaged-source check are untouched, so the review's
+request to "keep the packaged-source check enabled" describes the existing
+state. Its own remedy is a pinned lading revision containing the absent-package
+fix, which cannot exist until the fix does — which is exactly why the block was
+reported upstream as leynos/lading#367 rather than worked around here. The
+findings are therefore excluded as duplicates of a recorded upstream defect,
+not dismissed: the release gate is a delivery blocker either way, and the plan
+does not claim `make publish-check` passed.
 
 ### EP-M3 reconnaissance (2026-10-21)
 
@@ -1085,6 +1168,19 @@ release, not just its contents. The `publish_order_test.py` contract could not
 catch this, because it checks the order against the graph and the order was
 right.
 
+EP-M4: "derive the internal dependency list" was the right principle applied at
+the wrong granularity. Selecting by name answered "which crates does this
+member depend on internally" and not "which entries in this manifest are
+internal", and the two differ the moment a name is reused across tables. The
+first repair therefore inherited the bug it removed: `shared` in
+`[dependencies]` with a `path`, and `shared` in `[build-dependencies]` without
+one, is one name and two different requirements. The unit test that shipped
+with the first repair passed because its fixture declared each name in exactly
+one table, so it encoded the same assumption as the code. A negative control —
+a name that appears twice with different provenance — is what a derived
+selection needs; without one, "derive it" reads as correct right up to the
+release.
+
 ## Decision log
 
 2026-10-15: Treat the user's detailed coding plan and explicit implementation
@@ -1157,6 +1253,16 @@ build-script or feature gate. The 24 extra crates are the price of one fallible
 identifier owner shared by macro-expansion time and runtime; the alternative is
 a second copy of the normalizer, which is the defect the extraction exists to
 remove.
+
+2026-10-22 (EP-M4): Make the table part of an internal dependency's identity.
+The alternative — keep selecting bare names and have the writer skip entries
+without a `path` — also fixes the reported case, and was rejected because it
+leaves the selection and the mutation with two independent notions of
+"internal": the selector's rule and the writer's rule could drift, and a future
+table or entry shape would have to be taught to both. Returning `(table, name)`
+and writing only to that table gives the property one home, and the writer no
+longer needs to know why an entry was selected. The cost is a wider signature
+on a private helper with one caller in the module.
 
 ## Outcomes & retrospective
 
