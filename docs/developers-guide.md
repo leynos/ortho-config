@@ -85,22 +85,42 @@ leases also protect cache ownership across them.
 The membership is not a hand-maintained list, and
 `tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from
 becoming one. That contract reads which test binaries drive a child `cargo` out
-of the Rust sources, compares the set with what the group's filter selects, and
-fails on a difference in either direction. `cli_dispatch` was absent from the
-list here and from every raised allowance in the configuration: it spawned
-`cargo orthohelp` on the 600 s base tier, and no other assertion could see the
-omission, because every other reading begins from the same list that omitted it.
+of the Rust sources, and fails when one of them is not raised by the
+configuration. `cli_dispatch` was absent from the list here and from every
+raised allowance in the configuration: it spawned `cargo orthohelp` on the 600 s
+base tier, and no other assertion could see the omission, because every other
+reading begins from the same list that omitted it.
 
-That is a wider class than the group. A binary can drive a child `cargo` and
-not touch the shared caches the group serializes, so membership of the raised
-allowances and membership of the group are separate questions: the contract
-requires every *group* member to be a class member, because the raised
-allowance is written for the class and a serialized non-member would fall
-through to the base tier, while the class itself may be raised without being
-serialized. `cli_dispatch` is the case in point: its child cargo was measured
-at 0.04 s on a warm tree, so it takes the raised allowance the class's nested
-build can reach rather than a place in a group whose members hold their
-envelope for up to 956 s.
+Coverage is read as an *effective* allowance rather than as a union of entries
+that mention a binary, because nextest resolves each setting from the first
+override that matches and sets it. A configuration can therefore list a binary
+in a 960 s entry and still run it at 600 s, if an earlier entry matches it and
+carries the base figure. A union of above-base entries cannot see that: the
+raised entry still names the binary, so the union reports it covered.
+`tests/workflow_contracts/nextest_precedence.py` walks the entries in file order
+and applies that rule, and
+`test_a_base_tier_entry_above_a_raised_one_removes_coverage` is the negative
+control, driven by inserting the shadowing entry into the fixture's copy of this
+file. The resolver reads only `[profile.default]`'s own list and does not apply
+`platform` gates, which is exact for the Linux lane that runs these contracts.
+
+Group membership and raised-allowance coverage are separate questions, and the
+contract asks a different thing of each. Every binary a group *serializes* must
+be a class member, because the raised allowance is written for the class and a
+serialized non-member would fall through to the base tier. The class itself is
+not required to be serialized: a binary can drive a child `cargo` and never
+touch the shared caches the group protects.
+
+In this repository the two sets happen to coincide — the group's ten members
+(nine named in the group entry, plus `rstest_bdd` in its own) are exactly the
+class — but that is a property of the current configuration rather than
+something the contract enforces, and the configuration is free to narrow the
+group. `cli_dispatch` is the member where the distinction is worth naming: its
+child cargo was measured at 0.04 s on a warm tree, because its tests take the
+`cargo orthohelp --help` and argument-error paths rather than a bridge build,
+so the serialization it takes in the group costs the suite little today. The
+allowance it takes is sized for the nested build the class *can* reach, not for
+the cheapest path it currently takes.
 
 The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
 same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
