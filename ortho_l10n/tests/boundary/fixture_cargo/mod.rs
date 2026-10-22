@@ -22,7 +22,7 @@ pub(crate) mod manifest;
 pub(crate) mod metadata;
 
 pub(crate) use environment::{cargo_binary, inherited_toolchain};
-pub(crate) use manifest::declared_dependencies;
+pub(crate) use manifest::{declared_dependencies, declared_path_dependencies};
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
 
 use anyhow::{Context, Result, bail, ensure};

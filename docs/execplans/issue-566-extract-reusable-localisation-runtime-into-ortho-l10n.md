@@ -145,14 +145,14 @@ EP-M3 acceptance evidence, per criterion:
 
 EP-M4 acceptance evidence, per requirement:
 
-| Requirement                                     | Evidence                                                                                 |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Publish order matches the dependency graph      | `make test-workflow-contracts`, 4 contract tests over `lading.toml` and `cargo metadata` |
-| Every internal requirement moves with the bump  | `test_member_bump_updates_every_internal_dependency`                                     |
-| An external namesake is left alone              | `test_member_bump_leaves_an_external_namesake_alone`                                     |
-| Guides describe the order and discovery rules   | `docs/developers-guide.md` "Publish dry run" and the bump-script paragraph               |
-| Users know `ortho_l10n` is separately published | `docs/users-guide.md`, linked to `ortho_l10n/README.md` and ADR-0015                     |
-| The packaged-source check still runs            | unchanged `make publish-check`; blocked upstream, recorded above                         |
+| Requirement                                       | Evidence                                                                                        |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Publish order matches the declared internal edges | `make test-workflow-contracts`, 4 contract tests over `lading.toml` and the workspace manifests |
+| Every internal requirement moves with the bump    | `test_member_bump_updates_every_internal_dependency`                                            |
+| An external namesake is left alone                | `test_member_bump_leaves_an_external_namesake_alone`                                            |
+| Guides describe the order and discovery rules     | `docs/developers-guide.md` "Publish dry run" and the bump-script paragraph                      |
+| Users know `ortho_l10n` is separately published   | `docs/users-guide.md`, linked to `ortho_l10n/README.md` and ADR-0015                            |
+| The packaged-source check still runs              | unchanged `make publish-check`; blocked upstream, recorded above                                |
 
 Proof inventory: not applicable. EP-M3 introduces no CrossHair, Kani, Verus, or
 LemmaScript artefact. Its claims are about a resolved dependency graph and a
@@ -377,6 +377,19 @@ was never in the order, so `make publish-check` would not have packaged it at
 all. Red was observed first. The contract is
 `tests/workflow_contracts/publish_order_test.py`, four tests, run with
 `pytest tests/workflow_contracts/`.
+
+That contract reads manifests, not a resolved graph, and the distinction is
+worth stating precisely because an earlier description of this PR overstated it.
+`_workspace_members` lists `Cargo.toml` under each literal entry of
+`[workspace] members`; no glob is expanded. `_path_dependencies` walks the
+three tables in `EDGE_TABLES` at the top level of each member manifest and
+follows each `path` key relative to the manifest that declares it. It never
+invokes Cargo, and it never descends into a `target.*` table. So the result is
+valid for a workspace whose internal edges are all top-level path dependencies
+— which is this workspace — and it would not see an internal edge declared under
+`[target.'cfg(unix)'.dependencies]` or written through a member glob. Neither
+occurs here, and the manifest-side boundary checks are the ones that read every
+table on every platform.
 
 Writing the contract found three defects in itself before it found any in the
 repository. Each is recorded because each one produced a *green* result that
@@ -1562,6 +1575,117 @@ check and watching it pass when it should have failed; the duplication was
 found only by running CodeScene's delta locally. A green gate set is evidence
 that the gates' assertions hold, not that the assertions are the right ones.
 
+### EP-M3: the boundary checks that could not see what they claimed (2026-10-22)
+
+The two pre-readiness assessments (completeness and proof) independently found
+the same defect in the acceptance checks, and both were right. Neither found a
+dependency leak: `ortho_config` is the only workspace root whose closure holds
+the forbidden names, and the runtime's own closure holds none of them. What was
+wrong was the *evidence*.
+
+`packaged_runtime_declares_no_forbidden_edge` filtered every declaration to
+`EdgeKind::Normal` before matching the forbidden list. Three consequences, each
+a way the check could stay green while the contract was broken:
+
+- a forbidden `[dev-dependencies]` entry in the runtime's own manifest was
+  discarded, so the runtime's focused test graph — which ADR-0015 covers
+  explicitly — was outside the check;
+- a forbidden `[build-dependencies]` entry was discarded the same way;
+- `dependency_names` read table *keys*, so `alias = { package = "clap" }`
+  compared the alias, not the crate.
+
+There was a fourth, which the assessments named as their reason for wanting the
+focused graph and which measurement made concrete: a host-narrowed resolve
+cannot see an inactive platform edge at all. A probe manifest declaring `clap`
+under `[target.'cfg(target_os = "none")'.dev-dependencies]` resolved
+successfully offline, listed the edge in `packages[].dependencies` with its
+`target` field, and produced a resolve containing exactly one package. Cargo
+omits the edge from the graph entirely rather than resolving it. So the
+resolved-graph checks cannot cover that case however they are written; only
+manifest text can, which makes the manifest walk the load-bearing half.
+
+The repair, in three parts:
+
+- `fixture_cargo/manifest.rs` now owns every manifest-table walk, including the
+  one `manifests/mod.rs` had duplicated as `path_dependencies`. Each entry is
+  kept as a `Declaration` rather than reduced to its key, so `package()` can
+  resolve a rename and `declared_path_dependencies` can read `path` without a
+  second walker.
+- `manifests/mod.rs` matches the forbidden list against every kind and every
+  target table, and reports the kind of each offence.
+- `Metadata::reachable` computes the transitive closure, and
+  `assert_no_forbidden_reachable` applies it to the workspace resolve with
+  `ortho_l10n` as the root. `cargo metadata` has no `-p`, and the full graph is
+  a superset of any focused one, so no second invocation is needed.
+
+Non-vacuity was established by mutation, not by inspection. Removing the
+`package` field from `Declaration::package` fails the rename and path cases;
+removing the target-table recursion fails the platform case. A third test
+asserts in the same resolve that the *facade's* closure does report all eight
+forbidden names, so the runtime's clean report cannot be an empty-list
+artefact: two calls differing only in the root produce different verdicts.
+
+Two claims were corrected rather than repaired. The PR description and this
+plan described `publish_order_test.py` as reading "`cargo metadata`"; it reads
+manifests and top-level path dependencies and never invokes Cargo. And the
+proof assessment's reply rejected the argument that an ASCII alphabet bounds
+the identifier domain — a finite alphabet permits arbitrarily long strings — so
+the property tests are now described as bounded property tests rather than as
+exhaustive over a decidable domain. The absence of a formal proof stands on
+different grounds: the runtime and the macro wrappers call one shared
+implementation, so there is no second algorithm whose equivalence needs proving.
+
+### The boundary claim is host closure plus direct declarations
+
+The proof assessment's last finding is a scope question rather than a defect,
+and it is answered by narrowing the claim. The boundary is enforced as two
+statements, and neither is transitive across an inactive platform:
+
+- **Host closure.** The runtime's transitive closure in the host-narrowed
+  resolve reaches no forbidden package. This is exact for the current platform,
+  and it is what `the_runtime_workspace_closure_reaches_no_forbidden_package`
+  and the rendered-consumer contracts assert.
+- **Direct declarations.** The runtime manifest declares no forbidden edge in
+  any table, under any kind, on any platform. This is exact for *every*
+  platform, because it reads manifest text, and it is what
+  `packaged_runtime_declares_no_forbidden_edge` asserts over the packaged
+  manifest.
+
+What is deliberately not claimed is transitive closure *through an inactive
+platform*. A `[target.'cfg(windows)'.dependencies]` entry inside an otherwise
+permitted dependency is invisible to a Linux resolve and is not a declaration
+of the runtime's own manifest, so neither statement covers it. Reaching it
+would need a resolve per supported target, which the offline package cache
+cannot supply on this host, or a second graph model which the assessment itself
+argued would add little assurance. The claim is therefore stated as what is
+measured, and the gap is recorded rather than papered over.
+
+The reviewer's static counterexample against the *direct* half was executed
+rather than argued. Adding
+
+```toml
+[target.'cfg(target_os = "none")'.dev-dependencies]
+clap = "4"
+```
+
+to the runtime manifest makes `packaged_runtime_declares_no_forbidden_edge`
+fail with `clap (dev)`, naming both the offending crate and its table. The
+manifest was restored byte-identically afterwards (`sha256` and `diff` clean).
+An earlier version of this module filtered to normal edges and would have
+passed that mutation silently; that is the defect the kind-blind walk fixes.
+
+### Negative controls now require a successful resolve
+
+The control repair removed one vacuity and left another. Accepting a refused
+resolve meant a name-bearing Cargo failure counted as evidence even though
+`assert_absent_packages` never ran, and an offline resolve of an uncached crate
+fails with exactly such a message. A probe confirms it: an offline resolve of a
+Clap requirement naming a version that does not exist exits non-zero with
+Cargo's failed-to-select-a-version diagnostic, and that diagnostic names the
+crate. `run_negative_control` now treats a refusal as an error and requires
+resolution to succeed before the closure check is asked to reject the injected
+crate.
+
 ## Surprises & discoveries
 
 The requested locale determines bundle metadata even when embedded resources
@@ -1841,29 +1965,51 @@ usable signal instead of permanently firing noise.
 
 ## Outcomes & retrospective
 
-EP-M1 is complete, reviewed with zero outstanding findings, and published as a
-remote branch at `b50d56b0`; no pull request exists yet, so "published" here
-means branch-pushed over SSH with the origin tracking ref matching. EP-M2 is
-complete: the runtime, resources, and pure tests now belong to `ortho_l10n`,
-with actual-type configuration re-exports and shared macro normalization.
-Focused runtime, macro, identity, and documentation-agreement tests pass, every
-sequential gate passes on the corrected tree, and the milestone review's three
-findings are dispositioned and repaired. A mid-implementation disk exhaustion
-and a 312-character table-wrap defect both caused red gates; both are repaired
-and recorded above. Standalone/package closure proof, measurements, release
-tooling, and the draft PR remain EP-M3/EP-M4 work.
+### Delivery status (2026-10-22)
 
-EP-M3 implementation is complete and its evidence is recorded above: 17
-boundary cases green under three scheduling regimes, the negative controls
-proved to fail for their injected dependency by name, the packaged set built
-from two `cargo package` invocations, the macro host cost measured against
-`f99d9234`, and the focused `make boundary` target pinned by a workflow
-contract. The sequential gate run passed on tree `7b2ce374`, the milestone CLI
-review returned seventeen findings, and the follow-up round returned four more.
-All twenty-one were dispositioned and every valid one repaired. What remains
-before the checkbox closes is the gate run against the repaired tree and the
-assessment that confirms it. The measured +24-crate macro closure is recorded
-as a risk with an upper-bound caveat rather than as a settled performance claim.
+All four milestones are implemented and the branch is published as a draft pull
+request (PR 617), not as a branch alone. Every gate passes against the rebased
+candidate and hosted CI concluded green on it, including the
+`build-test (windows)` leg that the portability repair was for. What remains is
+the delivery sequence `pr-babysitting` owns: the pre-readiness assessments,
+readiness, and the formal review.
+
+`make publish-check` is still not claimed. The first-publication dry run aborts
+upstream in `leynos/lading#367` — a new crate produces Cargo's absent-package
+diagnostic, which lading does not classify — and this branch deliberately does
+not work around it.
+
+The paragraphs below were written at each milestone's close and are retained as
+the record of that moment. Where they say a milestone's review or gate "remains
+pending", the pending item has since been discharged; the narrative is history
+rather than a current status.
+
+EP-M1 is complete, reviewed with zero outstanding findings, and published as a
+remote branch at `b50d56b0`; no pull request existed at that time, so
+"published" here means branch-pushed over SSH with the origin tracking ref
+matching. EP-M2 is complete: the runtime, resources, and pure tests now belong
+to `ortho_l10n`, with actual-type configuration re-exports and shared macro
+normalization. Focused runtime, macro, identity, and documentation-agreement
+tests pass, every sequential gate passes on the corrected tree, and the
+milestone review's three findings are dispositioned and repaired. A
+mid-implementation disk exhaustion and a 312-character table-wrap defect both
+caused red gates; both are repaired and recorded above. Standalone/package
+closure proof, measurements, release tooling, and the draft PR — the last four
+items at the time of writing — became EP-M3/EP-M4 work and are complete.
+
+EP-M3 implementation is complete and its evidence is recorded above: 26
+boundary cases green as of the acceptance-check repair, including the seven
+manifest-reader controls and the two closure-root checks added with it, the
+negative controls proved to fail for their injected dependency by name, the
+packaged set built from two `cargo package` invocations, the macro host cost
+measured against `f99d9234`, and the focused `make boundary` target pinned by a
+workflow contract. The sequential gate run passed on tree `7b2ce374`, the
+milestone CLI review returned seventeen findings, and the follow-up round
+returned four more. All twenty-one were dispositioned and every valid one
+repaired. What remains before the checkbox closes is the gate run against the
+repaired tree and the assessment that confirms it. The measured +24-crate macro
+closure is recorded as a risk with an upper-bound caveat rather than as a
+settled performance claim.
 
 Decision log note (2026-10-21): The earlier guidance to use explicit result
 branches at the Clap collision panic boundaries is superseded. Those sites now

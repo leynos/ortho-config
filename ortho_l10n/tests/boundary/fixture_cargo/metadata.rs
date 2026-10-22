@@ -19,6 +19,7 @@
 //! comparison, so [`EdgeKind::from_cargo`] refuses it instead.
 
 use anyhow::{Context, Result, bail};
+use std::collections::BTreeSet;
 
 /// Part of Cargo's `cargo metadata --format-version=1` document.
 ///
@@ -110,6 +111,51 @@ impl Metadata {
         Ok(edges)
     }
 
+    /// Every package reachable from `name`, itself included.
+    ///
+    /// This is the transitive closure, so it answers a different question from
+    /// [`Self::edges`]: not "what does this crate declare" but "what does a
+    /// consumer of it compile". A forbidden crate can enter a graph without
+    /// being named by the root at all - through any depth below it - so a
+    /// direct-edge check is not a substitute for this one.
+    ///
+    /// All edge kinds are followed. Dev edges matter because Cargo resolves
+    /// them for the crate's own test targets, and a boundary claim that
+    /// excluded them would leave the crate's test graph unexamined.
+    ///
+    /// The result is a sorted, de-duplicated list of package names, which makes
+    /// a failure message readable and the ordering deterministic. A `deps` or
+    /// `dep_kinds` field may be `null` rather than absent - Cargo omits them
+    /// for a package with no dependencies - so both are read tolerantly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the graph holds no package called `name`.
+    pub(crate) fn reachable(&self, name: &str) -> Result<Vec<&str>> {
+        let root = self.id_of(name)?;
+        let mut seen = BTreeSet::new();
+        let mut pending = vec![root];
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            let node = self
+                .resolve
+                .nodes
+                .iter()
+                .find(|node| node.id == id)
+                .with_context(|| format!("resolve graph has no node for {id:?}"))?;
+            pending.extend(node.deps.iter().map(|dependency| dependency.pkg.as_str()));
+        }
+        let mut names = seen
+            .into_iter()
+            .map(|id| self.name_of_id(id))
+            .collect::<Result<Vec<_>>>()?;
+        names.sort_unstable();
+        names.dedup();
+        Ok(names)
+    }
+
     /// The name of the package whose id is `id`.
     ///
     /// # Errors
@@ -171,7 +217,10 @@ pub(crate) struct DepKind {
 }
 
 /// A dependency edge with its kind rendered for assertions and messages.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Ordered so a set of edges is a stable, readable value rather than a
+/// collection whose iteration order depends on insertion history.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct DependencyEdge {
     /// Dependency package name, as the registry spells it.
     pub(crate) package: String,

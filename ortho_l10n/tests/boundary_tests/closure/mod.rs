@@ -8,19 +8,23 @@
 //! edge.
 
 use crate::boundary::closure::{
-    CONSUMER_PACKAGE, ControlOutcome, FORBIDDEN_PACKAGES, Injection, assert_no_forbidden_packages,
-    assert_root_edges, assert_runtime_normal_edges, run_negative_control,
+    CONSUMER_PACKAGE, FORBIDDEN_PACKAGES, Injection, assert_no_forbidden_packages,
+    assert_no_forbidden_reachable, assert_root_edges, assert_runtime_normal_edges,
+    run_negative_control,
 };
 use crate::boundary::consumer::{
     CONSUMER_PACKAGE as RENDERED_PACKAGE, Consumer, Dependency, DependencySource,
 };
+use crate::boundary::fixture_cargo::environment::CARGO_DEADLINE;
 use crate::boundary::fixture_cargo::{
-    FixtureCargo, Metadata, describe_edges, ensure_failure_names,
+    FixtureCargo, Metadata, cargo_binary, describe_edges, ensure_failure_names,
+    inherited_toolchain, repository_root, run_with_deadline,
 };
 use crate::boundary::package_set::{ConsumerFixture, unpacked_directory};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use rstest::rstest;
+use std::process::Command;
 
 /// Resolve a runtime consumer from path dependencies and assert its closure.
 ///
@@ -124,13 +128,11 @@ fn no_forbidden_package_appears_in_a_workspace_runtime_consumer() -> Result<()> 
 /// directory, so running them concurrently costs one warm resolve rather than
 /// four cold ones.
 ///
-/// Two outcomes are legitimate and both are accepted: Cargo may refuse the
-/// injected crate during resolution, or resolve it and have the closure check
-/// reject it by name. The control only counts as evidence when one of those
-/// happened *and* the diagnostic names the injected crate; a fixture that
-/// failed for an unrelated reason is an error here, not a pass. Both
-/// conditions are asserted in one case because the second subsumes the first:
-/// a diagnostic that names a crate is not empty.
+/// [`run_negative_control`] does the whole assertion: it requires Cargo to
+/// *resolve* the injected edge and then requires the closure check to reject
+/// it by name. A control that only inspected Cargo's exit status would accept
+/// an offline cache miss as a rejection, since that diagnostic names the crate
+/// too.
 #[rstest]
 fn negative_controls_reject_every_injected_edge(
     #[values(
@@ -141,28 +143,19 @@ fn negative_controls_reject_every_injected_edge(
     )]
     injection: Injection,
 ) -> Result<()> {
-    let outcome = run_negative_control(injection).with_context(|| {
+    let diagnostic = run_negative_control(injection).with_context(|| {
         format!(
             "the {} negative control did not behave",
             injection.describe()
         )
     })?;
-    let diagnostic = diagnostic_of(&outcome);
     ensure!(
         diagnostic.contains(injection.injected_crate()),
-        "the {} control failed without naming {}: {diagnostic}",
+        "the {} control was rejected without naming {}: {diagnostic}",
         injection.describe(),
         injection.injected_crate(),
     );
     Ok(())
-}
-
-/// The diagnostic either control outcome carried.
-fn diagnostic_of(outcome: &ControlOutcome) -> &str {
-    match outcome {
-        ControlOutcome::Rejected { detail }
-        | ControlOutcome::AcceptedButCaughtByName { detail } => detail,
-    }
 }
 
 /// A fixture that cannot resolve at all must not read as a rejection.
@@ -182,6 +175,108 @@ fn an_unrelated_failure_does_not_satisfy_a_control() -> Result<()> {
         "a manifest Cargo cannot read was accepted as an injected-Clap rejection",
     );
     Ok(())
+}
+
+/// The runtime's own workspace closure must reach no forbidden package.
+///
+/// # Why this is not the same check as the consumer one
+///
+/// The consumer contracts above measure a *rendered stranger's* root, whose
+/// only normal edge is the runtime. They therefore see whatever the runtime
+/// declares, and nothing else. The crate under test is not that root: in
+/// `make test` the workspace resolves `ortho_l10n` together with the facade,
+/// the macros, and the test helpers, and this asks whether *that* graph pulls a
+/// forbidden crate into the runtime's closure.
+///
+/// It matters because the two graphs are not nested. The workspace graph
+/// includes `ortho_l10n`'s dev-dependencies - `proptest`, `rstest`, and the
+/// shared fixtures a test may consult - and ADR-0015 extends the boundary to
+/// "its focused test graph" explicitly. A dev-dependency of a dev-dependency
+/// is reachable here and invisible to a consumer contract that stops at the
+/// runtime's normal edges.
+///
+/// The workspace resolve is a *superset* of a focused one: Cargo offers no
+/// `cargo metadata -p`, and the full graph contains every edge a focused
+/// resolve would contain, so absence here entails absence there. That is the
+/// reason this test needs no second Cargo invocation.
+#[test]
+fn the_runtime_workspace_closure_reaches_no_forbidden_package() -> Result<()> {
+    assert_no_forbidden_reachable(&workspace_metadata()?, "ortho_l10n")
+}
+
+/// The check above must be able to fail, and fail naming the crate.
+///
+/// A closure assertion that can only ever pass is not evidence, and the risk
+/// here is not hypothetical: `reachable` could return the root alone, and
+/// [`assert_no_forbidden_reachable`] would then report an empty offending list
+/// for every graph it is handed.
+///
+/// The positive control is the *facade's* closure in the same resolve, which
+/// does contain all eight forbidden names on this host when its dev
+/// dependencies are followed. So the two calls differ only in the root, and
+/// only the root decides the outcome.
+#[test]
+fn the_closure_check_rejects_the_facade_in_the_same_graph() -> Result<()> {
+    let metadata = workspace_metadata()?;
+    assert_no_forbidden_reachable(&metadata, "ortho_l10n")?;
+    let rejection = assert_no_forbidden_reachable(&metadata, "ortho_config").err();
+    let reported = rejection.map(|error| error.to_string()).with_context(|| {
+        concat!(
+            "ortho_config's closure resolved no forbidden package in the workspace graph, ",
+            "so the runtime's clean report proves nothing about that check"
+        )
+    })?;
+    for forbidden in FORBIDDEN_PACKAGES {
+        ensure!(
+            reported.contains(forbidden),
+            "the facade's closure was rejected without naming {forbidden}: {reported}",
+        );
+    }
+    Ok(())
+}
+
+/// Resolve this workspace as the host sees it, narrowed to the host platform.
+///
+/// The narrowing is the same one [`FixtureCargo::resolve`] applies, for the
+/// same reason: an unfiltered resolve must download every platform's
+/// dependencies under `--offline`, and this repository's own Windows leg failed
+/// on exactly that. Here it is applied through the *workspace* manifest rather
+/// than a rendered fixture root, so the child is the repository itself and no
+/// private target directory is needed.
+///
+/// Every edge kind is resolved. Dropping dev edges would remove the very part
+/// of the graph these two tests exist to examine.
+///
+/// # Errors
+///
+/// Returns an error when the workspace is not a crate root, when Cargo cannot
+/// be spawned or exceeds [`CARGO_DEADLINE`], or when its output is not the
+/// single JSON document the contracts expect.
+fn workspace_metadata() -> Result<Metadata> {
+    let repository = repository_root()?;
+    let mut command = Command::new(cargo_binary());
+    command
+        .current_dir(&repository)
+        .args([
+            "metadata",
+            "--format-version=1",
+            "--all-features",
+            "--filter-platform",
+            "host-tuple",
+            "--offline",
+            "--manifest-path",
+        ])
+        .arg(repository.join("Cargo.toml").as_std_path())
+        .env_clear()
+        .envs(inherited_toolchain());
+    let output = run_with_deadline(command, CARGO_DEADLINE, "workspace cargo metadata")?;
+    ensure!(
+        output.status.success(),
+        "workspace cargo metadata failed with {}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+    Metadata::parse(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// The rendered consumer must be the package the closure checks read.

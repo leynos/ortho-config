@@ -13,10 +13,20 @@
 //! Reading the manifest as TOML rather than as text matters here: a crate name
 //! mentioned in a comment, in the normalized header, or in a feature table is
 //! not a declared edge, and a text search cannot tell the difference.
+//!
+//! # Why the forbidden check ignores edge kind
+//!
+//! The first version of this module filtered to normal edges, which left the
+//! same manifest free to declare a forbidden crate as a dev- or build-only
+//! edge. That is not a corner case: [`crate::boundary::closure`] follows dev
+//! edges when it asks what a consumer compiles, and ADR-0015's boundary covers
+//! the runtime's focused test graph explicitly. A manifest is either clean of
+//! these names in every table or it is not, so the check is kind-blind and
+//! target-table-blind and reports the kind it found.
 
 use crate::boundary::closure::{FORBIDDEN_PACKAGES, RUNTIME_NORMAL_EDGES};
 use crate::boundary::fixture_cargo::{
-    DependencyEdge, EdgeKind, declared_dependencies, describe_edges,
+    DependencyEdge, EdgeKind, declared_dependencies, declared_path_dependencies, describe_edges,
 };
 use crate::boundary::package_set::{PACKAGED_CRATES, assert_packaged_set_complete, packaged_crate};
 use anyhow::{Context, Result, ensure};
@@ -31,10 +41,9 @@ fn packaged_runtime_declares_only_its_runtime_crates() -> Result<()> {
     assert_packaged_set_complete()?;
     let packaged = packaged_crate("ortho_l10n")?;
     let declared = declared_dependencies(&packaged.read_manifest()?)?;
-    let normal = normal_edges(&declared);
     let mut expected = RUNTIME_NORMAL_EDGES.to_vec();
     expected.sort_unstable();
-    let mut found = normal;
+    let mut found = normal_edges(&declared);
     found.sort_unstable();
     ensure!(
         found == expected,
@@ -44,7 +53,7 @@ fn packaged_runtime_declares_only_its_runtime_crates() -> Result<()> {
     Ok(())
 }
 
-/// The packaged *runtime* must declare no forbidden crate as a normal edge.
+/// The packaged *runtime* must declare no forbidden crate under any table.
 ///
 /// The forbidden list is the issue's removal claim, and the runtime is the root
 /// that claim is about. It is deliberately not applied to the facade: the
@@ -52,21 +61,22 @@ fn packaged_runtime_declares_only_its_runtime_crates() -> Result<()> {
 /// fail for the correct behaviour. The facade's runtime-facing edges are
 /// covered separately by
 /// [`packaged_facade_declares_the_runtime_and_the_macros`].
+///
+/// Every edge kind is checked, including target-conditional tables. A dev-only
+/// or build-only declaration is still a resolved edge for the crate's own test
+/// and build targets, and a `cfg(windows)` table is invisible to a host-narrowed
+/// resolve on Linux, so neither can be excluded without un-asking part of the
+/// question.
 #[test]
 fn packaged_runtime_declares_no_forbidden_edge() -> Result<()> {
     assert_packaged_set_complete()?;
     let packaged = packaged_crate("ortho_l10n")?;
     let declared = declared_dependencies(&packaged.read_manifest()?)?;
-    let offending = declared
-        .iter()
-        .filter(|edge| edge.kind == EdgeKind::Normal)
-        .filter(|edge| FORBIDDEN_PACKAGES.contains(&edge.package.as_str()))
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
+    let offending = forbidden_edges(&declared);
     ensure!(
         offending.is_empty(),
-        "the packaged runtime declares forbidden runtime edges: {}\nall edges: {}",
-        offending.join(", "),
+        "the packaged runtime declares forbidden edges: {}\nall edges: {}",
+        join_edges(&offending),
         describe_edges(&declared),
     );
     Ok(())
@@ -109,9 +119,8 @@ fn packaged_manifests_carry_no_path_dependencies() -> Result<()> {
     assert_packaged_set_complete()?;
     for (name, _version) in PACKAGED_CRATES {
         let manifest = packaged_crate(name)?.read_manifest()?;
-        let document: toml::Table = toml::from_str(&manifest)
-            .with_context(|| format!("parse the packaged {name} manifest"))?;
-        let offenders = path_dependencies(&document);
+        let offenders = declared_path_dependencies(&manifest)
+            .with_context(|| format!("read the packaged {name} manifest"))?;
         ensure!(
             offenders.is_empty(),
             "the packaged {name} manifest declares {} by path",
@@ -121,6 +130,29 @@ fn packaged_manifests_carry_no_path_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// The forbidden edges in `declared`, in any table and under any kind.
+///
+/// The edges are returned rather than described so the caller can report the
+/// kind of each offence: "clap (dev)" says which table to open, while a bare
+/// name would leave the reader searching a manifest for a line the check has
+/// already found.
+fn forbidden_edges(declared: &[DependencyEdge]) -> Vec<DependencyEdge> {
+    declared
+        .iter()
+        .filter(|edge| FORBIDDEN_PACKAGES.contains(&edge.package.as_str()))
+        .cloned()
+        .collect()
+}
+
+/// Describe a set of edges for a failure message.
+fn join_edges(edges: &[DependencyEdge]) -> String {
+    edges
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// The normal edges of `declared`, as package names.
 fn normal_edges(declared: &[DependencyEdge]) -> Vec<String> {
     declared
@@ -128,47 +160,4 @@ fn normal_edges(declared: &[DependencyEdge]) -> Vec<String> {
         .filter(|edge| edge.kind == EdgeKind::Normal)
         .map(|edge| edge.package.clone())
         .collect()
-}
-
-/// Every dependency name in `document` whose entry carries a `path` key.
-fn path_dependencies(document: &toml::Table) -> Vec<String> {
-    let mut offenders = Vec::new();
-    collect_path_dependencies(document, &mut offenders);
-    offenders
-}
-
-/// The entries of one dependency table, or nothing when it is not declared.
-fn dependency_entries<'a>(
-    table: &'a toml::Table,
-    heading: &str,
-) -> impl Iterator<Item = (&'a String, &'a toml::Value)> {
-    table
-        .get(heading)
-        .and_then(toml::Value::as_table)
-        .into_iter()
-        .flat_map(toml::Table::iter)
-}
-
-/// The platform-conditional tables a manifest nests its edges in.
-fn target_tables(table: &toml::Table) -> impl Iterator<Item = &toml::Table> {
-    table
-        .get("target")
-        .and_then(toml::Value::as_table)
-        .into_iter()
-        .flat_map(toml::Table::values)
-        .filter_map(toml::Value::as_table)
-}
-
-/// Walk the dependency tables of `table`, including target-scoped ones.
-fn collect_path_dependencies(table: &toml::Table, offenders: &mut Vec<String>) {
-    for heading in ["dependencies", "dev-dependencies", "build-dependencies"] {
-        for (name, entry) in dependency_entries(table, heading) {
-            if entry.get("path").is_some() {
-                offenders.push(name.clone());
-            }
-        }
-    }
-    for scope in target_tables(table) {
-        collect_path_dependencies(scope, offenders);
-    }
 }

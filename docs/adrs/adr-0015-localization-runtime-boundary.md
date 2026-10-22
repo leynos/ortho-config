@@ -67,10 +67,23 @@ extracting the runtime. Consumers of documentation metadata read
 
 Standalone consumers must build and test outside workspace feature unification.
 Dependency-closure checks cover normal/build edges and focused root dev edges,
-with injected forbidden dependencies as negative controls. Mixed consumers
-prove nominal type identity, and agreement tests connect derive constants,
-runtime identifiers, and documentation metadata. Move pure runtime tests with
-the implementation; its test support must not depend back on configuration.
+with injected forbidden dependencies as negative controls. Each control must
+*resolve* its injected edge before the closure check rejects it: a resolver
+refusal, however it is worded, never counts as a rejection.
+
+The boundary is enforced as host closure plus direct declarations. The host
+graph gives the runtime's exact transitive closure for the current platform,
+narrowed to the host because an unfiltered offline resolve would need every
+platform's crates. The runtime manifest gives an exact answer for every
+platform at once, because it is read as TOML across every dependency table
+including `target.*`. What is not claimed is transitive closure through an
+inactive platform - a forbidden crate reached only via another dependency's
+`cfg(windows)` edge - which would need a resolve per target.
+
+Mixed consumers prove nominal type identity, and agreement tests connect derive
+constants, runtime identifiers, and documentation metadata. Move pure runtime
+tests with the implementation; its test support must not depend back on
+configuration.
 
 Publish `ortho_l10n` before macros and configuration. Package consumers must
 exercise the publishable version-plus-path graph. Record check/test-build

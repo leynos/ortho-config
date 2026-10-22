@@ -8,12 +8,21 @@
 //! - every forbidden package is absent by name;
 //! - the runtime's own resolved edges are exactly the runtime's declared
 //!   dependencies, classified as normal, build, or root dev edges;
-//! - a negative control injects each forbidden edge and must fail *for that
-//!   reason*, naming the injected dependency.
+//! - a negative control injects each forbidden edge, *resolves* it, and then
+//!   requires the closure check to reject it by name.
 //!
 //! The third property is what keeps the first two honest. Without it a typo in
 //! a crate name, or a fixture that failed to resolve at all, would read as
 //! success.
+//!
+//! Resolution succeeding is part of the claim, not a detail of the fixture. A
+//! control exists to show that [`assert_absent_packages`] can reject a
+//! forbidden package that is present in a graph; if Cargo refuses the resolve,
+//! that check never ran. A refusal is not a weaker form of the same evidence,
+//! because an `--offline` resolve whose crate is missing from the package
+//! cache fails with a diagnostic that names the crate - indistinguishable, by
+//! name alone, from a deliberate rejection. [`run_negative_control`] therefore
+//! reports a refusal as an error rather than as a pass.
 //!
 //! # The graph is the host's, and the manifests are every platform's
 //!
@@ -34,7 +43,7 @@
 
 use super::fixture_cargo::{
     DependencyEdge, EdgeKind, FixtureCargo, Metadata, absolute_member, describe_edges,
-    ensure_failure_names, repository_root, toml_string,
+    repository_root, toml_string,
 };
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -113,6 +122,35 @@ pub(crate) fn assert_absent_packages(metadata: &Metadata, forbidden: &[&str]) ->
         ),
         offending.join(", "),
         metadata.package_names().join(", "),
+    );
+    Ok(())
+}
+
+/// Assert that no forbidden package is reachable from `root` in `metadata`.
+///
+/// This is the closure claim as a *consumer* experiences it, and it is
+/// deliberately stronger than "the root declares no forbidden edge". A
+/// forbidden crate can enter the graph at any depth, so only the transitive
+/// closure answers the question. Dev edges are followed as well, because Cargo
+/// resolves them for the crate's own test targets and an exclusion there would
+/// leave exactly the graph the issue complains about unexamined.
+///
+/// # Errors
+///
+/// Returns an error naming every forbidden package that is reachable.
+pub(crate) fn assert_no_forbidden_reachable(metadata: &Metadata, root: &str) -> Result<()> {
+    let reachable = metadata.reachable(root)?;
+    let offending = FORBIDDEN_PACKAGES
+        .iter()
+        .filter(|forbidden| reachable.contains(forbidden))
+        .copied()
+        .collect::<Vec<_>>();
+    ensure!(
+        offending.is_empty(),
+        "the dependency closure rooted at {root} reaches forbidden packages: {}\n\
+         the reachable graph is: {}",
+        offending.join(", "),
+        reachable.join(", "),
     );
     Ok(())
 }
@@ -220,37 +258,56 @@ impl Injection {
     }
 }
 
-/// Why a negative control failed before it could prove anything.
+/// Every way a control can fail before it proves anything.
 ///
-/// The distinction matters: "the injection was rejected" and "the fixture was
-/// never resolved" both exit non-zero, and only the first is evidence.
-#[derive(Debug)]
-pub(crate) enum ControlOutcome {
-    /// Cargo refused the injected edge, naming the injected crate.
-    Rejected {
-        /// The line Cargo printed about the injected crate.
+/// Kept as an enum so the message distinguishes a resolver refusal - which is
+/// an infrastructure condition, reported with Cargo's own words - from an
+/// injection that resolved and was accepted, which is a real defect in the
+/// check under test.
+#[derive(Debug, thiserror::Error)]
+enum ControlFailure {
+    /// Cargo refused the resolve, so the closure check never ran.
+    #[error(
+        "the {injection} never resolved, so the closure check could not reject it; \
+         Cargo said: {detail}"
+    )]
+    Refused {
+        /// The injection whose fixture was refused.
+        injection: String,
+        /// Cargo's explanation, in full.
         detail: String,
     },
-    /// Cargo resolved the graph; the closure check then failed on the name.
-    AcceptedButCaughtByName {
-        /// The offending packages the closure check reported.
+    /// The injected edge resolved and the closure check accepted it.
+    #[error("the {injection} resolved and the closure check accepted it: {detail}")]
+    Accepted {
+        /// The injection that was accepted.
+        injection: String,
+        /// The full graph, so a reader can see what the check was looking at.
         detail: String,
     },
 }
 
-/// Run one negative control: inject the edge, resolve, and require a failure.
+/// Run one negative control: inject the edge, resolve, and require rejection.
 ///
-/// Two outcomes are legitimate, and both are reported rather than flattened:
-/// resolution may refuse the injected crate outright, or it may resolve and be
-/// caught by [`assert_absent_packages`] naming that crate. Anything else - a
-/// fixture that failed for an unrelated reason, or an injection that slipped
-/// through - is an error.
+/// The control is evidence only when Cargo *resolved* the injected edge and
+/// [`assert_absent_packages`] then rejected it by name. Both halves matter:
+///
+/// - if the resolve fails, the check under test never ran, so nothing has been
+///   demonstrated. This is not tolerated even when the diagnostic names the
+///   injected crate, because an offline resolve of an uncached crate fails with
+///   exactly such a message and is indistinguishable from a real rejection by
+///   name alone;
+/// - if the resolve succeeds and the check accepts the edge, the control has
+///   found a real hole.
+///
+/// Returns the closure check's rejection message on success, which is what a
+/// reader sees in the log if the control later turns out to have been vacuous.
 ///
 /// # Errors
 ///
-/// Returns an error when Cargo fails without naming the injected crate, or when
-/// the injected edge resolves and the closure check accepts it.
-pub(crate) fn run_negative_control(injection: Injection) -> Result<ControlOutcome> {
+/// Returns an error when Cargo refuses the resolve, or when the injected edge
+/// resolves and the closure check accepts it.
+pub(crate) fn run_negative_control(injection: Injection) -> Result<String> {
     let fixture = FixtureCargo::new()?;
     fixture.write(Utf8Path::new("src/lib.rs"), "//! Negative control.\n")?;
     fixture.write(
@@ -262,15 +319,11 @@ pub(crate) fn run_negative_control(injection: Injection) -> Result<ControlOutcom
     // meant to guard, and did.
     let output = fixture.resolve()?;
     if !output.status.success() {
-        ensure_failure_names(&output, injection.injected_crate())?;
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        let detail = stderr
-            .lines()
-            .find(|line| line.contains(injection.injected_crate()))
-            .unwrap_or_else(|| stderr.lines().next().unwrap_or("cargo printed nothing"))
-            .trim()
-            .to_owned();
-        return Ok(ControlOutcome::Rejected { detail });
+        return Err(ControlFailure::Refused {
+            injection: injection.describe(),
+            detail: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+        .into());
     }
     // Resolution succeeded: the injected edge is real, so the closure check
     // must be the thing that refuses it - and it must refuse it *because of the
@@ -285,14 +338,12 @@ pub(crate) fn run_negative_control(injection: Injection) -> Result<ControlOutcom
     let injected = injection.injected_crate();
     let detail = assert_absent_packages(&metadata, &[injected])
         .err()
-        .with_context(|| {
-            format!(
-                "{} resolved and the closure check accepted it; the control proves nothing",
-                injection.describe(),
-            )
-        })?
-        .to_string();
-    Ok(ControlOutcome::AcceptedButCaughtByName { detail })
+        .map(|error| error.to_string())
+        .with_context(|| ControlFailure::Accepted {
+            injection: injection.describe(),
+            detail: metadata.package_names().join(", "),
+        })?;
+    Ok(detail)
 }
 
 /// Render a standalone runtime consumer manifest with one injected edge.
