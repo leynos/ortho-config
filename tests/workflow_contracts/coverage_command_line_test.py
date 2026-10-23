@@ -4,22 +4,19 @@ Windows passes a spawned process's whole command line as one string, and
 ``CreateProcess`` refuses one longer than 32,767 characters with
 ``os error 206`` — before the compiler is ever executed, so nothing in the
 Rust tree can observe it and no local gate runs on Windows. Run
-39645228205 failed exactly there: the ``cargo-orthohelp`` bin test's rustc
-invocation reached 33,406 characters and was refused 639 characters over the
-limit.
+39893695039 failed after the first path shortening: the ``ortho_config``
+library test's rustc invocation reached 33,497 characters and was refused
+730 characters over the limit.
 
-The cost is not spread evenly. Cargo passes one
-``-L dependency=<target>/llvm-cov-target/debug/build/<crate>/<hash>/out``
-argument per build-script unit (207 in that invocation) and one ``--extern``
-path per dependency (43), so the single 53-character checkout root appears
-251 times and accounts for 13,303 characters on its own. Shortening the root
-is therefore the lever that matters, and ``cargo-llvm-cov`` takes its tree
-from ``CARGO_TARGET_DIR``.
+The cost is not spread evenly. Cargo repeats the target root 302 times across
+dependency search paths and ``--extern`` arguments. Shortening the root is
+therefore the lever that matters, and ``cargo-llvm-cov`` takes its tree from
+``CARGO_TARGET_DIR`` before appending ``llvm-cov-target``.
 
 This module holds that fix's shape so a later edit cannot quietly restore the
 long root, scope it to a platform that does not need it, hand Linux an empty
 value that ``cargo-llvm-cov`` rejects, or pick a root so long that the leg
-fails again on the next dependency to arrive.
+fails again as the workspace grows.
 
 The arithmetic re-derives the measured invocation with its root substituted,
 so the headroom assertion is a statement about this workspace's real paths
@@ -45,46 +42,29 @@ WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
 #: What Windows accepts in one ``CreateProcess`` command line.
 CREATE_PROCESS_LIMIT: typ.Final[int] = 32_767
 
-#: The root the failing invocation used: the checked-out workspace's
-#: ``target``, plus the ``llvm-cov-target`` subdirectory cargo-llvm-cov
-#: appends to whatever root it is given.
-CHECKOUT_ROOT: typ.Final[str] = r"D:\a\ortho-config\ortho-config\target\llvm-cov-target"
+#: The ``CARGO_TARGET_DIR`` prefix in the failed invocation. Cargo-llvm-cov
+#: appends ``llvm-cov-target`` after this path.
+FAILED_TARGET_ROOT: typ.Final[str] = r"D:\a\_temp\cov"
 
 #: GitHub's substitution for the hosted runner's temporary directory. It is
 #: short by design: ``D:\a\_temp`` on the Windows image.
 RUNNER_TEMP: typ.Final[str] = "D:\\a\\_temp"
 
-#: The directory name the coverage steps use under ``RUNNER_TEMP``. It is
-#: deliberately terse: every character here is paid 251 times.
-COVERAGE_DIRECTORY: typ.Final[str] = "cov"
+#: The chosen root is the drive anchor, avoiding any directory component.
+DRIVE_ROOT: typ.Final[str] = pathlib.PureWindowsPath(RUNNER_TEMP).anchor
 
-#: The longest crate name in the workspace. Cargo's per-unit directory uses
-#: the package name, so this sets the worst-case per-unit length.
-LONGEST_PACKAGE: typ.Final[str] = "orthohelp_policy_adoption_fixture"
+#: The measured failed command line and count of its repeated target root.
+FAILING_COMMAND_LINE: typ.Final[int] = 33_497
+ROOT_OCCURRENCES: typ.Final[int] = 302
 
-#: Per-unit suffix under the target root: ``debug/build/<crate>/<hash>/out``.
-#: Both hex components in the failing invocation were 16 digits.
-UNIT_HASH: typ.Final[str] = "0123456789abcdef"
+#: A root shorter than the failed one that still exceeds the limit.
+NEAR_MISS_ROOT: typ.Final[str] = r"D:\a\_temp\c"
 
-#: The measured failing command line, and how many times the checkout root
-#: occurred in it: 207 ``-L dependency`` arguments and 43 ``--extern`` paths.
-FAILING_COMMAND_LINE: typ.Final[int] = 33_406
-ROOT_OCCURRENCES: typ.Final[int] = 251
+#: A root that clears the limit but leaves less than the required margin.
+VERBOSE_ROOT: typ.Final[str] = r"D:\verbose"
 
-#: A root shorter than the checkout's that still exceeds the limit. Trimming
-#: the checkout root by three characters removes 753 of the overrun and
-#: leaves the rest, which proves the assertion responds to the arithmetic
-#: rather than to "the root moved".
-NEAR_MISS_ROOT: typ.Final[str] = r"D:\a\ortho-config\ortho-config\target\llvm-cov-targe"
-
-#: A root that clears the limit but not the margin below. ``cargo-target``
-#: was the first candidate and leaves under 2,900 characters.
-VERBOSE_ROOT: typ.Final[str] = r"D:\a\_temp\cargo-target\llvm-cov-target"
-
-#: The minimum margin the Windows leg must keep. It still carries the sccache
-#: and rustc paths, 52 lint flags and the ``-L native`` arguments, and the
-#: next dependency widens the command line again.
-MINIMUM_HEADROOM: typ.Final[int] = 4_000
+#: The drive-root path leaves 2,592 characters on the measured invocation.
+MINIMUM_HEADROOM: typ.Final[int] = 2_000
 
 #: The job that runs the coverage steps.
 BUILD_TEST_JOB: typ.Final[str] = "build-test"
@@ -122,25 +102,26 @@ def _chooser() -> dict[str, typ.Any]:
 def _chosen_root() -> str:
     """Return the target root the chooser actually publishes on Windows."""
     run = str(_chooser().get("run", ""))
-    prefix = "CARGO_TARGET_DIR=$env:RUNNER_TEMP\\"
-    start = run.find(prefix)
-    assert start != -1, (
-        f"the chooser writes {run.strip()!r}, which does not publish a "
-        f"CARGO_TARGET_DIR under RUNNER_TEMP"
+    assert "[System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)" in run, (
+        f"the chooser writes {run.strip()!r}, which does not select the "
+        f"Windows runner's drive root"
     )
-    remainder = run[start + len(prefix) :]
-    return RUNNER_TEMP + "\\" + remainder.split('"')[0].strip()
+    assert '"CARGO_TARGET_DIR=$coverageRoot"' in run, (
+        f"the chooser writes {run.strip()!r}, which does not publish its "
+        f"selected root through GITHUB_ENV"
+    )
+    return DRIVE_ROOT
 
 
 def _projected_command_line(root: str) -> int:
     """Return the command-line length this root would produce.
 
     Only the part the root influences is re-derived: every occurrence of the
-    checkout root is replaced, and the rest of the measured invocation is
-    kept. That is honest about what it is — the same invocation, moved.
+    failed target root is replaced, and the rest of the measured invocation
+    is kept. That is honest about what it is — the same invocation, moved.
     """
     return FAILING_COMMAND_LINE + ROOT_OCCURRENCES * (
-        len(root) - len(CHECKOUT_ROOT)
+        len(root) - len(FAILED_TARGET_ROOT)
     )
 
 
@@ -179,19 +160,18 @@ def test_the_chosen_root_is_the_one_the_coverage_steps_read() -> None:
     """The republished value and the step expression name the same tree."""
     run = str(_chooser().get("run", ""))
     assert "GITHUB_ENV" in run, "the chooser must republish through GITHUB_ENV"
-    assert f"CARGO_TARGET_DIR=$env:RUNNER_TEMP\\{COVERAGE_DIRECTORY}" in run, (
-        f"the chooser writes {run.strip()!r}, which is not the runner-temp "
-        f"root the coverage steps read"
+    assert "[System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)" in run, (
+        f"the chooser writes {run.strip()!r}, which is not based on the "
+        f"Windows runner's drive root"
     )
 
 
 @pytest.mark.parametrize(
     ("root", "expect_fit"),
     [
-        pytest.param(f"{RUNNER_TEMP}\\{COVERAGE_DIRECTORY}\\llvm-cov-target",
-                     True, id="chosen-root-fits"),
+        pytest.param(DRIVE_ROOT, True, id="chosen-root-fits"),
         pytest.param(NEAR_MISS_ROOT, False, id="a-shorter-root-still-overflows"),
-        pytest.param(CHECKOUT_ROOT, False, id="checkout-root-still-fails"),
+        pytest.param(FAILED_TARGET_ROOT, False, id="previous-root-still-fails"),
     ],
 )
 def test_the_projection_discriminates(root: str, expect_fit: bool) -> None:
@@ -212,8 +192,8 @@ def test_the_chosen_root_keeps_meaningful_headroom() -> None:
     """The fix is a margin, not a squeak past the limit.
 
     A repair that landed within a few hundred characters of the ceiling
-    would fail again on the next dependency, so the bound asserts the room
-    the Windows leg still has for its compiler paths, ``--extern`` list and
+    would fail again as the workspace grows, so the bound asserts the room
+    the Windows leg still has for compiler paths, the ``--extern`` list and
     lint flags. The verbose candidate beside it shows the margin bites: it
     clears the limit but not this floor.
     """

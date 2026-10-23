@@ -2740,29 +2740,25 @@ bridge cache key is sized to stay inside it (see
 `CreateProcess` accepts for a spawned process: 32,767 characters, reported as
 `os error 206` before the process ever starts.
 
-The coverage build reaches the second limit. Cargo passes the compiler one
-`-L dependency=<target>/llvm-cov-target/debug/build/<crate>/<hash>/out`
-argument per build-script unit and one `--extern` path per dependency, so a
-single target root is repeated across the whole command line. In run
-39645228205 the `cargo-orthohelp` bin test's invocation was 33,406 characters,
-639 over; its 53-character checkout root appeared 251 times and accounted for
-13,303 of them.
+The coverage build reaches the second limit. Cargo repeats a single target root
+across dependency search paths and `--extern` arguments. In run 39893695039 the
+`ortho_config` library test's invocation was 33,497 characters, 730 over;
+`D:\a\_temp\cov` appeared 302 times.
 
 `cargo-llvm-cov` takes its tree from `CARGO_TARGET_DIR`, so shortening that
 root shortens every occurrence at once. A step named
-`Choose the coverage target root` republishes
-`CARGO_TARGET_DIR=%RUNNER_TEMP%\cov` through `GITHUB_ENV` on the Windows leg
-only, which leaves roughly 5,100 characters of headroom. Two consequences are
-easy to undo by accident:
+`Choose the coverage target root` republishes the Windows runner's drive root as
+`CARGO_TARGET_DIR` through `GITHUB_ENV`. Cargo-llvm-cov appends
+`llvm-cov-target` there, leaving 2,592 characters of headroom for the measured
+invocation. Two consequences are easy to undo by accident:
 
 - The coverage steps must not set `CARGO_TARGET_DIR` themselves. Assigning it
   per step needs the Linux cells to resolve to an empty string, and
   `cargo-llvm-cov` refuses an empty value rather than reading it as unset. A
   per-step value also makes the coverage legs read a matrix value their
   publisher does not, which the CV-005 pairing rejects.
-- The directory name is deliberately terse. `cargo-target` would also clear
-  the limit but leaves under 2,900 characters, which the next dependency added
-  to the workspace would erode.
+- The selected root has no directory component. A longer root consumes the
+  remaining command-line headroom once per dependency path.
 
 `coverage_command_line_test.py` holds both rules and re-derives the arithmetic
 from the measured invocation, so a change that restores the long root, shortens

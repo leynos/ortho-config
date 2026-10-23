@@ -271,19 +271,17 @@ jobs:
 
       - name: Choose the coverage target root
         # Windows measures a spawned process's whole command line against the
-        # 32,767 characters CreateProcess accepts. The cargo-orthohelp bin
-        # test's rustc invocation reached 33,406 on run 39645228205 and died
-        # with `os error 206` before the compiler ran: 639 characters over.
+        # 32,767 characters CreateProcess accepts. After the first shortening,
+        # the ortho_config library test's rustc invocation reached 33,497
+        # characters on run 39893695039 and still died with `os error 206`:
+        # 730 characters over.
         #
-        # The checkout path dominates the excess. Cargo passes one
-        # `-L dependency=<target>/llvm-cov-target/debug/build/<crate>/<hash>/
-        # out` argument per build-script unit (207 here) and one `--extern`
-        # path per dependency (43), so that single 53-character root appears
-        # 251 times and accounts for 13,303 of the 33,406. `cargo-llvm-cov`
-        # derives its tree from `CARGO_TARGET_DIR`, so shortening the root
-        # shortens every one of those occurrences at once. `cov` costs 23
-        # characters fewer than the checkout root and yields about 5,100
-        # characters of headroom; `cargo-target` would leave under 2,900.
+        # The target root dominates the excess. Cargo repeats it 302 times in
+        # this invocation, across dependency search paths and `--extern`
+        # arguments. `cargo-llvm-cov` appends its own `llvm-cov-target` to
+        # `CARGO_TARGET_DIR`, so the Windows-only chooser uses the drive root:
+        # that removes 3,322 characters and leaves 2,592 characters of
+        # measured headroom. No shorter absolute Windows root is available.
         #
         # Linux keeps the default, whose limit is MAX_ARG_STRLEN, an order of
         # magnitude further away.
@@ -294,7 +292,8 @@ jobs:
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
         run: |
-          "CARGO_TARGET_DIR=$env:RUNNER_TEMP\cov" >> $env:GITHUB_ENV
+          $coverageRoot = [System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          "CARGO_TARGET_DIR=$coverageRoot" >> $env:GITHUB_ENV
 
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
