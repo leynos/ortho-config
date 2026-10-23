@@ -11,13 +11,14 @@ const TRYBUILD_CHILD_ENV: &str = "ORTHOHELP_TRYBUILD_CHILD";
 #[test]
 fn must_use_compile_tests() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var_os(TRYBUILD_CHILD_ENV).is_none() {
-        // Nextest may start workspace tests outside this package. Supplying
-        // the compile-time package path keeps trybuild's diagnostic paths
-        // relative to the right source directory on every platform.
+        // Nextest may start workspace tests outside this package. Running the
+        // child from the package directory lets trybuild discover the same
+        // source root that rustc uses for diagnostic paths.
         let status = Command::new(std::env::current_exe()?)
             .args(["--exact", "must_use_compile_tests", "--nocapture"])
             .env(TRYBUILD_CHILD_ENV, "1")
-            .env("CARGO_MANIFEST_DIR", env!("CARGO_MANIFEST_DIR"))
+            .env_remove("CARGO_MANIFEST_DIR")
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
             .status()?;
         if !status.success() {
             return Err(
