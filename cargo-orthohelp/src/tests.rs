@@ -239,9 +239,9 @@ fn link_input_paths_fit_in_the_windows_path_limit() {
         ));
 
     assert!(
-        link_input.as_str().len() <= WINDOWS_MAX_PATH,
-        "linker input is {} characters, over the {WINDOWS_MAX_PATH}-character \
-         Windows limit: {link_input}",
+        link_input.as_str().len() < WINDOWS_MAX_PATH,
+        "linker input is {} characters, but must be shorter than the \
+         {WINDOWS_MAX_PATH}-character Windows limit: {link_input}",
         link_input.as_str().len()
     );
 }

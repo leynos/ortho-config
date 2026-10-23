@@ -83,7 +83,7 @@
 - [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
   review the pinned Kani and Verus boundary, the bundled-solver decision, the
   opt-in integration evidence, and the limits of a fixture proof.
-- [ADR-0014: Adopt a dated nightly and the development build standard](adrs/adr-0014-adopt-a-dated-nightly-and-the-development-build-standard.md):
+- [ADR-0017: Adopt a dated nightly and the development build standard](adrs/adr-0017-adopt-a-dated-nightly-and-the-development-build-standard.md):
   review the pinned dated nightly, the Cargo defaults restated in Make recipes,
   the routes kept outside the standard, and build-tool provisioning.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed

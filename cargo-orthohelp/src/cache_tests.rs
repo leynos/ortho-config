@@ -84,6 +84,15 @@ fn cache_key_hash_renders_lowercase_hex() {
 }
 
 #[rstest]
+fn cache_key_hash_uses_the_leading_sha256_bytes() {
+    assert_eq!(
+        cache_key().hash(),
+        "151fb1ee840f9a46d9843813b6877cda",
+        "cache key should use the leading digest bytes for its directory name"
+    );
+}
+
+#[rstest]
 fn cache_key_hash_names_a_directory_no_longer_than_the_digest_budget() {
     // The hash is a path component, and from cargo 1.100 every artefact
     // sits under `target/debug/build/<crate>/<hash>/out/`. Windows still
