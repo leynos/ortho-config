@@ -252,6 +252,15 @@ jobs:
         if: ${{ always() && matrix.platform == 'linux' }}
         run: df -BM /
 
+      # Run 39645228205 hit os error 206: CreateProcess refused its 33,406-
+      # character rustc command at the 32,767-character limit. The target
+      # root appeared 251 times. Linux's MAX_ARG_STRLEN limit is an order of
+      # magnitude farther away, so Linux must stay genuinely unset.
+      - name: Shorten the Cargo target root for coverage (Windows)
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=$env:RUNNER_TEMP\cov" -Encoding utf8
+
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
@@ -284,6 +293,13 @@ jobs:
       - name: Disk sample (after coverage without serde_saphyr)
         if: ${{ always() && matrix.platform == 'linux' }}
         run: df -BM /
+
+      # GITHUB_ENV cannot unset a variable, so restore Cargo's effective
+      # workspace default after both passes rather than restoring absence.
+      - name: Restore the default Cargo target root (Windows)
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=$env:GITHUB_WORKSPACE\target" -Encoding utf8
 
       - name: Merge coverage results
         if: ${{ matrix.platform == 'linux' }}
