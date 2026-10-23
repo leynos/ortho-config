@@ -262,9 +262,9 @@ pub(super) fn artefact_path(out_dir: &Path) -> Result<Option<PathBuf>> {
         }
     };
     let relative_path = Path::new("ortho-config/cli-identifiers.json");
-    let exists = directory.try_exists(relative_path).with_context(|| {
-        format!("inspect identifier artefact under {}", out_dir.display())
-    })?;
+    let exists = directory
+        .try_exists(relative_path)
+        .with_context(|| format!("inspect identifier artefact under {}", out_dir.display()))?;
     Ok(exists.then(|| out_dir.join(relative_path)))
 }
 
@@ -290,7 +290,9 @@ fn retain_runner_error(error: anyhow::Error, operation: &str) -> anyhow::Error {
 #[test]
 fn artefact_path_reports_non_not_found_lookup_errors() {
     let output = tempfile::tempdir().expect("create a temporary output directory");
-    std::fs::write(output.path().join("ortho-config"), "not a directory")
+    Dir::open_ambient_dir(output.path(), ambient_authority())
+        .expect("open the temporary output directory")
+        .write("ortho-config", "not a directory")
         .expect("write a file at the artefact directory path");
 
     let error = artefact_path(output.path())
@@ -304,7 +306,9 @@ fn artefact_path_reports_non_not_found_lookup_errors() {
         "the invalid parent must report its filesystem error"
     );
     assert!(
-        error.to_string().contains(&output.path().display().to_string()),
+        error
+            .to_string()
+            .contains(&output.path().display().to_string()),
         "the error names the output directory: {error}"
     );
 }

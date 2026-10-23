@@ -3013,7 +3013,7 @@ way the standard would have carried it: `-Zcodegen-backend=cranelift` in
 `rustflags`, together with `-Zthreads=8` and `-Clink-arg=-fuse-ld=mold`. A
 `[profile.dev] codegen-backend` key was rejected on other grounds; see Option A
 in
-[ADR-014](adrs/adr-0014-adopt-a-dated-nightly-and-the-development-build-standard.md).
+[ADR-0016](adrs/adr-0016-adopt-a-dated-nightly-and-the-development-build-standard.md).
 
 ### The probe
 
@@ -3146,8 +3146,9 @@ exception:
 - `identifier_artefact_e2e` failed in the Cranelift run, but not because of the
   backend. It assumed the older Cargo build-directory layout
   (`build/<hash>/out`), while the pinned nightly writes
-  `build/<package>/<hash>/out`. It now searches both layouts and passes under
-  the standard, so it is not an exception test.
+  `build/<package>/<hash>/out`. It now reads the build-script `out_dir` from
+  Cargo's JSON messages and passes under the standard, so it is not an
+  exception test.
 - Of the ten tests terminated when the first run was stopped, nine were
   trybuild tests, now measured as above. The tenth, the
   `cargo-orthohelp::rstest_bdd` scenario
@@ -3754,12 +3755,13 @@ ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
 
 On the Windows leg the work outside the coverage steps is dominated by cache
 saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15. With the
-watchdog at 3,300 s and two coverage steps per job, the requirements are 190
-and 140 minutes: 6,600 s of watchdog, plus the lane's allowance, plus a 900 s
-margin. The margin is a term of the requirement rather than slack above it,
+watchdog at 3,300 s and two coverage steps per job, the minimum ceilings are
+185 and 140 minutes: 6,600 s of watchdog, plus the lane's allowance, plus a 900
+s margin. The margin is a term of the minimum rather than slack above it,
 because a ceiling equal to the sum it contains cancels the job at the moment
 the watchdog would have reported the overrun, and the report is the only thing
-that makes an overrun actionable. The ceilings equal their requirements.
+that makes an overrun actionable. The configured ceilings are 190 and 140
+minutes, leaving five extra minutes on `ci.yml` and none on `coverage-main.yml`.
 
 A lane in a workflow the contract has not measured is held to the larger
 allowance until someone measures it and records a run id.

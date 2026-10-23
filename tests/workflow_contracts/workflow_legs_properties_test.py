@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import itertools
 import typing as typ
+from collections.abc import Callable
 
 import pytest
 import workflow_legs
@@ -37,7 +38,7 @@ SETTINGS: typ.Final[settings] = settings(
 _KEY = st.text(alphabet="abcd", min_size=1, max_size=2)
 _VALUE = st.text(alphabet="xyz01", min_size=1, max_size=3)
 
-LegsImpl = typ.Callable[[str, str, dict[str, object]], list[workflow_legs.Leg]]
+type LegsImpl = Callable[[str, str, dict[str, object]], list[workflow_legs.Leg]]
 
 
 @st.composite
@@ -75,10 +76,12 @@ def check_product_is_complete(impl: LegsImpl, axes: dict[str, list[str]]) -> Non
     """A matrix of list axes yields exactly their product: every cell once, none extra."""
     cells = cells_of(impl, job_with(dict(axes)))
     expected = product_of(axes)
-    assert len(cells) == len(expected) == len({tuple(sorted(c.items())) for c in cells})
+    assert len(cells) == len(expected) == len({tuple(sorted(c.items())) for c in cells}), (
+        "matrix legs should contain each product cell exactly once"
+    )
     assert sorted(map(sorted, (c.items() for c in cells))) == sorted(
         map(sorted, (c.items() for c in expected))
-    )
+    ), f"matrix legs differ from the Cartesian product: {cells!r} != {expected!r}"
 
 
 def check_include_follows_survivors(
@@ -86,8 +89,12 @@ def check_include_follows_survivors(
 ) -> None:
     """Includes are appended after the product, in order, unchanged."""
     cells = cells_of(impl, job_with({**axes, "include": list(extra)}))
-    assert cells[len(cells) - len(extra) :] == extra
-    assert len(cells) == len(product_of(axes)) + len(extra)
+    assert cells[len(cells) - len(extra) :] == extra, (
+        "matrix includes should follow the product unchanged"
+    )
+    assert len(cells) == len(product_of(axes)) + len(extra), (
+        "matrix includes should append one leg each"
+    )
 
 
 def check_exclude_removes_exactly_the_matches(
@@ -103,14 +110,18 @@ def check_exclude_removes_exactly_the_matches(
     # A matrix that excludes every cell is read as one empty leg, the same
     # over-approximation as a job with no matrix: the contract would rather
     # demand an installer of a job that cannot run than excuse one that might.
-    assert cells == (survivors or [{}])
-    assert victim not in cells or not survivors
+    assert cells == (survivors or [{}]), f"exclude should remove only matching cells: {cells!r}"
+    assert victim not in cells or not survivors, (
+        "an excluded victim should not survive beside other cells"
+    )
 
 
 def check_a_job_without_cells_is_one_empty_leg(impl: LegsImpl, matrix: object) -> None:
     """No matrix, or one that names no cell, still runs once with an empty cell."""
     job = job_with(None) if matrix is None else {"strategy": {"matrix": matrix}}
-    assert cells_of(impl, job) == [{}]
+    assert cells_of(impl, job) == [{}], (
+        "a job without runnable matrix cells should have one empty leg"
+    )
 
 
 # -- runner labels -------------------------------------------------------------------
@@ -123,20 +134,34 @@ def leg_with(runs_on: object, cell: dict[str, str] | None = None) -> workflow_le
 
 def check_plain_forms_resolve_to_their_labels(labels: list[str], group: str) -> None:
     """A string, a list and a ``labels`` mapping resolve to their labels, group last."""
-    assert workflow_legs.runner_labels(leg_with(labels[0])) == [labels[0]]
-    assert workflow_legs.runner_labels(leg_with(list(labels))) == labels
-    assert workflow_legs.runner_labels(leg_with({"labels": labels[0]})) == [labels[0]]
+    assert workflow_legs.runner_labels(leg_with(labels[0])) == [labels[0]], (
+        "a scalar runner label should resolve"
+    )
+    assert workflow_legs.runner_labels(leg_with(list(labels))) == labels, (
+        "runner label lists should retain order"
+    )
+    assert workflow_legs.runner_labels(leg_with({"labels": labels[0]})) == [
+        labels[0]
+    ], "a labels mapping should resolve its scalar label"
     mapping = {"labels": list(labels), "group": group}
-    assert workflow_legs.runner_labels(leg_with(mapping)) == [*labels, group]
+    assert workflow_legs.runner_labels(leg_with(mapping)) == [*labels, group], (
+        "runner groups should follow labels"
+    )
 
 
 def check_matrix_references_are_substituted(cell: dict[str, str], literal: str) -> None:
     """Each ``matrix.<key>`` becomes the leg's value; a fork fallback names both arms."""
     first, second = (list(cell) * 2)[:2]
     fallback = f"${{{{ github.event.fork && matrix.{first} || matrix.{second} }}}}"
-    assert workflow_legs.runner_labels(leg_with(fallback, cell)) == [cell[first], cell[second]]
+    assert workflow_legs.runner_labels(leg_with(fallback, cell)) == [
+        cell[first],
+        cell[second],
+    ], "both readable arms of a fork fallback should resolve"
     quoted = f"${{{{ matrix.{first} && '{literal}' }}}}"
-    assert workflow_legs.runner_labels(leg_with(quoted, cell)) == [cell[first], literal]
+    assert workflow_legs.runner_labels(leg_with(quoted, cell)) == [
+        cell[first],
+        literal,
+    ], "matrix references and string literals should both resolve"
 
 
 def check_unreadable_runners_raise(key: str) -> None:
@@ -170,14 +195,22 @@ def check_conditions_agree_with_an_oracle(
         actual = cell.get(key)
         expected = expected and (actual is None or (actual == value) == equal)
     step = {"if": "${{ " + " && ".join(clauses) + " }}"}
-    assert workflow_legs.step_runs_on(step, cell) is expected
+    assert workflow_legs.step_runs_on(step, cell) is expected, (
+        f"matrix condition result differs from its oracle for {cell!r} and {tests!r}"
+    )
 
 
 def check_unevaluable_conditions_run(cell: dict[str, str], key: str, value: str) -> None:
     """No condition, an ``||``, or a non-matrix test never excuses a step."""
-    assert workflow_legs.step_runs_on({}, cell)
-    assert workflow_legs.step_runs_on({"if": f"matrix.{key} == '{value}' || always()"}, cell)
-    assert workflow_legs.step_runs_on({"if": "${{ always() }}"}, cell)
+    assert workflow_legs.step_runs_on({}, cell), (
+        "an absent condition should leave the step enabled"
+    )
+    assert workflow_legs.step_runs_on(
+        {"if": f"matrix.{key} == '{value}' || always()"}, cell
+    ), "an unevaluable disjunction should conservatively leave the step enabled"
+    assert workflow_legs.step_runs_on({"if": "${{ always() }}"}, cell), (
+        "an unevaluable function should conservatively leave the step enabled"
+    )
 
 
 # -- the real interpreter under Hypothesis -------------------------------------------
@@ -270,7 +303,7 @@ def _ignores_exclude(workflow: str, job_id: str, job: dict[str, object]) -> list
     return workflow_legs.legs(workflow, job_id, job_with(matrix))
 
 
-def _rejects(check: typ.Callable[..., None], *strategies: st.SearchStrategy[typ.Any]) -> None:
+def _rejects(check: Callable[..., None], *strategies: st.SearchStrategy[typ.Any]) -> None:
     """Assert that Hypothesis finds an input on which *check* fails."""
 
     # One failure is enough to reject; reporting several would wrap them in an
@@ -278,6 +311,7 @@ def _rejects(check: typ.Callable[..., None], *strategies: st.SearchStrategy[typ.
     @settings(SETTINGS, report_multiple_bugs=False)
     @given(st.tuples(*strategies))
     def run(args: tuple[object, ...]) -> None:
+        """Run the property check with Hypothesis-generated arguments."""
         check(*args)
 
     with pytest.raises(AssertionError):

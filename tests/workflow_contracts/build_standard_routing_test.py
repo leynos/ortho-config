@@ -21,7 +21,7 @@ Make but absent from the file (or the reverse) is a build that differs between
 
 Case identifiers are distinct (``make_test_linux_x86_64`` and so on) so each
 shows up by name in a collection listing and none can be dropped by a
-parametrisation that shares one.
+parameterization that shares one.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -30,10 +30,11 @@ from __future__ import annotations
 
 import pathlib
 import subprocess  # noqa: S404 - one case runs a real make, which is the subject.
-import tomllib
+import sys
 import typing as typ
 
 import pytest
+import tomllib
 from build_standard_make import (
     BACKEND_FLAG,
     CONFIG_PATH,
@@ -135,7 +136,7 @@ def test_development_routes_go_through_the_cargo_variable(case: str, target: str
 def test_the_standard_is_the_whole_standard_on_each_platform() -> None:
     """Pins each platform to its exact flags, so a loosened table cannot hide.
 
-    The parametrised cases compare Make with the file, which agree trivially
+    The parameterized cases compare Make with the file, which agree trivially
     if both lose a flag together. This case names the standard itself: Linux
     gets the parallel frontend and the linker, on either architecture, and the
     two platforms that ship no ``mold`` get the frontend alone.
@@ -312,12 +313,16 @@ def test_the_preflight_is_a_noop_when_the_standard_is_off() -> None:
     assert any("the build standard is off" in line for line in lines), lines
 
 
+@pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="the failing preflight fixture uses the Linux-only mold pin",
+)
 def test_a_failing_preflight_stops_the_build_before_cargo(tmp_path: pathlib.Path) -> None:
-    """A missing prerequisite aborts with an actionable error and never compiles.
+    """On Linux, a missing prerequisite aborts with an actionable error.
 
     The pinned mold version is pointed at one nothing installs, so the check
-    fails on any machine whether or not mold is present. ``CARGO`` is a script
-    that leaves a marker, so "never compiles" is observed rather than assumed.
+    fails on Linux whether or not mold is present. ``CARGO`` is a script that
+    leaves a marker, so "never compiles" is observed rather than assumed.
     """
     marker = tmp_path / "cargo-ran"
     fake_cargo = tmp_path / "fake-cargo"

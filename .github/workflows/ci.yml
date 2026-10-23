@@ -38,11 +38,11 @@ jobs:
     # contain both before it contains anything else. On the Windows leg the
     # work outside them, dominated by cache save and restore, reached 3,257 s
     # on run 33447440225, read across 103 jobs of every conclusion. The
-    # contract allows 60 minutes for that, making the requirement
-    # 6,600 + 3,600 = 10,200 s = 170 minutes, and asks for 15 minutes above it
-    # so a ceiling never fires at the moment the watchdog would have
-    # reported. The job had no ceiling at all before this and so inherited
-    # GitHub's six-hour default.
+    # contract allows 60 minutes for that. Together with 6,600 s of watchdog
+    # time and the 900 s margin, the minimum is 11,100 s (185 minutes). The
+    # configured 190-minute ceiling leaves five minutes above that minimum.
+    # The job had no ceiling at all before this and so inherited GitHub's
+    # six-hour default.
     timeout-minutes: 190
     permissions:
       contents: read
