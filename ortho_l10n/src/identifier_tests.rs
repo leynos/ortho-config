@@ -138,7 +138,7 @@ proptest! {
     }
 }
 
-/// Structured errors retain the offending input and the legacy panic text.
+/// Structured errors retain the offending input and stable diagnostics.
 #[rstest]
 #[case::missing(
     vec![], "bad/name",
@@ -165,7 +165,7 @@ proptest! {
     IdentifierError::InvalidCharacter { input: "bad/name".to_owned() },
     "invalid Fluent identifier segment: \"bad/name\"",
 )]
-fn structured_errors_and_panics_preserve_the_contract(
+fn structured_errors_preserve_the_contract(
     #[case] path: Vec<&str>,
     #[case] suffix: &str,
     #[case] expected: IdentifierError,
@@ -174,11 +174,36 @@ fn structured_errors_and_panics_preserve_the_contract(
     let error = try_message_id_for(&path, suffix).expect_err("invalid identifier");
     assert_eq!(error, expected);
     assert_eq!(error.to_string(), text);
-    let panic = std::panic::catch_unwind(|| message_id_for(&path, suffix))
-        .expect_err("legacy API must panic");
-    let rendered = panic
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied());
-    assert_eq!(rendered, Some(text));
+}
+
+#[test]
+#[should_panic(
+    expected = "Fluent identifier must start with an ASCII letter: missing command root"
+)]
+fn legacy_message_id_panics_on_missing_root() {
+    drop(message_id_for(&[] as &[&str], "bad/name"));
+}
+
+#[test]
+#[should_panic(expected = "invalid Fluent identifier segment: segment must not be empty")]
+fn legacy_message_id_panics_on_empty_segment() {
+    drop(message_id_for(&["demo"], "args..help"));
+}
+
+#[test]
+#[should_panic(expected = "invalid Fluent identifier segment: \"bad/name\"")]
+fn legacy_message_id_panics_on_invalid_character() {
+    drop(message_id_for(&["demo"], "bad/name"));
+}
+
+#[test]
+#[should_panic(expected = "Fluent identifier must start with an ASCII letter: \"123-help\"")]
+fn legacy_message_id_panics_on_numeric_root() {
+    drop(message_id_for(&["123"], "help"));
+}
+
+#[test]
+#[should_panic(expected = "invalid Fluent identifier segment: \"bad/name\"")]
+fn legacy_message_id_panics_on_segment_error_before_root_check() {
+    drop(message_id_for(&["123"], "bad/name"));
 }

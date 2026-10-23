@@ -2,10 +2,13 @@
 
 ## Status
 
-Accepted. The repository pins a dated nightly toolchain for development and
-formatting, takes the parallel `rustc` frontend and the `mold` linker as Cargo
-defaults, and keeps every non-development route off the standard. The Cranelift
-development backend was measured and is not adopted.
+Accepted, with the backend decision superseded by
+[ADR-0017](adr-0017-use-cranelift-for-development-builds.md). The repository
+pins a dated nightly toolchain for development and formatting, takes the
+parallel `rustc` frontend and the `mold` linker as Cargo defaults, and keeps
+every non-development route off the standard. This ADR records the original
+decision not to select Cranelift; ADR-0017 adopts it for dev-fast builds with a
+documented unwind limitation.
 
 ## Date
 
@@ -78,16 +81,15 @@ routes displacing the configuration instead.
   every component on Linux (x86_64 and aarch64), Windows MSVC, and macOS,
   checked against the rustup manifests. It carries the date 2026-10-16 at the
   time of writing.
-- Put the standard in `.cargo/config.toml` as Cargo defaults: `-Zthreads=8` in
-  `[build]`, and `-Zthreads=8 -Clink-arg=-fuse-ld=mold` under
-  `[target.'cfg(target_os = "linux")']` only. The Makefile restates the same
-  flags wherever a recipe assigns `RUSTFLAGS`: `$(GATE_RUSTFLAGS)` for a gate
-  and `$(DEBUG_RUSTFLAGS)` for a debug build. `BUILD_STANDARD=0` switches the
-  standard off for one invocation; only the advisory beta lane uses it.
-- Do not adopt backend selection. The Cranelift backend was requested, measured,
-  and refused; the evidence is in the developers' guide.[^1] The exception is
-  tracked by [issue #598](https://github.com/leynos/ortho-config/issues/598),
-  which requires a re-measurement by 2027-04-18.
+- Put the initial standard in `.cargo/config.toml` as Cargo defaults and
+  restate it in Make recipes. ADR-0017 supersedes this decision's omission of
+  Cranelift and records the current development flags.
+- Initially do not adopt backend selection. The Cranelift backend was requested,
+  measured, and refused; ADR-0017 supersedes that decision for dev-fast builds,
+  while retaining the measurement as an explicit limitation.[^1] The
+  re-measurement is tracked by
+  [issue #598](https://github.com/leynos/ortho-config/issues/598), due by
+  2027-04-18.
 - Keep explicit non-development routes outside the standard. `make release`
   uses `$(RELEASE_RUSTFLAGS)`, which assigns an empty `RUSTFLAGS` on purpose to
   displace the configuration. Coverage and packaging assign `RUSTFLAGS` in
@@ -144,4 +146,4 @@ is not replicated here.
   keep cargo-llvm-cov's default. See
   [The Windows coverage command line](../developers-guide.md#the-windows-coverage-command-line).
 
-[^1]: Developers' guide, "Cranelift qualification" section.
+[^1]: Developers' guide, "Cranelift development backend" section.

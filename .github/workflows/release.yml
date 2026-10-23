@@ -120,8 +120,8 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       # Release builds take the production route: no development standard.
-      # Assigning RUSTFLAGS displaces the parallel frontend and mold in
-      # `.cargo/config.toml`. The nested setup-rust would export
+      # Assigning RUSTFLAGS displaces the parallel frontend, Cranelift backend
+      # and mold in `.cargo/config.toml`. The nested setup-rust would export
       # this same value by default; it is written out so the exclusion does
       # not depend on an action default. Never set it to `''`: an empty value
       # leaves the configuration in force.

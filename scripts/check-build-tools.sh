@@ -49,7 +49,7 @@ check_mold() {
 # Report on the toolchain half of the prerequisites: rustup itself and the
 # pinned dated nightly, whose parallel frontend the standard relies on.
 check_toolchain() {
-  local toolchain=$1
+  local toolchain=$1 components
   if ! command -v rustup >/dev/null 2>&1; then
     note 'rustup not found on PATH; it is required to select the pinned nightly'
     note 'install it from https://rustup.rs'
@@ -61,6 +61,17 @@ check_toolchain() {
     return 1
   fi
   note "toolchain $toolchain available"
+  if ! components=$(rustup component list --toolchain "$toolchain" --installed); then
+    note "could not list components for toolchain $toolchain"
+    note 'install it with: make install-build-tools'
+    return 1
+  fi
+  if ! printf '%s\n' "$components" | grep -q '^rustc-codegen-cranelift-'; then
+    note "Cranelift codegen component is not installed for $toolchain"
+    note 'install it with: make install-build-tools'
+    return 1
+  fi
+  note "Cranelift codegen component available for $toolchain"
 }
 
 # Run both checks unconditionally so a developer sees every missing piece in one

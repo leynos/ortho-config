@@ -1,4 +1,4 @@
-"""Evaluating the Makefile's invocation contract, for the build-standard contracts.
+"""Evaluate the Makefile's dev-fast routing for build-standard contracts.
 
 Reading a recipe's text proves little about the command it runs: the flags are
 Make variables, the executable is a variable, and the platform conditionals
@@ -37,14 +37,17 @@ CONFIG_PATH: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".cargo" / "config.toml
 PROBE_CARGO: typ.Final[str] = "probe-cargo"
 PROBE_WHITAKER: typ.Final[str] = "probe-whitaker"
 
-#: The flags the development standard adds, by what they select, and the
-#: backend flag it refuses. A route that must not carry the standard is checked
-#: against all three, so that a backend selection cannot arrive through a route
-#: the standard's own tables never mention.
+#: The flags the development standard adds. A route that must not carry the
+#: standard is checked against every flag, so none can arrive through an
+#: excluded route.
 THREADS_FLAG: typ.Final[str] = "-Zthreads=8"
 BACKEND_FLAG: typ.Final[str] = "-Zcodegen-backend=cranelift"
+DEV_FAST_CFG_FLAG: typ.Final[str] = "--cfg=ortho_config_dev_fast"
+CHECK_CFG_FLAG: typ.Final[str] = "--check-cfg=cfg(ortho_config_dev_fast)"
 LINKER_FLAG: typ.Final[str] = "-Clink-arg=-fuse-ld=mold"
-STANDARD_FLAGS: typ.Final[frozenset[str]] = frozenset({THREADS_FLAG, BACKEND_FLAG, LINKER_FLAG})
+STANDARD_FLAGS: typ.Final[frozenset[str]] = frozenset(
+    {THREADS_FLAG, BACKEND_FLAG, DEV_FAST_CFG_FLAG, CHECK_CFG_FLAG, LINKER_FLAG}
+)
 
 #: The one target table that applies on Linux, and so the only place the linker
 #: may appear. ``cfg(unix)`` would also reach macOS, which ships no ``mold``.

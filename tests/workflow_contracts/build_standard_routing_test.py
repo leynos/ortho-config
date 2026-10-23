@@ -1,6 +1,6 @@
 """Contract for how the Makefile routes the development build standard.
 
-The standard (the parallel frontend and ``mold``, both in
+The standard (the parallel frontend, Cranelift backend and ``mold``, all in
 ``.cargo/config.toml``) reaches a build by one of two routes, and each can fail
 silently:
 
@@ -37,7 +37,9 @@ import pytest
 import tomllib
 from build_standard_make import (
     BACKEND_FLAG,
+    CHECK_CFG_FLAG,
     CONFIG_PATH,
+    DEV_FAST_CFG_FLAG,
     HOSTS,
     LINKER_FLAG,
     LINUX_CFG,
@@ -144,14 +146,15 @@ def test_the_standard_is_the_whole_standard_on_each_platform() -> None:
     """Pins each platform to its exact flags, so a loosened table cannot hide.
 
     The parameterized cases compare Make with the file, which agree trivially
-    if both lose a flag together. This case names the standard itself: Linux
-    gets the parallel frontend and the linker, on either architecture, and the
-    two platforms that ship no ``mold`` get the frontend alone.
+    if both lose a flag together. This case names the standard itself: every
+    platform gets the parallel frontend, Cranelift backend and test cfg, while
+    Linux also gets the linker.
     """
+    common = {THREADS_FLAG, BACKEND_FLAG, DEV_FAST_CFG_FLAG, CHECK_CFG_FLAG}
     for host_name in ("linux_x86_64", "linux_aarch64"):
-        assert configured_flags(HOSTS[host_name]) == {THREADS_FLAG, LINKER_FLAG}, host_name
+        assert configured_flags(HOSTS[host_name]) == common | {LINKER_FLAG}, host_name
     for host_name in ("macos_arm64", "windows_x86_64"):
-        assert configured_flags(HOSTS[host_name]) == {THREADS_FLAG}, host_name
+        assert configured_flags(HOSTS[host_name]) == common, host_name
 
 
 def test_the_linker_is_never_named_beyond_linux() -> None:
@@ -180,23 +183,12 @@ def test_the_linker_is_scoped_to_the_linux_table_alone() -> None:
     assert carriers == [f"[target.{LINUX_CFG}]"], f"the linker is named by {carriers}"
 
 
-def test_cranelift_is_refused_until_the_measurement_is_cleared() -> None:
-    """No file selects a codegen backend while the recorded Cranelift exception stands.
+def test_cranelift_is_the_development_backend_only() -> None:
+    """Cargo and Make select Cranelift for development; explicit routes opt out.
 
-    Cranelift was measured against this repository's own suite on the pinned
-    nightly and refused: a panic does not unwind through Cranelift-compiled
-    frames, and the suite catches panics (``docs/developers-guide.md``,
-    "Cranelift qualification"). The estate's rule accepts either an adopted
-    backend or a recorded exception, and a recorded exception is only honest if
-    nothing quietly selects the backend anyway. This reads every place a
-    selection could live: a profile key or an ``[unstable]`` table in the Cargo
-    configuration, a ``-Zcodegen-backend`` token in any ``rustflags`` source, a
-    Makefile variable, and a ``CARGO_PROFILE_*_CODEGEN_BACKEND`` assignment in a
-    workflow.
-
-    To adopt a backend, re-measure on the new nightly, clear the exception in
-    the guide in the same change, and replace this contract with one that holds
-    the adopted route.
+    The known unwind limitation is recorded in the developers' guide and ADR
+    0017. This contract checks the intended config and Make route while
+    preserving LLVM for coverage, releases and other explicit workflows.
     """
     document = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     assert "unstable" not in document, "an [unstable] table enables a backend selection"
@@ -209,9 +201,21 @@ def test_cranelift_is_refused_until_the_measurement_is_cleared() -> None:
         for table in [document.get("build", {}), *document.get("target", {}).values()]
         for flag in table.get("rustflags", [])
     ]
-    assert not any("codegen-backend" in flag for flag in flags), f"rustflags select a backend: {flags}"
+    sources = [document.get("build", {}), *document.get("target", {}).values()]
+    assert all(BACKEND_FLAG in table.get("rustflags", []) for table in sources), (
+        f"Cargo config does not select Cranelift in every rustflags source: {flags}"
+    )
+    assert all(flag in flags for flag in (THREADS_FLAG, DEV_FAST_CFG_FLAG, CHECK_CFG_FLAG)), (
+        f"Cargo config omits part of dev-fast: {flags}"
+    )
+    manifest = tomllib.loads((REPOSITORY_ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+    rust_lints = manifest["workspace"]["lints"]["rust"]
+    registered_cfgs = rust_lints["unexpected_cfgs"]["check-cfg"]
+    assert CHECK_CFG_FLAG.partition("=")[2] in registered_cfgs, (
+        "the workspace lint configuration does not register the dev-fast cfg"
+    )
     makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "codegen-backend" not in makefile, "the Makefile names a codegen backend"
+    assert BACKEND_FLAG in makefile, "the Makefile omits the development backend"
     for workflow in sorted((REPOSITORY_ROOT / ".github" / "workflows").glob("*.yml")):
         text = workflow.read_text(encoding="utf-8")
         assert "CODEGEN_BACKEND" not in text, f"{workflow.name} selects a codegen backend"

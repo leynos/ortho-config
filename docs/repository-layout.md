@@ -52,7 +52,7 @@ Table 1 describes the repository paths that define the workspace shape.
 
 | Path | Responsibility and conventions |
 | --- | --- |
-| `.cargo/` | Cargo configuration carrying the development build standard: the parallel `rustc` frontend everywhere and the `mold` linker on Linux only. The Makefile restates it where a recipe assigns `RUSTFLAGS`; see the developers' guide. |
+| `.cargo/`                   | Cargo configuration carrying the dev-fast standard: the parallel `rustc` frontend and Cranelift everywhere, plus the `mold` linker on Linux. The Makefile restates it where a recipe assigns `RUSTFLAGS`; see the developers' guide.                                                       |
 | `.github/` | GitHub automation. Workflow definitions live under `.github/workflows/`, including the opt-in `prover-tools.yml` verifier lane; keep workflow changes small and validate YAML when possible. |
 | `.verus/` | Local Verus installation produced by `make install-verus`, including the solver bundled with the pinned release. Generated and ignored by Git; never edit or commit it. |
 | `cargo-orthohelp/` | Workspace binary crate for generating localized documentation artefacts from `OrthoConfigDocs` metadata. Source code lives in `cargo-orthohelp/src/`; integration and golden tests live in `cargo-orthohelp/tests/`. |
