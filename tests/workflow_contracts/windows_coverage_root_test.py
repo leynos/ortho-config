@@ -39,6 +39,15 @@ LONGER_CARGO_TARGET_HEADROOM: typ.Final[int] = 2_875
 LINUX_UNSET_EXPLANATION: typ.Final[str] = (
     "Linux cells must stay genuinely unset; an empty value is not 'unset'."
 )
+TARGET_ROOT_ENVIRONMENT_VARIABLES: typ.Final[frozenset[str]] = frozenset(
+    {"CARGO_TARGET_DIR", "CARGO_LLVM_COV_TARGET_DIR"}
+)
+ALLOWED_TARGET_ROOT_RUNS: typ.Final[frozenset[tuple[str, str, str]]] = frozenset(
+    {
+        ("build-test", EXPORT_STEP, "CARGO_TARGET_DIR"),
+        ("build-test", RESTORE_STEP, "CARGO_TARGET_DIR"),
+    }
+)
 
 
 def _ci_workflow() -> WorkflowDocument:
@@ -167,43 +176,69 @@ def test_windows_coverage_root_steps_bracket_both_coverage_passes() -> None:
         )
 
 
-def test_ci_has_no_target_root_environment_overrides_or_extra_run_mentions() -> None:
-    """Only the two scoped PowerShell steps may mention the Cargo target root."""
+def test_ci_has_no_target_root_environment_overrides() -> None:
+    """Keep Linux target roots genuinely unset at every workflow scope."""
     ci = _ci_workflow()
-    prohibited = {"CARGO_TARGET_DIR", "CARGO_LLVM_COV_TARGET_DIR"}
     declared = [
         (scope, name)
         for scope, block in _environment_blocks(ci)
         if isinstance(block, dict)
-        for name in prohibited.intersection(block)
+        for name in TARGET_ROOT_ENVIRONMENT_VARIABLES.intersection(block)
     ]
     assert not declared, (
         f"ci.yml declares target-root overrides in env blocks: {declared}; "
         f"{LINUX_UNSET_EXPLANATION}"
     )
 
-    allowed_steps = {EXPORT_STEP, RESTORE_STEP}
+
+def _target_root_run_mentions(step: object) -> list[tuple[str, str]]:
+    r"""List target-root declarations in one run block.
+
+    This parser belongs to the Windows coverage workflow contract; keep it
+    local to this test rather than treating it as a general workflow reader.
+
+    >>> _target_root_run_mentions({"name": "Build", "run": "echo CARGO_TARGET_DIR=target"})
+    [('Build', 'CARGO_TARGET_DIR')]
+    >>> _target_root_run_mentions({"name": "Build", "run": "echo CARGO_LLVM_COV_TARGET_DIR=target"})
+    [('Build', 'CARGO_LLVM_COV_TARGET_DIR')]
+    """
+    if not isinstance(step, dict):
+        return []
+    run_block = str(step.get("run", ""))
+    step_name = str(step.get("name", ""))
+    return [
+        (step_name, variable)
+        for variable in sorted(TARGET_ROOT_ENVIRONMENT_VARIABLES)
+        if variable in run_block
+    ]
+
+
+def _unexpected_target_root_mentions_for_job(
+    job_name: str, job: dict[str, object]
+) -> list[tuple[str, int, str, str]]:
+    """Return run-block mentions outside the two allowed build-test steps."""
+    steps = job.get("steps", [])
+    if not isinstance(steps, list):
+        return []
+
     unexpected_mentions = []
-    for job_name, job in workflow_jobs(ci).items():
-        steps = job.get("steps", [])
-        if not isinstance(steps, list):
-            continue
-        for index, step in enumerate(steps):
-            if not isinstance(step, dict):
-                continue
-            run_block = str(step.get("run", ""))
-            for variable in prohibited:
-                if variable not in run_block:
-                    continue
-                if (
-                    variable == "CARGO_TARGET_DIR"
-                    and job_name == "build-test"
-                    and step.get("name") in allowed_steps
-                ):
-                    continue
+    for index, step in enumerate(steps):
+        for step_name, variable in _target_root_run_mentions(step):
+            if (job_name, step_name, variable) not in ALLOWED_TARGET_ROOT_RUNS:
                 unexpected_mentions.append(
-                    (job_name, index, step.get("name"), variable)
+                    (job_name, index, step_name, variable)
                 )
+    return unexpected_mentions
+
+
+def test_ci_has_no_unexpected_target_root_run_mentions() -> None:
+    """Only the two build-test steps may mention target-root variables."""
+    ci = _ci_workflow()
+    unexpected_mentions = [
+        mention
+        for job_name, job in workflow_jobs(ci).items()
+        for mention in _unexpected_target_root_mentions_for_job(job_name, job)
+    ]
     assert not unexpected_mentions, (
         "CARGO_TARGET_DIR may appear only in the export and restore steps, and "
         "CARGO_LLVM_COV_TARGET_DIR must not appear in run blocks; "
