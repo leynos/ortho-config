@@ -195,7 +195,11 @@ def test_ci_has_no_target_root_environment_overrides_or_extra_run_mentions() -> 
             for variable in prohibited:
                 if variable not in run_block:
                     continue
-                if variable == "CARGO_TARGET_DIR" and step.get("name") in allowed_steps:
+                if (
+                    variable == "CARGO_TARGET_DIR"
+                    and job_name == "build-test"
+                    and step.get("name") in allowed_steps
+                ):
                     continue
                 unexpected_mentions.append(
                     (job_name, index, step.get("name"), variable)
