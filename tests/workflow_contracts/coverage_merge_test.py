@@ -152,6 +152,27 @@ def _run_script(
     return result, argument_path
 
 
+def _prepare_reports(
+    working_directory: pathlib.Path,
+    invalid_report: tuple[str, str] | None = None,
+) -> None:
+    """Create valid reports, then apply one requested invalid-input case."""
+    for report in ALLOWED_REPORTS:
+        (working_directory / report).write_text("TN:\n", encoding="utf-8")
+
+    match invalid_report:
+        case None:
+            return
+        case ("missing", report):
+            (working_directory / report).unlink()
+        case ("empty", report):
+            (working_directory / report).write_text("", encoding="utf-8")
+        case ("extra", report):
+            (working_directory / report).write_text("TN:\n", encoding="utf-8")
+        case _:
+            raise ValueError(f"unsupported invalid report case: {invalid_report!r}")
+
+
 @pytest.mark.parametrize(
     ("workflow_name", "job_name"), WORKFLOW_CASES, ids=WORKFLOW_IDS
 )
@@ -184,33 +205,23 @@ def test_each_workflow_has_one_exactly_pinned_merge_step(
         f"bun x lcov-result-merger@{MERGER_VERSION} "
         f"'{MERGER_INPUT_PATTERN}' > lcov.info"
     ), f"expected the exact merger command; got {command!r}"
-    assert MERGER_INPUT_PATTERN in command, (
-        f"expected merger input {MERGER_INPUT_PATTERN!r}; got {command!r}"
-    )
-    assert "lcov-*.info" not in command, (
-        f"expected no broad input glob in the merger command; got {command!r}"
-    )
 
 
 def test_both_workflows_share_identical_pinned_merge_scripts() -> None:
     """Both workflows use the same exact merger version and guard."""
-    scripts = {
-        workflow_name: _merge_script(workflow_name, job_name)
+    first_script, second_script = (
+        _merge_script(workflow_name, job_name)
         for workflow_name, job_name in WORKFLOW_CASES
-    }
-    versions = {
-        workflow_name: _pinned_version(script)
-        for workflow_name, script in scripts.items()
-    }
-    expected_versions = {MERGER_VERSION}
-    actual_versions = set(versions.values())
-    assert actual_versions == expected_versions, (
-        f"expected both workflows to pin {expected_versions!r}; "
-        f"got {versions!r}"
     )
-    expected_scripts = {scripts[WORKFLOW_CASES[0][0]]}
-    assert set(scripts.values()) == expected_scripts, (
-        f"expected identical merge scripts; got {scripts!r}"
+    first_version = _pinned_version(first_script)
+    second_version = _pinned_version(second_script)
+    assert first_version == second_version, (
+        f"expected matching merger versions; got {first_version!r} and "
+        f"{second_version!r}"
+    )
+    assert first_script == second_script, (
+        f"expected identical merge scripts; got {first_script!r} and "
+        f"{second_script!r}"
     )
 
 
@@ -239,13 +250,9 @@ def test_merge_follows_both_generation_steps_and_precedes_upload(
 
     merge_step = _merge_step(steps)
     merge_index = steps.index(merge_step)
-    generation_indexes = [steps.index(step) for step in generation_steps]
-    assert len(generation_indexes) == 2, (
-        f"expected two coverage generation steps; got {len(generation_indexes)}"
-    )
-    assert all(index < merge_index for index in generation_indexes), (
+    assert all(steps.index(step) < merge_index for step in generation_steps), (
         f"expected merge index {merge_index} after generation indexes "
-        f"{generation_indexes!r}"
+        f"{[steps.index(step) for step in generation_steps]!r}"
     )
 
     if workflow_name == "coverage-main.yml":
@@ -293,8 +300,7 @@ def test_merge_passes_exact_inputs_and_preserves_output(
     tmp_path: pathlib.Path,
 ) -> None:
     """A successful merge calls the pinned tool with the two exact reports."""
-    for report in ALLOWED_REPORTS:
-        (tmp_path / report).write_text("TN:\n", encoding="utf-8")
+    _prepare_reports(tmp_path)
 
     script = _merge_script(workflow_name, job_name)
     result, argument_path = _run_script(
@@ -321,11 +327,11 @@ def test_merge_passes_exact_inputs_and_preserves_output(
 )
 @pytest.mark.parametrize(
     ("invalid_input", "affected_file"),
-    (
+    [
         ("missing", "lcov-no-serde-saphyr.info"),
         ("empty", "lcov-serde-saphyr.info"),
         ("extra", "lcov-extra.info"),
-    ),
+    ],
     ids=("missing-report", "empty-report", "unexpected-report"),
 )
 def test_invalid_reports_fail_before_invoking_bun(
@@ -337,14 +343,7 @@ def test_invalid_reports_fail_before_invoking_bun(
     tmp_path: pathlib.Path,
 ) -> None:
     """Missing, empty and unexpected reports fail before merger execution."""
-    for report in ALLOWED_REPORTS:
-        (tmp_path / report).write_text("TN:\n", encoding="utf-8")
-    if invalid_input == "missing":
-        (tmp_path / affected_file).unlink()
-    elif invalid_input == "empty":
-        (tmp_path / affected_file).write_text("", encoding="utf-8")
-    else:
-        (tmp_path / affected_file).write_text("TN:\n", encoding="utf-8")
+    _prepare_reports(tmp_path, (invalid_input, affected_file))
 
     result, argument_path = _run_script(
         _merge_script(workflow_name, job_name), tmp_path, bash_executable, LCOV_OUTPUT
@@ -377,8 +376,7 @@ def test_empty_merger_output_fails_after_the_tool_runs(
     tmp_path: pathlib.Path,
 ) -> None:
     """An empty result is rejected after the merger command succeeds."""
-    for report in ALLOWED_REPORTS:
-        (tmp_path / report).write_text("TN:\n", encoding="utf-8")
+    _prepare_reports(tmp_path)
 
     result, argument_path = _run_script(
         _merge_script(workflow_name, job_name), tmp_path, bash_executable, ""

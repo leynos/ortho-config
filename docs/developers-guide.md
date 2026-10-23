@@ -3264,11 +3264,13 @@ would otherwise never be compiled in CI.
 invoke `lcov-result-merger@6.0.0` with only `lcov-serde-saphyr.info` and
 `lcov-no-serde-saphyr.info`. A pre-merge guard requires both reports to be
 non-empty and rejects every other `lcov-*.info` file; the merged `lcov.info`
-must also be non-empty. The pin's registry integrity is
-`sha512-RsXi/N4J9b37mu83d3L8WdCGU0jsftN6GlXaJySK6fu+zD48joHC579hpA3K4brPvwWOhbNX5NoT7mghxDi5qw==`.
-Dependabot does not track this pin, so review and update both workflows
-together. Remaining risks are unlocked transitive dependencies and same-runner
-persistence between report generation and upload.
+must also be non-empty. The registry publishes integrity
+`sha512-RsXi/N4J9b37mu83d3L8WdCGU0jsftN6GlXaJySK6fu+zD48joHC579hpA3K4brPvwWOhbNX5NoT7mghxDi5qw==`
+for this release. The digest is a review reference, not a workflow check; the
+inline `bun x` invocation has no checked-in lockfile for this package or its
+transitive dependencies. Dependabot does not track this pin, so review and
+update both workflows together. Remaining risks are unlocked transitive
+dependencies and same-runner persistence between report generation and upload.
 
 **The publisher is guarded on the ref, and runs one at a time.** It declares no
 `workflow_dispatch` today, so `github.ref` is always main and the guard changes
