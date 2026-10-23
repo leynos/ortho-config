@@ -181,6 +181,7 @@ def test_check_reports_every_missing_piece_in_one_pass(
 ) -> None:
     """The linker and rustup are both reported, so one run shows the whole gap."""
     result = _check(tmp_path, tools)
+    assert result.returncode != 0, result.stderr
     assert "rustup not found on PATH" in result.stderr, result.stderr
     assert "mold not found on PATH" in result.stderr, result.stderr
 
