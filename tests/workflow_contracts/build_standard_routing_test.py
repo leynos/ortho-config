@@ -63,13 +63,20 @@ DEVELOPMENT_ROUTES: typ.Final[list[tuple[str, str, str]]] = [
     ("make_typecheck", "typecheck", "check"),
     ("make_lint_clippy_doc", "lint-clippy", "doc"),
     ("make_lint_clippy_clippy", "lint-clippy", "clippy"),
+    ("make_boundary", "boundary", "test"),
     ("make_build", "build", "build"),
 ]
 
 #: Routes that deny warnings as well as carrying the standard. ``build`` keeps
 #: the caller's warning policy and imposes none.
 DENIES_WARNINGS: typ.Final[frozenset[str]] = frozenset(
-    {"make_test", "make_typecheck", "make_lint_clippy_doc", "make_lint_clippy_clippy"}
+    {
+        "make_test",
+        "make_typecheck",
+        "make_lint_clippy_doc",
+        "make_lint_clippy_clippy",
+        "make_boundary",
+    }
 )
 
 DEVELOPMENT_CASES: typ.Final[list[object]] = [
@@ -293,7 +300,7 @@ def test_the_opt_out_removes_the_standard_and_nothing_else(case: str, target: st
 
 PREFLIGHT_TARGETS: typ.Final[list[object]] = [
     pytest.param(target, id=f"preflight_{target.replace('-', '_')}")
-    for target in ("test", "typecheck", "lint-clippy", "lint", "build")
+    for target in ("test", "typecheck", "lint-clippy", "lint", "build", "boundary")
 ]
 
 
