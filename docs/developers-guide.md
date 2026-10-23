@@ -2714,6 +2714,7 @@ they take.
 | Bare `cargo` build, test or check (Linux)            | `-Zthreads=8 -Clink-arg=-fuse-ld=mold`, from the Linux table                 | Development          |
 | Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8`, from `[build]`                                                | Development          |
 | `make test`, `make typecheck`                        | `-D warnings` and the host's standard, restated                              | Development          |
+| `make boundary`                                      | `-D warnings` and the host's standard, restated                              | Development          |
 | `make lint-clippy`: the `cargo doc` line             | `-D warnings` and the host's standard, restated                              | Development          |
 | `make lint-clippy`: the `cargo clippy` line          | `-D warnings` and the host's standard, restated                              | Development          |
 | `make build`                                         | The host's standard, restated; no `-D warnings`                              | Development          |

@@ -156,8 +156,8 @@ test: check-build-tools python-test-deps ## Run tests with warnings treated as e
 # from crates.io would prove something about the network instead of the shared
 # package cache. The fixture target is deliberately kept between runs, so a
 # warm run is not evidence of a cold download.
-boundary: ## Prove the standalone runtime boundary against foreign consumer roots
-	RUSTFLAGS="-D warnings" $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
+boundary: check-build-tools ## Prove the standalone runtime boundary against foreign consumer roots
+	$(GATE_RUSTFLAGS) $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
 
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
