@@ -24,19 +24,20 @@ guide is compiled, run, or parsed by the project's test suite.
 
 ## Impact at a glance
 
-| Priority                | Area                                      | What to do                                                        |
-| ----------------------- | ----------------------------------------- | ----------------------------------------------------------------- |
-| **Required**            | Dependency versions                       | Update every OrthoConfig crate requirement to v0.10.0 together.   |
-| **Review**              | Explicit CLI values                       | Check command lines that restate defaults; they now take effect.  |
-| **Review if localized** | Fluent identifiers and IR 2.0             | Re-key catalogues that used the dotted identifier forms.          |
-| **Required if used**    | `AgentContext` and `DocMetadata` literals | Use `ProfilesDeclaration` constructors and name `profiles: None`. |
-| **Review if scripted**  | Boolean flag values                       | Write `--flag=false`; the space-separated form is still rejected. |
-| **Optional**            | Named profiles                            | Add `profiles` to offer `[profile.<name>]` overlays.              |
-| **Optional**            | Stacked file scopes                       | Opt into `automatic_mode = "stack_scopes"`.                       |
-| **Optional**            | Injected environment sources              | Replace process-environment mutation in tests with `MapEnv`.      |
-| **Optional**            | Clap string defaults                      | Mark fields `cli_default_as_absent` and drop duplicated defaults. |
-| **Optional**            | Agent-native metadata and policy          | Declare `behaviour(...)` and run `--check-agent-native`.          |
-| **Optional**            | Cargo external subcommands                | Wrap a hand-built parser with `external_subcommand`.              |
+| Priority                | Area                                      | What to do                                                         |
+| ----------------------- | ----------------------------------------- | ------------------------------------------------------------------ |
+| **Required**            | Dependency versions                       | Update every OrthoConfig crate requirement to v0.10.0 together.    |
+| **Review**              | Explicit CLI values                       | Check command lines that restate defaults; they now take effect.   |
+| **Review if localized** | Fluent identifiers and IR 2.0             | Re-key catalogues that used the dotted identifier forms.           |
+| **Required if used**    | `AgentContext` and `DocMetadata` literals | Use `ProfilesDeclaration` constructors and name `profiles: None`.  |
+| **Review if scripted**  | Boolean flag values                       | Write `--flag=false`; the space-separated form is still rejected.  |
+| **Optional**            | Named profiles                            | Add `profiles` to offer `[profile.<name>]` overlays.               |
+| **Optional**            | Stacked file scopes                       | Opt into `automatic_mode = "stack_scopes"`.                        |
+| **Optional**            | Injected environment sources              | Replace process-environment mutation in tests with `MapEnv`.       |
+| **Optional**            | Clap string defaults                      | Mark fields `cli_default_as_absent` and drop duplicated defaults.  |
+| **Optional**            | Agent-native metadata and policy          | Declare `behaviour(...)` and run `--check-agent-native`.           |
+| **Optional**            | Cargo external subcommands                | Wrap a hand-built parser with `external_subcommand`.               |
+| **Optional**            | Standalone localization runtime           | Depend on `ortho_l10n` directly when only Fluent lookup is needed. |
 
 _Table 1: Application-facing work when moving from v0.9.0 to v0.10.0._
 
