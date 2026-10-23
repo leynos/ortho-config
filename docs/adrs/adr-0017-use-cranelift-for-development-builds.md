@@ -21,7 +21,7 @@ remain on LLVM because LLVM instrumentation is required.
 The route must be consistent for bare Cargo commands and Make recipes. It must
 also keep the unwind limitation visible in tests: `#[should_panic]` works under
 Cranelift, but panics caught with `catch_unwind` or raised on a joined thread
-do not follow LLVM's unwind behavior.
+do not follow LLVM's unwind behaviour.
 
 ## Decision drivers
 
@@ -55,7 +55,7 @@ do not follow LLVM's unwind behavior.
 - The dev-fast test run does not exercise the poisoned-mutex unwind scenario.
   The LLVM coverage route does, and must stay green.
 - The Cranelift limitation is not a claim that the backend has LLVM-equivalent
-  unwind behavior. Do not use this backend for release builds.
+  unwind behaviour. Do not use this backend for release builds.
 - The original full-suite measurement covered Linux only. Hosted CI validates
   the development route on the configured platforms; remeasure when the pinned
   nightly changes, following the developers' guide and issue #598.
