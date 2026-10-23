@@ -2414,6 +2414,15 @@ contains no test functions; its own executable examples are what
 document rather than matching its text, so a re-indentation cannot change a
 verdict.
 
+`windows_coverage_root_test.py` pins the Windows coverage root template, the
+Windows-only `pwsh` export and restore, and their positions around lint, both
+coverage actions, wrapper validation and publish dry run. It rejects
+target-root declarations in workflow, job or step `env:` blocks and unexpected
+run-block mentions. Its command-line arithmetic holds the 30-character hosted
+root and at least 4,000 characters of `CreateProcess` headroom, including the
+measured 251 root occurrences. Linux must stay genuinely unset; an empty value
+is not unset.
+
 ### Whitaker in continuous integration
 
 In continuous integration (CI), the Linux lint leg installs Whitaker through
@@ -3209,6 +3218,27 @@ they cannot be redirected independently. Removing them between the two coverage
 passes would throw away the warm builds the second pass reuses. The leg prints
 `df -BM /` at each boundary: before lint, before and after the discard, and
 after each coverage pass.
+
+### Windows coverage command-line headroom
+
+The Windows `cargo-orthohelp` bin-test compile in run 39645228205 reached
+33,406 characters, with the target root repeated 251 times. `CreateProcess`
+rejects a whole command line above 32,767 characters, so rustc was never
+started and reported `os error 206`. The Windows coverage steps therefore set
+`CARGO_TARGET_DIR` through `GITHUB_ENV` to `$RUNNER_TEMP\cov` before the first
+pass. On the hosted runner, cargo-llvm-cov derives
+`D:\a\_temp\cov\llvm-cov-target`, a 30-character root that projects to 27,633
+characters and leaves about 5,100 characters of headroom. Keeping that root
+through both passes also preserves the first pass's warm trybuild builds for
+the second.
+
+After the second pass, a Windows-only step restores the effective workspace
+default, `$GITHUB_WORKSPACE\target`. `GITHUB_ENV` cannot unset a variable, so
+the restore writes the default explicitly. Linux keeps `CARGO_TARGET_DIR`
+genuinely unset: its `MAX_ARG_STRLEN` headroom is an order of magnitude larger,
+and an empty value is not equivalent to an unset variable. The restore is not an
+`always()` step; later Cargo consumers are skipped if coverage fails, and the
+always-running sccache statistics step does not build.
 
 [ADR-0009](adrs/adr-0009-linux-build-test-runner-placement.md) records the
 decision.
