@@ -295,7 +295,7 @@ jobs:
           set -euo pipefail
 
           for report in lcov-serde-saphyr.info lcov-no-serde-saphyr.info; do
-            if [[ ! -s "$report" ]]; then
+            if ! test -s "$report"; then
               echo "::error::Missing or empty coverage report: $report"
               exit 1
             fi
@@ -315,7 +315,7 @@ jobs:
 
           bun x lcov-result-merger@6.0.0 '{lcov-serde-saphyr.info,lcov-no-serde-saphyr.info}' > lcov.info
 
-          if [[ ! -s lcov.info ]]; then
+          if ! test -s lcov.info; then
             echo "::error::Merged coverage report is empty: lcov.info"
             exit 1
           fi
