@@ -65,19 +65,20 @@ def _pinned_channel() -> str:
     raise AssertionError(message)
 
 
-def _fake_rustup(directory: pathlib.Path, *, installed: bool = True) -> None:
-    """Install a ``rustup`` that reports the pinned toolchain as present or absent.
+def _fake_rustup(
+    directory: pathlib.Path, *, installed: bool = True, cranelift_installed: bool = True
+) -> None:
+    """Install a fake ``rustup`` with configurable toolchain and backend presence.
 
-    The toolchain half of the check is not under test in the linker cases, so it
-    is made to pass rather than allowed to fail for an unrelated reason: a case
-    that expects a non-zero exit would otherwise be satisfied by the wrong half.
+    The toolchain and component checks are made to pass in linker cases, so an
+    expected failure cannot be satisfied by the wrong prerequisite.
     """
     listing = f"{_pinned_channel()}-x86_64-unknown-linux-gnu (active)" if installed else ""
-    _tool(
-        directory,
-        "rustup",
+    component = "rustc-codegen-cranelift-x86_64-unknown-linux-gnu" if cranelift_installed else ""
+    _tool(directory, "rustup", "\n".join([
         'if [ "$1" = toolchain ]; then echo "' + listing + '"; fi',
-    )
+        'if [ "$1" = component ]; then echo "' + component + '"; fi',
+    ]))
 
 
 def _pin(tmp_path: pathlib.Path, version: str = PIN) -> pathlib.Path:
@@ -125,6 +126,19 @@ def test_check_passes_when_every_prerequisite_is_present(
     _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
     result = _check(tmp_path, tools)
     assert result.returncode == 0, result.stderr
+    assert "Cranelift codegen component available" in result.stderr, result.stderr
+
+
+def test_check_fails_with_the_install_hint_when_cranelift_is_missing(
+    tmp_path: pathlib.Path, tools: pathlib.Path
+) -> None:
+    """A nightly without its selected development backend is not ready to build."""
+    _fake_rustup(tools, cranelift_installed=False)
+    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    result = _check(tmp_path, tools)
+    assert result.returncode != 0, result.stderr
+    assert "Cranelift codegen component is not installed" in result.stderr, result.stderr
+    assert HINT in result.stderr, result.stderr
 
 
 def test_check_fails_with_the_install_hint_when_mold_is_missing(

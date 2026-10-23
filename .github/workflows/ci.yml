@@ -49,7 +49,8 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       # The explicit exclusion of the development build standard (the parallel
-      # frontend and mold in `.cargo/config.toml`) from every step that is not
+      # frontend, Cranelift backend and mold in `.cargo/config.toml`) from every
+      # step that is not
       # a Make gate. Cargo takes RUSTFLAGS in preference to every `rustflags`
       # table in that file, so this value is what keeps the standard out of
       # the coverage builds: cargo-llvm-cov appends `-Cinstrument-coverage` to
@@ -278,10 +279,16 @@ jobs:
         #
         # The target root dominates the excess. Cargo repeats it 302 times in
         # this invocation, across dependency search paths and `--extern`
-        # arguments. `cargo-llvm-cov` appends its own `llvm-cov-target` to
-        # `CARGO_TARGET_DIR`, so the Windows-only chooser uses the drive root:
-        # that removes 3,322 characters and leaves 2,592 characters of
-        # measured headroom. No shorter absolute Windows root is available.
+        # arguments. `cargo-llvm-cov` normally appends `llvm-cov-target` to
+        # `CARGO_TARGET_DIR`. Trybuild also reads that variable through Cargo
+        # metadata, and a drive-root value makes its target-path normalizer
+        # treat source paths as target paths. Put the target directly under
+        # the drive root and set both variables to that same directory:
+        # `CARGO_LLVM_COV_TARGET_DIR` prevents the action from appending the
+        # suffix a second time. The effective `D:\llvm-cov-target` removes
+        # 3,624 characters and leaves 2,894 characters of measured headroom.
+        # It is outside the checkout, keeps the command line short, and does
+        # not become an ancestor of source paths during trybuild normalization.
         #
         # Linux keeps the default, whose limit is MAX_ARG_STRLEN, an order of
         # magnitude further away.
@@ -293,19 +300,21 @@ jobs:
         shell: pwsh
         run: |
           $coverageRoot = [System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)
-          "CARGO_TARGET_DIR=$coverageRoot" >> $env:GITHUB_ENV
+          $coverageTarget = Join-Path $coverageRoot 'llvm-cov-target'
+          "CARGO_TARGET_DIR=$coverageTarget" >> $env:GITHUB_ENV
+          "CARGO_LLVM_COV_TARGET_DIR=$coverageTarget" >> $env:GITHUB_ENV
 
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
         #
-        # `CARGO_TARGET_DIR` arrives from the step that chooses it, which
-        # runs on Windows only, so the Linux leg keeps cargo-llvm-cov's
-        # default. Setting it here instead would need an empty string on
-        # Linux, and cargo-llvm-cov rejects an empty value rather than
-        # reading it as "unset": it appends its own `llvm-cov-target` to
-        # whatever root it is given.
+        # Both target-directory variables arrive from the chooser, which
+        # runs on Windows only, so Linux keeps cargo-llvm-cov's default.
+        # Setting them here instead would need empty strings on Linux, and
+        # cargo-llvm-cov rejects empty values rather than reading them as
+        # "unset". On Windows the LLVM-specific value matches the Cargo target
+        # directory so the action does not append `llvm-cov-target` again.
         uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           output-path: lcov-serde-saphyr.info
@@ -525,8 +534,8 @@ jobs:
       # Packaging builds what the release workflow builds, so it takes the
       # release route: production flags only. Assigning RUSTFLAGS displaces
       # the development standard in `.cargo/config.toml` (the parallel
-      # frontend and mold). setup-rust would export this same value
-      # by default; it is written out so the exclusion does not depend on an
+      # frontend, Cranelift backend and mold). setup-rust would export this
+      # same value by default; it is written out so the exclusion does not depend on an
       # action default. Never set it to `''`: an empty value leaves the
       # configuration in force.
       RUSTFLAGS: -D warnings

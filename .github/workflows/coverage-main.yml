@@ -57,7 +57,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       # The explicit exclusion of the development build standard (the parallel
-      # frontend and mold in `.cargo/config.toml`) from the coverage builds.
+      # frontend, Cranelift backend and mold in `.cargo/config.toml`) from the coverage builds.
       # Cargo takes RUSTFLAGS in preference to every `rustflags` table in that
       # file, and cargo-llvm-cov appends `-Cinstrument-coverage` to this value,
       # so coverage is measured on the LLVM backend with the platform linker.

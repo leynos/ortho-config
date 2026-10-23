@@ -5,8 +5,9 @@ CARGO ?= cargo
 WHITAKER ?= whitaker
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
-# The development build standard: the parallel `rustc` frontend and the `mold`
-# linker are the defaults for development, test, lint and typecheck builds.
+# The development build standard: the parallel `rustc` frontend, Cranelift
+# backend, and the `mold` linker are the defaults for development, test, lint
+# and typecheck builds.
 # `.cargo/config.toml` carries them, so a bare `cargo` invocation gets them
 # too; this block restates them where a recipe assigns `RUSTFLAGS`.
 #
@@ -25,6 +26,9 @@ BUILD_JOBS ?=
 # nightly-only, so a stable or beta compiler refuses it outright.
 BUILD_STANDARD ?= 1
 STANDARD_THREADS_FLAG ?= -Zthreads=8
+STANDARD_BACKEND_FLAG ?= -Zcodegen-backend=cranelift
+STANDARD_DEV_FAST_CFG ?= --cfg=ortho_config_dev_fast \
+	--check-cfg=cfg(ortho_config_dev_fast)
 STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
@@ -35,14 +39,15 @@ BUILD_TOOLS_PREFIX ?= $(HOME)/.local
 export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE BUILD_TOOLS_PREFIX
 # `mold` ships for Linux only. macOS and Windows keep the platform linker,
 # matching the `[target.*]` table in `.cargo/config.toml`. `OS` is set by
-# Windows and by no other host. The Cranelift backend is not part of the
-# standard (docs/developers-guide.md, "Cranelift qualification").
+# Windows and by no other host.
 ifeq ($(OS),Windows_NT)
 BUILD_HOST_OS ?= Windows_NT
 else
 BUILD_HOST_OS ?= $(shell uname -s)
 endif
-STANDARD_RUSTFLAGS = $(if $(filter 1,$(BUILD_STANDARD)),$(STANDARD_THREADS_FLAG)$(if $(filter Linux,$(BUILD_HOST_OS)), $(STANDARD_MOLD_FLAG)))
+STANDARD_RUSTFLAGS = $(if $(filter 1,$(BUILD_STANDARD)),\
+	$(STANDARD_THREADS_FLAG) $(STANDARD_BACKEND_FLAG) $(STANDARD_DEV_FAST_CFG)\
+	$(if $(filter Linux,$(BUILD_HOST_OS)), $(STANDARD_MOLD_FLAG)))
 # Warnings denied, plus the standard. Every gate recipe that runs Cargo uses it.
 GATE_RUSTFLAGS = RUSTFLAGS="-D warnings $(STANDARD_RUSTFLAGS)"
 # A debug build keeps the caller's warning policy rather than imposing one.

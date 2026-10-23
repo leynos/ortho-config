@@ -2563,15 +2563,16 @@ that the step selecting beta sets the switch to `0`.
 
 The development build standard is what a contributor's builds, tests, lints and
 type checks use unless a route opts out. It is the parallel `rustc` frontend
-(`-Zthreads=8`) on every host, plus the `mold` linker on Linux. The parallel
-frontend is nightly-only, which is why the repository pins a dated nightly; see
-[Toolchain pin and freshness](#toolchain-pin-and-freshness).
-Cranelift is not part of the standard; the measurement and the reasons are
-recorded in the "Cranelift qualification" section of this guide.
+(`-Zthreads=8`) and Cranelift backend on every host, plus the `mold` linker on
+Linux. These compiler options require the pinned dated nightly; see
+[Toolchain pin and freshness](#toolchain-pin-and-freshness). Cranelift's
+unwinding limitation and the one test kept for LLVM coverage are recorded in
+the "Cranelift development backend" section and
+[ADR-0017](adrs/adr-0017-use-cranelift-for-development-builds.md).
 
-The maintainer has made three decisions that this section records and does not
-reopen: development and formatting use a dated nightly, the parallel frontend
-and `mold` are adopted, and Dependabot keeps the pin fresh.
+The maintainer has made four decisions that this section records: development
+and formatting use a dated nightly, dev-fast uses Cranelift and the parallel
+frontend, Linux uses `mold`, and Dependabot keeps the pin fresh.
 
 ### Where the flags live
 
@@ -2580,16 +2581,27 @@ the standard:
 
 ```toml
 [build]
-rustflags = ["-Zthreads=8"]
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+]
 
 [target.'cfg(target_os = "linux")']
-rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+  "-Clink-arg=-fuse-ld=mold",
+]
 ```
 
 `mold` ships for Linux only, so it appears under the Linux target table alone.
 It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
-match. macOS and Windows get the parallel frontend only and keep the platform
-linker.
+match. macOS and Windows get Cranelift and the parallel frontend, and keep the
+platform linker.
 
 Cargo selects one `rustflags` source and does not merge them. A matching
 `[target.*]` table replaces `[build] rustflags` outright, and an assigned
@@ -2597,7 +2609,8 @@ Cargo selects one `rustflags` source and does not merge them. A matching
 source, and each Makefile recipe that assigns `RUSTFLAGS` restates the standard
 through four variables:
 
-- `STANDARD_RUSTFLAGS` is the standard for the host: `-Zthreads=8`, plus
+- `STANDARD_RUSTFLAGS` is the standard for the host: `-Zthreads=8`,
+  `-Zcodegen-backend=cranelift`, and the `ortho_config_dev_fast` test cfg, plus
   `-Clink-arg=-fuse-ld=mold` when `BUILD_HOST_OS` is `Linux`. It is empty when
   `BUILD_STANDARD` is not `1`.
 - `GATE_RUSTFLAGS` is `-D warnings` followed by `STANDARD_RUSTFLAGS`. Every
@@ -2634,8 +2647,8 @@ they take.
 
 | Invocation                                           | Flags that reach Cargo                                                       | Route                |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------- |
-| Bare `cargo` build, test or check (Linux)            | `-Zthreads=8 -Clink-arg=-fuse-ld=mold`, from the Linux table                 | Development          |
-| Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8`, from `[build]`                                                | Development          |
+| Bare `cargo` build, test or check (Linux)            | `-Zthreads=8 -Zcodegen-backend=cranelift` and `mold`, from the Linux table   | Development          |
+| Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8 -Zcodegen-backend=cranelift`, from `[build]`                    | Development          |
 | `make test`, `make typecheck`                        | `-D warnings` and the host's standard, restated                              | Development          |
 | `make boundary`                                      | `-D warnings` and the host's standard, restated                              | Development          |
 | `make lint-clippy`: the `cargo doc` line             | `-D warnings` and the host's standard, restated                              | Development          |
@@ -2667,9 +2680,10 @@ Notes on individual rows:
   [Releases use the pinned nightly](#releases-use-the-pinned-nightly).
 - Coverage is `generate-coverage` in the `build-test` job and in
   `coverage-main.yml`. The job-level `RUSTFLAGS: -D warnings` displaces the
-  configuration, so a coverage build has neither `mold` nor the parallel
-  frontend. On the Windows leg the coverage steps also run under a short
-  `CARGO_TARGET_DIR`; see
+  configuration, so a coverage build uses LLVM and has neither Cranelift,
+  `mold` nor the parallel frontend. The custom cfg is also absent, so the
+  unwind-dependent mutex-poisoning test runs in coverage. On the Windows leg
+  the coverage steps also run under a short `CARGO_TARGET_DIR`; see
   [The Windows coverage command line](#the-windows-coverage-command-line).
 - Release builds (`release.yml`, job `build-assets`) and packaging (`ci.yml`,
   job `binstall-packaging`) set the same explicit job-level value and take the
@@ -2695,8 +2709,8 @@ linker.
 
 ### Installing and checking the build tools
 
-The standard needs two things on a Linux host: the pinned `mold` release and
-the pinned toolchain. Two targets provision and verify them:
+The standard needs the pinned toolchain and Cranelift component on every host,
+plus the pinned `mold` release on Linux. Two targets provision and verify them:
 
 - `make install-build-tools` runs `scripts/install-build-tools.sh`. It downloads
   the pinned `mold` release (`tools/mold/VERSION`) for the host architecture
@@ -2707,10 +2721,10 @@ the pinned toolchain. Two targets provision and verify them:
   reads `rust-toolchain.toml` for the channel, profile and components. Only
   binary releases are fetched; there is no source-build fallback.
 - `make check-build-tools` runs `scripts/check-build-tools.sh`. On Linux,
-  `mold` must be on `PATH`, must run, and must equal the pin; `rustup` and the
-  pinned toolchain must be present. Every failure names
-  `make install-build-tools`, and all failures are reported in one pass. Off
-  Linux the linker half prints a note and passes.
+  `mold` must be on `PATH`, must run, and must equal the pin; `rustup`, the
+  pinned toolchain and its Cranelift component must be present. Every failure
+  names `make install-build-tools`, and all failures are reported in one pass.
+  Off Linux the linker half prints a note and passes.
 
 The check runs before `test`, `typecheck`, `lint-clippy` (and therefore `lint`)
 and the debug `build`. It never runs before `release`, `lint-whitaker` or
@@ -2743,22 +2757,29 @@ bridge cache key is sized to stay inside it (see
 The coverage build reaches the second limit. Cargo repeats a single target root
 across dependency search paths and `--extern` arguments. In run 39893695039 the
 `ortho_config` library test's invocation was 33,497 characters, 730 over;
-`D:\a\_temp\cov` appeared 302 times.
+`D:\a\_temp\cov\llvm-cov-target` appeared 302 times.
 
-`cargo-llvm-cov` takes its tree from `CARGO_TARGET_DIR`, so shortening that
-root shortens every occurrence at once. A step named
-`Choose the coverage target root` republishes the Windows runner's drive root as
-`CARGO_TARGET_DIR` through `GITHUB_ENV`. Cargo-llvm-cov appends
-`llvm-cov-target` there, leaving 2,592 characters of headroom for the measured
-invocation. Two consequences are easy to undo by accident:
+`cargo-llvm-cov` normally appends `llvm-cov-target` to `CARGO_TARGET_DIR`,
+while trybuild independently reads that variable through Cargo metadata. A
+drive-root target makes trybuild's normalizer treat source paths as target
+paths, so the Windows-only `Choose the coverage target root` step derives the
+drive from `RUNNER_TEMP`, then sets both `CARGO_TARGET_DIR` and
+`CARGO_LLVM_COV_TARGET_DIR` to the same `llvm-cov-target` directory. The
+LLVM-specific value prevents the action from appending the suffix again. The
+effective `D:\llvm-cov-target` is outside the checkout, shortens each of the
+302 measured occurrences by 12 characters, and leaves 2,894 characters of
+headroom. Two consequences are easy to undo by accident:
 
-- The coverage steps must not set `CARGO_TARGET_DIR` themselves. Assigning it
-  per step needs the Linux cells to resolve to an empty string, and
-  `cargo-llvm-cov` refuses an empty value rather than reading it as unset. A
-  per-step value also makes the coverage legs read a matrix value their
-  publisher does not, which the CV-005 pairing rejects.
-- The selected root has no directory component. A longer root consumes the
-  remaining command-line headroom once per dependency path.
+- The coverage steps must not set either target-directory variable themselves.
+  Assigning them per step needs the Linux cells to resolve to empty strings, and
+  `cargo-llvm-cov` refuses empty values rather than reading them as unset.
+  Per-step values also make the coverage legs read a matrix value their
+  publisher does not, which the CV-005 pairing rejects. Linux keeps both
+  variables unset and uses the action default.
+- The selected directory must stay a direct child of the drive root and
+  outside the checkout. A drive-root value prefixes every source path in
+  trybuild diagnostics; a longer directory spends command-line headroom once
+  for every dependency path.
 
 `coverage_command_line_test.py` holds both rules and re-derives the arithmetic
 from the measured invocation, so a change that restores the long root, shortens
@@ -2848,8 +2869,7 @@ the published rustup manifests.
 - The nightly is needed because `-Zthreads=8`, the parallel `rustc` frontend, is
   nightly-only.
 - `llvm-tools-preview` is for local `cargo llvm-cov`.
-- `rustc-codegen-cranelift-preview` stays installed so that re-measuring
-  Cranelift needs no toolchain edit. The standard does not use it.
+- `rustc-codegen-cranelift-preview` is the backend used by dev-fast builds.
 
 `scripts/build-tools-common.sh` reads the channel from `rust-toolchain.toml`,
 so the installer and the check follow the pin and no second copy exists.
@@ -2921,7 +2941,7 @@ Dependabot proposes the bump. A human reviewing the pull request must:
    [The Windows coverage command line](#the-windows-coverage-command-line).
    Platform-specific length limits are invisible to a Linux-only gate, so check
    them by hand rather than waiting for the runner to say so.
-5. Re-read the re-measurement instruction in the "Cranelift qualification"
+5. Re-read the remeasurement instruction in the "Cranelift development backend"
    section of this guide.
 6. Run `make install-build-tools` and `make check-build-tools` locally to pick
    up and verify the new channel.
@@ -2976,14 +2996,15 @@ because no member inherits them. They cannot simply be removed:
 `scripts/bump_version.py` and `scripts/release_archive_naming.py` read
 `workspace.package.version`.
 
-## Cranelift qualification
+## Cranelift development backend
 
-This section is the recorded codegen-backend exception for this repository. It
-states why the Cranelift development backend is not part of the build standard,
-what was measured, what was not, and how to re-measure and clear the exception.
+This section records the known limitation of the selected dev-fast backend, the
+measurements that established it, and how to remeasure after a toolchain bump.
+The current route is defined in
+[ADR-0017](adrs/adr-0017-use-cranelift-for-development-builds.md).
 
-Current record: Pinned channel `nightly-2026-10-16`; measured on it on
-2026-10-16; no deferral.
+Current record: Pinned channel `nightly-2026-10-16`; initial measurement on
+2026-10-16; dev-fast adopted on 2026-10-23 with the test routing below.
 
 Tracking: [issue #598](https://github.com/leynos/ortho-config/issues/598)
 requires a re-measurement by 2027-04-18, whatever the pin has moved to by then.
@@ -2993,17 +3014,22 @@ The pinned nightly is `rustc 1.101.0-nightly (2026-10-15)`. The
 `rustc-codegen-cranelift-preview` component of the same date stays installed by
 `rust-toolchain.toml`, so a re-measurement needs no toolchain edit.
 
-### Verdict
+### Known limitation
 
-Cranelift is not adopted. The failure is one mechanism: a panic raised in
-Cranelift-compiled code does not find the unwind handler. As a result:
+Cranelift is selected for development builds with a known unwind limitation: a
+panic raised in Cranelift-compiled code does not find the unwind handler. As a
+result:
 
 - `catch_unwind` fails to catch the panic.
 - Destructors do not run during unwinding.
 - A panic on a spawned thread aborts the whole process with
   `fatal runtime error: failed to initiate panic, error 5, aborting` (SIGABRT).
 
-Everything else measured passes, including `#[should_panic]`.
+The direct `#[should_panic]` path works. The three external-subcommand
+debug-assertion tests and the empty-aggregate test use that path, so they stay
+active under dev-fast. The spawned-thread mutex-poisoning test is marked
+ignored only when `ortho_config_dev_fast` is set; coverage overrides
+`RUSTFLAGS`, uses LLVM, and runs it.
 
 The measurement host was x86_64 Linux (Rocky 10). Cranelift was selected the
 way the standard would have carried it: `-Zcodegen-backend=cranelift` in
@@ -3065,22 +3091,26 @@ fn drop_runs_during_unwind() {
 }
 ```
 
-| Case                        | Cranelift (with `-Zthreads=8` and `mold`, as the standard would configure) | LLVM control (`-Zthreads=8` and `mold`, the committed standard) |
-| --------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `#[should_panic]`           | Passes                                                                     | Passes                                                          |
-| Main-thread `catch_unwind`  | Fails                                                                      | Passes                                                          |
-| `Drop` during unwinding     | Fails                                                                      | Passes                                                          |
-| Spawned-thread panic joined | Aborts the process                                                         | Passes                                                          |
-| Scoped-thread panic caught  | Aborts the process                                                         | Passes                                                          |
+| Case                        | Cranelift (with `-Zthreads=8` and `mold`) | LLVM control (`-Zthreads=8` and `mold`, the prior standard) |
+| --------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `#[should_panic]`           | Passes                                    | Passes                                                      |
+| Main-thread `catch_unwind`  | Fails                                     | Passes                                                      |
+| `Drop` during unwinding     | Fails                                     | Passes                                                      |
+| Spawned-thread panic joined | Aborts the process                        | Passes                                                      |
+| Scoped-thread panic caught  | Aborts the process                        | Passes                                                      |
 
-*Table: Results of the five-case probe on `nightly-2026-10-16`, measured on
-2026-10-16.*
+*Table: Results of the initial five-case probe on `nightly-2026-10-16`,
+measured on 2026-10-16.*
 
 As an attribution control, `-Zcodegen-backend=cranelift` as the only flag, with
 neither `mold` nor `-Zthreads`, aborts the probe the same way. Neither `mold`
 nor the parallel frontend is the cause.
 
-### The repository suite
+### Initial repository-suite measurement
+
+The results below are the initial measurement before the test adaptation
+described above. They preserve which existing tests exposed the unwind
+limitation; they are not the current `make test` result.
 
 The suite ran as `cargo nextest run --workspace --all-features --no-fail-fast`
 with
@@ -3097,9 +3127,9 @@ distinct test functions) failed, all by unwinding.
 
 *Table: Test functions that failed under Cranelift, by failure mode.*
 
-The LLVM control on the same tree, under the committed standard (`-Zthreads=8`
-and `mold`, LLVM backend), passed all 1731 tests in the 80 fast binaries. That
-includes the five unwinding tests that failed above, and the four
+The LLVM control on the same tree, under the then-committed standard
+(`-Zthreads=8` and `mold`, LLVM backend), passed all 1731 tests in the 80 fast
+binaries. That includes the five unwinding tests that failed above, and the four
 `reader_thread_diagnostic_names_the_stream` executions pass when run by name.
 
 Under Cranelift these mechanisms, which the estate watches, passed:
@@ -3152,7 +3182,7 @@ exception:
   `orthohelp_agent_context_generate_agent_context_json_from_the_simple_fixture`,
   was not re-run.
 
-Still not measured under Cranelift, which is a gap and not a pass:
+At the time that initial run ended, these had not been measured under Cranelift:
 
 - 22 selected tests were never reached when the first run was stopped.
 - Five documentation-example tests failed at their 1,200-second in-process
@@ -3162,17 +3192,18 @@ Still not measured under Cranelift, which is a gap and not a pass:
 
 A later measurement that covers these belongs in the tables above.
 
-Windows and macOS were not measured, because the measurement host is Linux.
-Cranelift is not selected on any platform, so nothing needs scoping. The pinned
-nightly publishes the Cranelift component for x86_64 Windows MSVC, aarch64 and
-x86_64 macOS, and Linux aarch64, so a later measurement is possible there.
+Windows and macOS were not included in that initial full-suite measurement,
+which ran on Linux. The pinned nightly publishes the Cranelift component for
+x86_64 Windows MSVC, aarch64 and x86_64 macOS, and Linux aarch64. The current
+CI build-test jobs exercise the configured development route on supported
+platforms; coverage remains LLVM-only.
 
-### Re-measuring and clearing
+### Remeasuring after a toolchain bump
 
-Re-measure on every toolchain bump, because Dependabot moves the pin daily.
-When doing so, rewrite the record line near the top of this section to say what
-the current pin is, whether a measurement was taken on it, and the date any
-deferral runs to.
+Remeasure on every toolchain bump, because Dependabot moves the pin daily.
+Rewrite the record line near the top of this section with the current pin and
+measurement date. Compare the probe and suite with the historical results above
+and keep the test routing aligned with the observed backend behaviour.
 
 The flags below select Cranelift the way the standard would carry it:
 
@@ -3181,28 +3212,15 @@ CRANELIFT_FLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mol
 ```
 
 1. Run the probe above in a scratch crate outside the repository, with
-   `RUSTFLAGS="$CRANELIFT_FLAGS" cargo test`. The component is already
-   satisfied by `rust-toolchain.toml`.
+   `RUSTFLAGS="$CRANELIFT_FLAGS" cargo test`. The component is installed by
+   `rust-toolchain.toml` and checked by `make check-build-tools`.
 2. Run the suite with the same `RUSTFLAGS` and
-   `cargo nextest run --workspace --all-features --no-fail-fast`, running the
-   trybuild binaries one at a time.
-3. The exception can be cleared only when the probe passes five of five and the
-   seven failing functions listed above pass.
-
-To adopt the backend once it is cleared:
-
-- Select it in the Linux target table of `.cargo/config.toml` through
-  `rustflags`, not through a `[profile.dev]` key.
-- Restate it in the Makefile's `STANDARD_RUSTFLAGS`.
-- Have coverage and release keep selecting LLVM.
-- Extend the install check to cover the component.
-- Delete the exception status of this section, and replace the contract
-  `test_cranelift_is_refused_until_the_measurement_is_cleared` in
-  `tests/workflow_contracts/build_standard_routing_test.py` with one that holds
-  the adopted route.
-
-That contract currently refuses any backend selection, so adopting one cannot
-happen quietly.
+   `cargo nextest run --workspace --all-features --no-fail-fast`, serializing
+   the trybuild binaries.
+3. Keep the known limitation and cfg-gated test if unwind behaviour is
+   unchanged. Remove the dev-fast test exception only after the five-case probe
+   and all affected tests pass under Cranelift. Coverage must continue using
+   LLVM instrumentation.
 
 ## Publish dry run
 
