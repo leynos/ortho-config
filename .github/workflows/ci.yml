@@ -23,7 +23,11 @@ jobs:
     # The Linux leg runs on Ubicloud: hosted queue waits on it reached
     # 29 min (median 10 min) over the last ten runs, against a 27 min
     # median wall. A fork's pull request cannot obtain an Ubicloud runner,
-    # so it falls back to the hosted label. Windows stays hosted.
+    # so it falls back to the hosted label; so does a Dependabot pull request,
+    # which GitHub-hosted runners serve at no charge on a public repository.
+    # The author is tested, not the actor, because the actor is whoever
+    # triggered the run, so a person pushing to a Dependabot branch would flip
+    # the runner. Windows stays hosted.
     # The Linux leg is sized for disk, not for wall time: on
     # ubicloud-standard-2 it ran out of disk in both runs (36308332712 and
     # 36354295154). The second run started lint with 6,869 MB free and fell
@@ -31,7 +35,8 @@ jobs:
     # `>-` rather than `>`: a folded scalar keeps a trailing line break
     # inside the expression otherwise.
     runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
+      ${{ (github.event.pull_request.head.repo.fork
+      || github.event.pull_request.user.login == 'dependabot[bot]')
       && matrix.fork-runner || matrix.runner }}
     # Two coverage steps run in this job, each under its own 2,700 s cargo
     # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must

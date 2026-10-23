@@ -3166,11 +3166,17 @@ first coverage pass then took it down to 791 MB and failed with "No space left
 on device". `ubicloud-standard-4` offers 150 GB, against 75 GB on `-2`.
 
 A pull request from a fork cannot obtain an Ubicloud runner, so the leg falls
-back to `ubuntu-latest` for forks:
+back to `ubuntu-latest` for forks. So does a pull request Dependabot opened:
+hosted minutes cost nothing on a public repository, and Dependabot opens many
+pull requests. The expression tests the pull request's author, not
+`github.actor`, because the actor is whoever triggered the run, so a person
+pushing to a Dependabot branch would flip the runner. A Dependabot pull request
+therefore builds cold on the hosted pool:
 
 ```yaml
 runs-on: >-
-  ${{ github.event.pull_request.head.repo.fork
+  ${{ (github.event.pull_request.head.repo.fork
+  || github.event.pull_request.user.login == 'dependabot[bot]')
   && matrix.fork-runner || matrix.runner }}
 ```
 
@@ -3207,11 +3213,12 @@ after each coverage pass.
 [ADR-0009](adrs/adr-0009-linux-build-test-runner-placement.md) records the
 decision.
 
-`runner_placement_test.py` holds all of this. It reads the fallback by
-position, checks each leg's runners, and checks that no fork reaches Ubicloud,
-that the names are runner-independent, and that the job has a ceiling. It also
-checks the credentials step's guard and position, that the packaging legs stay
-hosted, and that the Linux leg discards the lint build trees before coverage.
+`runner_placement_test.py` holds all of this. It reads the fallback by position
+(the condition is exactly the fork test or the Dependabot author test), checks
+each leg's runners, and checks that no fork reaches Ubicloud, that the names
+are runner-independent, and that the job has a ceiling. It also checks the
+credentials step's guard and position, that the packaging legs stay hosted, and
+that the Linux leg discards the lint build trees before coverage.
 
 ## CodeScene coverage belongs to main
 
