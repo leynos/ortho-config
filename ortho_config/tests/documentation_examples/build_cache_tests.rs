@@ -2,7 +2,7 @@
 
 use super::{BuildCache, BuildInputs, BuildRequest};
 use crate::process_runner::{self, Operation, Policy};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::io::Write;
 use std::path::Path;
@@ -235,13 +235,7 @@ fn opaque_callback_failure_preserves_primary_error_and_ownership(
 fn invoking_cargo_releases_its_profile_lock_before_running_tests() -> Result<()> {
     let deadline = super::scenario::deadline();
     let executable = std::env::current_exe()?;
-    let dependencies = executable.parent().context("test executable directory")?;
-    ensure!(
-        dependencies.file_name().is_some_and(|name| name == "deps"),
-        "cannot identify Cargo profile from test executable: {}",
-        executable.display()
-    );
-    let profile = dependencies.parent().context("Cargo profile directory")?;
+    let profile = cargo_profile_from_test_executable(&executable)?;
     let target = profile.parent().context("Cargo target directory")?;
     let cache = BuildCache::for_parent_target(target);
     let _snapshot_owner = cache.acquire(deadline)?;
@@ -263,4 +257,52 @@ fn invoking_cargo_releases_its_profile_lock_before_running_tests() -> Result<()>
         )
     })?;
     Ok(())
+}
+
+#[test]
+fn cargo_profile_is_found_in_both_test_executable_layouts() -> Result<()> {
+    let dependency_executable = Path::new("/target/debug/deps/documentation_examples_rust_tests");
+    ensure!(
+        cargo_profile_from_test_executable(dependency_executable)? == Path::new("/target/debug"),
+        "Cargo profile should be the parent of the deps directory"
+    );
+
+    let build_output_executable = Path::new(
+        "/target/debug/build/ortho_config/abc123/out/documentation_examples_rust_tests-abc123",
+    );
+    ensure!(
+        cargo_profile_from_test_executable(build_output_executable)? == Path::new("/target/debug"),
+        "Cargo profile should be the ancestor above build/<package>/<hash>/out"
+    );
+    Ok(())
+}
+
+fn cargo_profile_from_test_executable(executable: &Path) -> Result<&Path> {
+    let executable_directory = executable.parent().context("test executable directory")?;
+    match executable_directory.file_name() {
+        Some(name) if name == "deps" => executable_directory
+            .parent()
+            .context("Cargo profile directory"),
+        Some(name) if name == "out" => {
+            let hash_directory = executable_directory
+                .parent()
+                .context("build hash directory")?;
+            let package_directory = hash_directory.parent().context("build package directory")?;
+            let build_directory = package_directory
+                .parent()
+                .context("Cargo build directory")?;
+            ensure!(
+                build_directory
+                    .file_name()
+                    .is_some_and(|directory_name| directory_name == "build"),
+                "expected Cargo build output layout for test executable: {}",
+                executable.display()
+            );
+            build_directory.parent().context("Cargo profile directory")
+        }
+        _ => bail!(
+            "cannot identify Cargo profile from test executable: {}",
+            executable.display()
+        ),
+    }
 }

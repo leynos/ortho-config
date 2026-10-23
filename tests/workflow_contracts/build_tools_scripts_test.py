@@ -107,9 +107,14 @@ def tools(tmp_path: pathlib.Path) -> pathlib.Path:
     return directory
 
 
-def _check(tmp_path: pathlib.Path, tools: pathlib.Path) -> subprocess.CompletedProcess[str]:
+def _check(
+    tmp_path: pathlib.Path, tools: pathlib.Path, *, version: str = PIN
+) -> subprocess.CompletedProcess[str]:
     """Run the check against the fixture pin with the fixture tools only."""
-    return _run(CHECK, {"PATH": str(tools), "MOLD_VERSION_FILE": str(_pin(tmp_path))})
+    return _run(
+        CHECK,
+        {"PATH": str(tools), "MOLD_VERSION_FILE": str(_pin(tmp_path, version))},
+    )
 
 
 def test_check_passes_when_every_prerequisite_is_present(
@@ -187,6 +192,25 @@ def test_check_refuses_an_unreadable_pin(tmp_path: pathlib.Path, tools: pathlib.
     assert "missing version pin" in result.stderr, result.stderr
 
 
+@pytest.mark.parametrize(
+    ("version", "diagnostic"),
+    [
+        pytest.param("", "empty version pin", id="blank"),
+        pytest.param("9.9.9\n9.9.9", "expected one line", id="multiple-lines"),
+        pytest.param("9.9 .9", "version pin contains whitespace", id="internal-whitespace"),
+    ],
+)
+def test_check_refuses_malformed_version_pins(
+    tmp_path: pathlib.Path, tools: pathlib.Path, version: str, diagnostic: str
+) -> None:
+    """The check rejects blank, multiline and internally spaced pins."""
+    _fake_rustup(tools)
+    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    result = _check(tmp_path, tools, version=version)
+    assert result.returncode != 0, result.stderr
+    assert diagnostic in result.stderr, result.stderr
+
+
 class OfflineInstall(typ.NamedTuple):
     """Everything an installer case needs: where it runs and what it may fetch."""
 
@@ -250,6 +274,22 @@ def test_install_refuses_an_artefact_with_no_recorded_digest(offline_install: Of
     assert result.returncode != 0, result.stderr
     assert "no checksum recorded" in result.stderr, result.stderr
     assert not (offline_install.root / "prefix" / "bin").exists()
+
+
+def test_install_refuses_duplicate_checksum_rows_before_unpack_or_rustup(
+    offline_install: OfflineInstall,
+) -> None:
+    """Ambiguous matching checksum rows stop before installation side effects."""
+    duplicate = offline_install.sums_line * 2
+    result = _run(INSTALL, offline_install.env(duplicate))
+    assert result.returncode != 0, result.stderr
+    assert "2 checksums recorded" in result.stderr, result.stderr
+    assert not (offline_install.root / "prefix" / "bin").exists(), (
+        "an archive with ambiguous checksums was unpacked"
+    )
+    assert not (offline_install.root / "rustup.log").exists(), (
+        "rustup ran after checksum ambiguity was detected"
+    )
 
 
 def test_install_unpacks_a_verified_archive_then_installs_the_toolchain(

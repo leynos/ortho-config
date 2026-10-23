@@ -76,7 +76,7 @@
 - [ADR-0015: Reusable localization runtime](adrs/adr-0015-localization-runtime-boundary.md):
   review the reusable localization boundary, compatibility defaults, and shared
   identifier owner.
-- [ADR-0014: Adopt a dated nightly and the development build standard](adrs/adr-0014-adopt-a-dated-nightly-and-the-development-build-standard.md):
+- [ADR-0016: Adopt a dated nightly and the development build standard](adrs/adr-0016-adopt-a-dated-nightly-and-the-development-build-standard.md):
   review the pinned dated nightly, the Cargo defaults restated in Make recipes,
   the routes kept outside the standard, and build-tool provisioning.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
