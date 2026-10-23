@@ -795,8 +795,9 @@ lives in the
 [developers' guide](developers-guide.md#diagnosing-a-post-release-lock-hold).
 
 For screen readers: The following sequence diagram traces a settling assertion
-from the test that makes it, through the probes and the procfs evidence
-gathered for a hold, to either a pass or a holder report.
+from the test that makes it, through repeated probes that end the wait as soon
+as the lock settles, to the procfs evidence gathered only once the budget is
+spent and the final re-probe that precedes a holder report.
 
 ```mermaid
 sequenceDiagram
@@ -813,16 +814,17 @@ sequenceDiagram
         Diagnostics-->>Test: Ok
     else lock is held
         Probe-->>Diagnostics: Held(metadata)
-        Diagnostics->>ProcLocks: read_records()
-        ProcLocks-->>Diagnostics: matching lock records
-        Diagnostics->>ProcessFDs: inspect_holder(pid, device, inode)
-        ProcessFDs-->>Diagnostics: process and descriptor evidence
-        Diagnostics->>Probe: probe_lock(root) after SETTLE_INTERVAL
+        Diagnostics->>Probe: probe_lock(root) every SETTLE_INTERVAL
         alt lock settles before SETTLE_BUDGET
             Probe-->>Diagnostics: Free
             Diagnostics-->>Test: Ok
         else lock remains held
             Probe-->>Diagnostics: Held(metadata)
+            Diagnostics->>ProcLocks: read_records()
+            ProcLocks-->>Diagnostics: matching lock records
+            Diagnostics->>ProcessFDs: inspect_holder(pid, device, inode)
+            ProcessFDs-->>Diagnostics: process and descriptor evidence
+            Diagnostics->>Probe: probe_lock(root) after RECHECK_DELAY
             Diagnostics-->>Test: report_hold(root, expectation, metadata)
         end
     end
