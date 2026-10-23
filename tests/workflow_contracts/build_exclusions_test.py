@@ -7,10 +7,8 @@ Cargo takes ``RUSTFLAGS`` in preference to every ``rustflags`` source in
 displaces the standard.
 
 - Coverage appends ``-Cinstrument-coverage`` to ``RUSTFLAGS`` and is measured
-  with the platform linker. Instrumentation is LLVM-only, so a codegen backend
-  selected through ``rustflags`` would break it outright; none is selected
-  today (``build_standard_routing_test.py`` refuses one), but the exclusion
-  must hold for the day one is adopted.
+  with the platform linker. Instrumentation is LLVM-only, so the explicit
+  assignment must keep the selected development backend out of coverage.
 - Release and packaging builds are production builds: LLVM, the platform
   linker, the stable frontend settings.
 - The MSRV lane runs a stable compiler, which refuses the standard's

@@ -9,15 +9,12 @@
 #
 # - `-Zthreads=8` is the parallel `rustc` frontend. It is nightly-only, which
 #   is why rust-toolchain.toml pins a dated nightly.
+# - `-Zcodegen-backend=cranelift` selects the fast development backend. The
+#   `ortho_config_dev_fast` cfg lets one unwind-dependent test remain enabled
+#   for LLVM coverage, because Cranelift cannot unwind through compiled frames.
 # - `-Clink-arg=-fuse-ld=mold` selects the `mold` linker. `mold` ships for Linux
 #   only, so it appears solely under the Linux target table, never in `[build]`
 #   and never under `cfg(unix)`, which macOS builds also take.
-#
-# The Cranelift codegen backend is deliberately absent. Panics do not unwind
-# through Cranelift-compiled frames on the pinned nightly, and this
-# repository's own tests catch them (docs/developers-guide.md, "Cranelift
-# qualification"). tests/workflow_contracts/build_standard_routing_test.py
-# refuses any backend selection until that record is re-measured and cleared.
 #
 # Cargo selects ONE `rustflags` source and does not merge them: a matching
 # `[target.*]` table replaces `[build] rustflags` outright, and an assigned
@@ -27,7 +24,18 @@
 # `RUSTFLAGS` and say so where they do.
 
 [build]
-rustflags = ["-Zthreads=8"]
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+]
 
 [target.'cfg(target_os = "linux")']
-rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+  "-Clink-arg=-fuse-ld=mold",
+]
