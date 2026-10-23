@@ -1,5 +1,5 @@
 [publish]
-order = ["ortho_config_macros", "ortho_config_test_helpers", "ortho_config", "cargo-orthohelp"]
+order = ["ortho_l10n", "ortho_config_macros", "ortho_config_test_helpers", "ortho_config", "cargo-orthohelp"]
 strip_patches = "all"
 
 # CI sets `LADING_SKIP_PREFLIGHT` on the publish step, so the settings below

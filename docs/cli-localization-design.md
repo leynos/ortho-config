@@ -205,10 +205,13 @@ The identifier shape is a documented pure function of the command path:
 `<root>` is configurable via `LocalizeCmd::with_base("…")` (defaulting to the
 binary name normalized to a Fluent identifier) so applications can share one
 catalogue across multiple binaries by giving each a distinct prefix. The
-canonical function is exposed as
-`ortho_config::message_id_for(&command_path, suffix)` so applications, tests,
-and the IR pipeline can produce identical identifiers without re-implementing
-the convention (see [ADR-0006](adrs/adr-0006-identifier-derivation-panics.md)).
+canonical convention belongs to `ortho_l10n`. Its `message_id_for` and fallible
+`try_message_id_for` compose the same identifiers; `ortho_config` re-exports
+the actual runtime function. Derive diagnostics wrap the shared fallible
+normalizer, keeping application lookup, constants, and documentation metadata
+aligned without moving the IR into the runtime. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md) and
+[ADR-0006](adrs/adr-0006-identifier-derivation-panics.md).
 
 Identifier normalization is a documented function: lowercase American Standard
 Code for Information Interchange (ASCII) letters pass through, ASCII digits,

@@ -518,6 +518,46 @@ unchanged. The artefact is a standalone declaration inventory; mounted command
 tree identifiers remain owned by the path-aware documentation IR. If output
 exceeds 1 MiB, read the `cli-identifiers.<n>.json` parts listed by the index.
 
+## Adopt the standalone localization runtime
+
+`ortho_l10n` is now a separate publishable crate carrying the runtime half of
+localization: `Localizer`, `NoOpLocalizer`, `LocalizationArgs`, the Fluent
+implementation and its builder, formatting reports and errors, catalogue
+composition and fallback, the embedded English and Japanese resources, and the
+fallible message-identifier convention. Adopt it when an application needs
+catalogue lookup and Fluent formatting and nothing else.
+
+```toml
+[dependencies]
+ortho_l10n = "0.10.0"
+```
+
+```rust
+use ortho_l10n::{FluentLocalizer, Localizer, langid};
+
+let localizer = FluentLocalizer::embedded(langid!("en-US"))?;
+let text = localizer.lookup("cli.about", None);
+```
+
+The reason to adopt it is build cost. A consumer rooted only at `ortho_l10n`
+resolves 36 packages; one rooted at `ortho_config` resolves 139, because the
+facade still pulls configuration discovery, merging, the derive macros,
+Figment, and Clap. Nothing forbidden is reachable from the runtime: no
+`ortho_config`, `ortho_config_macros`, `ortho_config_test_helpers`, `figment`,
+or `clap`, including through default features and the focused test graph.
+
+**No migration is required.** `ortho_config` re-exports the runtime's actual
+types rather than defining duplicates, so existing `ortho_config` imports keep
+working and code that uses both paths names the same nominal types. Clap
+command and error adapters, `OrthoConfigLocalization`, `ArgLocalizationIds`,
+and the documentation IR remain in `ortho_config`. There is no bridge trait and
+no wrapper localizer to remove.
+
+Reach for `ortho_l10n` directly only when the application genuinely does not
+load configuration. A program that uses `#[derive(OrthoConfig)]` or parses a
+Clap command still needs the facade, and gains nothing by splitting the
+dependency.
+
 ## No migration required for other users
 
 Profile support and the Cargo helper are additive. Existing configuration

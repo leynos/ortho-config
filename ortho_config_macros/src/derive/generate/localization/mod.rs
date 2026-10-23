@@ -258,7 +258,10 @@ fn normalize_arg_id(
     span: Span,
 ) -> syn::Result<(FluentMessageId, FluentSegments)> {
     let segments = arg_id.normalize(span)?;
-    Ok((FluentMessageId(segments.0.join("-")), segments))
+    Ok((
+        FluentMessageId(segments.0.join(ortho_l10n::MESSAGE_ID_SEPARATOR)),
+        segments,
+    ))
 }
 
 /// Builds an argument identifier: base + `args` + arg segments + suffix.

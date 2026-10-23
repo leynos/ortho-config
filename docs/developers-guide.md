@@ -116,6 +116,24 @@ Windows, `cargo build` holds a read lock on `Cargo.toml`; a concurrent
 truncate-and-rewrite from another invocation violates that lock. Keep the whole
 group serialized unless the shared-state access has been eliminated.
 
+The `boundary` binary has a group of its own, `boundary_packaging`. Its
+packaged contracts materialize the release once per *process*, and nextest runs
+each test in its own process, so without the group six of them run
+`cargo package` and unpack `target/localization-boundary/packaging-target` side
+by side. Cargo's package-cache lock does not cover that: it does not hold
+readers out while a package root is removed and unpacked, so one process can
+replace a root another is reading. `make boundary` and `make test` start one
+process for the binary and need nothing extra, which is why the group exists
+only for nextest.
+
+That group also fixes the per-test allowance arithmetic. One packaged test runs
+both `cargo package` invocations, each bounded at 240 s by `PACKAGE_DEADLINE`,
+so the pair has to fit inside the 600 s base allowance with room for the root
+checks around them. A deadline that did not fit could never fire: nextest would
+stop the test first, and the error naming the invocation that hung would never
+be printed. `boundary_packaging_test.py` reads the group, the manifest and the
+deadline so neither half can drift from the other.
+
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
 `ortho_config::crate_path_trybuild`, `ortho_config::declarative_merge_trybuild`,
@@ -150,6 +168,35 @@ same four binaries was measured as an alternative on run 36264533224. It saved
 no wall time (52.9 min), and `must_use_compile_tests`, still competing with the
 rest of the suite, took 523.5 s of its 600 s allowance, so the reservation was
 kept.
+
+#### Packaging must resolve the way a clean runner resolves
+
+The packaged contracts are the only place in this repository that exercises a
+stranger's dependency graph, and the failure they are most likely to hide is
+resolution that only works on a developer's machine. Two rules keep them honest.
+
+**Patch every internal edge the invocation resolves, not just the ones it
+packages.** `cargo package` builds every dependency table, dev-dependencies
+included, so a path member that is only a dev-dependency still has to be
+patched, or its rewritten version requirement is looked up in an index that may
+never have seen it. Patches are keyed by *package* name, which is not always
+the directory name: `ortho_config_test_helpers` lives in `test_helpers`.
+
+**Do not remove `--verify` to get past a packaging failure.** It is the step
+that unpacks each `.crate` into the `package/<name>-<version>/` root every
+consumer and manifest contract reads. `--no-verify` writes the archives and
+unpacks nothing, so the failure moves from packaging to path resolution. The
+remedy for a verify-time failure is to remove the cause - a dev-dependency
+cycle is the one that has actually bitten here, because verifying the macros
+tarball pulled the patched library back in through its normal edge and
+duplicated the package under verification.
+
+A packaging failure on a *clean* registry is not reproducible by re-running the
+command locally: the developer's `CARGO_HOME` already holds the index entries
+the runner lacks. Reproduce it with an isolated `CARGO_HOME` that has the
+internal crates' entries removed, and check the output for
+`patch … was not used in the crate graph` - that warning means the patch under
+test was never consulted, and the probe proved nothing.
 
 ## Subcommand dispatch changes
 
@@ -270,13 +317,14 @@ name `profiles: None`. The runtime "which profile is active" concern is
 `SelectedProfile` and `ProfileLoadOutcome`, deliberately separate from the
 static agent-context contract.
 
-`localizer::identifier::normalize_segment` is the single source of truth for
-strict runtime and derive-time Fluent identifier segments. Reuse it from
-command localization, derive output, and future lookup-id generation instead of
-duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
-`localizer::fluent` separate: it exists only to pre-normalize hand-authored
-resource ids such as dotted catalogue keys before Fluent parses them, and must
-not be used to validate generated command ids.
+`ortho_l10n::try_normalize_segment` is the single source of truth for strict
+runtime and derive-time Fluent identifier segments. Reuse it, or the
+complete-identifier helpers re-exported beside it, from command localization,
+derive output, and future lookup-id generation instead of duplicating ASCII
+normalization rules. Keep the tolerant catalogue load path in
+`ortho_l10n/src/fluent.rs` separate: it exists only to pre-normalize
+hand-authored resource ids such as dotted catalogue keys before Fluent parses
+them, and must not be used to validate generated command ids.
 
 `#[derive(OrthoConfig)]` emits `OrthoConfigLocalization` for the deriving
 configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
@@ -429,8 +477,10 @@ command identifiers are still a documented runtime panic contract owned by
 runtime panic tests until derive-emitted identifiers move validation to compile
 time.
 
-The runtime and macro normalizers are deliberate twins, locked by their shared
-version marker and property tests against `message_id_for`. Generated docs IR
+`ortho_l10n` owns the shared fallible identifier normalizer. The runtime panic
+and macro spanned diagnostics wrap that implementation; argument fragments use
+the shared separator without imposing the root rule. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md). Generated docs IR
 receives mounted paths through path-aware trait methods; handwritten trait
 implementations use their provided fallback. The optional identifier artefact
 uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
@@ -443,8 +493,16 @@ crate surface. `LocalizeCmd`, `LocalizedParse`, and `parse_localized_command`
 are implemented; `#[derive(OrthoConfig)]` also emits the public
 `OrthoConfigLocalization` contract and supports opt-in identifier artefacts.
 Their current contracts are documented above. `localized_default` is recognized
-by the derive but rejected with a deferral diagnostic; embedded defaults remain
-future work.
+by the derive but rejected with a deferral diagnostic, so the derive-level
+default-value feature remains future work.
+
+That deferral is about the derive attribute, not about catalogues. `ortho_l10n`
+now owns the runtime and its embedded English and Japanese resources;
+`FluentLocalizer::embedded` loads them, and `FluentLocalizer::builder` layers a
+consumer's catalogue over them. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md) for why the runtime
+is a separate crate and why `ortho_config` re-exports its actual types instead
+of adding bridge traits.
 
 The remaining proposals belong at clear ownership boundaries: locale lifecycle,
 Clap coverage, and translation interfaces in the core localizer; identifier
@@ -2424,6 +2482,25 @@ tarball verification resolves the re-export against the published crate and
 fails with "no `OrthoConfigSubcommandDocs` in the root". Nothing else in CI
 sees that.
 
+The order is a claim about the workspace graph, so it is checked against the
+graph rather than restated beside it.
+`tests/workflow_contracts/publish_order_test.py` derives the published set from
+the manifests (a member publishes unless it sets `publish = false`) and the
+edges from the `path` dependencies they declare. It asserts that the order
+names exactly the publishable members, and that a crate appears after
+everything it depends on. A wrong order still builds locally, because Cargo
+resolves the path; it fails only when a publisher asks crates.io for a version
+that is not there yet.
+
+Dev dependencies are real edges here. The workspace has no dev-dependency cycle
+today: the macros crate once dev-depended back on `ortho_config`, which made
+the pair mutually dependent, and that edge has since been removed. The contract
+keeps a narrow exemption for mutually dependent pairs, so a future cycle cannot
+fail the ordering check for a reason no order can fix. Every other edge is
+enforced, including `ortho_config`'s dev dependency on
+`ortho_config_test_helpers`, which is why the helper crate is published before
+it. That edge has already been broken once.
+
 Before it packages, lading runs a pre-flight:
 `cargo check --workspace --all-targets`, then `cargo test`, both into a
 throwaway target directory. `lading.toml` sets `preflight.unit_tests_only`,
@@ -2524,6 +2601,17 @@ one, so a tooling-only release is a patch bump of that crate alone. Edit
 `cargo-orthohelp/Cargo.toml`, refresh the lock with
 `cargo update -p cargo-orthohelp`, and tag `v<version>`. Use
 `scripts/bump_version.py` only when the whole workspace is being released.
+
+That script discovers the internal dependency requirements instead of naming
+them. For each member manifest it bumps every dependency declared with a
+`path`, across the normal, dev, and build tables. A hand-kept list of crates
+went stale as soon as `ortho_l10n` joined the graph: `ortho_config` kept
+requiring a version the release would never publish, and the resulting failure
+would have surfaced only in the publish dry run. External requirements are left
+alone, so a dependency on a third-party crate is never rewritten. Selection
+works on the table and the name together rather than on the name alone, so a
+crate whose name is also an external dependency's is rewritten only in the
+table where it is declared with a `path`.
 
 ### Verifying the packaging locally
 

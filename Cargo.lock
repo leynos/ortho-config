@@ -1508,8 +1508,6 @@ dependencies = [
  "dunce",
  "figment",
  "figment-json5",
- "fluent-bundle",
- "fluent-syntax",
  "fs4",
  "googletest",
  "insta",
@@ -1519,6 +1517,7 @@ dependencies = [
  "nix",
  "ortho_config_macros",
  "ortho_config_test_helpers",
+ "ortho_l10n",
  "pretty_assertions",
  "process-wrap",
  "proptest",
@@ -1536,7 +1535,6 @@ dependencies = [
  "tracing-subscriber",
  "trybuild",
  "uncased",
- "unic-langid",
  "windows",
  "xdg",
 ]
@@ -1548,7 +1546,7 @@ dependencies = [
  "anyhow",
  "figment",
  "heck",
- "ortho_config",
+ "ortho_l10n",
  "proc-macro2",
  "proptest",
  "quote",
@@ -1566,6 +1564,27 @@ dependencies = [
  "camino",
  "figment",
  "parking_lot",
+]
+
+[[package]]
+name = "ortho_l10n"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "camino",
+ "cap-std",
+ "fluent-bundle",
+ "fluent-syntax",
+ "proptest",
+ "rstest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml 1.1.8+spec-1.1.0",
+ "tracing",
+ "unic-langid",
+ "wait-timeout",
 ]
 
 [[package]]

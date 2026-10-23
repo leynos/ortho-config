@@ -22,10 +22,12 @@ layout and the critical subdirectories new contributors usually need first.
 ├── examples/
 │   └── hello_world/
 ├── ortho_config/
-│   ├── locales/
 │   ├── src/
 │   └── tests/
 ├── ortho_config_macros/
+│   └── src/
+├── ortho_l10n/
+│   ├── locales/
 │   └── src/
 ├── scripts/
 │   └── tests/
@@ -51,10 +53,11 @@ Table 1 describes the repository paths that define the workspace shape.
 | `docs/execplans/`       | Living and historical execution plans for substantial tasks. Update an active ExecPlan as work proceeds so progress, decisions, and validation survive context loss.                                                                                                                       |
 | `examples/hello_world/` | Example application crate used to demonstrate layered configuration, subcommands, localization, generated docs metadata, and behavioural coverage.                                                                                                                                         |
 | `ortho_config/`         | Core runtime crate. This is where public configuration loading, merge logic, discovery, error types, documentation IR types, localization support, and user-facing APIs live.                                                                                                              |
-| `ortho_config/locales/` | Embedded Fluent resources used by localization support. Keep locale identifiers and message identifiers aligned with generated clap and documentation metadata.                                                                                                                            |
-| `ortho_config/src/`     | Runtime source modules for configuration discovery, file parsing, merge behaviour, docs metadata, error handling, localization, and supporting utilities. Every module should start with a module-level `//!` comment.                                                                     |
+| `ortho_config/src/`     | Runtime source modules for configuration discovery, file parsing, merge behaviour, docs metadata, error handling, localization adapters, and supporting utilities. Every module should start with a module-level `//!` comment.                                                            |
 | `ortho_config/tests/`   | Core crate integration and behavioural tests. Use shared helpers rather than direct environment mutation.                                                                                                                                                                                  |
 | `ortho_config_macros/`  | Procedural macro crate for deriving OrthoConfig-related implementations. Macro parsing, build, and generation code lives under `ortho_config_macros/src/`.                                                                                                                                 |
+| `ortho_l10n/`           | Reusable localization runtime crate. Owns Fluent catalogue lookup, formatting reports, embedded default resources, and the shared message identifier convention. It must not depend on configuration or Clap.                                                                              |
+| `ortho_l10n/locales/`   | Embedded Fluent resources used by localization support. Keep locale identifiers and message identifiers aligned with generated clap and documentation metadata.                                                                                                                            |
 | `scripts/`              | Python and shell-adjacent maintenance scripts for version bumping and release archives. Focused script tests live under `scripts/tests/`.                                                                                                                                                  |
 | `target/`               | Cargo build output, generated documentation, trybuild artefacts, and temporary build products. Do not edit or commit files from this directory.                                                                                                                                            |
 | `test_helpers/`         | Shared test helper crate. Put cross-crate fixtures, environment guards, and reusable assertions here rather than duplicating test infrastructure.                                                                                                                                          |

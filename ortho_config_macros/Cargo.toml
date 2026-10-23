@@ -16,6 +16,7 @@ proc-macro = true
 
 [dependencies]
 syn = { version = "3", features = ["full", "visit"] }
+ortho_l10n = { path = "../ortho_l10n", version = "0.9.0" }
 quote = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 heck = "0.5.0"
@@ -37,8 +38,3 @@ rstest = "0.27.0"
 serde = { version = "1", features = ["derive"] }
 figment = { version = "0.10", default-features = false, features = ["test"] }
 proptest = "1.11.0"
-
-# Dev-dependency cycle (permitted by Cargo): the macro crate's property tests
-# drive `ortho_config::message_id_for` directly against the internal normaliser
-# twin to lock the §4.1 identifier convention (Decision D-8).
-ortho_config = { path = "../ortho_config", version = "0.9.0" }

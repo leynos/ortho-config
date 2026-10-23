@@ -16,6 +16,8 @@ accepted = [
 
 [patterns]
 ignore = [
+  # The requested branch slug determines this execution-plan filename.
+  "issue-566-extract-reusable-localisation-runtime-into-ortho-l10n\\.md",
   # These code spans name external APIs, identifiers, or deliberate spelling
   # fixtures. Keep inline-code spelling enabled for every other span.
   "`--color auto\\|always\\|never`",

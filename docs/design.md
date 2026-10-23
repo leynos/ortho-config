@@ -86,7 +86,7 @@ The implementation must adhere to the following principles:
 
 ## 3. High-Level Architecture
 
-The crate will be composed of three main parts:
+The workspace will be composed of four main parts:
 
 1. **Procedural Macro (`ortho_config_macros`):** The `#[derive(OrthoConfig)]`
    macro. It will be responsible for parsing the user's struct definition and
@@ -94,8 +94,13 @@ The crate will be composed of three main parts:
 2. **Core Crate (`ortho_config`):** The runtime component. It will contain the
    `OrthoConfig` trait, the core loading and merging logic, error types, and
    necessary helper functions.
-3. **Dependencies:** It will be built upon the shoulders of established
-   community crates: `clap`, `figment`, `serde`, and `syn`/`quote`.
+3. **Localization Runtime (`ortho_l10n`):** The reusable catalogue and
+   identifier layer. Applications that only need Fluent lookup and formatting
+   depend on it directly, without configuration discovery, derives, Figment, or
+   Clap. See [ADR-0015](adrs/adr-0015-localization-runtime-boundary.md).
+4. **Dependencies:** It will be built upon the shoulders of established
+   community crates: `clap`, `figment`, `serde`, `fluent-bundle`, and
+   `syn`/`quote`.
 
 The primary data flow for a user calling `AppConfig::load()` will be:
 
@@ -870,10 +875,13 @@ sequenceDiagram
 ### 4.12. Localization architecture
 
 `clap` surfaces every string presented to end users, so localization must be
-first-class. `ortho-config` introduces a `Localizer` trait that abstracts
-string lookup and delegates to a Fluent-powered implementation layered over
-built-in defaults. Consumers can therefore opt into internationalization
-without giving up a working baseline.
+first-class. The `ortho_l10n` crate introduces a `Localizer` trait that
+abstracts string lookup and delegates to a Fluent-powered implementation
+layered over built-in defaults; `ortho_config` re-exports those types and owns
+the Clap adapters. Consumers can therefore opt into internationalization
+without giving up a working baseline, and applications that never load
+configuration can use the runtime directly. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md).
 
 - **Trait surface:** The trait exposes a single lookup entry point,
   `fn lookup(&self, id: &str, args: Option<&HashMap<&str, FluentValue<'_>>>)`,
@@ -888,10 +896,10 @@ without giving up a working baseline.
   to `clap`'s native message.
 
 - **Bundling defaults:** Default message catalogues live under
-  `locales/<lang>/messages.ftl` and are embedded with `include_str!`. A helper
-  constructs the default `FluentBundle` for the selected locale, parsing the
-  static resources once at start-up. Additional locales reuse the same helper
-  by passing a different language identifier.
+  `ortho_l10n/locales/<lang>/messages.ftl` and are embedded with
+  `include_str!`. A helper constructs the default `FluentBundle` for the
+  selected locale, parsing the static resources once at start-up. Additional
+  locales reuse the same helper by passing a different language identifier.
 
 - **Consumer integration:** Callers either pass a fully built
   `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
@@ -921,12 +929,12 @@ unlock per-application phrasing and additional languages without forking the
 library.
 
 The shipped implementation builds a concurrent `FluentBundle` from the embedded
-`locales/en-US/messages.ftl` catalogue and layers any consumer-provided
-resources over it. Formatting errors raised during `format_pattern` are logged
-via `tracing::warn!` by default and yield `None`, allowing the next bundle—or
-the caller’s fallback string—to supply the final message. Builders expose
-`with_error_reporter` so applications and tests can capture these issues
-without reconfiguring global loggers.
+`ortho_l10n/locales/en-US/messages.ftl` catalogue and layers any
+consumer-provided resources over it. Formatting errors raised during
+`format_pattern` are logged via `tracing::warn!` by default and yield `None`,
+allowing the next bundle—or the caller’s fallback string—to supply the final
+message. Builders expose `with_error_reporter` so applications and tests can
+capture these issues without reconfiguring global loggers.
 
 The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
 `HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named
@@ -1154,9 +1162,18 @@ and the production bridge; they are not general application subprocess APIs. See
   - `syn`: To parse Rust code and attributes.
   - `quote`: To generate Rust code.
   - `proc-macro2`: For improved procedural macro APIs.
+  - `ortho_l10n`: For the shared fallible identifier convention.
+- **`ortho_l10n` (Runtime):**
+  - `fluent-bundle` and `fluent-syntax`: For catalogue parsing, registration,
+    and formatting.
+  - `unic-langid`: For locale identifiers.
+  - `thiserror`: For the builder error enum.
+  - `tracing`: For the default formatting-issue reporter. It installs no
+    subscriber.
 - **`ortho_config` (Core):**
   - `clap`: For CLI parsing. Choose a version with the `derive` feature.
   - `figment`: As the core layering engine.
+  - `ortho_l10n`: For catalogue lookup and message identifiers.
   - `serde`: For serialization/deserialization.
   - `serde_json`: For manipulating configuration when pruning `None` CLI
     values.

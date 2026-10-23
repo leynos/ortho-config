@@ -1,6 +1,6 @@
 // Shared test localisers for clap localisation scenarios.
 use crate_root::{LocalizationArgs, Localizer};
-use fluent_bundle::FluentValue;
+use ortho_l10n::FluentValue;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ArgumentEchoLocalizer {

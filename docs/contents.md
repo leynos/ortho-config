@@ -73,6 +73,9 @@
 - [ADR-014: Documentation build and process ownership](adrs/adr-0014-documentation-build-ownership.md):
   review the test-only build-cache ownership, process supervision, and timeout
   policy for executable documentation.
+- [ADR-0015: Reusable localization runtime](adrs/adr-0015-localization-runtime-boundary.md):
+  review the reusable localization boundary, compatibility defaults, and shared
+  identifier owner.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -160,6 +163,9 @@
 
 ## Execution plans
 
+- [Reusable localization runtime][l10n-runtime-plan]:
+  extract `ortho_l10n`, preserve compatibility, and verify consumer dependency
+  boundaries.
 - [ExecPlans directory](execplans/): review living and historical execution
   plans for substantial work.
   - [PowerShell generator with wrapper](execplans/4-1-1-4-power-shell-generator-with-wrapper.md):
@@ -212,3 +218,6 @@
 
 [adr-0008]: adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0009]: adrs/adr-0009-linux-build-test-runner-placement.md
+
+[l10n-runtime-plan]:
+  execplans/issue-566-extract-reusable-localisation-runtime-into-ortho-l10n.md

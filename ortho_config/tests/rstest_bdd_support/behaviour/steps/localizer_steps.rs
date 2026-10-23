@@ -4,12 +4,12 @@ use super::value_parsing::{normalize_scalar, strip_isolates};
 use crate::rstest_bdd_support::scenario_state::{LocalizedDemoArgs, LocalizerContext};
 use anyhow::{Result, anyhow, ensure};
 use clap::CommandFactory;
-use fluent_bundle::FluentValue;
 use ortho_config::{
     FluentLocalizer, FormattingIssue, LocalizationArgs, LocalizeCmd, Localizer, NoOpLocalizer,
     OrthoConfigLocalization, langid, localize_clap_error, localize_clap_error_with_command,
     parse_localized_command,
 };
+use ortho_l10n::FluentValue;
 use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -1169,9 +1169,9 @@ reimplementing all eleven identifiers. See cargo-orthohelp-design.md §4.2.1.
   - See cargo-orthohelp-design.md §4.2.1.
   - [ ] Add the full `ortho.headings.*` set — name, synopsis, description,
     options, environment, files, precedence, exit status, examples, see also,
-    and commands — to the canonical `ortho_config/locales/en-US/messages.ftl`
+    and commands — to the canonical `ortho_l10n/locales/en-US/messages.ftl`
     resource and the other currently shipped resource,
-    `ortho_config/locales/ja/messages.ftl`.
+    `ortho_l10n/locales/ja/messages.ftl`.
   - [ ] Keep `en-US/messages.ftl` as the library's canonical English resource;
     there is no library `en-GB` catalogue to alias. Language-only matching
     makes English tags including `en-GB` reuse the embedded `en-US` resources.

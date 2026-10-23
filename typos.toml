@@ -70,6 +70,7 @@ extend-ignore-re = [
     "`skill_manifest_serialises_with_camino_path`",
     "`var\\.iamge_id` instead of `var\\.image_id`",
     "currentColor",
+    "issue-566-extract-reusable-localisation-runtime-into-ortho-l10n\\.md",
     "rust-analyzer",
 ]
 

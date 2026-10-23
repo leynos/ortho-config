@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -83,6 +83,23 @@ clean: ## Remove build artefacts
 test: python-test-deps ## Run tests with warnings treated as errors
 	RUSTFLAGS="-D warnings" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
+
+# The boundary contracts are the evidence that an application depending on the
+# localization runtime alone never resolves the configuration facade, the derive
+# macros, Figment, or Clap. They build and test foreign package roots under
+# `target/localization-boundary`, so they cost minutes rather than seconds and
+# are worth a target of their own: a boundary failure should be identifiable
+# without re-running the whole workspace.
+#
+# This is a focused entry point, not a second copy of the claim. `make test`
+# already runs it, because `--all-targets` reaches the declared `[[test]]
+# boundary` target, and CI's coverage lane reaches it through nextest's default
+# filter. `--offline` matches the fixtures: resolution that silently fetched
+# from crates.io would prove something about the network instead of the shared
+# package cache. The fixture target is deliberately kept between runs, so a
+# warm run is not evidence of a cold download.
+boundary: ## Prove the standalone runtime boundary against foreign consumer roots
+	RUSTFLAGS="-D warnings" $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
 
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
