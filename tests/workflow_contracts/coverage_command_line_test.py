@@ -57,6 +57,12 @@ DRIVE_ROOT: typ.Final[str] = pathlib.PureWindowsPath(RUNNER_TEMP).anchor
 FAILING_COMMAND_LINE: typ.Final[int] = 33_497
 ROOT_OCCURRENCES: typ.Final[int] = 302
 
+#: The workspace package with the longest build-script directory name.
+LONGEST_PACKAGE: typ.Final[str] = "orthohelp_policy_adoption_fixture"
+
+#: A representative Cargo build-script unit hash.
+UNIT_HASH: typ.Final[str] = "0123456789abcdef"
+
 #: A root shorter than the failed one that still exceeds the limit.
 NEAR_MISS_ROOT: typ.Final[str] = r"D:\a\_temp\c"
 
