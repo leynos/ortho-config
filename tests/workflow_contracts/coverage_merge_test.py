@@ -323,7 +323,7 @@ def test_merge_passes_exact_inputs_and_preserves_output(
 
 
 @pytest.mark.parametrize(
-    ("workflow_name", "job_name"), WORKFLOW_CASES, ids=WORKFLOW_IDS
+    "workflow_case", WORKFLOW_CASES, ids=WORKFLOW_IDS
 )
 @pytest.mark.parametrize(
     "invalid_report",
@@ -335,14 +335,14 @@ def test_merge_passes_exact_inputs_and_preserves_output(
     ids=("missing-report", "empty-report", "unexpected-report"),
 )
 def test_invalid_reports_fail_before_invoking_bun(
-    workflow_name: str,
-    job_name: str,
+    workflow_case: tuple[str, str],
     invalid_report: tuple[str, str],
     bash_executable: str,
     tmp_path: pathlib.Path,
 ) -> None:
     """Missing, empty and unexpected reports fail before merger execution."""
-    invalid_input, affected_file = invalid_report
+    workflow_name, job_name = workflow_case
+    _, affected_file = invalid_report
     _prepare_reports(tmp_path, invalid_report)
 
     result, argument_path = _run_script(
