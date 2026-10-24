@@ -5,10 +5,22 @@ mod api_guide;
 
 #[path = "documentation_examples/boolean_override.rs"]
 mod boolean_override;
+
+#[path = "documentation_examples/cargo_flows.rs"]
+mod cargo_flows;
 mod documentation_examples;
 
 #[path = "documentation_examples/env_alias_chain.rs"]
 mod env_alias_chain;
+
+#[path = "documentation_examples/environment_probe.rs"]
+mod environment_probe;
+
+#[path = "documentation_examples/guide_flows.rs"]
+mod guide_flows;
+
+#[path = "documentation_examples/migration_flows.rs"]
+mod migration_flows;
 
 #[path = "documentation_examples/process_runner_test_support.rs"]
 mod process_runner;
@@ -18,30 +30,42 @@ mod process_runner_execution_policy;
 #[path = "documentation_examples/rust_flows.rs"]
 mod example_flows;
 
+#[path = "documentation_examples/simple_runs.rs"]
+mod simple_runs;
+
 #[path = "documentation_examples/workspace.rs"]
 mod workspace;
 
 use anyhow::{Context, Result, ensure};
 use boolean_override::assert_boolean_override_flow;
-use documentation_examples::{DocumentedExample, documented_example};
+use documentation_examples::documented_example;
 use env_alias_chain::assert_env_alias_chain;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use workspace::{DependencyAlias, EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile};
 
 const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "readme-main",
     "guide-first-cli",
+    "guide-collections",
     "guide-discovery",
+    "guide-profiles",
     "guide-hermetic-discovery",
     "guide-load-first-outcomes",
+    "guide-source-aware-load",
     "guide-compose-layers-with-sources",
+    "guide-csv-env-with-source",
     "guide-subcommand",
+    "guide-subcommand-merge-sources",
     "guide-subcommand-sources",
     "guide-selected-subcommand-sources",
+    "guide-clap-only-parse",
     "guide-errors",
     "guide-localization",
+    "guide-localization-ids",
     "guide-tracing",
     "guide-orthohelp-metadata",
+    "guide-behaviour-metadata",
+    "guide-check-command",
     "guide-scoped-discovery",
     "api-guide-policy-report-constructors",
     "api-guide-policy-report-json",
@@ -55,36 +79,22 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
 #[serial_test::serial(documentation_build)]
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
-    for id in STANDARD_RUST_EXAMPLES {
+    let rust_examples = STANDARD_RUST_EXAMPLES
+        .iter()
+        .chain(migration_flows::MIGRATION_RUST_EXAMPLES);
+    for id in rust_examples {
         workspace.add_binary(documented_example(id)?)?;
     }
-    workspace.add_binary(&environment_probe())?;
+    workspace.add_binary(&environment_probe::environment_probe())?;
     api_guide::add_schema_version_probe(&mut workspace)?;
+    guide_flows::add_probes(&mut workspace)?;
     workspace.build()?;
 
     let (policy_version, agent_context_version) = api_guide::schema_versions(&mut workspace)?;
 
-    example_flows::assert_standard_example_runs(&mut workspace)?;
+    simple_runs::assert_simple_runs(&mut workspace)?;
     assert_env_alias_chain(&mut workspace)?;
     example_flows::assert_tracing_flow(&mut workspace)?;
-    assert_run(
-        &mut workspace,
-        ExampleId("guide-orthohelp-metadata"),
-        [],
-        "field=host\n",
-    )?;
-    assert_run(
-        &mut workspace,
-        ExampleId("api-guide-policy-report-constructors"),
-        [],
-        "",
-    )?;
-    assert_run(
-        &mut workspace,
-        ExampleId("api-guide-agent-context-constructor"),
-        [],
-        "",
-    )?;
     api_guide::assert_json_schema_version(
         &mut workspace,
         ExampleId("api-guide-policy-report-json"),
@@ -97,84 +107,18 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         "schema_version",
         &agent_context_version,
     )?;
-    assert_sanitized_binary_environment(&mut workspace)?;
+    environment_probe::assert_sanitized_binary_environment(&mut workspace)?;
 
     assert_boolean_override_flow(&mut workspace)?;
+    guide_flows::assert_profile_flow(&mut workspace)?;
+    guide_flows::assert_collection_flow(&mut workspace)?;
+    guide_flows::assert_localization_id_flow(&mut workspace)?;
+    guide_flows::assert_behaviour_check_flow(&mut workspace)?;
+    guide_flows::assert_profile_metadata_flow(&mut workspace)?;
+    migration_flows::assert_migration_flows(&mut workspace)?;
 
     example_flows::assert_error_flow(&mut workspace)?;
-    example_flows::assert_console_flows(&mut workspace)?;
-
-    assert_run(
-        &mut workspace,
-        ExampleId("guide-selected-subcommand-sources"),
-        [],
-        "",
-    )
-}
-
-#[test]
-#[serial_test::serial(documentation_build)]
-fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {
-    let example = documented_example("guide-cargo-external-subcommand")?;
-    let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
-    workspace.add_binary_as("cargo-demo", example)?;
-    workspace.build()?;
-
-    let direct_success = workspace.run(ExampleId("cargo-demo"), ["demo", "--verbose"])?;
-    ensure!(
-        direct_success.status.success(),
-        "direct documented Cargo helper invocation should succeed:\n{}",
-        String::from_utf8_lossy(&direct_success.stderr)
-    );
-
-    let cargo_success = workspace.run_cargo_subcommand("demo", ["--verbose"])?;
-    ensure!(
-        cargo_success.status.success(),
-        "Cargo-dispatched documented helper invocation should succeed:\n{}",
-        String::from_utf8_lossy(&cargo_success.stderr)
-    );
-
-    let direct_help = workspace.run(ExampleId("cargo-demo"), ["--help"])?;
-    ensure!(
-        direct_help.status.success(),
-        "direct helper help should succeed"
-    );
-    ensure!(
-        String::from_utf8_lossy(&direct_help.stdout).contains("Usage: cargo <COMMAND>"),
-        "direct helper help should render Cargo dispatch usage"
-    );
-
-    let cargo_help = workspace.run_cargo_subcommand("demo", ["--help"])?;
-    ensure!(
-        cargo_help.status.success(),
-        "Cargo-dispatched helper help should succeed"
-    );
-    ensure!(
-        String::from_utf8_lossy(&cargo_help.stdout).contains("Usage: cargo demo [OPTIONS]"),
-        "Cargo-dispatched helper help should render subcommand usage"
-    );
-
-    let direct_failure = workspace.run(ExampleId("cargo-demo"), std::iter::empty::<&str>())?;
-    ensure!(
-        !direct_failure.status.success(),
-        "direct helper should require a subcommand"
-    );
-    ensure!(
-        String::from_utf8_lossy(&direct_failure.stderr).contains("Usage: cargo <COMMAND>"),
-        "direct helper failure should render top-level usage"
-    );
-
-    let cargo_failure = workspace.run_cargo_subcommand("demo", ["--unknown"])?;
-    ensure!(
-        !cargo_failure.status.success(),
-        "Cargo-dispatched helper should reject an unknown option"
-    );
-    ensure!(
-        String::from_utf8_lossy(&cargo_failure.stderr).contains("Usage: cargo demo [OPTIONS]"),
-        "Cargo-dispatched helper failure should render subcommand usage"
-    );
-
-    Ok(())
+    example_flows::assert_console_flows(&mut workspace)
 }
 
 #[test]
@@ -217,52 +161,6 @@ fn workspace_rejects_paths_outside_an_example_directory() -> Result<()> {
         );
     }
 
-    Ok(())
-}
-
-fn environment_probe() -> DocumentedExample {
-    DocumentedExample {
-        id: "environment-probe".to_owned(),
-        language: "rust".to_owned(),
-        body: concat!(
-            "fn main() {\n",
-            "    let current = std::env::current_dir().expect(\"read current directory\");\n",
-            "    let home = std::env::var_os(\"HOME\").expect(\"HOME should be set\");\n",
-            "    let xdg = std::env::var_os(\"XDG_CONFIG_HOME\").expect(\"XDG should be set\");\n",
-            "    println!(\"current={}\", current.display());\n",
-            "    println!(\"home={}\", std::path::Path::new(&home).display());\n",
-            "    println!(\"xdg={}\", std::path::Path::new(&xdg).display());\n",
-            "    println!(\"path_present={}\", std::env::var_os(\"PATH\").is_some());\n",
-            "}\n",
-        )
-        .to_owned(),
-        source: "environment probe",
-        line: 1,
-    }
-}
-
-fn assert_sanitized_binary_environment(workspace: &mut ExampleWorkspace) -> Result<()> {
-    ensure!(
-        std::env::var_os("PATH").is_some(),
-        "the parent test process should provide PATH"
-    );
-    let output = workspace.run(ExampleId("environment-probe"), std::iter::empty::<&str>())?;
-    ensure!(output.status.success(), "environment probe should succeed");
-    let stdout = String::from_utf8(output.stdout).context("environment probe output is UTF-8")?;
-    let values = stdout
-        .lines()
-        .filter_map(|line| line.split_once('='))
-        .collect::<std::collections::HashMap<_, _>>();
-    let value = |name| {
-        values
-            .get(name)
-            .copied()
-            .with_context(|| format!("environment probe should report {name}"))
-    };
-    let current = PathBuf::from(value("current")?);
-    ensure!(Path::new(value("home")?) == current);
-    ensure!(Path::new(value("xdg")?) == current.join("xdg"));
-    ensure!(value("path_present")? == "false");
     Ok(())
 }
 

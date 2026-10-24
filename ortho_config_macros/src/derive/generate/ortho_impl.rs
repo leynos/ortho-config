@@ -150,8 +150,12 @@ fn generate_cli_value_extractor_impl(
 
     let prune_nulls_helpers = generate_prune_nulls_helpers();
 
+    // Derive output compiles in the caller's crate, where a
+    // `#[cfg(feature = "serde_json")]` guard would test the caller's features
+    // instead of OrthoConfig's. The runtime crate's gate macro evaluates the
+    // feature where it is defined and reports a missing feature itself.
     quote! {
-        #[cfg(feature = "serde_json")]
+        #krate::__cli_default_as_absent_support! {
         impl #krate::CliValueExtractor for #config_ident {
             fn extract_user_provided(
                 &self,
@@ -186,13 +190,7 @@ fn generate_cli_value_extractor_impl(
                 Ok(serde_json::Value::Object(map))
             }
         }
-
-        #[cfg(not(feature = "serde_json"))]
-        const _: () = {
-            compile_error!(
-                "cli_default_as_absent requires enabling the ortho_config `serde_json` feature"
-            );
-        };
+        }
     }
 }
 
@@ -215,5 +213,43 @@ pub(crate) fn generate_trait_implementation(
         #defaults_struct
         #ortho_impl
         #cli_extractor_impl
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the `CliValueExtractor` generator.
+
+    use super::generate_cli_value_extractor_impl;
+    use anyhow::{Context, Result, ensure};
+    use quote::quote;
+    use syn::parse_str;
+    /// The `serde_json` requirement must be decided by `ortho_config`, not by the
+    /// crate that invokes the derive.
+    ///
+    /// A `#[cfg(feature = "serde_json")]` guard in the expansion is evaluated
+    /// against the caller's features, so an application without its own
+    /// `serde_json` feature was told that `cli_default_as_absent` needs one, even
+    /// though `OrthoConfig` enables its own `serde_json` feature by default.
+    #[test]
+    fn cli_default_as_absent_support_is_gated_by_the_runtime_crate() -> Result<()> {
+        let ident = parse_str("ServeArgs").context("parse ServeArgs ident")?;
+        let fields = [crate::CliFieldInfo {
+            serialized_key: "port".to_owned(),
+            arg_id: "port".to_owned(),
+            is_bool: false,
+            is_default_as_absent: true,
+        }];
+        let rendered = generate_cli_value_extractor_impl(&ident, &fields, &quote! { ortho_config })
+            .to_string();
+        ensure!(
+            rendered.contains("ortho_config :: __cli_default_as_absent_support !"),
+            "the extractor should be routed through the runtime gate: {rendered}"
+        );
+        ensure!(
+            !rendered.contains("feature"),
+            "the expansion must not test the caller's features: {rendered}"
+        );
+        Ok(())
     }
 }

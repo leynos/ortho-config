@@ -5,6 +5,9 @@ mod documentation_examples;
 #[path = "documentation_examples/format_all.rs"]
 mod format_all;
 
+#[path = "documentation_examples/static_contracts.rs"]
+mod static_contracts;
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
@@ -28,6 +31,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-check-report",
     "guide-clap-only-parse",
     "guide-collection-file",
+    "guide-collections",
     "guide-compose-layers-with-sources",
     "guide-csv-env-with-source",
     "guide-discovery",
@@ -36,9 +40,12 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-file-run",
     "guide-first-cli",
     "guide-hermetic-discovery",
+    "guide-identifier-artefact",
     "guide-install",
     "guide-load-first-outcomes",
     "guide-localization",
+    "guide-localization-ids",
+    "guide-localization-ids-output",
     "guide-metrics-install",
     "guide-orthohelp-command",
     "guide-orthohelp-format-all",
@@ -48,30 +55,91 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-policy-ci",
     "guide-policy-config",
     "guide-profile-metadata",
+    "guide-profiles",
+    "guide-profiles-file",
+    "guide-profiles-run",
     "guide-scoped-discovery",
     "guide-selected-subcommand-sources",
     "guide-source-aware-load",
     "guide-subcommand",
+    "guide-subcommand-merge-sources",
     "guide-subcommand-sources",
     "guide-tracing",
     "guide-tracing-install",
     "guide-yaml",
+    "guide-yaml-install",
+    "migration-agent-context-profiles",
+    "migration-boolean-file",
+    "migration-boolean-run",
+    "migration-cli-default-after",
+    "migration-cli-default-before",
+    "migration-cli-default-run",
+    "migration-dependencies-after",
+    "migration-dependencies-before",
+    "migration-explicit-cli",
+    "migration-explicit-cli-run",
+    "migration-l10n-dependency",
+    "migration-l10n-runtime",
+    "migration-profile-precedence",
     "readme-binstall",
     "readme-install",
     "readme-main",
     "readme-run",
 ];
 
+/// The crate packages the repository README directly, so there is no copy to
+/// keep in step. `cargo package` copies a readme from outside the package
+/// into the crate root, and a second `ortho_config/README.md` would collide
+/// with it.
 #[test]
-fn published_crate_readme_matches_repository_readme() -> Result<()> {
+fn published_crate_packages_the_repository_readme() -> Result<()> {
     let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
-    let repository_readme = repository.read_to_string("README.md")?;
-    let crate_readme = repository.read_to_string("ortho_config/README.md")?;
+    let manifest: toml::Value =
+        toml::from_str(&repository.read_to_string("ortho_config/Cargo.toml")?)
+            .context("parse the ortho_config manifest")?;
+    let readme = manifest
+        .get("package")
+        .and_then(|package| package.get("readme"))
+        .and_then(toml::Value::as_str);
     ensure!(
-        crate_readme == repository_readme,
-        "the packaged ortho_config README should match the repository README"
+        readme == Some("../README.md"),
+        "ortho_config should package the repository README, got {readme:?}"
+    );
+    ensure!(
+        !repository.exists("ortho_config/README.md"),
+        "remove ortho_config/README.md; the crate packages the repository README"
     );
     Ok(())
+}
+
+/// crates.io and docs.rs render the README away from the repository, so a
+/// relative link would resolve against the wrong base.
+#[test]
+fn repository_readme_links_are_absolute() -> Result<()> {
+    let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
+    let readme = repository.read_to_string("README.md")?;
+    let relative: Vec<&str> = link_targets(&readme)
+        .filter(|target| !(target.starts_with("https://") || target.starts_with('#')))
+        .collect();
+    ensure!(
+        relative.is_empty(),
+        "README links must be absolute: {relative:?}"
+    );
+    Ok(())
+}
+
+/// Targets of inline links (`](target)`) and reference definitions
+/// (`[label]: target`), ignoring any link title.
+fn link_targets(markdown: &str) -> impl Iterator<Item = &str> {
+    let inline = markdown
+        .split("](")
+        .skip(1)
+        .filter_map(|rest| rest.split([')', ' ']).next());
+    let references = markdown.lines().filter_map(|line| {
+        let (label, target) = line.strip_prefix('[')?.split_once("]: ")?;
+        (!label.is_empty()).then(|| target.split(' ').next().unwrap_or_default())
+    });
+    inline.chain(references)
 }
 
 #[test]
@@ -89,89 +157,6 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
         actual == expected,
         "documented example registry drifted\nexpected: {expected:#?}\nactual: {actual:#?}"
     );
-    Ok(())
-}
-
-#[test]
-fn installation_manifests_select_the_documented_release() -> Result<()> {
-    let readme = parse_toml("readme-install")?;
-    assert_dependency_version(&readme, "ortho_config", "0.9.0")?;
-    assert_dependency_version(&readme, "serde", "1.0")?;
-
-    let guide = parse_toml("guide-install")?;
-    assert_dependency_version(&guide, "ortho_config", "0.9.0")?;
-    assert_dependency_version(&guide, "clap", "4.5")?;
-    assert_dependency_version(&guide, "serde", "1.0")?;
-
-    let tracing = parse_toml("guide-tracing-install")?;
-    let subscriber = dependency(&tracing, "tracing-subscriber")?;
-    ensure!(subscriber["version"].as_str() == Some("0.3"));
-    ensure!(
-        subscriber["features"]
-            .as_array()
-            .is_some_and(|features| features
-                .iter()
-                .any(|value| value.as_str() == Some("env-filter"))),
-        "tracing-subscriber manifest should enable env-filter"
-    );
-    Ok(())
-}
-
-#[test]
-fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
-    let example = documented_example("readme-binstall")?;
-    ensure!(example.language == "console");
-    ensure!(
-        example.body == "cargo binstall --disable-strategies compile cargo-orthohelp\n",
-        "documented cargo-binstall command drifted"
-    );
-
-    // The command only avoids a source build if the named crate publishes the
-    // binstall metadata that resolves its release archives.
-    let repository = Dir::open_ambient_dir(repository_root(), ambient_authority())
-        .context("open the repository root")?;
-    let manifest: toml::Value = toml::from_str(
-        &repository
-            .read_to_string("cargo-orthohelp/Cargo.toml")
-            .context("read the cargo-orthohelp manifest")?,
-    )
-    .context("parse the cargo-orthohelp manifest")?;
-    let package = manifest
-        .get("package")
-        .context("cargo-orthohelp should declare [package]")?;
-    ensure!(package.get("name").and_then(toml::Value::as_str) == Some("cargo-orthohelp"));
-    let binstall = package
-        .get("metadata")
-        .and_then(|metadata| metadata.get("binstall"))
-        .context("cargo-orthohelp should declare [package.metadata.binstall]")?;
-    ensure!(binstall.get("pkg-fmt").and_then(toml::Value::as_str) == Some("tgz"));
-    for key in ["pkg-url", "bin-dir"] {
-        ensure!(
-            binstall.get(key).and_then(toml::Value::as_str).is_some(),
-            "binstall metadata should declare {key}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn optional_and_aliased_manifests_preserve_the_intended_contract() -> Result<()> {
-    let metrics = parse_toml("guide-metrics-install")?;
-    let metrics_dependency = dependency(&metrics, "ortho_config")?;
-    ensure!(metrics_dependency["version"].as_str() == Some("0.9.0"));
-    ensure!(
-        metrics_dependency["features"]
-            .as_array()
-            .is_some_and(|features| features
-                .iter()
-                .any(|value| value.as_str() == Some("metrics"))),
-        "metrics manifest should enable the metrics feature"
-    );
-
-    let alias = parse_toml("guide-alias-install")?;
-    let aliased_dependency = dependency(&alias, "config_layer")?;
-    ensure!(aliased_dependency["package"].as_str() == Some("ortho_config"));
-    ensure!(aliased_dependency["version"].as_str() == Some("0.9.0"));
     Ok(())
 }
 
@@ -257,25 +242,6 @@ fn parse_toml(id: &str) -> Result<toml::Value> {
     let example = documented_example(id)?;
     ensure!(example.language == "toml", "{id} should be TOML");
     toml::from_str(&example.body).with_context(|| format!("parse {id}"))
-}
-
-fn dependency<'a>(manifest: &'a toml::Value, name: &str) -> Result<&'a toml::Value> {
-    manifest
-        .get("dependencies")
-        .and_then(|dependencies| dependencies.get(name))
-        .with_context(|| format!("manifest should declare {name}"))
-}
-
-fn assert_dependency_version(manifest: &toml::Value, name: &str, version: &str) -> Result<()> {
-    let value = dependency(manifest, name)?;
-    let actual = value
-        .as_str()
-        .or_else(|| value.get("version").and_then(toml::Value::as_str));
-    ensure!(
-        actual == Some(version),
-        "expected {name} version {version}, got {actual:?}"
-    );
-    Ok(())
 }
 
 fn repository_root() -> Utf8PathBuf {
