@@ -25,7 +25,14 @@ use rstest::rstest;
 use serde_json::Value;
 use std::path::Path;
 use std::process::Output;
+use std::sync::{LazyLock, Mutex, PoisonError};
 use tempfile::TempDir;
+
+// Each run starts its scenario deadline before it waits for the shared build
+// lock. nextest's `orthohelp_cache` group serializes the binary only under
+// nextest, so a direct `cargo test` would otherwise let one case spend its
+// deadline queued behind another's cold bridge build.
+static DOCUMENTED_RUN_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
 /// A finished `cargo orthohelp` run and the directory it wrote into.
 struct OrthohelpRun {
@@ -64,6 +71,9 @@ fn run_orthohelp(args: &[&str]) -> Result<OrthohelpRun> {
     let out_dir = tempfile::Builder::new()
         .prefix("documented-command-")
         .tempdir_in(state)?;
+    let _run_guard = DOCUMENTED_RUN_MUTEX
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let output = orthohelp_workflow::run_orthohelp(
         repository,
         Path::new(env!("CARGO_BIN_EXE_cargo-orthohelp")),
