@@ -2741,6 +2741,19 @@ that discovery still finds the workflows it is expected to, so a broken read
 cannot empty the list and turn the rest into a vacuous pass. Run it with
 `make test-workflow-contracts`.
 
+## Development build footprint
+
+The Concordat `rust-dev-build-footprint` rule keeps default development builds
+small. The workspace `Cargo.toml` sets `incremental = false` and `debug = 0` in
+`[profile.dev]`, and the test profile inherits both, so builds keep no
+incremental compilation state and no debug information. The trade-off is that a
+debugger sees no symbols or line tables in a default development build and
+every rebuild recompiles whole crates. To debug, run with
+`CARGO_PROFILE_DEV_DEBUG=true`; to rebuild incrementally, set
+`CARGO_INCREMENTAL=1`. The pin is the stable `1.99` channel, so the rule's
+unstable metadata key does not apply.
+`tests/workflow_contracts/build_footprint_test.py` holds both settings.
+
 ## Test timeouts: the tiers this repository sets
 
 Four independent timers can end a test run, and the canonical statement of how
