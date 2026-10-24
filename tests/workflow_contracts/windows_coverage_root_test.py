@@ -114,7 +114,7 @@ def _projected_command_line_length(target_root_length: int) -> int:
 
 
 def test_windows_coverage_root_steps_keep_their_guard_shell_and_exact_writes() -> None:
-    """The two Windows steps write the target roots through UTF-8 GITHUB_ENV."""
+    """Windows steps write exact roots and log each transition."""
     steps = _build_test_steps(_ci_workflow())
     _, export = _named_step(steps, EXPORT_STEP)
     _, restore = _named_step(steps, RESTORE_STEP)
@@ -125,14 +125,30 @@ def test_windows_coverage_root_steps_keep_their_guard_shell_and_exact_writes() -
         )
         assert step.get("shell") == "pwsh", f"{name!r} must use PowerShell 7"
 
-    assert _normalised_run(export) == (
-        "Add-Content -Path $env:GITHUB_ENV -Value "
-        f'"CARGO_TARGET_DIR={TARGET_ROOT_TEMPLATE}" -Encoding utf8'
-    ), "the export must append exactly one UTF-8, BOM-free target-root line"
-    assert _normalised_run(restore) == (
-        "Add-Content -Path $env:GITHUB_ENV -Value "
-        f'"CARGO_TARGET_DIR={WORKSPACE_TARGET_TEMPLATE}" -Encoding utf8'
-    ), "the restore must append exactly one UTF-8, BOM-free target-root line"
+    export_summary = (
+        '"Windows coverage target root exported: $env:CARGO_TARGET_DIR"'
+    )
+    restore_summary = (
+        '"Windows coverage target root restored: $env:CARGO_TARGET_DIR"'
+    )
+    assert _normalised_run(export) == " ".join(
+        (
+            f'$env:CARGO_TARGET_DIR = "{TARGET_ROOT_TEMPLATE}"',
+            "Add-Content -Path $env:GITHUB_ENV -Value "
+            f'"CARGO_TARGET_DIR={TARGET_ROOT_TEMPLATE}" -Encoding utf8',
+            f"Write-Output {export_summary}",
+            f"{export_summary} >> $env:GITHUB_STEP_SUMMARY",
+        )
+    ), "export must write one UTF-8, BOM-free root and log its resolved value"
+    assert _normalised_run(restore) == " ".join(
+        (
+            f'$env:CARGO_TARGET_DIR = "{WORKSPACE_TARGET_TEMPLATE}"',
+            "Add-Content -Path $env:GITHUB_ENV -Value "
+            f'"CARGO_TARGET_DIR={WORKSPACE_TARGET_TEMPLATE}" -Encoding utf8',
+            f"Write-Output {restore_summary}",
+            f"{restore_summary} >> $env:GITHUB_STEP_SUMMARY",
+        )
+    ), "restore must write one UTF-8, BOM-free root and log its resolved value"
 
 
 def test_windows_coverage_root_steps_bracket_both_coverage_passes() -> None:

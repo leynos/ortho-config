@@ -259,7 +259,12 @@ jobs:
       - name: Shorten the Cargo target root for coverage (Windows)
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
-        run: Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=$env:RUNNER_TEMP\cov" -Encoding utf8
+        # GITHUB_ENV affects later steps, so set this process too for the log.
+        run: |
+          $env:CARGO_TARGET_DIR = "$env:RUNNER_TEMP\cov"
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=$env:RUNNER_TEMP\cov" -Encoding utf8
+          Write-Output "Windows coverage target root exported: $env:CARGO_TARGET_DIR"
+          "Windows coverage target root exported: $env:CARGO_TARGET_DIR" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
@@ -299,7 +304,12 @@ jobs:
       - name: Restore the default Cargo target root (Windows)
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
-        run: Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=$env:GITHUB_WORKSPACE\target" -Encoding utf8
+        # GITHUB_ENV affects later steps, so set this process too for the log.
+        run: |
+          $env:CARGO_TARGET_DIR = "$env:GITHUB_WORKSPACE\target"
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=$env:GITHUB_WORKSPACE\target" -Encoding utf8
+          Write-Output "Windows coverage target root restored: $env:CARGO_TARGET_DIR"
+          "Windows coverage target root restored: $env:CARGO_TARGET_DIR" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Merge coverage results
         if: ${{ matrix.platform == 'linux' }}
