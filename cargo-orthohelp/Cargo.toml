@@ -60,7 +60,7 @@ anyhow = "1"
 googletest = "0.14"
 insta = "1"
 proptest = "1"
-process-wrap = { version = "9.0.1", default-features = false, features = ["std"] }
+process-wrap = { version = "10.0.1", default-features = false, features = ["std"] }
 pretty_assertions = "1"
 rstest = "0.27.0"
 rstest-bdd.workspace = true
