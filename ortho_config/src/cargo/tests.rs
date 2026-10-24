@@ -284,34 +284,19 @@ fn wrapped_parse_matches_unwrapped_parse(#[case] tail: &[&str]) {
 }
 
 #[test]
+#[should_panic(expected = "installed binary name must be cargo-<subcommand name>")]
 fn transposed_names_trip_debug_assertion() {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        external_subcommand("demo", "cargo-demo", Command::new("demo"))
-    }));
-    assert!(
-        result.is_err(),
-        "transposed names must trip the debug assertion"
-    );
+    let _command = external_subcommand("demo", "cargo-demo", Command::new("demo"));
 }
 
 #[test]
+#[should_panic(expected = "subcommand name is empty")]
 fn empty_subcommand_name_trips_debug_assertion() {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        external_subcommand("cargo-", "", Command::new("demo"))
-    }));
-    assert!(
-        result.is_err(),
-        "an empty subcommand name must trip the debug assertion"
-    );
+    let _command = external_subcommand("cargo-", "", Command::new("demo"));
 }
 
 #[test]
+#[should_panic(expected = "subcommand name must not be clap's reserved help command")]
 fn reserved_help_name_trips_debug_assertion() {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        external_subcommand("cargo-help", "help", Command::new("demo"))
-    }));
-    assert!(
-        result.is_err(),
-        "the reserved 'help' name must trip the debug assertion"
-    );
+    let _command = external_subcommand("cargo-help", "help", Command::new("demo"));
 }

@@ -1,0 +1,41 @@
+# The development build standard, as Cargo's auto-discovered defaults.
+#
+# A bare `cargo build`, `cargo test` or `cargo check` reads this file, so the
+# standard is what a contributor gets without asking for it. The Makefile
+# restates the same flags where a recipe assigns `RUSTFLAGS`
+# (docs/developers-guide.md, "Development build standard");
+# tests/workflow_contracts/build_standard_routing_test.py holds the two equal
+# for every host it names.
+#
+# - `-Zthreads=8` is the parallel `rustc` frontend. It is nightly-only, which
+#   is why rust-toolchain.toml pins a dated nightly.
+# - `-Zcodegen-backend=cranelift` selects the fast development backend. The
+#   `ortho_config_dev_fast` cfg lets one unwind-dependent test remain enabled
+#   for LLVM coverage, because Cranelift cannot unwind through compiled frames.
+# - `-Clink-arg=-fuse-ld=mold` selects the `mold` linker. `mold` ships for Linux
+#   only, so it appears solely under the Linux target table, never in `[build]`
+#   and never under `cfg(unix)`, which macOS builds also take.
+#
+# Cargo selects ONE `rustflags` source and does not merge them: a matching
+# `[target.*]` table replaces `[build] rustflags` outright, and an assigned
+# `RUSTFLAGS` outranks every table here. So every flag that must survive is
+# repeated in each source, except the ones deliberately scoped to a platform.
+# Release, coverage and the Whitaker suite take none of this; they assign
+# `RUSTFLAGS` and say so where they do.
+
+[build]
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+]
+
+[target.'cfg(target_os = "linux")']
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+  "-Clink-arg=-fuse-ld=mold",
+]

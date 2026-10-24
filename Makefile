@@ -1,10 +1,72 @@
-.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck msrv-build python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts install-build-tools check-build-tools FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
 WHITAKER ?= whitaker
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
+# The development build standard: the parallel `rustc` frontend, Cranelift
+# backend, and the `mold` linker are the defaults for development, test, lint
+# and typecheck builds.
+# `.cargo/config.toml` carries them, so a bare `cargo` invocation gets them
+# too; this block restates them where a recipe assigns `RUSTFLAGS`.
+#
+# Why restate: Cargo selects a single `rustflags` source rather than merging
+# them, and an assigned `RUSTFLAGS` outranks every `rustflags` table in the
+# configuration. A recipe that assigned only `-D warnings` would therefore
+# silently build without the standard and still report success.
+# tests/workflow_contracts/build_standard_routing_test.py holds these variables
+# equal to the configuration file for each host it names; change one without
+# the other and that contract fails.
+#
+# Release and packaging builds, coverage, and the Whitaker suite are excluded
+# and say so where they assign `RUSTFLAGS` below. `BUILD_STANDARD=0` turns the
+# standard off for one invocation, for a toolchain that is not the pinned
+# nightly (the advisory `clippy-beta` job): the parallel frontend is
+# nightly-only, so a stable or beta compiler refuses it outright.
+BUILD_STANDARD ?= 1
+STANDARD_THREADS_FLAG ?= -Zthreads=8
+STANDARD_BACKEND_FLAG ?= -Zcodegen-backend=cranelift
+STANDARD_DEV_FAST_CFG ?= --cfg=ortho_config_dev_fast \
+	--check-cfg=cfg(ortho_config_dev_fast)
+STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
+MOLD_VERSION_FILE ?= tools/mold/VERSION
+MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
+BUILD_TOOLS_PREFIX ?= $(HOME)/.local
+# Exported rather than interpolated into the recipes. Make hands an exported
+# variable to the child process directly, so a path containing a quote cannot
+# break the command line the shell parses.
+export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE BUILD_TOOLS_PREFIX
+# `mold` ships for Linux only. macOS and Windows keep the platform linker,
+# matching the `[target.*]` table in `.cargo/config.toml`. `OS` is set by
+# Windows and by no other host.
+ifeq ($(OS),Windows_NT)
+BUILD_HOST_OS ?= Windows_NT
+else
+BUILD_HOST_OS ?= $(shell uname -s)
+endif
+STANDARD_RUSTFLAGS = $(if $(filter 1,$(BUILD_STANDARD)),\
+	$(STANDARD_THREADS_FLAG) $(STANDARD_BACKEND_FLAG) $(STANDARD_DEV_FAST_CFG)\
+	$(if $(filter Linux,$(BUILD_HOST_OS)), $(STANDARD_MOLD_FLAG)))
+# Warnings denied, plus the standard. Every gate recipe that runs Cargo uses it.
+GATE_RUSTFLAGS = RUSTFLAGS="-D warnings $(STANDARD_RUSTFLAGS)"
+# A debug build keeps the caller's warning policy rather than imposing one.
+DEBUG_RUSTFLAGS = RUSTFLAGS="$(STANDARD_RUSTFLAGS)"
+# Release builds take none of the standard. Assigning `RUSTFLAGS` at all, even
+# to the empty string, displaces the configuration file's `rustflags` tables,
+# which is the whole mechanism.
+RELEASE_RUSTFLAGS = RUSTFLAGS=""
+# The MSRV is read from the manifest, as major.minor, so the build cannot drift
+# from the promise. CI's matrix leg names the same major.minor and passes it in
+# (MSRV=1.89), and a contract holds the two equal. `?=` is lazily expanded, so
+# the shell only runs for the target that needs it.
+MSRV ?= $(shell awk -F'"' '/^rust-version[[:space:]]*=/ { print $$2; exit }' Cargo.toml | cut -d. -f1,2)
+# The build-tools install prefix leads PATH: `-fuse-ld=mold` resolves by PATH
+# order, so the pinned release must outrank any distribution `mold`. Windows
+# separates PATH entries with `;`, so the prefix is not prepended there.
+ifneq ($(OS),Windows_NT)
+export PATH := $(BUILD_TOOLS_PREFIX)/bin:$(PATH)
+endif
 # One lint invocation for every caller: the pinned-toolchain `build-test`
 # job and the advisory `clippy-beta` job both run it through `lint-clippy`,
 # so CI states its strictness once, here, rather than in two workflow steps
@@ -61,6 +123,7 @@ PYTEST ?= $(UV_RUN) --module pytest
 RUSTDOC_FLAGS ?= -D warnings
 
 define BUILD_LIBRARY_COMMAND
+$(if $(findstring release,$(@)),$(RELEASE_RUSTFLAGS),$(DEBUG_RUSTFLAGS)) \
 $(CARGO) build $(BUILD_JOBS)                            \
   $(if $(findstring release,$(@)),--release)            \
   --lib
@@ -80,8 +143,8 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 	rm -rf $(PYTHON_VENV)
 
-test: python-test-deps ## Run tests with warnings treated as errors
-	RUSTFLAGS="-D warnings" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
+test: check-build-tools python-test-deps ## Run tests with warnings treated as errors
+	$(GATE_RUSTFLAGS) $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
 
 # The boundary contracts are the evidence that an application depending on the
@@ -98,8 +161,8 @@ test: python-test-deps ## Run tests with warnings treated as errors
 # from crates.io would prove something about the network instead of the shared
 # package cache. The fixture target is deliberately kept between runs, so a
 # warm run is not evidence of a cold download.
-boundary: ## Prove the standalone runtime boundary against foreign consumer roots
-	RUSTFLAGS="-D warnings" $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
+boundary: check-build-tools ## Prove the standalone runtime boundary against foreign consumer roots
+	$(GATE_RUSTFLAGS) $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
 
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
@@ -124,14 +187,23 @@ test-workflow-contracts: ## Validate the workflow caller contracts, including th
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
 	$(BUILD_LIBRARY_COMMAND)
 
+# Only the debug build uses the standard, so only it needs the standard's tools.
+# A release build must not fail for want of a linker it will not use.
+target/debug/lib$(CRATE).rlib: | check-build-tools
+
 FORCE:
 
 lint: lint-clippy lint-whitaker docstring-coverage ## Run linters with warnings denied
 
-lint-clippy: ## Run rustdoc and Clippy with warnings denied
-	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
-	$(CARGO) clippy $(CLIPPY_FLAGS)
+lint-clippy: check-build-tools ## Run rustdoc and Clippy with warnings denied
+	$(GATE_RUSTFLAGS) RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
+	$(GATE_RUSTFLAGS) $(CARGO) clippy $(CLIPPY_FLAGS)
 
+# Whitaker runs on the toolchain its installer manages, not on this
+# repository's, so it takes none of the development standard: the parallel
+# frontend and `mold` would be applied to a different compiler, and `mold` is
+# not a prerequisite it can rely on. The assignment is deliberately
+# `-D warnings` alone, and deliberately not GATE_RUSTFLAGS.
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
@@ -193,8 +265,29 @@ docstring-coverage: ## Require complete docstrings for every Python source file
 		}' "$$report"; \
 	fi
 
-typecheck: ## Typecheck workspace (cargo check)
-	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
+typecheck: check-build-tools ## Typecheck workspace (cargo check)
+	$(GATE_RUSTFLAGS) $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
+
+# Builds every target on the declared MSRV, and runs nothing: a build proves the
+# code compiles and links for the oldest compiler the crates promise to support,
+# and the `build-test` job has already established behaviour on the pinned
+# toolchain. It is stronger than the estate's `cargo check --all-targets` cost
+# rule and still no second test run (a deliberate choice, recorded in the
+# developers' guide). The MSRV is a stable toolchain, which refuses the
+# standard's nightly-only flags, so `RUSTFLAGS` is assigned to displace the
+# configuration's `rustflags` tables rather than inherit them.
+msrv-build: ## Build every target on the declared MSRV toolchain (no tests)
+	RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features $(BUILD_JOBS)
+
+install-build-tools: ## Install the pinned mold linker and the pinned toolchain
+	@scripts/install-build-tools.sh
+
+check-build-tools: ## Check the mold linker and toolchain prerequisites
+ifeq ($(BUILD_STANDARD),1)
+	@scripts/check-build-tools.sh
+else
+	@echo 'build-tools: BUILD_STANDARD=$(BUILD_STANDARD); the build standard is off, nothing to check'
+endif
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
