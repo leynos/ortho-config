@@ -42,6 +42,7 @@ pub(super) fn assert_migration_flows(workspace: &mut ExampleWorkspace) -> Result
     )
 }
 
+/// The `ACME_PORT` environment the explicit-CLI transcript runs under.
 const fn port_env(value: &str) -> [EnvironmentVariable<'_>; 1] {
     [EnvironmentVariable {
         name: "ACME_PORT",
@@ -132,6 +133,10 @@ fn assert_boolean_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
 }
 
 /// The inferred clap default sits below the environment and explicit flags.
+///
+/// Compiling `migration-cli-default-after` in the example crate is also the
+/// downstream regression for the derive's `cli_default_as_absent` feature gate;
+/// `workspace_tests` pins the crate shape that makes it one.
 fn assert_cli_default_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
     const ID: &str = "migration-cli-default-after";
     assert_run(

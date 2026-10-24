@@ -1,6 +1,6 @@
 //! Regression coverage for documented-example workspaces.
 
-use super::layout::{ManifestPaths, render_manifest, seed_lockfile};
+use super::layout::{ManifestPaths, manifest, render_manifest, seed_lockfile};
 use super::{
     DependencyAlias, DocumentedExample, ExampleId, ExampleWorkspace, RunFile, cargo_dispatch_path,
 };
@@ -50,6 +50,34 @@ fn windows_dependency_path_produces_valid_toml() {
     assert_eq!(
         dependencies.get("serde_json").and_then(toml::Value::as_str),
         Some("1")
+    );
+}
+
+/// The example crate stands for a downstream application: it declares no
+/// features of its own and takes `ortho_config`'s default features.
+///
+/// That shape is what makes the compiled `cli_default_as_absent` examples a
+/// regression test for the derive's feature gate. Derive output compiles in
+/// the caller's crate, so a gate written as `cfg(feature = "serde_json")`
+/// there tests this crate's features, which do not exist, while
+/// `ortho_config`'s `serde_json` default is enabled. A `[features]` table here,
+/// or disabled defaults, would hide that boundary.
+#[test]
+fn example_crate_has_no_features_and_default_ortho_config() {
+    let generated = manifest(DependencyAlias("ortho_config"));
+    let parsed = toml::from_str::<toml::Value>(&generated)
+        .expect("generated documentation manifest should parse as TOML");
+    assert!(
+        parsed.get("features").is_none(),
+        "the example crate must not declare features"
+    );
+    let ortho_config = parsed
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get("ortho_config"))
+        .expect("the example crate should depend on ortho_config");
+    assert!(
+        ortho_config.get("default-features").is_none() && ortho_config.get("features").is_none(),
+        "the example crate should take ortho_config's default features"
     );
 }
 
