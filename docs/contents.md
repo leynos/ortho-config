@@ -201,6 +201,8 @@
     model downstream skill manifests.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
+  - [Profile redaction metadata](execplans/9-1-2-profile-redaction-metadata.md):
+    approval-gated plan for sensitive fields and safe profile-name exposure.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Prepare the v0.9.0 user documentation](execplans/prepare-v0-9-0-user-documentation.md):
