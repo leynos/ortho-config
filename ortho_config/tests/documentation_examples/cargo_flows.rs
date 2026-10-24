@@ -9,6 +9,8 @@ use anyhow::{Result, ensure};
 use crate::documentation_examples::documented_example;
 use crate::workspace::{DependencyAlias, ExampleId, ExampleWorkspace};
 
+/// The documented Cargo external-subcommand example accepts both
+/// `cargo demo` dispatch and direct `cargo-demo demo` invocation.
 #[test]
 #[serial_test::serial(documentation_build)]
 fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {

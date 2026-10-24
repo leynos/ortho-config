@@ -22,6 +22,8 @@ pub(super) fn sanitize_application_environment(command: &mut Command) {
     }
 }
 
+/// Render the generated example workspace's manifest, naming `ortho_config`
+/// under `dependency_name` so aliased examples compile against the real crate.
 pub(super) fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
     let crate_path = toml::Value::String(env!("CARGO_MANIFEST_DIR").to_owned()).to_string();
     let sibling = |name: &str| {

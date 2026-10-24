@@ -142,6 +142,8 @@ fn link_targets(markdown: &str) -> impl Iterator<Item = &str> {
     inline.chain(references)
 }
 
+/// Every fenced block in the public documents carries a registered,
+/// unique `tested-example` identifier, so no example escapes the contracts.
 #[test]
 fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
     let examples = load_documented_examples()?;

@@ -125,6 +125,8 @@ fn migration_runtime_manifest_selects_the_upgrade_release() -> Result<()> {
     Ok(())
 }
 
+/// The README's `cargo binstall` command names the crate that publishes
+/// binstall metadata, so following it fetches an archive instead of building.
 #[test]
 fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
     let example = documented_example("readme-binstall")?;
@@ -163,6 +165,7 @@ fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
     Ok(())
 }
 
+/// Parse a documented TOML fence as a Cargo manifest.
 fn parse_manifest(example: &DocumentedExample) -> Result<toml::Value> {
     ensure!(example.language == "toml", "{} should be TOML", example.id);
     toml::from_str(&example.body).with_context(|| format!("parse {}", example.id))
@@ -187,6 +190,7 @@ fn ortho_config_versions(manifest: &toml::Value) -> Vec<Option<&str>> {
         .collect()
 }
 
+/// The manifest's direct `ortho_config` dependency entry.
 fn ortho_config_dependency(manifest: &toml::Value) -> Result<&toml::Value> {
     manifest
         .get("dependencies")

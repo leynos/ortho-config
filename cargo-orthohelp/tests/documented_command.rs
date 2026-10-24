@@ -41,16 +41,20 @@ struct OrthohelpRun {
 }
 
 impl OrthohelpRun {
+    /// The run's standard output, which the documentation says carries the
+    /// generated JSON document.
     fn stdout(&self) -> Result<&str> {
         std::str::from_utf8(&self.output.stdout).context("cargo-orthohelp stdout is UTF-8")
     }
 
+    /// Read one file the run wrote into its output directory.
     fn read_artefact(&self, name: &str) -> Result<String> {
         Dir::open_ambient_dir(self.out_dir.path(), ambient_authority())?
             .read_to_string(name)
             .with_context(|| format!("read generated {name}"))
     }
 
+    /// Fail with the run's standard error unless the command succeeded.
     fn ensure_success(&self, flow: &str) -> Result<()> {
         ensure!(
             self.output.status.success(),
