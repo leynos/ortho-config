@@ -144,8 +144,7 @@ def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) 
     terms = BINARY_TERM.findall(filter_expression)
     if not terms:
         message = (
-            f"the trybuild override's filter names no binary(...) predicate: "
-            f"{filter_expression!r}"
+            f"the filter names no binary(...) predicate: {filter_expression!r}"
         )
         raise UnreadableMatcherError(message)
     # Removing the terms leaves the glue between them. Checking it here,
@@ -155,10 +154,10 @@ def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) 
     remainder = BINARY_TERM.sub("", filter_expression)
     if BINARY_DISJUNCTION.match(remainder) is None:
         message = (
-            f"the trybuild override's filter combines its binary(...) terms "
-            f"with something other than `|`, which this contract does not "
-            f"evaluate; reading the terms alone would report a narrower "
-            f"expression as a wider one: {filter_expression!r}"
+            f"the filter combines its binary(...) terms with something other "
+            f"than `|`, which this contract does not evaluate; reading the "
+            f"terms alone would report a narrower expression as a wider one: "
+            f"{filter_expression!r}"
         )
         raise UnreadableMatcherError(message)
     return {
