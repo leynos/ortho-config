@@ -32,20 +32,12 @@ const MIGRATION_GUIDES: &[&str] = &["docs/v0-10-0-migration-guide.md"];
 #[test]
 fn every_documented_manifest_installs_the_current_release() -> Result<()> {
     let mut checked = Vec::new();
-    for example in load_documented_examples()? {
-        if example.language != "toml" || MIGRATION_GUIDES.contains(&example.source) {
-            continue;
-        }
+    let release_manifests = load_documented_examples()?
+        .iter()
+        .filter(|example| is_release_manifest(example));
+    for example in release_manifests {
         let manifest = parse_manifest(example)?;
-        let Some(dependencies) = manifest.get("dependencies").and_then(toml::Value::as_table)
-        else {
-            continue;
-        };
-        for (name, dependency) in dependencies {
-            if !names_ortho_config(name, dependency) {
-                continue;
-            }
-            let version = dependency_version(dependency);
+        for version in ortho_config_versions(&manifest) {
             ensure!(
                 version == Some(DOCUMENTED_RELEASE),
                 "{} should install ortho_config {DOCUMENTED_RELEASE}, got {version:?}",
@@ -174,6 +166,25 @@ fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
 fn parse_manifest(example: &DocumentedExample) -> Result<toml::Value> {
     ensure!(example.language == "toml", "{} should be TOML", example.id);
     toml::from_str(&example.body).with_context(|| format!("parse {}", example.id))
+}
+
+/// Whether the release sweep covers this example: a TOML manifest outside the
+/// migration guides, whose upgrade paths pin historical versions on purpose.
+fn is_release_manifest(example: &DocumentedExample) -> bool {
+    example.language == "toml" && !MIGRATION_GUIDES.contains(&example.source)
+}
+
+/// The version requirement of every `ortho_config` dependency in a manifest,
+/// whether named directly or through a `package = ...` alias.
+fn ortho_config_versions(manifest: &toml::Value) -> Vec<Option<&str>> {
+    manifest
+        .get("dependencies")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flatten()
+        .filter(|(name, dependency)| names_ortho_config(name, dependency))
+        .map(|(_, dependency)| dependency_version(dependency))
+        .collect()
 }
 
 fn ortho_config_dependency(manifest: &toml::Value) -> Result<&toml::Value> {
