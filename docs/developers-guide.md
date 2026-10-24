@@ -2498,9 +2498,9 @@ target-root declarations in workflow, job or step `env:` blocks and unexpected
 run-block mentions. Its command-line arithmetic holds the 30-character hosted
 root and at least 4,000 characters of `CreateProcess` headroom, including the
 measured 251 root occurrences. Linux must stay genuinely unset; an empty value
-is not unset. The export and restore steps also log the resolved Windows root
-to the step output and job summary so a failed coverage run records both
-transitions.
+is not unset. The export and restore steps log each resolved Windows root to
+the step output and job summary. A failed coverage pass skips the restore step,
+so its run records the export only.
 
 ### Whitaker in continuous integration
 
