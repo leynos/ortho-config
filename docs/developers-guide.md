@@ -86,6 +86,43 @@ file or environment value overrides the inferred default, while an explicit CLI
 value still wins. Run the standard quality gates before requesting a CodeRabbit
 review.
 
+### Feature gates in generated code
+
+Derive output is compiled in the caller's crate. A `#[cfg(feature = "...")]`
+attribute emitted by the derive therefore tests the *caller's* features, which
+an application rarely declares, rather than `ortho_config`'s. Before 0.10.0 the
+`cli_default_as_absent` `CliValueExtractor` implementation was guarded this
+way, so it vanished in any application without its own `serde_json` feature.
+
+The derive now wraps that implementation in
+`ortho_config::__cli_default_as_absent_support! { ... }`, a hidden exported
+macro defined in `ortho_config/src/lib.rs`. `ortho_config` selects one of its
+two definitions with its own `serde_json` feature: the enabled arm emits the
+items unchanged, and the disabled arm emits a single `compile_error!` that
+names the feature to enable. The macro is part of the derive contract, not
+public API; only generated code may call it. Generated code that depends on any
+other `ortho_config` feature must follow the same pattern rather than emitting a
+`cfg` attribute. The decision is recorded in the
+[design decision log](design.md#9-decision-log).
+
+Two tests cover the boundary:
+
+- the generator unit test in
+  `ortho_config_macros/src/derive/generate/ortho_impl.rs` rejects any `feature`
+  test in the expansion; and
+- the documented `cli_default_as_absent` examples, such as
+  `migration-cli-default-after`, compile and run in the generated documentation
+  workspace. That crate declares no features and takes `ortho_config`'s default
+  features, which `workspace_tests.rs` pins, so it stands for a downstream
+  application.
+
+The disabled arm has no test, and none can be written yet: although
+`serde_json` is declared as an optional feature, `ortho_config` itself does not
+currently compile without it (the discovery, file-loading, profile, and merge
+modules use `serde_json` unconditionally). Every supported build therefore
+takes the enabled arm. Add a compile-fail fixture for the diagnostic when the
+crate is made to build with `default-features = false`.
+
 ### Scoped use of `googletest` and `pretty_assertions`
 
 The `googletest` and `pretty_assertions` dev dependencies (decision D9 of
@@ -1134,8 +1171,11 @@ the layout used in Netsuke:
   manifests. It sweeps every TOML fence that depends on `ortho_config` and
   requires the version to equal `CARGO_PKG_VERSION`, so `lading bump`, which
   rewrites the README and user's guide, keeps the contract and the
-  documentation in step. Migration guides are excluded from the sweep because
-  their versions describe a fixed upgrade path;
+  documentation in step. The `[bump.documentation]` globs in `lading.toml` also
+  name `ortho_l10n/README.md`, so its install line moves with each bump; that
+  README is a doctest target of `ortho_l10n` rather than part of this sweep.
+  Migration guides are excluded from the sweep because their versions describe
+  a fixed upgrade path;
 - `documentation_examples_rust_tests.rs` compiles every Rust fence into one
   temporary workspace and runs it. Examples whose contract is their output for
   fixed arguments belong in the table in
