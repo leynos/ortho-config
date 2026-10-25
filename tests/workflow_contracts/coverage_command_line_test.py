@@ -116,38 +116,6 @@ def _chooser() -> dict[str, typ.Any]:
     return found[0]
 
 
-def _linux_chooser() -> dict[str, typ.Any]:
-    """Return the step that isolates Linux coverage from checkout config."""
-    job = workflow_jobs(read_workflows(WORKFLOWS)["ci.yml"])[BUILD_TEST_JOB]
-    found = [
-        step
-        for step in job.get("steps") or []
-        if isinstance(step, dict) and step.get("name") == LINUX_CHOOSER_STEP
-    ]
-    assert len(found) == 1, (
-        f"expected exactly one {LINUX_CHOOSER_STEP!r} step in {BUILD_TEST_JOB}, "
-        f"found {len(found)}"
-    )
-    return found[0]
-
-
-def _coverage_main_chooser() -> dict[str, typ.Any]:
-    """Return the coverage publisher's Linux target isolation step."""
-    job = workflow_jobs(read_workflows(WORKFLOWS)["coverage-main.yml"])[
-        "coverage-upload"
-    ]
-    found = [
-        step
-        for step in job.get("steps") or []
-        if isinstance(step, dict) and step.get("name") == LINUX_CHOOSER_STEP
-    ]
-    assert len(found) == 1, (
-        f"expected exactly one {LINUX_CHOOSER_STEP!r} step in coverage-upload, "
-        f"found {len(found)}"
-    )
-    return found[0]
-
-
 def _chosen_target_directory() -> str:
     """Return the effective coverage directory published on Windows."""
     run = str(_chooser().get("run", ""))
@@ -198,21 +166,40 @@ def test_the_coverage_steps_do_not_set_the_root_themselves() -> None:
             )
 
 
-def test_linux_coverage_target_is_outside_the_checkout() -> None:
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name", "expected_condition"),
+    [
+        pytest.param(
+            "ci.yml",
+            BUILD_TEST_JOB,
+            "${{ matrix.platform == 'linux' }}",
+            id="build-test",
+        ),
+        pytest.param(
+            "coverage-main.yml",
+            "coverage-upload",
+            None,
+            id="coverage-publisher",
+        ),
+    ],
+)
+def test_linux_coverage_targets_are_outside_the_checkout(
+    workflow_name: str, job_name: str, expected_condition: str | None
+) -> None:
     """Nested trybuild projects must not discover the development config."""
-    chooser = _linux_chooser()
+    job = workflow_jobs(read_workflows(WORKFLOWS)[workflow_name])[job_name]
+    found = [
+        step
+        for step in job.get("steps") or []
+        if isinstance(step, dict) and step.get("name") == LINUX_CHOOSER_STEP
+    ]
+    assert len(found) == 1, (
+        f"expected exactly one {LINUX_CHOOSER_STEP!r} step in {job_name}, "
+        f"found {len(found)}"
+    )
+    chooser = found[0]
     run = str(chooser.get("run", ""))
-    assert chooser.get("if") == "${{ matrix.platform == 'linux' }}"
-    assert chooser.get("shell") == "bash"
-    assert '"$RUNNER_TEMP/llvm-cov-target"' in run
-    assert '"CARGO_TARGET_DIR=$coverage_target"' in run
-    assert '"CARGO_LLVM_COV_TARGET_DIR=$coverage_target"' in run
-
-
-def test_coverage_publisher_uses_the_same_external_target_root() -> None:
-    """The baseline publisher runs the same nested trybuild tests as CI."""
-    chooser = _coverage_main_chooser()
-    run = str(chooser.get("run", ""))
+    assert chooser.get("if") == expected_condition
     assert chooser.get("shell") == "bash"
     assert '"$RUNNER_TEMP/llvm-cov-target"' in run
     assert '"CARGO_TARGET_DIR=$coverage_target"' in run
