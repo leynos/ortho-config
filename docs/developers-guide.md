@@ -742,6 +742,19 @@ fixtures and `Slot<T>` values inside `#[derive(ScenarioState)]` structs.
 Cross-scenario mutable sharing is forbidden; use `#[once]` only for expensive,
 effectively read-only infrastructure.
 
+In the `cargo-orthohelp` BDD suite, `steps_cache.rs` owns cache-path resolution
+through its private `recorded_cache_location` helper. Cache read, corruption,
+replacement, and permission steps compose their file operations from the
+returned parent capability and entry name; other step modules should use their
+own feature-specific path logic. In `steps_cmd.rs`, the private
+`run_orthohelp_and_record_output` helper is for invocations whose output is
+checked by a later `Then` step. Steps that assert success or capture cache
+state immediately keep that extra orchestration in the step that owns it. Its
+private `RecordedOutputMode` parameter maps the two BDD invocation modes
+(`cache-free rebuild` and `no-build`) to their fixed CLI arguments; use it only
+for those output-recording invocations, and keep modes that require immediate
+assertions in their owning steps.
+
 Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
 fixture-specific module rather than expanding unrelated step files. Likewise,

@@ -5,6 +5,7 @@ use super::{
     render_manifest,
 };
 use anyhow::{Context, Result, ensure};
+use serial_test::serial;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -56,6 +57,7 @@ fn cargo_dispatch_path_prepends_fixture_to_inherited_entries() -> Result<()> {
 }
 
 #[test]
+#[serial]
 fn independently_owned_workspaces_support_concurrent_interleavings() -> Result<()> {
     std::thread::scope(|scope| {
         let first = scope.spawn(|| exercise_workspace_interleavings("first", "updated-first"));

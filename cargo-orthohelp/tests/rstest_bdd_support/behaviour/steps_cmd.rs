@@ -11,7 +11,11 @@
 //!   [`CACHE_ARGS`] and records cache state.
 //! - **`I rerun cargo-orthohelp with cache for the fixture`** — reruns with
 //!   cache args (no cache-state recording).
-//! - **`I run cargo-orthohelp with --no-build`** — verifies the no-build path.
+//! - **`I attempt cargo-orthohelp with cache for the fixture`** — stores the
+//!   command result without assuming that the cached file can be read.
+//! - **`I invoke cargo-orthohelp in {mode} mode for the fixture`** — selects
+//!   either a cache-free rebuild or a no-build invocation and records output
+//!   for a later assertion.
 //! - **`I run cargo-orthohelp with format ir`** — asserts the `ir` format
 //!   succeeds.
 //!
@@ -22,12 +26,53 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
 use std::process::Command;
+use std::str::FromStr;
 
 use super::steps::{
     OrthoHelpContext, StepResult, get_out_dir, get_workspace_root, scenario_target_dir,
 };
 use super::steps_cache::{CACHE_ARGS, is_not_found_kind, record_cache_state};
 use crate::fixtures;
+
+#[derive(Clone, Copy)]
+enum RecordedOutputMode {
+    CacheFreeRebuild,
+    NoBuild,
+}
+
+impl RecordedOutputMode {
+    const fn args(self) -> &'static [&'static str] {
+        match self {
+            Self::CacheFreeRebuild => &[
+                "--format",
+                "ir",
+                "--package",
+                "orthohelp_fixture",
+                "--locale",
+                "en-US",
+            ],
+            Self::NoBuild => &[
+                "--no-build",
+                "--package",
+                "orthohelp_fixture",
+                "--locale",
+                "en-US",
+            ],
+        }
+    }
+}
+
+impl FromStr for RecordedOutputMode {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "cache-free rebuild" => Ok(Self::CacheFreeRebuild),
+            "no-build" => Ok(Self::NoBuild),
+            _ => Err("mode must be cache-free rebuild or no-build"),
+        }
+    }
+}
 
 #[given("a temporary output directory")]
 fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
@@ -82,20 +127,17 @@ fn rerun_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
     run_orthohelp_with_cache_args(orthohelp_context)
 }
 
-#[when("I run cargo-orthohelp with no-build for the fixture")]
-fn run_with_no_build(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let output = run_orthohelp(
-        orthohelp_context,
-        &[
-            "--no-build",
-            "--package",
-            "orthohelp_fixture",
-            "--locale",
-            "en-US",
-        ],
-    )?;
-    orthohelp_context.last_output.set(output);
-    Ok(())
+#[when("I attempt cargo-orthohelp with cache for the fixture")]
+fn attempt_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    run_orthohelp_and_record_output(orthohelp_context, CACHE_ARGS)
+}
+
+#[when("I invoke cargo-orthohelp in {mode} mode for the fixture")]
+fn invoke_and_record_output(
+    orthohelp_context: &mut OrthoHelpContext,
+    mode: RecordedOutputMode,
+) -> StepResult<()> {
+    run_orthohelp_and_record_output(orthohelp_context, mode.args())
 }
 
 #[when("I run cargo-orthohelp with format ir for the fixture")]
@@ -135,4 +177,10 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
         .arg(out_dir.as_str())
         .args(args);
     Ok(command.output()?)
+}
+
+fn run_orthohelp_and_record_output(ctx: &mut OrthoHelpContext, args: &[&str]) -> StepResult<()> {
+    let output = run_orthohelp(ctx, args)?;
+    ctx.last_output.set(output);
+    Ok(())
 }

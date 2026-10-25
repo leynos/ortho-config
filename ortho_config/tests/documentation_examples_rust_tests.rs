@@ -1,4 +1,8 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
+//!
+//! The Cargo-backed tests run serially because each owns an isolated target
+//! directory; the workspace interleaving test still exercises its two own
+//! builds concurrently.
 
 mod documentation_examples;
 #[path = "documentation_examples/env_alias_chain.rs"]
@@ -11,6 +15,7 @@ mod workspace;
 use anyhow::{Context, Result, ensure};
 use documentation_examples::{DocumentedExample, documented_example};
 use env_alias_chain::assert_env_alias_chain;
+use serial_test::serial;
 use std::path::{Path, PathBuf};
 use workspace::{DependencyAlias, EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile};
 
@@ -33,6 +38,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
 
 /// Verifies the public Rust examples compile and behave as documented.
 #[test]
+#[serial]
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     for id in STANDARD_RUST_EXAMPLES {
@@ -64,6 +70,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 }
 
 #[test]
+#[serial]
 fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {
     let example = documented_example("guide-cargo-external-subcommand")?;
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
@@ -215,6 +222,7 @@ fn assert_tracing_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
 }
 
 #[test]
+#[serial]
 fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
     workspace.add_binary(documented_example("guide-alias-derive")?)?;

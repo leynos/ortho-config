@@ -48,7 +48,41 @@ impl Default for ProcessLimits {
 
 /// Run a command with the documentation-test timeout and output limits.
 pub(super) fn run_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
-    run_command_with_limits(command, operation, ProcessLimits::default())
+    run_command_with_timeout(command, operation, DEFAULT_TIMEOUT)
+}
+
+/// Run a command with the documentation-test output limit and a caller timeout.
+///
+/// Cargo builds can spend time waiting for shared compiler admission, so callers
+/// may give those builds a longer bound without extending ordinary subprocesses.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::process::Command;
+/// use std::time::Duration;
+///
+/// let mut cargo = Command::new("cargo");
+/// let output = run_command_with_timeout(
+///     &mut cargo,
+///     Operation("build fixture"),
+///     Duration::from_secs(1_800),
+/// )?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub(super) fn run_command_with_timeout(
+    command: &mut Command,
+    operation: Operation<'_>,
+    timeout: Duration,
+) -> Result<Output> {
+    run_command_with_limits(
+        command,
+        operation,
+        ProcessLimits {
+            timeout,
+            ..ProcessLimits::default()
+        },
+    )
 }
 
 fn run_command_with_limits(
@@ -169,7 +203,10 @@ fn join_reader(
 mod tests {
     //! Regression coverage for subprocess output and duration bounds.
 
-    use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
+    use super::{
+        Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits,
+        run_command_with_timeout,
+    };
     use anyhow::{Context, Result};
     use rstest::rstest;
     use std::io::Write;
@@ -198,13 +235,10 @@ mod tests {
     fn stalled_process_is_terminated_at_the_deadline() {
         let mut command = probe_command("bounded_timeout_probe")
             .expect("the bounded-timeout probe command should be available");
-        let error = run_command_with_limits(
+        let error = run_command_with_timeout(
             &mut command,
             Operation("run timeout probe"),
-            ProcessLimits {
-                timeout: Duration::from_millis(100),
-                output_bytes: 256,
-            },
+            Duration::from_millis(100),
         )
         .expect_err("stalled probe should time out");
         assert!(format!("{error:#}").contains("run timeout probe: subprocess timed out"));

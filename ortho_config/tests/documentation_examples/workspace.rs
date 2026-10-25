@@ -5,6 +5,7 @@ use cap_std::{ambient_authority, fs::Dir};
 use std::ffi::{OsStr, OsString};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output};
+use std::time::Duration;
 use tempfile::TempDir;
 
 use super::documentation_examples::{DocumentedExample, is_valid_example_id};
@@ -13,6 +14,7 @@ use crate::process_runner::{self, Operation};
 pub(super) mod cargo_runner;
 
 const CHILD_ENV_ALLOWLIST: &[&str] = &["SYSTEMROOT", "WINDIR"];
+const DOCUMENTED_BUILD_TIMEOUT: Duration = Duration::from_secs(3_600);
 
 /// A Cargo dependency alias used by the generated example package.
 pub(super) struct DependencyAlias<'a>(pub(super) &'a str);
@@ -119,7 +121,11 @@ impl ExampleWorkspace {
     pub fn build(&mut self) -> Result<()> {
         let mut command = self.cargo_command()?;
         command.args(["build", "--offline", "--bins"]);
-        let output = process_runner::run_command(&mut command, Operation("build documented Rust"))?;
+        let output = process_runner::run_command_with_timeout(
+            &mut command,
+            Operation("build documented Rust"),
+            DOCUMENTED_BUILD_TIMEOUT,
+        )?;
         ensure!(
             output.status.success(),
             "documented Rust failed to compile:\n{}",

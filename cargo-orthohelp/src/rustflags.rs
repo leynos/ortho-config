@@ -191,3 +191,7 @@ mod tests {
 #[cfg(test)]
 #[path = "rustflags_proptests.rs"]
 mod proptests;
+
+#[cfg(test)]
+#[path = "rustflags_boundary_tests.rs"]
+mod boundary_tests;
