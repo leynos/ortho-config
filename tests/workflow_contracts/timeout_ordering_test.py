@@ -73,7 +73,7 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: drifting away from the sample it was sized against.
 #:
 #: The largest allowance is 1,200 s for the serialized boundary binary. Its
-#: package-set tests can run two child Cargo commands, each bounded at 420 s.
+#: package-set tests can run two child Cargo commands, each bounded at 520 s.
 #: Trybuild, `rstest_bdd`, and documentation scenarios each allow 960 s, or
 #: eight warning periods of 120 s. The trybuild allowance was 600 s until that
 #: class outgrew it --

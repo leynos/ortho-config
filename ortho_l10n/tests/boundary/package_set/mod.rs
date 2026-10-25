@@ -65,19 +65,19 @@ use std::time::Duration;
 /// Each invocation is bounded on its own, and every entry in
 /// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
 /// inside nextest's per-test allowance with room for the root checks around
-/// them: 2 x 420 s is 840 s of the 1,200 s boundary allowance, leaving 360 s.
-/// The figure is derived from the allowance rather than chosen for comfort,
-/// because a bound that does not fit never fires: nextest stops the test
-/// first, and the error naming the invocation that hung is never printed.
+/// them: 2 x 520 s is 1,040 s of the 1,200 s boundary allowance. Reserve 120 s
+/// for unpacking and root checks, with 40 s left as scheduling margin. A recent
+/// full test run exhausted the former 420 s limit after both archives had
+/// been written but before the packaging command returned. The added 100 s
+/// give verification more time while keeping a finite child deadline.
 ///
 /// The second invocation reuses the first's target directory and is much
 /// shorter. For scale, the pair took 244 s on this host with the packaging
 /// target removed, which is an upper bound rather than a build time: it
 /// includes waiting for compile-admission slots, which the child inherits. A
-/// recent gate's first packaging invocation exceeded 240 s, while another
-/// nested Cargo command waited nearly four minutes on the shared cache. The
-/// 420 s bound leaves room for those queues without removing the deadline.
-const PACKAGE_DEADLINE: Duration = Duration::from_secs(420);
+/// The 520 s bound remains finite while leaving room for the measured queue
+/// and verification work.
+const PACKAGE_DEADLINE: Duration = Duration::from_secs(520);
 
 /// The `cargo package` invocations that together produce all three roots.
 ///

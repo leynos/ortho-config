@@ -45,6 +45,9 @@ BINARY: typ.Final[str] = "boundary"
 GROUP: typ.Final[str] = "boundary_packaging"
 CRATE: typ.Final[str] = "ortho_l10n"
 
+#: Time reserved inside nextest's allowance for unpacking and root checks.
+PACKAGING_REMAINDER_SECONDS: typ.Final[int] = 120
+
 #: The manifest declaring the binary, and the fixture declaring its deadline.
 MANIFEST: typ.Final[pathlib.Path] = REPOSITORY_ROOT / CRATE / "Cargo.toml"
 PACKAGE_SET: typ.Final[pathlib.Path] = (
@@ -196,12 +199,14 @@ def test_the_packaging_deadline_fits_inside_the_allowance() -> None:
     )
 
     allowance = _boundary_allowance()
-    assert deadline * invocations < allowance, (
+    required = deadline * invocations + PACKAGING_REMAINDER_SECONDS
+    assert required < allowance, (
         f"each packaging invocation is bounded at {deadline}s and {invocations} "
-        f"share one test, so they need {deadline * invocations}s of a "
-        f"{allowance:.0f}s per-test allowance. A bound that does not fit is never "
-        f"reached: nextest stops the test first and the error naming the hung "
-        f"invocation is lost"
+        f"share one test, so they and the {PACKAGING_REMAINDER_SECONDS}s "
+        f"unpacking/check reserve need {required}s of a {allowance:.0f}s "
+        f"per-test allowance. A bound that does not fit is never reached: "
+        f"nextest stops the test first and the error naming the hung invocation "
+        "is lost"
     )
 
 
