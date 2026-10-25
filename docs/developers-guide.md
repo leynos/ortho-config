@@ -163,11 +163,12 @@ only for nextest.
 
 The group also gives its nested Cargo commands room to wait for the shared
 package-cache lock. One packaged test runs both `cargo package` invocations,
-each bounded at 420 s by `PACKAGE_DEADLINE`; consumer commands are bounded at
-420 s by `CARGO_DEADLINE`. The binary's 1,200 s per-test allowance leaves room
-for these multi-command contracts to report a child timeout, while the 2,300 s
-whole-run limit still bounds the suite. `boundary_packaging_test.py` reads the
-group, manifest and both deadlines so their constraints cannot drift apart.
+each bounded at 520 s by `PACKAGE_DEADLINE`; consumer commands are bounded at
+420 s by `CARGO_DEADLINE`. The binary's 1,200 s per-test allowance leaves 160 s
+after both package deadlines: 120 s for unpacking and root checks, plus 40 s of
+scheduling margin. The 2,300 s whole-run limit still bounds the suite.
+`boundary_packaging_test.py` reads the group, manifest and both deadlines so
+their constraints cannot drift apart.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -2761,8 +2762,12 @@ Notes on individual rows:
   `coverage-main.yml`. The job-level `RUSTFLAGS: -D warnings` displaces the
   configuration, so a coverage build uses LLVM and has neither Cranelift,
   `mold` nor the parallel frontend. The custom cfg is also absent, so the
-  unwind-dependent mutex-poisoning test runs in coverage. On the Windows leg
-  the coverage steps also run under a short `CARGO_TARGET_DIR`; see
+  unwind-dependent mutex-poisoning test runs in coverage. The Linux coverage
+  jobs in `ci.yml` and `coverage-main.yml` put the target under `RUNNER_TEMP`
+  and set `CARGO_TARGET_DIR` and `CARGO_LLVM_COV_TARGET_DIR` to the same path.
+  This keeps trybuild's nested Cargo projects from discovering the checkout's
+  development configuration. The Windows leg in `ci.yml` also uses a drive-root
+  path to keep compiler command lines under the `CreateProcess` limit; see
   [The Windows coverage command line](#the-windows-coverage-command-line).
 - Release builds (`release.yml`, job `build-assets`) and packaging (`ci.yml`,
   job `binstall-packaging`) set the same explicit job-level value and take the
@@ -2847,14 +2852,15 @@ drive from `RUNNER_TEMP`, then sets both `CARGO_TARGET_DIR` and
 LLVM-specific value prevents the action from appending the suffix again. The
 effective `D:\llvm-cov-target` is outside the checkout, shortens each of the
 302 measured occurrences by 12 characters, and leaves 2,894 characters of
-headroom. Two consequences are easy to undo by accident:
+headroom. Linux also sets both variables to one target directory under
+`RUNNER_TEMP`; there the reason is to keep trybuild's nested Cargo projects
+outside the checkout so they cannot discover its Cranelift development flags
+while compiling with LLVM coverage. Two consequences are easy to undo by
+accident:
 
 - The coverage steps must not set either target-directory variable themselves.
-  Assigning them per step needs the Linux cells to resolve to empty strings, and
-  `cargo-llvm-cov` refuses empty values rather than reading them as unset.
-  Per-step values also make the coverage legs read a matrix value their
-  publisher does not, which the CV-005 pairing rejects. Linux keeps both
-  variables unset and uses the action default.
+  The platform-specific chooser steps publish them through `GITHUB_ENV`, with
+  equal values so `cargo-llvm-cov` does not append its default suffix again.
 - The selected directory must stay a direct child of the drive root and
   outside the checkout. A drive-root value prefixes every source path in
   trybuild diagnostics; a longer directory spends command-line headroom once

@@ -15,10 +15,10 @@ normally appends ``llvm-cov-target`` to ``CARGO_TARGET_DIR``, while trybuild
 independently reads ``CARGO_TARGET_DIR`` through Cargo metadata.
 
 This module holds that fix's shape so a later edit cannot quietly restore the
-long root, make the drive root an ancestor of source paths during trybuild
-normalization, scope the change to a platform that does not need it, hand
-Linux an empty value that ``cargo-llvm-cov`` rejects, or pick a root so long
-that the leg fails again as the workspace grows.
+long Windows root, make the drive root an ancestor of source paths during
+trybuild normalization, omit Linux's separate target root (which keeps nested
+Cargo projects from discovering the development configuration), or pick a
+Windows root so long that the leg fails again as the workspace grows.
 
 The arithmetic re-derives the measured invocation with its effective target
 directory substituted, so the headroom assertion is a statement about this
@@ -87,6 +87,7 @@ BUILD_TEST_JOB: typ.Final[str] = "build-test"
 
 #: The step that republishes the chosen root through ``GITHUB_ENV``.
 CHOOSER_STEP: typ.Final[str] = "Choose the coverage target root"
+LINUX_CHOOSER_STEP: typ.Final[str] = "Choose the Linux coverage target root"
 
 
 def _coverage_steps() -> list[dict[str, typ.Any]]:
@@ -110,6 +111,38 @@ def _chooser() -> dict[str, typ.Any]:
     ]
     assert len(found) == 1, (
         f"expected exactly one {CHOOSER_STEP!r} step in {BUILD_TEST_JOB}, "
+        f"found {len(found)}"
+    )
+    return found[0]
+
+
+def _linux_chooser() -> dict[str, typ.Any]:
+    """Return the step that isolates Linux coverage from checkout config."""
+    job = workflow_jobs(read_workflows(WORKFLOWS)["ci.yml"])[BUILD_TEST_JOB]
+    found = [
+        step
+        for step in job.get("steps") or []
+        if isinstance(step, dict) and step.get("name") == LINUX_CHOOSER_STEP
+    ]
+    assert len(found) == 1, (
+        f"expected exactly one {LINUX_CHOOSER_STEP!r} step in {BUILD_TEST_JOB}, "
+        f"found {len(found)}"
+    )
+    return found[0]
+
+
+def _coverage_main_chooser() -> dict[str, typ.Any]:
+    """Return the coverage publisher's Linux target isolation step."""
+    job = workflow_jobs(read_workflows(WORKFLOWS)["coverage-main.yml"])[
+        "coverage-upload"
+    ]
+    found = [
+        step
+        for step in job.get("steps") or []
+        if isinstance(step, dict) and step.get("name") == LINUX_CHOOSER_STEP
+    ]
+    assert len(found) == 1, (
+        f"expected exactly one {LINUX_CHOOSER_STEP!r} step in coverage-upload, "
         f"found {len(found)}"
     )
     return found[0]
@@ -151,30 +184,43 @@ def _projected_command_line(target_directory: str) -> int:
 
 
 def test_the_coverage_steps_do_not_set_the_root_themselves() -> None:
-    """The root arrives from the chooser, so Linux never sees a value.
+    """Platform chooser steps publish roots for the coverage actions.
 
-    Assigning either variable per step needs the Linux cells to resolve to an
-    empty string, and cargo-llvm-cov refuses empty target-directory values. It
-    also makes the coverage legs read a matrix value the publisher does not,
-    which the CV-005 pairing rejects. Both problems disappear when the only
-    assignments are in a chooser step that runs on Windows alone.
+    Keeping assignments in the chooser means each platform publishes matching
+    values before either coverage action runs.
     """
     for step in _coverage_steps():
         environment = step.get("env") or {}
         for variable in ("CARGO_TARGET_DIR", "CARGO_LLVM_COV_TARGET_DIR"):
             assert variable not in environment, (
                 f"{step.get('name')!r} sets {variable} itself; the chooser "
-                f"is the sole assignment so the Linux cells stay unset"
+                "supplies both coverage roots"
             )
 
 
-def test_linux_is_left_completely_unset() -> None:
-    """The Linux leg keeps cargo-llvm-cov's default instead of an empty value.
+def test_linux_coverage_target_is_outside_the_checkout() -> None:
+    """Nested trybuild projects must not discover the development config."""
+    chooser = _linux_chooser()
+    run = str(chooser.get("run", ""))
+    assert chooser.get("if") == "${{ matrix.platform == 'linux' }}"
+    assert chooser.get("shell") == "bash"
+    assert '"$RUNNER_TEMP/llvm-cov-target"' in run
+    assert '"CARGO_TARGET_DIR=$coverage_target"' in run
+    assert '"CARGO_LLVM_COV_TARGET_DIR=$coverage_target"' in run
 
-    ``cargo-llvm-cov`` refuses an empty ``CARGO_TARGET_DIR`` outright, so a
-    fix that assigned the default path to Linux would break the leg it was
-    not meant to touch.
-    """
+
+def test_coverage_publisher_uses_the_same_external_target_root() -> None:
+    """The baseline publisher runs the same nested trybuild tests as CI."""
+    chooser = _coverage_main_chooser()
+    run = str(chooser.get("run", ""))
+    assert chooser.get("shell") == "bash"
+    assert '"$RUNNER_TEMP/llvm-cov-target"' in run
+    assert '"CARGO_TARGET_DIR=$coverage_target"' in run
+    assert '"CARGO_LLVM_COV_TARGET_DIR=$coverage_target"' in run
+
+
+def test_windows_chooser_remains_scoped_to_windows() -> None:
+    """Only Windows needs the drive-root path for command-line headroom."""
     chooser = _chooser()
     assert chooser.get("if") == "${{ matrix.platform == 'windows' }}", (
         "the chooser must be scoped to Windows; it runs on "

@@ -103,6 +103,17 @@ jobs:
         with:
           bun-version: '1.2.21'
 
+      - name: Choose the Linux coverage target root
+        # Trybuild creates nested Cargo projects under its target directory.
+        # Keeping that directory outside this checkout prevents those projects
+        # from discovering .cargo/config.toml and inheriting Cranelift flags
+        # alongside LLVM coverage instrumentation.
+        shell: bash
+        run: |
+          coverage_target="$RUNNER_TEMP/llvm-cov-target"
+          echo "CARGO_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+          echo "CARGO_LLVM_COV_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job); it writes the authoritative baseline that

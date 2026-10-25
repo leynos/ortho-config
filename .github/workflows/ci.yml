@@ -295,12 +295,10 @@ jobs:
         # It is outside the checkout, keeps the command line short, and does
         # not become an ancestor of source paths during trybuild normalization.
         #
-        # Linux keeps the default, whose limit is MAX_ARG_STRLEN, an order of
-        # magnitude further away.
-        #
-        # Scoped to the coverage steps because nothing else in the job builds
-        # under `llvm-cov-target`: lint and typecheck ran before this, and the
-        # only later step that runs cargo is the PowerShell wrapper check.
+        # Scoped to Windows because Linux uses a separate chooser only to put
+        # trybuild's nested Cargo projects outside this checkout's .cargo
+        # configuration; Windows additionally needs the drive-root path to
+        # stay below CreateProcess's command-line limit.
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
         run: |
@@ -309,17 +307,27 @@ jobs:
           "CARGO_TARGET_DIR=$coverageTarget" >> $env:GITHUB_ENV
           "CARGO_LLVM_COV_TARGET_DIR=$coverageTarget" >> $env:GITHUB_ENV
 
+      - name: Choose the Linux coverage target root
+        # Trybuild creates nested Cargo projects under its target directory.
+        # Keeping that directory outside the checkout prevents those projects
+        # from discovering .cargo/config.toml and inheriting Cranelift flags
+        # alongside LLVM coverage instrumentation.
+        if: ${{ matrix.platform == 'linux' }}
+        shell: bash
+        run: |
+          coverage_target="$RUNNER_TEMP/llvm-cov-target"
+          echo "CARGO_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+          echo "CARGO_LLVM_COV_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
         #
-        # Both target-directory variables arrive from the chooser, which
-        # runs on Windows only, so Linux keeps cargo-llvm-cov's default.
-        # Setting them here instead would need empty strings on Linux, and
-        # cargo-llvm-cov rejects empty values rather than reading them as
-        # "unset". On Windows the LLVM-specific value matches the Cargo target
-        # directory so the action does not append `llvm-cov-target` again.
+        # Both target-directory variables arrive from the platform-specific
+        # chooser. The values match so cargo-llvm-cov does not append
+        # `llvm-cov-target` again. Linux keeps nested trybuild projects outside
+        # this checkout; Windows also keeps the compiler command line short.
         uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           output-path: lcov-serde-saphyr.info
