@@ -187,15 +187,16 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # root is removed and unpacked, so one process can replace a root another is
 # reading. Serialize the binary.
 #
-# That also settles the per-test allowance. Two packaging invocations share one
-# test, and each is bounded at 240 s
-# (`ortho_l10n/tests/boundary/package_set`), so the pair fits inside the 600 s
-# base allowance with 120 s for the root checks around them. A bound that did
-# not fit would never fire: nextest would stop the test first, and the error
-# naming the invocation that hung would never be printed.
+# Several boundary tests run multiple nested Cargo commands, which can wait on
+# the shared package-cache lock held by other worktrees. The package set uses
+# two invocations bounded at 420 s each, and consumer commands use a 420 s child
+# deadline. Give this serialized binary a 1,200 s per-test ceiling so those
+# child bounds can report their own failures after a long queue wait. The
+# existing 2,300 s global timeout still bounds the whole test run.
 #
 # `make boundary` and `make test` do not need this entry: each starts one
 # process for the binary, which initializes the cache once and reuses it.
 [[profile.default.overrides]]
 filter = 'binary(boundary)'
 test-group = 'boundary_packaging'
+slow-timeout = { period = "120s", terminate-after = 10 }
