@@ -373,9 +373,8 @@ starts from the struct's `Default` implementation instead, so implement
 
 Earlier releases rejected `cli_default_as_absent` in any crate that did not
 declare its own `serde_json` feature, because the derive tested the calling
-crate's features. That check now reads OrthoConfig's own feature, so an
-application that added a `serde_json` feature only to satisfy it can remove
-that feature.
+crate's features. The derive no longer tests features, so an application that
+added a `serde_json` feature only to satisfy it can remove that feature.
 
 String `default_value` is parsed by a synthetic clap argument using the same
 parser metadata as the field. This preserves behaviour for scalar primitive and

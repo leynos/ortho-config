@@ -135,8 +135,8 @@ fn assert_boolean_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
 /// The inferred clap default sits below the environment and explicit flags.
 ///
 /// Compiling `migration-cli-default-after` in the example crate is also the
-/// downstream regression for the derive's `cli_default_as_absent` feature gate;
-/// `workspace_tests` pins the crate shape that makes it one.
+/// downstream regression for `cli_default_as_absent` expanding without a
+/// feature test; `workspace_tests` pins the crate shape that makes it one.
 fn assert_cli_default_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
     const ID: &str = "migration-cli-default-after";
     assert_run(

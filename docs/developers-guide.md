@@ -92,36 +92,34 @@ Derive output is compiled in the caller's crate. A `#[cfg(feature = "...")]`
 attribute emitted by the derive therefore tests the *caller's* features, which
 an application rarely declares, rather than `ortho_config`'s. Before 0.10.0 the
 `cli_default_as_absent` `CliValueExtractor` implementation was guarded this
-way, so it vanished in any application without its own `serde_json` feature.
+way, and its `not(feature = "serde_json")` arm emitted a `compile_error!` in
+every application without its own `serde_json` feature.
 
-The derive now wraps that implementation in
-`ortho_config::__cli_default_as_absent_support! { ... }`, a hidden exported
-macro defined in `ortho_config/src/lib.rs`. `ortho_config` selects one of its
-two definitions with its own `serde_json` feature: the enabled arm emits the
-items unchanged, and the disabled arm emits a single `compile_error!` that
-names the feature to enable. The macro is part of the derive contract, not
-public API; only generated code may call it. Generated code that depends on any
-other `ortho_config` feature must follow the same pattern rather than emitting a
-`cfg` attribute. The decision is recorded in the
+The derive now emits that implementation with no feature test. This is sound
+only because `ortho_config` does not build without its `serde_json` feature:
+although the feature is declared optional, the discovery, file-loading,
+profile, and merge modules use `serde_json` unconditionally. A gate whose
+disabled arm can never be compiled would be untestable dead code.
+
+Do not emit `cfg` attributes for `ortho_config` features from the derive. If
+generated code must depend on a feature that `ortho_config` can genuinely be
+built without, select the code inside `ortho_config` instead, for example with
+a hidden `#[macro_export]` macro defined once per feature state, and add a
+compile-fail fixture that builds `ortho_config` without the feature. The same
+applies to `cli_default_as_absent` if `serde_json` is ever made genuinely
+optional. The decision is recorded in the
 [design decision log](design.md#9-decision-log).
 
-Two tests cover the boundary:
+Two tests cover the current boundary:
 
 - the generator unit test in
-  `ortho_config_macros/src/derive/generate/ortho_impl.rs` rejects any `feature`
-  test in the expansion; and
+  `ortho_config_macros/src/derive/generate/ortho_impl.rs` requires the
+  implementation and rejects any `cfg` or `compile_error!` in the expansion; and
 - the documented `cli_default_as_absent` examples, such as
   `migration-cli-default-after`, compile and run in the generated documentation
   workspace. That crate declares no features and takes `ortho_config`'s default
   features, which `workspace_tests.rs` pins, so it stands for a downstream
   application.
-
-The disabled arm has no test, and none can be written yet: although
-`serde_json` is declared as an optional feature, `ortho_config` itself does not
-currently compile without it (the discovery, file-loading, profile, and merge
-modules use `serde_json` unconditionally). Every supported build therefore
-takes the enabled arm. Add a compile-fail fixture for the diagnostic when the
-crate is made to build with `default-features = false`.
 
 ### Scoped use of `googletest` and `pretty_assertions`
 

@@ -57,11 +57,11 @@ fn windows_dependency_path_produces_valid_toml() {
 /// features of its own and takes `ortho_config`'s default features.
 ///
 /// That shape is what makes the compiled `cli_default_as_absent` examples a
-/// regression test for the derive's feature gate. Derive output compiles in
-/// the caller's crate, so a gate written as `cfg(feature = "serde_json")`
-/// there tests this crate's features, which do not exist, while
-/// `ortho_config`'s `serde_json` default is enabled. A `[features]` table here,
-/// or disabled defaults, would hide that boundary.
+/// downstream regression test for that attribute. Derive output compiles in
+/// the caller's crate, so a `cfg(feature = "serde_json")` test in it would
+/// read this crate's features, which do not exist, while `ortho_config`'s
+/// `serde_json` default is enabled. A `[features]` table here, or disabled
+/// defaults, would hide that boundary.
 #[test]
 fn example_crate_has_no_features_and_default_ortho_config() {
     let generated = manifest(DependencyAlias("ortho_config"));

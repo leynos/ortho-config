@@ -1437,16 +1437,15 @@ generated documentation, generated agent context, and enforceable CLI policy.
   ADR-0010 records the attribute shape, the no-inference rule, the pinned
   bypass/dry-run flag grammar, the non-interactive/bypass contradiction rule,
   and the IR version-skew contract.
-- **Gate generated feature-dependent code in the runtime crate (2026-10-25):**
+- **Never test `ortho_config` features in derive output (2026-10-25):**
   Derive output compiles in the caller's crate, so a `#[cfg(feature = ...)]`
   attribute in generated code tests the caller's features, not
-  `ortho_config`'s. The `cli_default_as_absent` support, which needs
-  `ortho_config`'s `serde_json` feature, is therefore wrapped in the hidden
-  `ortho_config::__cli_default_as_absent_support!` macro, whose definition
-  `ortho_config` selects with its own feature. A disabled feature yields one
-  `compile_error!` naming the feature to enable. Any future generated code that
-  depends on an `ortho_config` feature uses the same pattern; the developers'
-  guide records the contract and its tests.
+  `ortho_config`'s. The `cli_default_as_absent` extractor is therefore emitted
+  unconditionally, which is sound because `ortho_config` does not build without
+  its `serde_json` feature. Generated code that must depend on a feature
+  `ortho_config` can genuinely be built without is selected inside
+  `ortho_config`, with a compile-fail fixture for the disabled state; the
+  developers' guide records the contract and its tests.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
