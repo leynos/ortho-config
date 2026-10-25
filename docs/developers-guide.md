@@ -86,6 +86,41 @@ file or environment value overrides the inferred default, while an explicit CLI
 value still wins. Run the standard quality gates before requesting a CodeRabbit
 review.
 
+### Feature gates in generated code
+
+Derive output is compiled in the caller's crate. A `#[cfg(feature = "...")]`
+attribute emitted by the derive therefore tests the *caller's* features, which
+an application rarely declares, rather than `ortho_config`'s. Before 0.10.0 the
+`cli_default_as_absent` `CliValueExtractor` implementation was guarded this
+way, and its `not(feature = "serde_json")` arm emitted a `compile_error!` in
+every application without its own `serde_json` feature.
+
+The derive now emits that implementation with no feature test. This is sound
+only because `ortho_config` does not build without its `serde_json` feature:
+although the feature is declared optional, the discovery, file-loading,
+profile, and merge modules use `serde_json` unconditionally. A gate whose
+disabled arm can never be compiled would be untestable dead code.
+
+Do not emit `cfg` attributes for `ortho_config` features from the derive. If
+generated code must depend on a feature that `ortho_config` can genuinely be
+built without, select the code inside `ortho_config` instead, for example with
+a hidden `#[macro_export]` macro defined once per feature state, and add a
+compile-fail fixture that builds `ortho_config` without the feature. The same
+applies to `cli_default_as_absent` if `serde_json` is ever made genuinely
+optional. The decision is recorded in the
+[design decision log](design.md#9-decision-log).
+
+Two tests cover the current boundary:
+
+- the generator unit test in
+  `ortho_config_macros/src/derive/generate/ortho_impl.rs` requires the
+  implementation and rejects any `cfg` or `compile_error!` in the expansion; and
+- the documented `cli_default_as_absent` examples, such as
+  `migration-cli-default-after`, compile and run in the generated documentation
+  workspace. That crate declares no features and takes `ortho_config`'s default
+  features, which `workspace_tests.rs` pins, so it stands for a downstream
+  application.
+
 ### Scoped use of `googletest` and `pretty_assertions`
 
 The `googletest` and `pretty_assertions` dev dependencies (decision D9 of
@@ -764,7 +799,9 @@ Profile support is opt-in at the struct level through the derive attribute
 merge order, gains no `--profile` flag, and treats a `[profile.*]` table in a
 shared file as an ordinary key rather than extracting it. The accepted design is
 [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md); the user-facing
-view is the [Profiles section](users-guide.md#profiles) of the users' guide.
+view is the
+[named profiles section](users-guide.md#switch-between-named-profiles) of the
+users' guide.
 
 Opted-in structs merge five tiers, lowest to highest: built-in defaults,
 configuration files, the selected profile, environment variables, and CLI
@@ -964,12 +1001,12 @@ cargo test -p ortho_config --test <target>
 
 ### Public documentation examples
 
-The root README, `docs/users-guide.md`, and `docs/cargo-orthohelp-api-guide.md`
-are executable documentation. Every fenced block in those files must have a
-unique `tested-example` marker on the immediately preceding line. The
-documentation-example test support owns parsing and lookup for these examples.
-It is test infrastructure only; production code, other crates, and examples
-must not depend on it.
+The root README, `docs/users-guide.md`, `docs/cargo-orthohelp-api-guide.md`, and
+`docs/v0-10-0-migration-guide.md` are executable documentation. Every fenced
+block in those files must have a unique `tested-example` marker on the
+immediately preceding line. The documentation-example test support owns parsing
+and lookup for these examples. It is test infrastructure only; production code,
+other crates, and examples must not depend on it.
 
 The loader is shared by the documentation integration-test targets. Each target
 loads and parses the documents once, then borrows examples from its cached
@@ -1121,6 +1158,46 @@ Cargo retains compiler wrappers, job limits, warning enforcement, coverage
 settings, and allow-listed native build inputs. Application secrets and
 arbitrary application variables are excluded. Run-file paths must contain
 normal relative components only.
+
+The contracts are split across integration-test targets by concern, following
+the layout used in Netsuke:
+
+- `documentation_examples_tests.rs` owns the closed identifier registry, the
+  packaging contract for the README, and static contracts for data fences such
+  as configuration files, JSON documents, and command spellings;
+- `documentation_installation_tests.rs` owns installation and upgrade
+  manifests. It sweeps every TOML fence that depends on `ortho_config` and
+  requires the version to equal `CARGO_PKG_VERSION`, so `lading bump`, which
+  rewrites the README and user's guide, keeps the contract and the
+  documentation in step. The `[bump.documentation]` globs in `lading.toml` also
+  name `ortho_l10n/README.md`, so its install line moves with each bump; that
+  README is a doctest target of `ortho_l10n` rather than part of this sweep.
+  Migration guides are excluded from the sweep because their versions describe
+  a fixed upgrade path;
+- `documentation_examples_rust_tests.rs` compiles every Rust fence into one
+  temporary workspace and runs it. Examples whose contract is their output for
+  fixed arguments belong in the table in
+  `documentation_examples/simple_runs.rs`; examples that need fixture files,
+  environment overrides, or transcripts belong in a feature-named flow module
+  such as `guide_flows.rs`, `migration_flows.rs`, or `cargo_flows.rs`; and
+- `cargo-orthohelp/tests/documented_command.rs` runs the documented
+  `cargo orthohelp` command flows against workspace packages, using the
+  executable Cargo has already built for the package, and checks the artefacts
+  and streams they produce. The command text itself is pinned by the static
+  contracts, so the executed flags and the published flags cannot drift apart.
+
+A console transcript is tested in two halves: assert the exact published text,
+then run the binary under the conditions each command line names and compare
+the output with the lines that follow it. Placeholder package names in command
+examples, such as `my-cli`, are mapped onto workspace fixture packages whose
+manifests carry the documented configuration.
+
+The `ortho_config` crate publishes the repository README itself: its manifest
+sets `readme = "../README.md"`, and `cargo package` copies that file into the
+crate root. Do not add `ortho_config/README.md`; it would collide with the
+copied file and reintroduce a second README to keep in step. Because crates.io
+and docs.rs render the README away from the repository, every link in it must
+be absolute, which `repository_readme_links_are_absolute` enforces.
 
 ### Production bridge build ownership
 

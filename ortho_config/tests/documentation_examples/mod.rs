@@ -15,6 +15,7 @@ const DOCUMENT_PATHS: &[&str] = &[
     "README.md",
     "docs/users-guide.md",
     "docs/cargo-orthohelp-api-guide.md",
+    "docs/v0-10-0-migration-guide.md",
 ];
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
 const MARKER_SUFFIX: &str = " -->";

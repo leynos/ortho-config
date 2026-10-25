@@ -150,8 +150,13 @@ fn generate_cli_value_extractor_impl(
 
     let prune_nulls_helpers = generate_prune_nulls_helpers();
 
+    // Derive output compiles in the caller's crate, so a
+    // `#[cfg(feature = "serde_json")]` guard here would test the caller's
+    // features instead of OrthoConfig's. `ortho_config` does not build without
+    // its `serde_json` feature, so the implementation is emitted
+    // unconditionally; see "Feature gates in generated code" in the
+    // developers' guide before adding a feature-dependent expansion.
     quote! {
-        #[cfg(feature = "serde_json")]
         impl #krate::CliValueExtractor for #config_ident {
             fn extract_user_provided(
                 &self,
@@ -186,13 +191,6 @@ fn generate_cli_value_extractor_impl(
                 Ok(serde_json::Value::Object(map))
             }
         }
-
-        #[cfg(not(feature = "serde_json"))]
-        const _: () = {
-            compile_error!(
-                "cli_default_as_absent requires enabling the ortho_config `serde_json` feature"
-            );
-        };
     }
 }
 
@@ -215,5 +213,43 @@ pub(crate) fn generate_trait_implementation(
         #defaults_struct
         #ortho_impl
         #cli_extractor_impl
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the `CliValueExtractor` generator.
+
+    use super::generate_cli_value_extractor_impl;
+    use anyhow::{Context, Result, ensure};
+    use quote::quote;
+    use syn::parse_str;
+    /// The expansion must not test features, because it compiles in the crate
+    /// that invokes the derive.
+    ///
+    /// A `#[cfg(feature = "serde_json")]` guard in the expansion is evaluated
+    /// against the caller's features, so an application without its own
+    /// `serde_json` feature was told that `cli_default_as_absent` needs one, even
+    /// though `OrthoConfig` enables its own `serde_json` feature by default.
+    #[test]
+    fn cli_default_as_absent_extractor_ignores_the_callers_features() -> Result<()> {
+        let ident = parse_str("ServeArgs").context("parse ServeArgs ident")?;
+        let fields = [crate::CliFieldInfo {
+            serialized_key: "port".to_owned(),
+            arg_id: "port".to_owned(),
+            is_bool: false,
+            is_default_as_absent: true,
+        }];
+        let rendered = generate_cli_value_extractor_impl(&ident, &fields, &quote! { ortho_config })
+            .to_string();
+        ensure!(
+            rendered.contains("impl ortho_config :: CliValueExtractor for ServeArgs"),
+            "the extractor implementation should be emitted: {rendered}"
+        );
+        ensure!(
+            !rendered.contains("cfg") && !rendered.contains("compile_error"),
+            "the expansion must not test the caller's features: {rendered}"
+        );
+        Ok(())
     }
 }
