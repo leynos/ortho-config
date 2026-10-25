@@ -28,6 +28,9 @@ use crate::hex::to_lower_hex;
 /// rendering time and cannot mask a defect in how the inputs are combined.
 pub(crate) const CACHE_DIRECTORY_DIGEST_BYTES: usize = 16;
 
+/// Prefix identifying the cache-key directory encoding.
+pub(crate) const CACHE_KEY_VERSION_PREFIX: &str = "v1-";
+
 /// Cache key inputs for the bridge IR.
 #[derive(Debug, Clone)]
 pub struct CacheKey {
@@ -46,10 +49,12 @@ pub struct CacheKey {
 impl CacheKey {
     /// Hashes the cache inputs into a stable directory name.
     ///
-    /// The returned identifier is 32 lowercase hexadecimal digits, the leading
+    /// The returned identifier starts with [`CACHE_KEY_VERSION_PREFIX`], then
+    /// 32 lowercase hexadecimal digits from the leading
     /// [`CACHE_DIRECTORY_DIGEST_BYTES`] bytes of the SHA-256 digest over every
-    /// input. It is a name, not a security boundary: see that constant for why
-    /// the digest is truncated and what a collision would cost.
+    /// input. The prefix versions the directory encoding; it is a name, not a
+    /// security boundary. See the digest constant for why it is truncated and
+    /// what a collision would cost.
     ///
     /// # Examples
     ///
@@ -78,7 +83,7 @@ impl CacheKey {
         for (slot, byte) in prefix.iter_mut().zip(hasher.finalize().iter()) {
             *slot = *byte;
         }
-        to_lower_hex(&prefix)
+        format!("{CACHE_KEY_VERSION_PREFIX}{}", to_lower_hex(&prefix))
     }
 }
 

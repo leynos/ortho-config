@@ -314,6 +314,8 @@ dependencies = [
  "fs4",
  "googletest",
  "insta",
+ "metrics",
+ "metrics-util",
  "nix",
  "ortho_config",
  "ortho_config_test_helpers",

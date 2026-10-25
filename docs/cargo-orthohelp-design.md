@@ -798,21 +798,24 @@ help_info_uri = "https://example.com/help/MyApp"
 ### 6.3 Caching
 
 Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint,
-macro version, tool version, and the workspace `Cargo.lock` hash (when present).
-`--cache` reuses it when valid; `--no-build` trusts the existing IR.
+macro version, tool version, and the workspace `Cargo.lock` hash (when
+present). The directory name is `v1-` followed by 32 lowercase hexadecimal
+digits from the leading 16 bytes of the SHA-256 digest. The prefix versions the
+key encoding; changing it creates a fresh cache namespace. `--cache` reuses an
+entry when valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
 cache.
 
-Digests are SHA-256 and are rendered as 64 lowercase hexadecimal digits by the
-crate-internal `cargo-orthohelp/src/hex.rs` helper. `sha2` 0.11 returns
+Digests are SHA-256 and the crate-internal `cargo-orthohelp/src/hex.rs` helper
+renders full digests as 64 lowercase hexadecimal digits. `sha2` 0.11 returns
 `hybrid_array::Array<u8, _>` from `finalize`, and that type does not implement
 `core::fmt::LowerHex`, so the previous `{:x}` formatting no longer compiles.
-The helper keeps the rendered form byte-for-byte identical to the earlier
-output, so existing cache directories remain addressable. See the
-digest-rendering section of [developers' guide](developers-guide.md) for the
-helper's re-use policy.
+The helper keeps full-digest rendering byte-for-byte identical to the earlier
+output. `CacheKey::hash` uses a 16-byte prefix and adds the `v1-` directory
+format tag described above. See the digest-rendering section of
+[developers' guide](developers-guide.md) for the helper's re-use policy.
 
 ### 6.3.1 Agent-context pipeline additions
 
@@ -963,16 +966,25 @@ has no presentation sink; `run_cargo` forwards the retained diagnostics to
 stderr after draining the JSON stream and emits a truncation notice when
 needed. IR cache publication remains atomic and skips replacement when the
 existing cache already contains identical content, preserving the established
-path and idempotent-write behaviour.
+path and idempotent-write behaviour. The private `bridge/ir_cache.rs` module
+owns cache-file reads and publication; only bridge orchestration and its
+crate-local tests call it. It is not a general-purpose filesystem or cache
+abstraction.
 
 The bridge cache lookup, target lock, Cargo build, executable snapshot, bridge
 execution, and IR publication emit named tracing spans or events. Outcome
 events use a closed operation and outcome vocabulary and include elapsed time;
-they omit paths, cache keys, error strings, and child output. The one-shot CLI
-installs a tracing subscriber but no metrics recorder, so this path reports
-per-invocation evidence through tracing rather than emitting metrics that the
-default invocation would silently discard. This boundary is recorded in
+they omit paths, cache keys, error strings, and child output. This tracing
+boundary is recorded in
 [ADR-014](adrs/adr-0014-documentation-build-ownership.md#decision-outcome).
+
+With the optional `metrics` feature enabled, bridge cache outcomes also
+increment `cargo_orthohelp.bridge_cache.events`. Its only labels are `operation`
+(`lookup` or `publish`) and `outcome` (`hit`, `miss`, `read_failed`,
+`unchanged`, `updated`, or `write_failed`). The feature does not install a
+recorder; an embedding application owns that boundary. Metric contract tests
+capture every lookup and publish outcome with a thread-local recorder and
+reject extra label keys or values.
 
 An interrupted build whose writer lifetime cannot be confirmed leaves a
 fail-closed ownership marker. A later invocation must not treat that marker as

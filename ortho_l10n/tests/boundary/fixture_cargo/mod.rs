@@ -34,6 +34,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use environment::CARGO_DEADLINE;
 use std::process::{Command, Output, Stdio};
+use std::sync::Mutex;
 use std::time::Duration;
 use wait_timeout::ChildExt as _;
 
@@ -255,6 +256,14 @@ pub(crate) fn run_with_deadline(
     deadline: Duration,
     description: &str,
 ) -> Result<Output> {
+    // `cargo test` runs this binary's cases concurrently, but their nested
+    // commands share one Cargo target and package cache. Serialize the children
+    // before starting each deadline so sibling lock waits do not consume it.
+    static CARGO_COMMAND_LOCK: Mutex<()> = Mutex::new(());
+    let _cargo_guard = CARGO_COMMAND_LOCK
+        .lock()
+        .map_err(|error| anyhow::anyhow!("nested Cargo command lock was poisoned: {error}"))?;
+
     let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

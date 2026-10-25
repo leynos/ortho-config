@@ -10,7 +10,7 @@ use cap_std::fs_utf8::Dir;
 use tempfile::tempdir;
 
 use super::*;
-use crate::cache::CACHE_DIRECTORY_DIGEST_BYTES;
+use crate::cache::{CACHE_DIRECTORY_DIGEST_BYTES, CACHE_KEY_VERSION_PREFIX};
 
 fn dummy_paths() -> BridgePaths {
     BridgePaths {
@@ -227,7 +227,7 @@ fn link_input_paths_fit_in_the_windows_path_limit() {
         .join("orthohelp-bdd")
         .join(".tmpXXXXXX")
         .join("orthohelp")
-        .join("x".repeat(CACHE_DIRECTORY_DIGEST_BYTES * 2))
+        .join("x".repeat(CACHE_KEY_VERSION_PREFIX.len() + CACHE_DIRECTORY_DIGEST_BYTES * 2))
         .join("target")
         .join("debug")
         .join("build")

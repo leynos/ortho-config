@@ -33,11 +33,11 @@ use std::time::Duration;
 
 /// Longest a single nested Cargo invocation may run.
 ///
-/// The contracts resolve small consumer roots against the shared package cache;
-/// the slowest observed run is tens of seconds, not minutes. The bound exists so
-/// a child blocked on the package-cache lock is attributed to its own contract
-/// instead of consuming the whole test allowance silently.
-pub(crate) const CARGO_DEADLINE: Duration = Duration::from_secs(300);
+/// A recent gate observed a nested metadata command wait nearly four minutes on
+/// the shared package-cache lock, and other children hit their 300-second
+/// deadlines. This bound leaves two more minutes for a queued command to run
+/// while still limiting a stuck child.
+pub(crate) const CARGO_DEADLINE: Duration = Duration::from_secs(420);
 
 /// Toolchain and platform variables a nested Cargo invocation may inherit.
 ///

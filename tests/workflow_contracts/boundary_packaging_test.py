@@ -33,7 +33,7 @@ import re
 import tomllib
 import typing as typ
 
-from nextest_budgets import profile_allowance
+from nextest_allowances import budget_of
 from timeout_budgets import NEXTEST_CONFIG
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
@@ -50,6 +50,9 @@ MANIFEST: typ.Final[pathlib.Path] = REPOSITORY_ROOT / CRATE / "Cargo.toml"
 PACKAGE_SET: typ.Final[pathlib.Path] = (
     REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "package_set" / "mod.rs"
 )
+CARGO_ENVIRONMENT: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "environment.rs"
+)
 
 
 def _overrides() -> list[dict[str, object]]:
@@ -62,6 +65,24 @@ def _overrides() -> list[dict[str, object]]:
 def _group_entries(name: str) -> list[dict[str, object]]:
     """Return the overrides assigning a test to ``name``."""
     return [entry for entry in _overrides() if entry.get("test-group") == name]
+
+
+def _boundary_allowance() -> float:
+    """Return the per-test ceiling that applies to the boundary binary."""
+    entries = [
+        entry
+        for entry in _overrides()
+        if entry.get("filter") == f"binary({BINARY})"
+    ]
+    assert len(entries) == 1, (
+        f"expected one timeout override for binary({BINARY}), found {len(entries)}"
+    )
+    assert "slow-timeout" in entries[0], (
+        f"the timeout override for binary({BINARY}) has no slow-timeout"
+    )
+    return budget_of(
+        "profile.default.overrides[binary(boundary)]", entries[0]["slow-timeout"]
+    )
 
 
 def test_the_group_is_serial() -> None:
@@ -126,7 +147,12 @@ def test_no_other_override_assigns_the_boundary_binary() -> None:
     )
 
 
-def _single_match(pattern: str, source: str, what: str) -> re.Match[str]:
+def _single_match(
+    pattern: str,
+    source: str,
+    what: str,
+    path: pathlib.Path = PACKAGE_SET,
+) -> re.Match[str]:
     """Return the one match of ``pattern``, or fail naming ``what``.
 
     A regex that matches nothing and one that matches twice are both a
@@ -135,7 +161,7 @@ def _single_match(pattern: str, source: str, what: str) -> re.Match[str]:
     """
     matches = list(re.finditer(pattern, source))
     assert len(matches) == 1, (
-        f"expected exactly one {what} in {PACKAGE_SET}, found {len(matches)}; "
+        f"expected exactly one {what} in {path}, found {len(matches)}; "
         f"this contract cannot read the figure it is meant to check"
     )
     return matches[0]
@@ -169,11 +195,31 @@ def test_the_packaging_deadline_fits_inside_the_allowance() -> None:
         )[1]
     )
 
-    allowance = profile_allowance(NEXTEST_CONFIG.read_text(encoding="utf-8"))
+    allowance = _boundary_allowance()
     assert deadline * invocations < allowance, (
         f"each packaging invocation is bounded at {deadline}s and {invocations} "
         f"share one test, so they need {deadline * invocations}s of a "
         f"{allowance:.0f}s per-test allowance. A bound that does not fit is never "
         f"reached: nextest stops the test first and the error naming the hung "
         f"invocation is lost"
+    )
+
+
+def test_the_nested_cargo_deadline_fits_inside_the_allowance() -> None:
+    """A child deadline must fire before nextest stops its parent test."""
+    source = CARGO_ENVIRONMENT.read_text(encoding="utf-8")
+    deadline = int(
+        _single_match(
+            r"CARGO_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            source,
+            "CARGO_DEADLINE declaration",
+            CARGO_ENVIRONMENT,
+        )[1]
+    )
+
+    allowance = _boundary_allowance()
+    assert deadline < allowance, (
+        f"a nested Cargo invocation is bounded at {deadline}s, but binary({BINARY}) "
+        f"has a {allowance:.0f}s per-test allowance. Nextest would stop the test "
+        f"before the fixture reports which child exceeded its deadline"
     )

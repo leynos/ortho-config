@@ -118,7 +118,7 @@ NULL_DEVICE ?= NUL
 else
 NULL_DEVICE ?= /dev/null
 endif
-UV_RUN := $(UV) run --python $(PYTHON_VERSION) --with-requirements $(PYTHON_DEPS_FILE)
+UV_RUN := $(UV) run --no-project --python $(PYTHON_VERSION) --with-requirements $(PYTHON_DEPS_FILE)
 PYTEST ?= $(UV_RUN) --module pytest
 RUSTDOC_FLAGS ?= -D warnings
 

@@ -161,13 +161,13 @@ replace a root another is reading. `make boundary` and `make test` start one
 process for the binary and need nothing extra, which is why the group exists
 only for nextest.
 
-That group also fixes the per-test allowance arithmetic. One packaged test runs
-both `cargo package` invocations, each bounded at 240 s by `PACKAGE_DEADLINE`,
-so the pair has to fit inside the 600 s base allowance with room for the root
-checks around them. A deadline that did not fit could never fire: nextest would
-stop the test first, and the error naming the invocation that hung would never
-be printed. `boundary_packaging_test.py` reads the group, the manifest and the
-deadline so neither half can drift from the other.
+The group also gives its nested Cargo commands room to wait for the shared
+package-cache lock. One packaged test runs both `cargo package` invocations,
+each bounded at 420 s by `PACKAGE_DEADLINE`; consumer commands are bounded at
+420 s by `CARGO_DEADLINE`. The binary's 1,200 s per-test allowance leaves room
+for these multi-command contracts to report a child timeout, while the 2,300 s
+whole-run limit still bounds the suite. `boundary_packaging_test.py` reads the
+group, manifest and both deadlines so their constraints cannot drift apart.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -1131,8 +1131,8 @@ The 956-second envelope is 1.60 times that observed lower bound. Its deadline
 counts cache and compiler-admission waits without estimating or subtracting
 them, and preserves two seconds for child cleanup and two for test reporting.
 Output does not reset either deadline. The workflow contract checks this
-ordering against nextest's 1,800-second whole-run limit, the 2,700-second Cargo
-watchdog, and the enclosing job ceiling. See
+ordering against nextest's configured 2,300-second whole-run limit, the
+3,300-second Cargo watchdog, and the enclosing job ceiling. See
 [Test timeouts](#test-timeouts-the-tiers-this-repository-sets) and
 `documentation_budget_test.py`.
 
@@ -1872,8 +1872,10 @@ encoder cannot pass.
 
 `CacheKey::hash` names the bridge directory under `target/orthohelp/`, and that
 name is one component of every path the bridge's `cargo build` hands to the
-linker. It renders the leading `CACHE_DIRECTORY_DIGEST_BYTES` bytes of the full
-SHA-256 digest — 16 bytes, 32 hexadecimal digits — rather than all 64.
+linker. The directory name starts with `v1-`, followed by the leading
+`CACHE_DIRECTORY_DIGEST_BYTES` bytes of the full SHA-256 digest — 16 bytes, 32
+hexadecimal digits — rather than all 64. The prefix versions this cache-key
+encoding so a future format change can use a fresh cache namespace.
 
 The limit is not a tuning choice. Cargo 1.100 made the new build-directory
 layout unconditional, so every artefact of the bridge build lands in
@@ -3594,12 +3596,12 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 2,300 s (38 m 20 s)                                                                     |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 3,300 s (55 m)                                                                          |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 190 m in `ci.yml`, 140 m in `coverage-main.yml`                                         |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s for trybuild, BDD and documentation scenarios; 1,200 s for boundary packaging |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 2,300 s (38 m 20 s)                                                                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 3,300 s (55 m)                                                                                              |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 190 m in `ci.yml`, 140 m in `coverage-main.yml`                                                             |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3719,11 +3721,12 @@ the contract rather than silently left on the base allowance:
 and `boolean_cli_trybuild` arrived that way from branches, and the contract is
 what caught each.
 
-The 960 s allowance is lower than the 2,300 s whole-run budget, which the
-ordering contract asserts. That comparison does not by itself guarantee a test
-using its full allowance finishes before the run deadline, since a test that
-starts late spends part of the budget waiting to be scheduled; it establishes
-that the allowance cannot exhaust the run on its own.
+The largest per-test allowance is 1,200 s for boundary packaging, lower than
+the 2,300 s whole-run budget, which the ordering contract asserts. That
+comparison does not by itself guarantee a test using its full allowance
+finishes before the run deadline, since a test that starts late spends part of
+the budget waiting to be scheduled; it establishes that the allowance cannot
+exhaust the run on its own.
 
 The whole-run budget has to fit inside the watchdog with nextest's termination
 procedure and a cold build counted, which is 2,300 s plus 70 s plus 600 s, or

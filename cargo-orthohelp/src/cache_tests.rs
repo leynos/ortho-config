@@ -76,10 +76,13 @@ fn lockfile_fingerprint_is_absent_without_a_lockfile(
 #[rstest]
 fn cache_key_hash_renders_lowercase_hex() {
     let hash = cache_key().hash();
+    let digest = hash
+        .strip_prefix(CACHE_KEY_VERSION_PREFIX)
+        .expect("cache key should include its format version");
 
     assert!(
-        is_lowercase_hex(&hash),
-        "cache key hash should be lowercase hex digits: {hash}"
+        is_lowercase_hex(digest),
+        "cache key digest should be lowercase hex digits: {hash}"
     );
 }
 
@@ -87,8 +90,8 @@ fn cache_key_hash_renders_lowercase_hex() {
 fn cache_key_hash_uses_the_leading_sha256_bytes() {
     assert_eq!(
         cache_key().hash(),
-        "151fb1ee840f9a46d9843813b6877cda",
-        "cache key should use the leading digest bytes for its directory name"
+        "v1-151fb1ee840f9a46d9843813b6877cda",
+        "cache key should version and use the leading digest bytes for its directory name"
     );
 }
 
@@ -102,8 +105,8 @@ fn cache_key_hash_names_a_directory_no_longer_than_the_digest_budget() {
 
     assert_eq!(
         hash.len(),
-        CACHE_DIRECTORY_DIGEST_BYTES * 2,
-        "cache key hash should be {} hex digits: {hash}",
+        CACHE_KEY_VERSION_PREFIX.len() + CACHE_DIRECTORY_DIGEST_BYTES * 2,
+        "cache key should use the version prefix and {} hex digits: {hash}",
         CACHE_DIRECTORY_DIGEST_BYTES * 2
     );
 }
