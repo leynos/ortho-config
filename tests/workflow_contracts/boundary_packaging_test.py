@@ -245,11 +245,21 @@ def test_packaged_consumers_route_every_child_through_shared_deadline() -> None:
     test_source = CONSUMER_TESTS.read_text(encoding="utf-8")
     fixture_module_source = FIXTURE_CARGO.read_text(encoding="utf-8")
 
-    assert "prepare_packaged_set_until(sequence_deadline)?" in test_source
-    assert ".test_until(sequence_deadline)" in test_source
-    assert "resolve_metadata_until(sequence_deadline)" in test_source
-    assert "run_with_deadline_until(command, PACKAGE_DEADLINE, deadline" in package_source
-    assert "self.cargo_until(args, sequence_deadline)" in fixture_module_source
+    assert "prepare_packaged_set_until(sequence_deadline)?" in test_source, (
+        "packaging must consume the packaged-consumer sequence deadline"
+    )
+    assert ".test_until(sequence_deadline)" in test_source, (
+        "consumer test commands must receive the shared sequence deadline"
+    )
+    assert "resolve_metadata_until(sequence_deadline)" in test_source, (
+        "consumer metadata commands must receive the shared sequence deadline"
+    )
+    assert "run_with_deadline_until(command, PACKAGE_DEADLINE, deadline" in package_source, (
+        "packaging subprocesses must receive the shared sequence deadline"
+    )
+    assert "self.cargo_until(args, sequence_deadline)" in fixture_module_source, (
+        "fixture Cargo commands must route through the shared-deadline runner"
+    )
 
 
 def test_packaged_consumer_sequence_deadline_covers_child_commands() -> None:

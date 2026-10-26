@@ -58,6 +58,15 @@ pub(crate) struct FixtureCargo {
 }
 
 impl FixtureCargo {
+    /// Shared host-filtered arguments for this fixture's metadata resolve paths.
+    const METADATA_ARGS: [&str; 5] = [
+        "metadata",
+        "--format-version=1",
+        "--all-features",
+        "--filter-platform",
+        "host-tuple",
+    ];
+
     /// Create an empty fixture root inside the repository target tree.
     ///
     /// # Errors
@@ -220,13 +229,7 @@ impl FixtureCargo {
     /// Returns an error when Cargo cannot be spawned or exceeds the deadline.
     /// A non-zero exit is not an error here; the caller decides.
     pub(crate) fn resolve(&self) -> Result<Output> {
-        self.cargo(&[
-            "metadata",
-            "--format-version=1",
-            "--all-features",
-            "--filter-platform",
-            "host-tuple",
-        ])
+        self.cargo(&Self::METADATA_ARGS)
     }
 
     /// Resolve metadata while respecting an enclosing test sequence's deadline.
@@ -235,16 +238,7 @@ impl FixtureCargo {
     ///
     /// Returns an error when Cargo cannot be spawned or either deadline expires.
     pub(crate) fn resolve_until(&self, sequence_deadline: Instant) -> Result<Output> {
-        self.cargo_until(
-            &[
-                "metadata",
-                "--format-version=1",
-                "--all-features",
-                "--filter-platform",
-                "host-tuple",
-            ],
-            sequence_deadline,
-        )
+        self.cargo_until(&Self::METADATA_ARGS, sequence_deadline)
     }
 
     /// Resolve and parse the fixture root, requiring Cargo to succeed.

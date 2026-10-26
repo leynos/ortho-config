@@ -73,7 +73,7 @@ use std::time::{Duration, Instant};
 /// The second invocation reuses the first's target directory and is much
 /// shorter. For scale, the pair took 244 s on this host with the packaging
 /// target removed, which is an upper bound rather than a build time: it
-/// includes waiting for compile-admission slots, which the child inherits. A
+/// includes waiting for compile-admission slots, which the child inherits.
 /// The 520 s bound remains finite while leaving room for the measured queue
 /// and verification work.
 const PACKAGE_DEADLINE: Duration = Duration::from_secs(520);

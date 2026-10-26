@@ -93,17 +93,7 @@ fn compose_trybuild_rustflags(
     if is_coverage_build {
         flags.retain(|flag| !DEV_FAST_RUSTFLAGS.contains(&flag.as_str()));
     }
-    flags.extend(
-        [
-            "--cfg",
-            "trybuild",
-            "--verbose",
-            "-A",
-            "dead_code",
-            "--diagnostic-width=140",
-        ]
-        .map(str::to_owned),
-    );
+    flags.extend(["--cfg", "trybuild", "--verbose", "--diagnostic-width=140"].map(str::to_owned));
 
     // Nested trybuild Cargo builds need the requested LLVM instrumentation.
     // Keep it while adding the path remap required for stable diagnostics on
@@ -139,6 +129,7 @@ fn coverage_trybuild_flags_exclude_development_build_flags() {
             .windows(2)
             .any(|pair| pair == ["-C", "instrument-coverage"])
     );
+    assert!(!arguments.windows(2).any(|pair| pair == ["-A", "dead_code"]));
     assert!(
         !DEV_FAST_RUSTFLAGS
             .iter()
@@ -171,6 +162,7 @@ fn non_coverage_trybuild_flags_preserve_the_development_build_standard() {
             .iter()
             .all(|flag| arguments.contains(flag))
     );
+    assert!(!arguments.windows(2).any(|pair| pair == ["-A", "dead_code"]));
 }
 
 #[test]

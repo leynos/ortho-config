@@ -5,6 +5,7 @@ use super::{BridgeCache, BridgeConfig, load_or_build_ir_inner, write_ir_cache};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
+use rstest::rstest;
 use std::collections::BTreeSet;
 use std::error::Error;
 
@@ -100,7 +101,7 @@ fn assert_bounded_labels(counters: &[(metrics_util::CompositeKey, u64)]) {
     }
 }
 
-#[test]
+#[rstest]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions report cache metric mismatches more clearly than errors"
@@ -144,7 +145,7 @@ fn lookup_metrics_cover_hits_misses_and_read_failures() -> Result<(), Box<dyn Er
     Ok(())
 }
 
-#[test]
+#[rstest]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions report cache metric mismatches more clearly than errors"
@@ -190,7 +191,7 @@ fn publish_metrics_cover_update_unchanged_and_failures() -> Result<(), Box<dyn E
     Ok(())
 }
 
-#[test]
+#[rstest]
 fn metric_labels_are_drawn_from_closed_vocabularies() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
