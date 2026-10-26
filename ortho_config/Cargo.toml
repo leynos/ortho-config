@@ -59,7 +59,7 @@ serde = { version = "1", features = ["derive"] }
 googletest.workspace = true
 pretty_assertions.workspace = true
 trybuild = "1"
-rstest = "0.27.0"
+rstest = "0.28.0"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
 insta = "1"

@@ -34,7 +34,7 @@ toml = []
 
 [dev-dependencies]
 anyhow = "1"
-rstest = "0.27.0"
+rstest = "0.28.0"
 serde = { version = "1", features = ["derive"] }
 figment = { version = "0.10", default-features = false, features = ["test"] }
 proptest = "1.11.0"

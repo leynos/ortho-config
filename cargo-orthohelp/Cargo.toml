@@ -62,7 +62,7 @@ insta = "1"
 proptest = "1"
 process-wrap = { version = "9.0.1", default-features = false, features = ["std"] }
 pretty_assertions = "1"
-rstest = "0.27.0"
+rstest = "0.28.0"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
 test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers", version = "0.10.0" }
