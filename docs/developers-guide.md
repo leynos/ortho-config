@@ -3609,9 +3609,9 @@ incremental compilation state and no debug information. The trade-off is that a
 debugger sees no symbols or line tables in a default development build and
 every rebuild recompiles whole crates. To debug, run with
 `CARGO_PROFILE_DEV_DEBUG=true`; to rebuild incrementally, set
-`CARGO_INCREMENTAL=1`. The pin is the stable `1.99` channel, so the rule's
-unstable metadata key does not apply.
-`tests/workflow_contracts/build_footprint_test.py` holds both settings.
+`CARGO_INCREMENTAL=1`. The workspace pins `nightly-2026-10-16` for development,
+formatting and Clippy; stable MSRV builds use the separate `make msrv-build`
+route. `tests/workflow_contracts/build_footprint_test.py` holds both settings.
 
 ## Test timeouts: the tiers this repository sets
 

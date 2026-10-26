@@ -92,6 +92,7 @@ fn is_cargo_command(command: &Command) -> bool {
 mod tests {
     //! Behavioural tests for the boundary command runner.
 
+    use super::super::process_state::assert_child_was_cleaned_up;
     use super::{is_cargo_command, run_with_deadline, run_with_deadline_until};
     use anyhow::{Context, Result, ensure};
     use cap_std::{ambient_authority, fs::Dir};
@@ -230,7 +231,12 @@ mod tests {
             marker_dir.exists("started"),
             "the timed-out child did not start"
         );
+        let child_pid = marker_dir
+            .read_to_string("pid")?
+            .parse()
+            .context("parse the timed-out child PID")?;
         thread::sleep(CHILD_COMPLETION_DELAY + Duration::from_millis(250));
+        assert_child_was_cleaned_up(child_pid)?;
         ensure!(
             !marker_dir.exists("completed"),
             "the timed-out child must not continue running after the runner returns"
@@ -321,6 +327,8 @@ mod tests {
         let root = std::env::var_os(CHILD_MARKER_ROOT_ENV)
             .context("locate the marker root for the child process test")?;
         let directory = Dir::open_ambient_dir(root, ambient_authority())?;
+        let process_id = std::process::id().to_string();
+        directory.write("pid", process_id.as_bytes())?;
         directory.write("started", b"started")?;
         thread::sleep(CHILD_COMPLETION_DELAY);
         directory.write("completed", b"completed")?;
