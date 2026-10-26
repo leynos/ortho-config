@@ -18,6 +18,7 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use std::sync::OnceLock;
+use std::time::Instant;
 
 /// Directory `cargo package` writes into, relative to the shared target root.
 const PACKAGE_DIRECTORY: &str = "package";
@@ -106,8 +107,22 @@ static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
 /// Returns an error when either packaging invocation fails or when one of the
 /// expected unpacked roots is missing afterwards.
 pub(crate) fn prepare_packaged_set() -> Result<()> {
-    let packaged =
-        PACKAGED.get_or_init(|| build_packaged_set().map_err(|error| format!("{error:#}")));
+    prepare_packaged_set_with_deadline(None)
+}
+
+/// Package and unpack this release before an enclosing test sequence deadline.
+///
+/// # Errors
+///
+/// Returns an error when packaging fails or the sequence deadline expires.
+pub(crate) fn prepare_packaged_set_until(sequence_deadline: Instant) -> Result<()> {
+    prepare_packaged_set_with_deadline(Some(sequence_deadline))
+}
+
+fn prepare_packaged_set_with_deadline(sequence_deadline: Option<Instant>) -> Result<()> {
+    let packaged = PACKAGED.get_or_init(|| {
+        build_packaged_set(sequence_deadline).map_err(|error| format!("{error:#}"))
+    });
     packaged
         .as_deref()
         .map(|_roots| ())
@@ -163,14 +178,14 @@ pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
 }
 
 /// Run both packaging invocations and collect the unpacked roots.
-fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
+fn build_packaged_set(sequence_deadline: Option<Instant>) -> Result<Vec<PackagedCrate>> {
     let repository = repository_root()?;
     let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
     Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
         .with_context(|| format!("create packaging target {target}"))?;
 
     for invocation in &PACKAGING_INVOCATIONS {
-        package_sources(&repository, &target, invocation)?;
+        package_sources(&repository, &target, invocation, sequence_deadline)?;
     }
 
     let package_directory = target.join(PACKAGE_DIRECTORY);

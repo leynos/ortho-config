@@ -162,13 +162,15 @@ process for the binary and need nothing extra, which is why the group exists
 only for nextest.
 
 The group also gives its nested Cargo commands room to wait for the shared
-package-cache lock. One packaged test runs both `cargo package` invocations,
-each bounded at 520 s by `PACKAGE_DEADLINE`; consumer commands are bounded at
-420 s by `CARGO_DEADLINE`. The binary's 1,200 s per-test allowance leaves 160 s
-after both package deadlines: 120 s for unpacking and root checks, plus 40 s of
-scheduling margin. The 2,300 s whole-run limit still bounds the suite.
-`boundary_packaging_test.py` reads the group, manifest and both deadlines so
-their constraints cannot drift apart.
+package-cache lock. The packaged-consumer scenario runs two `cargo package`
+invocations, each bounded at 520 s by `PACKAGE_DEADLINE`, then tests and
+resolves metadata for three consumer shapes, each command bounded at 420 s by
+`CARGO_DEADLINE`. Those independent ceilings total 3,560 s before unpacking and
+root checks, so the scenario shares one 2,100 s deadline across the entire
+sequence. The binary's 2,200 s per-test allowance leaves 100 s for error
+reporting and teardown; the 2,300 s whole-run limit still bounds the suite.
+`boundary_packaging_test.py` reads the group, manifest, command counts and
+deadlines so their constraints cannot drift apart.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -3604,7 +3606,7 @@ tier two did not exist at all.
 
 | Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
 | ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s for trybuild, BDD and documentation scenarios; 1,200 s for boundary packaging |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s for trybuild, BDD and documentation scenarios; 2,200 s for boundary packaging |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 2,300 s (38 m 20 s)                                                                                         |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 3,300 s (55 m)                                                                                              |
 | Job `timeout-minutes`    | the whole job                      | job level                                  | 190 m in `ci.yml`, 140 m in `coverage-main.yml`                                                             |
@@ -3727,7 +3729,7 @@ the contract rather than silently left on the base allowance:
 and `boolean_cli_trybuild` arrived that way from branches, and the contract is
 what caught each.
 
-The largest per-test allowance is 1,200 s for boundary packaging, lower than
+The largest per-test allowance is 2,200 s for boundary packaging, lower than
 the 2,300 s whole-run budget, which the ordering contract asserts. That
 comparison does not by itself guarantee a test using its full allowance
 finishes before the run deadline, since a test that starts late spends part of

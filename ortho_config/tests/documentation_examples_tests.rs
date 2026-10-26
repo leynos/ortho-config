@@ -48,6 +48,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-localization-ids-output",
     "guide-metrics-install",
     "guide-orthohelp-command",
+    "guide-orthohelp-bridge-cache-metrics",
     "guide-orthohelp-format-all",
     "guide-orthohelp-format-all-tree",
     "guide-orthohelp-metadata",

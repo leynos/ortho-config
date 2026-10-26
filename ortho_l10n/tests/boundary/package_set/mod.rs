@@ -53,22 +53,21 @@
 //! directory name (`ortho_config_test_helpers` lives in `test_helpers`).
 
 use super::fixture_cargo::{
-    FixtureCargo, cargo_binary, inherited_toolchain, run_with_deadline, toml_string,
+    FixtureCargo, cargo_binary, inherited_toolchain, run_with_deadline, run_with_deadline_until,
+    toml_string,
 };
 use anyhow::{Result, bail, ensure};
 use camino::Utf8Path;
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Longest either packaging invocation may run.
 ///
-/// Each invocation is bounded on its own, and every entry in
-/// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
-/// inside nextest's per-test allowance with room for the root checks around
-/// them: 2 x 520 s is 1,040 s of the 1,200 s boundary allowance. Reserve 120 s
-/// for unpacking and root checks, with 40 s left as scheduling margin. A recent
-/// full test run exhausted the former 420 s limit after both archives had
-/// been written but before the packaging command returned. The added 100 s
+/// Each invocation is bounded on its own. The packaged-consumer scenario also
+/// applies one deadline across this set and its later fixture Cargo commands,
+/// because their independent child limits exceed nextest's per-test allowance.
+/// A recent full test run exhausted the former 420 s limit after both archives
+/// had been written but before the packaging command returned. The added 100 s
 /// give verification more time while keeping a finite child deadline.
 ///
 /// The second invocation reuses the first's target directory and is much
@@ -87,11 +86,10 @@ const PACKAGE_DEADLINE: Duration = Duration::from_secs(520);
 /// patch is keyed by package name, so spelling the directory there would
 /// silently patch nothing.
 ///
-/// They are data rather than two call statements because the per-test
-/// allowance is shared between them: `boundary_packaging_test.py` reads this
-/// array's length and [`PACKAGE_DEADLINE`] to check that the whole set can
-/// reach its own deadlines before nextest stops the test. The array length is
-/// part of the type, so rustc checks it against the initializers.
+/// They are data rather than two call statements because
+/// `boundary_packaging_test.py` reads this array's length and
+/// [`PACKAGE_DEADLINE`] when checking the enclosing test's shared deadline. The
+/// array length is part of the type, so rustc checks it against the initializers.
 pub(super) const PACKAGING_INVOCATIONS: [PackageInvocation; 2] = [
     PackageInvocation {
         crates: ORTHO_L10N_AND_CONFIG,
@@ -143,7 +141,7 @@ mod roots;
 // Re-exported so the contracts keep naming one module for the packaged set.
 pub(crate) use roots::{
     PACKAGED_CRATES, PACKAGED_VERSION, assert_packaged_set_complete, packaged_crate,
-    prepare_packaged_set, unpacked_directory,
+    prepare_packaged_set, prepare_packaged_set_until, unpacked_directory,
 };
 
 /// Run one `cargo package` invocation.
@@ -151,6 +149,7 @@ pub(super) fn package_sources(
     repository: &Utf8Path,
     target: &Utf8Path,
     invocation: &PackageInvocation,
+    sequence_deadline: Option<Instant>,
 ) -> Result<()> {
     // The subcommand comes first: `--manifest-path` is a per-command flag.
     let mut args = vec![String::from("package")];
@@ -180,7 +179,12 @@ pub(super) fn package_sources(
         .envs(inherited_toolchain())
         .env("CARGO_TARGET_DIR", target);
     let description = format!("cargo package for {}", invocation.crates.join(", "));
-    let output = run_with_deadline(command, PACKAGE_DEADLINE, &description)?;
+    let output = match sequence_deadline {
+        Some(deadline) => {
+            run_with_deadline_until(command, PACKAGE_DEADLINE, deadline, &description)?
+        }
+        None => run_with_deadline(command, PACKAGE_DEADLINE, &description)?,
+    };
     if !output.status.success() {
         bail!(
             "{description} failed with {}\nstderr:\n{}",
@@ -252,6 +256,19 @@ impl ConsumerFixture {
         self.cargo.resolve_metadata()
     }
 
+    /// Resolve metadata within an enclosing test sequence's deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Cargo fails, metadata is unreadable, or either
+    /// deadline expires.
+    pub(crate) fn resolve_metadata_until(
+        &self,
+        sequence_deadline: Instant,
+    ) -> Result<super::fixture_cargo::Metadata> {
+        self.cargo.resolve_metadata_until(sequence_deadline)
+    }
+
     /// Build and test the consumer root.
     ///
     /// # Errors
@@ -260,6 +277,21 @@ impl ConsumerFixture {
     pub(crate) fn test(&self) -> Result<()> {
         self.cargo
             .cargo_checked(&["test", "--all-targets", "--all-features"])
+            .map(|_stdout| ())
+    }
+
+    /// Build and test the consumer within an enclosing test sequence's deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the build or its tests fail, or either deadline
+    /// expires.
+    pub(crate) fn test_until(&self, sequence_deadline: Instant) -> Result<()> {
+        self.cargo
+            .cargo_checked_until(
+                &["test", "--all-targets", "--all-features"],
+                sequence_deadline,
+            )
             .map(|_stdout| ())
     }
 }

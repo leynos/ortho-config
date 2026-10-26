@@ -56,6 +56,15 @@ PACKAGE_SET: typ.Final[pathlib.Path] = (
 CARGO_ENVIRONMENT: typ.Final[pathlib.Path] = (
     REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "environment.rs"
 )
+FIXTURE_CARGO: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "mod.rs"
+)
+CONSUMER_TESTS: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary_tests" / "consumer" / "mod.rs"
+)
+CONSUMER_MODEL: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "consumer" / "mod.rs"
+)
 
 
 def _overrides() -> list[dict[str, object]]:
@@ -227,4 +236,86 @@ def test_the_nested_cargo_deadline_fits_inside_the_allowance() -> None:
         f"a nested Cargo invocation is bounded at {deadline}s, but binary({BINARY}) "
         f"has a {allowance:.0f}s per-test allowance. Nextest would stop the test "
         f"before the fixture reports which child exceeded its deadline"
+    )
+
+
+def test_packaged_consumers_route_every_child_through_shared_deadline() -> None:
+    """Every child Cargo command receives the sequence's shared deadline."""
+    package_source = PACKAGE_SET.read_text(encoding="utf-8")
+    test_source = CONSUMER_TESTS.read_text(encoding="utf-8")
+    fixture_module_source = FIXTURE_CARGO.read_text(encoding="utf-8")
+
+    assert "prepare_packaged_set_until(sequence_deadline)?" in test_source
+    assert ".test_until(sequence_deadline)" in test_source
+    assert "resolve_metadata_until(sequence_deadline)" in test_source
+    assert "run_with_deadline_until(command, PACKAGE_DEADLINE, deadline" in package_source
+    assert "self.cargo_until(args, sequence_deadline)" in fixture_module_source
+
+
+def test_packaged_consumer_sequence_deadline_covers_child_commands() -> None:
+    """The shared child-command deadline fits the test allowance.
+
+    The three consumer shapes each run ``cargo test`` and ``cargo metadata``
+    after the two packaging commands. Their independent command ceilings exceed
+    the test allowance, so all eight commands must receive one shared deadline.
+    """
+    package_source = PACKAGE_SET.read_text(encoding="utf-8")
+    test_source = CONSUMER_TESTS.read_text(encoding="utf-8")
+    model_source = CONSUMER_MODEL.read_text(encoding="utf-8")
+    fixture_source = CARGO_ENVIRONMENT.read_text(encoding="utf-8")
+
+    package_deadline = int(
+        _single_match(
+            r"PACKAGE_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            package_source,
+            "PACKAGE_DEADLINE declaration",
+        )[1]
+    )
+    packaging_invocations = int(
+        _single_match(
+            r"PACKAGING_INVOCATIONS:\s*\[PackageInvocation;\s*(\d+)\]",
+            package_source,
+            "PACKAGING_INVOCATIONS array length",
+        )[1]
+    )
+    cargo_deadline = int(
+        _single_match(
+            r"CARGO_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            fixture_source,
+            "CARGO_DEADLINE declaration",
+            CARGO_ENVIRONMENT,
+        )[1]
+    )
+    consumer_shapes = int(
+        _single_match(
+            r"pub\(crate\) const ALL:\s*\[Self;\s*(\d+)\]",
+            model_source,
+            "consumer shape count",
+            CONSUMER_MODEL,
+        )[1]
+    )
+    sequence_deadline = int(
+        _single_match(
+            r"PACKAGED_CONSUMER_SEQUENCE_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\(([\d_]+)\)",
+            test_source,
+            "packaged-consumer sequence deadline",
+            CONSUMER_TESTS,
+        )[1]
+        .replace("_", "")
+    )
+
+    fixture_commands = consumer_shapes * 2
+    independent_deadlines = (
+        package_deadline * packaging_invocations
+        + cargo_deadline * fixture_commands
+        + PACKAGING_REMAINDER_SECONDS
+    )
+    allowance = _boundary_allowance()
+    assert independent_deadlines > sequence_deadline, (
+        f"the independently bounded commands need {independent_deadlines}s; "
+        f"the {sequence_deadline}s shared deadline would not cap them"
+    )
+    assert sequence_deadline + 100 <= allowance, (
+        f"the {sequence_deadline}s shared deadline needs 100s for teardown, "
+        f"but the boundary test allowance is only {allowance:.0f}s"
     )

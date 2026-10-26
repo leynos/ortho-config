@@ -3,6 +3,7 @@
 use super::telemetry_metrics::{CacheOperation, CacheOutcome, record_cache_event};
 use super::{BridgeCache, BridgeConfig, load_or_build_ir_inner, write_ir_cache};
 use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -12,11 +13,15 @@ const CACHE_EVENT_METRIC: &str = "cargo_orthohelp.bridge_cache.events";
 fn bridge_cache(root: &tempfile::TempDir) -> Result<BridgeCache, Box<dyn Error>> {
     let cache_root = Utf8PathBuf::from_path_buf(root.path().to_path_buf())
         .map_err(|path| format!("temporary path is not UTF-8: {}", path.display()))?;
-    Ok(BridgeCache {
+    Ok(bridge_cache_at(&cache_root))
+}
+
+fn bridge_cache_at(cache_root: &Utf8PathBuf) -> BridgeCache {
+    BridgeCache {
         cache_dir: cache_root.clone(),
         target_dir: cache_root.join("target"),
         ir_path: cache_root.join("ir.json"),
-    })
+    }
 }
 
 fn bridge_config(root: &tempfile::TempDir) -> Result<BridgeConfig, Box<dyn Error>> {
@@ -104,7 +109,8 @@ fn lookup_metrics_cover_hits_misses_and_read_failures() -> Result<(), Box<dyn Er
     let hit_root = tempfile::tempdir()?;
     let hit_cache = bridge_cache(&hit_root)?;
     let hit_config = bridge_config(&hit_root)?;
-    std::fs::write(&hit_cache.ir_path, "cached IR")?;
+    let hit_directory = Dir::open_ambient_dir(&hit_cache.cache_dir, ambient_authority())?;
+    hit_directory.write("ir.json", b"cached IR")?;
 
     let miss_root = tempfile::tempdir()?;
     let miss_cache = bridge_cache(&miss_root)?;
@@ -113,7 +119,8 @@ fn lookup_metrics_cover_hits_misses_and_read_failures() -> Result<(), Box<dyn Er
     let failed_root = tempfile::tempdir()?;
     let failed_cache = bridge_cache(&failed_root)?;
     let failed_config = bridge_config(&failed_root)?;
-    std::fs::create_dir(&failed_cache.ir_path)?;
+    let failed_directory = Dir::open_ambient_dir(&failed_cache.cache_dir, ambient_authority())?;
+    failed_directory.create_dir("ir.json")?;
 
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
@@ -150,11 +157,15 @@ fn publish_metrics_cover_update_unchanged_and_failures() -> Result<(), Box<dyn E
 
     let failed_read_root = tempfile::tempdir()?;
     let failed_read_cache = bridge_cache(&failed_read_root)?;
-    std::fs::create_dir(&failed_read_cache.ir_path)?;
+    let failed_read_directory =
+        Dir::open_ambient_dir(&failed_read_cache.cache_dir, ambient_authority())?;
+    failed_read_directory.create_dir("ir.json")?;
 
     let failed_write_root = tempfile::tempdir()?;
-    let failed_write_cache = bridge_cache(&failed_write_root)?;
-    std::fs::remove_dir(&failed_write_cache.cache_dir)?;
+    let failed_write_root_path = Utf8PathBuf::from_path_buf(failed_write_root.path().to_path_buf())
+        .map_err(|path| format!("temporary path is not UTF-8: {}", path.display()))?;
+    let missing_cache_root = failed_write_root_path.join("missing-cache");
+    let failed_write_cache = bridge_cache_at(&missing_cache_root);
 
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
