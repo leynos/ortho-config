@@ -22,7 +22,7 @@ pub(super) fn assert_child_was_cleaned_up(process_id: u32) -> Result<()> {
 /// Verify a timed-out Windows command no longer has a process-table entry.
 #[cfg(windows)]
 pub(super) fn assert_child_was_cleaned_up(process_id: u32) -> Result<()> {
-    use anyhow::{Context, bail};
+    use anyhow::{anyhow, bail};
     use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER};
     use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
     use windows::core::HRESULT;
@@ -30,10 +30,11 @@ pub(super) fn assert_child_was_cleaned_up(process_id: u32) -> Result<()> {
     // SAFETY: the query-only handle is closed before this function returns.
     match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) } {
         Err(error) if error.code() == HRESULT::from_win32(ERROR_INVALID_PARAMETER.0) => Ok(()),
-        Err(error) => Err(error).context("inspect timed-out Windows child"),
+        Err(error) => Err(anyhow!("inspect timed-out Windows child: {error:?}")),
         Ok(handle) => {
             // SAFETY: `OpenProcess` returned this valid handle to the inspection.
-            unsafe { CloseHandle(handle) }.context("close Windows process inspection handle")?;
+            unsafe { CloseHandle(handle) }
+                .map_err(|error| anyhow!("close Windows process inspection handle: {error:?}"))?;
             bail!("timed-out Windows child {process_id} still exists")
         }
     }
