@@ -1564,8 +1564,14 @@ version = "0.10.0"
 dependencies = [
  "anyhow",
  "camino",
+ "cap-std",
  "figment",
+ "nix",
  "parking_lot",
+ "process-wrap",
+ "proptest",
+ "tracing",
+ "windows",
 ]
 
 [[package]]
@@ -1577,6 +1583,8 @@ dependencies = [
  "cap-std",
  "fluent-bundle",
  "fluent-syntax",
+ "nix",
+ "process-wrap",
  "proptest",
  "rstest",
  "serde",
@@ -1586,7 +1594,7 @@ dependencies = [
  "toml 1.1.8+spec-1.1.0",
  "tracing",
  "unic-langid",
- "wait-timeout",
+ "windows",
 ]
 
 [[package]]
