@@ -144,9 +144,12 @@ is not replicated here.
   `CARGO_LLVM_COV_TARGET_DIR` to `$RUNNER_TEMP/llvm-cov-target`. This keeps
   nested trybuild projects outside the checkout, so they do not discover the
   development Cranelift configuration beside the instrumented workspace. The
-  Windows coverage legs use the runner's drive root for both target-directory
-  variables because Cargo repeats the target root across one compiler command
-  line often enough to reach the 32,767-character `CreateProcess` limit. See
+  Windows coverage legs set both `CARGO_TARGET_DIR` and
+  `CARGO_LLVM_COV_TARGET_DIR` to the child directory `llvm-cov-target` directly
+  under the runner's drive root. This keeps the target directory from becoming
+  an ancestor of checkout source paths during trybuild normalization, while
+  keeping Cargo's repeated target-root paths short enough to stay below the
+  32,767-character `CreateProcess` limit. See
   [The Windows coverage command line](../developers-guide.md#the-windows-coverage-command-line).
 
 [^1]: Developers' guide, "Cranelift development backend" section.
