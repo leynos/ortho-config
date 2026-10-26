@@ -1123,6 +1123,23 @@ success, on every supported platform. The mechanism is platform-specific; the
 contract is not. This ownership applies only to test subprocesses and must not
 terminate unrelated processes or shared cache services.
 
+The shared process-tree owners and cancellable pipe readers live in
+`test_helpers/src/process/`. Crates whose package boundaries permit the helper
+dependency use `ortho_config_test_helpers::process`: call `run_with_deadline`
+for one bounded command and `run_with_deadline_until` when an enclosing test
+sequence supplies a deadline. The `ortho_l10n` boundary test includes this
+module by source path and declares its platform dependencies directly. That
+single test-only inclusion preserves `ortho_l10n`'s explicit ban on the
+workspace test-helper package in its resolved graph and packaged manifest. Do
+not weaken that boundary or copy the process implementation.
+
+Callers retain ownership of command construction, environment policy, any
+serialization lock, and interpretation of the returned status and output. Use
+the lower-level reader or platform tree modules only when a specialized test
+runner needs its own diagnostics or capture policy; do not add another
+process-group, Job Object, or blocking pipe-reader implementation to a package.
+These helpers are for tests and must not be used by production code.
+
 Documentation example scenarios start a fixed 956-second monotonic envelope
 inside their 960-second nextest override, reserving two two-second cleanup
 allowances. Individual build, execution, and discovery operations have 956, 60,
@@ -3834,7 +3851,10 @@ subprocess. Build, execution, and discovery budgets are 956, 60, and 30
 seconds, with two seconds reserved for bounded cleanup. A fixed scenario
 deadline is never extended by output. The runner drains both streams while
 retaining at most 1 MiB per stream, reports truncation and available evidence
-on timeout or wait failure, and limits reader completion during cleanup.
+on timeout or wait failure, and limits reader completion during cleanup. Its
+platform-specific process-tree ownership and cancellable readers are shared
+through `ortho_config_test_helpers::process`; the documentation runner keeps
+its operation policies, diagnostics, and capture limits locally.
 
 These operations do not create a new Cargo target for each example workspace.
 They resolve the caller's configured target directory, including the target

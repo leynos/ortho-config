@@ -4,7 +4,8 @@ use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use std::io::{self, Read};
 use std::os::fd::AsFd;
 
-pub(crate) trait Input: AsFd + Read + Send + 'static {}
+/// A pipe handle that can be read without blocking while owned by a drain thread.
+pub trait Input: AsFd + Read + Send + 'static {}
 
 impl<PipeHandle> Input for PipeHandle where PipeHandle: AsFd + Read + Send + 'static {}
 

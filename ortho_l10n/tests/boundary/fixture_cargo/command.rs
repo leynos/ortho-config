@@ -1,11 +1,9 @@
 //! Bounded subprocess execution for the boundary Cargo fixtures.
 
-use anyhow::{Context, Result, bail, ensure};
-use std::io::Read;
-use std::process::{Command, Output, Stdio};
+use anyhow::Result;
+use std::process::{Command, Output};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use wait_timeout::ChildExt as _;
 
 /// Run `command` to completion or its individual deadline, whichever comes first.
 ///
@@ -32,7 +30,8 @@ pub(crate) fn run_with_deadline(
 /// Run a child command under both its own and an enclosing sequence deadline.
 ///
 /// The local Cargo lock is acquired before the remaining sequence time is
-/// measured, so waiting behind a sibling command consumes the shared budget.
+/// measured for Cargo commands, so waiting behind a sibling command consumes
+/// the shared budget.
 ///
 /// # Errors
 ///
@@ -53,97 +52,47 @@ pub(crate) fn run_with_deadline_until(
 }
 
 fn run_with_optional_sequence_deadline(
-    mut command: Command,
+    command: Command,
     command_deadline: Duration,
     sequence_deadline: Option<Instant>,
     description: &str,
 ) -> Result<Output> {
-    // `cargo test` runs this binary's cases concurrently, but their nested
-    // commands share one Cargo target and package cache. Serialize the children
-    // before starting each command deadline. A sequence deadline, when set,
-    // already includes any time spent waiting for this lock.
+    // `cargo test` runs this binary's cases concurrently, and their Cargo
+    // commands share one target and package cache. Probe children do not share
+    // that state, so keep them out of the Cargo-only serialization queue.
     static CARGO_COMMAND_LOCK: Mutex<()> = Mutex::new(());
-    let _cargo_guard = CARGO_COMMAND_LOCK
-        .lock()
-        .map_err(|error| anyhow::anyhow!("nested Cargo command lock was poisoned: {error}"))?;
+    let _cargo_guard =
+        if is_cargo_command(&command) {
+            Some(CARGO_COMMAND_LOCK.lock().map_err(|error| {
+                anyhow::anyhow!("nested Cargo command lock was poisoned: {error}")
+            })?)
+        } else {
+            None
+        };
 
-    let (deadline, timeout_scope) =
-        sequence_deadline.map_or((command_deadline, "command"), |sequence| {
-            let remaining = sequence.saturating_duration_since(Instant::now());
-            if remaining < command_deadline {
-                (remaining, "shared sequence")
-            } else {
-                (command_deadline, "command")
-            }
-        });
-    ensure!(
-        !deadline.is_zero(),
-        "{description} could not start before its enclosing sequence deadline"
-    );
-
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("spawn {description}"))?;
-    let stdout_reader = drain(
-        child.stdout.take(),
-        &format!("read stdout of {description}"),
-    )?;
-    let stderr_reader = drain(
-        child.stderr.take(),
-        &format!("read stderr of {description}"),
-    )?;
-
-    let waited = child
-        .wait_timeout(deadline)
-        .with_context(|| format!("wait for {description}"))?;
-    let Some(status) = waited else {
-        // Reap the child: a killed process releases its package-cache lock and
-        // its compile-admission slot, which a leaked one would hold.
-        let _killed = child.kill();
-        let _reaped = child.wait();
-        bail!(
-            "{description} exceeded the {} second {timeout_scope} deadline",
-            deadline.as_secs(),
-        );
-    };
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("the stdout reader of {description} panicked"))?
-        .with_context(|| format!("read stdout of {description}"))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("the stderr reader of {description} panicked"))?
-        .with_context(|| format!("read stderr of {description}"))?;
-    Ok(Output {
-        status,
-        stdout,
-        stderr,
-    })
+    match sequence_deadline {
+        Some(deadline) => crate::process_runner::run_with_deadline_until(
+            command,
+            command_deadline,
+            deadline,
+            description,
+        ),
+        None => crate::process_runner::run_with_deadline(command, command_deadline, description),
+    }
 }
 
-/// Start a thread that reads `handle` to end of file.
-fn drain<R: Read + Send + 'static>(
-    handle: Option<R>,
-    description: &str,
-) -> Result<std::thread::JoinHandle<std::io::Result<Vec<u8>>>> {
-    let mut stream = handle.with_context(|| format!("capture {description}"))?;
-    std::thread::Builder::new()
-        .name(description.to_owned())
-        .spawn(move || {
-            let mut buffer = Vec::new();
-            stream.read_to_end(&mut buffer)?;
-            Ok(buffer)
-        })
-        .with_context(|| format!("start the reader for {description}"))
+/// Identify Cargo itself so unrelated child probes bypass its shared-state lock.
+fn is_cargo_command(command: &Command) -> bool {
+    std::path::Path::new(command.get_program())
+        .file_stem()
+        .is_some_and(|name| name == "cargo")
 }
 
 #[cfg(test)]
 mod tests {
     //! Behavioural tests for the boundary command runner.
 
-    use super::{run_with_deadline, run_with_deadline_until};
+    use super::{is_cargo_command, run_with_deadline, run_with_deadline_until};
     use anyhow::{Context, Result, ensure};
     use cap_std::{ambient_authority, fs::Dir};
     use rstest::rstest;
@@ -157,6 +106,23 @@ mod tests {
     const CHILD_MARKER_ROOT_ENV: &str = "ORTHO_L10N_BOUNDARY_COMMAND_TEST_MARKER_ROOT";
     const STREAM_PAYLOAD_BYTES: usize = 256 * 1024;
     const CHILD_COMPLETION_DELAY: Duration = Duration::from_millis(1_500);
+    const PIPE_HOLDER_DELAY: Duration = Duration::from_secs(4);
+
+    #[rstest]
+    #[case::cargo("cargo", true)]
+    #[case::windows_cargo("cargo.exe", true)]
+    #[case::cargo_subcommand("cargo-orthohelp", false)]
+    #[case::probe_child("sleep", false)]
+    fn only_cargo_commands_take_the_shared_lock(
+        #[case] program: &str,
+        #[case] expected: bool,
+    ) -> Result<()> {
+        ensure!(
+            is_cargo_command(&Command::new(program)) == expected,
+            "unexpected Cargo command classification for {program}"
+        );
+        Ok(())
+    }
 
     #[rstest]
     fn boundary_command_runner_child_process_behavior() -> Result<()> {
@@ -167,6 +133,8 @@ mod tests {
         match mode.to_string_lossy().as_ref() {
             "large-output" => write_large_streams(),
             "delayed-markers" => write_delayed_markers(),
+            "pipe-holding-root" => write_pipe_holding_root(),
+            "pipe-holder" => write_pipe_holder(),
             other => anyhow::bail!("unknown child process test mode: {other}"),
         }
     }
@@ -204,6 +172,34 @@ mod tests {
         ensure!(
             output.stderr.len() >= STREAM_PAYLOAD_BYTES,
             "child stderr did not exceed a pipe buffer"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn runner_terminates_pipe_holding_descendants_after_root_exit() -> Result<()> {
+        let marker_root = tempfile::tempdir()?;
+        let marker_dir = Dir::open_ambient_dir(marker_root.path(), ambient_authority())?;
+        let started = Instant::now();
+        let output = run_with_deadline(
+            child_command("pipe-holding-root", Some(marker_root.path()))?,
+            Duration::from_secs(8),
+            "pipe-holding root child",
+        )?;
+
+        ensure!(output.status.success(), "root child failed: {output:?}");
+        ensure!(
+            marker_dir.exists("pipe-holder-started"),
+            "the pipe-holding descendant did not start"
+        );
+        ensure!(
+            !marker_dir.exists("pipe-holder-finished"),
+            "the descendant finished naturally instead of being terminated"
+        );
+        ensure!(
+            started.elapsed() < Duration::from_secs(2),
+            "runner waited for the descendant's inherited output pipes: {:?}",
+            started.elapsed()
         );
         Ok(())
     }
@@ -328,6 +324,37 @@ mod tests {
         directory.write("started", b"started")?;
         thread::sleep(CHILD_COMPLETION_DELAY);
         directory.write("completed", b"completed")?;
+        Ok(())
+    }
+
+    fn write_pipe_holding_root() -> Result<()> {
+        let root = std::env::var_os(CHILD_MARKER_ROOT_ENV)
+            .context("locate the marker root for the descendant test")?;
+        let directory = Dir::open_ambient_dir(&root, ambient_authority())?;
+        let mut descendant = child_command("pipe-holder", Some(Path::new(&root)))?;
+        let _child = descendant
+            .spawn()
+            .context("start the pipe-holding descendant")?;
+        // Dropping this handle does not kill the descendant; the shared
+        // process-tree owner must close its inherited output pipes on root exit.
+        let start_deadline = Instant::now() + Duration::from_secs(2);
+        while !directory.exists("pipe-holder-started") && Instant::now() < start_deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        ensure!(
+            directory.exists("pipe-holder-started"),
+            "the pipe-holding descendant did not signal startup"
+        );
+        Ok(())
+    }
+
+    fn write_pipe_holder() -> Result<()> {
+        let root = std::env::var_os(CHILD_MARKER_ROOT_ENV)
+            .context("locate the marker root for the pipe-holding descendant")?;
+        let directory = Dir::open_ambient_dir(root, ambient_authority())?;
+        directory.write("pipe-holder-started", b"started")?;
+        thread::sleep(PIPE_HOLDER_DELAY);
+        directory.write("pipe-holder-finished", b"finished")?;
         Ok(())
     }
 }
