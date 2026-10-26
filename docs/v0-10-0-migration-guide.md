@@ -237,6 +237,21 @@ spelling in generated help.
 The capabilities below are opt-in. Applications that do not use them need no
 changes.
 
+### Bridge-cache metrics
+
+`cargo-orthohelp` v0.10.0 adds an opt-in counter for bridge-cache outcomes.
+Enable the `metrics` feature when installing the tool by passing
+`--features metrics` to `cargo install cargo-orthohelp --version 0.10.0`. The
+[user's guide](users-guide.md#collect-bridge-cache-metrics) has the tested
+installation command.
+
+The feature is additive and disabled by default. It does not install a metrics
+recorder; the process must provide one for events to be collected. The counter
+is `cargo_orthohelp.bridge_cache.events`, with bounded `operation` values
+`lookup` and `publish`, and `outcome` values `hit`, `miss`, `read_failed`,
+`unchanged`, `updated`, and `write_failed`. No migration is needed for existing
+commands.
+
 ### Named profiles
 
 Add `profiles` to a struct's `#[ortho_config(...)]` attribute to offer

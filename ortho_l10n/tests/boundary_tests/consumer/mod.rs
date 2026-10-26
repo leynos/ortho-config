@@ -86,11 +86,10 @@ fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
         fixture
             .test_until(sequence_deadline)
             .with_context(|| shape.clone())?;
-        assert_paths_for(
-            dependency,
-            &fixture.resolve_metadata_until(sequence_deadline)?,
-        )
-        .with_context(|| shape)?;
+        let metadata = fixture
+            .resolve_metadata_until(sequence_deadline)
+            .with_context(|| shape.clone())?;
+        assert_paths_for(dependency, &metadata).with_context(|| shape)?;
     }
     Ok(())
 }

@@ -1582,8 +1582,9 @@ The feature is opt-in and does not install a metrics recorder. The standalone
 CLI does not install one either, so events are collected only when the process
 provides its own `metrics` recorder. Without a recorder, the metrics facade
 drops them. The feature is additive and disabled by default; no migration is
-needed to keep using existing commands. See the
-[v0.10.0 migration guide](v0-10-0-migration-guide.md) for other v0.10 changes.
+needed to keep using existing commands. For the upgrade summary, see the
+[bridge-cache metrics entry](v0-10-0-migration-guide.md#bridge-cache-metrics)
+in the v0.10.0 migration guide.
 
 ## Generate every format at once
 

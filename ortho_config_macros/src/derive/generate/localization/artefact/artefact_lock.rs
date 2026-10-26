@@ -24,12 +24,22 @@ const LOCK_FILE: &str = "cli-identifiers.lock";
 
 /// Holds the exclusive artefact-publication lock for its whole lifetime.
 ///
-/// The lock is released when this guard is dropped and the underlying file
-/// handle closes, which covers the caller's error paths as well as its success
-/// path.
+/// Dropping the guard explicitly unlocks before the underlying file handle
+/// closes, which covers the caller's error paths as well as its success path.
 pub(super) struct LockGuard {
     /// Keeps the locked handle open; the guard owns the lock's lifetime.
-    _file: fs::File,
+    file: fs::File,
+}
+
+impl Drop for LockGuard {
+    fn drop(&mut self) {
+        // A concurrent fork can briefly inherit this open-file description
+        // before exec closes its close-on-exec descriptor. Explicit unlock
+        // prevents that child from prolonging the completed critical section.
+        // Drop cannot report an unlock error; closing the parent handle remains
+        // the best-effort fallback.
+        let _unlock_result = self.file.unlock();
+    }
 }
 
 /// How long a reporting acquirer sleeps between attempts.
@@ -117,7 +127,7 @@ fn lock_error(root: &Path, error: &std::io::Error) -> syn::Error {
 pub(super) fn lock(root: &Path) -> syn::Result<LockGuard> {
     let file = open_lock_file(&lock_path(root))?;
     file.lock().map_err(|error| lock_error(root, &error))?;
-    Ok(LockGuard { _file: file })
+    Ok(LockGuard { file })
 }
 
 /// Acquires the lock, reporting each observed wait to `on_wait`.
@@ -131,7 +141,7 @@ pub(super) fn lock_while(root: &Path, mut on_wait: impl FnMut(Duration)) -> syn:
     let started = Instant::now();
     loop {
         match file.try_lock() {
-            Ok(()) => return Ok(LockGuard { _file: file }),
+            Ok(()) => return Ok(LockGuard { file }),
             Err(fs::TryLockError::WouldBlock) => {
                 on_wait(started.elapsed());
                 std::thread::sleep(POLL_INTERVAL);
@@ -162,16 +172,19 @@ pub(super) fn create_lock(root: &Path) -> std::io::Result<()> {
 /// production code locks, rather than duplicating the filename.
 ///
 /// The probe is read-only by construction. It opens without create or
-/// truncate and its non-blocking acquisition is dropped before returning, so
-/// an observation cannot create the file, clear its contents, or keep the
-/// lock it just took. It answers with the raw I/O error rather than
-/// `open_lock_file`'s spanned diagnostic, and a missing lock file is
-/// `NotFound` — call [`create_lock`] to set the probe up.
+/// truncate and explicitly unlocks a successful non-blocking acquisition
+/// before returning. This prevents a concurrently forked child from keeping
+/// the probe's lock after the parent closes its handle. It answers with the raw
+/// I/O error rather than `open_lock_file`'s spanned diagnostic, and a missing
+/// lock file is `NotFound` — call [`create_lock`] to set the probe up.
 #[cfg(test)]
 pub(super) fn is_free(root: &Path) -> std::io::Result<bool> {
     let file = open_existing_lock_file(&lock_path(root))?;
     let free = match file.try_lock() {
-        Ok(()) => true,
+        Ok(()) => {
+            file.unlock()?;
+            true
+        }
         Err(fs::TryLockError::WouldBlock) => false,
         Err(fs::TryLockError::Error(error)) => return Err(error),
     };
@@ -179,4 +192,35 @@ pub(super) fn is_free(root: &Path) -> std::io::Result<bool> {
     // `LockGuard` releases the production lock.
     drop(file);
     Ok(free)
+}
+
+#[cfg(all(test, unix))]
+mod lock_tests {
+    //! Verify guard drop releases the lock while a duplicate descriptor stays open.
+
+    use anyhow::{Context, Result, ensure};
+    use rstest::rstest;
+
+    use super::super::fragment_tests::TempRoot;
+    use super::{create_lock, is_free, lock};
+
+    #[rstest]
+    fn dropping_guard_unlocks_while_a_duplicate_descriptor_remains_open() -> Result<()> {
+        let root = TempRoot::new()?;
+        create_lock(root.path()).context("create the lock file for the duplicate test")?;
+        let guard = lock(root.path())?;
+        let duplicate = guard
+            .file
+            .try_clone()
+            .context("duplicate the held lock descriptor")?;
+
+        drop(guard);
+
+        ensure!(
+            is_free(root.path()).context("probe while the duplicate descriptor remains open")?,
+            "dropping the guard must unlock before its duplicate descriptor closes",
+        );
+        drop(duplicate);
+        Ok(())
+    }
 }
