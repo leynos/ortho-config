@@ -72,8 +72,9 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: ordering holds for a wide range of both and would not notice either
 #: drifting away from the sample it was sized against.
 #:
-#: The largest allowance is 1,200 s for the serialized boundary binary. Its
-#: package-set tests can run two child Cargo commands, each bounded at 520 s.
+#: The largest allowance is 2,200 s for the serialized boundary binary. The
+#: packaged-consumer scenario has one shared 2,100 s deadline across its
+#: packaging and fixture Cargo commands.
 #: Trybuild, `rstest_bdd`, and documentation scenarios each allow 960 s, or
 #: eight warning periods of 120 s. The trybuild allowance was 600 s until that
 #: class outgrew it --
@@ -81,14 +82,15 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: at 572.5 s of 600 s on run 36068184976, and `must_use_compile_tests`
 #: was killed at 600.224 s on run 36070786646. The BDD allowance is
 #: measured independently in `documentation_budget_test.py`.
-REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 1_200.0
+REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 2_200.0
 #: The whole-run budget, raised from 1,800 s when the dated-nightly pin
 #: cold-missed sccache. Sized from the run that was cancelled rather than
 #: from the warm sample that predates the pin: the Windows leg ran
 #: 1,810.1 s, and its younger survivor had run 157.3 s when the timer
-#: fired, so it started at 1,652.8 s and could not have finished before
-#: 1,652.8 + its own 600 s allowance, or 2,252.8 s. 2,300 s covers that
-#: bound with 47 s to spare; 1,800 s fell 452.8 s short of it. The
+#: fired, so it started at 1,652.8 s and could have run until
+#: 1,652.8 + its own 600 s allowance, or 2,252.8 s. That is an upper bound
+#: on its permitted end time. 2,300 s covers it with 47 s to spare; 1,800 s
+#: fell 452.8 s short. The
 #: comparison against the previous toolchain is 1,044.1 s over the same
 #: tests and features. See issue 614.
 REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 2_300.0

@@ -88,6 +88,12 @@ BUILD_TEST_JOB: typ.Final[str] = "build-test"
 #: The step that republishes the chosen root through ``GITHUB_ENV``.
 CHOOSER_STEP: typ.Final[str] = "Choose the coverage target root"
 LINUX_CHOOSER_STEP: typ.Final[str] = "Choose the Linux coverage target root"
+WITH_SERDE_COVERAGE_STEP: typ.Final[str] = (
+    "Test and Measure Coverage (with serde_saphyr)"
+)
+WITHOUT_SERDE_COVERAGE_STEP: typ.Final[str] = (
+    "Test and Measure Coverage (without serde_saphyr)"
+)
 
 
 def _coverage_steps() -> list[dict[str, typ.Any]]:
@@ -212,6 +218,84 @@ def test_windows_chooser_remains_scoped_to_windows() -> None:
     assert chooser.get("if") == "${{ matrix.platform == 'windows' }}", (
         "the chooser must be scoped to Windows; it runs on "
         f"{chooser.get('if')!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name", "chooser_name", "consumer_name"),
+    [
+        pytest.param(
+            "ci.yml",
+            BUILD_TEST_JOB,
+            CHOOSER_STEP,
+            WITH_SERDE_COVERAGE_STEP,
+            id="build-test-windows-chooser-before-with-serde",
+        ),
+        pytest.param(
+            "ci.yml",
+            BUILD_TEST_JOB,
+            CHOOSER_STEP,
+            WITHOUT_SERDE_COVERAGE_STEP,
+            id="build-test-windows-chooser-before-without-serde",
+        ),
+        pytest.param(
+            "ci.yml",
+            BUILD_TEST_JOB,
+            LINUX_CHOOSER_STEP,
+            WITH_SERDE_COVERAGE_STEP,
+            id="build-test-linux-chooser-before-with-serde",
+        ),
+        pytest.param(
+            "ci.yml",
+            BUILD_TEST_JOB,
+            LINUX_CHOOSER_STEP,
+            WITHOUT_SERDE_COVERAGE_STEP,
+            id="build-test-linux-chooser-before-without-serde",
+        ),
+        pytest.param(
+            "coverage-main.yml",
+            "coverage-upload",
+            LINUX_CHOOSER_STEP,
+            WITH_SERDE_COVERAGE_STEP,
+            id="coverage-publisher-chooser-before-with-serde",
+        ),
+        pytest.param(
+            "coverage-main.yml",
+            "coverage-upload",
+            LINUX_CHOOSER_STEP,
+            WITHOUT_SERDE_COVERAGE_STEP,
+            id="coverage-publisher-chooser-before-without-serde",
+        ),
+    ],
+)
+def test_each_coverage_chooser_precedes_both_consuming_steps(
+    workflow_name: str, job_name: str, chooser_name: str, consumer_name: str
+) -> None:
+    """Each coverage root is published before each action that reads it."""
+    workflow = read_workflows(WORKFLOWS)[workflow_name]
+    steps = workflow_jobs(workflow)[job_name].get("steps") or []
+    named_steps = [
+        (index, step)
+        for index, step in enumerate(steps)
+        if isinstance(step, dict) and isinstance(step.get("name"), str)
+    ]
+    chooser_indexes = [
+        index for index, step in named_steps if step["name"] == chooser_name
+    ]
+    consumer_indexes = [
+        index for index, step in named_steps if step["name"] == consumer_name
+    ]
+
+    assert len(chooser_indexes) == 1, (
+        f"expected exactly one {chooser_name!r} chooser in {job_name}, "
+        f"found {len(chooser_indexes)}"
+    )
+    assert len(consumer_indexes) == 1, (
+        f"expected exactly one {consumer_name!r} consumer in {job_name}, "
+        f"found {len(consumer_indexes)}"
+    )
+    assert chooser_indexes[0] < consumer_indexes[0], (
+        f"{chooser_name!r} appears after {consumer_name!r} in {job_name}"
     )
 
 

@@ -19,23 +19,63 @@ const DEV_FAST_RUSTFLAGS: [&str; 5] = [
 fn trybuild_rustflags(package_root: &str) -> String {
     let encoded_flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").ok();
     let rustflags = std::env::var("RUSTFLAGS").ok();
-    let is_coverage_build = rustflags
-        .as_deref()
-        .is_some_and(|flags| flags.contains("-C instrument-coverage"));
-    compose_trybuild_rustflags(encoded_flags.as_deref(), is_coverage_build, package_root)
+    let configured_rustflags = std::env::var("CARGO_BUILD_RUSTFLAGS").ok();
+    let flags = selected_rustflags(
+        encoded_flags.as_deref(),
+        rustflags.as_deref(),
+        configured_rustflags.as_deref(),
+    );
+    let is_coverage_build = has_coverage_instrumentation(&flags);
+    compose_trybuild_rustflags(&flags, is_coverage_build, package_root)
 }
 
-fn compose_trybuild_rustflags(
+fn selected_rustflags(
     encoded_flags: Option<&str>,
-    is_coverage_build: bool,
-    package_root: &str,
-) -> String {
-    let mut flags = encoded_flags
-        .unwrap_or_default()
+    rustflags: Option<&str>,
+    configured_rustflags: Option<&str>,
+) -> Vec<String> {
+    if let Some(flags) = encoded_flags {
+        return split_encoded_rustflags(flags);
+    }
+    if let Some(flags) = rustflags {
+        return flags.split_whitespace().map(str::to_owned).collect();
+    }
+    if let Some(flags) = configured_rustflags {
+        return flags.split_whitespace().map(str::to_owned).collect();
+    }
+    configured_development_rustflags()
+}
+
+fn split_encoded_rustflags(flags: &str) -> Vec<String> {
+    flags
         .split(RUSTFLAGS_SEPARATOR)
         .filter(|flag| !flag.is_empty())
         .map(str::to_owned)
-        .collect::<Vec<_>>();
+        .collect()
+}
+
+fn configured_development_rustflags() -> Vec<String> {
+    let flag_count = if cfg!(target_os = "linux") { 5 } else { 4 };
+    DEV_FAST_RUSTFLAGS
+        .iter()
+        .take(flag_count)
+        .map(|flag| (*flag).to_owned())
+        .collect()
+}
+
+fn has_coverage_instrumentation(flags: &[String]) -> bool {
+    flags.iter().any(|flag| flag == "-Cinstrument-coverage")
+        || flags
+            .windows(2)
+            .any(|pair| pair == ["-C", "instrument-coverage"])
+}
+
+fn compose_trybuild_rustflags(
+    selected_flags: &[String],
+    is_coverage_build: bool,
+    package_root: &str,
+) -> String {
+    let mut flags = selected_flags.to_vec();
     if is_coverage_build {
         flags.retain(|flag| !DEV_FAST_RUSTFLAGS.contains(&flag.as_str()));
     }
@@ -75,7 +115,8 @@ fn coverage_trybuild_flags_exclude_development_build_flags() {
     ]
     .join(&RUSTFLAGS_SEPARATOR.to_string());
 
-    let encoded = compose_trybuild_rustflags(Some(&inherited), true, "/workspace/package");
+    let selected = split_encoded_rustflags(&inherited);
+    let encoded = compose_trybuild_rustflags(&selected, true, "/workspace/package");
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert!(arguments.windows(2).any(|pair| pair == ["-D", "warnings"]));
@@ -93,7 +134,8 @@ fn coverage_trybuild_flags_exclude_development_build_flags() {
 
 #[test]
 fn empty_encoded_flags_do_not_add_an_empty_argument() {
-    let encoded = compose_trybuild_rustflags(Some(""), true, "/workspace/package");
+    let selected = split_encoded_rustflags("");
+    let encoded = compose_trybuild_rustflags(&selected, true, "/workspace/package");
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert!(arguments.iter().all(|flag| !flag.is_empty()));
@@ -106,9 +148,8 @@ fn empty_encoded_flags_do_not_add_an_empty_argument() {
 
 #[test]
 fn non_coverage_trybuild_flags_preserve_the_development_build_standard() {
-    let inherited = DEV_FAST_RUSTFLAGS.join(&RUSTFLAGS_SEPARATOR.to_string());
-
-    let encoded = compose_trybuild_rustflags(Some(&inherited), false, "/workspace/package");
+    let selected = DEV_FAST_RUSTFLAGS.map(str::to_owned);
+    let encoded = compose_trybuild_rustflags(&selected, false, "/workspace/package");
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert!(
@@ -116,6 +157,74 @@ fn non_coverage_trybuild_flags_preserve_the_development_build_standard() {
             .iter()
             .all(|flag| arguments.contains(flag))
     );
+}
+
+#[test]
+fn plain_environment_flags_are_selected_when_encoded_flags_are_absent() {
+    let inherited = format!("-D warnings {}", DEV_FAST_RUSTFLAGS.join(" "));
+    let selected = selected_rustflags(None, Some(&inherited), None);
+    let encoded = compose_trybuild_rustflags(&selected, false, "/workspace/package");
+    let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
+
+    assert!(arguments.windows(2).any(|pair| pair == ["-D", "warnings"]));
+    assert!(
+        DEV_FAST_RUSTFLAGS
+            .iter()
+            .all(|flag| arguments.contains(flag))
+    );
+}
+
+#[test]
+fn plain_coverage_flags_keep_warnings_and_remove_development_flags() {
+    let inherited = format!(
+        "-D warnings -C instrument-coverage {}",
+        DEV_FAST_RUSTFLAGS.join(" ")
+    );
+    let selected = selected_rustflags(None, Some(&inherited), None);
+    let encoded = compose_trybuild_rustflags(
+        &selected,
+        has_coverage_instrumentation(&selected),
+        "/workspace/package",
+    );
+    let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
+
+    assert!(arguments.windows(2).any(|pair| pair == ["-D", "warnings"]));
+    assert!(
+        arguments
+            .windows(2)
+            .any(|pair| pair == ["-C", "instrument-coverage"])
+    );
+    assert!(
+        !DEV_FAST_RUSTFLAGS
+            .iter()
+            .any(|flag| arguments.contains(flag))
+    );
+}
+
+#[test]
+fn configuration_flags_are_selected_when_environment_flags_are_absent() {
+    let selected = selected_rustflags(None, None, None);
+    let configured = configured_development_rustflags();
+    let encoded = compose_trybuild_rustflags(&selected, false, "/workspace/package");
+    let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
+
+    assert_eq!(selected, configured);
+    assert!(
+        configured
+            .iter()
+            .all(|flag| arguments.contains(&flag.as_str()))
+    );
+}
+
+#[test]
+fn encoded_flags_take_precedence_over_plain_and_configured_flags() {
+    let selected = selected_rustflags(
+        Some("-D\u{1f}warnings"),
+        Some("-C opt-level=0"),
+        Some("-C debuginfo=0"),
+    );
+
+    assert_eq!(selected, ["-D".to_owned(), "warnings".to_owned()]);
 }
 
 #[test]

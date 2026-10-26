@@ -188,16 +188,16 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # reading. Serialize the binary.
 #
 # Several boundary tests run multiple nested Cargo commands, which can wait on
-# the shared package-cache lock held by other worktrees. The package set uses
-# two invocations bounded at 520 s each, and consumer commands use a 420 s child
-# deadline. Give this serialized binary a 1,200 s per-test ceiling so both
-# package invocations fit with 120 s reserved for unpacking and root checks,
-# plus 40 s of scheduling margin. The existing 2,300 s global timeout still
-# bounds the whole test run.
+# the shared package-cache lock held by other worktrees. The packaged-consumer
+# scenario has two packaging invocations and six fixture Cargo commands; their
+# independent deadlines do not fit in one test allowance. That scenario gives
+# every child the same 2,100 s sequence deadline. Give the serialized binary a
+# 2,200 s per-test ceiling, leaving 100 s for error reporting and teardown; the
+# 2,300 s global timeout still bounds the whole test run.
 #
 # `make boundary` and `make test` do not need this entry: each starts one
 # process for the binary, which initializes the cache once and reuses it.
 [[profile.default.overrides]]
 filter = 'binary(boundary)'
 test-group = 'boundary_packaging'
-slow-timeout = { period = "120s", terminate-after = 10 }
+slow-timeout = { period = "220s", terminate-after = 10 }
