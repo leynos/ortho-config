@@ -10,14 +10,15 @@
 //!   [`BOUNDARY_ROOT`], so the nested resolution cannot contend with the parent
 //!   build's fingerprints.
 //!
-//! Child process deadlines, inherited environment, Cargo metadata and manifest
-//! inspection each have a focused module: [`command`], [`environment`],
-//! [`metadata`] and [`manifest`].
+//! Child process deadlines and cleanup checks, inherited environment, Cargo
+//! metadata and manifest inspection each have a focused module: [`command`],
+//! [`process_state`], [`environment`], [`metadata`] and [`manifest`].
 
 mod command;
 pub(crate) mod environment;
 pub(crate) mod manifest;
 pub(crate) mod metadata;
+mod process_state;
 
 #[cfg(test)]
 #[path = "metadata_proptests.rs"]
