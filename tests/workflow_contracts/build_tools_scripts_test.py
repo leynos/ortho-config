@@ -26,6 +26,7 @@ import os
 import pathlib
 import shutil
 import subprocess  # noqa: S404 - the contract drives the scripts, which are the subject.
+import sys
 import tarfile
 import typing as typ
 
@@ -68,6 +69,31 @@ def _pinned_channel() -> str:
     raise AssertionError(message)
 
 
+def _pinned_components() -> list[str]:
+    """Return the component names in the toolchain's multiline TOML array."""
+    lines = (REPOSITORY_ROOT / "rust-toolchain.toml").read_text(encoding="utf-8").splitlines()
+    component_lines: list[str] = []
+    in_components = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("components"):
+            in_components = True
+        elif in_components and stripped == "]":
+            break
+        elif in_components and stripped.startswith('"'):
+            component_lines.append(stripped.split('"')[1])
+    return component_lines
+
+
+def _pinned_profile() -> str:
+    """Return the profile in the toolchain's TOML section."""
+    for line in (REPOSITORY_ROOT / "rust-toolchain.toml").read_text(encoding="utf-8").splitlines():
+        if line.strip().startswith("profile"):
+            return line.split('"')[1]
+    message = "rust-toolchain.toml names no profile"
+    raise AssertionError(message)
+
+
 def _fake_rustup(
     directory: pathlib.Path, *, installed: bool = True, cranelift_installed: bool = True
 ) -> None:
@@ -96,8 +122,10 @@ def tools(tmp_path: pathlib.Path) -> pathlib.Path:
     """Return a directory holding the system tools the scripts use, and nothing else.
 
     Linking the real binaries in, rather than inheriting ``PATH``, is what lets a
-    case control whether ``mold`` or ``rustup`` exists at all.
+    case control whether ``ld.mold`` or ``rustup`` exists at all.
     """
+    if not sys.platform.startswith("linux"):
+        pytest.skip("the build-tools script fixtures require Linux")
     directory = tmp_path / "bin"
     directory.mkdir()
     needed = (
@@ -126,7 +154,7 @@ def test_check_passes_when_every_prerequisite_is_present(
 ) -> None:
     """The positive control: the failures below are about their one missing piece."""
     _fake_rustup(tools)
-    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "ld.mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
     result = _check(tmp_path, tools)
     assert result.returncode == 0, result.stderr
     assert "Cranelift codegen component available" in result.stderr, result.stderr
@@ -137,7 +165,7 @@ def test_check_fails_with_the_install_hint_when_cranelift_is_missing(
 ) -> None:
     """A nightly without its selected development backend is not ready to build."""
     _fake_rustup(tools, cranelift_installed=False)
-    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "ld.mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
     result = _check(tmp_path, tools)
     assert result.returncode != 0, result.stderr
     assert "Cranelift codegen component is not installed" in result.stderr, result.stderr
@@ -147,11 +175,12 @@ def test_check_fails_with_the_install_hint_when_cranelift_is_missing(
 def test_check_fails_with_the_install_hint_when_mold_is_missing(
     tmp_path: pathlib.Path, tools: pathlib.Path
 ) -> None:
-    """No linker on ``PATH``: the check fails, names the fix, and blames only the linker."""
+    """A ``mold`` driver alone cannot satisfy Clang's ``ld.mold`` lookup."""
     _fake_rustup(tools)
+    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
     result = _check(tmp_path, tools)
     assert result.returncode != 0, result.stderr
-    assert "mold not found on PATH" in result.stderr, result.stderr
+    assert "ld.mold not found on PATH" in result.stderr, result.stderr
     assert HINT in result.stderr, result.stderr
     assert "is not installed" not in result.stderr, result.stderr
 
@@ -161,7 +190,7 @@ def test_check_fails_when_mold_cannot_report_its_version(
 ) -> None:
     """A truncated or broken linker is a failure, not a version-drift warning."""
     _fake_rustup(tools)
-    _tool(tools, "mold", "exit 1")
+    _tool(tools, "ld.mold", "exit 1")
     result = _check(tmp_path, tools)
     assert result.returncode != 0, result.stderr
     assert "cannot report its version" in result.stderr, result.stderr
@@ -173,7 +202,8 @@ def test_check_fails_when_mold_differs_from_the_pin(
 ) -> None:
     """An advisory pin is not a pin: a different release fails, and says how to match."""
     _fake_rustup(tools)
-    _tool(tools, "mold", "echo 'mold 1.0.0 (compatible with GNU ld)'")
+    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "ld.mold", "echo 'mold 1.0.0 (compatible with GNU ld)'")
     result = _check(tmp_path, tools)
     assert result.returncode != 0, result.stderr
     assert f"does not match the pin {PIN}" in result.stderr, result.stderr
@@ -185,12 +215,12 @@ def test_check_fails_when_the_pinned_toolchain_is_not_installed(
 ) -> None:
     """The toolchain half fails on its own, with the same fix named."""
     _fake_rustup(tools, installed=False)
-    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "ld.mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
     result = _check(tmp_path, tools)
     assert result.returncode != 0, result.stderr
     assert "is not installed" in result.stderr, result.stderr
     assert HINT in result.stderr, result.stderr
-    assert "mold not found" not in result.stderr, result.stderr
+    assert "ld.mold not found" not in result.stderr, result.stderr
 
 
 def test_check_reports_every_missing_piece_in_one_pass(
@@ -200,7 +230,7 @@ def test_check_reports_every_missing_piece_in_one_pass(
     result = _check(tmp_path, tools)
     assert result.returncode != 0, result.stderr
     assert "rustup not found on PATH" in result.stderr, result.stderr
-    assert "mold not found on PATH" in result.stderr, result.stderr
+    assert "ld.mold not found on PATH" in result.stderr, result.stderr
 
 
 def test_check_fails_when_host_os_cannot_be_detected(
@@ -208,11 +238,23 @@ def test_check_fails_when_host_os_cannot_be_detected(
 ) -> None:
     """A failed uname query must not masquerade as a non-Linux linker skip."""
     _fake_rustup(tools)
-    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "ld.mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
     _tool(tools, "uname", "exit 1")
     result = _check(tmp_path, tools)
     assert result.returncode != 0, result.stderr
     assert "could not determine host operating system using uname -s" in result.stderr
+
+
+def test_check_preserves_rustup_toolchain_list_failure(
+    tmp_path: pathlib.Path, tools: pathlib.Path
+) -> None:
+    """A failed rustup listing is not misreported as an absent toolchain."""
+    _tool(tools, "ld.mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "rustup", 'if [ "$1" = toolchain ]; then exit 17; fi')
+    result = _check(tmp_path, tools)
+    assert result.returncode != 0, result.stderr
+    assert "could not list installed Rust toolchains" in result.stderr, result.stderr
+    assert "is not installed" not in result.stderr, result.stderr
 
 
 def test_check_refuses_an_unreadable_pin(tmp_path: pathlib.Path, tools: pathlib.Path) -> None:
@@ -235,7 +277,7 @@ def test_check_refuses_malformed_version_pins(
 ) -> None:
     """The check rejects blank, multiline and internally spaced pins."""
     _fake_rustup(tools)
-    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "ld.mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
     result = _check(tmp_path, tools, version=version)
     assert result.returncode != 0, result.stderr
     assert diagnostic in result.stderr, result.stderr
@@ -277,12 +319,12 @@ def offline_install(tmp_path: pathlib.Path, tools: pathlib.Path) -> OfflineInsta
     (release_dir / f"v{PIN}").mkdir(parents=True)
     root = tmp_path / "src" / f"mold-{PIN}-{arch}-linux"
     (root / "bin").mkdir(parents=True)
-    (root / "bin" / "mold").write_text("#!/bin/sh\necho mold\n", encoding="utf-8")
+    (root / "bin" / "ld.mold").write_text("#!/bin/sh\necho mold\n", encoding="utf-8")
     archive_path = release_dir / f"v{PIN}" / name
     with tarfile.open(archive_path, "w:gz") as archive:
         archive.add(root, arcname=root.name)
     digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    _tool(tools, "rustup", f"echo \"$@\" >> '{tmp_path}/rustup.log'")
+    _tool(tools, "rustup", f"printf '%s\\n' \"$@\" >> '{tmp_path}/rustup.log'")
     return OfflineInstall(tmp_path, tools, release_dir, f"{digest}  {name}\n")
 
 
@@ -325,14 +367,25 @@ def test_install_refuses_duplicate_checksum_rows_before_unpack_or_rustup(
 def test_install_unpacks_a_verified_archive_then_installs_the_toolchain(
     offline_install: OfflineInstall,
 ) -> None:
-    """The verified tree lands under the prefix, and rustup is asked for the pinned toolchain."""
-    result = _run(INSTALL, offline_install.env(offline_install.sums_line))
-    assert result.returncode == 0, result.stderr
-    assert (offline_install.root / "prefix" / "bin" / "mold").is_file(), result.stderr
-    logged = (offline_install.root / "rustup.log").read_text(encoding="utf-8").split()
-    assert logged == ["toolchain", "install"], (
-        "rustup was not asked to install the toolchain rust-toolchain.toml names"
+    """Install the pinned channel and every configured component despite an override."""
+    result = _run(
+        INSTALL,
+        {
+            **offline_install.env(offline_install.sums_line),
+            "RUSTUP_TOOLCHAIN": "stable",
+        },
     )
+    assert result.returncode == 0, result.stderr
+    assert (offline_install.root / "prefix" / "bin" / "ld.mold").is_file(), result.stderr
+    logged = (offline_install.root / "rustup.log").read_text(encoding="utf-8").splitlines()
+    assert logged == [
+        "toolchain",
+        "install",
+        _pinned_channel(),
+        "--profile",
+        _pinned_profile(),
+        *[argument for component in _pinned_components() for argument in ("--component", component)],
+    ], "rustup did not receive the pinned channel and all configured components explicitly"
 
 
 def test_install_fails_when_host_os_cannot_be_detected(

@@ -116,6 +116,16 @@ routes displacing the configuration instead.
   toolchain from `rust-toolchain.toml`, and `release.yml` names no toolchain,
   so the Dependabot-maintained pin governs releases with production flags only.
   No workflow names a dated nightly other than the pin (estate rule RT-027).
+- For a local-path install from this checkout, override the nightly-only Cargo
+  flags explicitly:
+
+  ```sh
+  RUSTFLAGS="-D warnings" cargo +stable install --path cargo-orthohelp
+  ```
+
+  Cargo reads this checkout's `.cargo/config.toml` for a local-path install.
+  Registry installs use configuration discovered from the invoking environment,
+  not this checkout's configuration.
 - Add a daily `rust-toolchain` entry to `.github/dependabot.yml` so the pin
   stays within the 56-day window.
 

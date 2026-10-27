@@ -17,8 +17,9 @@ use super::{PACKAGING_INVOCATIONS, package_sources};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
-use std::sync::OnceLock;
-use std::time::Instant;
+use std::sync::{Mutex, MutexGuard, OnceLock, TryLockError};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// Directory `cargo package` writes into, relative to the shared target root.
 const PACKAGE_DIRECTORY: &str = "package";
@@ -71,13 +72,142 @@ pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
     ("ortho_config", PACKAGED_VERSION),
 ];
 
-/// The packaged set, materialized once per test process by
-/// [`prepare_packaged_set`].
+/// Process-local state for the packaged roots used by boundary contracts.
 ///
-/// This is a *store*, not a lookup, and it is module-private for that reason:
-/// a caller reading it is a caller that cannot spawn packaging or Cargo, which
-/// is what keeps the contracts' own queries free of side effects.
-static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
+/// Successful packaging is shared by every caller in the test process. An
+/// unbounded packaging failure is retained so callers do not repeat failed
+/// Cargo work; a failure from a sequence-bounded attempt is caller-specific and
+/// must not prevent a later caller with remaining budget from retrying. This
+/// cache belongs only to this package-set module and is not a general-purpose
+/// cache for other test fixtures.
+struct PackagedSetCache {
+    roots: OnceLock<Vec<PackagedCrate>>,
+    failure: OnceLock<String>,
+    preparation: Mutex<()>,
+}
+
+impl PackagedSetCache {
+    /// Create an empty process-local cache.
+    const fn new() -> Self {
+        Self {
+            roots: OnceLock::new(),
+            failure: OnceLock::new(),
+            preparation: Mutex::new(()),
+        }
+    }
+
+    /// Package once, caching successful results and only unbounded failures.
+    fn prepare_with(
+        &self,
+        sequence_deadline: Option<Instant>,
+        build: impl FnOnce(Option<Instant>) -> Result<Vec<PackagedCrate>>,
+    ) -> Result<()> {
+        if self.is_ready()? {
+            return Ok(());
+        }
+        let _preparation = lock_preparation(&self.preparation, sequence_deadline)?;
+        if self.is_ready()? {
+            return Ok(());
+        }
+        ensure_deadline_remaining(sequence_deadline)?;
+        self.build_and_cache(sequence_deadline, build)
+    }
+
+    /// Whether roots are ready, or the retained unbounded failure if packaging failed.
+    fn is_ready(&self) -> Result<bool> {
+        match (self.roots.get(), self.failure.get()) {
+            (Some(_), _) => Ok(true),
+            (_, Some(error)) => anyhow::bail!("{error}"),
+            (None, None) => Ok(false),
+        }
+    }
+
+    /// Run the package recipe and store only caller-independent outcomes.
+    fn build_and_cache(
+        &self,
+        sequence_deadline: Option<Instant>,
+        build: impl FnOnce(Option<Instant>) -> Result<Vec<PackagedCrate>>,
+    ) -> Result<()> {
+        match build(sequence_deadline) {
+            Ok(roots) => self.cache_roots(roots),
+            Err(error) => self.report_build_failure(sequence_deadline, &error),
+        }
+    }
+
+    /// Retain one successful package result for later callers.
+    fn cache_roots(&self, roots: Vec<PackagedCrate>) -> Result<()> {
+        self.roots
+            .set(roots)
+            .map_err(|_| anyhow::anyhow!("packaged roots were initialized concurrently"))
+    }
+
+    /// Report a build failure, retaining it only when it has no caller deadline.
+    fn report_build_failure(
+        &self,
+        sequence_deadline: Option<Instant>,
+        error: &anyhow::Error,
+    ) -> Result<()> {
+        let message = format!("{error:#}");
+        if sequence_deadline.is_none() {
+            self.failure.get_or_init(|| message.clone());
+        }
+        anyhow::bail!("{message}")
+    }
+}
+
+/// Acquire the preparation lock within an optional caller deadline.
+fn lock_preparation(
+    preparation: &Mutex<()>,
+    sequence_deadline: Option<Instant>,
+) -> Result<MutexGuard<'_, ()>> {
+    sequence_deadline.map_or_else(
+        || {
+            preparation
+                .lock()
+                .map_err(|error| anyhow::anyhow!("package preparation lock is poisoned: {error}"))
+        },
+        |deadline| lock_before_deadline(preparation, deadline),
+    )
+}
+
+/// Refuse to start packaging after a caller's enclosing sequence deadline.
+fn ensure_deadline_remaining(sequence_deadline: Option<Instant>) -> Result<()> {
+    if let Some(deadline) = sequence_deadline {
+        anyhow::ensure!(
+            deadline > Instant::now(),
+            "packaged set could not start before its enclosing sequence deadline"
+        );
+    }
+    Ok(())
+}
+
+/// Wait for the package operation without exceeding a caller's deadline.
+fn lock_before_deadline(
+    preparation: &Mutex<()>,
+    sequence_deadline: Instant,
+) -> Result<MutexGuard<'_, ()>> {
+    const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+    loop {
+        match preparation.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(TryLockError::Poisoned(error)) => {
+                anyhow::bail!("package preparation lock is poisoned: {error}");
+            }
+            Err(TryLockError::WouldBlock) => {
+                let remaining = sequence_deadline.saturating_duration_since(Instant::now());
+                anyhow::ensure!(
+                    !remaining.is_zero(),
+                    "packaged set could not start before its enclosing sequence deadline"
+                );
+                thread::sleep(remaining.min(POLL_INTERVAL));
+            }
+        }
+    }
+}
+
+/// The packaged roots, materialized once per test process.
+static PACKAGED: PackagedSetCache = PackagedSetCache::new();
 
 /// Package and unpack this release's crates, once per test process.
 ///
@@ -89,8 +219,10 @@ static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
 /// suite.
 ///
 /// The first caller packages and unpacks; every later caller is a no-op that
-/// reads the same directory. A failure is cached too, so a broken packaging
-/// step is reported once rather than retried by every contract.
+/// reads the same directory. An unbounded failure is cached too, so a broken
+/// packaging step is reported once rather than retried by every contract. A
+/// sequence-bounded failure is not cached because that deadline belongs only
+/// to its caller.
 ///
 /// That cache is process-local, and nextest runs each test in its own process,
 /// so in a full run several of these packaged contracts package the same target
@@ -120,13 +252,7 @@ pub(crate) fn prepare_packaged_set_until(sequence_deadline: Instant) -> Result<(
 }
 
 fn prepare_packaged_set_with_deadline(sequence_deadline: Option<Instant>) -> Result<()> {
-    let packaged = PACKAGED.get_or_init(|| {
-        build_packaged_set(sequence_deadline).map_err(|error| format!("{error:#}"))
-    });
-    packaged
-        .as_deref()
-        .map(|_roots| ())
-        .map_err(|error| anyhow::anyhow!("{error}"))
+    PACKAGED.prepare_with(sequence_deadline, build_packaged_set)
 }
 
 /// The materialized packaged set.
@@ -137,12 +263,13 @@ fn prepare_packaged_set_with_deadline(sequence_deadline: Option<Instant>) -> Res
 /// failed. Both are reported rather than retried: this function cannot package
 /// anything, by design.
 fn packaged_set() -> Result<&'static [PackagedCrate]> {
-    let cached = PACKAGED
-        .get()
-        .context("the packaged set was never prepared; call prepare_packaged_set first")?;
-    cached
-        .as_deref()
-        .map_err(|error| anyhow::anyhow!("{error}"))
+    if let Some(roots) = PACKAGED.roots.get() {
+        return Ok(roots);
+    }
+    if let Some(error) = PACKAGED.failure.get() {
+        anyhow::bail!("{error}");
+    }
+    anyhow::bail!("the packaged set was never prepared; call prepare_packaged_set first")
 }
 
 /// Look up one packaged crate by name.
@@ -223,4 +350,50 @@ pub(crate) fn assert_packaged_set_complete() -> Result<()> {
         ensure!(archive.is_file(), "{archive} was not written");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Regression coverage for package-set cache outcomes and caller deadlines.
+
+    use super::{PackagedCrate, PackagedSetCache};
+    use camino::Utf8PathBuf;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn sequence_bounded_packaging_failure_does_not_poison_a_later_caller() {
+        let cache = PackagedSetCache::new();
+        let sequence_deadline = Instant::now() + Duration::from_secs(5);
+        let mut attempted_bounded_build = false;
+        let error = cache
+            .prepare_with(Some(sequence_deadline), |deadline| {
+                attempted_bounded_build = true;
+                assert_eq!(deadline, Some(sequence_deadline));
+                anyhow::bail!("packaging failed for this caller's sequence deadline")
+            })
+            .expect_err("the sequence-bounded build must report its failure");
+
+        assert!(attempted_bounded_build, "the bounded build should run");
+        assert!(error.to_string().contains("sequence deadline"));
+        assert!(
+            cache.roots.get().is_none(),
+            "a failure must not cache roots"
+        );
+        assert!(
+            cache.failure.get().is_none(),
+            "a caller-specific failure must not poison the shared cache"
+        );
+
+        cache
+            .prepare_with(None, |_| {
+                Ok(vec![PackagedCrate {
+                    name: "ortho_l10n",
+                    version: "0.0.0",
+                    root: Utf8PathBuf::new(),
+                }])
+            })
+            .expect("a later unbounded caller can retry packaging");
+
+        assert_eq!(cache.roots.get().map(Vec::len), Some(1));
+    }
 }

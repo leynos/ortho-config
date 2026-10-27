@@ -167,12 +167,13 @@ project:
   - `make test` executes:
 
     ```sh
-    cargo test --workspace
+    cargo test --all-targets --all-features
     ```
 
-    running the full workspace test suite. The recipe runs under
-    `GATE_RUSTFLAGS`, which restates the build standard alongside
-    `-D warnings`. Use `make fmt`
+    running the Rust workspace tests for every target and feature. `make test`
+    also runs the Python tests; the Cargo command does not run Rust doctests.
+    The recipe runs under `GATE_RUSTFLAGS`, which restates the build standard
+    alongside `-D warnings`. Use `make fmt`
     (`cargo fmt --workspace`) to apply formatting fixes reported by the
     formatter check.
 - Clippy warnings MUST be disallowed.
