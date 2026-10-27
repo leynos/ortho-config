@@ -26,6 +26,7 @@ from collections.abc import Callable
 
 import pytest
 import workflow_legs
+import workflow_shell
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -289,17 +290,17 @@ def test_unevaluable_conditions_never_excuse_a_step(
 
 def test_make_goals_join_a_backslash_continued_command() -> None:
     """A physical line break escaped by a backslash does not end the goals."""
-    assert workflow_legs._make_goals("make lint \\\n  test") == [["lint", "test"]]
+    assert workflow_shell.make_goals("make lint \\\n  test") == [["lint", "test"]]
 
 
 def test_make_goals_stop_at_and_then_parse_the_next_command() -> None:
     """A shell conjunction ends one Make command and starts the next one."""
-    assert workflow_legs._make_goals("make lint && make test") == [["lint"], ["test"]]
+    assert workflow_shell.make_goals("make lint && make test") == [["lint"], ["test"]]
 
 
 def test_make_goal_keeps_a_quoted_shell_operator() -> None:
     """Quoted punctuation is a goal argument, not a command boundary."""
-    assert workflow_legs._make_goals("make '&&' test") == [["&&", "test"]]
+    assert workflow_shell.make_goals("make '&&' test") == [["&&", "test"]]
 
 
 # -- negative controls: the same properties must reject a wrong interpreter ---------

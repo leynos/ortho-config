@@ -2940,9 +2940,12 @@ identifiers are distinct, so each appears by name in `pytest --collect-only`.
   in for the network, the linker and `rustup`, and observes every refusal.
 - `clippy_beta_test.py` carries a case that the beta step sets
   `BUILD_STANDARD` to `0`.
-- `build_standard_make.py` and `workflow_legs.py` are support code: the first
-  evaluates the Makefile and reads the Cargo configuration, and the second
-  derives a job's legs and the steps that reach the suite.
+- `build_standard_make.py`, `workflow_legs.py` and `workflow_shell.py` are
+  support code: the first evaluates the Makefile and reads the Cargo
+  configuration, the second derives a job's legs and the steps that reach the
+  suite, and the third reads only enough shell syntax to identify Make goals in
+  workflow `run` steps. `workflow_shell.py` belongs to this interpreter and is
+  not a general-purpose shell parser.
 - `workflow_legs_properties_test.py` holds Hypothesis property tests of the
   `workflow_legs` interpreter: matrix product completeness, `include` entries
   appended unchanged, an `exclude` entry removing exactly its matches,

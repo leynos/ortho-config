@@ -30,10 +30,10 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import re
-import shlex
 import typing as typ
 
 from build_standard_make import PREFLIGHT_SCRIPT, dry_run
+from workflow_shell import make_goals
 
 #: Make variables a workflow may set per step or per job to change a route.
 MAKE_SWITCHES: typ.Final[tuple[str, ...]] = ("BUILD_STANDARD",)
@@ -44,15 +44,12 @@ _DIRECT_SUITE: typ.Final[re.Pattern[str]] = re.compile(
 )
 _GENERATE_COVERAGE: typ.Final[str] = "/generate-coverage@"
 _MATRIX_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(r"matrix\.([A-Za-z0-9_-]+)")
-_EXPRESSION: typ.Final[re.Pattern[str]] = re.compile(r"\$\{\{.*?\}\}")
 _QUOTED_LITERAL: typ.Final[re.Pattern[str]] = re.compile(r"'([^']+)'")
-_SHELL_CONTROL_MARKER: typ.Final[str] = "\ufdd0"
 #: References that can choose a runner but cannot be known from the workflow text.
 _UNRESOLVABLE: typ.Final[re.Pattern[str]] = re.compile(r"\b(?:inputs|vars|env|needs|steps|secrets)\.")
 _MATRIX_COMPARISON: typ.Final[re.Pattern[str]] = re.compile(
     r"matrix\.([A-Za-z0-9_-]+)\s*(==|!=)\s*'([^']*)'"
 )
-_SHELL_CONTROL_CHARS: typ.Final[str] = ";|&()"
 
 
 class UnreadableRunnerError(RuntimeError):
@@ -271,98 +268,6 @@ def _comparison_holds(actual: str | None, operator: str, value: str) -> bool:
     return (operator == "==") == (actual == value)
 
 
-def _make_goals(run: str) -> list[list[str]]:
-    """Return the goal list of each ``make`` invocation in a ``run`` script."""
-    source = _EXPRESSION.sub("EXPR", run)
-    tokenised = (_tokens(line) for line in _logical_lines(source))
-    return [
-        _goals_after(tokens, index)
-        for tokens in tokenised
-        for index, token in enumerate(tokens)
-        if token == "make"
-    ]
-
-
-def _logical_lines(run: str) -> list[str]:
-    """Join shell backslash continuations without splitting inside quotes."""
-    lines: list[str] = []
-    current: list[str] = []
-    quote: str | None = None
-    at_word_start = True
-    index = 0
-    while index < len(run):
-        char = run[index]
-        if char == "\\" and quote != "'" and index + 1 < len(run):
-            newline_length = 2 if run.startswith("\r\n", index + 1) else int(run[index + 1] == "\n")
-            if newline_length:
-                index += 1 + newline_length
-                continue
-            current.extend((char, run[index + 1]))
-            at_word_start = False
-            index += 2
-            continue
-        if quote is None and char == "#" and at_word_start:
-            end = run.find("\n", index)
-            if end == -1:
-                current.extend(run[index:])
-                break
-            current.extend(run[index:end])
-            lines.append("".join(current))
-            current.clear()
-            at_word_start = True
-            index = end + 1
-            continue
-        if quote is None and char in _SHELL_CONTROL_CHARS:
-            end = index + 1
-            while end < len(run) and run[end] in _SHELL_CONTROL_CHARS:
-                end += 1
-            current.extend((" ", _SHELL_CONTROL_MARKER, " "))
-            at_word_start = True
-            index = end
-            continue
-        if quote is None and char in {'"', "'"}:
-            quote = char
-        elif quote == char:
-            quote = None
-        if char == "\n" and quote is None:
-            lines.append("".join(current))
-            current.clear()
-            at_word_start = True
-            index += 1
-            continue
-        current.append(char)
-        at_word_start = char.isspace() or char in _SHELL_CONTROL_CHARS
-        index += 1
-    if current:
-        lines.append("".join(current))
-    return lines
-
-
-def _tokens(line: str) -> list[str]:
-    """Split one script line into words, or return none for a line shell cannot parse.
-
-    An expression such as `MSRV=${{ matrix.toolchain }}` holds spaces, which
-    would split into stray words that read as goals; GitHub resolves it before
-    the shell runs, so it is replaced by a placeholder word. Operators are
-    marked as control boundaries.
-    """
-    try:
-        return shlex.split(_EXPRESSION.sub("EXPR", line), comments=True)
-    except ValueError:
-        return []
-
-
-def _goals_after(tokens: list[str], index: int) -> list[str]:
-    """Return Make goals up to the next shell operator, omitting flags/assignments."""
-    goals: list[str] = []
-    for word in tokens[index + 1 :]:
-        if word == _SHELL_CONTROL_MARKER:
-            break
-        if not word.startswith("-") and "=" not in word:
-            goals.append(word)
-    return goals
-
-
 def reaches_the_suite(step: dict[str, object], leg: Leg) -> bool:
     """Report whether a step runs tests, or reaches the build-tools preflight.
 
@@ -388,7 +293,7 @@ def reaches_the_suite(step: dict[str, object], leg: Leg) -> bool:
     switches = [f"{name}={env[name]}" for name in MAKE_SWITCHES if name in env]
     return any(
         PREFLIGHT_SCRIPT in dry_run(goal, *switches)
-        for goals in _make_goals(run)
+        for goals in make_goals(run)
         for goal in goals
     )
 
