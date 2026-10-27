@@ -164,8 +164,8 @@ pattern supplies the nearest implementation precedent. Struct attributes enter
 is assembled in `ortho_config_macros/src/derive/generate/docs/sections.rs` with
 helpers such as `generate/docs/behaviour.rs`.
 
-The reusable documentation model is `ortho_config/src/docs/ir/mod.rs`,
-exported by `ortho_config/src/docs/mod.rs`. The equivalent tool model is
+The reusable documentation model is `ortho_config/src/docs/ir/mod.rs`, exported
+by `ortho_config/src/docs/mod.rs`. The equivalent tool model is
 `cargo-orthohelp/src/schema/mod.rs`. The adapter's
 `cargo-orthohelp/src/agent_context/mod.rs::walk` recursively constructs one
 `AgentCommand` per metadata node. It resolves a cosmetic summary through
@@ -182,14 +182,14 @@ for equivalents. New helpers must have documented ownership and allowed uses.
 
 ## Conformance basis
 
-The planning baseline was commit
-`dc979878b5728bbb23866df9c05c2570bdb5629e`. The plan was then rebased onto
-`ceacf0ccd1130980bc41dc67f0f4d0d7387b4091`, which renamed and relocated the
-ADRs, split the documentation IR into a directory module, extracted the
-localization runtime into `ortho_l10n`, and added `docs/scripting-standards.md`.
-Paths below are the post-rebase paths; re-verify them before M1 rather than
-trusting this list. No separate terms of reference exists for this task. The
-following documents and the user's request supply the governing requirements.
+The planning baseline was commit `dc979878b5728bbb23866df9c05c2570bdb5629e`.
+The plan was then rebased onto `ceacf0ccd1130980bc41dc67f0f4d0d7387b4091`,
+which renamed and relocated the ADRs, split the documentation IR into a
+directory module, extracted the localization runtime into `ortho_l10n`, and
+added `docs/scripting-standards.md`. Paths below are the post-rebase paths;
+re-verify them before M1 rather than trusting this list. No separate terms of
+reference exists for this task. The following documents and the user's request
+supply the governing requirements.
 
 - R1: `docs/roadmap.md` 7.2.2 and
   `docs/agent-native-cli-design.md` §§6.2–6.2.1: independent support and
@@ -199,7 +199,8 @@ following documents and the user's request supply the governing requirements.
   `docs/cli-localization-design.md`: protocol fields stay non-localized, with
   explicit legacy defaults and additive wire compatibility. M1 supplies E2/E3;
   M2 supplies E4 and migration documentation.
-- R3: `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`,
+- R3:
+  `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`,
   `docs/adrs/adr-0010-behavioural-metadata-attribute-surface.md`,
   `docs/design.md`, and `docs/cargo-orthohelp-design.md`: retain schema
   boundaries and sibling declaration scope. M1 architecture review and M2
@@ -218,12 +219,12 @@ Testing and documentation references to consult during implementation are
 `docs/complexity-antipatterns-and-refactoring-strategies.md`,
 `docs/rstest-bdd-users-guide.md`, `docs/documentation-style-guide.md` and
 `docs/scripting-standards.md`. Their role is shared fixtures, executable API
-examples, injected state, Fluent boundaries, small modules, behavioural
-wiring, prose style, and script conventions respectively. The requested
+examples, injected state, Fluent boundaries, small modules, behavioural wiring,
+prose style, and script conventions respectively. The requested
 `docs/rtest-bdd-users-guide.md` is a filename mismatch; use the existing
-`rstest` spelling above. `docs/scripting-standards.md` exists after the
-rebase. No new script is planned; if one becomes necessary, follow that
-standard rather than inventing conventions.
+`rstest` spelling above. `docs/scripting-standards.md` exists after the rebase.
+No new script is planned; if one becomes necessary, follow that standard rather
+than inventing conventions.
 
 Use the `execplans`, `codegraph-mcp`, and `rust-router` skills. Route API work
 to `rust-types-and-apis`, verification selection to `rust-verification`, and
