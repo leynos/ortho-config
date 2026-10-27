@@ -6,11 +6,12 @@ Cargo. The scripts are driven here with fixtures standing in for the network,
 the linker and ``rustup``, so every refusal is observed rather than read:
 
 - ``check-build-tools`` fails, and says ``make install-build-tools``, when the
-  linker is absent, cannot run, or differs from the pin;
+  linker is absent, cannot run, or differs from the pin, and when host
+  detection fails;
 - ``install-build-tools`` refuses an archive whose digest is not the recorded
   one, refuses an artefact with no recorded digest, installs nothing in either
-  case, and on success installs under the requested prefix and then asks
-  ``rustup`` for the toolchain the repository names.
+  case, fails when host detection fails, and on success installs under the
+  requested prefix before asking ``rustup`` for the pinned toolchain.
 
 The scripts are Linux-first by design: on any other host they skip the linker
 and say so. This contract runs on Linux, as does the CI step that carries it.
@@ -39,8 +40,10 @@ PIN: typ.Final[str] = "9.9.9"
 
 
 def _tool(directory: pathlib.Path, name: str, body: str) -> None:
-    """Write an executable shell script called *name* into *directory*."""
+    """Write an executable shell fixture, replacing any linked host tool."""
     path = directory / name
+    if path.is_symlink():
+        path.unlink()
     path.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
     path.chmod(0o755)
 
@@ -200,6 +203,18 @@ def test_check_reports_every_missing_piece_in_one_pass(
     assert "mold not found on PATH" in result.stderr, result.stderr
 
 
+def test_check_fails_when_host_os_cannot_be_detected(
+    tmp_path: pathlib.Path, tools: pathlib.Path
+) -> None:
+    """A failed uname query must not masquerade as a non-Linux linker skip."""
+    _fake_rustup(tools)
+    _tool(tools, "mold", f"echo 'mold {PIN} (compatible with GNU ld)'")
+    _tool(tools, "uname", "exit 1")
+    result = _check(tmp_path, tools)
+    assert result.returncode != 0, result.stderr
+    assert "could not determine host operating system using uname -s" in result.stderr
+
+
 def test_check_refuses_an_unreadable_pin(tmp_path: pathlib.Path, tools: pathlib.Path) -> None:
     """A missing pin file aborts rather than checking against an empty version."""
     result = _run(CHECK, {"PATH": str(tools), "MOLD_VERSION_FILE": str(tmp_path / "absent")})
@@ -318,6 +333,18 @@ def test_install_unpacks_a_verified_archive_then_installs_the_toolchain(
     assert logged == ["toolchain", "install"], (
         "rustup was not asked to install the toolchain rust-toolchain.toml names"
     )
+
+
+def test_install_fails_when_host_os_cannot_be_detected(
+    offline_install: OfflineInstall,
+) -> None:
+    """The installer must stop before skipping mold or installing the toolchain."""
+    _tool(offline_install.tools, "uname", "exit 1")
+    result = _run(INSTALL, offline_install.env(offline_install.sums_line))
+    assert result.returncode != 0, result.stderr
+    assert "could not determine host operating system using uname -s" in result.stderr
+    assert not (offline_install.root / "prefix" / "bin").exists()
+    assert not (offline_install.root / "rustup.log").exists()
 
 
 def test_the_scripts_and_pins_are_checked_out_with_lf_line_endings() -> None:

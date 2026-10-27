@@ -82,8 +82,16 @@ pinned_toolchain() {
   printf '%s' "$value"
 }
 
-# Whether the host can use mold at all; it ships for Linux only.
-is_linux() { [ "$(uname -s)" = 'Linux' ]; }
+# Print the host operating system, failing explicitly when `uname` cannot read it.
+# Treating a failed query as a non-Linux host would skip the required linker.
+detect_host_os() {
+  local host_os
+  if ! host_os=$(uname -s); then
+    note 'could not determine host operating system using uname -s'
+    return 1
+  fi
+  printf '%s' "$host_os"
+}
 
 # mold publishes per-architecture tarballs; map `uname -m` onto those names.
 mold_arch() {

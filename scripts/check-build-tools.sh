@@ -16,9 +16,10 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # required but missing, unusable, or a different version from the pin. Only a
 # non-Linux host is tolerated, with a note explaining what is used instead.
 check_mold() {
-  local pinned=$1 installed resolved
-  if ! is_linux; then
-    note "mold is Linux-only; the default $(uname -s) linker is used"
+  local pinned=$1 installed resolved host_os
+  host_os=$(detect_host_os) || return 1
+  if [ "$host_os" != 'Linux' ]; then
+    note "mold is Linux-only; the default $host_os linker is used"
     return 0
   fi
   if ! resolved=$(command -v mold 2>/dev/null); then

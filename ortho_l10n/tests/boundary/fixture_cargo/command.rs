@@ -108,6 +108,7 @@ mod tests {
     const STREAM_PAYLOAD_BYTES: usize = 256 * 1024;
     const CHILD_COMPLETION_DELAY: Duration = Duration::from_millis(1_500);
     const PIPE_HOLDER_DELAY: Duration = Duration::from_secs(4);
+    const PIPE_HOLDER_COMPLETION_MARGIN: Duration = Duration::from_secs(1);
 
     #[rstest]
     #[case::cargo("cargo", true)]
@@ -194,13 +195,14 @@ mod tests {
             "the pipe-holding descendant did not start"
         );
         ensure!(
-            !marker_dir.exists("pipe-holder-finished"),
-            "the descendant finished naturally instead of being terminated"
-        );
-        ensure!(
-            started.elapsed() < Duration::from_secs(2),
+            started.elapsed() < PIPE_HOLDER_DELAY.saturating_sub(PIPE_HOLDER_COMPLETION_MARGIN),
             "runner waited for the descendant's inherited output pipes: {:?}",
             started.elapsed()
+        );
+        thread::sleep(PIPE_HOLDER_DELAY);
+        ensure!(
+            !marker_dir.exists("pipe-holder-finished"),
+            "the descendant finished naturally instead of being terminated"
         );
         Ok(())
     }

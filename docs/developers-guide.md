@@ -3797,11 +3797,11 @@ Summary [1810.068s] 2070 tests run: 2068 passed (17 slow), 2 failed, 30 skipped
 
 Both survivors were far inside their own 600 s allowance — 192.3 s and 157.3 s
 — so no per-test tier is what failed. How much the run still needed is bounded
-rather than guessed. The younger survivor, at 157.3 s elapsed when the timer
-fired, had started at 1,652.8 s; its own allowance would have let it run until
-2,252.8 s, so no outcome of that run could have taken longer. That is the
-figure 2,300 s was chosen against: it covers the bound with 47 s to spare,
-where 1,800 s fell 452.8 s short of it.
+rather than guessed. The younger survivor started at 1,652.8 s and had used
+157.3 s when cancellation was reported at about 1,810.1 s. Its own 600 s
+allowance therefore ended at 2,252.8 s, so no outcome of that run could have
+taken longer. That is the figure 2,300 s was chosen against: it covers the
+bound with 47 s to spare, where 1,800 s fell 452.8 s short of it.
 
 The bound is not a comfortable margin, and none of the three runs on the
 enlarged budget widens it. All three were later runs on the pin, so all three
