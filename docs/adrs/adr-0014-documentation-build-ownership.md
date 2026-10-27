@@ -365,13 +365,13 @@ ceilings above:
   the 960-second nextest allowance.
 
 The 2,300-second whole-run limit covers the bound from the cancelled Windows
-run: the younger remaining test had used 157.3 seconds when the 1,800-second
-timer fired, placing the end of its 600-second allowance at 2,252.8 seconds.
-The new limit leaves 47.2 seconds above that bound. The three later warm runs
-do not establish a cold-cache bound because they inherited cache entries from
-the cancelled run. The cold nested-build path still cannot reach `sccache`
-while the documentation runner clears the environment without restoring
-`RUSTC_WRAPPER`;
+run: the younger remaining test had started at 1,652.8 seconds and had used
+157.3 seconds when cancellation was reported at about 1,810.1 seconds. Its
+600-second allowance therefore ended at 2,252.8 seconds. The new limit leaves
+47.2 seconds above that bound. The three later warm runs do not establish a
+cold-cache bound because they inherited cache entries from the cancelled run.
+The cold nested-build path still cannot reach `sccache` while the documentation
+runner clears the environment without restoring `RUSTC_WRAPPER`;
 [issue #614](https://github.com/leynos/ortho-config/issues/614) tracks that
 separate repair. Detailed timings and evidence limits are in the developers'
 guide's [cold-run budget account][cold-run-budget].
