@@ -2936,8 +2936,13 @@ identifiers are distinct, so each appears by name in `pytest --collect-only`.
   to set a non-empty `RUSTFLAGS` with none of the standard, and requires that
   nothing re-empties it. It also holds the MSRV job; see
   [The MSRV lane](#the-msrv-lane).
-- `build_tools_scripts_test.py` drives both scripts with fixture tools standing
-  in for the network, the linker and `rustup`, and observes every refusal.
+- `build_tools_scripts_test.py` drives the preflight with fixture tools in place
+  of the linker and `rustup`, and observes every refusal. The separate
+  `build_tools_install_test.py` exercises archive verification, installation
+  and the supported and unsupported architecture names with offline fixtures.
+- `build_tools_test_support.py` owns the fake tools and offline archive fixtures
+  used only by those two build-tools script contracts; it is not shared
+  subprocess infrastructure.
 - `clippy_beta_test.py` carries a case that the beta step sets
   `BUILD_STANDARD` to `0`.
 - `build_standard_make.py`, `workflow_legs.py` and `workflow_shell.py` are
