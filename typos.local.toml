@@ -52,14 +52,19 @@ ignore = [
   # excerpt in the corpus is 7 to 40 characters, and an all-letter abbreviation
   # is legitimate, so the bound alone is what keeps the exemption narrow.
   "`[0-9a-f]{7,40}`",
-  # `mold` is the upstream linker's name (https://github.com/rui314/mold), which
-  # the en-GB-oxendict dictionary reads as a misspelling of "mould". It is
-  # written in code spans throughout the build-standard documentation, as the
-  # tool itself (`mold`), inside the flag that selects it
-  # (`-Clink-arg=-fuse-ld=mold`), and in the pin path and action input names
-  # (`tools/mold/`, `install-mold`, `mold-version`). The exemption is bounded to
-  # a code span that contains the name, so prose outside code is still checked.
-  "`[^`\\n]*mold[^`\\n]*`",
+  # `mold` is the upstream linker name and is absent from the shared dictionary.
+  # Exempt only the exact code spans used by this repository so a nearby typo
+  # in the same span is still checked.
+  "`mold`",
+  "`-Clink-arg=-fuse-ld=mold`",
+  "`-fuse-ld=mold`",
+  "`RUSTFLAGS=\"-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold\"`",
+  "`install-mold: 'true'`",
+  "`install-mold`",
+  "`mold-version`",
+  "`tools/mold/SHA256SUMS`",
+  "`tools/mold/VERSION`",
+  "`tools/mold/`",
 ]
 
 [files]

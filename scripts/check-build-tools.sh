@@ -22,8 +22,8 @@ check_mold() {
     note "mold is Linux-only; the default $host_os linker is used"
     return 0
   fi
-  if ! resolved=$(command -v mold 2>/dev/null); then
-    note "mold not found on PATH (pinned $pinned)"
+  if ! resolved=$(command -v ld.mold 2>/dev/null); then
+    note "ld.mold not found on PATH (pinned $pinned)"
     note 'install it with: make install-build-tools'
     return 1
   fi
@@ -31,7 +31,7 @@ check_mold() {
   # an unresolved shared library -- so treat it as a failure rather than letting
   # the empty string surface as a confusing version-drift warning.
   if ! installed=$(installed_mold_version) || [ -z "$installed" ]; then
-    note "mold at $resolved is on PATH but cannot report its version"
+    note "ld.mold at $resolved is on PATH but cannot report its version"
     note 'reinstall it with: make install-build-tools'
     return 1
   fi
@@ -40,23 +40,28 @@ check_mold() {
   # the repository claims. Reporting the resolved path names the winner when
   # `-fuse-ld=mold` picks an unexpected copy.
   if [ "$installed" != "$pinned" ]; then
-    note "mold $installed at $resolved does not match the pin $pinned"
+    note "ld.mold $installed at $resolved does not match the pin $pinned"
     note 'run make install-build-tools to match'
     return 1
   fi
-  note "mold $installed at $resolved"
+  note "ld.mold $installed at $resolved"
 }
 
 # Report on the toolchain half of the prerequisites: rustup itself and the
 # pinned dated nightly, whose parallel frontend the standard relies on.
 check_toolchain() {
-  local toolchain=$1 components
+  local toolchain=$1 toolchains components
   if ! command -v rustup >/dev/null 2>&1; then
     note 'rustup not found on PATH; it is required to select the pinned nightly'
     note 'install it from https://rustup.rs'
     return 1
   fi
-  if ! rustup toolchain list | grep -q "^$toolchain"; then
+  if ! toolchains=$(rustup toolchain list); then
+    note 'could not list installed Rust toolchains'
+    note 'install it with: make install-build-tools'
+    return 1
+  fi
+  if ! grep -q "^$toolchain" <<< "$toolchains"; then
     note "toolchain $toolchain is not installed"
     note 'install it with: make install-build-tools'
     return 1
@@ -67,7 +72,7 @@ check_toolchain() {
     note 'install it with: make install-build-tools'
     return 1
   fi
-  if ! printf '%s\n' "$components" | grep -q '^rustc-codegen-cranelift-'; then
+  if ! grep -q '^rustc-codegen-cranelift-' <<< "$components"; then
     note "Cranelift codegen component is not installed for $toolchain"
     note 'install it with: make install-build-tools'
     return 1

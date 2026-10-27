@@ -55,6 +55,8 @@ from build_standard_make import (
     development_flags,
     dry_run,
     hard_coded_cargo,
+    make_executable,
+    shell_tokens,
 )
 
 #: Each development invocation: the case name, the target, and a word that
@@ -107,6 +109,45 @@ def _line_for(
         f"`make {target}` has {len(matching)} Cargo lines running {subcommand!r}: {lines}"
     )
     return matching[0]
+
+
+def _workflow_files(directory: pathlib.Path) -> list[pathlib.Path]:
+    """Return workflow files with either YAML extension, in stable order."""
+    return sorted((*directory.glob("*.yml"), *directory.glob("*.yaml")))
+
+
+def test_shell_helpers_ignore_comments_and_tolerate_malformed_quotes() -> None:
+    """Comment text is not a command, and malformed quotes do not abort parsing."""
+    assert shell_tokens("  # probe-cargo RUSTFLAGS=-Zthreads=8") == []
+    assert cargo_lines(["# probe-cargo test", "probe-cargo test 'unterminated"]) == [
+        "probe-cargo test 'unterminated"
+    ]
+    assert hard_coded_cargo(["# cargo test", "cargo test 'unterminated"]) == [
+        "cargo test 'unterminated"
+    ]
+    assert assigned_rustflags("# RUSTFLAGS=-Zthreads=8") is None
+    assert assigned_rustflags('RUSTFLAGS="-D warnings" # RUSTFLAGS=-Zthreads=8') == ["-D", "warnings"]
+    assert shell_tokens("RUSTFLAGS=-D warnings 'unterminated") == [
+        "RUSTFLAGS=-D",
+        "warnings",
+        "'unterminated",
+    ]
+
+
+def test_make_executable_is_resolved() -> None:
+    """Subprocess contracts invoke the Make binary resolved from PATH."""
+    assert pathlib.Path(make_executable()).is_absolute()
+
+
+def test_workflow_files_include_both_yaml_extensions(tmp_path: pathlib.Path) -> None:
+    """The backend exclusion contract sees either accepted workflow suffix."""
+    yml_workflow = tmp_path / "first.yml"
+    yaml_workflow = tmp_path / "second.yaml"
+    unrelated_file = tmp_path / "third.txt"
+    for path in (yml_workflow, yaml_workflow, unrelated_file):
+        path.touch()
+
+    assert _workflow_files(tmp_path) == [yml_workflow, yaml_workflow]
 
 
 @pytest.mark.parametrize(("case", "target", "subcommand", "host_name"), DEVELOPMENT_CASES)
@@ -216,7 +257,7 @@ def test_cranelift_is_the_development_backend_only() -> None:
     )
     makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
     assert BACKEND_FLAG in makefile, "the Makefile omits the development backend"
-    for workflow in sorted((REPOSITORY_ROOT / ".github" / "workflows").glob("*.yml")):
+    for workflow in _workflow_files(REPOSITORY_ROOT / ".github" / "workflows"):
         text = workflow.read_text(encoding="utf-8")
         assert "CODEGEN_BACKEND" not in text, f"{workflow.name} selects a codegen backend"
         assert BACKEND_FLAG not in text, f"{workflow.name} names {BACKEND_FLAG}"
@@ -341,8 +382,8 @@ def test_a_failing_preflight_stops_the_build_before_cargo(tmp_path: pathlib.Path
     fake_cargo.chmod(0o755)
     wrong_pin = tmp_path / "VERSION"
     wrong_pin.write_text("0.0.1\n", encoding="utf-8")
-    result = subprocess.run(  # noqa: S603, S607 - fixed argument vector, no shell.
-        ["make", "typecheck", f"CARGO={fake_cargo}", f"MOLD_VERSION_FILE={wrong_pin}"],
+    result = subprocess.run(  # noqa: S603 - resolved executable, fixed argument vector, no shell.
+        [make_executable(), "typecheck", f"CARGO={fake_cargo}", f"MOLD_VERSION_FILE={wrong_pin}"],
         cwd=REPOSITORY_ROOT,
         capture_output=True,
         text=True,

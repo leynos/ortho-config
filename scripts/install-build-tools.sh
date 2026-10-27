@@ -95,17 +95,26 @@ install_mold() {
   note "put $BUILD_TOOLS_PREFIX/bin first on PATH when not using the make targets"
 }
 
-# Install the pinned nightly with the components `rust-toolchain.toml` lists.
-# The no-argument form of `rustup toolchain install` reads that file from the
-# working directory, so the toolchain, the profile and every component come
-# from one place rather than being restated here.
+# Install the pinned nightly with the profile and components from
+# `rust-toolchain.toml`. Passing the channel explicitly prevents
+# `RUSTUP_TOOLCHAIN` from making a successful install select another toolchain.
 install_toolchain() {
-  local toolchain=$1
+  local toolchain=$1 profile components component
+  local -a install_args=()
   command -v rustup >/dev/null 2>&1 ||
     fail 'rustup not found on PATH; install it from https://rustup.rs'
+
+  profile=$(awk -F '"' '/^[[:space:]]*profile[[:space:]]*=/ { print $2; exit }' "$RUST_TOOLCHAIN_FILE")
+  [ -n "$profile" ] || fail "no profile found in: $RUST_TOOLCHAIN_FILE"
+  components=$(pinned_toolchain_components) || return 1
+  install_args=(--profile "$profile")
+  while IFS= read -r component; do
+    [ -n "$component" ] && install_args+=(--component "$component")
+  done <<< "$components"
+
   note "installing toolchain $toolchain with its components"
-  (cd -- "$BUILD_TOOLS_REPO_ROOT" && rustup toolchain install) ||
-    fail "failed to install toolchain $toolchain (rustup 1.28 or later reads rust-toolchain.toml)"
+  rustup toolchain install "$toolchain" "${install_args[@]}" ||
+    fail "failed to install toolchain $toolchain"
 }
 
 # Install both halves. The linker step runs first so a checksum failure aborts

@@ -104,13 +104,29 @@ mold_arch() {
   esac
 }
 
-# The version of whichever mold PATH resolves to, or a non-zero status when
-# that mold cannot be run.
+# The version of the linker executable that `-fuse-ld=mold` resolves through
+# PATH, or a non-zero status when that executable cannot be run.
 installed_mold_version() {
-  # `mold --version` prints e.g. "mold 2.41.0 (compatible with GNU ld)". Capture
-  # first so a failing mold propagates its status instead of being masked by the
-  # exit status of a downstream awk.
+  # Clang resolves `-fuse-ld=mold` to `ld.mold`, not the `mold` driver. Capture
+  # its output first so a failing linker propagates its status instead of being
+  # masked by the exit status of a downstream awk.
   local output
-  output=$(mold --version 2>/dev/null) || return 1
+  output=$(ld.mold --version 2>/dev/null) || return 1
   printf '%s' "$output" | awk 'NR == 1 { print $2 }'
+}
+
+# Print the components listed in the toolchain's multiline TOML array.
+pinned_toolchain_components() {
+  local file=$RUST_TOOLCHAIN_FILE
+  [ -f "$file" ] || fail "missing version pin: $file"
+  awk -F '"' '
+    /^\[toolchain\][[:space:]]*$/ { in_toolchain = 1; next }
+    /^\[/ { in_toolchain = 0 }
+    in_toolchain && /^[[:space:]]*components[[:space:]]*=[[:space:]]*\[/ {
+      in_components = 1
+      next
+    }
+    in_components && /^[[:space:]]*\]/ { exit }
+    in_components && /^[[:space:]]*"/ { print $2 }
+  ' "$file"
 }

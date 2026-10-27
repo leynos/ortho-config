@@ -254,8 +254,8 @@ fn group_has_writers(group: Pid) -> io::Result<bool> {
     Ok(false)
 }
 
-#[cfg(target_os = "linux")]
 /// Read a process stat entry while treating a vanished process as absent.
+#[cfg(target_os = "linux")]
 pub fn read_proc_stat(read: impl FnOnce() -> io::Result<String>) -> io::Result<Option<String>> {
     match read() {
         Ok(stat) => Ok(Some(stat)),

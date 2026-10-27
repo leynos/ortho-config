@@ -25,6 +25,7 @@ from __future__ import annotations
 import dataclasses
 import pathlib
 import shlex
+import shutil
 import subprocess  # noqa: S404 - the contract drives make, which is the subject.
 import tomllib
 import typing as typ
@@ -122,7 +123,7 @@ def dry_run(target: str, *variables: str, host: Host | None = None) -> list[str]
         the contract that asked, not read as an empty one.
     """
     command = [
-        "make",
+        make_executable(),
         "--dry-run",
         "--no-print-directory",
         "--silent",
@@ -132,7 +133,7 @@ def dry_run(target: str, *variables: str, host: Host | None = None) -> list[str]
         *(host.variables() if host else []),
         *variables,
     ]
-    result = subprocess.run(  # noqa: S603 - fixed argument vector, no shell.
+    result = subprocess.run(  # noqa: S603 - resolved executable, fixed argument vector, no shell.
         command,
         cwd=REPOSITORY_ROOT,
         capture_output=True,
@@ -143,6 +144,30 @@ def dry_run(target: str, *variables: str, host: Host | None = None) -> list[str]
         f"{' '.join(command)} exited {result.returncode}: {result.stderr.strip()}"
     )
     return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def make_executable() -> str:
+    """Return the resolved Make executable required by these contracts."""
+    executable = shutil.which("make")
+    assert executable is not None, "make is required to evaluate the Makefile contracts"
+    return str(pathlib.Path(executable).resolve())
+
+
+def shell_tokens(line: str) -> list[str]:
+    """Split an expanded recipe line, tolerating comments and malformed quotes.
+
+    Make's dry-run output is shell text. Valid lines use ``shlex`` so quoted
+    values stay together. A malformed quoting example should not crash a
+    contract helper; its whitespace fallback is deliberately best-effort.
+    Full comment lines are ignored before either parser can mistake their
+    contents for a command or assignment.
+    """
+    if line.lstrip().startswith("#"):
+        return []
+    try:
+        return shlex.split(line, comments=True)
+    except ValueError:
+        return line.split()
 
 
 def cargo_lines(lines: list[str]) -> list[str]:
@@ -163,7 +188,7 @@ def cargo_lines(lines: list[str]) -> list[str]:
     >>> cargo_lines(['RUSTFLAGS="" probe-cargo build --lib', 'echo done'])
     ['RUSTFLAGS="" probe-cargo build --lib']
     """
-    return [line for line in lines if PROBE_CARGO in shlex.split(line)]
+    return [line for line in lines if PROBE_CARGO in shell_tokens(line)]
 
 
 def hard_coded_cargo(lines: list[str]) -> list[str]:
@@ -185,11 +210,7 @@ def hard_coded_cargo(lines: list[str]) -> list[str]:
     >>> hard_coded_cargo(['probe-cargo test', 'cargo test', '# the cargo output'])
     ['cargo test']
     """
-    # A recipe line that Make echoes as a shell comment is prose, not a command.
-    return [
-        line for line in lines
-        if not line.lstrip().startswith("#") and "cargo" in shlex.split(line)
-    ]
+    return [line for line in lines if "cargo" in shell_tokens(line)]
 
 
 def assigned_rustflags(line: str) -> list[str] | None:
@@ -217,7 +238,7 @@ def assigned_rustflags(line: str) -> list[str] | None:
     >>> assigned_rustflags('probe-cargo build') is None
     True
     """
-    for token in shlex.split(line):
+    for token in shell_tokens(line):
         if token.startswith("RUSTFLAGS="):
             return token.removeprefix("RUSTFLAGS=").split()
     return None

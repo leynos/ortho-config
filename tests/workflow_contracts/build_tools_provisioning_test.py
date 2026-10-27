@@ -43,7 +43,7 @@ MOLD_VERSION_FILE: typ.Final[pathlib.Path] = REPOSITORY_ROOT / "tools" / "mold" 
 MOLD_SHA256SUMS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / "tools" / "mold" / "SHA256SUMS"
 
 SETUP_RUST: typ.Final[re.Pattern[str]] = re.compile(
-    r"leynos/shared-actions/\.github/actions/setup-rust@[0-9a-f]{40}$"
+    r"leynos/shared-actions/\.github/actions/setup-rust@[0-9a-f]{40}"
 )
 
 #: The Linux legs that run the suite today. Proof that the derivation works, not
@@ -91,7 +91,7 @@ def _is_installer(step: dict[str, object]) -> bool:
     """Report whether a step is the pinned mold install, however guarded."""
     with_block = step.get("with")
     return (
-        SETUP_RUST.search(str(step.get("uses", ""))) is not None
+        SETUP_RUST.fullmatch(str(step.get("uses", ""))) is not None
         and isinstance(with_block, dict)
         and with_block.get("install-mold") == "true"
     )
@@ -122,30 +122,29 @@ def test_the_derivation_excludes_legs_that_do_not_reach_the_suite(
 
 
 def _suite_leg_cases() -> list[object]:
-    """Return one parametrisation per leg the derivation finds, by name."""
+    """Return each full leg so no matrix axis is lost to its display name."""
     documents = read_workflows(WORKFLOWS)
-    return [pytest.param(leg.name, id=leg.name) for leg in _linux_suite_legs(documents)]
+    return [pytest.param(leg, id=leg.name) for leg in _linux_suite_legs(documents)]
 
 
-@pytest.mark.parametrize("leg_name", _suite_leg_cases())
+@pytest.mark.parametrize("leg", _suite_leg_cases())
 def test_every_linux_suite_leg_installs_the_pinned_tools_first(
-    documents: dict[str, WorkflowDocument], leg_name: str
+    leg: workflow_legs.Leg,
 ) -> None:
     """The installer is unconditional, non-soft-failing and ahead of the suite."""
-    leg = next(leg for leg in _linux_suite_legs(documents) if leg.name == leg_name)
     steps = _steps(leg)
     first_suite = next(
         index for index, step in enumerate(steps) if workflow_legs.reaches_the_suite(step, leg)
     )
     installers = [index for index, step in enumerate(steps[:first_suite]) if _is_installer(steps[index])]
-    assert installers, f"{leg_name} reaches the suite at step {first_suite} with no install-mold before it"
+    assert installers, f"{leg.name} reaches the suite at step {first_suite} with no install-mold before it"
     installer = steps[installers[0]]
-    assert "if" not in installer, f"{leg_name}: the installer is conditional: {installer['if']!r}"
-    assert "continue-on-error" not in installer, f"{leg_name}: the installer may fail softly"
-    assert leg.job.get("continue-on-error") is None, f"{leg_name}: the job swallows failures"
+    assert "if" not in installer, f"{leg.name}: the installer is conditional: {installer['if']!r}"
+    assert "continue-on-error" not in installer, f"{leg.name}: the installer may fail softly"
+    assert leg.job.get("continue-on-error") is None, f"{leg.name}: the job swallows failures"
     version = MOLD_VERSION_FILE.read_text(encoding="utf-8").strip()
     declared = installer["with"].get("mold-version")  # type: ignore[union-attr]
-    assert declared == version, f"{leg_name}: mold-version is {declared!r}, tools/mold/VERSION is {version!r}"
+    assert declared == version, f"{leg.name}: mold-version is {declared!r}, tools/mold/VERSION is {version!r}"
 
 
 def test_the_pin_files_agree_with_each_other() -> None:
@@ -171,7 +170,10 @@ def test_the_installer_reader_rejects_the_unsafe_variants() -> None:
         "uses": "leynos/shared-actions/.github/actions/setup-rust@" + "a" * 40,
         "with": {"install-mold": "true"},
     }
+    use_ref = str(good["uses"])
     assert _is_installer(good)
     assert not _is_installer({**good, "with": {"install-mold": "false"}})
     assert not _is_installer({**good, "uses": "leynos/shared-actions/.github/actions/setup-rust@v1"})
+    assert not _is_installer({**good, "uses": "prefix/" + use_ref})
+    assert not _is_installer({**good, "uses": use_ref + "/suffix"})
     assert not _is_installer({"run": "echo install-mold"})

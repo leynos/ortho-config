@@ -287,6 +287,21 @@ def test_unevaluable_conditions_never_excuse_a_step(
     check_unevaluable_conditions_run(cell, key, value)
 
 
+def test_make_goals_join_a_backslash_continued_command() -> None:
+    """A physical line break escaped by a backslash does not end the goals."""
+    assert workflow_legs._make_goals("make lint \\\n  test") == [["lint", "test"]]
+
+
+def test_make_goals_stop_at_and_then_parse_the_next_command() -> None:
+    """A shell conjunction ends one Make command and starts the next one."""
+    assert workflow_legs._make_goals("make lint && make test") == [["lint"], ["test"]]
+
+
+def test_make_goal_keeps_a_quoted_shell_operator() -> None:
+    """Quoted punctuation is a goal argument, not a command boundary."""
+    assert workflow_legs._make_goals("make '&&' test") == [["&&", "test"]]
+
+
 # -- negative controls: the same properties must reject a wrong interpreter ---------
 
 
@@ -337,9 +352,19 @@ def test_the_exclusion_property_rejects_an_ignored_exclude() -> None:
 
 def test_the_condition_property_rejects_a_swapped_operator(monkeypatch: pytest.MonkeyPatch) -> None:
     """Control: ``==`` and ``!=`` swapped in the comparison fails the oracle."""
-    monkeypatch.setattr(
-        workflow_legs, "_comparison_holds", lambda actual, operator, value: True
-    )
+
+    original = workflow_legs._comparison_holds
+
+    def swapped(actual: str | None, operator: str, value: str) -> bool:
+        """Invert equality comparisons while preserving other operators."""
+        if actual is None or operator not in {"==", "!="}:
+            return original(actual, operator, value)
+        inverse = "!=" if operator == "==" else "=="
+        return original(actual, inverse, value)
+
+    assert swapped(None, "==", "x") is original(None, "==", "x")
+    assert swapped("x", ">", "x") is original("x", ">", "x")
+    monkeypatch.setattr(workflow_legs, "_comparison_holds", swapped)
     _rejects(
         check_conditions_agree_with_an_oracle,
         st.dictionaries(_KEY, _VALUE, min_size=1, max_size=3),
@@ -363,4 +388,4 @@ def test_the_product_oracle_is_itself_the_itertools_product() -> None:
     """The slow oracle agrees with ``itertools.product`` on a fixed example."""
     axes = {"a": ["x", "y"], "b": ["0", "1", "z"]}
     expected = [dict(zip(axes, combo, strict=True)) for combo in itertools.product(*axes.values())]
-    assert product_of(axes) == expected
+    assert product_of(axes) == expected, "the product oracle should match itertools.product"

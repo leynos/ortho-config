@@ -8,6 +8,9 @@ use std::process::Command;
 
 const TRYBUILD_CHILD_ENV: &str = "ORTHOHELP_TRYBUILD_CHILD";
 const RUSTFLAGS_SEPARATOR: char = '\u{1f}';
+const CARGO_CONFIG: &str = include_str!("../../.cargo/config.toml");
+const BUILD_CONFIG_SECTION: &str = "[build]";
+const LINUX_TARGET_CONFIG_SECTION: &str = r#"[target.'cfg(target_os = "linux")']"#;
 const DEV_FAST_RUSTFLAGS: [&str; 5] = [
     "-Zthreads=8",
     "-Zcodegen-backend=cranelift",
@@ -74,6 +77,35 @@ fn configured_development_rustflags() -> Vec<String> {
         .iter()
         .take(flag_count)
         .map(|flag| (*flag).to_owned())
+        .collect()
+}
+
+fn rustflags_in_config_section(config: &str, section_header: &str) -> Option<Vec<String>> {
+    let mut in_section = false;
+    let mut section_found = false;
+    let mut section_lines = Vec::new();
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            if section_found {
+                break;
+            }
+            in_section = trimmed == section_header;
+            section_found |= in_section;
+        } else if in_section {
+            section_lines.push(trimmed);
+        }
+    }
+    if !section_found {
+        return None;
+    }
+
+    let section = section_lines.join("\n");
+    let list = section.split_once("rustflags = [")?.1.split_once(']')?.0;
+    list.split(',')
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| line.strip_prefix('"')?.strip_suffix('"').map(str::to_owned))
         .collect()
 }
 
@@ -225,6 +257,27 @@ fn configuration_flags_are_selected_when_environment_flags_are_absent() {
             .iter()
             .all(|flag| arguments.contains(&flag.as_str()))
     );
+}
+
+#[test]
+fn development_build_flags_match_the_cargo_configuration() {
+    let build_flags = rustflags_in_config_section(CARGO_CONFIG, BUILD_CONFIG_SECTION)
+        .expect("Cargo config should define [build].rustflags");
+    let linux_flags = rustflags_in_config_section(CARGO_CONFIG, LINUX_TARGET_CONFIG_SECTION)
+        .expect("Cargo config should define Linux target rustflags");
+
+    let expected_build_flags = DEV_FAST_RUSTFLAGS[..4]
+        .iter()
+        .map(|flag| (*flag).to_owned())
+        .collect::<Vec<_>>();
+    let expected_linux_flags = DEV_FAST_RUSTFLAGS
+        .iter()
+        .map(|flag| (*flag).to_owned())
+        .collect::<Vec<_>>();
+
+    assert_eq!(build_flags, expected_build_flags);
+    assert_eq!(linux_flags, expected_linux_flags);
+    assert!(!build_flags.contains(&DEV_FAST_RUSTFLAGS[4].to_owned()));
 }
 
 #[cfg(target_os = "linux")]
