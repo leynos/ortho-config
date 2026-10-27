@@ -4,13 +4,11 @@
 //! rejected by the compiler (e.g. ignoring `#[must_use]` return values) do in
 //! fact fail to compile.
 
-use std::process::Command;
+use std::{path::Path, process::Command};
 
 const TRYBUILD_CHILD_ENV: &str = "ORTHOHELP_TRYBUILD_CHILD";
 const RUSTFLAGS_SEPARATOR: char = '\u{1f}';
 const CARGO_CONFIG: &str = include_str!("../../.cargo/config.toml");
-const BUILD_CONFIG_SECTION: &str = "[build]";
-const LINUX_TARGET_CONFIG_SECTION: &str = r#"[target.'cfg(target_os = "linux")']"#;
 const DEV_FAST_RUSTFLAGS: [&str; 5] = [
     "-Zthreads=8",
     "-Zcodegen-backend=cranelift",
@@ -19,7 +17,30 @@ const DEV_FAST_RUSTFLAGS: [&str; 5] = [
     "-Clink-arg=-fuse-ld=mold",
 ];
 
-fn trybuild_rustflags(package_root: &str) -> String {
+#[derive(Clone, Copy)]
+enum CargoConfigSection {
+    Build,
+    LinuxTarget,
+}
+
+impl CargoConfigSection {
+    const fn header(self) -> &'static str {
+        match self {
+            Self::Build => "[build]",
+            Self::LinuxTarget => r#"[target.'cfg(target_os = "linux")']"#,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct RustflagsInputs<'a> {
+    encoded: Option<&'a str>,
+    plain: Option<&'a str>,
+    target: Option<&'a [String]>,
+    build: Option<&'a str>,
+}
+
+fn trybuild_rustflags(package_root: &Path) -> String {
     let encoded_flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").ok();
     let rustflags = std::env::var("RUSTFLAGS").ok();
     // Linux's target table replaces the build-wide value; other hosts use
@@ -30,34 +51,29 @@ fn trybuild_rustflags(package_root: &str) -> String {
         None
     };
     let build_rustflags = std::env::var("CARGO_BUILD_RUSTFLAGS").ok();
-    let flags = selected_rustflags(
-        encoded_flags.as_deref(),
-        rustflags.as_deref(),
-        target_rustflags.as_deref(),
-        build_rustflags.as_deref(),
-    );
+    let flags = selected_rustflags(RustflagsInputs {
+        encoded: encoded_flags.as_deref(),
+        plain: rustflags.as_deref(),
+        target: target_rustflags.as_deref(),
+        build: build_rustflags.as_deref(),
+    });
     let is_coverage_build = has_coverage_instrumentation(&flags);
     compose_trybuild_rustflags(&flags, is_coverage_build, package_root)
 }
 
-fn selected_rustflags(
-    encoded_flags: Option<&str>,
-    rustflags: Option<&str>,
-    target_rustflags: Option<&[String]>,
-    build_rustflags: Option<&str>,
-) -> Vec<String> {
-    if let Some(flags) = encoded_flags {
+fn selected_rustflags(inputs: RustflagsInputs<'_>) -> Vec<String> {
+    if let Some(flags) = inputs.encoded {
         return split_encoded_rustflags(flags);
     }
-    if let Some(flags) = rustflags {
+    if let Some(flags) = inputs.plain {
         return flags.split_whitespace().map(str::to_owned).collect();
     }
     // Cargo chooses matching target flags before `[build].rustflags`, even
     // when the latter comes from `CARGO_BUILD_RUSTFLAGS`.
-    if let Some(flags) = target_rustflags {
+    if let Some(flags) = inputs.target {
         return flags.to_vec();
     }
-    if let Some(flags) = build_rustflags {
+    if let Some(flags) = inputs.build {
         return flags.split_whitespace().map(str::to_owned).collect();
     }
     configured_development_rustflags()
@@ -80,11 +96,12 @@ fn configured_development_rustflags() -> Vec<String> {
         .collect()
 }
 
-fn rustflags_in_config_section(config: &str, section_header: &str) -> Option<Vec<String>> {
+fn rustflags_in_config_section(section: CargoConfigSection) -> Option<Vec<String>> {
+    let section_header = section.header();
     let mut in_section = false;
     let mut section_found = false;
     let mut section_lines = Vec::new();
-    for line in config.lines() {
+    for line in CARGO_CONFIG.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('[') && trimmed.ends_with(']') {
             if section_found {
@@ -100,8 +117,12 @@ fn rustflags_in_config_section(config: &str, section_header: &str) -> Option<Vec
         return None;
     }
 
-    let section = section_lines.join("\n");
-    let list = section.split_once("rustflags = [")?.1.split_once(']')?.0;
+    let section_text = section_lines.join("\n");
+    let list = section_text
+        .split_once("rustflags = [")?
+        .1
+        .split_once(']')?
+        .0;
     list.split(',')
         .map(str::trim)
         .filter(|line| !line.is_empty())
@@ -119,7 +140,7 @@ fn has_coverage_instrumentation(flags: &[String]) -> bool {
 fn compose_trybuild_rustflags(
     selected_flags: &[String],
     is_coverage_build: bool,
-    package_root: &str,
+    package_root: &Path,
 ) -> String {
     let mut flags = selected_flags.to_vec();
     if is_coverage_build {
@@ -133,7 +154,8 @@ fn compose_trybuild_rustflags(
     if is_coverage_build {
         flags.extend(["-C", "instrument-coverage"].map(str::to_owned));
     }
-    flags.push(format!("--remap-path-prefix={package_root}="));
+    let package_root_prefix = package_root.to_string_lossy();
+    flags.push(format!("--remap-path-prefix={package_root_prefix}="));
 
     flags.join(&RUSTFLAGS_SEPARATOR.to_string())
 }
@@ -152,7 +174,7 @@ fn coverage_trybuild_flags_exclude_development_build_flags() {
     .join(&RUSTFLAGS_SEPARATOR.to_string());
 
     let selected = split_encoded_rustflags(&inherited);
-    let encoded = compose_trybuild_rustflags(&selected, true, "/workspace/package");
+    let encoded = compose_trybuild_rustflags(&selected, true, Path::new("/workspace/package"));
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert!(arguments.windows(2).any(|pair| pair == ["-D", "warnings"]));
@@ -172,7 +194,7 @@ fn coverage_trybuild_flags_exclude_development_build_flags() {
 #[test]
 fn empty_encoded_flags_do_not_add_an_empty_argument() {
     let selected = split_encoded_rustflags("");
-    let encoded = compose_trybuild_rustflags(&selected, true, "/workspace/package");
+    let encoded = compose_trybuild_rustflags(&selected, true, Path::new("/workspace/package"));
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert!(arguments.iter().all(|flag| !flag.is_empty()));
@@ -186,7 +208,7 @@ fn empty_encoded_flags_do_not_add_an_empty_argument() {
 #[test]
 fn non_coverage_trybuild_flags_preserve_the_development_build_standard() {
     let selected = DEV_FAST_RUSTFLAGS.map(str::to_owned);
-    let encoded = compose_trybuild_rustflags(&selected, false, "/workspace/package");
+    let encoded = compose_trybuild_rustflags(&selected, false, Path::new("/workspace/package"));
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert!(
@@ -200,8 +222,13 @@ fn non_coverage_trybuild_flags_preserve_the_development_build_standard() {
 #[test]
 fn plain_environment_flags_are_selected_when_encoded_flags_are_absent() {
     let inherited = format!("-D warnings {}", DEV_FAST_RUSTFLAGS.join(" "));
-    let selected = selected_rustflags(None, Some(&inherited), None, None);
-    let encoded = compose_trybuild_rustflags(&selected, false, "/workspace/package");
+    let selected = selected_rustflags(RustflagsInputs {
+        encoded: None,
+        plain: Some(&inherited),
+        target: None,
+        build: None,
+    });
+    let encoded = compose_trybuild_rustflags(&selected, false, Path::new("/workspace/package"));
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert!(arguments.windows(2).any(|pair| pair == ["-D", "warnings"]));
@@ -218,11 +245,16 @@ fn plain_coverage_flags_keep_warnings_and_remove_development_flags() {
         "-D warnings -C instrument-coverage {}",
         DEV_FAST_RUSTFLAGS.join(" ")
     );
-    let selected = selected_rustflags(None, Some(&inherited), None, None);
+    let selected = selected_rustflags(RustflagsInputs {
+        encoded: None,
+        plain: Some(&inherited),
+        target: None,
+        build: None,
+    });
     let encoded = compose_trybuild_rustflags(
         &selected,
         has_coverage_instrumentation(&selected),
-        "/workspace/package",
+        Path::new("/workspace/package"),
     );
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
@@ -246,9 +278,14 @@ fn configuration_flags_are_selected_when_environment_flags_are_absent() {
     } else {
         None
     };
-    let selected = selected_rustflags(None, None, target_flags.as_deref(), None);
+    let selected = selected_rustflags(RustflagsInputs {
+        encoded: None,
+        plain: None,
+        target: target_flags.as_deref(),
+        build: None,
+    });
     let configured = configured_development_rustflags();
-    let encoded = compose_trybuild_rustflags(&selected, false, "/workspace/package");
+    let encoded = compose_trybuild_rustflags(&selected, false, Path::new("/workspace/package"));
     let arguments = encoded.split(RUSTFLAGS_SEPARATOR).collect::<Vec<_>>();
 
     assert_eq!(selected, configured);
@@ -261,9 +298,9 @@ fn configuration_flags_are_selected_when_environment_flags_are_absent() {
 
 #[test]
 fn development_build_flags_match_the_cargo_configuration() {
-    let build_flags = rustflags_in_config_section(CARGO_CONFIG, BUILD_CONFIG_SECTION)
+    let build_flags = rustflags_in_config_section(CargoConfigSection::Build)
         .expect("Cargo config should define [build].rustflags");
-    let linux_flags = rustflags_in_config_section(CARGO_CONFIG, LINUX_TARGET_CONFIG_SECTION)
+    let linux_flags = rustflags_in_config_section(CargoConfigSection::LinuxTarget)
         .expect("Cargo config should define Linux target rustflags");
 
     let expected_build_flags = DEV_FAST_RUSTFLAGS[..4]
@@ -284,19 +321,24 @@ fn development_build_flags_match_the_cargo_configuration() {
 #[test]
 fn target_configuration_precedes_build_rustflags_environment_override() {
     let target_flags = configured_development_rustflags();
-    let selected = selected_rustflags(
-        None,
-        None,
-        Some(target_flags.as_slice()),
-        Some("-D warnings"),
-    );
+    let selected = selected_rustflags(RustflagsInputs {
+        encoded: None,
+        plain: None,
+        target: Some(target_flags.as_slice()),
+        build: Some("-D warnings"),
+    });
 
     assert_eq!(selected, target_flags);
 }
 
 #[test]
 fn build_rustflags_is_selected_when_no_target_configuration_matches() {
-    let selected = selected_rustflags(None, None, None, Some("-D warnings"));
+    let selected = selected_rustflags(RustflagsInputs {
+        encoded: None,
+        plain: None,
+        target: None,
+        build: Some("-D warnings"),
+    });
 
     assert_eq!(selected, ["-D".to_owned(), "warnings".to_owned()]);
 }
@@ -304,12 +346,12 @@ fn build_rustflags_is_selected_when_no_target_configuration_matches() {
 #[test]
 fn encoded_flags_take_precedence_over_plain_and_configured_flags() {
     let target_rustflags = ["-Zthreads=8".to_owned()];
-    let selected = selected_rustflags(
-        Some("-D\u{1f}warnings"),
-        Some("-C opt-level=0"),
-        Some(target_rustflags.as_slice()),
-        Some("-C debuginfo=0"),
-    );
+    let selected = selected_rustflags(RustflagsInputs {
+        encoded: Some("-D\u{1f}warnings"),
+        plain: Some("-C opt-level=0"),
+        target: Some(target_rustflags.as_slice()),
+        build: Some("-C debuginfo=0"),
+    });
 
     assert_eq!(selected, ["-D".to_owned(), "warnings".to_owned()]);
 }
@@ -326,7 +368,7 @@ fn must_use_compile_tests() -> Result<(), Box<dyn std::error::Error>> {
             .env_remove("CARGO_MANIFEST_DIR")
             .env(
                 "CARGO_ENCODED_RUSTFLAGS",
-                trybuild_rustflags(env!("CARGO_MANIFEST_DIR")),
+                trybuild_rustflags(Path::new(env!("CARGO_MANIFEST_DIR"))),
             )
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .status()?;

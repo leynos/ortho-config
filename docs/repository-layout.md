@@ -70,7 +70,7 @@ Table 1 describes the repository paths that define the workspace shape.
 | `target/` | Cargo build output, generated documentation, trybuild artefacts, and temporary build products. Do not edit or commit files from this directory. |
 | `test_helpers/` | Shared test helper crate. Put cross-crate fixtures, environment guards, and reusable assertions here rather than duplicating test infrastructure. |
 | `tests/fixtures/` | Workspace-level fixture crates and data used by integration, documentation, and generator tests. Fixtures should be minimal but representative. `tests/fixtures/prover_tools/` holds the Kani package and Verus proof files exercised by the opt-in verifier lane. |
-| `tests/workflow_contracts/` | Workflow and Make-routing contract tests, run by `make test-workflow-contracts`. They hold the CI workflows and the build standard's Make routing to their contracts. |
+| `tests/workflow_contracts/` | Workflow and Make-routing contract tests, run by `make test-workflow-contracts`. They hold the CI workflows and the build standard's Make routing to their contracts, with narrow readers for Make output and workflow shell goals.                                                        |
 | `tools/` | Repository-owned tool pins. `tools/kani/VERSION` and `tools/verus/VERSION` name the verifier releases, and `tools/verus/SHA256SUMS` pins the Verus archive. Change them only with the matching integration evidence. |
 | `tools/mold/` | The pinned `mold` linker release: `VERSION` names it and `SHA256SUMS` carries the digests that `make install-build-tools` verifies. |
 
