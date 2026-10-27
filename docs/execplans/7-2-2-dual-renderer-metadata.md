@@ -1,6 +1,6 @@
 # Add dual-renderer metadata (7.2.2)
 
-Status: DRAFT — awaiting explicit approval before implementation.
+Status: APPROVED (2026-10-28) — implementation authorized.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -21,10 +21,10 @@ JSON must retain each declared policy, apply documented legacy defaults to the
 nested command, and preserve protocol fields across two localizers. The feature
 describes downstream rendering; it does not implement terminal output.
 
-This PR contains only a plan and its documentation index entry. Approval of
-this plan, including the deliberate pre-1.0 Rust source break described below,
-is required before any implementation milestone begins. Draft PR publication,
-passing checks, and expert review do not constitute that approval.
+This plan, including the deliberate pre-1.0 Rust source break described below,
+was explicitly approved on 2026-10-28; implementation may proceed. Draft PR
+publication, passing checks, and expert review did not by themselves constitute
+that approval.
 
 ## Constraints
 
@@ -105,7 +105,8 @@ source failures. There is no time limit; queued compiler work is not a hang.
 - [x] (2026-10-14) Documentation gates passed: formatting, Markdown/spelling,
   and diagram validation; no unrelated tracked changes resulted.
 - [ ] Commit and publish this plan as a draft PR for approval.
-- [ ] Obtain explicit approval, including the source compatibility decision.
+- [x] (2026-10-28) Obtain explicit approval, including the source compatibility
+  decision.
 - [ ] M1: deliver metadata types, derive, bridge, and contract tests together.
 - [ ] M2: finish behavioural/end-to-end coverage, documentation, and closure.
 
@@ -634,3 +635,8 @@ work is authorized by these checks.
 2026-10-14 spelling revision: Reworded the external colour-suppression
 reference and its link label after the post-turn spelling gate rejected the
 unquoted upstream spelling. The source URL and planned behaviour are unchanged.
+
+2026-10-28 approval: The user explicitly approved this plan, including the
+deliberate pre-1.0 Rust source break for the new metadata fields. The status is
+now APPROVED and the approval progress item is checked. M1 may begin; no
+requirement, tolerance, or design decision changed.
