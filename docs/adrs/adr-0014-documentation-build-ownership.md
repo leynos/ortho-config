@@ -297,6 +297,10 @@ helper may not terminate unrelated processes or restart shared cache services.
 
 ## Timeout policy and validation status
 
+The values and recommendation in this section record the policy at the ADR's
+acceptance date. The 2026-10-26 addendum below supersedes its current-state
+limits and validation conclusion while preserving the original observations.
+
 The 600-second nextest per-test ceiling remains the default. The BDD target and
 the serialized documentation-scenario group have 960-second overrides. The
 1,800-second whole-run ceiling, 2,700-second Cargo watchdog, and workflow job
@@ -341,6 +345,37 @@ unavailable and admission slots were held, and a later fresh-target run did not
 report cache hit or miss state. Keep the build budget unchanged until a
 controlled run provides usable cold-build evidence.
 
+## Addendum (2026-10-26): Updated test and workflow budgets
+
+The adoption of the dated nightly in
+[ADR-0016](adr-0016-adopt-a-dated-nightly-and-the-development-build-standard.md)
+changed compiler cache keys and invalidated the warm sample used to set the
+whole-run budget. The current limits supersede the whole-run, watchdog and job
+ceilings above:
+
+- `.config/nextest.toml` sets a 2,300-second whole-run limit and a
+  2,200-second per-test limit for the boundary binary. The packaged-consumer
+  scenario shares a 2,100-second deadline across its commands; each packaging
+  invocation has a 520-second limit and each nested Cargo command has a
+  420-second limit.
+- The coverage workflows set `RUN_RUST_CARGO_WAIT_TIMEOUT` to 3,300 seconds.
+  The CI coverage job has a 190-minute ceiling, and the coverage publisher has
+  a 140-minute ceiling.
+- Documentation scenarios retain their 956-second operation envelope within
+  the 960-second nextest allowance.
+
+The 2,300-second whole-run limit covers the bound from the cancelled Windows
+run: the younger remaining test had started at 1,652.8 seconds and had used
+157.3 seconds when cancellation was reported at about 1,810.1 seconds. Its
+600-second allowance therefore ended at 2,252.8 seconds. The new limit leaves
+47.2 seconds above that bound. The three later warm runs do not establish a
+cold-cache bound because they inherited cache entries from the cancelled run.
+The cold nested-build path still cannot reach `sccache` while the documentation
+runner clears the environment without restoring `RUSTC_WRAPPER`;
+[issue #614](https://github.com/leynos/ortho-config/issues/614) tracks that
+separate repair. Detailed timings and evidence limits are in the developers'
+guide's [cold-run budget account][cold-run-budget].
+
 ## Consequences
 
 - Documentation-test workspaces reuse compiler outputs through Cargo while
@@ -364,6 +399,7 @@ controlled run provides usable cold-build evidence.
 - [Executable documentation-test design][design-infrastructure]
 - [Documentation-example implementation guidance][developer-guidance]
 - [Test timeout ordering][timeout-guidance]
+- [Cold-run budget account][cold-run-budget]
 - [Descriptor locking with `fs4`][file-lock]
 
 [design-infrastructure]:
@@ -371,4 +407,6 @@ controlled run provides usable cold-build evidence.
 [developer-guidance]: ../developers-guide.md#public-documentation-examples
 [timeout-guidance]:
   ../developers-guide.md#test-timeouts-the-tiers-this-repository-sets
+[cold-run-budget]:
+  ../developers-guide.md#the-whole-run-budget-was-resized-from-a-cold-run
 [file-lock]: https://docs.rs/fs4/1.1.0/fs4/trait.FileExt.html

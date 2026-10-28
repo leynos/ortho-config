@@ -59,6 +59,13 @@ the derive. Optional `json5`, `yaml`, and `metrics` features are covered later.
 OrthoConfig re-exports its derive macros, so a separate `ortho_config_macros`
 dependency is not needed.
 
+Depending on the published crate needs no special toolchain; the supported
+minimum Rust version is 1.89.0. Building OrthoConfig from a source checkout has
+extra prerequisites: the checkout pins a dated nightly toolchain, and Linux
+builds also need the `mold` linker. The
+[developers' guide](developers-guide.md#development-build-standard) explains
+how to install and verify them.
+
 ## Build the first layered CLI
 
 Start with one struct. The `prefix` is used for environment variables and for
@@ -1556,6 +1563,28 @@ available from the selected library or binary target. The default format is
 `ir`. `--format agent-context` writes `agent-context.json` and also emits the
 same compact JSON document to standard output, so a pipeline can consume it
 directly.
+
+## Collect bridge-cache metrics
+
+The optional `metrics` feature enables a counter for `cargo-orthohelp` bridge
+cache outcomes. Enable it when installing the tool:
+
+<!-- tested-example: guide-orthohelp-bridge-cache-metrics -->
+```console
+cargo install cargo-orthohelp --version 0.10.0 --features metrics
+```
+
+The counter is `cargo_orthohelp.bridge_cache.events`. Its bounded `operation`
+label is `lookup` or `publish`; its `outcome` label is `hit`, `miss`,
+`read_failed`, `unchanged`, `updated`, or `write_failed`.
+
+The feature is opt-in and does not install a metrics recorder. The standalone
+CLI does not install one either, so events are collected only when the process
+provides its own `metrics` recorder. Without a recorder, the metrics facade
+drops them. The feature is additive and disabled by default; no migration is
+needed to keep using existing commands. For the upgrade summary, see the
+[bridge-cache metrics entry](v0-10-0-migration-guide.md#bridge-cache-metrics)
+in the v0.10.0 migration guide.
 
 ## Generate every format at once
 

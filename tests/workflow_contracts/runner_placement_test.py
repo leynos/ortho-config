@@ -242,6 +242,8 @@ PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
     "Disk sample (before discard)": "${{ always() && matrix.platform == 'linux' }}",
     "Discard lint build trees": LINUX_ONLY,
     "Disk sample (before coverage)": "${{ always() && matrix.platform == 'linux' }}",
+    "Choose the coverage target root": "${{ matrix.platform == 'windows' }}",
+    "Choose the Linux coverage target root": LINUX_ONLY,
     "Disk sample (after coverage with serde_saphyr)": (
         "${{ always() && matrix.platform == 'linux' }}"
     ),

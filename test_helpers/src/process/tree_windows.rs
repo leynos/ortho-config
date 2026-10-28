@@ -66,7 +66,8 @@ impl CommandWrapper for JobObjectOwner {
     }
 }
 
-pub(super) fn configure(command: &mut CommandWrap) {
+/// Configure a wrapped command to own a Windows Job Object.
+pub fn configure(command: &mut CommandWrap) {
     command.wrap(JobObjectOwner::new());
 }
 

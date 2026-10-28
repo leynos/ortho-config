@@ -161,13 +161,21 @@ replace a root another is reading. `make boundary` and `make test` start one
 process for the binary and need nothing extra, which is why the group exists
 only for nextest.
 
-That group also fixes the per-test allowance arithmetic. One packaged test runs
-both `cargo package` invocations, each bounded at 240 s by `PACKAGE_DEADLINE`,
-so the pair has to fit inside the 600 s base allowance with room for the root
-checks around them. A deadline that did not fit could never fire: nextest would
-stop the test first, and the error naming the invocation that hung would never
-be printed. `boundary_packaging_test.py` reads the group, the manifest and the
-deadline so neither half can drift from the other.
+The package-set cache is process-local to the packaged boundary contracts. It
+shares successful roots and retains failures from unbounded packaging attempts,
+but does not cache a failure caused by a caller's sequence deadline. A later
+caller with time remaining can retry.
+
+The group also gives its nested Cargo commands room to wait for the shared
+package-cache lock. The packaged-consumer scenario runs two `cargo package`
+invocations, each bounded at 520 s by `PACKAGE_DEADLINE`, then tests and
+resolves metadata for three consumer shapes, each command bounded at 420 s by
+`CARGO_DEADLINE`. Those independent ceilings total 3,560 s before unpacking and
+root checks, so the scenario shares one 2,100 s deadline across the entire
+sequence. The binary's 2,200 s per-test allowance leaves 100 s for error
+reporting and teardown; the 2,300 s whole-run limit still bounds the suite.
+`boundary_packaging_test.py` reads the group, manifest, command counts and
+deadlines, so their constraints cannot drift apart.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -1120,6 +1128,23 @@ success, on every supported platform. The mechanism is platform-specific; the
 contract is not. This ownership applies only to test subprocesses and must not
 terminate unrelated processes or shared cache services.
 
+The shared process-tree owners and cancellable pipe readers live in
+`test_helpers/src/process/`. Crates whose package boundaries permit the helper
+dependency use `ortho_config_test_helpers::process`: call `run_with_deadline`
+for one bounded command and `run_with_deadline_until` when an enclosing test
+sequence supplies a deadline. The `ortho_l10n` boundary test includes this
+module by source path and declares its platform dependencies directly. That
+single test-only inclusion preserves `ortho_l10n`'s explicit ban on the
+workspace test-helper package in its resolved graph and packaged manifest. Do
+not weaken that boundary or copy the process implementation.
+
+Callers retain ownership of command construction, environment policy, any
+serialization lock, and interpretation of the returned status and output. Use
+the lower-level reader or platform tree modules only when a specialized test
+runner needs its own diagnostics or capture policy; do not add another
+process-group, Job Object, or blocking pipe-reader implementation to a package.
+These helpers are for tests and must not be used by production code.
+
 Documentation example scenarios start a fixed 956-second monotonic envelope
 inside their 960-second nextest override, reserving two two-second cleanup
 allowances. Individual build, execution, and discovery operations have 956, 60,
@@ -1131,8 +1156,8 @@ The 956-second envelope is 1.60 times that observed lower bound. Its deadline
 counts cache and compiler-admission waits without estimating or subtracting
 them, and preserves two seconds for child cleanup and two for test reporting.
 Output does not reset either deadline. The workflow contract checks this
-ordering against nextest's 1,800-second whole-run limit, the 2,700-second Cargo
-watchdog, and the enclosing job ceiling. See
+ordering against nextest's configured 2,300-second whole-run limit, the
+3,300-second Cargo watchdog, and the enclosing job ceiling. See
 [Test timeouts](#test-timeouts-the-tiers-this-repository-sets) and
 `documentation_budget_test.py`.
 
@@ -1831,7 +1856,7 @@ closed vocabulary exists to keep out.
 
 ## Digest rendering
 
-`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
+`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as
 lowercase hexadecimal digits. From `sha2` 0.11 the `finalize` and `digest`
 methods return `hybrid_array::Array<u8, _>`, which dereferences to `[u8]` but
 does not implement `core::fmt::LowerHex`, so the `{:x}` formatting the cache
@@ -1851,6 +1876,10 @@ previously used no longer compiles. `sha2` 0.11 also no longer implements
   genuinely needs one.
 - Pass the digest by reference, as in `to_lower_hex(&hasher.finalize())`, so
   `Array` coerces to `&[u8]` through `Deref`.
+- Render only a prefix by `zip`ping the digest into a fixed-size array, never
+  by slicing. The workspace denies `clippy::indexing_slicing`, and a zipped
+  copy has no panic path; a `const` assertion pairs with it to prove the array
+  cannot be wider than the digest it is filled from.
 - Feed a hasher with `update` from a bounded buffered read loop, or through a
   small `std::io::Write` adapter newtype that forwards to `update`. Do not
   reach for `std::io::copy` with a hasher as the sink.
@@ -1863,6 +1892,79 @@ the change does not invalidate cache directories. A bounded exhaustive unit
 test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
 digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
 encoder cannot pass.
+
+### The bridge cache key
+
+`CacheKey::hash` names the bridge directory under `target/orthohelp/`, and that
+name is one component of every path the bridge's `cargo build` hands to the
+linker. The directory name starts with `v1-`, followed by the leading
+`CACHE_DIRECTORY_DIGEST_BYTES` bytes of the full SHA-256 digest — 16 bytes, 32
+hexadecimal digits — rather than all 64. The prefix versions this cache-key
+encoding so a future format change can use a fresh cache namespace.
+
+The limit is not a tuning choice. Cargo 1.100 made the new build-directory
+layout unconditional, so every artefact of the bridge build lands in
+`target/debug/build/<package>/<hash>/out/` instead of `target/debug/deps/`.
+That adds roughly 50 characters, and Windows still applies a 260-character
+`MAX_PATH` to the file names `link.exe` opens. Halving the directory name
+bought back 32 of them; `build-test (windows)` had failed with `LNK1104` on
+`orthohelp_policy_warn_fixture` before the change.
+
+Two rules follow from this:
+
+- The truncation happens at rendering time, in `CacheKey::hash`. Keep it there.
+  The digest is still computed over the full SHA-256 output, so truncation
+  cannot mask a defect in how the inputs are combined.
+- Treat the width as a path-length budget, not a security boundary. A
+  collision costs a stale IR reuse, not a corrupt result, and 128 bits is
+  already far wider than the input space. A test asserting the exact rendered
+  length lives beside the hash, and `cargo-orthohelp/src/tests.rs` reconstructs
+  the hosted Windows runner's longest linker path so the next lengthening fails
+  on Linux instead.
+
+### Rustflags sanitization for bridge builds
+
+The bridge build spawns `cargo build` and so inherits the parent environment.
+Under `cargo-llvm-cov` that environment contains `-Cinstrument-coverage` in
+`RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS`, which would make the bridge binary
+write profiling data into the test run. `cargo-orthohelp/src/rustflags.rs`
+sanitizes both variables before the child is spawned:
+`apply_sanitized_rustflags` is called only from `bridge::build_bridge_command`,
+which also removes `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`,
+`LLVM_PROFILE_FILE`, `CARGO_LLVM_COV_TARGET_DIR`, and `CARGO_TARGET_DIR` from
+the child.
+
+The contract, which `rustflags_proptests.rs` checks against an independent
+reference filter:
+
+- **Two variables, two delimiters.** `RUSTFLAGS` uses
+  `str::split_whitespace`, so any run of Unicode whitespace separates its
+  tokens; `CARGO_ENCODED_RUSTFLAGS` splits on Cargo's unit separator
+  (`U+001F`). The delimiter is chosen once and used in both directions, so a
+  value is never split on one separator and joined with the other. Do not merge
+  the two paths into one string-typed helper.
+- **What counts as a coverage token.** A compact `-Cinstrument-coverage`,
+  including the `-Cinstrument-coverage=<value>` form, or a bare `-C` whose
+  successor is `instrument-coverage` or starts with `instrument-coverage=`. The
+  split pair is removed as a pair, so the successor cannot survive as a stray
+  token.
+- **Surviving tokens keep their order.** Nothing is sorted or deduplicated.
+  When coverage removal changes the value, the survivors are rejoined with the
+  delimiter's separator — one ASCII space for `RUSTFLAGS`, `U+001F` for
+  `CARGO_ENCODED_RUSTFLAGS` — so separator runs are normalized on that path.
+- **An unchanged value passes through byte-for-byte**, whitespace runs
+  included, rather than being re-rendered from its tokens. Original spacing is
+  preserved only here, on the path that removes nothing.
+- **An emptied value removes the variable** rather than setting it to the empty
+  string. An empty `RUSTFLAGS` is not the same as no `RUSTFLAGS` to Cargo.
+- **Every change is logged.** A partial strip and a full removal each emit one
+  `debug` event naming the variable but not its value. The unchanged path emits
+  nothing, because it has nothing to report.
+
+`apply_sanitized_rustflags` reads the current process environment directly
+rather than taking an injected source. The module is therefore tested through
+those pure functions and the property filter, never by mutating the test
+process's environment.
 
 ## Scoped and policy-based configuration discovery
 
@@ -2304,14 +2406,16 @@ integration (CI) environments.
 
 Dependabot owns scheduled dependency updates through `.github/dependabot.yml`:
 
-- Root GitHub Actions updates run weekly and use the `dependencies` and
+- Root GitHub Actions updates run daily and use the `dependencies` and
   `github-actions` labels.
 - Root Cargo workspace updates run daily and use the `dependencies` and
   `cargo` labels.
 - Python test requirements in `scripts/` update daily and use the
   `dependencies` and `python` labels.
-- The root `rust-toolchain.toml` updates weekly through the independent
+- The root `rust-toolchain.toml` updates daily through the independent
   `rust-toolchain` route, using the `dependencies` and `rust-toolchain` labels.
+  [Toolchain pin and freshness](#toolchain-pin-and-freshness)
+  explains why the interval is daily and carries no cooldown.
 
 GitHub Actions updates include calls into `leynos/shared-actions`. Contract
 tests that assert a caller's exact commit SHA create a lockstep dependency:
@@ -2516,6 +2620,14 @@ reference). The workflow contract `whitaker_install_test.py` asserts exactly one
 `Install Whitaker` step, using the action at a full commit hash, with no
 script of its own, on the Linux leg only.
 
+Whitaker takes none of the
+[development build standard](#development-build-standard). `make lint-whitaker`
+deliberately assigns `RUSTFLAGS="-D warnings"` alone and never
+`GATE_RUSTFLAGS`, because Whitaker runs on the toolchain its installer manages
+rather than on this repository's pinned nightly, and `mold` is not a
+prerequisite it can rely on. `build_standard_routing_test.py` holds the
+assignment to exactly `-D warnings`.
+
 ### The advisory Clippy-on-beta lane
 
 `clippy-beta` is the early-warning job for lints that have landed on the Rust
@@ -2543,6 +2655,691 @@ Makefile's `CLIPPY_FLAGS`
 strictness once, in the Makefile, and
 `tests/workflow_contracts/clippy_beta_test.py` asserts both ends: the job's
 platforms and advisory scope, and the target it calls.
+
+The beta step also sets `BUILD_STANDARD: '0'`. Beta refuses the nightly-only
+flags the [development build standard](#development-build-standard) restates,
+`-Zthreads=8` among them, so the lane turns the standard off for the whole
+invocation. That also makes the build-tools preflight a no-op, so the job
+installs neither `mold` nor the pinned nightly. `clippy_beta_test.py` asserts
+that the step selecting beta sets the switch to `0`.
+
+## Development build standard
+
+The development build standard is what a contributor's builds, tests, lints and
+type checks use unless a route opts out. It is the parallel `rustc` frontend
+(`-Zthreads=8`) and Cranelift backend on every host, plus the `mold` linker on
+Linux. These compiler options require the pinned dated nightly; see
+[Toolchain pin and freshness](#toolchain-pin-and-freshness). Cranelift's
+unwinding limitation and the one test kept for LLVM coverage are recorded in
+the "Cranelift development backend" section and
+[ADR-0017](adrs/adr-0017-use-cranelift-for-development-builds.md).
+
+The maintainer has made four decisions that this section records: development
+and formatting use a dated nightly, dev-fast uses Cranelift and the parallel
+frontend, Linux uses `mold`, and Dependabot keeps the pin fresh.
+
+### Where the flags live
+
+For a bare `cargo` invocation, `.cargo/config.toml` is the whole statement of
+the standard:
+
+```toml
+[build]
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+]
+
+[target.'cfg(target_os = "linux")']
+rustflags = [
+  "-Zthreads=8",
+  "-Zcodegen-backend=cranelift",
+  "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+  "-Clink-arg=-fuse-ld=mold",
+]
+```
+
+`mold` ships for Linux only, so it appears under the Linux target table alone.
+It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
+match. macOS and Windows get Cranelift and the parallel frontend, and keep the
+platform linker.
+
+Cargo selects one `rustflags` source and does not merge them. A matching
+`[target.*]` table replaces `[build] rustflags` outright, and an assigned
+`RUSTFLAGS` outranks every table. `-Zthreads=8` is therefore repeated in each
+source, and each Makefile recipe that assigns `RUSTFLAGS` restates the standard
+through four variables:
+
+- `STANDARD_RUSTFLAGS` is the standard for the host: `-Zthreads=8`,
+  `-Zcodegen-backend=cranelift`, and the `ortho_config_dev_fast` test cfg, plus
+  `-Clink-arg=-fuse-ld=mold` when `BUILD_HOST_OS` is `Linux`. It is empty when
+  `BUILD_STANDARD` is not `1`.
+- `GATE_RUSTFLAGS` is `-D warnings` followed by `STANDARD_RUSTFLAGS`. Every
+  gate recipe that runs Cargo through the standard uses it.
+- `DEBUG_RUSTFLAGS` is `STANDARD_RUSTFLAGS` alone, so a debug build keeps the
+  caller's warning policy rather than imposing one.
+- `RELEASE_RUSTFLAGS` is an empty assignment, which displaces the configuration
+  and so gives release builds none of the standard.
+
+`BUILD_HOST_OS` is the output of `uname -s`, or `Windows_NT` on Windows.
+Recipes invoke Cargo as `$(CARGO)`, so the executable is injectable.
+
+A gate that assigned only `-D warnings` would silently lose the standard and
+still be green. `build_standard_routing_test.py` therefore holds the Make
+variables equal to the configuration file for each host it names; change one
+without the other and that contract fails.
+
+### Routing matrix
+
+Which flags reach Cargo depends on the route, and three things must not be
+blurred:
+
+- Bare Cargo behaviour is the configuration file. A bare `cargo build`,
+  `cargo test` or `cargo check` reads `.cargo/config.toml` and nothing else.
+- Make restates the flags, because an assigned `RUSTFLAGS` displaces the file.
+  The restatement is what keeps `make test` and `cargo test` building the same
+  way on the same host.
+- Explicit non-development routes assign `RUSTFLAGS` on purpose, and say so in a
+  comment where they do. Release, coverage, packaging and the Whitaker suite
+  are not development builds and take none of the standard.
+
+The table lists, for each invocation, the flags that reach Cargo and the route
+they take.
+
+| Invocation                                           | Flags that reach Cargo                                                       | Route                |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------- |
+| Bare `cargo` build, test or check (Linux)            | `-Zthreads=8 -Zcodegen-backend=cranelift` and `mold`, from the Linux table   | Development          |
+| Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8 -Zcodegen-backend=cranelift`, from `[build]`                    | Development          |
+| `make test`, `make typecheck`                        | `-D warnings` and the host's standard, restated                              | Development          |
+| `make boundary`                                      | `-D warnings` and the host's standard, restated                              | Development          |
+| `make lint-clippy`: the `cargo doc` line             | `-D warnings` and the host's standard, restated                              | Development          |
+| `make lint-clippy`: the `cargo clippy` line          | `-D warnings` and the host's standard, restated                              | Development          |
+| `make build`                                         | The host's standard, restated; no `-D warnings`                              | Development          |
+| `make release`                                       | None: an empty assignment displaces the configuration                        | Production           |
+| `make lint-whitaker`                                 | `-D warnings` alone                                                          | Whitaker's toolchain |
+| `make msrv-build`                                    | `-D warnings` alone, on the stable MSRV compiler                             | MSRV                 |
+| `clippy-beta` lane                                   | `-D warnings` alone, with `BUILD_STANDARD=0` on `cargo +beta`                | Advisory beta        |
+| Coverage in CI                                       | `-D warnings` from the job; `cargo llvm-cov` appends `-Cinstrument-coverage` | Coverage             |
+| Release builds and packaging in CI                   | `-D warnings` from an explicit job-level `RUSTFLAGS`                         | Production           |
+| `cargo +1.95.0 install merman-cli` in CI             | `-D warnings` from the job-level `RUSTFLAGS`                                 | Shielded             |
+| Mutation testing                                     | `-D warnings` from the shared action's default                               | Shared workflow      |
+
+*Table: How each invocation obtains its Cargo flags, and whether it takes the
+development standard.*
+
+Notes on individual rows:
+
+- `make lint-clippy` runs two Cargo commands, `cargo doc` and `cargo clippy`,
+  and the routing contract proves each separately. `make build` omits
+  `-D warnings` by design.
+- `make lint-whitaker` assigns `RUSTFLAGS="-D warnings"` alone. Whitaker runs on
+  its installer-managed toolchain and takes none of the standard.
+- `make msrv-build` runs on a stable compiler, which refuses the nightly-only
+  flags, so it assigns `-D warnings` alone to displace the configuration.
+- Releases are not a development route and are not built on a stable compiler:
+  they use the pinned nightly with production flags only. See
+  [Releases use the pinned nightly](#releases-use-the-pinned-nightly).
+- Coverage is `generate-coverage` in the `build-test` job and in
+  `coverage-main.yml`. The job-level `RUSTFLAGS: -D warnings` displaces the
+  configuration, so a coverage build uses LLVM and has neither Cranelift,
+  `mold` nor the parallel frontend. The custom cfg is also absent, so the
+  unwind-dependent mutex-poisoning test runs in coverage. The Linux coverage
+  jobs in `ci.yml` and `coverage-main.yml` put the target under `RUNNER_TEMP`
+  and set `CARGO_TARGET_DIR` and `CARGO_LLVM_COV_TARGET_DIR` to the same path.
+  This keeps trybuild's nested Cargo projects from discovering the checkout's
+  development configuration. The Windows leg in `ci.yml` also uses a drive-root
+  path to keep compiler command lines under the `CreateProcess` limit; see
+  [The Windows coverage command line](#the-windows-coverage-command-line).
+- The `cargo-orthohelp` trybuild harness uses `target-tuple` to identify the
+  compiled target when forwarding target-specific Cargo flags to its child.
+- Release builds (`release.yml`, job `build-assets`) and packaging (`ci.yml`,
+  job `binstall-packaging`) set the same explicit job-level value and take the
+  production route.
+- `cargo +1.95.0 install merman-cli` reads this checkout's configuration on a
+  stable compiler that refuses `-Zthreads`. The job-level `RUSTFLAGS` shields
+  it.
+- Mutation testing is a shared reusable workflow whose `setup-rust` default
+  exports `RUSTFLAGS=-D warnings`, so the configuration is displaced. This
+  repository does not set that value and no repository contract covers it; the
+  route depends on the shared action's default.
+
+An empty `RUSTFLAGS` assignment displaces the configuration, which is how
+`RELEASE_RUSTFLAGS` works. An empty `rustflags` input to the shared
+`setup-rust` action is different: it leaves `RUSTFLAGS` unset and so leaves the
+configuration in force. `build_exclusions_test.py` refuses that in the excluded
+jobs.
+
+Installed tooling need not be active in every job. The coverage publisher
+installs `mold` although its flags exclude it, because the suite that runs
+under coverage is the suite the Linux leg runs, and that suite needs the pinned
+linker.
+
+### Installing and checking the build tools
+
+The standard needs the pinned toolchain and Cranelift component on every host,
+plus the pinned `mold` release on Linux. Two targets provision and verify them:
+
+- `make install-build-tools` runs `scripts/install-build-tools.sh`. It downloads
+  the pinned `mold` release (`tools/mold/VERSION`) for the host architecture
+  and verifies it against `tools/mold/SHA256SUMS`. It refuses an unlisted
+  artefact, an ambiguous file and a mismatch, and installs nothing in any of
+  those cases. It then unpacks the release under `BUILD_TOOLS_PREFIX` (default
+  `~/.local`) and runs `rustup toolchain install` in the repository root, which
+  reads `rust-toolchain.toml` for the channel, profile and components. Only
+  binary releases are fetched; there is no source-build fallback.
+- `make check-build-tools` runs `scripts/check-build-tools.sh`. On Linux,
+  `mold` must be on `PATH`, must run, and must equal the pin; `rustup`, the
+  pinned toolchain and its Cranelift component must be present. Every failure
+  names `make install-build-tools`, and all failures are reported in one pass.
+  Off Linux the linker half prints a note and passes.
+
+The check runs before `test`, `typecheck`, `lint-clippy` (and therefore `lint`)
+and the debug `build`. It never runs before `release`, `lint-whitaker` or
+`msrv-build`, so a release build does not fail for want of a linker it will not
+use. Under `BUILD_STANDARD=0` it is a no-op.
+
+The Makefile puts `$(BUILD_TOOLS_PREFIX)/bin` first on `PATH` on every host
+except Windows, because `-fuse-ld=mold` resolves by `PATH` order and the pinned
+release must outrank any distribution `mold`. Running the scripts outside Make
+means arranging that order separately.
+
+In CI, `build-test` and the coverage publisher job `coverage-upload` call the
+shared `setup-rust` action, pinned by SHA, with `install-mold: 'true'` and a
+`mold-version` equal to `tools/mold/VERSION`. The call is unconditional, in the
+same job, and before the first step that reaches the suite. The action is a
+notice-only no-op on Windows, so no platform guard exists or is allowed. It
+sets no linker flag; `.cargo/config.toml` does. The Windows leg installs
+nothing because the action does nothing there, and `clippy-beta`, `msrv`,
+packaging and release do not call the installer.
+
+### The Windows coverage command line
+
+Windows enforces two different length limits, and they fail differently. The
+first is `MAX_PATH`, 260 characters, which `link.exe` reports as `LNK1104`; the
+bridge cache key is sized to stay inside it (see
+[The bridge cache key](#the-bridge-cache-key)). The second is the command line
+`CreateProcess` accepts for a spawned process: 32,767 characters, reported as
+`os error 206` before the process ever starts.
+
+The coverage build reaches the second limit. Cargo repeats a single target root
+across dependency search paths and `--extern` arguments. In run 39893695039 the
+`ortho_config` library test's invocation was 33,497 characters, 730 over;
+`D:\a\_temp\cov\llvm-cov-target` appeared 302 times.
+
+`cargo-llvm-cov` normally appends `llvm-cov-target` to `CARGO_TARGET_DIR`,
+while trybuild independently reads that variable through Cargo metadata. A
+drive-root target makes trybuild's normalizer treat source paths as target
+paths, so the Windows-only `Choose the coverage target root` step derives the
+drive from `RUNNER_TEMP`, then sets both `CARGO_TARGET_DIR` and
+`CARGO_LLVM_COV_TARGET_DIR` to the same `llvm-cov-target` directory. The
+LLVM-specific value prevents the action from appending the suffix again. The
+effective `D:\llvm-cov-target` is outside the checkout, shortens each of the
+302 measured occurrences by 12 characters, and leaves 2,894 characters of
+headroom. Linux also sets both variables to one target directory under
+`RUNNER_TEMP`; there the reason is to keep trybuild's nested Cargo projects
+outside the checkout so they cannot discover its Cranelift development flags
+while compiling with LLVM coverage. Two consequences are easy to undo by
+accident:
+
+- The coverage steps must not set either target-directory variable themselves.
+  The platform-specific chooser steps publish them through `GITHUB_ENV`, with
+  equal values so `cargo-llvm-cov` does not append its default suffix again.
+- The selected directory must stay a direct child of the drive root and
+  outside the checkout. A drive-root value prefixes every source path in
+  trybuild diagnostics; a longer directory spends command-line headroom once
+  for every dependency path.
+
+`coverage_command_line_test.py` holds both rules and re-derives the arithmetic
+from the measured invocation, so a change that restores the long root, shortens
+the margin, or moves the assignment fails the contract rather than the Windows
+job.
+
+### Opting out with `BUILD_STANDARD`
+
+`BUILD_STANDARD=0` turns the standard off for one invocation: the recipes then
+assign no standard flags, and the build-tools check prints a note and checks
+nothing. Only the advisory `clippy-beta` lane uses it, because beta refuses the
+nightly-only flags. Use it for any toolchain that is not the pinned nightly,
+together with `CARGO`:
+
+```bash
+make lint-clippy BUILD_STANDARD=0 CARGO="cargo +beta"
+```
+
+### Contract tests
+
+`make test-workflow-contracts` (see
+[Workflow contract gate](#workflow-contract-gate)) holds the standard in place
+with four contracts, a case in a fifth, and two support modules under
+`tests/workflow_contracts/`. Their method is a dry run:
+
+```bash
+make --dry-run <target> CARGO=probe-cargo
+```
+
+Make expands every variable and conditional as a real run would, and the
+contract judges the command line that would have reached Cargo. Case
+identifiers are distinct, so each appears by name in `pytest --collect-only`.
+
+- `build_standard_routing_test.py` compares each development route with the
+  configuration for each of four named hosts: Linux on x86_64, Linux on
+  aarch64, macOS and Windows. It proves that release, Whitaker, MSRV and the
+  `BUILD_STANDARD=0` opt-out are excluded, and that every standard route
+  reaches the preflight before its first Cargo line. A real `make` run proves
+  that a failing preflight stops the build before Cargo runs.
+- `build_tools_provisioning_test.py` derives the Linux jobs that reach the suite
+  from the workflows and from Make's dry run rather than listing them. Each
+  must install the pinned tools first, unconditionally, without
+  `continue-on-error`, with the pinned version.
+- `build_exclusions_test.py` requires the coverage, release and packaging jobs
+  to set a non-empty `RUSTFLAGS` with none of the standard, and requires that
+  nothing re-empties it. It also holds the MSRV job; see
+  [The MSRV lane](#the-msrv-lane).
+- `build_tools_scripts_test.py` drives the preflight with fixture tools in place
+  of the linker and `rustup`, and observes every refusal. The separate
+  `build_tools_install_test.py` exercises archive verification, installation
+  and the supported and unsupported architecture names with offline fixtures.
+- `build_tools_test_support.py` owns the fake tools and offline archive fixtures
+  used only by those two build-tools script contracts; it is not shared
+  subprocess infrastructure.
+- `clippy_beta_test.py` carries a case that the beta step sets
+  `BUILD_STANDARD` to `0`.
+- `build_standard_make.py`, `workflow_legs.py` and `workflow_shell.py` are
+  support code: the first evaluates the Makefile and reads the Cargo
+  configuration, the second derives a job's legs and the steps that reach the
+  suite, and the third reads only enough shell syntax to identify Make goals in
+  workflow `run` steps. `workflow_shell.py` belongs to this interpreter and is
+  not a general-purpose shell parser.
+- `workflow_legs_properties_test.py` holds Hypothesis property tests of the
+  `workflow_legs` interpreter: matrix product completeness, `include` entries
+  appended unchanged, an `exclude` entry removing exactly its matches,
+  degenerate matrices giving one empty leg, the string, list and mapping forms
+  of `runs-on`, `matrix.<key>` substitution including the fork fallback,
+  unreadable runners raising, and step `if` conditions agreeing with an
+  independent oracle. They are derandomized, bounded and use no example
+  database, so they are deterministic and fast. Each property is also run
+  against a deliberately wrong interpreter (a dropped axis, an ignored
+  `exclude`, an always-true condition, an unsubstituted reference) and must
+  reject it. They exist because the repository's workflows use one spelling of
+  everything, so the real workflows cannot tell a working interpreter from a
+  broken one, and the provisioning contract depends on it. Hypothesis is
+  already declared for `make test-workflow-contracts`
+  (`--with 'hypothesis>=6,<7'` in the Makefile target).
+
+These contracts judge this repository's own invocations. Estate-wide policy is
+audited by Concordat (`concordat artefact rule run rust-build-defaults`,
+`rust-toolchain-policy` and `dependabot-update-shape`, each with `--repo .`),
+which this repository does not replicate.
+
+## Toolchain pin and freshness
+
+### The pin
+
+`rust-toolchain.toml` pins a dated nightly. The file is authoritative, and this
+guide does not copy its date. The profile is `minimal` and the components are
+`rustfmt`, `clippy`, `rust-analyzer`, `rustc-codegen-cranelift-preview` and
+`llvm-tools-preview`. The pin is the newest nightly for which every component
+exists on Linux (x86_64 and aarch64), Windows MSVC and macOS, checked against
+the published rustup manifests.
+
+- The nightly is needed because `-Zthreads=8`, the parallel `rustc` frontend, is
+  nightly-only.
+- `llvm-tools-preview` is for local `cargo llvm-cov`.
+- `rustc-codegen-cranelift-preview` is the backend used by dev-fast builds.
+
+`scripts/build-tools-common.sh` reads the channel from `rust-toolchain.toml`,
+so the installer and the check follow the pin and no second copy exists.
+
+### Releases use the pinned nightly
+
+Releases stay on the pinned nightly; this is a maintainer decision.
+`rust-build-release` resolves the toolchain from an explicit input, then from
+`rust-toolchain.toml`, then from the manifest `rust-version`. `release.yml`
+passes no `toolchain` input and names no toolchain, so the
+Dependabot-maintained pin governs releases. They take production flags only:
+`RUSTFLAGS: -D warnings`, LLVM and the platform linker. No workflow names a
+dated nightly other than the pin (estate rule RT-027).
+
+### Dependabot keeps the pin fresh
+
+`.github/dependabot.yml` carries a `rust-toolchain` entry on `/`. It runs
+daily, sits in the catch-all `minor-and-patch` group (patterns `*`, update types
+`minor` and `patch`), uses the `dependencies` and `rust-toolchain` labels, and
+has no cooldown. The reasoning is:
+
+- The estate audit requires a Dependabot `rust-toolchain` entry that is daily or
+  weekly (RT-024), and a pinned dated nightly no older than 56 days (RT-023).
+- The estate Dependabot-shape rule requires every entry to be daily with a final
+  catch-all group (DB-005). Daily is the one interval that satisfies both
+  interval rules.
+- No rule asks for a cooldown, and a nightly's age is its date, so a cooldown
+  would spend part of the 56-day window before the bump pull request opened.
+
+### Bumping the pin
+
+Dependabot proposes the bump. A human reviewing the pull request must:
+
+1. Regenerate the trybuild `.stderr` snapshots from the compiler, never by
+   hand, then re-run with `TRYBUILD` unset to confirm. Ten test binaries use
+   trybuild, and they share one project directory under
+   `target/tests/trybuild`, so run them one at a time (`cargo test` does; a
+   parallel runner must serialize them):
+
+   ```bash
+   for t in boolean_cli_trybuild compile_fail crate_path_trybuild \
+     declarative_merge_trybuild env_source_trybuild generated_lint_trybuild \
+     localization_trybuild localized_parse_trybuild subcommand_trybuild; do
+     TRYBUILD=overwrite cargo test -p ortho_config --test "$t"
+   done
+   TRYBUILD=overwrite cargo test -p cargo-orthohelp --test compile_time
+   ```
+
+   See [Testing these diagnostics](#testing-these-diagnostics).
+2. Confirm from the diff that only compiler wording changed.
+3. Read a red test run for layout assumptions as well as compiler wording. A
+   nightly can change where Cargo writes build output: the first bump moved
+   build-script output from `target/<profile>/build/<hash>/out` to
+   `target/<profile>/build/<package>/<hash>/out`, which broke
+   `identifier_artefact_e2e.rs` ("fixture identifier artefact was not emitted")
+   after a complete build. Tests should ask where an artefact is, by bounded
+   search or Cargo's JSON `out_dir`, rather than encode one layout.
+4. Check the length of the longest path the Windows leg builds. Cargo 1.100
+   made the new build directory layout unconditional: every artefact now lands
+   in `target/<profile>/build/<package>/<hash>/out/`, and there is no flag to
+   restore `deps/`. On the pin at the time of writing this moved
+   `orthohelp_policy_warn_fixture`'s `.rlib` from 210 to 262 characters on a
+   hosted Windows runner, over the 260-character `MAX_PATH` that `link.exe`
+   still applies, and `build-test (windows)` failed with `LNK1104`. The bridge
+   cache-directory name was shortened from 64 to 32 hexadecimal digits to make
+   room; see [*The bridge cache key*](#the-bridge-cache-key). A newer
+   dependency also widens the coverage compiler command line, which is bounded
+   by `CreateProcess` rather than by `MAX_PATH`; see
+   [The Windows coverage command line](#the-windows-coverage-command-line).
+   Platform-specific length limits are invisible to a Linux-only gate, so check
+   them by hand rather than waiting for the runner to say so.
+5. Re-read the remeasurement instruction in the "Cranelift development backend"
+   section of this guide.
+6. Run `make install-build-tools` and `make check-build-tools` locally to pick
+   up and verify the new channel.
+
+### The MSRV lane
+
+The workspace `rust-version` is 1.89.0 and CI exercises it. The `msrv` job in
+`ci.yml` is a matrix job keyed by `toolchain`, with one leg, `"1.89"`, quoted
+in YAML so that it is not read as a number. The leg installs
+`${{ matrix.toolchain }}` through the pinned `dtolnay/rust-toolchain` action
+and runs `make msrv-build MSRV=${{ matrix.toolchain }}`. That target is:
+
+```bash
+RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features
+```
+
+`MSRV` defaults to the manifest's `rust-version` as major.minor (currently
+1.89), so a local run cannot drift from the promise; CI passes the matrix value
+explicitly. The leg builds every workspace target with all features and runs no
+test.
+
+The lane builds rather than checks by a deliberate maintainer choice. The
+estate rule RT-026 states a cost rule of `cargo check --all-targets` on the
+MSRV and never a second test run. A build is stronger than a check, because it
+also links, and it is still not a test run. The numeric leg, equal in
+major.minor to the MSRV, is what RT-026 detects. Behaviour is established on
+the pinned toolchain by `build-test`, so a test run here would only repeat it.
+The command was proved by running it on 1.89.
+
+The leg must not inherit the nightly flags. `.cargo/config.toml` carries
+`-Zthreads=8`, which a stable compiler rejects, so the recipe assigns
+`RUSTFLAGS` to displace it, as the coverage route does. `mold` is not required
+on this leg.
+
+`build_exclusions_test.py` and `build_standard_routing_test.py` hold the lane
+in place:
+
+- The matrix leg equals the manifest's `rust-version` as major.minor, so the
+  two cannot drift, and it is quoted in YAML.
+- The job installs `matrix.toolchain` and runs only
+  `make msrv-build MSRV=${{ matrix.toolchain }}`. It runs no test command and
+  sets no nightly flag in its environment.
+- The Make recipe builds, and does not test, with
+  `--workspace --all-targets --all-features`. It selects `+toolchain`, assigns
+  `RUSTFLAGS` without any standard flag, and takes the toolchain it is given.
+
+### The workspace-package warning
+
+On the pinned nightly, Cargo warns `cargo::unused_workspace_package_fields` for
+`version`, `readme`, `keywords` and `categories` in `[workspace.package]`,
+because no member inherits them. They cannot simply be removed:
+`scripts/bump_version.py` and `scripts/release_archive_naming.py` read
+`workspace.package.version`.
+
+## Cranelift development backend
+
+This section records the known limitation of the selected dev-fast backend, the
+measurements that established it, and how to remeasure after a toolchain bump.
+The current route is defined in
+[ADR-0017](adrs/adr-0017-use-cranelift-for-development-builds.md).
+
+Current record: Pinned channel `nightly-2026-10-16`; initial measurement on
+2026-10-16; dev-fast adopted on 2026-10-23 with the test routing below.
+
+Tracking: [issue #598](https://github.com/leynos/ortho-config/issues/598)
+requires a re-measurement by 2027-04-18, whatever the pin has moved to by then.
+Rewrite the record line above when that measurement is taken.
+
+The pinned nightly is `rustc 1.101.0-nightly (2026-10-15)`. The
+`rustc-codegen-cranelift-preview` component of the same date stays installed by
+`rust-toolchain.toml`, so a re-measurement needs no toolchain edit.
+
+### Known limitation
+
+Cranelift is selected for development builds with a known unwind limitation: a
+panic raised in Cranelift-compiled code does not find the unwind handler. As a
+result:
+
+- `catch_unwind` fails to catch the panic.
+- Destructors do not run during unwinding.
+- A panic on a spawned thread aborts the whole process with
+  `fatal runtime error: failed to initiate panic, error 5, aborting` (SIGABRT).
+
+The direct `#[should_panic]` path works. The three external-subcommand
+debug-assertion tests and the empty-aggregate test use that path, so they stay
+active under dev-fast. The spawned-thread mutex-poisoning test is marked
+ignored only when `ortho_config_dev_fast` is set; coverage overrides
+`RUSTFLAGS`, uses LLVM, and runs it.
+
+The measurement host was x86_64 Linux (Rocky 10). Cranelift was selected the
+way the standard would have carried it: `-Zcodegen-backend=cranelift` in
+`rustflags`, together with `-Zthreads=8` and `-Clink-arg=-fuse-ld=mold`. A
+`[profile.dev] codegen-backend` key was rejected on other grounds; see Option A
+in
+[ADR-0016](adrs/adr-0016-adopt-a-dated-nightly-and-the-development-build-standard.md).
+
+### The probe
+
+The probe is a five-case crate: a `#[should_panic]` test, `catch_unwind` on the
+main thread, a `Drop` guard observed after `catch_unwind`, a spawned thread
+that is joined, and a scoped thread caught with `catch_unwind`.
+
+```rust
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+#[test]
+#[should_panic(expected = "boom")]
+fn should_panic_is_observed() {
+    panic!("boom");
+}
+
+#[test]
+fn main_thread_catch_unwind_catches() {
+    assert!(catch_unwind(AssertUnwindSafe(|| panic!("boom"))).is_err());
+}
+
+#[test]
+fn spawned_thread_panic_unwinds_to_join() {
+    assert!(std::thread::spawn(|| panic!("boom")).join().is_err());
+}
+
+#[test]
+fn scoped_thread_panic_unwinds_to_scope() {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        std::thread::scope(|scope| {
+            scope.spawn(|| panic!("boom"));
+        });
+    }));
+    assert!(result.is_err());
+}
+
+#[test]
+fn drop_runs_during_unwind() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static DROPPED: AtomicBool = AtomicBool::new(false);
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            DROPPED.store(true, Ordering::SeqCst);
+        }
+    }
+    let _ = catch_unwind(|| {
+        let _guard = Guard;
+        panic!("boom");
+    });
+    assert!(DROPPED.load(Ordering::SeqCst));
+}
+```
+
+| Case                        | Cranelift (with `-Zthreads=8` and `mold`) | LLVM control (`-Zthreads=8` and `mold`, the prior standard) |
+| --------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `#[should_panic]`           | Passes                                    | Passes                                                      |
+| Main-thread `catch_unwind`  | Fails                                     | Passes                                                      |
+| `Drop` during unwinding     | Fails                                     | Passes                                                      |
+| Spawned-thread panic joined | Aborts the process                        | Passes                                                      |
+| Scoped-thread panic caught  | Aborts the process                        | Passes                                                      |
+
+*Table: Results of the initial five-case probe on `nightly-2026-10-16`,
+measured on 2026-10-16.*
+
+As an attribution control, `-Zcodegen-backend=cranelift` as the only flag, with
+neither `mold` nor `-Zthreads`, aborts the probe the same way. Neither `mold`
+nor the parallel frontend is the cause.
+
+### Initial repository-suite measurement
+
+The results below are the initial measurement before the test adaptation
+described above. They preserve which existing tests exposed the unwind
+limitation; they are not the current `make test` result.
+
+The suite ran as `cargo nextest run --workspace --all-features --no-fail-fast`
+with
+`RUSTFLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold"`,
+which is equivalent to the configuration file. It selected 1924 tests in 97
+binaries. Of these, 1902 completed and 1876 passed. Nine test executions (seven
+distinct test functions) failed, all by unwinding.
+
+| Failure mode                                                              | Test functions                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catch_unwind` fails: assertion failed (4 executions)                     | `ortho_config` `cargo::tests::empty_subcommand_name_trips_debug_assertion`, `cargo::tests::reserved_help_name_trips_debug_assertion`, `cargo::tests::transposed_names_trip_debug_assertion` and `error::tests::aggregate_panics_on_empty`                           |
+| Panic on a spawned thread aborts the test process: SIGABRT (5 executions) | `process_runner::tests::reader_thread_diagnostic_names_the_stream` cases `case_1_stdout` and `case_2_stderr`, compiled into two test binaries (`ortho_config::documentation_examples_tests` and `ortho_config::documentation_examples_rust_tests`; four executions) |
+| Panic on a spawned thread aborts the test process: SIGABRT (continued)    | `rstest_bdd_support::scenario_state::scenario_state_tests::take_issues_recovers_from_poisoned_mutex` in `ortho_config::rstest_bdd`, where a thread panics while holding a mutex (one execution)                                                                     |
+
+*Table: Test functions that failed under Cranelift, by failure mode.*
+
+The LLVM control on the same tree, under the then-committed standard
+(`-Zthreads=8` and `mold`, LLVM backend), passed all 1731 tests in the 80 fast
+binaries. That includes the five unwinding tests that failed above, and the four
+`reader_thread_diagnostic_names_the_stream` executions pass when run by name.
+
+Under Cranelift these mechanisms, which the estate watches, passed:
+
+- All five `#[should_panic]` tests:
+  `localizer::clap_command::tests::localize_panics_on_colliding_argument_identifiers`,
+  the matching test for subcommand identifiers,
+  `localizer::identifier::tests::message_id_for_rejects_ids_without_leading_letter`
+  (its cases), the `..._unrepresentable_segments` test (its cases), and
+  `localized_parse::agreement::fluent_unsafe_identifier_panics`.
+- The proc-macro crate `ortho_config_macros`. Its 281 unit tests passed, and a
+  type generated by the Cranelift-compiled macro still rejects invalid input:
+  `#[ortho_config(cli_long = "help")]` fails with "reserved `cli_long` 'help'
+  conflicts with global clap flags", identically under LLVM.
+- 116 `cargo-orthohelp` bridge tests (`golden_tests`, `agent_context_contract`,
+  `policy_report_contract`, `nested_subcommand_end_to_end` and `rstest_bdd`).
+  They spawn child `cargo build` processes that inherit the configuration.
+- Doctests: `cargo test --workspace --doc --all-features` with the same
+  `RUSTFLAGS` passed all 124 doctests across the workspace crates, with none
+  failing. Rustdoc builds the doctest binaries and does not read `RUSTFLAGS`,
+  so Cranelift compiled their dependencies only.
+- The trybuild corpus, with its nine test binaries serialized: all 10 tests
+  passed (see the next subsection).
+
+### What is not attributed
+
+The following are not attributable to Cranelift and are not part of the
+exception:
+
+- The earlier result that `ortho_config::compile_fail` reported all 33 of its
+  UI cases as compiling was an artefact of running the trybuild binaries
+  concurrently. They share one project directory
+  (`target/tests/trybuild/ortho_config`) and must run one at a time. It is not
+  a Cranelift failure. With the nine trybuild test binaries serialized
+  (`--test-threads 8` and a nextest group allowing one at a time), all 10 tests
+  pass under the same flags: `cargo-orthohelp::compile_time`
+  (`must_use_compile_tests`), `ortho_config::compile_fail` (two tests),
+  `crate_path_trybuild`, `declarative_merge_trybuild`, `env_source_trybuild`,
+  `generated_lint_trybuild`, `localization_trybuild`,
+  `localized_parse_trybuild` and `subcommand_trybuild`.
+- `identifier_artefact_e2e` failed in the Cranelift run, but not because of the
+  backend. It assumed the older Cargo build-directory layout
+  (`build/<hash>/out`), while the pinned nightly writes
+  `build/<package>/<hash>/out`. It now reads the build-script `out_dir` from
+  Cargo's JSON messages and passes under the standard, so it is not an
+  exception test.
+- Of the ten tests terminated when the first run was stopped, nine were
+  trybuild tests, now measured as above. The tenth, the
+  `cargo-orthohelp::rstest_bdd` scenario
+  `orthohelp_agent_context_generate_agent_context_json_from_the_simple_fixture`,
+  was not re-run.
+
+At the time that initial run ended, these had not been measured under Cranelift:
+
+- 22 selected tests were never reached when the first run was stopped.
+- Five documentation-example tests failed at their 1,200-second in-process
+  deadline. They fail identically under LLVM on this saturated host, so the
+  deadline reflects host load and not the backend.
+- The one `cargo-orthohelp::rstest_bdd` scenario named above.
+
+A later measurement that covers these belongs in the tables above.
+
+Windows and macOS were not included in that initial full-suite measurement,
+which ran on Linux. The pinned nightly publishes the Cranelift component for
+x86_64 Windows MSVC, aarch64 and x86_64 macOS, and Linux aarch64. The current
+CI build-test jobs exercise the configured development route on supported
+platforms; coverage remains LLVM-only.
+
+### Remeasuring after a toolchain bump
+
+Remeasure on every toolchain bump, because Dependabot moves the pin daily.
+Rewrite the record line near the top of this section with the current pin and
+measurement date. Compare the probe and suite with the historical results above
+and keep the test routing aligned with the observed backend behaviour.
+
+The flags below select Cranelift the way the standard would carry it:
+
+```bash
+CRANELIFT_FLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold"
+```
+
+1. Run the probe above in a scratch crate outside the repository, with
+   `RUSTFLAGS="$CRANELIFT_FLAGS" cargo test`. The component is installed by
+   `rust-toolchain.toml` and checked by `make check-build-tools`.
+2. Run the suite with the same `RUSTFLAGS` and
+   `cargo nextest run --workspace --all-features --no-fail-fast`, serializing
+   the trybuild binaries.
+3. Keep the known limitation and cfg-gated test if unwind behaviour is
+   unchanged. Remove the dev-fast test exception only after the five-case probe
+   and all affected tests pass under Cranelift. Coverage must continue using
+   LLVM instrumentation.
 
 ## Publish dry run
 
@@ -2827,9 +3624,9 @@ incremental compilation state and no debug information. The trade-off is that a
 debugger sees no symbols or line tables in a default development build and
 every rebuild recompiles whole crates. To debug, run with
 `CARGO_PROFILE_DEV_DEBUG=true`; to rebuild incrementally, set
-`CARGO_INCREMENTAL=1`. The pin is the stable `1.99` channel, so the rule's
-unstable metadata key does not apply.
-`tests/workflow_contracts/build_footprint_test.py` holds both settings.
+`CARGO_INCREMENTAL=1`. The workspace pins `nightly-2026-10-16` for development,
+formatting and Clippy; stable MSRV builds use the separate `make msrv-build`
+route. `tests/workflow_contracts/build_footprint_test.py` holds both settings.
 
 ## Test timeouts: the tiers this repository sets
 
@@ -2839,12 +3636,12 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                          |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                         |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s for trybuild, BDD and documentation scenarios; 2,200 s for boundary packaging |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 2,300 s (38 m 20 s)                                                                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 3,300 s (55 m)                                                                                              |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 190 m in `ci.yml`, 140 m in `coverage-main.yml`                                                             |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -2964,19 +3761,98 @@ the contract rather than silently left on the base allowance:
 and `boolean_cli_trybuild` arrived that way from branches, and the contract is
 what caught each.
 
-The 960 s allowance is lower than the 1,800 s whole-run budget, which the
-ordering contract asserts. That comparison does not by itself guarantee a test
-using its full allowance finishes before the run deadline, since a test that
-starts late spends part of the budget waiting to be scheduled; it establishes
-that the allowance cannot exhaust the run on its own.
+The largest per-test allowance is 2,200 s for boundary packaging, lower than
+the 2,300 s whole-run budget, which the ordering contract asserts. That
+comparison does not by itself guarantee a test using its full allowance
+finishes before the run deadline, since a test that starts late spends part of
+the budget waiting to be scheduled; it establishes that the allowance cannot
+exhaust the run on its own.
 
-The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
-It has to fit inside the watchdog with nextest's termination procedure and a
-cold build counted, which is 1,800 s plus 70 s plus 600 s, or 2,470 s. The
-watchdog was 1,800 s and could not have carried it, so it rises to 2,700 s.
-That is what moves the ceilings: the requirement is the watchdogs a job
-contains plus the work outside them plus the margin, and each job runs the
-action twice.
+The whole-run budget has to fit inside the watchdog with nextest's termination
+procedure and a cold build counted, which is 2,300 s plus 70 s plus 600 s, or
+2,970 s, so the watchdog rises to 3,300 s. That is what moves the ceilings: the
+requirement is the watchdogs a job contains plus the work outside them plus the
+margin, and each job runs the action twice.
+
+### The whole-run budget was resized from a cold run
+
+The budget was 1,800 s, about 1.76 times the 1,023.6 s warm sample above.
+Pinning the dated nightly invalidated that sample, and it is now 2,300 s, sized
+from a run that was cancelled rather than from one that finished.
+
+`sccache` keys its entries by compiler, so the toolchain change cold-missed the
+whole Windows dependency graph. The leg's hit rate fell from 89.00 % — 2,282
+hits against 282 misses — on the previous toolchain to 35.67 %, or 824 hits
+against 1,486 misses, on this one.
+
+A cold cache does not merely move the build out of the way. It lands inside
+nextest's clock, because the binaries whose tests spawn their own `cargo` each
+pay for a fresh dependency build. Three of them more than quadrupled while the
+tests that compile nothing rose by under half again:
+
+| Binary                               | Previous toolchain | Pinned nightly | Ratio |
+| ------------------------------------ | ------------------ | -------------- | ----- |
+| `cargo-orthohelp::compile_time`      | 71.4 s             | 335.9 s        | 4.7   |
+| `ortho_config::compile_fail`         | 45.2 s             | 195.8 s        | 4.3   |
+| `ortho_config::boolean_cli_trybuild` | 37.7 s             | 178.0 s        | 4.7   |
+| `documentation_examples_rust_tests`  | 235.7 s            | 315.3 s        | 1.3   |
+| `cargo-orthohelp::golden_tests`      | 96.5 s             | 136.0 s        | 1.4   |
+
+*Table: the Windows `build-test` leg's first coverage pass, run 39633413142 on
+the previous toolchain against run 39658769738 on the pin. Both ran 2,070 tests
+with the same features.*
+
+Over that same work, the leg ran 1,044.1 s on the old toolchain and 1,810.1 s
+on the pin, where nextest cancelled it with two tests still running:
+
+```text
+Cancelling due to global timeout: 2 tests still running
+Summary [1810.068s] 2070 tests run: 2068 passed (17 slow), 2 failed, 30 skipped
+```
+
+Both survivors were far inside their own 600 s allowance — 192.3 s and 157.3 s
+— so no per-test tier is what failed. How much the run still needed is bounded
+rather than guessed. The younger survivor started at 1,652.8 s and had used
+157.3 s when cancellation was reported at about 1,810.1 s. Its own 600 s
+allowance therefore ended at 2,252.8 s, so no outcome of that run could have
+taken longer. That is the figure 2,300 s was chosen against: it covers the
+bound with 47 s to spare, where 1,800 s fell 452.8 s short of it.
+
+The bound is not a comfortable margin, and none of the three runs on the
+enlarged budget widens it. All three were later runs on the pin, so all three
+inherited the entries the cancelled run had written, at 88.77 %, 89.04 % and
+89.20 % hit rates rather than the cold 35.67 %. Every Windows pass completed
+inside the budget:
+
+```text
+Summary [1519.887s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [1142.681s] 2042 tests run: 2042 passed (12 slow), 30 skipped
+Summary [1507.403s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [1164.063s] 2042 tests run: 2042 passed (12 slow), 30 skipped
+Summary [1186.471s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [ 887.980s] 2042 tests run: 2042 passed ( 9 slow), 30 skipped
+```
+
+The warm runs on the pin span 1,186.5 s to 1,519.9 s over the same 2,070 tests,
+against main's 1,044.1 s: between 14 % and 46 % slower at a hit rate at least
+as good. That spread is itself the finding — it is too wide to read as a fixed
+cost of the toolchain, and it means the warm sample cannot bound the cold case.
+So the pin costs time with the cache already behind it, and the cold figure is
+not an anomaly to be explained away. What recurs is the cold case: Dependabot
+moves the pin, every entry keyed by the old compiler becomes unreachable, and
+the first run on the new pin pays the whole graph again. The warm figures
+measure the floor, not the peak, and the cold budget rests on the bound above.
+
+That the margin is 47 s is the argument for fixing the cause rather than the
+figure.
+
+Raising the figure again would be the wrong repair. The lever is letting the
+nested builds reach `sccache` at all, which cannot happen while
+`ortho_config/tests/documentation_examples/cargo_runner.rs` clears the
+environment and restores no `RUSTC_WRAPPER`
+([issue 614](https://github.com/leynos/ortho-config/issues/614)). A cold cache
+is inherent to a dated nightly that Dependabot moves daily, so the budget has
+to carry it rather than the sample that predates the pin.
 
 [Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
 measurements and named the constraint they had to satisfy, that each coverage
@@ -2990,7 +3866,10 @@ subprocess. Build, execution, and discovery budgets are 956, 60, and 30
 seconds, with two seconds reserved for bounded cleanup. A fixed scenario
 deadline is never extended by output. The runner drains both streams while
 retaining at most 1 MiB per stream, reports truncation and available evidence
-on timeout or wait failure, and limits reader completion during cleanup.
+on timeout or wait failure, and limits reader completion during cleanup. Its
+platform-specific process-tree ownership and cancellable readers are shared
+through `ortho_config_test_helpers::process`; the documentation runner keeps
+its operation policies, diagnostics, and capture limits locally.
 
 These operations do not create a new Cargo target for each example workspace.
 They resolve the caller's configured target directory, including the target
@@ -3027,12 +3906,13 @@ ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
 
 On the Windows leg the work outside the coverage steps is dominated by cache
 saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15. With the
-watchdog at 2,700 s and two coverage steps per job, the requirements are 165
-and 120 minutes: 5,400 s of watchdog, plus the lane's allowance, plus a 900 s
-margin. The margin is a term of the requirement rather than slack above it,
+watchdog at 3,300 s and two coverage steps per job, the minimum ceilings are
+185 and 140 minutes: 6,600 s of watchdog, plus the lane's allowance, plus a 900
+s margin. The margin is a term of the minimum rather than slack above it,
 because a ceiling equal to the sum it contains cancels the job at the moment
 the watchdog would have reported the overrun, and the report is the only thing
-that makes an overrun actionable. The ceilings equal their requirements.
+that makes an overrun actionable. The configured ceilings are 190 and 140
+minutes, leaving five extra minutes on `ci.yml` and none on `coverage-main.yml`.
 
 A lane in a workflow the contract has not measured is held to the larger
 allowance until someone measures it and records a run id.
@@ -3081,7 +3961,7 @@ it happens to be the case somebody wrote.
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
 table nextest never consults, and reports a budget the runner does not use.
-`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering
+`.config/nextest.toml` sets `global-timeout = "2300s"`, and the ordering
 assertion requires that value to sit above the largest per-test allowance and
 inside the watchdog; it skips only when no whole-run budget is set at all. A
 scraping reader would read a commented-out or filtered budget as one in force,
@@ -3222,7 +4102,7 @@ the tier in question, which is what a maintainer can act on.
 
 It also pins how many coverage steps each job runs. The ceiling's requirement
 is the sum of the watchdogs found, so deleting one of a job's two coverage
-steps lowers that requirement by 2,700 s and every timing assertion still
+steps lowers that requirement by 3,300 s and every timing assertion still
 passes while the lane measures half of what it did.
 
 `tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
@@ -3451,13 +4331,35 @@ passing.
 
 ## Command checklist
 
-Run from repository root:
+Run from repository root.
+
+For first-time setup, install the pinned `mold` linker and the pinned
+toolchain, then confirm them (see
+[Installing and checking the build tools](#installing-and-checking-the-build-tools)):
+
+```bash
+make install-build-tools
+make check-build-tools
+```
+
+Then run the gates:
 
 ```bash
 set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
 set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
 set -o pipefail; make markdownlint 2>&1 | tee /tmp/make-markdownlint.log
 set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
+```
+
+Two further targets complete the set. `make msrv-build` builds every target on
+the declared MSRV toolchain without running tests (see
+[The MSRV lane](#the-msrv-lane)), and `make test-workflow-contracts` runs the
+workflow and build-standard contracts (see
+[Workflow contract gate](#workflow-contract-gate)):
+
+```bash
+set -o pipefail; make msrv-build 2>&1 | tee /tmp/make-msrv-build.log
+set -o pipefail; make test-workflow-contracts 2>&1 | tee /tmp/make-test-workflow-contracts.log
 ```
 
 For targeted behavioural debugging:

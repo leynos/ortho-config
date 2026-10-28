@@ -4,12 +4,13 @@ use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::time::{Duration, Instant, SystemTime};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use tempfile::tempdir;
 
 use super::*;
+use crate::cache::{CACHE_DIRECTORY_DIGEST_BYTES, CACHE_KEY_VERSION_PREFIX};
 
 fn dummy_paths() -> BridgePaths {
     BridgePaths {
@@ -188,6 +189,60 @@ fn write_ir_cache_propagates_a_non_missing_read_failure() {
     assert!(
         matches!(error, OrthohelpError::Io { .. }),
         "cache-read failure surfaced as {error:?}"
+    );
+}
+
+/// Longest package name among the fixtures the behavioural suite builds.
+///
+/// It is not a guess: the failing crate is the one whose linker-input path
+/// crosses `MAX_PATH`, so it is the crate a regression would hit first.
+const LONGEST_FIXTURE_PACKAGE: &str = "orthohelp_policy_adoption_fixture";
+
+/// Windows still applies a 260-character `MAX_PATH` to the file names
+/// `link.exe` opens, even where long paths are enabled for other APIs.
+const WINDOWS_MAX_PATH: usize = 260;
+
+/// Depth of the workspace path a hosted Windows runner checks the repository
+/// out to, `D:\a\<repository>\<repository>`.
+///
+/// The backslashes are doubled because this suite runs on Linux, where a
+/// single one is a directory separator that `Utf8Path` would collapse. Only
+/// the character count matters here, and `\` and `/` cost the same, so the
+/// measurement is the one Windows would make.
+const RUNNER_WORKSPACE: &str = r"D:\\a\\ortho-config\\ortho-config";
+
+#[test]
+fn link_input_paths_fit_in_the_windows_path_limit() {
+    // From cargo 1.100 every artefact is written under
+    // `build/<crate>/<hash>/out/` instead of `deps/`, which put the longest
+    // fixture's `.rlib` at 262 characters on a hosted runner and made
+    // `link.exe` fail with LNK1104 while building the bridge. Rebuilding the
+    // path here keeps the next lengthening of any component, the crate name,
+    // the cache key, or the layout, inside this suite rather than on Windows.
+    //
+    // `<crate>/<hash>` mirrors cargo's own directory shape, where both hashes
+    // are 16 digits; the `.rlib` name repeats the same two terms.
+    let link_input = Utf8Path::new(RUNNER_WORKSPACE)
+        .join("target")
+        .join("orthohelp-bdd")
+        .join(".tmpXXXXXX")
+        .join("orthohelp")
+        .join("x".repeat(CACHE_KEY_VERSION_PREFIX.len() + CACHE_DIRECTORY_DIGEST_BYTES * 2))
+        .join("target")
+        .join("debug")
+        .join("build")
+        .join(LONGEST_FIXTURE_PACKAGE)
+        .join("0123456789abcdef")
+        .join("out")
+        .join(format!(
+            "lib{LONGEST_FIXTURE_PACKAGE}-0123456789abcdef.rlib"
+        ));
+
+    assert!(
+        link_input.as_str().len() < WINDOWS_MAX_PATH,
+        "linker input is {} characters, but must be shorter than the \
+         {WINDOWS_MAX_PATH}-character Windows limit: {link_input}",
+        link_input.as_str().len()
     );
 }
 

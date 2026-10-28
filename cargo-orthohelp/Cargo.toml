@@ -39,12 +39,14 @@ serde_json = ["ortho_config/serde_json"]
 toml = ["ortho_config/toml"]
 json5 = ["ortho_config/json5"]
 yaml = ["ortho_config/yaml"]
+metrics = ["dep:metrics"]
 
 [dependencies]
 camino = "1"
 cap-std = { version = "4", features = ["fs_utf8"] }
 clap = { version = "4", features = ["derive"] }
 cargo_metadata = "0.18"
+metrics = { version = "0.24", optional = true }
 fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
 ortho_config = { path = "../ortho_config", version = "0.10.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
@@ -59,12 +61,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 googletest = "0.14"
 insta = "1"
+metrics-util = { version = "0.20", features = ["debugging"] }
 proptest = "1"
 process-wrap = { version = "9.0.1", default-features = false, features = ["std"] }
 pretty_assertions = "1"
 rstest = "0.28.0"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
+target-tuple = "1.0.2"
 test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers", version = "0.10.0" }
 trybuild = "1"
 

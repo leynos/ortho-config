@@ -38,28 +38,40 @@ jobs:
       ${{ (github.event.pull_request.head.repo.fork
       || github.event.pull_request.user.login == 'dependabot[bot]')
       && matrix.fork-runner || matrix.runner }}
-    # Two coverage steps run in this job, each under its own 2,700 s cargo
+    # Two coverage steps run in this job, each under its own 3,300 s cargo
     # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
     # contain both before it contains anything else. On the Windows leg the
     # work outside them, dominated by cache save and restore, reached 3,257 s
     # on run 33447440225, read across 103 jobs of every conclusion. The
-    # contract allows 60 minutes for that, making the requirement
-    # 5,400 + 3,600 = 9,000 s = 150 minutes, and asks for 15 minutes above it
-    # so a ceiling never fires at the moment the watchdog would have
-    # reported. The job had no ceiling at all before this and so inherited
-    # GitHub's six-hour default.
-    timeout-minutes: 165
+    # contract allows 60 minutes for that. Together with 6,600 s of watchdog
+    # time and the 900 s margin, the minimum is 11,100 s (185 minutes). The
+    # configured 190-minute ceiling leaves five minutes above that minimum.
+    # The job had no ceiling at all before this and so inherited GitHub's
+    # six-hour default.
+    timeout-minutes: 190
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # The explicit exclusion of the development build standard (the parallel
+      # frontend, Cranelift backend and mold in `.cargo/config.toml`) from every
+      # step that is not
+      # a Make gate. Cargo takes RUSTFLAGS in preference to every `rustflags`
+      # table in that file, so this value is what keeps the standard out of
+      # the coverage builds: cargo-llvm-cov appends `-Cinstrument-coverage` to
+      # it, and coverage is measured on the LLVM backend with the platform
+      # linker. The Make gates assign RUSTFLAGS themselves and restate the
+      # standard, so they ignore this value. It also shields
+      # `cargo +1.95.0 install merman-cli`, which reads this checkout's
+      # configuration and runs on a stable compiler that refuses `-Zthreads`.
+      # Never set it to `''`: an empty value leaves the configuration in force.
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
       # seconds (default 600). The windows coverage run legitimately takes
       # ~12 min (the compile_fail trybuild test alone is ~200s), and the
       # 927edd4 action now emits full per-line data, so raise the ceiling.
-      RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '3300'
       # sccache. The shared Rust setup action installs it and, from this
       # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
       # installed. Before this pin it installed sccache and exported
@@ -104,7 +116,18 @@ jobs:
         uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@6cec89bac47a21cf756d68d638a9a510998e57f8
 
       - name: Setup Rust
+        # `install-mold` puts the pinned, digest-verified mold on PATH on a
+        # Linux runner and is a notice-only no-op on Windows, so no `if` is
+        # needed and none is allowed: it must precede every step that can
+        # reach `make check-build-tools` or run the suite, and the coverage
+        # builds below run tests that need it even though their own flags
+        # exclude it. The action sets no linker flag; `.cargo/config.toml`
+        # selects mold. `mold-version` is held equal to tools/mold/VERSION by
+        # tests/workflow_contracts/build_tools_provisioning_test.py.
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          install-mold: 'true'
+          mold-version: '2.41.0'
 
       # The Windows coverage action uses Bash, which prepends Git's /usr/bin
       # ahead of Visual Studio. Pin the linker and export its SDK search paths
@@ -252,10 +275,59 @@ jobs:
         if: ${{ always() && matrix.platform == 'linux' }}
         run: df -BM /
 
+      - name: Choose the coverage target root
+        # Windows measures a spawned process's whole command line against the
+        # 32,767 characters CreateProcess accepts. After the first shortening,
+        # the ortho_config library test's rustc invocation reached 33,497
+        # characters on run 39893695039 and still died with `os error 206`:
+        # 730 characters over.
+        #
+        # The target root dominates the excess. Cargo repeats it 302 times in
+        # this invocation, across dependency search paths and `--extern`
+        # arguments. `cargo-llvm-cov` normally appends `llvm-cov-target` to
+        # `CARGO_TARGET_DIR`. Trybuild also reads that variable through Cargo
+        # metadata, and a drive-root value makes its target-path normalizer
+        # treat source paths as target paths. Put the target directly under
+        # the drive root and set both variables to that same directory:
+        # `CARGO_LLVM_COV_TARGET_DIR` prevents the action from appending the
+        # suffix a second time. The effective `D:\llvm-cov-target` removes
+        # 3,624 characters and leaves 2,894 characters of measured headroom.
+        # It is outside the checkout, keeps the command line short, and does
+        # not become an ancestor of source paths during trybuild normalization.
+        #
+        # Scoped to Windows because Linux uses a separate chooser only to put
+        # trybuild's nested Cargo projects outside this checkout's .cargo
+        # configuration; Windows additionally needs the drive-root path to
+        # stay below CreateProcess's command-line limit.
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: |
+          $coverageRoot = [System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          $coverageTarget = Join-Path $coverageRoot 'llvm-cov-target'
+          "CARGO_TARGET_DIR=$coverageTarget" >> $env:GITHUB_ENV
+          "CARGO_LLVM_COV_TARGET_DIR=$coverageTarget" >> $env:GITHUB_ENV
+
+      - name: Choose the Linux coverage target root
+        # Trybuild creates nested Cargo projects under its target directory.
+        # Keeping that directory outside the checkout prevents those projects
+        # from discovering .cargo/config.toml and inheriting Cranelift flags
+        # alongside LLVM coverage instrumentation.
+        if: ${{ matrix.platform == 'linux' }}
+        shell: bash
+        run: |
+          coverage_target="$RUNNER_TEMP/llvm-cov-target"
+          echo "CARGO_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+          echo "CARGO_LLVM_COV_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
+        #
+        # Both target-directory variables arrive from the platform-specific
+        # chooser. The values match so cargo-llvm-cov does not append
+        # `llvm-cov-target` again. Linux keeps nested trybuild projects outside
+        # this checkout; Windows also keeps the compiler command line short.
         uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           output-path: lcov-serde-saphyr.info
@@ -273,6 +345,8 @@ jobs:
         run: df -BM /
 
       - name: Test and Measure Coverage (without serde_saphyr)
+        # Same short Windows target root as the first leg, and from the same
+        # place: the step that chooses it republishes through GITHUB_ENV.
         uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           output-path: lcov-no-serde-saphyr.info
@@ -419,7 +493,51 @@ jobs:
       - name: Clippy (beta)
         env:
           CARGO: cargo +beta
+          # Beta refuses the nightly-only flag the standard restates (the
+          # parallel frontend), so this lane turns the standard off for the
+          # whole invocation. That also makes the build-tools
+          # preflight a no-op, so the job installs neither mold nor the
+          # pinned nightly.
+          BUILD_STANDARD: '0'
         run: make lint-clippy
+
+  # Builds every workspace target on the declared MSRV (`rust-version` in
+  # Cargo.toml) and runs no test. The estate's cost rule for this lane is
+  # `cargo check --all-targets` and never a second test run; a build is stronger
+  # than a check (it also links) and is still not a test run, and was asked for
+  # by the maintainer. `build-test` has already established behaviour on the
+  # pinned toolchain. The leg is keyed by toolchain and quoted so YAML does not
+  # read 1.89 as a number; tests/workflow_contracts/build_exclusions_test.py
+  # holds it equal to the manifest's major.minor, so the two cannot drift.
+  msrv:
+    name: msrv (${{ matrix.toolchain }} build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.89"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the MSRV toolchain
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f  # master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      # `make msrv-build` assigns RUSTFLAGS, which displaces the nightly-only
+      # flags in `.cargo/config.toml` that a stable compiler refuses, and
+      # selects the toolchain with `+<version>`, which bypasses the pinned
+      # nightly in rust-toolchain.toml.
+      - name: Build every target on the MSRV
+        run: make msrv-build MSRV=${{ matrix.toolchain }}
 
   binstall-packaging:
     name: Packaging dry run (${{ matrix.target }})
@@ -428,6 +546,14 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # Packaging builds what the release workflow builds, so it takes the
+      # release route: production flags only. Assigning RUSTFLAGS displaces
+      # the development standard in `.cargo/config.toml` (the parallel
+      # frontend, Cranelift backend and mold). setup-rust would export this
+      # same value by default; it is written out so the exclusion does not depend on an
+      # action default. Never set it to `''`: an empty value leaves the
+      # configuration in force.
+      RUSTFLAGS: -D warnings
       # sccache. The shared Rust setup action installs it and, from this
       # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
       # installed. Before this pin it installed sccache and exported

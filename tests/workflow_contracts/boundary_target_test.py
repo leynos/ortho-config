@@ -59,9 +59,9 @@ def _invocation() -> list[str]:
     """Return the target's recipe as one token list.
 
     A recipe may spread its command over continuation lines, so the lines are
-    joined before they are split. ``RUSTFLAGS="-D warnings"`` is a prefix
-    assignment rather than part of the command, and ``shlex`` keeps it as one
-    token, which the assertions below ignore.
+    joined before they are split. The recipe carries the ``GATE_RUSTFLAGS``
+    macro, whose expansion and host-specific flags are checked by the build
+    standard routing contract.
     """
     joined = " ".join(line.removesuffix("\\").strip() for line in _recipe())
     return shlex.split(joined, comments=True)
@@ -120,19 +120,18 @@ def test_the_target_resolves_from_the_shared_package_cache(flag: str) -> None:
 
 
 def test_the_target_denies_warnings() -> None:
-    """The workspace denies warnings; a focused run must not be laxer.
+    """The focused run uses the shared gate flags.
 
     Scenario: the boundary fixtures compile with a warning. Invariant: the
-    recipe sets ``RUSTFLAGS`` to deny warnings, as ``make test`` does, so the
-    focused entry point cannot pass where the full gate would fail.
+    recipe uses the shared ``GATE_RUSTFLAGS`` macro, so it inherits both the
+    host's development standard and the workspace's warning policy.
 
-    The assignment is read as a token rather than as a substring: a recipe
-    line is one string, so a substring test would also accept the flag inside
-    a comment or a quoted argument where it sets nothing.
+    The build standard routing contract expands the recipe and checks the
+    resulting host-specific assignment and warning policy.
     """
-    tokens = _invocation()
-    assert 'RUSTFLAGS=-D warnings' in tokens, (
-        f"the boundary recipe must deny warnings the way `make test` does: {tokens}"
+    recipe = " ".join(_recipe())
+    assert "$(GATE_RUSTFLAGS)" in recipe, (
+        f"the boundary recipe must use the shared gate flags: {recipe}"
     )
 
 

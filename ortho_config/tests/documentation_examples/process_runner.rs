@@ -3,30 +3,19 @@
 //! This module owns subprocess trees, operation deadlines, and output capture.
 //! Callers remain responsible for command construction and environment policy.
 
-#[path = "process_runner_capture.rs"]
-pub(crate) mod capture;
 #[path = "process_runner_cleanup.rs"]
 mod cleanup;
 #[path = "process_runner_diagnostics.rs"]
 mod diagnostics;
-#[cfg(unix)]
-#[path = "process_runner_pipe_unix.rs"]
-pub(crate) mod pipe;
-#[cfg(windows)]
-#[path = "process_runner_pipe_windows.rs"]
-pub(crate) mod pipe;
 #[path = "process_runner_policy.rs"]
 mod process_policy;
-#[path = "process_runner_spawn_guard.rs"]
-pub(crate) mod spawn_guard;
-#[cfg(unix)]
-#[path = "process_runner_tree_unix.rs"]
-pub(crate) mod tree;
-#[cfg(windows)]
-#[path = "process_runner_tree_windows.rs"]
-pub(crate) mod tree;
 #[path = "process_runner_wait.rs"]
 pub(crate) mod wait;
+
+pub(crate) use test_helpers::process::capture;
+pub(crate) use test_helpers::process::spawn_guard;
+#[cfg(any(unix, windows))]
+pub(crate) use test_helpers::process::tree;
 
 use diagnostics::{capture_snapshots, environment_evidence, stream_bytes, workspace_identity};
 pub(crate) use process_policy::Policy;

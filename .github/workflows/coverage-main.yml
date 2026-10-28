@@ -44,23 +44,29 @@ jobs:
     # repository secret. The shared CV-005 library's environment.placement
     # clause holds the environment to this job.
     environment: codescene
-    # Two coverage steps run in this job, each under its own 2,700 s cargo
+    # Two coverage steps run in this job, each under its own 3,300 s cargo
     # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
     # contain both. The work outside them reached 284 s on run 31908409573,
     # read across 31 runs of every conclusion, and the contract allows 15
     # minutes against that, which makes the requirement
-    # 5,400 + 900 = 6,300 s = 105 minutes with 15 more asked for above it.
+    # 6,600 + 900 = 7,500 s = 125 minutes with 15 more asked for above it.
     # This job had no ceiling either.
-    timeout-minutes: 120
+    timeout-minutes: 140
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # The explicit exclusion of the development build standard (the parallel
+      # frontend, Cranelift backend and mold in `.cargo/config.toml`) from the coverage builds.
+      # Cargo takes RUSTFLAGS in preference to every `rustflags` table in that
+      # file, and cargo-llvm-cov appends `-Cinstrument-coverage` to this value,
+      # so coverage is measured on the LLVM backend with the platform linker.
+      # Never set it to `''`: an empty value leaves the configuration in force.
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
       # seconds (default 600); the full-suite coverage run needs longer.
-      RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '3300'
       # sccache. The shared Rust setup action installs it and, from this
       # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
       # installed. Before this pin it installed sccache and exported
@@ -81,12 +87,32 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
+        # The coverage flags above exclude mold, but the suite that runs under
+        # them is the one the Linux build-test leg runs, so the publisher
+        # installs the same pinned tools before it: unconditionally, in this
+        # job, ahead of both coverage steps. `mold-version` is held equal to
+        # tools/mold/VERSION by
+        # tests/workflow_contracts/build_tools_provisioning_test.py.
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        with:
+          install-mold: 'true'
+          mold-version: '2.41.0'
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: '1.2.21'
+
+      - name: Choose the Linux coverage target root
+        # Trybuild creates nested Cargo projects under its target directory.
+        # Keeping that directory outside this checkout prevents those projects
+        # from discovering .cargo/config.toml and inheriting Cranelift flags
+        # alongside LLVM coverage instrumentation.
+        shell: bash
+        run: |
+          coverage_target="$RUNNER_TEMP/llvm-cov-target"
+          echo "CARGO_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+          echo "CARGO_LLVM_COV_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
 
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet

@@ -12,11 +12,13 @@ pub(super) enum ReadProgress {
     End,
 }
 
-pub(crate) trait ReadHandle: AsRawHandle + Read + Send {}
+/// A Windows pipe handle that can be observed for available bytes.
+pub trait ReadHandle: AsRawHandle + Read + Send {}
 
 impl<PipeHandle> ReadHandle for PipeHandle where PipeHandle: AsRawHandle + Read + Send {}
 
-pub(crate) trait Input: ReadHandle + 'static {}
+/// A Windows pipe handle accepted by the shared drain reader.
+pub trait Input: ReadHandle + 'static {}
 
 impl<PipeHandle> Input for PipeHandle where PipeHandle: ReadHandle + 'static {}
 

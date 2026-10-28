@@ -314,6 +314,8 @@ dependencies = [
  "fs4",
  "googletest",
  "insta",
+ "metrics",
+ "metrics-util",
  "nix",
  "ortho_config",
  "ortho_config_test_helpers",
@@ -327,6 +329,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "target-tuple",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
@@ -1562,8 +1565,14 @@ version = "0.10.0"
 dependencies = [
  "anyhow",
  "camino",
+ "cap-std",
  "figment",
+ "nix",
  "parking_lot",
+ "process-wrap",
+ "proptest",
+ "tracing",
+ "windows",
 ]
 
 [[package]]
@@ -1575,6 +1584,8 @@ dependencies = [
  "cap-std",
  "fluent-bundle",
  "fluent-syntax",
+ "nix",
+ "process-wrap",
  "proptest",
  "rstest",
  "serde",
@@ -1584,7 +1595,7 @@ dependencies = [
  "toml 1.1.8+spec-1.1.0",
  "tracing",
  "unic-langid",
- "wait-timeout",
+ "windows",
 ]
 
 [[package]]
