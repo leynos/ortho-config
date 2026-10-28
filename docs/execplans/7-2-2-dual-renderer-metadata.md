@@ -107,7 +107,10 @@ source failures. There is no time limit; queued compiler work is not a hang.
 - [ ] Commit and publish this plan as a draft PR for approval.
 - [x] (2026-10-28) Obtain explicit approval, including the source compatibility
   decision.
-- [ ] M1: deliver metadata types, derive, bridge, and contract tests together.
+- [x] M1: deliver metadata types, derive, bridge, and contract tests together.
+      Committed as `9588f063`. Focused suites and the documentation gates pass;
+      the `ortho_l10n` boundary suite is blocked by compiler-queue contention
+      on nested Cargo children, recorded below as an infrastructure failure.
 - [ ] M2: finish behavioural/end-to-end coverage, documentation, and closure.
 
 ## Surprises & discoveries
@@ -125,6 +128,20 @@ Roadmap 13.1 and agent-native design §9 explicitly identify struct-literal
 construction as an extensibility gap. JSON compatibility is not Rust source
 compatibility. The next release must acknowledge the new source requirement.
 
+The `ortho_l10n` boundary suite (`ortho_l10n/tests/boundary_tests/`) shells out
+to nested `cargo package` and `cargo test` children under a 240-second and
+300-second wall-clock deadline. On this build host those children queue behind
+compiler admission control (`RUSTC_WRAPPER` = `build-limits-rustc`, with the
+shared `BUILD_LIMITS_*` socket), so they exhaust the deadline while waiting for
+a compile slot rather than while doing work. All ten (full run) and nine
+(serialized run) failures report `exceeded the <n> second deadline`; none is an
+assertion failure, and `make boundary` fails identically in isolation. Under
+the plan's tolerance clause this is an infrastructure failure, not a source
+failure, and queued compiler work is not a hang. The suite is unmodified by
+this branch: `ortho_l10n` is inherited from the merge base `ceacf0cc`, and the
+only manifest change here is the `syn` `extra-traits` dev-dependency in
+`ortho_config_macros`, which is not packaged into the runtime crate set.
+
 ## Decision log
 
 - 2026-10-14, proposed: use a sibling renderer group and independent per-command
@@ -141,6 +158,13 @@ compatibility. The next release must acknowledge the new source requirement.
 - 2026-10-14, research: the colour-suppression environment variable disables
   colour when non-empty, not other styling. It cannot stand in for plain
   output, emoji, or accessibility policy.
+- 2026-10-28, implemented for M1: the renderer group is a sibling attribute
+  parsed by a dedicated `renderer_attrs`/`renderer_values` pair rather than an
+  extension of `behaviour_attrs`, keeping the strict nested-key parser and the
+  existing behaviour surface independent. Support defaults are applied per
+  renderer (human true, machine false) instead of via a shared
+  `SupportDeclaration::default`, so an absent declaration cannot silently claim
+  machine support.
 
 ## Outcomes & retrospective
 
@@ -155,6 +179,22 @@ scrutineer. Only this plan and its index entry changed. Code lint/tests are
 implementation-milestone requirements, not claimed planning evidence.
 Publication follows the gated plan commit; implementation awaited approval,
 which was granted on 2026-10-28 (see the revision note).
+
+M1 landed on 2026-10-28 as `9588f063`. Evidence actually collected:
+`make check-fmt` (exit 0), `make lint` (exit 0, 100% docstring coverage),
+`cargo test --workspace --doc --all-features` (exit 0), and the focused suites
+`docs_ir_renderer` (14 passed), `ortho_config_macros renderer` (47 passed),
+`ortho_config --all-features agent_context` (53 + 1 passed),
+`cargo-orthohelp --lib renderer` (45 passed), `golden_tests` (36 passed),
+`rstest_bdd` (50 passed), and `nested_subcommand_end_to_end` (21 passed).
+`make test` is the one incomplete obligation: it stopped at
+`-p ortho_l10n --test boundary` with ten nested-Cargo deadline expiries and no
+assertion failure, so the suites ordered after that binary in the same run were
+not exercised by `make test` itself. Snapshot updates were reviewed one by one:
+each existing agent-context snapshot gains only the declared `renderer` object
+(`human.supported = true`, `machine.supported = false`) with no reordering,
+renaming, or reformatting of surrounding fields, and the legacy wire fixture is
+untouched, with the new renderer contract fixture added beside it.
 
 ## Context and orientation
 
