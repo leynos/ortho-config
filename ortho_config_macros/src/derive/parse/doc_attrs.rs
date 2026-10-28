@@ -9,7 +9,7 @@ use super::doc_types::{
     PrecedenceAttrs, WindowsAttrs,
 };
 use super::literals::{lit_char, lit_str};
-use super::{FieldAttrs, discard_unknown, parse_behaviour_meta};
+use super::{FieldAttrs, discard_unknown, parse_behaviour_meta, parse_renderer_meta};
 
 /// Applies one documentation setting to the struct model.
 ///
@@ -70,6 +70,10 @@ pub(crate) fn apply_struct_doc_attr(
             let mut behaviour = out.behaviour.take().unwrap_or_default();
             parse_behaviour_meta(meta, &mut behaviour)?;
             out.behaviour = Some(behaviour);
+            Ok(true)
+        }
+        "renderer" => {
+            parse_renderer_meta(meta, out.renderer.get_or_insert_default())?;
             Ok(true)
         }
         "behavior" => Err(syn::Error::new(

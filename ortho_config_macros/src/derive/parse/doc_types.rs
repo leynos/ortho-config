@@ -25,6 +25,8 @@ pub(crate) struct DocStructAttrs {
     pub windows: Option<WindowsAttrs>,
     /// Declared interaction and safety metadata copied into generated help.
     pub behaviour: Option<BehaviourAttrs>,
+    /// Declared human and machine rendering copied into generated help.
+    pub renderer: Option<RendererAttrs>,
 }
 
 /// Heading ID overrides for documentation sections.
@@ -92,6 +94,82 @@ pub(crate) struct BehaviourAttrs {
     pub bypass: Option<String>,
     /// Whether the command supports a preview that avoids applying changes.
     pub dry_run: Option<String>,
+}
+
+/// Declared human and machine rendering for a command (roadmap 7.2.2).
+///
+/// Mirrors the rendered `ortho_config::docs::RendererMetadata` block. Policy
+/// values stay as validated strings here; the generate stage converts them into
+/// typed IR values, so a parser bug cannot silently emit an unchecked variant.
+#[derive(Default, Clone)]
+pub(crate) struct RendererAttrs {
+    /// Human-facing rendering declaration, absent when not declared.
+    pub human: Option<RendererRecordAttrs>,
+    /// Machine-facing rendering declaration, absent when not declared.
+    pub machine: Option<RendererRecordAttrs>,
+    /// Whether a `human(...)` group has been parsed, so a repeat is rejected.
+    pub human_declared: bool,
+    /// Whether a `machine(...)` group has been parsed, so a repeat is rejected.
+    pub machine_declared: bool,
+}
+
+/// One renderer record's declared policy values.
+///
+/// Each field is an optional validated token. Unknown keys and invalid tokens
+/// are rejected during parsing, so later stages treat every `Some` value as
+/// one of the accepted spellings.
+#[derive(Default, Clone)]
+pub(crate) struct RendererRecordAttrs {
+    /// Declared support value; `None` means undeclared.
+    pub supported: Option<bool>,
+    /// Declared terminal sensitivity of stdout.
+    pub tty: Option<String>,
+    /// Declared behaviour when stdin is closed.
+    pub closed_stdin: Option<String>,
+    /// Declared colour policy.
+    pub colour: Option<String>,
+    /// Declared emoji policy.
+    pub emoji: Option<String>,
+    /// Declared progress policy.
+    pub progress: Option<String>,
+    /// Declared pager policy.
+    pub pager: Option<String>,
+    /// Declared output width.
+    pub width: Option<RenderWidthAttr>,
+    /// Declared accessibility claim.
+    pub accessibility: Option<String>,
+    /// Declared plain-output availability.
+    pub plain: Option<String>,
+    /// Declared stdout content category.
+    pub stdout: Option<String>,
+    /// Declared stderr content category.
+    pub stderr: Option<String>,
+    /// Declared progress inheritance permission.
+    pub progress_inheritance: Option<String>,
+    /// Declared subprocess inheritance permission.
+    pub subprocess_inheritance: Option<String>,
+    /// Declared output-field localization entries in source order.
+    pub fields: Vec<RendererFieldAttr>,
+}
+
+/// A declared output width: unbounded, terminal-relative, or a fixed column count.
+#[derive(Clone)]
+pub(crate) enum RenderWidthAttr {
+    /// Output is not constrained to a width.
+    Unbounded,
+    /// Width follows the terminal.
+    Terminal,
+    /// Output declares a fixed positive column count.
+    Fixed(u16),
+}
+
+/// One declared output field and its localization classification.
+#[derive(Clone)]
+pub(crate) struct RendererFieldAttr {
+    /// Stable, application-defined output field identifier.
+    pub id: String,
+    /// Declared localization classification token.
+    pub localization: String,
 }
 
 /// Field-level documentation attributes captured during parsing.

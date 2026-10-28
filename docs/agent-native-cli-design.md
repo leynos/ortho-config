@@ -493,6 +493,13 @@ renderer. The reusable contract should describe:
 This supports Weaver's dual human/machine output and Netsuke's human-first,
 agent-consistent presentation from the same metadata vocabulary.
 
+This is realized in the derive attribute surface as the sibling `renderer(...)`
+group, in documentation IR as `DocMetadata::renderer`, and in agent context as
+`AgentCommand::renderer`. See
+[ADR-0016](adrs/adr-0016-dual-renderer-metadata-surface.md) for the accepted
+vocabulary, the role-specific legacy support defaults, the width encoding, and
+the no-inference rule.
+
 ### 6.2.2 Exit-code taxonomy metadata
 
 OrthoConfig should model exit codes in documentation IR and agent context, but

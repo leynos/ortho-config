@@ -4,6 +4,10 @@ use super::*;
 use crate::serialize_agent_context;
 use proptest::{collection::vec, option, prelude::*};
 
+#[path = "tests_round_trip_renderer.rs"]
+mod renderer_strategies;
+use renderer_strategies::*;
+
 proptest! {
     #[test]
     fn to_json_always_round_trips(context in any_agent_context()) {
@@ -84,7 +88,9 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
         option::of(async_submission()),
         option::of(delivery_route()),
         option::of(pagination_contract()),
-        vec(any_agent_example(), 0..4),
+        // The same twelve-element ceiling keeps examples paired with the
+        // renderer contract rather than in their own slot.
+        (vec(any_agent_example(), 0..4), any_agent_renderer()),
     )
         .prop_map(
             |(
@@ -99,7 +105,7 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
                 async_submission,
                 delivery_route,
                 pagination,
-                examples,
+                (examples, renderer),
             )| AgentCommand {
                 path,
                 summary,
@@ -114,6 +120,7 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
                 delivery_route,
                 pagination,
                 examples,
+                renderer,
             },
         )
 }

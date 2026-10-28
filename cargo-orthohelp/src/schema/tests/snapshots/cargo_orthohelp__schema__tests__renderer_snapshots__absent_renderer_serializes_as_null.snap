@@ -1,0 +1,8 @@
+---
+source: cargo-orthohelp/src/schema/tests/renderer_snapshots.rs
+expression: "snapshot_json(&RendererMetadata::default())"
+---
+{
+  "human": null,
+  "machine": null
+}

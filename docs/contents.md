@@ -76,6 +76,10 @@
 - [ADR-0015: Reusable localization runtime](adrs/adr-0015-localization-runtime-boundary.md):
   review the reusable localization boundary, compatibility defaults, and shared
   identifier owner.
+- [ADR-0016: Dual-renderer metadata surface](adrs/adr-0016-dual-renderer-metadata-surface.md):
+  review the accepted `renderer(...)` derive group, the per-command human and
+  machine records, the role-specific legacy support defaults, and the width
+  encoding.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
