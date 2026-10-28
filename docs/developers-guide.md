@@ -2793,6 +2793,8 @@ Notes on individual rows:
   development configuration. The Windows leg in `ci.yml` also uses a drive-root
   path to keep compiler command lines under the `CreateProcess` limit; see
   [The Windows coverage command line](#the-windows-coverage-command-line).
+- The `cargo-orthohelp` trybuild harness uses `target-tuple` to identify the
+  compiled target when forwarding target-specific Cargo flags to its child.
 - Release builds (`release.yml`, job `build-assets`) and packaging (`ci.yml`,
   job `binstall-packaging`) set the same explicit job-level value and take the
   production route.

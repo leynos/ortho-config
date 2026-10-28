@@ -161,9 +161,14 @@ def test_the_msrv_leg_installs_and_builds_its_matrix_toolchain_and_runs_no_tests
     """
     job = _msrv_job(documents)
     steps = [step for step in job["steps"] if isinstance(step, dict)]
-    step_inputs = [_mapping(step.get("with")) for step in steps]
-    installs = [inputs["toolchain"] for inputs in step_inputs if "toolchain" in inputs]
-    assert installs == ["${{ matrix.toolchain }}"], f"the MSRV leg installs {installs}"
+    installers = [
+        step for step in steps if str(step.get("uses", "")).startswith("dtolnay/rust-toolchain@")
+    ]
+    assert len(installers) == 1, f"the MSRV leg has {len(installers)} toolchain installers"
+    installer = installers[0]
+    assert _PINNED.search(str(installer["uses"])), "the MSRV toolchain installer is not pinned"
+    toolchain = _mapping(installer.get("with")).get("toolchain")
+    assert toolchain == "${{ matrix.toolchain }}", f"the MSRV leg installs {toolchain!r}"
     runs = [str(step["run"]) for step in steps if "run" in step]
     assert runs == ["make msrv-build MSRV=${{ matrix.toolchain }}"], f"the MSRV leg runs {runs}"
     for run in runs:

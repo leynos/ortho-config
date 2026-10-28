@@ -68,6 +68,7 @@ pretty_assertions = "1"
 rstest = "0.28.0"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
+target-tuple = "1.0.2"
 test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers", version = "0.10.0" }
 trybuild = "1"
 

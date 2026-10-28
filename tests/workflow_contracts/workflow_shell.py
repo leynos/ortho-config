@@ -147,7 +147,18 @@ def _goals_after(tokens: list[str], index: int) -> list[str]:
 
 
 def make_goals(run: str) -> list[list[str]]:
-    """Return goal lists for Make invocations in a GitHub Actions ``run`` script."""
+    """Return goal lists for Make invocations in a GitHub Actions script.
+
+    Parameters
+    ----------
+    run : str
+        The GitHub Actions ``run`` script to inspect.
+
+    Returns
+    -------
+    list[list[str]]
+        The goals for each Make invocation, in script order.
+    """
     source = _EXPRESSION.sub("EXPR", run)
     tokenised = (_tokens(line) for line in _logical_lines(source))
     return [

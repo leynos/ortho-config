@@ -353,47 +353,5 @@ pub(crate) fn assert_packaged_set_complete() -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Regression coverage for package-set cache outcomes and caller deadlines.
-
-    use super::{PackagedCrate, PackagedSetCache};
-    use camino::Utf8PathBuf;
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn sequence_bounded_packaging_failure_does_not_poison_a_later_caller() {
-        let cache = PackagedSetCache::new();
-        let sequence_deadline = Instant::now() + Duration::from_secs(5);
-        let mut attempted_bounded_build = false;
-        let error = cache
-            .prepare_with(Some(sequence_deadline), |deadline| {
-                attempted_bounded_build = true;
-                assert_eq!(deadline, Some(sequence_deadline));
-                anyhow::bail!("packaging failed for this caller's sequence deadline")
-            })
-            .expect_err("the sequence-bounded build must report its failure");
-
-        assert!(attempted_bounded_build, "the bounded build should run");
-        assert!(error.to_string().contains("sequence deadline"));
-        assert!(
-            cache.roots.get().is_none(),
-            "a failure must not cache roots"
-        );
-        assert!(
-            cache.failure.get().is_none(),
-            "a caller-specific failure must not poison the shared cache"
-        );
-
-        cache
-            .prepare_with(None, |_| {
-                Ok(vec![PackagedCrate {
-                    name: "ortho_l10n",
-                    version: "0.0.0",
-                    root: Utf8PathBuf::new(),
-                }])
-            })
-            .expect("a later unbounded caller can retry packaging");
-
-        assert_eq!(cache.roots.get().map(Vec::len), Some(1));
-    }
-}
+#[path = "roots_tests.rs"]
+mod tests;
