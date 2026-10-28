@@ -153,7 +153,8 @@ Documentation validation passed on 2026-10-14: `make fmt`, `make check-fmt`,
 `make markdownlint` (including spelling), and `make nixie`, run sequentially by
 scrutineer. Only this plan and its index entry changed. Code lint/tests are
 implementation-milestone requirements, not claimed planning evidence.
-Publication follows the gated plan commit; implementation awaits approval.
+Publication follows the gated plan commit; implementation awaited approval,
+which was granted on 2026-10-28 (see the revision note).
 
 ## Context and orientation
 
