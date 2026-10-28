@@ -290,17 +290,23 @@ def test_unevaluable_conditions_never_excuse_a_step(
 
 def test_make_goals_join_a_backslash_continued_command() -> None:
     """A physical line break escaped by a backslash does not end the goals."""
-    assert workflow_shell.make_goals("make lint \\\n  test") == [["lint", "test"]]
+    assert workflow_shell.make_goals("make lint \\\n  test") == [["lint", "test"]], (
+        "a continued Make command must retain both goals"
+    )
 
 
 def test_make_goals_stop_at_and_then_parse_the_next_command() -> None:
     """A shell conjunction ends one Make command and starts the next one."""
-    assert workflow_shell.make_goals("make lint && make test") == [["lint"], ["test"]]
+    assert workflow_shell.make_goals("make lint && make test") == [["lint"], ["test"]], (
+        "a conjunction must separate the two Make commands"
+    )
 
 
 def test_make_goal_keeps_a_quoted_shell_operator() -> None:
     """Quoted punctuation is a goal argument, not a command boundary."""
-    assert workflow_shell.make_goals("make '&&' test") == [["&&", "test"]]
+    assert workflow_shell.make_goals("make '&&' test") == [["&&", "test"]], (
+        "a quoted shell operator must remain a Make goal"
+    )
 
 
 # -- negative controls: the same properties must reject a wrong interpreter ---------
@@ -363,8 +369,12 @@ def test_the_condition_property_rejects_a_swapped_operator(monkeypatch: pytest.M
         inverse = "!=" if operator == "==" else "=="
         return original(actual, inverse, value)
 
-    assert swapped(None, "==", "x") is original(None, "==", "x")
-    assert swapped("x", ">", "x") is original("x", ">", "x")
+    assert swapped(None, "==", "x") is original(None, "==", "x"), (
+        "the control must preserve comparisons with a missing value"
+    )
+    assert swapped("x", ">", "x") is original("x", ">", "x"), (
+        "the control must preserve unsupported operators"
+    )
     monkeypatch.setattr(workflow_legs, "_comparison_holds", swapped)
     _rejects(
         check_conditions_agree_with_an_oracle,
