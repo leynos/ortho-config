@@ -736,7 +736,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8cb01cd46b0cf372153850f4c6c272d9cbea2da513e07538405148f95bd789f3"
 dependencies = [
  "atomic",
- "parking_lot",
+ "parking_lot 0.12.5",
  "pear",
  "serde",
  "tempfile",
@@ -787,7 +787,7 @@ dependencies = [
  "intl_pluralrules",
  "rustc-hash",
  "self_cell",
- "smallvec 1.15.1",
+ "smallvec 1.16.4",
  "unic-langid",
 ]
 
@@ -1135,7 +1135,7 @@ dependencies = [
  "i18n-embed-impl",
  "intl-memoizer",
  "log",
- "parking_lot",
+ "parking_lot 0.12.5",
  "rust-embed",
  "sys-locale",
  "thiserror 1.0.69",
@@ -1341,6 +1341,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lock_api"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65d91b22da179613dcf4d6ec8349563f52a363f6849e03b00dd0a185ec4a59af"
+dependencies = [
+ "scopeguard",
+]
+
+[[package]]
 name = "log"
 version = "0.4.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1419,7 +1428,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77a5d83df9f36fe23f0c3648c6bbb8b0298bb5f1939c8f2704431371f4b84d43"
 dependencies = [
- "smallvec 1.15.1",
+ "smallvec 1.16.4",
 ]
 
 [[package]]
@@ -1563,7 +1572,7 @@ dependencies = [
  "anyhow",
  "camino",
  "figment",
- "parking_lot",
+ "parking_lot 0.13.0",
 ]
 
 [[package]]
@@ -1639,8 +1648,18 @@ version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
 dependencies = [
- "lock_api",
- "parking_lot_core",
+ "lock_api 0.4.14",
+ "parking_lot_core 0.9.12",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9cf937ca4e1d0b7578784559063422fc39ae7c5a00f02471f2614d5486fd226"
+dependencies = [
+ "lock_api 0.5.0",
+ "parking_lot_core 0.10.0",
 ]
 
 [[package]]
@@ -1651,8 +1670,20 @@ checksum = "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall",
- "smallvec 1.15.1",
+ "redox_syscall 0.5.18",
+ "smallvec 1.16.4",
+ "windows-link",
+]
+
+[[package]]
+name = "parking_lot_core"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cfff060068cc18aa7815010fcaf80c68c7fb9e85fc7f5c0f9bf142c21d19826"
+dependencies = [
+ "libc",
+ "redox_syscall 0.9.5",
+ "smallvec 1.16.4",
  "windows-link",
 ]
 
@@ -2040,6 +2071,15 @@ name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
+name = "redox_syscall"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "580c875845b41ecb1564ad1ae4703044cef774145e3d7a94dc2b3fa7c97868fd"
 dependencies = [
  "bitflags",
 ]
@@ -2443,7 +2483,7 @@ dependencies = [
  "futures",
  "log",
  "once_cell",
- "parking_lot",
+ "parking_lot 0.12.5",
  "scc",
  "serial_test_derive",
 ]
@@ -2516,9 +2556,9 @@ checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
 
 [[package]]
 name = "smallvec"
-version = "1.15.1"
+version = "1.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+checksum = "d0d5d4b1981b8bbbb7aed204cae5726d683d5d6ac7e74ec54122ea28f315e7c8"
 
 [[package]]
 name = "smallvec"
@@ -2879,7 +2919,7 @@ dependencies = [
  "once_cell",
  "regex-automata",
  "sharded-slab",
- "smallvec 1.15.1",
+ "smallvec 1.16.4",
  "thread_local",
  "tracing",
  "tracing-core",
