@@ -2498,7 +2498,7 @@ the shared `leynos/shared-actions/.github/actions/install-whitaker` action,
 pinned to a full commit hash (SHA, the Secure Hash Algorithm identifier of a
 Git commit), in a step named `Install Whitaker` that is guarded to
 `matrix.platform == 'linux'`. The action owns the install: it takes a
-digest-verified, prebuilt `whitaker-installer` (0.2.9 or later), passes
+digest-verified, prebuilt `whitaker-installer` (0.2.11 by default), passes
 `--no-source-fallback`, preinstalls the prebuilt `dylint-link`, authenticates
 with `github.token`, and caches the installer itself. The repository therefore
 carries no resolve, cache or install script for it. Whitaker's lint suite is a
@@ -2507,8 +2507,10 @@ what stays fixed.
 
 The concordat QG-002 rule accepts a revision of that action only if it is a
 shared-actions commit, from the revision that first carried the install rules
-onwards, that leaves the action directory content-identical, so the pin moves
-with the other shared-actions references (the one-SHA contract in
+onwards, that either leaves the action directory content-identical to an
+approved root or is itself approved as a new root (concordat #331 approved
+`5a99aed7`, which defaults whitaker-installer to 0.2.11), so the pin moves with
+the other shared-actions references (the one-SHA contract in
 `sccache_wiring_test.py`, which exempts `.github/actions/rust-build-release` and
 `.github/workflows/mutation-cargo.yml`; those two may sit at their own full
 commit hashes, and the Whitaker pin follows the rule for every non-exempt
