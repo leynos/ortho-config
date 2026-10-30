@@ -253,7 +253,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.tag }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
       # Resolves the real pkg-url for every target against the published
       # release, so a template that renders an unreachable URL fails here
       # rather than in a consumer's install.

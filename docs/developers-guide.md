@@ -2398,10 +2398,10 @@ Two Rust lanes are outside this, each for its own reason:
   `release` event, so that guard never fires here.
 
 `rust-build-release` and `mutation-cargo` are exempt from the one-SHA
-assertion. Every reference into the shared-actions tree, those two included,
-sits at `6cec89bac47a` today, where the repin that brought in setup-rust's
-fail-open sccache start-up left them. The exemption remains an allowance for
-them to diverge without the contract reporting a partial repin, as they did
+assertion. Every other reference into the shared-actions tree sits at
+`5a99aed78ce6` today, where the repin that brought in install-whitaker 0.2.11
+left them; those two stay at `7d751eded578`. The exemption remains an allowance
+for them to diverge without the contract reporting a partial repin, as they did
 after the CodeScene coverage adoption's repin: neither serves a lane this
 wiring governs, `rust-build-release` is the release build the action excludes
 from sccache, and `mutation-cargo` is a reusable workflow, which caller job
