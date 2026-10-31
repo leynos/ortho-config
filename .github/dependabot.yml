@@ -35,6 +35,17 @@ updates:
       rstest-bdd:
         patterns:
           - "rstest-bdd*"
+      # ortho_config and fluent-bundle share FluentValue types, so the two must
+      # resolve to one fluent-bundle (the dependency-family-contracts rule,
+      # family ortho-config-fluent-bundle). ortho_config is this repository's
+      # own workspace crate, so Dependabot never offers it; the group still
+      # names it so the pair is declared as a family wherever it is read, and
+      # it keeps fluent-bundle out of the catch-all. It must precede the
+      # catch-all: Dependabot uses the first group that matches.
+      ortho-config-fluent-bundle:
+        patterns:
+          - "ortho_config"
+          - "fluent-bundle"
       minor-and-patch:
         patterns:
           - "*"
