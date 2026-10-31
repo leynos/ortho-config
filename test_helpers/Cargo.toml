@@ -17,4 +17,4 @@ workspace = true
 anyhow = "1"
 camino = "1"
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
-parking_lot = "0.12"
+parking_lot = "0.13"
