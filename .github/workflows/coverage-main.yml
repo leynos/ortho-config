@@ -117,12 +117,44 @@ jobs:
 
       - name: Merge coverage results
         shell: bash
-        # lcov-result-merger takes a single glob pattern and an optional
-        # output file; passing two file paths treats the second as the
-        # output and leaves stdout empty. Match both feature-leg reports
-        # with one glob ('lcov-*.info' excludes the lcov.info output) and
-        # write the merged result via stdout.
-        run: bun x lcov-result-merger 'lcov-*.info' > lcov.info
+        # lcov-result-merger takes one glob pattern and an optional output
+        # file; with two file paths, the second is the output. The brace
+        # pattern names exactly the two feature-leg reports. The guard rejects
+        # missing, empty or unexpected `lcov-*.info` reports before the merge.
+        # Pin 6.0.0 (registry-published integrity:
+        # `sha512-RsXi/N4J9b37mu83d3L8WdCGU0jsftN6GlXaJySK6fu+zD48joHC579hpA3K4brPvwWOhbNX5NoT7mghxDi5qw==`).
+        # The digest is a review reference, not a workflow check; this inline
+        # bun x install has no checked-in lockfile for it or its dependencies.
+        # Dependabot does not track this pin, so bump both workflows together
+        # in a manual, reviewed change.
+        run: |
+          set -euo pipefail
+
+          for report in lcov-serde-saphyr.info lcov-no-serde-saphyr.info; do
+            if ! test -s "$report"; then
+              echo "::error::Missing or empty coverage report: $report"
+              exit 1
+            fi
+          done
+
+          shopt -s nullglob
+          reports=(lcov-*.info)
+          for report in "${reports[@]}"; do
+            case "$report" in
+              lcov-serde-saphyr.info|lcov-no-serde-saphyr.info) ;;
+              *)
+                echo "::error::Unexpected coverage report: $report"
+                exit 1
+                ;;
+            esac
+          done
+
+          bun x lcov-result-merger@6.0.0 '{lcov-serde-saphyr.info,lcov-no-serde-saphyr.info}' > lcov.info
+
+          if ! test -s lcov.info; then
+            echo "::error::Merged coverage report is empty: lcov.info"
+            exit 1
+          fi
 
       # Whether the token is set, as a plain output. The expression is
       # evaluated before the shell runs, so this step binds nothing and
