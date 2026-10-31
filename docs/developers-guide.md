@@ -2335,6 +2335,13 @@ Dependabot owns scheduled dependency updates through `.github/dependabot.yml`:
   `dependencies` and `python` labels.
 - The root `rust-toolchain.toml` updates weekly through the independent
   `rust-toolchain` route, using the `dependencies` and `rust-toolchain` labels.
+- The Cargo entry's `ortho-config-fluent-bundle` group takes `ortho_config` and
+  `fluent-bundle` together, ahead of the `minor-and-patch` catch-all (the
+  Concordat dependency-family rule requires a group for that pair, because the
+  two share `FluentValue` types). `ortho_config` is a workspace crate that
+  Dependabot never offers, so the group in practice keeps `fluent-bundle` in
+  one pull request. `tests/workflow_contracts/dependabot_family_group_test.py`
+  holds it.
 
 GitHub Actions updates include calls into `leynos/shared-actions`. Contract
 tests that assert a caller's exact commit SHA create a lockstep dependency:
