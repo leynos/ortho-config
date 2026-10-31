@@ -1,8 +1,10 @@
 # Add dual-renderer metadata (7.2.2)
 
-Status: COMPLETE (2026-10-30) — implementation landed in `9588f063` (M1) and
-the M2 change set; `make test` remains incomplete on infrastructure grounds and
-the PR description is not yet published (see Outcomes & retrospective).
+Status: COMPLETE (2026-10-30, revalidated 2026-10-31) — implementation landed in
+`9588f063` (M1) and the M2 change set. A 2026-10-31 handoff review found and
+repaired a role-default defect in agent-context decoding; the repaired
+candidate requires a fresh sequential gate run, and the implementation changes
+are still unpublished at the time of writing (see Outcomes & retrospective).
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -135,6 +137,15 @@ source failures. There is no time limit; queued compiler work is not a hang.
       is recorded below and in the Outcomes section. Publication of the PR
       description is blocked: every `gh` invocation is refused by the execution
       policy, so the prepared body has to be applied outside this session.
+- [x] (2026-10-31) Handoff review found that the role-specific support default
+      was applied only when the whole `human`/`machine` record was absent. An
+      empty record or a record without `supported` decoded `bool::default()`
+      (`false`), contradicting ADR-0016. A red test reproduced
+      `(false, false)` against the expected `(true, false)`; the role-aware
+      decoder in `ortho_config/src/agent_context/renderer_wire.rs` now
+      distinguishes an absent leaf from an explicit `false`. Focused suite
+      green at 14/14. Full sequential gates are being re-run for the repaired
+      candidate; implementation commits are still unpublished.
 
 ## Surprises & discoveries
 
@@ -215,6 +226,21 @@ The practical consequence for anyone re-running this gate: `make test` is
 reported as incomplete, not green. The suites that ran before the stop are
 recorded below with their counts.
 
+The 2026-10-31 handoff review found a real decoding defect that the M1 suite
+had missed. ADR-0016 applies the legacy support defaults not only when a record
+is absent but also when it is present and empty, and when a present record has
+no `supported` leaf. The derived `Deserialize` on `RendererContract` only
+handled the first case: `#[serde(default = "default_human_record")]` fires when
+the field is missing, while `{"human":{}}` still went through
+`bool::default()`, producing `false`. The red test
+`ortho_config/src/agent_context/tests_renderer_defaults.rs` observed
+`(false, false)` for both `{"human":{},"machine":{}}` and `{"human":{}}` where
+`(true, false)` is required. A role-aware decoder now mirrors the wire shape
+just far enough to tell an absent `supported` from an explicit `false`, rejects
+present nulls, and leaves unknown fields permissive. This is the case a naive
+"defaults look right" snapshot can hide: the all-default serialization was
+already correct, so only decoding the partial shapes exposes it.
+
 ## Decision log
 
 - 2026-10-14, proposed: use a sibling renderer group and independent per-command
@@ -263,6 +289,14 @@ recorded below with their counts.
   separate fields of `RendererRecord`, and field-level localization is its own
   enum on `RendererField`, so no clause is satisfied merely by the attribute
   existing.
+- 2026-10-31, implemented at handoff: `RendererContract` uses a role-aware
+  `Deserialize` implementation in `renderer_wire.rs` instead of a derive. The
+  derive's field-level `default` cannot depend on whether the record occupies
+  the human or machine slot, so it could not express ADR-0016's table. A
+  private wire mirror tracks `supported` presence separately from its boolean
+  value, applies the slot default only when the leaf is absent, and rejects a
+  present null. The public types and wire spelling are unchanged; only the
+  decoding path is more precise.
 
 ## Outcomes & retrospective
 
@@ -888,3 +922,13 @@ stopped in `ortho_config --test identifier_artefact_e2e`, which reproduces in
 isolation on a file untouched since `ab7f51e1`. `make test` therefore remains
 incomplete rather than green, and the attempt table in Outcomes records each
 stopping point.
+
+2026-10-31 handoff revision: A review against ADR-0016 found that agent-context
+decoding applied the role-specific support default only when the whole record
+was absent. Empty records and records missing the `supported` leaf decoded to
+`false` for both slots. A red test reproduced the defect, a role-aware decoder
+repaired it, and the focused suite passed 14/14. The implementation status
+stays COMPLETE subject to a fresh sequential gate run for the repaired
+candidate; the earlier gate evidence applies to the pre-repair commits and is
+retained only for that scope. Publication, hosted CI, and review state are
+tracked in the PR and the delivery ledger rather than claimed here.

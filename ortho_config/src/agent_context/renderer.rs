@@ -18,13 +18,11 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// `{"human":{"supported":true},"machine":{"supported":false}}`: the
 /// compatibility defaults are explicit, while undeclared policy stays absent
 /// rather than becoming an affirmative promise.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct RendererContract {
     /// Human-facing rendering description.
-    #[serde(default = "default_human_record")]
     pub human: RendererRecord,
     /// Machine-facing rendering description.
-    #[serde(default = "default_machine_record")]
     pub machine: RendererRecord,
 }
 

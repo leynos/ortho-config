@@ -37,6 +37,7 @@ mod profiles;
 pub use profiles::{ProfileSelectionContract, ProfilesDeclaration};
 
 mod renderer;
+mod renderer_wire;
 
 pub use renderer::{
     AccessibilityPolicy, ClosedStdinPolicy, InheritancePolicy, PlainPolicy, RenderWidth,

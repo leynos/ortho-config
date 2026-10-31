@@ -19,6 +19,9 @@ mod round_trip;
 #[path = "tests_renderer_legacy.rs"]
 mod renderer_legacy;
 
+#[path = "tests_renderer_defaults.rs"]
+mod renderer_defaults;
+
 #[path = "tests_wire_enums.rs"]
 mod wire_enums;
 
