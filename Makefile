@@ -5,6 +5,12 @@ CARGO ?= cargo
 WHITAKER ?= whitaker
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
+# The development build standard (concordat rule `rust-build-defaults`): the
+# mold linker on Linux. An assigned RUSTFLAGS replaces every `rustflags` table
+# in .cargo/config.toml, so each gate recipe that sets it adds the linker flag.
+# The pinned stable toolchain has no parallel frontend or Cranelift backend.
+BUILD_HOST_OS := $(shell uname -s)
+STANDARD_RUSTFLAGS := $(if $(filter Linux,$(BUILD_HOST_OS)),-Clink-arg=-fuse-ld=mold)
 # One lint invocation for every caller: the pinned-toolchain `build-test`
 # job and the advisory `clippy-beta` job both run it through `lint-clippy`,
 # so CI states its strictness once, here, rather than in two workflow steps
@@ -81,7 +87,7 @@ clean: ## Remove build artefacts
 	rm -rf $(PYTHON_VENV)
 
 test: python-test-deps ## Run tests with warnings treated as errors
-	RUSTFLAGS="-D warnings" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
+	RUSTFLAGS="-D warnings $(STANDARD_RUSTFLAGS)" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
 
 # The boundary contracts are the evidence that an application depending on the
@@ -99,7 +105,7 @@ test: python-test-deps ## Run tests with warnings treated as errors
 # package cache. The fixture target is deliberately kept between runs, so a
 # warm run is not evidence of a cold download.
 boundary: ## Prove the standalone runtime boundary against foreign consumer roots
-	RUSTFLAGS="-D warnings" $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
+	RUSTFLAGS="-D warnings $(STANDARD_RUSTFLAGS)" $(CARGO) test -p ortho_l10n --test boundary --offline $(BUILD_JOBS)
 
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
@@ -194,7 +200,7 @@ docstring-coverage: ## Require complete docstrings for every Python source file
 	fi
 
 typecheck: ## Typecheck workspace (cargo check)
-	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
+	RUSTFLAGS="-D warnings $(STANDARD_RUSTFLAGS)" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

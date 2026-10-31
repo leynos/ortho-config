@@ -105,6 +105,8 @@ jobs:
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        with:
+          install-mold: 'true'
 
       # The Windows coverage action uses Bash, which prepends Git's /usr/bin
       # ahead of Visual Studio. Pin the linker and export its SDK search paths
@@ -415,6 +417,12 @@ jobs:
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
         run: choco install make --yes --no-progress
+
+      # .cargo/config.toml selects the mold linker on Linux, and the job sets
+      # no RUSTFLAGS, so the configuration applies to Clippy's build scripts.
+      - name: Install mold
+        if: ${{ matrix.platform == 'linux' }}
+        run: sudo apt-get install --yes --no-install-recommends mold
 
       - name: Clippy (beta)
         env:

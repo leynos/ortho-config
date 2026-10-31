@@ -2274,6 +2274,29 @@ in captured fields. This keeps process collection, injected-source coverage,
 and redaction checks explicit without copying the parent's environment into a
 probe.
 
+## Development build standard
+
+`.cargo/config.toml` holds the estate's development build defaults, so a bare
+`cargo build` gets them. The `mold` linker is the default on Linux, in a
+Linux-only target table; `mold` must be on `PATH` (CI installs it through
+`install-mold` on `setup-rust`, and the advisory beta Clippy job installs it
+with `apt-get`). The repository pins stable `1.99`, so the parallel `rustc`
+frontend (`-Zthreads=8`) does not apply: it is a nightly flag.
+
+Assigning `RUSTFLAGS` replaces every `rustflags` source in the configuration, so
+`make test`, `make boundary` and `make typecheck` add the linker flag through
+`STANDARD_RUSTFLAGS`. The Whitaker route and the coverage lanes take none of it.
+`tests/workflow_contracts/build_standard_test.py` holds the configuration, the
+recipes and the workflow installs.
+
+### Cranelift in default builds
+
+Exception: Cranelift is not the development-profile backend, because Cranelift
+requires a nightly toolchain and this repository pins the stable `1.99`
+(recorded 2026-10-31; no measurement was taken, because a stable toolchain
+cannot select the backend). Revisit if the repository moves to a nightly pin,
+and re-measure the whole suite under Cranelift then.
+
 ## Dependency management
 
 Cargo dependencies in this workspace follow strict version pinning rules so
