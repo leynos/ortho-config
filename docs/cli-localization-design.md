@@ -776,6 +776,84 @@ two fields whose identifiers normalize to the same value produce a
 `compile_error!`. A regression test in the macros crate compares derive output
 against `message_id_for` for a fixture command tree to lock the agreement.
 
+### 8.3 Artefact-lock post-release diagnostics
+
+The lock in §8.2 is cooperative and test-observable, so the suites that police
+it assert that a released lock has become free again. A single probe answers
+only "free" or "held", and a hold observed a moment after a correct release has
+two very different causes: a descriptor this process leaked, or an unrelated
+process — including a child that inherited the open file description across
+`fork` — holding the same inode. The two call for opposite fixes, so the
+assertion reports the holder alongside the failure.
+
+Two assertions exist and the split is deliberate. `ensure_released` demands the
+lock be free at the instant it is probed, and is the strict form the fork
+diagnostic uses. `ensure_settles_free` re-probes within a bounded
+`SETTLE_BUDGET` and is the form the gating suites use, because the description
+a forking peer inherits is transient by construction. The operational detail
+lives in the
+[developers' guide](developers-guide.md#diagnosing-a-post-release-lock-hold).
+
+For screen readers: The following sequence diagram traces a settling assertion
+from the test that makes it, through repeated probes that end the wait as soon
+as the lock settles, to the procfs evidence gathered only once the budget is
+spent and the final re-probe that precedes a holder report.
+
+```mermaid
+sequenceDiagram
+    participant Test
+    participant Diagnostics
+    participant Probe
+    participant ProcLocks
+    participant ProcessFDs
+
+    Test->>Diagnostics: ensure_settles_free(root, expectation)
+    Diagnostics->>Probe: probe_lock(root)
+    alt lock is free
+        Probe-->>Diagnostics: Free
+        Diagnostics-->>Test: Ok
+    else lock is held
+        Probe-->>Diagnostics: Held(metadata)
+        Diagnostics->>Probe: probe_lock(root) every SETTLE_INTERVAL
+        alt lock settles before SETTLE_BUDGET
+            Probe-->>Diagnostics: Free
+            Diagnostics-->>Test: Ok
+        else lock remains held
+            Probe-->>Diagnostics: Held(metadata)
+            Diagnostics->>ProcLocks: read_records()
+            ProcLocks-->>Diagnostics: matching lock records
+            Diagnostics->>ProcessFDs: inspect_holder(pid, device, inode)
+            ProcessFDs-->>Diagnostics: process and descriptor evidence
+            Diagnostics->>Probe: probe_lock(root) after RECHECK_DELAY
+            Diagnostics-->>Test: report_hold(root, expectation, metadata)
+        end
+    end
+```
+
+*Figure 1: A settling post-release assertion, from probe to holder report.*
+
+For screen readers: The following flowchart contrasts the strict and settling
+assertions and shows how a forking peer makes a correctly released lock read as
+held until the child reaches `exec`.
+
+```mermaid
+flowchart TD
+    A[Lock released by test] --> B{Post-release assertion}
+    B -->|Strict diagnostic| C[ensure_released]
+    C --> D{Free immediately?}
+    D -->|Yes| E[Pass]
+    D -->|No| F[Fail with holder report]
+    B -->|Gating assertion| G[ensure_settles_free]
+    G --> H{Free within SETTLE_BUDGET?}
+    H -->|Yes| E
+    H -->|No| F
+    I[Forking peer] --> J[Child inherits flock open file description]
+    J --> K[Transient held observation until exec]
+    K --> G
+```
+
+*Figure 2: Strict versus settling post-release assertions.*
+
 ## 9. Translator diagnostics
 
 The current `FormattingIssueReporter` fires only when a Fluent formatter
