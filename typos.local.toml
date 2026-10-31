@@ -35,6 +35,9 @@ ignore = [
   "`PSScriptAnalyzer`",
   "`[^`\\n]*localised_help[^`\\n]*`",
   "`Artifacts`",
+  # "mold" names the linker (https://github.com/rui314/mold), not a fungus.
+  "`mold`",
+  "`install-mold`",
   "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",
   "`[^`\\n]*cli::tests::localisation[^`\\n]*`",
   "`skill_manifest_serialises_with_camino_path`",
