@@ -44,6 +44,8 @@ EXPECTED_WITH = {
     "paths": "cargo-orthohelp/,examples/,ortho_config/,ortho_config_macros/",
     "exclude-globs": "test_helpers/**,tests/fixtures/**",
     "extra-args": "--features serde_json,toml,json5,yaml --test-workspace=true",
+    # .cargo/config.toml selects the mold linker on Linux.
+    "install-mold": "true",
 }
 
 #: The feature set named in extra-args, and the manifest of every

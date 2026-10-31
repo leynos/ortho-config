@@ -131,7 +131,9 @@ def test_the_target_denies_warnings() -> None:
     a comment or a quoted argument where it sets nothing.
     """
     tokens = _invocation()
-    assert 'RUSTFLAGS=-D warnings' in tokens, (
+    # The development build standard adds the linker flag after the warning
+    # policy, so the token is the policy plus ``$(STANDARD_RUSTFLAGS)``.
+    assert "RUSTFLAGS=-D warnings $(STANDARD_RUSTFLAGS)" in tokens, (
         f"the boundary recipe must deny warnings the way `make test` does: {tokens}"
     )
 
