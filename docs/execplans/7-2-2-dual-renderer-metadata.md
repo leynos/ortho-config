@@ -166,6 +166,13 @@ source failures. There is no time limit; queued compiler work is not a hang.
       macro parser's test module; it is deferred until the hosted CodeScene
       check reports whether the hosted rule set counts test modules, because
       the alternative is a metrics-driven rewrite of that test DSL.
+- [x] (2026-10-31) A full gate run then reached the linters for the first time
+      and failed on `doc_attrs.rs`, which had grown to 407 lines against
+      Whitaker's 400-line module ceiling; the earlier `apply_nested_struct_attr`
+      extraction had pushed it over. The example, link, and note parsers are
+      shared by the struct-level and field-level attribute families, so they
+      moved to `doc_attrs_common.rs`, leaving `doc_attrs.rs` at 341 lines
+      without reintroducing the long method.
 
 ## Surprises & discoveries
 
@@ -973,5 +980,10 @@ tests repeated their metadata wrapper. The behavioural policy step now binds a
 single `key=token` claim, which also removes its five-argument signature. The
 string-heavy-argument score on the macro parser's test module is left open
 pending the hosted CodeScene result, which decides whether the hosted rule set
-counts test modules. A full sequential gate run for the rebased, repaired
-candidate is pending and is recorded in Outcomes when it completes.
+counts test modules. Subsequent gate runs repaired the faults they exposed:
+private wire fields gained rustdoc, the `Option` wrapper around the shared
+bridge-test builder was removed, the end-to-end suite returns errors instead of
+asserting in a `Result` function, and the shared example/link/note parsers
+moved to `doc_attrs_common.rs` after `doc_attrs.rs` crossed Whitaker's 400-line
+module ceiling. A full sequential gate run for the final candidate is pending
+and is recorded in Outcomes when it completes.
