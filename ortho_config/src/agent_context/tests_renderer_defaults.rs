@@ -11,7 +11,7 @@ use rstest::rstest;
 use serde_json::{Value, json};
 
 /// Builds a one-command context whose command carries `renderer`.
-fn context_with_renderer(renderer: Value) -> Result<AgentContext, serde_json::Error> {
+fn context_with_renderer(renderer: &Value) -> Result<AgentContext, serde_json::Error> {
     serde_json::from_value(json!({
         "schema_version": "1",
         "kind": "defaults-cli.agent_context",
@@ -62,7 +62,7 @@ fn empty_and_partial_renderers_apply_role_specific_defaults(
     #[case] expected: (bool, bool),
 ) {
     let context =
-        context_with_renderer(renderer).expect("an empty or partial renderer is well-formed");
+        context_with_renderer(&renderer).expect("an empty or partial renderer is well-formed");
 
     assert_eq!(support_pair(&context), expected);
 }
@@ -75,7 +75,7 @@ fn empty_and_partial_renderers_apply_role_specific_defaults(
 #[case::null_fields(json!({"human": {"fields": null}}))]
 fn null_renderer_parts_are_rejected(#[case] renderer: Value) {
     assert!(
-        context_with_renderer(renderer).is_err(),
+        context_with_renderer(&renderer).is_err(),
         "a present null is invalid in agent context"
     );
 }

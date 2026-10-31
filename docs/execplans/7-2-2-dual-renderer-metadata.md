@@ -265,10 +265,11 @@ The spelling gate is a live-dictionary gate, not a repository-local snapshot.
 `typos-config-builder` v0.1.3 always regenerates `typos.toml` in write mode
 before it runs Typos, and it deliberately does not fail on that drift, so an
 estate policy change rewrites a tracked file during an unrelated gate run. On
-2026-10-31 the live dictionary dropped the `flavor = ` ignore pattern and added
-tokio attribute patterns. That drift is unrelated to this branch (the diff
-contains no tokio usage), so it is not committed here; the file was restored
-and the observation recorded for whoever adopts the dictionary update.
+2026-10-31 the live dictionary dropped one ignore pattern for a US-spelled
+identifier and added attribute-macro patterns for an async runtime. That drift
+is unrelated to this branch (the diff touches neither), so it is not committed
+here; the file was restored and the observation recorded for whoever adopts the
+dictionary update.
 
 ## Decision log
 

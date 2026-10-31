@@ -37,8 +37,10 @@ impl<'de> Deserialize<'de> for RendererContract {
 /// not an `Option` here.
 #[derive(Deserialize)]
 struct ContractWire {
+    /// The human slot; defaults to an empty record so the role default applies.
     #[serde(default)]
     human: RecordWire,
+    /// The machine slot; defaults to an empty record so the role default applies.
     #[serde(default)]
     machine: RecordWire,
 }
@@ -46,34 +48,49 @@ struct ContractWire {
 /// One renderer record with an explicitly tracked `supported` leaf.
 #[derive(Default, Deserialize)]
 struct RecordWire {
+    /// Declared support, or absence so the enclosing slot's default applies.
     #[serde(default)]
     supported: SupportWire,
+    /// Whether the renderer requires a terminal.
     #[serde(default)]
     tty: Option<TtyPolicy>,
+    /// What the renderer does when standard input is closed.
     #[serde(default)]
     closed_stdin: Option<ClosedStdinPolicy>,
+    /// Whether the renderer emits colour.
     #[serde(default)]
     colour: Option<TogglePolicy>,
+    /// Whether the renderer emits emoji.
     #[serde(default)]
     emoji: Option<TogglePolicy>,
+    /// Whether the renderer emits progress output.
     #[serde(default)]
     progress: Option<TogglePolicy>,
+    /// Whether the renderer pages long output.
     #[serde(default)]
     pager: Option<TogglePolicy>,
+    /// The declared render width.
     #[serde(default)]
     width: Option<RenderWidth>,
+    /// The declared accessibility policy.
     #[serde(default)]
     accessibility: Option<AccessibilityPolicy>,
+    /// Whether plain output is offered.
     #[serde(default)]
     plain: Option<PlainPolicy>,
+    /// What the renderer writes to standard output.
     #[serde(default)]
     stdout: Option<StreamContent>,
+    /// What the renderer writes to standard error.
     #[serde(default)]
     stderr: Option<StreamContent>,
+    /// Whether child processes inherit the progress stream.
     #[serde(default)]
     progress_inheritance: Option<InheritancePolicy>,
+    /// Whether child processes inherit the renderer's streams.
     #[serde(default)]
     subprocess_inheritance: Option<InheritancePolicy>,
+    /// Per-field localization claims.
     #[serde(default)]
     fields: Vec<RendererField>,
 }
