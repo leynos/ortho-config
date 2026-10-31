@@ -36,18 +36,6 @@ pub(crate) fn apply_struct_doc_attr(
             out.bin_name = Some(lit_str(meta, "bin_name")?.value());
             Ok(true)
         }
-        "headings" => {
-            let mut headings = out.headings.clone();
-            parse_headings_meta(meta, &mut headings)?;
-            out.headings = headings;
-            Ok(true)
-        }
-        "precedence" => {
-            let mut precedence = out.precedence.take().unwrap_or_default();
-            parse_precedence_meta(meta, &mut precedence)?;
-            out.precedence = Some(precedence);
-            Ok(true)
-        }
         "example" => {
             out.examples.push(parse_example_meta(meta)?);
             Ok(true)
@@ -60,22 +48,6 @@ pub(crate) fn apply_struct_doc_attr(
             out.notes.push(parse_note_meta(meta)?);
             Ok(true)
         }
-        "windows" => {
-            let mut windows = out.windows.take().unwrap_or_default();
-            parse_windows_meta(meta, &mut windows)?;
-            out.windows = Some(windows);
-            Ok(true)
-        }
-        "behaviour" => {
-            let mut behaviour = out.behaviour.take().unwrap_or_default();
-            parse_behaviour_meta(meta, &mut behaviour)?;
-            out.behaviour = Some(behaviour);
-            Ok(true)
-        }
-        "renderer" => {
-            parse_renderer_meta(meta, out.renderer.get_or_insert_default())?;
-            Ok(true)
-        }
         "behavior" => Err(syn::Error::new(
             meta.path.span(),
             concat!(
@@ -83,8 +55,44 @@ pub(crate) fn apply_struct_doc_attr(
                 "(declares non-interactive execution and mutation-boundary metadata)"
             ),
         )),
-        _ => Ok(false),
+        _ => apply_nested_struct_attr(meta, key.as_str(), out),
     }
+}
+
+/// Applies one attribute whose value is a nested group.
+///
+/// Each group may be declared more than once, so an earlier declaration is
+/// carried into the parse and only replaced once the new group is valid.
+fn apply_nested_struct_attr(
+    meta: &ParseNestedMeta,
+    key: &str,
+    out: &mut DocStructAttrs,
+) -> syn::Result<bool> {
+    match key {
+        "headings" => {
+            let mut headings = out.headings.clone();
+            parse_headings_meta(meta, &mut headings)?;
+            out.headings = headings;
+        }
+        "precedence" => {
+            let mut precedence = out.precedence.take().unwrap_or_default();
+            parse_precedence_meta(meta, &mut precedence)?;
+            out.precedence = Some(precedence);
+        }
+        "windows" => {
+            let mut windows = out.windows.take().unwrap_or_default();
+            parse_windows_meta(meta, &mut windows)?;
+            out.windows = Some(windows);
+        }
+        "behaviour" => {
+            let mut behaviour = out.behaviour.take().unwrap_or_default();
+            parse_behaviour_meta(meta, &mut behaviour)?;
+            out.behaviour = Some(behaviour);
+        }
+        "renderer" => parse_renderer_meta(meta, out.renderer.get_or_insert_default())?,
+        _ => return Ok(false),
+    }
+    Ok(true)
 }
 /// Applies one documentation setting to a field's parsed attribute model.
 ///

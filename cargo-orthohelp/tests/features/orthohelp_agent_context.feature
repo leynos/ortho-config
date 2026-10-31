@@ -37,12 +37,12 @@ Feature: cargo-orthohelp agent-context generation
     When I run cargo-orthohelp with format agent-context for the nested fixture
     Then the command greet reports human renderer supported true
     And the command greet reports machine renderer supported true
-    And the command greet reports human renderer policy tty adapts
-    And the command greet reports human renderer policy colour auto
-    And the command greet reports human renderer policy width terminal
-    And the command greet reports machine renderer policy stdout structured
-    And the command greet reports machine renderer policy colour never
-    And the command greet reports machine renderer policy width unbounded
+    And the command greet reports human renderer policy tty=adapts
+    And the command greet reports human renderer policy colour=auto
+    And the command greet reports human renderer policy width=terminal
+    And the command greet reports machine renderer policy stdout=structured
+    And the command greet reports machine renderer policy colour=never
+    And the command greet reports machine renderer policy width=unbounded
 
   Scenario: Child declarations are independent
     Given a temporary output directory

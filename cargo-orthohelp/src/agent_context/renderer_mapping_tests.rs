@@ -18,6 +18,17 @@ use crate::schema::{
     TtyPolicy as IrTty,
 };
 
+/// Builds metadata whose human record carries `record` and no machine record.
+///
+/// The machine record stays absent so every case also proves the bridge leaves
+/// the untouched slot empty rather than copying the declared one across.
+fn human_only(record: IrRecord) -> Option<RendererMetadata> {
+    Some(RendererMetadata {
+        human: Some(record),
+        machine: None,
+    })
+}
+
 /// Every IR terminal-sensitivity variant maps to its exact wire counterpart.
 ///
 /// A swapped human/machine mapping fails here because the two records are
@@ -27,12 +38,9 @@ use crate::schema::{
 #[case::adapts(IrTty::Adapts, TtyPolicy::Adapts)]
 #[case::requires(IrTty::Requires, TtyPolicy::Requires)]
 fn tty_policy_maps_exactly(#[case] ir: IrTty, #[case] expected: TtyPolicy) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            tty: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        tty: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.tty, Some(expected));
@@ -51,12 +59,9 @@ fn closed_stdin_policy_maps_exactly(
     #[case] ir: IrClosedStdin,
     #[case] expected: ClosedStdinPolicy,
 ) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            closed_stdin: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        closed_stdin: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.closed_stdin, Some(expected));
@@ -68,15 +73,12 @@ fn closed_stdin_policy_maps_exactly(
 #[case::auto(IrToggle::Auto, TogglePolicy::Auto)]
 #[case::always(IrToggle::Always, TogglePolicy::Always)]
 fn toggle_policy_maps_exactly(#[case] ir: IrToggle, #[case] expected: TogglePolicy) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            colour: Some(ir),
-            emoji: Some(ir),
-            progress: Some(ir),
-            pager: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        colour: Some(ir),
+        emoji: Some(ir),
+        progress: Some(ir),
+        pager: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.colour, Some(expected));
@@ -90,12 +92,9 @@ fn toggle_policy_maps_exactly(#[case] ir: IrToggle, #[case] expected: TogglePoli
 #[case::terminal(IrWidth::Terminal, RenderWidth::Terminal)]
 #[case::unbounded(IrWidth::Unbounded, RenderWidth::Unbounded)]
 fn width_shape_maps_exactly(#[case] ir: IrWidth, #[case] expected: RenderWidth) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            width: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        width: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.width, Some(expected));
@@ -105,12 +104,9 @@ fn width_shape_maps_exactly(#[case] ir: IrWidth, #[case] expected: RenderWidth) 
 #[test]
 fn fixed_width_preserves_column_count() {
     let columns = std::num::NonZeroU16::new(80).expect("80 is non-zero");
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            width: Some(IrWidth::Fixed { columns }),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        width: Some(IrWidth::Fixed { columns }),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.width, Some(RenderWidth::Fixed { columns }));
@@ -124,12 +120,9 @@ fn accessibility_policy_maps_exactly(
     #[case] ir: IrAccessibility,
     #[case] expected: AccessibilityPolicy,
 ) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            accessibility: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        accessibility: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.accessibility, Some(expected));
@@ -141,12 +134,9 @@ fn accessibility_policy_maps_exactly(
 #[case::available(IrPlain::Available, PlainPolicy::Available)]
 #[case::always(IrPlain::Always, PlainPolicy::Always)]
 fn plain_policy_maps_exactly(#[case] ir: IrPlain, #[case] expected: PlainPolicy) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            plain: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        plain: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.plain, Some(expected));
@@ -159,13 +149,10 @@ fn plain_policy_maps_exactly(#[case] ir: IrPlain, #[case] expected: PlainPolicy)
 #[case::structured(IrStream::Structured, StreamContent::Structured)]
 #[case::mixed(IrStream::Mixed, StreamContent::Mixed)]
 fn stream_content_maps_exactly(#[case] ir: IrStream, #[case] expected: StreamContent) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            stdout: Some(ir),
-            stderr: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        stdout: Some(ir),
+        stderr: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.stdout, Some(expected));
@@ -177,13 +164,10 @@ fn stream_content_maps_exactly(#[case] ir: IrStream, #[case] expected: StreamCon
 #[case::allowed(IrInheritance::Allowed, InheritancePolicy::Allowed)]
 #[case::forbidden(IrInheritance::Forbidden, InheritancePolicy::Forbidden)]
 fn inheritance_policy_maps_exactly(#[case] ir: IrInheritance, #[case] expected: InheritancePolicy) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            progress_inheritance: Some(ir),
-            subprocess_inheritance: Some(ir),
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        progress_inheritance: Some(ir),
+        subprocess_inheritance: Some(ir),
+        ..IrRecord::default()
     }));
 
     assert_eq!(renderer.human.progress_inheritance, Some(expected));
@@ -201,15 +185,12 @@ fn field_localization_maps_exactly(
     #[case] ir: IrFieldLocalization,
     #[case] expected: RendererFieldLocalization,
 ) {
-    let renderer = bridge_single(Some(RendererMetadata {
-        human: Some(IrRecord {
-            fields: vec![IrField {
-                id: "error_code".to_owned(),
-                localization: ir,
-            }],
-            ..IrRecord::default()
-        }),
-        machine: None,
+    let renderer = bridge_single(human_only(IrRecord {
+        fields: vec![IrField {
+            id: "error_code".to_owned(),
+            localization: ir,
+        }],
+        ..IrRecord::default()
     }));
 
     assert_eq!(

@@ -11,6 +11,7 @@
 use rstest_bdd_macros::then;
 use serde_json::Value;
 use std::fmt;
+use std::str::FromStr;
 
 use super::steps::{OrthoHelpContext, StepResult};
 
@@ -120,6 +121,44 @@ impl std::str::FromStr for RendererPolicyKey {
     }
 }
 
+/// One `policy=token` expectation, bound from a single scenario placeholder.
+///
+/// The key and the expected value are one claim, so they travel as one step
+/// argument. Splitting them across two placeholders would make the sentence
+/// longer without making the scenario clearer.
+#[derive(Debug, Clone)]
+struct PolicyClaim {
+    key: RendererPolicyKey,
+    expected: String,
+}
+
+impl PolicyClaim {
+    /// Builds a claim from a policy key and the token it should report.
+    fn new(key: RendererPolicyKey, expected: impl Into<String>) -> Self {
+        Self {
+            key,
+            expected: expected.into(),
+        }
+    }
+}
+
+impl FromStr for PolicyClaim {
+    type Err = String;
+
+    /// Reads the `key=token` claim used in the feature file.
+    ///
+    /// The key is parsed through [`RendererPolicyKey`] so a misspelt leaf is
+    /// reported rather than compared against the wrong one.
+    fn from_str(claim: &str) -> Result<Self, Self::Err> {
+        let Some((key, expected)) = claim.split_once('=') else {
+            return Err(format!(
+                "expected `policy=token` such as `tty=adapts`, got `{claim}`"
+            ));
+        };
+        Ok(Self::new(key.parse()?, expected))
+    }
+}
+
 /// Reads the single agent-context JSON document the scenario last produced.
 fn agent_context(orthohelp_context: &OrthoHelpContext) -> StepResult<Value> {
     let stdout = orthohelp_context
@@ -211,23 +250,23 @@ fn assert_policy(
     orthohelp_context: &OrthoHelpContext,
     leaf: &str,
     role: RendererRole,
-    key: RendererPolicyKey,
-    expected: &str,
+    claim: &PolicyClaim,
 ) -> StepResult<()> {
     let json = agent_context(orthohelp_context)?;
     let record = renderer_record(&json, leaf, role)?;
-    let actual = policy_token(record, key);
-    let matches = match expected {
+    let actual = policy_token(record, claim.key);
+    let matches = match claim.expected.as_str() {
         "undeclared" => actual.is_none(),
         declared => actual == Some(declared),
     };
     if matches {
         return Ok(());
     }
-    Err(
-        format!("command {leaf:?} {role} renderer {key} should be {expected}, got {actual:?}")
-            .into(),
+    Err(format!(
+        "command {leaf:?} {role} renderer {} should be {}, got {actual:?}",
+        claim.key, claim.expected
     )
+    .into())
 }
 
 /// Declared support survives into agent context for the declaring command.
@@ -242,15 +281,14 @@ fn command_reports_renderer_supported(
 }
 
 /// A declared presentation policy is reported verbatim for the named command.
-#[then("the command {command} reports {role} renderer policy {key} {expected}")]
+#[then("the command {command} reports {role} renderer policy {claim}")]
 fn command_reports_renderer_policy(
     orthohelp_context: &mut OrthoHelpContext,
     command: String,
     role: RendererRole,
-    key: RendererPolicyKey,
-    expected: String,
+    claim: PolicyClaim,
 ) -> StepResult<()> {
-    assert_policy(orthohelp_context, &command, role, key, &expected)
+    assert_policy(orthohelp_context, &command, role, &claim)
 }
 
 /// A child that declares nothing keeps the legacy support defaults.
@@ -279,7 +317,8 @@ fn undeclared_command_keeps_defaults(orthohelp_context: &mut OrthoHelpContext) -
 fn undeclared_command_makes_no_claim(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     for role in [RendererRole::Human, RendererRole::Machine] {
         for key in RendererPolicyKey::ALL {
-            assert_policy(orthohelp_context, VERSION_COMMAND, role, key, "undeclared")?;
+            let claim = PolicyClaim::new(key, "undeclared");
+            assert_policy(orthohelp_context, VERSION_COMMAND, role, &claim)?;
         }
     }
     Ok(())
