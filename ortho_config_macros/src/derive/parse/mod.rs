@@ -17,6 +17,7 @@ mod clap_attrs;
 mod clap_defaults;
 mod discovery_attrs;
 mod doc_attrs;
+mod doc_attrs_common;
 mod doc_types;
 mod field_attrs;
 mod input;
