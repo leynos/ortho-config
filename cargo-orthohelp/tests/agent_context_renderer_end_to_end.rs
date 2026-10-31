@@ -28,13 +28,20 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 use tempfile::TempDir;
 
 // The shared harness serves the documentation-example suites as well, so it
-// exposes more than this file calls. Silence only the dead-code and unused-import
-// noise that comes with that sharing; the modules' own suites still exercise the
-// remaining surface, and `-D warnings` would otherwise reject this target.
-#[allow(dead_code, unused_imports)]
+// exposes more than this file calls. Expect only the dead-code noise that comes
+// with that sharing; the modules' own suites still exercise the remaining
+// surface, and `-D warnings` would otherwise reject this target.
+#[expect(
+    dead_code,
+    reason = "shared harness exposes more than this target calls"
+)]
 #[path = "../../ortho_config/tests/documentation_examples/cargo_environment.rs"]
 mod cargo_environment;
-#[allow(dead_code, unused_imports)]
+#[expect(
+    dead_code,
+    unused_imports,
+    reason = "shared harness exposes more than this target calls"
+)]
 #[path = "../../ortho_config/tests/documentation_examples/process_runner_support.rs"]
 mod process_runner;
 
@@ -113,16 +120,12 @@ fn undeclared_command_keeps_legacy_defaults_end_to_end() -> Result<(), TestError
             .and_then(Value::as_bool)
             .ok_or_else(|| format!("{role} renderer supported should be a boolean").into())
     };
-    assert_eq!(
-        read_supported("human")?,
-        true,
-        "human support legacy default"
-    );
-    assert_eq!(
-        read_supported("machine")?,
-        false,
-        "machine support legacy default"
-    );
+    if !read_supported("human")? {
+        return Err("human support legacy default should be true".into());
+    }
+    if read_supported("machine")? {
+        return Err("machine support legacy default should be false".into());
+    }
 
     // Absence, not a reassuring false, is how an undeclared policy is reported.
     for role in ["human", "machine"] {

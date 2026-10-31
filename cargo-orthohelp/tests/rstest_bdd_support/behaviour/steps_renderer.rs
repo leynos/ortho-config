@@ -236,7 +236,7 @@ fn assert_supported(
 /// Width is the one tagged object in this vocabulary, so a reader that expected
 /// a bare string there would silently compare an absent value against a token.
 /// The `kind` fallback keeps the comparison honest for both shapes.
-fn policy_token<'a>(record: &'a Value, key: RendererPolicyKey) -> Option<&'a str> {
+fn policy_token(record: &Value, key: RendererPolicyKey) -> Option<&str> {
     let leaf = record.get(key.as_str())?;
     leaf.as_str().or_else(|| {
         leaf.get("kind")
