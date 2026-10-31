@@ -118,6 +118,20 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # ownership locks in one process-wide group. This prevents scenarios from
 # spending their own deadlines waiting behind peer tests. Production locks
 # still protect build-and-snapshot operations across separate processes.
+#
+# Membership here is every test binary that spawns a child `cargo`, which is
+# the class `child_cargo_tier_test.py` reads from the Rust sources. That
+# contract is what keeps this list from being a hand-maintained one: it
+# requires every binary this entry serializes to be a class member, and
+# requires the class in turn to be covered by the raised allowances below.
+# `cli_dispatch` was absent from both, ran on the 600s base allowance with a
+# nested `cargo` on its clock, and neither the list nor any other assertion
+# could see the omission.
+#
+# The two sets coincide today -- these nine plus `rstest_bdd`'s own entry are
+# the whole class -- but the contract does not require that, and narrowing
+# this list is safe while every binary left out still takes a raised
+# allowance.
 [test-groups]
 orthohelp_cache = { max-threads = 1 }
 # Serialized because its members package and unpack one shared target
@@ -134,8 +148,15 @@ filter = 'binary(rstest_bdd)'
 test-group = 'orthohelp_cache'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
+# `binary(cli_dispatch)` is named here rather than left to the base allowance.
+# Its tests load the built tool and drive it through `cargo orthohelp`, so a
+# child cargo is on their clock exactly as it is on the others'; measured on a
+# warm tree that dispatch is a 0.04s help path, but the allowance is sized for
+# the nested build the class can reach, not for the cheapest path it takes.
+# It was on the 600s base allowance until `child_cargo_tier_test.py` read the
+# class from the sources and reported it.
 [[profile.default.overrides]]
-filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e)'
+filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e) | binary(cli_dispatch)'
 test-group = 'orthohelp_cache'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
