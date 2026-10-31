@@ -135,8 +135,9 @@ source failures. There is no time limit; queued compiler work is not a hang.
       TTY, closed-stdin, colour, emoji, progress, pager, width, accessibility,
       and plain-output policy; `RendererFieldLocalization`). Final gate evidence
       is recorded below and in the Outcomes section. Publication of the PR
-      description is blocked: every `gh` invocation is refused by the execution
-      policy, so the prepared body has to be applied outside this session.
+      description was blocked at the time: every `gh` invocation was refused by
+      the execution policy. That restriction no longer applies; the PR was
+      published on 2026-11-01 (see the revision note).
 - [x] (2026-10-31) Handoff review found that the role-specific support default
       was applied only when the whole `human`/`machine` record was absent. An
       empty record or a record without `supported` decoded `bool::default()`
@@ -173,6 +174,16 @@ source failures. There is no time limit; queued compiler work is not a hang.
       shared by the struct-level and field-level attribute families, so they
       moved to `doc_attrs_common.rs`, leaving `doc_attrs.rs` at 341 lines
       without reintroducing the long method.
+- [x] (2026-11-01) Full sequential gate runs on the repaired candidate
+      `1d025941`. Formatting, typecheck, lint (Clippy, Whitaker, and 100%
+      docstring coverage), Markdown/spelling, and diagram gates all passed.
+      `make test` was attempted twice; both runs certified 103 of 108 workspace
+      targets and then stopped only at `ortho_l10n --test boundary`, with eight
+      nested-Cargo deadline expiries per run and no assertion or compiler
+      diagnostic (shared queue depth 103-185). The two surfaces those aborts
+      left untested — the five fixture workspace members and the pytest phase —
+      were then certified separately and passed (`119 passed, 5 skipped`). The
+      boundary expiry is recorded as environmental, not as green.
 
 ## Surprises & discoveries
 
@@ -398,7 +409,7 @@ gate evidence actually collected on this branch is:
   20/21 with one infrastructure failure after it), and
   `agent_context_renderer_end_to_end` 25.
 
-`make test` has never completed on this host. Across five attempts the run
+`make test` has never completed on this host. Across seven attempts the run
 always stopped short of the end of the workspace target list, and in no attempt
 did an assertion fail. The stopping point moved as the host's compile queue
 moved, which is what distinguishes this from a source failure:
@@ -410,6 +421,8 @@ moved, which is what distinguishes this from a source failure:
 | 3       | `cargo-orthohelp --test rstest_bdd`           | 880 s BDD subprocess deadline, stale bridge marker |
 | 4       | `cargo-orthohelp --test rstest_bdd`           | same marker, reused by the aborted child           |
 | 5       | `ortho_config --test identifier_artefact_e2e` | 880 s fixture subprocess timeout                   |
+| 6       | `ortho_l10n --test boundary`                  | eight nested-Cargo deadline expiries (queue 103)   |
+| 7       | `ortho_l10n --test boundary`                  | identical eight expiries (queue reached 185)       |
 
 Attempt 3's eleven failures were not a source signal. The aborted child left
 `target/orthohelp-bridge-build.in-progress` naming a dead pid, and the bridge
@@ -429,13 +442,31 @@ and is unmodified here; re-running just that target produced the identical
 nested build exhausted the fixture's own budget waiting for compiler admission,
 not doing work.
 
+Attempts 6 and 7 ran on the repaired candidate `1d025941`. Both certified 103
+of 108 workspace targets — including the new
+`agent_context_renderer_end_to_end` (25/25) and the previously blocked
+`cargo-orthohelp --test agent_context_contract` (21/21) — and then stopped at
+the same boundary target with the same eight deadline expiries. The shared
+queue held 103-110 waiting compiles in attempt 6 and 185 in attempt 7; the two
+runs took 58 and 19 minutes respectively to reach the same point, the second
+being warmer. `ortho_l10n` is unmodified by this branch
+(`git diff --stat origin/main...HEAD -- ortho_l10n` is empty); the fixtures
+build cold nested Cargo roots in their own target directories, deliberately
+inherit `RUSTC_WRAPPER` and `RUSTFLAGS`, and enforce 240 s and 300 s deadlines.
+The two surfaces Cargo's fail-fast aborted before — the five `tests/fixtures/*`
+workspace members and the pytest phase — were certified separately at the same
+head: the five fixture binaries compiled and ran (exit 0, no unit tests), and
+`pytest` reported `119 passed, 5 skipped`.
+
 So `make test` is recorded as **incomplete**, not green. That distinction is
 deliberate: the plan's tolerance clause covers infrastructure failures, but
 tolerance is not a pass and must not be reported as one.
 
-Publication of the PR description remains outstanding because the execution
-policy refuses every `gh` invocation in this session, including `gh --version`.
-The prepared body is therefore handed to the operator rather than applied.
+Publication of the PR description was previously blocked because the execution
+policy refused every `gh` invocation in this session. That restriction no
+longer applies: the implementation, title, and description are published on the
+pull request, and hosted CI and review state are tracked in the delivery ledger
+rather than claimed here.
 
 ## Context and orientation
 
@@ -987,3 +1018,17 @@ asserting in a `Result` function, and the shared example/link/note parsers
 moved to `doc_attrs_common.rs` after `doc_attrs.rs` crossed Whitaker's 400-line
 module ceiling. A full sequential gate run for the final candidate is pending
 and is recorded in Outcomes when it completes.
+
+2026-11-01 gate and publication revision: Sequential gates ran on the repaired
+candidate `1d025941`. `make check-fmt`, `make typecheck`, `make lint` (Clippy,
+Whitaker, and 540/540 docstring coverage), `make markdownlint`, and
+`make nixie` passed. `make test` was attempted twice; each attempt certified
+103 of 108 workspace targets before stopping at `ortho_l10n --test boundary`
+with eight nested-Cargo deadline expiries and no assertion or compiler
+diagnostic, while the shared compile queue held 103-185 waiting crates. The
+five fixture workspace members and the pytest phase, which those aborts
+skipped, were certified separately and passed. `make test` therefore remains
+incomplete rather than green, and the boundary expiry is recorded as
+environmental. The PR description is now published from this session; hosted CI
+and review results remain outside this plan and are tracked in the delivery
+ledger.
