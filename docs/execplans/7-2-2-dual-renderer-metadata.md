@@ -146,6 +146,26 @@ source failures. There is no time limit; queued compiler work is not a hang.
       distinguishes an absent leaf from an explicit `false`. Focused suite
       green at 14/14. Full sequential gates are being re-run for the repaired
       candidate; implementation commits are still unpublished.
+- [x] (2026-10-31) Rebased the ten planning and implementation commits onto
+      `origin/main` at `53d433cb`. Upstream had adopted the Rust development
+      build standard (`mold` linker through `.cargo/config.toml` plus
+      `STANDARD_RUSTFLAGS` in `make test`, `make typecheck`, and `make
+      boundary`), regrouped the Cargo dependabot entry, repinned
+      `install-whitaker` to 0.2.11, and bumped the Python hypothesis
+      requirement. No file overlapped this branch, and the rebase replayed
+      without conflict; no requirement or tolerance changed.
+- [x] (2026-10-31) Code-health review with `cs delta 53d433cb HEAD` (CLI 1.0.52
+      against the same base the hosted check uses) found two production-side
+      findings and three test-side ones. `apply_struct_doc_attr` had reached 71
+      lines against a 70-line threshold because the renderer arm joined the
+      nested-group arms, so those arms moved to `apply_nested_struct_attr`.
+      The renderer bridge mapping tests now share a `human_only` builder
+      instead of repeating the metadata wrapper ten times, and the behavioural
+      policy step binds one `key=token` claim instead of taking five
+      arguments. The remaining finding is a string-heavy-argument score on the
+      macro parser's test module; it is deferred until the hosted CodeScene
+      check reports whether the hosted rule set counts test modules, because
+      the alternative is a metrics-driven rewrite of that test DSL.
 
 ## Surprises & discoveries
 
@@ -240,6 +260,15 @@ just far enough to tell an absent `supported` from an explicit `false`, rejects
 present nulls, and leaves unknown fields permissive. This is the case a naive
 "defaults look right" snapshot can hide: the all-default serialization was
 already correct, so only decoding the partial shapes exposes it.
+
+The spelling gate is a live-dictionary gate, not a repository-local snapshot.
+`typos-config-builder` v0.1.3 always regenerates `typos.toml` in write mode
+before it runs Typos, and it deliberately does not fail on that drift, so an
+estate policy change rewrites a tracked file during an unrelated gate run. On
+2026-10-31 the live dictionary dropped the `flavor = ` ignore pattern and added
+tokio attribute patterns. That drift is unrelated to this branch (the diff
+contains no tokio usage), so it is not committed here; the file was restored
+and the observation recorded for whoever adopts the dictionary update.
 
 ## Decision log
 
@@ -932,3 +961,16 @@ stays COMPLETE subject to a fresh sequential gate run for the repaired
 candidate; the earlier gate evidence applies to the pre-repair commits and is
 retained only for that scope. Publication, hosted CI, and review state are
 tracked in the PR and the delivery ledger rather than claimed here.
+
+2026-10-31 rebase and code-health revision: The branch was rebased onto
+`origin/main` at `53d433cb`, which brought the Rust development build standard
+and a repinned Whitaker action without touching this plan's scope. A local
+`cs delta 53d433cb HEAD` run then raised two production-side code-health
+findings, both repaired: `apply_struct_doc_attr` crossed the 70-line threshold
+when the renderer arm joined the nested-group arms, and the bridge mapping
+tests repeated their metadata wrapper. The behavioural policy step now binds a
+single `key=token` claim, which also removes its five-argument signature. The
+string-heavy-argument score on the macro parser's test module is left open
+pending the hosted CodeScene result, which decides whether the hosted rule set
+counts test modules. A full sequential gate run for the rebased, repaired
+candidate is pending and is recorded in Outcomes when it completes.
