@@ -187,6 +187,7 @@ pub struct DocMetadata {
     pub subcommands: Vec<DocMetadata>, // recursively the same schema
     pub windows: Option<WindowsMetadata>, // Windows-only generator hints
     pub behaviour: Option<BehaviourMetadata>, // declared execution behaviour
+    pub renderer: Option<RendererMetadata>, // declared human/machine rendering
 }
 ```
 
@@ -227,6 +228,19 @@ Every identifier in `HeadingIds` resolves against the library heading catalogue
 described in §4.2. A consumer that ships no Fluent catalogue of its own still
 renders complete headings; a consumer that ships one overrides only the
 headings it cares about.
+
+`renderer` is absent when the command declares no `renderer(...)` group. It is
+an `Option` rather than a defaulted struct because absence and "declared to be
+unsupported" are different claims, and the tool must not turn an undeclared
+command into a reassuring one. The block holds independent `human` and
+`machine` records covering support, TTY sensitivity, closed-stdin behaviour,
+colour, emoji, progress, pager, width (a tagged `terminal`/`unbounded`/`fixed`
+object), accessibility, plain-output availability, the stdout and stderr
+content categories, and the localization classification of named output fields.
+Renderer data contains no translatable text, so localization copies it verbatim
+into each per-locale artefact; a localizer must never alter it. See
+[ADR-0016](adrs/adr-0016-dual-renderer-metadata-surface.md) for the vocabulary
+and the reason each meaning is declared rather than inferred.
 
 ### 2.2 Field-level metadata
 
@@ -521,6 +535,13 @@ Namespace: `#[ortho_config(…)]`. Selected keys:
 - Windows (optional, generator hints):
   `windows(module_name = "…", include_common_parameters = true,`
   `split_subcommands = false)`.
+- Rendering (optional, per command): a sibling
+  `renderer(human(…), machine(…))` group. Each record accepts `supported`,
+  `tty`, `closed_stdin`, `colour`, `emoji`, `progress`, `pager`, `width`,
+  `accessibility`, `plain`, `stdout`, `stderr`, and repeated
+  `field("…", localization = "localized|non_localized")` entries. Values are
+  checked against a closed vocabulary at macro time, so a typo is a compile
+  error rather than a silently absent claim.
 
 ### 3.3 Diagnostics
 
@@ -1028,7 +1049,11 @@ sentinel so generators can surface gaps during development.
       "about": "Run the app",
       "fields": []
     }
-  ]
+  ],
+  "renderer": {
+    "human": { "supported": true, "tty": "adapts" },
+    "machine": { "supported": true, "stdout": "structured" }
+  }
 }
 ```
 
@@ -1040,6 +1065,14 @@ localized IR:
 - `headings_ids` -> `headings`
 - `help_id`/`long_help_id` -> `help`/`long_help`
 - `note_id`/`title_id`/`text_id` -> `note`/`title`/`text`
+
+The `renderer` block is the exception: it is copied verbatim, never renamed and
+never localized. Its leaf values are closed policy tokens and opaque
+application-defined field identifiers, so translating any of them would corrupt
+a protocol contract. Dropping the block is equally a bug, because a per-locale
+artefact would then contradict the agent context generated from the same
+metadata; both faces carry it, and the behavioural suite compares them across
+locales.
 
 ### 6.4.2 Locale resource discovery
 

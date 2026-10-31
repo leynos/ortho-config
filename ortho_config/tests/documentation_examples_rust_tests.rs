@@ -49,6 +49,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-collections",
     "guide-discovery",
     "guide-profiles",
+    "guide-renderer-metadata",
     "guide-hermetic-discovery",
     "guide-load-first-outcomes",
     "guide-source-aware-load",

@@ -144,10 +144,40 @@ impl Default for NestedFixtureCommand {
 }
 
 /// Options for the nested fixture greet command.
+///
+/// Declares both renderers so the end-to-end scenarios can observe a real
+/// dual declaration: human support with presentation policies, machine support
+/// with a structured stream, and an output field classified non-localized so a
+/// change of human language cannot be mistaken for a protocol rename.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(
     prefix = "NESTED_FIXTURE",
-    behaviour(interaction = "non_interactive", mutation = "read_only")
+    behaviour(interaction = "non_interactive", mutation = "read_only"),
+    renderer(
+        human(
+            supported = true,
+            tty = "adapts",
+            colour = "auto",
+            width = "terminal",
+            plain = "available",
+            stdout = "text",
+            stderr = "text",
+            field("message", localization = "localized"),
+            field("error_code", localization = "non_localized")
+        ),
+        machine(
+            supported = true,
+            tty = "independent",
+            colour = "never",
+            progress = "never",
+            pager = "never",
+            width = "unbounded",
+            plain = "always",
+            stdout = "structured",
+            stderr = "structured",
+            field("error_code", localization = "non_localized")
+        )
+    )
 )]
 pub struct NestedGreetCommand {
     /// Recipient to greet.
@@ -158,6 +188,10 @@ pub struct NestedGreetCommand {
     pub is_excited: bool,
 }
 /// Empty command proving leaf commands without options survive the bridge.
+///
+/// Deliberately declares no `renderer(...)` group: it is the undeclared child
+/// the E4 scenarios assert keeps the legacy support defaults and makes no
+/// presentation claim.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "NESTED_FIXTURE")]
 pub struct NestedVersionCommand {}

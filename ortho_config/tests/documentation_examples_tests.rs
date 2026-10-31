@@ -58,6 +58,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-profiles",
     "guide-profiles-file",
     "guide-profiles-run",
+    "guide-renderer-metadata",
     "guide-scoped-discovery",
     "guide-selected-subcommand-sources",
     "guide-source-aware-load",

@@ -352,6 +352,68 @@ name `profiles: None`. The runtime "which profile is active" concern is
 `SelectedProfile` and `ProfileLoadOutcome`, deliberately separate from the
 static agent-context contract.
 
+### Renderer metadata ownership
+
+Renderer metadata (ADR-0016) is declared through the sibling `renderer(...)`
+attribute and is owned in three places that must move together:
+
+- `ortho_config::docs::ir::renderer` holds the human-documentation IR types;
+- `cargo_orthohelp::schema::renderer` holds the mirror the standalone generator
+  decodes, per
+  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md);
+  and
+- `ortho_config::agent_context::renderer` and
+  `cargo_orthohelp::agent_context::renderer` hold the wire contract, linked by
+  `agent_context::walk`, which maps one IR into the other.
+
+The macro side is a matching pair, `derive/parse/renderer_attrs.rs` for the
+nested group and `derive/parse/renderer_values.rs` for the token vocabularies,
+emitted by `derive/generate/docs/renderer.rs`. Keep the accepted-token lists in
+`renderer_values.rs` as the source for authoring; the IR and wire enums must
+accept exactly those spellings. Do not extend `behaviour_attrs`: the two
+surfaces parse independent nested groups, so a change to one cannot loosen the
+other's validation.
+
+Decoding differs by side, deliberately. IR decoding is strict, because it reads
+a document this workspace just produced, so an unknown token is a bug worth
+surfacing. Agent-context decoding is tolerant, because a consumer may meet a
+document written by a newer generator, so unrecognized tokens normalize to
+`unknown` rather than failing. Adding a token therefore means updating the
+strict lists *and* the tolerant fallbacks; changing one without the other
+either rejects valid input or silently accepts a typo.
+
+Support defaults are per renderer and are applied by `RendererContract`, not by
+`SupportDeclaration::default()`, whose `false` is right elsewhere but wrong for
+human output. Human defaults to supported and machine to unsupported, which is
+what an undeclared command reported before the field existed. Change that pair
+together: changing either alone changes what every unannotated command claims.
+
+Localization copies the renderer block verbatim. Renderer data is presentation
+policy containing no translatable text, so `ir::localize_doc` clones it rather
+than resolving it. Dropping it there is a silent failure — the agent-context
+path would still report the declaration while every published per-locale
+artefact lost it — which is why the behavioural suite asserts both artefact
+families and compares them across locales.
+
+Fixture discipline: `tests/fixtures/orthohelp_fixture` carries one command that
+declares both renderers (`NestedGreetCommand`) and one that declares none
+(`NestedVersionCommand`). Keep both. A fixture whose commands all declare the
+same block cannot distinguish "declared" from "defaulted", and the scenarios
+assert opposite support claims across the pair for exactly that reason.
+
+Test entry points:
+
+- `cargo test -p cargo-orthohelp --test rstest_bdd -- orthohelp_agent_context`
+  for the behavioural scenarios, including the locale-stability pair;
+- `cargo test -p cargo-orthohelp --test agent_context_renderer_end_to_end` for
+  subprocess runs of the shipped binary with closed stdin and a bounded
+  deadline;
+- `cargo test -p ortho_config --test docs_ir_renderer` and
+  `cargo test -p cargo-orthohelp --lib renderer` for the IR and bridge units;
+  and
+- `cargo test -p cargo-orthohelp --test golden_tests` for the agent-context
+  snapshots.
+
 `ortho_l10n::try_normalize_segment` is the single source of truth for strict
 runtime and derive-time Fluent identifier segments. Reuse it, or the
 complete-identifier helpers re-exported beside it, from command localization,

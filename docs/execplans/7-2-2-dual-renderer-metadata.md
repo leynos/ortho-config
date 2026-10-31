@@ -1,6 +1,8 @@
 # Add dual-renderer metadata (7.2.2)
 
-Status: APPROVED (2026-10-28) — implementation authorized.
+Status: COMPLETE (2026-10-30) — implementation landed in `9588f063` (M1) and
+the M2 change set; `make test` remains incomplete on infrastructure grounds and
+the PR description is not yet published (see Outcomes & retrospective).
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -111,7 +113,28 @@ source failures. There is no time limit; queued compiler work is not a hang.
       Committed as `9588f063`. Focused suites and the documentation gates pass;
       the `ortho_l10n` boundary suite is blocked by compiler-queue contention
       on nested Cargo children, recorded below as an infrastructure failure.
-- [ ] M2: finish behavioural/end-to-end coverage, documentation, and closure.
+- [x] (2026-10-30) M2a: behavioural and end-to-end coverage. Three scenarios
+      were added to `cargo-orthohelp/tests/features/orthohelp_agent_context.feature`
+      (independent support, child independence, locale stability), backed by new
+      `steps_renderer` and `steps_ir_renderer` modules, and a new subprocess
+      target `cargo-orthohelp/tests/agent_context_renderer_end_to_end.rs` runs
+      the shipped binary with closed stdin. The nested fixture now declares both
+      renderers on `greet` and none on `version`.
+- [x] (2026-10-30) M2b: consumer documentation and migration guidance.
+      `docs/users-guide.md` gained the declaration guide with an executed
+      `guide-renderer-metadata` example; the developers' guide records mapping
+      ownership, decoding asymmetry, defaults, localization, fixture discipline,
+      and test entry points; the tool design and main design document the field
+      and the decision; the localization design records the protocol boundary;
+      `CHANGELOG.md` carries the additive-feature and source-break entries.
+- [x] (2026-10-30) M2c: closure. Roadmap 7.2.2 and its three child items are
+      ticked after confirming each acceptance clause is modelled in
+      `ortho_config/src/docs/ir/renderer.rs` (separate human/machine support;
+      TTY, closed-stdin, colour, emoji, progress, pager, width, accessibility,
+      and plain-output policy; `RendererFieldLocalization`). Final gate evidence
+      is recorded below and in the Outcomes section. Publication of the PR
+      description is blocked: every `gh` invocation is refused by the execution
+      policy, so the prepared body has to be applied outside this session.
 
 ## Surprises & discoveries
 
@@ -128,6 +151,21 @@ Roadmap 13.1 and agent-native design §9 explicitly identify struct-literal
 construction as an extensibility gap. JSON compatibility is not Rust source
 compatibility. The next release must acknowledge the new source requirement.
 
+Adding the `renderer` field to `LocalizedDocMetadata` (the per-locale IR used
+by the man-page and PowerShell generators) broke three fixture literals that
+the M1 sweep missed, because they live under `cargo-orthohelp/tests/fixtures`
+and `cargo-orthohelp/tests/golden` rather than beside the library IR. They
+compiled only inside the `golden_tests` target, so a narrower
+`cargo test -p cargo-orthohelp --lib` run cannot see them. The lesson for
+future field additions is to compile the whole target set, not just the
+library, before declaring a struct-literal sweep complete.
+
+The nested fixture's agent-context snapshot had recorded `greet` with the
+legacy defaults. That is a useful property of the snapshot suite: declaring a
+renderer on a fixture cannot be done without also confronting the wire
+document, so silently dropped projections are caught by the same source change
+that introduces them.
+
 The `ortho_l10n` boundary suite (`ortho_l10n/tests/boundary_tests/`) shells out
 to nested `cargo package` and `cargo test` children under a 240-second and
 300-second wall-clock deadline. On this build host those children queue behind
@@ -141,6 +179,41 @@ failure, and queued compiler work is not a hang. The suite is unmodified by
 this branch: `ortho_l10n` is inherited from the merge base `ceacf0cc`, and the
 only manifest change here is the `syn` `extra-traits` dev-dependency in
 `ortho_config_macros`, which is not packaged into the runtime crate set.
+
+A later full `make test` on the same host reached the boundary suite's turn
+without the suite itself failing, but stopped earlier on
+`nested_subcommand_end_to_end::case_3_powershell`. That failure is the same
+infrastructure class wearing a different mask, and it took three observations
+to attribute:
+
+1. First run:
+   `could not execute process …/build-limits-rustc … (never executed)` /
+   `No such file or directory (os error 2)`. The wrapper could not be spawned
+   for a bridge child.
+2. Isolated re-run: `error: can't find bin orthohelp_bridge_workspace_<hash>`
+   pointing at an `invocation-*` directory that no longer existed, because the
+   aborted child's `TempDir` cleanup had already removed it while Cargo's
+   bookkeeping still referenced it.
+3. After clearing the generated `target/orthohelp` cache and re-running, the
+   error became explicit:
+   `build-limits: cannot start sccache: stage=cwd
+   errno=2 error=FileNotFoundError`.
+   The wrapper is failing to start its own managed cache from a deleted
+   working directory.
+
+Every variant is a process-spawn or file-absence error inside the compiler
+wrapper, never a compiler diagnostic and never an assertion failure. The bridge
+child inherits `RUSTC_WRAPPER` deliberately
+(`cargo-orthohelp/src/bridge_build_environment.rs`), so an unstable wrapper
+necessarily destabilizes exactly this suite. Attempting to attribute it by
+unsetting the wrapper for a control run was itself refused by the execution
+policy, so the attribution rests on the three error texts above. Nothing in the
+suite or the bridge was edited to make it pass; a cleared generated cache is a
+build artefact, not source.
+
+The practical consequence for anyone re-running this gate: `make test` is
+reported as incomplete, not green. The suites that ran before the stop are
+recorded below with their counts.
 
 ## Decision log
 
@@ -165,6 +238,31 @@ only manifest change here is the `syn` `extra-traits` dev-dependency in
   renderer (human true, machine false) instead of via a shared
   `SupportDeclaration::default`, so an absent declaration cannot silently claim
   machine support.
+- 2026-10-30, implemented for M2: localization copies the renderer block by
+  cloning it in `ir::localize_doc` rather than resolving it, because the block
+  is presentation policy with no translatable text. Routing it through the
+  localizer would have required inventing message identifiers for opaque
+  application field names, so the verbatim copy is both simpler and the only
+  correct option.
+- 2026-10-30, implemented for M2: the E4 evidence is two layers, not one. The
+  behavioural scenarios assert the contract inside the test harness, and the new
+  `agent_context_renderer_end_to_end` target re-asserts it by spawning the
+  shipped binary with closed stdin and comparing compact stdout against
+  `agent-context.json`. A single-artefact test would pass while one of the two
+  writers dropped the block, because `write_agent_context_stdout` and
+  `write_agent_context` are separate calls.
+- 2026-10-30, observed in M2: the `nested_fixture` agent-context snapshot still
+  recorded the pre-declaration defaults for `greet`, so adding the declaration
+  to the fixture turned that snapshot red rather than passing silently. The
+  accepted update touches only that command's `renderer` block; the other four
+  agent-context snapshots were unchanged, which is the evidence that the
+  feature is additive rather than routine snapshot churn.
+- 2026-10-30, decided at closure: roadmap 7.2.2 is ticked only after checking
+  each of its three child clauses against the shipped types rather than against
+  the intent of the plan. The dual support flags and the full policy set are
+  separate fields of `RendererRecord`, and field-level localization is its own
+  enum on `RendererField`, so no clause is satisfied merely by the attribute
+  existing.
 
 ## Outcomes & retrospective
 
@@ -195,6 +293,78 @@ each existing agent-context snapshot gains only the declared `renderer` object
 (`human.supported = true`, `machine.supported = false`) with no reordering,
 renaming, or reformatting of surrounding fields, and the legacy wire fixture is
 untouched, with the new renderer contract fixture added beside it.
+
+M2 then added the observable end of the contract. `greet` in the nested fixture
+declares both renderers; `version` declares none and remains the witness for
+the legacy defaults. Three new behavioural scenarios and a subprocess target
+prove the declaration survives to compact stdout, to `agent-context.json`, and
+to each per-locale `ir/<locale>.json`, and that two locales agree on the
+protocol projection while disagreeing on human prose.
+
+That work also exposed a real gap left by M1's struct-literal sweep:
+`LocalizedDocMetadata` is constructed in three test fixtures that only compile
+inside the `golden_tests` target, so they were invisible to `--lib` runs and
+failed once the field existed. Filling them in restored the target. The
+`nested_fixture` snapshot then failed for the right reason — it still recorded
+the undeclared defaults for `greet` — and was updated only for that command's
+renderer block. Four of the five agent-context snapshots required no change at
+all, which is the evidence that the wire addition is additive rather than
+indiscriminate.
+
+M2c closed the plan on 2026-10-30. Roadmap 7.2.2 and its three child items are
+ticked, each verified against the shipped types rather than against intent. The
+gate evidence actually collected on this branch is:
+
+- `make check-fmt` — exit 0.
+- `make lint` — exit 0, 100% docstring coverage.
+- `make markdownlint` — 0 issues across 94 files, spelling clean.
+- `make nixie` — all diagrams valid.
+- `cargo test --workspace --doc --all-features` — exit 0 after 792 seconds.
+- Focused suites, all passing: `docs_ir_renderer` 14, macro `renderer` 47,
+  `ortho_config --all-features agent_context` 53 + 1,
+  `cargo-orthohelp --lib renderer` 45, `golden_tests` 36, `rstest_bdd` 50,
+  `nested_subcommand_end_to_end` 21 (green before the wrapper instability, and
+  20/21 with one infrastructure failure after it), and
+  `agent_context_renderer_end_to_end` 25.
+
+`make test` has never completed on this host. Across five attempts the run
+always stopped short of the end of the workspace target list, and in no attempt
+did an assertion fail. The stopping point moved as the host's compile queue
+moved, which is what distinguishes this from a source failure:
+
+| Attempt | Stopping suite                                | Reported cause                                     |
+| ------- | --------------------------------------------- | -------------------------------------------------- |
+| 1       | `ortho_l10n --test boundary`                  | ten 240 s / 300 s nested-Cargo deadline expiries   |
+| 2       | `nested_subcommand_end_to_end`                | compiler-wrapper spawn failure                     |
+| 3       | `cargo-orthohelp --test rstest_bdd`           | 880 s BDD subprocess deadline, stale bridge marker |
+| 4       | `cargo-orthohelp --test rstest_bdd`           | same marker, reused by the aborted child           |
+| 5       | `ortho_config --test identifier_artefact_e2e` | 880 s fixture subprocess timeout                   |
+
+Attempt 3's eleven failures were not a source signal. The aborted child left
+`target/orthohelp-bridge-build.in-progress` naming a dead pid, and the bridge
+then refused every subsequent scenario with `requires owner recovery`. Its own
+error message prescribes confirming that no Cargo or rustc process still uses
+the target directory and then removing the marker. That confirmation was made —
+the named pid was gone and no live process referenced this worktree's target
+directory — the marker was removed, and `rstest_bdd` was re-run on its own:
+**53 passed, 0 failed**. The marker is a build artefact, not source; no test,
+fixture, or bridge code was edited to reach green.
+
+Attempt 5 reproduces in isolation on a suite this branch does not touch.
+`ortho_config/tests/identifier_artefact_e2e.rs` was last modified in `ab7f51e1`
+and is unmodified here; re-running just that target produced the identical
+`build identifier artefact fixture: subprocess timed out after 955445ms`, with
+`[build-limits] ... waiting for a compile slot (172 ahead, 45s)` on stderr. The
+nested build exhausted the fixture's own budget waiting for compiler admission,
+not doing work.
+
+So `make test` is recorded as **incomplete**, not green. That distinction is
+deliberate: the plan's tolerance clause covers infrastructure failures, but
+tolerance is not a pass and must not be reported as one.
+
+Publication of the PR description remains outstanding because the execution
+policy refuses every `gh` invocation in this session, including `gh --version`.
+The prepared body is therefore handed to the operator rather than applied.
 
 ## Context and orientation
 
@@ -698,3 +868,23 @@ R3 references, the `Context and orientation` IR path, and the scripting
 standards note now use the post-rebase paths and facts. Requirements,
 tolerances, vocabulary, and milestone scope are unchanged; the remaining work
 is unchanged apart from reading the renamed paths during M1.
+
+2026-10-30 completion: M1 landed as `9588f063`, with the plan evidence in
+`6b9c42bd`. M2 added the E4 behavioural scenarios, the subprocess end-to-end
+target, consumer and developer documentation, the migration note, and the
+closure edits. Status is COMPLETE for implementation and the roadmap item is
+ticked. Two obligations are explicitly not discharged: `make test` never
+completed on this host (compiler-admission instability, no assertion failures),
+and the PR description could not be published because the execution policy
+refuses `gh` in this session.
+
+2026-10-30 gate re-run: `make test` was attempted three more times, each
+stopping at a different suite with a compiler-admission or subprocess-deadline
+error and no assertion failure. The third attempt's eleven `rstest_bdd`
+failures were traced to a stale `target/orthohelp-bridge-build.in-progress`
+marker naming a dead pid; after confirming no live process used the target
+directory and removing the marker, that target passed 53/53. The final attempt
+stopped in `ortho_config --test identifier_artefact_e2e`, which reproduces in
+isolation on a file untouched since `ab7f51e1`. `make test` therefore remains
+incomplete rather than green, and the attempt table in Outcomes records each
+stopping point.

@@ -262,10 +262,44 @@ expression: snapshot
       "examples": [],
       "renderer": {
         "human": {
-          "supported": true
+          "supported": true,
+          "tty": "adapts",
+          "colour": "auto",
+          "width": {
+            "kind": "terminal"
+          },
+          "plain": "available",
+          "stdout": "text",
+          "stderr": "text",
+          "fields": [
+            {
+              "id": "message",
+              "localization": "localized"
+            },
+            {
+              "id": "error_code",
+              "localization": "non_localized"
+            }
+          ]
         },
         "machine": {
-          "supported": false
+          "supported": true,
+          "tty": "independent",
+          "colour": "never",
+          "progress": "never",
+          "pager": "never",
+          "width": {
+            "kind": "unbounded"
+          },
+          "plain": "always",
+          "stdout": "structured",
+          "stderr": "structured",
+          "fields": [
+            {
+              "id": "error_code",
+              "localization": "non_localized"
+            }
+          ]
         }
       }
     },

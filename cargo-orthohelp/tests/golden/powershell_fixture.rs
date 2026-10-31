@@ -69,5 +69,6 @@ pub(crate) fn minimal_doc() -> LocalizedDocMetadata {
         }],
         subcommands: vec![],
         windows: None,
+        renderer: None,
     }
 }

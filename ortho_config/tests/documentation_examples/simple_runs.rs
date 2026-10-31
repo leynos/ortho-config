@@ -112,6 +112,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "mutation=Some(Delete) bypass=Some(\"--force\")\n",
     },
     SimpleRun {
+        id: "guide-renderer-metadata",
+        args: &[],
+        stdout: "machine=Some(true) stdout=Some(Structured) fields=[\"error_code\"]\n",
+    },
+    SimpleRun {
         id: "api-guide-policy-report-constructors",
         args: &[],
         stdout: "",

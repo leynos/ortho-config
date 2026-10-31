@@ -30,3 +30,31 @@ Feature: cargo-orthohelp agent-context generation
     And the command greet reports mutation effect read_only
     And the command admin grant-access reports mutation effect submit
     And the command version reports interaction mode unknown
+
+  Scenario: Independent support survives generation
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I run cargo-orthohelp with format agent-context for the nested fixture
+    Then the command greet reports human renderer supported true
+    And the command greet reports machine renderer supported true
+    And the command greet reports human renderer policy tty adapts
+    And the command greet reports human renderer policy colour auto
+    And the command greet reports human renderer policy width terminal
+    And the command greet reports machine renderer policy stdout structured
+    And the command greet reports machine renderer policy colour never
+    And the command greet reports machine renderer policy width unbounded
+
+  Scenario: Child declarations are independent
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I run cargo-orthohelp with format agent-context for the nested fixture
+    Then the undeclared nested command keeps legacy support defaults
+    And the undeclared nested command makes no presentation claim
+    And the command greet reports machine renderer supported true
+
+  Scenario: Human language does not rename protocol fields
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I generate the nested fixture IR for two locales
+    Then renderer field identifiers and policies agree across en-US and fr-FR
+    And the en-US and fr-FR command summaries differ
