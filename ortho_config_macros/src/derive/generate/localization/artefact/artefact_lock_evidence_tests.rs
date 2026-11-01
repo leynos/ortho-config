@@ -243,7 +243,7 @@ fn renders_devices_the_way_the_kernel_does() {
             DeviceNumber::new(major, minor).to_string(),
             expected,
             "the {case} halves {major:#x}:{minor:#x} must print as the kernel does; \
-             each half is %02x, so single digits keep a leading zero",
+             each half is two lowercase hex digits, so a single digit keeps a leading zero",
         );
     }
 }
@@ -273,8 +273,8 @@ fn matches_records_by_device_and_inode() {
         assert_eq!(
             record.matches(LockFileIdentity::of(device, inode)),
             expected,
-            "the {case} case must only be attributed to this lock when device and inode \
-             both match",
+            "the {case} case must only be attributed to this lock when device and \
+             inode both match",
         );
     }
 }
