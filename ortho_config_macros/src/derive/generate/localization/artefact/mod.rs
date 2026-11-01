@@ -376,6 +376,11 @@ mod lock_diagnostics;
 #[cfg(test)]
 #[path = "artefact_lock_evidence.rs"]
 mod lock_evidence;
+// Test support for the holder report: gated on `test`, not the platform, so
+// every test build compiles the module and its `lock_evidence` import alike.
+#[cfg(test)]
+#[path = "artefact_lock_process.rs"]
+mod lock_process;
 #[cfg(test)]
 #[path = "artefact_lock_report_tests.rs"]
 mod lock_report_tests;

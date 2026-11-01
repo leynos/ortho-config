@@ -15,18 +15,21 @@
 
 use anyhow::{Context, Result};
 
+#[cfg(target_os = "linux")]
+use super::lock_evidence::ProcessId;
+
 /// Verifies a process is named by its command, parent, and relation.
 #[cfg(target_os = "linux")]
 #[test]
 fn names_the_reporting_process_as_such() {
-    let own_pid = std::process::id();
-    let identity = super::lock_diagnostics::process_identity(own_pid)
+    let own_pid = ProcessId::new(std::process::id());
+    let identity = super::lock_process::process_identity(own_pid)
         .expect("the running process must have a readable /proc/self/stat");
     assert!(
         !identity.command.is_empty(),
         "the command name must be recorded: {identity:?}",
     );
-    let described = super::lock_diagnostics::describe_process(own_pid, own_pid);
+    let described = super::lock_process::describe_process(own_pid, own_pid);
     assert!(
         described.contains("this process"),
         "a hold named after this process must say so: {described}",
