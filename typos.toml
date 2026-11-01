@@ -72,6 +72,7 @@ extend-ignore-re = [
     "`env\\(allias = …\\)`",
     "`install-mold: 'true'`",
     "`install-mold`",
+    "`ld.mold`",
     "`mold-version`",
     "`mold`",
     "`normalisation`",

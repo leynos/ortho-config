@@ -161,6 +161,16 @@ def shell_tokens(line: str) -> list[str]:
     contract helper; its whitespace fallback is deliberately best-effort.
     Full comment lines are ignored before either parser can mistake their
     contents for a command or assignment.
+
+    Parameters
+    ----------
+    line : str
+        One expanded recipe line.
+
+    Returns
+    -------
+    list of str
+        The shell tokens, empty for a full comment line.
     """
     if line.lstrip().startswith("#"):
         return []

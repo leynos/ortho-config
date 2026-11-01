@@ -2972,11 +2972,12 @@ plus the pinned `mold` release on Linux. Two targets provision and verify them:
   and verifies it against `tools/mold/SHA256SUMS`. It refuses an unlisted
   artefact, an ambiguous file and a mismatch, and installs nothing in any of
   those cases. It then unpacks the release under `BUILD_TOOLS_PREFIX` (default
-  `~/.local`) and runs `rustup toolchain install` in the repository root, which
-  reads `rust-toolchain.toml` for the channel, profile and components. Only
-  binary releases are fetched; there is no source-build fallback.
+  `~/.local`) and runs `rustup toolchain install` with the channel, profile and
+  components from `rust-toolchain.toml` passed explicitly. This prevents a
+  `RUSTUP_TOOLCHAIN` override from selecting another toolchain. Only binary
+  releases are fetched; there is no source-build fallback.
 - `make check-build-tools` runs `scripts/check-build-tools.sh`. On Linux,
-  `mold` must be on `PATH`, must run, and must equal the pin; `rustup`, the
+  `ld.mold` must be on `PATH`, must run, and must equal the pin; `rustup`, the
   pinned toolchain and its Cranelift component must be present. Every failure
   names `make install-build-tools`, and all failures are reported in one pass.
   Off Linux the linker half prints a note and passes.

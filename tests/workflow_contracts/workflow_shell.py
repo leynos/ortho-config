@@ -15,6 +15,9 @@ import typing as typ
 _EXPRESSION: typ.Final[re.Pattern[str]] = re.compile(r"\$\{\{.*?\}\}")
 _SHELL_CONTROL_MARKER: typ.Final[str] = "\ufdd0"
 _SHELL_CONTROL_CHARS: typ.Final[str] = ";|&()"
+_REDIRECTION: typ.Final[re.Pattern[str]] = re.compile(
+    r"^(?P<operator>\d*(?:<<<|<<-|<<|<>|<&|>>|>\||>&|<|>)|&(?:>>|>|<))(?P<target>.*)$"
+)
 
 
 @dataclasses.dataclass
@@ -135,12 +138,26 @@ def _tokens(line: str) -> list[str]:
         return []
 
 
+def _redirected_target(word: str) -> bool | None:
+    """Return whether a redirection operator needs its following target."""
+    redirection = _REDIRECTION.fullmatch(word)
+    return None if redirection is None else not redirection.group("target")
+
+
 def _goals_after(tokens: list[str], index: int) -> list[str]:
     """Return Make goals until the next command boundary, omitting options."""
     goals: list[str] = []
+    skip_target = False
     for word in tokens[index + 1 :]:
         if word == _SHELL_CONTROL_MARKER:
             break
+        if skip_target:
+            skip_target = False
+            continue
+        target_follows = _redirected_target(word)
+        if target_follows is not None:
+            skip_target = target_follows
+            continue
         if not word.startswith("-") and "=" not in word:
             goals.append(word)
     return goals

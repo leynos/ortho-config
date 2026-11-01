@@ -59,6 +59,7 @@ ignore = [
   # Exempt only the exact code spans used by this repository so a nearby typo
   # in the same span is still checked.
   "`mold`",
+  "`ld.mold`",
   "`-Clink-arg=-fuse-ld=mold`",
   "`-fuse-ld=mold`",
   "`RUSTFLAGS=\"-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold\"`",
