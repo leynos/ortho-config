@@ -11,7 +11,12 @@ and recorded in the Progress and Decision log below. The sequential gate run
 for that repaired head is recorded in Progress and the Revision note: every
 gate passed except `make test`, which stopped in a suite this branch does not
 touch. The PR is published and under `pr-babysitting`; hosted CI and review
-state live in the delivery ledger rather than in this plan.
+state live in the delivery ledger rather than in this plan. A further inline
+review on 2026-11-01 raised eleven findings: ten are repaired (documentation
+accuracy, an explicit localization-token match with a diagnostic, removal of
+redundant parser flags, and stronger value assertions in three suites), and the
+request to bump the documentation-IR version is rebutted with the approved
+design; both are recorded in the Decision log.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -267,6 +272,26 @@ source failures. There is no time limit; queued compiler work is not a hang.
       stopped producing a leaf would leave the property green, because both
       sides of its comparison would lose the same data. The focused suite passes
       8/8.
+- [x] (2026-11-01) Inline review round actioned. CodeRabbit posted eleven
+      inline findings against head `322cc25e`. Ten were valid and are repaired
+      in this candidate: the changelog's spread-into-a-literal alternative named
+      a construction `AgentCommand` does not support; the user's guide described
+      the inheritance keys as record inheritance rather than output pass-through
+      and named `AgentContext` where the break is on `AgentCommand`; this plan's
+      field syntax still showed the rejected `field(id = ...)` spelling; the
+      generated-IR token match now names both localization variants explicitly
+      and emits a `compile_error!` for anything else, with a unit test that
+      pins the fallback; the redundant `human_declared`/`machine_declared` flags
+      are gone in favour of `Option::get_or_insert_default`; and three suites
+      assert decoded values rather than presence — the macro parser's full-house
+      record, the documentation-IR decoder's typed leaves and width cases, and
+      the agent-context round-trip generator, which now draws each toggle,
+      stream category, and inheritance claim on its own. The eleventh finding, a
+      request to bump `ORTHO_DOCS_IR_VERSION`, is rebutted on the record in the
+      Decision log: the approved design places the additive block inside IR
+      2.0, and a wire-version bump is an exception this assignment does not
+      authorize. Focused suites pass after the repairs; the sequential gate run
+      for this candidate is recorded in the Revision note.
 
 ## Surprises & discoveries
 
@@ -400,6 +425,24 @@ everywhere else, and `#[expect(dead_code)]` would be an unfulfilled expectation
 in the targets that do use it. Declaring each helper module from the target
 that needs it is the only shape that satisfies both lints.
 
+Generating *every* renderer leaf independently in the agent-context round-trip
+property overran the test thread's stack. The first repair spelled the eleven
+newly independent leaves as additional tuple slots, which nested the generator
+four deep; `cargo test -p ortho_config --lib round_trip` then aborted with
+`fatal runtime error: stack overflow` before any case ran, deterministically.
+Restoring the previous file from `git show HEAD:` made the suite pass again,
+which attributed the abort to the strategy rather than to the property. A
+bounded `RUST_MIN_STACK` probe placed the threshold: the nested form failed at
+2 MiB and passed at 3 MiB, while the previous strategy passed only at 2 MiB.
+The shipped form generates the repeated families as fixed-length
+`proptest::collection::vec` strategies and renames their elements with
+`exact_leaves`, which keeps all eleven leaves independently drawn, flattens the
+tuple to ten slots, and passes at 1.5 MiB — strictly more headroom than the
+strategy it replaced, so the change does not erode the CI margin. The lesson is
+that a property generator's shape, not only its variant coverage, is a test
+resource: debug-build strategy construction is stack-hungry, and the default 2
+MiB libtest thread is not generous.
+
 ## Decision log
 
 - 2026-10-14, proposed: use a sibling renderer group and independent per-command
@@ -489,6 +532,24 @@ that needs it is the only shape that satisfies both lints.
   The regenerated file is therefore committed as its own atomic commit,
   separate from the feature and documentation commits, so the review diff for
   the feature stays focused and the generated fixed point is still recorded.
+- 2026-11-01, decided after inline review: `ORTHO_DOCS_IR_VERSION` stays
+  `2.0`; the renderer block is additive inside that version, not a new one. The
+  reviewer asked for a bump on the grounds that new document fields usually
+  warrant one, and that is a reasonable prior — but ADR-0010 and ADR-0012 make
+  the bump a response to a version planning to ship without the field, and
+  ADR-0016, which is this feature's decision of record, states that docs IR
+  `2.0` already accommodates additive optional blocks. The Constraints section
+  of this plan repeats that, and the Tolerances list treats a wire-version bump
+  as an exception trigger needing an approved deviation; no such deviation was
+  granted. A bump also carries a real cost here, because the strict decoder
+  rejects unknown version strings, so every consumer that pins `2.0` would
+  break for a change that adds nothing they must handle specially. The
+  `cargo-orthohelp` cache key additionally hashes a workspace source
+  fingerprint alongside `ir_version`, so a stale artefact cannot be reused
+  merely because the version string is unchanged. If the maintainers prefer the
+  ADR-0010/ADR-0012 convention for a post-release addition, that is a separate,
+  approved change and would also revise the compatibility statement the
+  changelog makes; it is not this branch's call.
 
 ## Outcomes & retrospective
 
@@ -852,13 +913,13 @@ The proposed attribute shape is:
           pager = "auto", width = "terminal", accessibility = "text_equivalent",
           plain = "available", stdout = "text", stderr = "text",
           progress_inheritance = "allowed", subprocess_inheritance = "allowed",
-          field(id = "message", localization = "localized")),
+          field("message", localization = "localized")),
     machine(supported = true, tty = "independent", closed_stdin = "ignored",
             colour = "never", emoji = "never", progress = "never",
             pager = "never", width = "unbounded", plain = "always",
             stdout = "structured", stderr = "structured",
             progress_inheritance = "forbidden", subprocess_inheritance = "forbidden",
-            field(id = "error_code", localization = "non_localized"))
+            field("error_code", localization = "non_localized"))
 ))]
 ```
 
