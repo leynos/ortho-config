@@ -10,10 +10,10 @@ use std::num::NonZeroU16;
 use proptest::prelude::*;
 
 use crate::schema::{
-    CliMetadata, ClosedStdinPolicy, DocMetadata, FieldMetadata, HeadingIds, InheritancePolicy,
-    PlainPolicy, RenderWidth, RendererField as IrField, RendererFieldLocalization,
-    RendererMetadata, RendererRecord as IrRecord, SectionsMetadata, StreamContent, TogglePolicy,
-    TtyPolicy,
+    AccessibilityPolicy, CliMetadata, ClosedStdinPolicy, DocMetadata, FieldMetadata, HeadingIds,
+    InheritancePolicy, PlainPolicy, RenderWidth, RendererField as IrField,
+    RendererFieldLocalization, RendererMetadata, RendererRecord as IrRecord, SectionsMetadata,
+    StreamContent, TogglePolicy, TtyPolicy,
 };
 use ortho_config::{AgentCommand, AgentContext, LocalizationArgs, Localizer, RendererContract};
 
@@ -166,12 +166,42 @@ fn ir_width() -> impl Strategy<Value = Option<RenderWidth>> {
     ]
 }
 
-/// Generates one renderer record with support and several declared policies.
+/// Generates an absent-or-declared three-state toggle policy.
+fn toggle_leaf() -> impl Strategy<Value = Option<TogglePolicy>> {
+    optional_policy(vec![
+        TogglePolicy::Never,
+        TogglePolicy::Auto,
+        TogglePolicy::Always,
+    ])
+}
+
+/// Generates an absent-or-declared stdout/stderr content category.
+fn stream_leaf() -> impl Strategy<Value = Option<StreamContent>> {
+    optional_policy(vec![
+        StreamContent::None,
+        StreamContent::Text,
+        StreamContent::Structured,
+        StreamContent::Mixed,
+    ])
+}
+
+/// Generates an absent-or-declared inheritance claim.
+fn inheritance_leaf() -> impl Strategy<Value = Option<InheritancePolicy>> {
+    optional_policy(vec![
+        InheritancePolicy::Allowed,
+        InheritancePolicy::Forbidden,
+    ])
+}
+
+/// Generates one renderer record with support and every policy leaf.
 ///
 /// Both records of a block share this generator, so a generated document can
 /// declare every policy family on the human side, the machine side, or both.
+/// Each leaf is drawn independently, including the two stream categories and
+/// the two inheritance claims, so a case can declare `stdout` without `stderr`
+/// and can disagree between progress and subprocess inheritance.
 fn declared_record(fields: impl Strategy<Value = Vec<IrField>>) -> impl Strategy<Value = IrRecord> {
-    (
+    let presentation = (
         prop::option::of(any::<bool>()),
         optional_policy(vec![
             TtyPolicy::Independent,
@@ -183,57 +213,50 @@ fn declared_record(fields: impl Strategy<Value = Vec<IrField>>) -> impl Strategy
             ClosedStdinPolicy::Eof,
             ClosedStdinPolicy::Error,
         ]),
+        toggle_leaf(),
         optional_policy(vec![
-            TogglePolicy::Never,
-            TogglePolicy::Auto,
-            TogglePolicy::Always,
+            AccessibilityPolicy::Unspecified,
+            AccessibilityPolicy::TextEquivalent,
         ]),
+        toggle_leaf(),
+        toggle_leaf(),
+        toggle_leaf(),
+    );
+    let output = (
         optional_policy(vec![
             PlainPolicy::Unsupported,
             PlainPolicy::Available,
             PlainPolicy::Always,
         ]),
-        optional_policy(vec![
-            StreamContent::None,
-            StreamContent::Text,
-            StreamContent::Structured,
-            StreamContent::Mixed,
-        ]),
-        optional_policy(vec![
-            InheritancePolicy::Allowed,
-            InheritancePolicy::Forbidden,
-        ]),
+        stream_leaf(),
+        stream_leaf(),
         ir_width(),
-        fields,
+        inheritance_leaf(),
+        inheritance_leaf(),
+    );
+    (presentation, output, fields).prop_map(
+        |(
+            (supported, tty, closed_stdin, colour, accessibility, emoji, progress, pager),
+            (plain, stdout, stderr, width, progress_inheritance, subprocess_inheritance),
+            declared_fields,
+        )| IrRecord {
+            supported,
+            tty,
+            closed_stdin,
+            colour,
+            emoji,
+            progress,
+            pager,
+            width,
+            accessibility,
+            plain,
+            stdout,
+            stderr,
+            progress_inheritance,
+            subprocess_inheritance,
+            fields: declared_fields,
+        },
     )
-        .prop_map(
-            |(
-                supported,
-                tty,
-                closed_stdin,
-                colour,
-                plain,
-                stdout,
-                inheritance,
-                width,
-                declared_fields,
-            )| {
-                IrRecord {
-                    supported,
-                    tty,
-                    closed_stdin,
-                    colour,
-                    plain,
-                    stdout,
-                    stderr: stdout,
-                    progress_inheritance: inheritance,
-                    subprocess_inheritance: inheritance,
-                    width,
-                    fields: declared_fields,
-                    ..IrRecord::default()
-                }
-            },
-        )
 }
 
 /// Generates a renderer block with independently chosen records.

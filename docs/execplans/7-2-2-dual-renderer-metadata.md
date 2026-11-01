@@ -255,6 +255,18 @@ source failures. There is no time limit; queued compiler work is not a hang.
       that has actually happened. The remaining documentation point, the
       user's guide's accepted keys, was already closed. A candidate-bound
       follow-up on the new head asks for re-assessment against this evidence.
+- [x] (2026-11-01) Reassessment closed six of the seven points and left one
+      generator gap, which is now repaired. The E3 generator omitted declared
+      `accessibility`, `emoji`, `progress`, and `pager` leaves and drew
+      `stdout`/`stderr` and the two inheritance claims from a single value, so
+      the property never saw those families independently. Each leaf is now
+      drawn on its own, with shared `toggle_leaf`, `stream_leaf`, and
+      `inheritance_leaf` strategies so the variant tables exist once. A new
+      `every_declared_leaf_reaches_the_projection` case declares every leaf once
+      and asserts each survives the bridge: without it, a generator that
+      stopped producing a leaf would leave the property green, because both
+      sides of its comparison would lose the same data. The focused suite passes
+      8/8.
 
 ## Surprises & discoveries
 

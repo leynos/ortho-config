@@ -30,7 +30,10 @@ use proptest::prelude::*;
 use rstest::rstest;
 
 use super::bridge_ir_to_agent_context;
-use crate::schema::DocMetadata;
+use crate::schema::{
+    AccessibilityPolicy, ClosedStdinPolicy, DocMetadata, InheritancePolicy, PlainPolicy,
+    RenderWidth, RendererMetadata, RendererRecord, StreamContent, TogglePolicy, TtyPolicy,
+};
 use ortho_config::{
     AgentContext, RendererFieldLocalization as WireLocalization, TogglePolicy as WireTogglePolicy,
 };
@@ -151,6 +154,60 @@ fn first_human_field_id(context: &AgentContext) -> String {
         .first()
         .map(|field| field.id.clone())
         .expect("the populated tree declares a human field")
+}
+
+/// Every declared policy leaf reaches the projection.
+///
+/// The generated property would stay green if the generator stopped producing
+/// a leaf, because both sides of its comparison would lose the same data. This
+/// pins one record that declares every leaf and asserts each one survives, so
+/// the generator's class coverage is observable rather than assumed.
+#[test]
+fn every_declared_leaf_reaches_the_projection() {
+    let record = RendererRecord {
+        supported: Some(true),
+        tty: Some(TtyPolicy::Adapts),
+        closed_stdin: Some(ClosedStdinPolicy::Eof),
+        colour: Some(TogglePolicy::Auto),
+        emoji: Some(TogglePolicy::Never),
+        progress: Some(TogglePolicy::Always),
+        pager: Some(TogglePolicy::Auto),
+        width: Some(RenderWidth::Terminal),
+        accessibility: Some(AccessibilityPolicy::TextEquivalent),
+        plain: Some(PlainPolicy::Available),
+        stdout: Some(StreamContent::Text),
+        stderr: Some(StreamContent::Structured),
+        progress_inheritance: Some(InheritancePolicy::Allowed),
+        subprocess_inheritance: Some(InheritancePolicy::Forbidden),
+        fields: Vec::new(),
+    };
+    let block = RendererMetadata {
+        human: Some(record),
+        machine: None,
+    };
+
+    let projected = project_renderer(&node("demo", Some(block), Vec::new())).human;
+
+    let leaves = [
+        projected.supported,
+        projected.tty.is_some(),
+        projected.closed_stdin.is_some(),
+        projected.colour.is_some(),
+        projected.emoji.is_some(),
+        projected.progress.is_some(),
+        projected.pager.is_some(),
+        projected.width.is_some(),
+        projected.accessibility.is_some(),
+        projected.plain.is_some(),
+        projected.stdout.is_some(),
+        projected.stderr.is_some(),
+        projected.progress_inheritance.is_some(),
+        projected.subprocess_inheritance.is_some(),
+    ];
+    assert!(
+        leaves.iter().all(|declared| *declared),
+        "every declared leaf must reach the projection: {leaves:?}"
+    );
 }
 
 /// The projection comparison detects a localized field identifier.
