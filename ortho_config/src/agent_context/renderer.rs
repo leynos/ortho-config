@@ -58,10 +58,12 @@ fn default_machine_record() -> RendererRecord {
 
 /// One renderer's declared presentation in agent context.
 ///
-/// `supported` defaults to `false` so a record read without the leaf is still
-/// well-formed; the role-specific default is applied by
-/// [`RendererContract`]'s field attributes. Undeclared policy fields are
-/// omitted from the wire.
+/// `supported` defaults to `false` when this record is built directly, so a
+/// record read without the leaf is still well-formed. Reading a whole
+/// [`RendererContract`] applies the role-specific default instead: the custom
+/// `Deserialize` implementation in the sibling `renderer_wire` module supplies
+/// `true` for the human slot and `false` for the machine slot. Undeclared
+/// policy fields are omitted from the wire.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RendererRecord {
     /// Whether this renderer is supported.

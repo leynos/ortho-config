@@ -1,173 +1,43 @@
 //! Generated checks for the renderer half of the agent-context bridge (E3).
 //!
-//! These are sampled checks, not proofs, and they state their own limits. Two
-//! are shaped so the generator cannot satisfy the property for free:
+//! These are sampled checks, not proofs, and they state their own limits.
+//! Three are shaped so the generator cannot satisfy the property for free:
 //!
-//! - field identifiers are generated from a mixed Unicode alphabet in arbitrary
-//!   order, so the exact-order property exercises the bridge's own pass-through
+//! - identifiers are generated from a mixed Unicode alphabet in arbitrary
+//!   order, so the projection properties exercise the bridge's own pass-through
 //!   rather than an order the generator already supplied;
 //! - the localizer returns a value that visibly differs from the declared
-//!   summary, so the "human output changed" property cannot hold vacuously when
-//!   no localizer is applied.
+//!   identifiers, so the "summary moved" assertion cannot hold vacuously when
+//!   no localizer is applied;
+//! - the negative-control test below mutates a projected field identifier and
+//!   proves the projection comparison notices, so the localization property is
+//!   not silently blind to protocol data.
+//!
+//! Class coverage: both renderer records, declared support values and policy
+//! leaves, nested command paths, declared CLI inputs, and 0–16 output fields
+//! with 1–64 character identifiers. Generated cases are bounded at 256 per
+//! property, and each failure prints proptest's own seed and minimized case.
 //!
 //! The unknown-token property covers only the tolerant wire side. The authoring
 //! IR rejects unknown tokens instead of normalizing them, which is asserted by
 //! example in `ortho_config/tests/docs_ir_renderer.rs`; generating that case
 //! here would require constructing values the strict types cannot represent.
 
+#[path = "renderer_proptests_support.rs"]
+mod support;
+
 use proptest::prelude::*;
+use rstest::rstest;
 
 use super::bridge_ir_to_agent_context;
-use crate::schema::{
-    DocMetadata, HeadingIds, RendererField as IrField, RendererFieldLocalization, RendererMetadata,
-    RendererRecord as IrRecord, SectionsMetadata,
-};
+use crate::schema::DocMetadata;
 use ortho_config::{
-    AgentContext, LocalizationArgs, Localizer, RendererContract, RendererField,
-    RendererFieldLocalization as WireLocalization, TogglePolicy,
+    AgentContext, RendererFieldLocalization as WireLocalization, TogglePolicy as WireTogglePolicy,
 };
-
-/// Caps every generated family at 256 cases, per the plan's stated bound.
-fn bounded() -> ProptestConfig {
-    ProptestConfig::with_cases(256)
-}
-
-/// Builds a root-only metadata tree carrying the supplied renderer block.
-fn root_with(renderer: Option<RendererMetadata>) -> DocMetadata {
-    DocMetadata {
-        ir_version: crate::schema::ORTHO_DOCS_IR_VERSION.to_owned(),
-        app_name: "demo".to_owned(),
-        bin_name: Some("demo-bin".to_owned()),
-        about_id: "root.about".to_owned(),
-        synopsis_id: None,
-        sections: sections(),
-        fields: Vec::new(),
-        subcommands: Vec::new(),
-        windows: None,
-        behaviour: None,
-        renderer,
-        profiles: None,
-    }
-}
-
-/// Builds the stable section-heading metadata the IR requires.
-fn sections() -> SectionsMetadata {
-    SectionsMetadata {
-        headings_ids: HeadingIds {
-            name: "heading.name".to_owned(),
-            synopsis: "heading.synopsis".to_owned(),
-            description: "heading.description".to_owned(),
-            options: "heading.options".to_owned(),
-            environment: "heading.environment".to_owned(),
-            files: "heading.files".to_owned(),
-            precedence: "heading.precedence".to_owned(),
-            exit_status: "heading.exit-status".to_owned(),
-            examples: "heading.examples".to_owned(),
-            see_also: "heading.see-also".to_owned(),
-            commands: None,
-        },
-        discovery: None,
-        precedence: None,
-        examples: Vec::new(),
-        links: Vec::new(),
-        notes: Vec::new(),
-    }
-}
-
-/// Generates a token no accepted spelling can produce.
-///
-/// The `future_` prefix is the witness: the tolerant wire enums must normalize
-/// it to `unknown` rather than guessing at a nearby known variant.
-fn future_token(prefix: &'static str) -> impl Strategy<Value = String> {
-    "[a-z0-9]{0,12}".prop_map(move |suffix| format!("{prefix}_future_{suffix}"))
-}
-
-/// Generates one non-empty identifier drawn from a mixed Unicode alphabet.
-///
-/// Lengths run 1–8 characters because the plan bounds identifiers at 1–64; the
-/// alphabet mixes ASCII, accented Latin, and non-Latin scripts so a bridge that
-/// normalized or escaped identifiers would change the value.
-fn unicode_identifier() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop::sample::select(vec!['a', 'Z', '0', '_', '-', 'é', 'ü', '漢', 'α', 'Ω']),
-        1..=8,
-    )
-    .prop_map(|chars| chars.into_iter().collect())
-}
-
-/// Generates one declared field with a chosen localization token.
-fn ir_field() -> impl Strategy<Value = IrField> {
-    (
-        unicode_identifier(),
-        prop_oneof![
-            Just(RendererFieldLocalization::Localized),
-            Just(RendererFieldLocalization::NonLocalized),
-        ],
-    )
-        .prop_map(|(id, localization)| IrField { id, localization })
-}
-
-/// Generates 0–16 declared fields, deduplicated by identifier.
-///
-/// Duplicates are removed rather than filtered out after the fact, so the
-/// shrinking path does not depend on rejection sampling.
-fn ir_fields() -> impl Strategy<Value = Vec<IrField>> {
-    prop::collection::vec(ir_field(), 0..=16).prop_map(|fields| {
-        let mut seen = std::collections::BTreeSet::new();
-        fields
-            .into_iter()
-            .filter(|field| seen.insert(field.id.clone()))
-            .collect()
-    })
-}
-
-/// Generates an optional support claim plus an optional toggle policy.
-fn declared_record(fields: impl Strategy<Value = Vec<IrField>>) -> impl Strategy<Value = IrRecord> {
-    (
-        prop::option::of(any::<bool>()),
-        prop_oneof![
-            Just(None),
-            Just(Some(crate::schema::TogglePolicy::Never)),
-            Just(Some(crate::schema::TogglePolicy::Auto)),
-            Just(Some(crate::schema::TogglePolicy::Always)),
-        ],
-        fields,
-    )
-        .prop_map(|(supported, colour, declared_fields)| IrRecord {
-            supported,
-            colour,
-            fields: declared_fields,
-            ..IrRecord::default()
-        })
-}
-
-/// Generates a renderer block with independently chosen records.
-fn renderer_block() -> impl Strategy<Value = RendererMetadata> {
-    (
-        prop::option::of(declared_record(ir_fields())),
-        prop::option::of(declared_record(ir_fields())),
-    )
-        .prop_map(|(human, machine)| RendererMetadata { human, machine })
-}
-
-/// A localizer whose answers visibly differ from the declared identifiers.
-struct RenamingLocalizer;
-
-impl Localizer for RenamingLocalizer {
-    fn lookup(&self, id: &str, _args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-        Some(format!("localized summary for {id}"))
-    }
-}
-
-/// Projects a tree and returns the renderer of its single root command.
-fn project_renderer(tree: &DocMetadata) -> RendererContract {
-    bridge_ir_to_agent_context(tree, "demo_pkg", None)
-        .commands
-        .into_iter()
-        .next()
-        .expect("a root command is always emitted")
-        .renderer
-}
+use support::{
+    RenamingLocalizer, bounded, future_token, generated_tree, node, populated_tree,
+    project_renderer, renderer_block, root_command, without_summaries,
+};
 
 proptest! {
     #![proptest_config(bounded())]
@@ -187,101 +57,41 @@ proptest! {
             .and_then(|record| record.supported)
             .unwrap_or(false);
 
-        let renderer = project_renderer(&root_with(Some(block)));
+        let renderer = project_renderer(&node("demo", Some(block), Vec::new()));
 
         prop_assert_eq!(renderer.human.supported, expected_human);
         prop_assert_eq!(renderer.machine.supported, expected_machine);
     }
 
-    /// Every declared field identifier reaches the wire byte-for-byte, in
-    /// declaration order, with its localization classification intact.
-    #[test]
-    fn declared_field_identifiers_survive_unchanged(fields in ir_fields()) {
-        let block = RendererMetadata {
-            human: Some(IrRecord { fields: fields.clone(), ..IrRecord::default() }),
-            machine: None,
-        };
-
-        let renderer = project_renderer(&root_with(Some(block)));
-
-        let expected: Vec<RendererField> = fields
-            .iter()
-            .map(|field| RendererField {
-                id: field.id.clone(),
-                localization: match field.localization {
-                    RendererFieldLocalization::Localized => WireLocalization::Localized,
-                    RendererFieldLocalization::NonLocalized => WireLocalization::NonLocalized,
-                },
-            })
-            .collect();
-        prop_assert_eq!(renderer.human.fields, expected);
-    }
-
-    /// Projecting twice yields identical documents, so nothing is order- or
-    /// iteration-dependent.
-    #[test]
-    fn renderer_projection_is_deterministic(block in renderer_block()) {
-        let tree = root_with(Some(block));
-
-        let first = serde_json::to_string(&project_renderer(&tree))
-            .expect("the renderer contract should serialize");
-        let second = serde_json::to_string(&project_renderer(&tree))
-            .expect("the renderer contract should serialize");
-
-        prop_assert_eq!(first, second);
-    }
-}
-
-proptest! {
-    #![proptest_config(bounded())]
-
-    /// A localizer changes human-facing summary text but never field identity.
+    /// A localizer changes only cosmetic summaries, never protocol data.
     ///
-    /// The two halves are asserted together because the interesting failure is
-    /// a localizer leaking into protocol data: the summary must move, and `id`
-    /// must not.
+    /// The whole document is compared, not just the renderer block: paths,
+    /// inputs, and every declared policy must survive, and the summaries must
+    /// genuinely move or the equality would be vacuous.
     #[test]
-    fn localization_changes_summary_but_not_field_identifiers(fields in ir_fields()) {
-        let block = RendererMetadata {
-            human: Some(IrRecord { fields: fields.clone(), ..IrRecord::default() }),
-            machine: None,
-        };
-        let tree = root_with(Some(block));
-
-        let plain: AgentContext = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+    fn localization_preserves_the_protocol_projection(tree in generated_tree()) {
+        let plain = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
         let localized = bridge_ir_to_agent_context(&tree, "demo_pkg", Some(&RenamingLocalizer));
 
-        let root_of = |context: &AgentContext| {
-            context
-                .commands
-                .first()
-                .expect("a root command is always emitted")
-                .clone()
-        };
-        let plain_root = root_of(&plain);
-        let localized_root = root_of(&localized);
-        let plain_summary = plain_root.summary.clone();
-        let localized_summary = localized_root.summary.clone();
-        prop_assert_ne!(
-            plain_summary,
-            localized_summary,
-            "the localizer must visibly change the human summary"
-        );
-
-        let localized_ids: Vec<&str> = localized_root
-            .renderer
-            .human
-            .fields
+        let summaries_moved = plain
+            .commands
             .iter()
-            .map(|field| field.id.as_str())
-            .collect();
-        let declared_ids: Vec<&str> = fields.iter().map(|field| field.id.as_str()).collect();
-        prop_assert_eq!(localized_ids, declared_ids);
+            .zip(&localized.commands)
+            .any(|(before, after)| before.summary != after.summary);
+        prop_assert!(summaries_moved, "the localizer must visibly change a summary");
+        prop_assert_eq!(without_summaries(&plain), without_summaries(&localized));
     }
-}
 
-proptest! {
-    #![proptest_config(bounded())]
+    /// A projection survives serialization and re-reading without loss.
+    #[test]
+    fn projection_round_trips_through_the_wire(tree in generated_tree()) {
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let encoded = serde_json::to_value(&context).expect("a context should serialize");
+        let decoded: ortho_config::AgentContext =
+            serde_json::from_value(encoded).expect("a context should round-trip");
+
+        prop_assert_eq!(decoded, context);
+    }
 
     /// A token no known spelling matches normalizes to `unknown` on the wire.
     ///
@@ -293,12 +103,100 @@ proptest! {
         let quoted = serde_json::to_string(&token).expect("a token should serialize");
 
         prop_assert_eq!(
-            serde_json::from_str::<TogglePolicy>(&quoted).expect("toggle policy decode"),
-            TogglePolicy::Unknown
+            serde_json::from_str::<WireTogglePolicy>(&quoted).expect("toggle policy decode"),
+            WireTogglePolicy::Unknown
         );
         prop_assert_eq!(
             serde_json::from_str::<WireLocalization>(&quoted).expect("localization decode"),
             WireLocalization::Unknown
         );
     }
+}
+
+/// Named cases for the empty and populated projection shapes.
+///
+/// The absent block proves both support defaults and empty lists; the populated
+/// block proves both explicit support values, declared policies, nested paths,
+/// inputs, and output fields together.
+#[rstest]
+#[case::empty_lists(node("demo", None, Vec::new()), (true, false), 0, 0)]
+#[case::populated_lists(populated_tree(), (false, true), 2, 2)]
+fn named_projection_cases(
+    #[case] tree: DocMetadata,
+    #[case] root_support: (bool, bool),
+    #[case] expected_children: usize,
+    #[case] expected_fields: usize,
+) {
+    let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+    let root = root_command(&context);
+
+    assert_eq!(
+        (
+            root.renderer.human.supported,
+            root.renderer.machine.supported
+        ),
+        root_support
+    );
+    assert_eq!(context.commands.len(), 1 + expected_children);
+    assert_eq!(root.inputs.len(), 1, "the root declares one CLI input");
+    assert_eq!(root.renderer.human.fields.len(), expected_fields);
+}
+
+/// Returns the root command's first projected human field identifier.
+fn first_human_field_id(context: &AgentContext) -> String {
+    root_command(context)
+        .renderer
+        .human
+        .fields
+        .first()
+        .map(|field| field.id.clone())
+        .expect("the populated tree declares a human field")
+}
+
+/// The projection comparison detects a localized field identifier.
+///
+/// This is the standing negative control for the localization property: it
+/// performs the mutation that property must catch — replacing a protocol field
+/// identifier with localized prose — and asserts the comparison notices. Without
+/// it, a comparison that ignored `renderer.fields` would still pass.
+#[test]
+fn projection_comparison_detects_a_localized_field_identifier() {
+    let tree = populated_tree();
+    let plain = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+    let mut mutated = bridge_ir_to_agent_context(&tree, "demo_pkg", Some(&RenamingLocalizer));
+
+    let field = mutated
+        .commands
+        .first_mut()
+        .and_then(|command| command.renderer.human.fields.first_mut())
+        .expect("the populated tree declares human fields");
+    field.id = "localized summary for message".to_owned();
+
+    assert_ne!(
+        without_summaries(&plain),
+        without_summaries(&mutated),
+        "a localized field identifier must fail the protocol projection comparison"
+    );
+    assert_eq!(
+        first_human_field_id(&plain),
+        "message",
+        "the unmutated projection keeps the declared identifier"
+    );
+    assert_eq!(
+        first_human_field_id(&mutated),
+        "localized summary for message"
+    );
+    let mut restored = without_summaries(&mutated);
+    let restored_field = restored
+        .commands
+        .first_mut()
+        .and_then(|command| command.renderer.human.fields.first_mut())
+        .expect("the populated tree declares human fields");
+    restored_field.id = "message".to_owned();
+
+    assert_eq!(
+        restored,
+        without_summaries(&plain),
+        "the field identifier is the only protocol difference the mutation introduced"
+    );
 }

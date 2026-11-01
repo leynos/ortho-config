@@ -22,6 +22,9 @@ mod renderer_legacy;
 #[path = "tests_renderer_defaults.rs"]
 mod renderer_defaults;
 
+#[path = "tests_renderer_wire.rs"]
+mod renderer_wire;
+
 #[path = "tests_wire_enums.rs"]
 mod wire_enums;
 

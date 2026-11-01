@@ -17,6 +17,11 @@
 
 mod fixtures;
 
+// Declared here rather than inside `fixtures` so targets that never read
+// renderer metadata do not carry these helpers as dead code.
+#[path = "fixtures/renderer_assertions.rs"]
+mod renderer_assertions;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
@@ -50,10 +55,10 @@ type TestError = Box<dyn Error + Send + Sync>;
 const FIXTURE_PACKAGE: &str = "orthohelp_fixture";
 const FIXTURE_ROOT_TYPE: &str = "orthohelp_fixture::NestedFixtureConfig";
 
-/// Package-rooted leaf of the command that declares both renderers.
-const GREET_COMMAND: &str = "greet";
 /// Leaf of the command that declares no renderer at all.
 const VERSION_COMMAND: &str = "version";
+/// Format that writes the agent-context artefact and streams it to stdout.
+const AGENT_CONTEXT_FORMAT: &str = "agent-context";
 
 // The bridge directory is content-addressed and rewritten before each build, so
 // two scenarios must never overlap. The BDD suite takes the same precaution.
@@ -67,7 +72,7 @@ static BRIDGE_BUILD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 #[test]
 fn declared_renderer_metadata_survives_to_both_artefacts() -> Result<(), TestError> {
     let (_temp, out_dir) = temp_out_dir()?;
-    let run = run_orthohelp(&out_dir)?;
+    let run = run_orthohelp(&out_dir, AGENT_CONTEXT_FORMAT, &[])?;
 
     let stdout: Value = serde_json::from_slice(&run.stdout).map_err(|error| {
         format!(
@@ -77,18 +82,8 @@ fn declared_renderer_metadata_survives_to_both_artefacts() -> Result<(), TestErr
     })?;
     let artefact = read_artefact(&out_dir)?;
 
-    let declared = expected_greet_renderer();
     for (origin, document) in [("stdout", &stdout), ("agent-context.json", &artefact)] {
-        let greet = command_by_leaf(document, GREET_COMMAND)
-            .map_err(|error| format!("{origin}: {error}"))?;
-        let renderer = greet
-            .get("renderer")
-            .ok_or_else(|| format!("{origin}: greet command carries no renderer block"))?;
-        if *renderer != declared {
-            return Err(
-                format!("{origin}: greet renderer should be {declared}, got {renderer}").into(),
-            );
-        }
+        renderer_assertions::assert_greet_renderer(document, origin)?;
     }
 
     if stdout != artefact {
@@ -105,10 +100,10 @@ fn declared_renderer_metadata_survives_to_both_artefacts() -> Result<(), TestErr
 #[test]
 fn undeclared_command_keeps_legacy_defaults_end_to_end() -> Result<(), TestError> {
     let (_temp, out_dir) = temp_out_dir()?;
-    let run = run_orthohelp(&out_dir)?;
+    let run = run_orthohelp(&out_dir, AGENT_CONTEXT_FORMAT, &[])?;
     let stdout: Value = serde_json::from_slice(&run.stdout)?;
 
-    let version = command_by_leaf(&stdout, VERSION_COMMAND)?;
+    let version = renderer_assertions::command_by_leaf(&stdout, VERSION_COMMAND)?;
     let renderer = version
         .get("renderer")
         .ok_or("an undeclared command should still report the default contract")?;
@@ -145,48 +140,72 @@ fn undeclared_command_keeps_legacy_defaults_end_to_end() -> Result<(), TestError
     Ok(())
 }
 
-/// The renderer block `nested-fixture greet` declares, as it appears on the wire.
+/// A policy check keeps its report as the sole stdout document.
 ///
-/// Written as a literal rather than derived from the fixture so the assertion
-/// pins the wire spelling a consumer depends on.
-fn expected_greet_renderer() -> Value {
-    serde_json::json!({
-        "human": {
-            "supported": true,
-            "tty": "adapts",
-            "colour": "auto",
-            "width": {"kind": "terminal"},
-            "plain": "available",
-            "stdout": "text",
-            "stderr": "text",
-            "fields": [
-                {"id": "message", "localization": "localized"},
-                {"id": "error_code", "localization": "non_localized"}
-            ]
-        },
-        "machine": {
-            "supported": true,
-            "tty": "independent",
-            "colour": "never",
-            "progress": "never",
-            "pager": "never",
-            "width": {"kind": "unbounded"},
-            "plain": "always",
-            "stdout": "structured",
-            "stderr": "structured",
-            "fields": [
-                {"id": "error_code", "localization": "non_localized"}
-            ]
-        }
-    })
+/// The combined format still writes the renderer-bearing agent context, but an
+/// agent that asked for policy checking reads the report on stdout; streaming
+/// the context there as well would make the document ambiguous.
+#[test]
+fn policy_report_is_the_only_stdout_document_in_combined_mode() -> Result<(), TestError> {
+    let (_temp, out_dir) = temp_out_dir()?;
+    let run = run_orthohelp(
+        &out_dir,
+        "all",
+        &[
+            "--check-agent-native",
+            "--policy-mode",
+            "warn",
+            "--man-date",
+            "2026-06-04",
+            "--man-split-subcommands",
+            "--ps-split-subcommands",
+            "true",
+            "--ensure-en-us",
+            "true",
+        ],
+    )?;
+
+    let stdout: Value = serde_json::from_slice(&run.stdout).map_err(|error| {
+        format!(
+            "stdout should be one compact JSON document, got {:?}: {error}",
+            String::from_utf8_lossy(&run.stdout)
+        )
+    })?;
+    assert_policy_report_shape(&stdout)?;
+
+    if stdout.get("commands").is_some() {
+        return Err("policy checking should not stream the agent context to stdout".into());
+    }
+    let artefact = read_artefact(&out_dir)?;
+    renderer_assertions::assert_greet_renderer(&artefact, "agent-context.json")
 }
 
-/// Runs the fixture through `--format agent-context` with closed stdin.
+/// Requires `document` to look like a policy report rather than agent context.
+fn assert_policy_report_shape(document: &Value) -> Result<(), TestError> {
+    let tool = document.get("tool").and_then(Value::as_str);
+    if tool != Some("cargo-orthohelp") {
+        return Err(format!("stdout should be a policy report, got tool {tool:?}").into());
+    }
+    let mode = document.get("mode").and_then(Value::as_str);
+    if mode != Some("warn") {
+        return Err(format!("policy report should record warn mode, got {mode:?}").into());
+    }
+    if document.get("results").and_then(Value::as_array).is_none() {
+        return Err("policy report should list results".into());
+    }
+    Ok(())
+}
+
+/// Runs the fixture through the requested format with closed stdin.
 ///
 /// The shared runner closes stdin and enforces a deadline, so a generator that
 /// waited for input or hung would be reported as such rather than stalling the
 /// suite until the harness gives up.
-fn run_orthohelp(out_dir: &Utf8PathBuf) -> Result<std::process::Output, TestError> {
+fn run_orthohelp(
+    out_dir: &Utf8PathBuf,
+    format: &str,
+    extra_args: &[&str],
+) -> Result<std::process::Output, TestError> {
     let exe = fixtures::cargo_orthohelp_exe()?;
     let workspace_root = fixtures::workspace_root()?;
     let _bridge_build_guard = BRIDGE_BUILD_MUTEX
@@ -207,7 +226,8 @@ fn run_orthohelp(out_dir: &Utf8PathBuf) -> Result<std::process::Output, TestErro
         .arg("--locale")
         .arg("en-US")
         .arg("--format")
-        .arg("agent-context");
+        .arg(format)
+        .args(extra_args);
 
     let output = process_runner::run_with_policy(
         &mut command,
@@ -232,31 +252,6 @@ fn read_artefact(out_dir: &Utf8PathBuf) -> Result<Value, TestError> {
     let mut content = String::new();
     file.read_to_string(&mut content)?;
     Ok(serde_json::from_str(&content)?)
-}
-
-/// Finds the single command whose `path` ends in `leaf`.
-///
-/// Requiring uniqueness means a renamed or duplicated command fails here rather
-/// than silently asserting whichever match came first.
-fn command_by_leaf<'a>(document: &'a Value, leaf: &str) -> Result<&'a Value, TestError> {
-    let matches = document
-        .get("commands")
-        .and_then(Value::as_array)
-        .ok_or("commands should be an array")?
-        .iter()
-        .filter(|command| {
-            command
-                .get("path")
-                .and_then(Value::as_array)
-                .and_then(|path| path.last())
-                .and_then(Value::as_str)
-                == Some(leaf)
-        })
-        .collect::<Vec<_>>();
-    match matches.as_slice() {
-        [command] => Ok(command),
-        other => Err(format!("expected one command named {leaf:?}, found {}", other.len()).into()),
-    }
 }
 
 /// Creates an output directory and keeps its temporary owner alive.
