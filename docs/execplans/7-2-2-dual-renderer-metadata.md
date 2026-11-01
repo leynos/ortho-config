@@ -14,9 +14,13 @@ touch. The PR is published and under `pr-babysitting`; hosted CI and review
 state live in the delivery ledger rather than in this plan. A further inline
 review on 2026-11-01 raised eleven findings: ten are repaired (documentation
 accuracy, an explicit localization-token match with a diagnostic, removal of
-redundant parser flags, and stronger value assertions in three suites), and the
-request to bump the documentation-IR version is rebutted with the approved
-design; both are recorded in the Decision log.
+redundant parser flags, independent leaf generation in two property suites, and
+stronger value assertions in three suites), and the request to bump the
+documentation-IR version is rebutted with the approved design and withdrawn by
+the reviewer; both are recorded in the Decision log. Gates were re-run on the
+repaired head: formatting, Markdown, diagram, type, and lint gates pass, and
+`make test` again stops in `ortho_l10n --test boundary` on nested-Cargo
+deadline expiries, the same environmental class as before.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -292,6 +296,17 @@ source failures. There is no time limit; queued compiler work is not a hang.
       2.0, and a wire-version bump is an exception this assignment does not
       authorize. Focused suites pass after the repairs; the sequential gate run
       for this candidate is recorded in the Revision note.
+- [x] (2026-11-01) Sequential gates on the inline-review candidate. All eleven
+      review threads carry a reply and CodeRabbit resolved them, withdrawing the
+      version-bump request. On `6c6ffe40`, `make check-fmt` (94 Markdown files
+      unchanged), `make markdownlint` (94 files, 0 issues, spelling clean, no
+      `typos.toml` drift), and `make nixie` pass; `make lint` had already passed
+      on the identical Rust content. `make test` ran 103 targets, passed
+      `ortho_config --test identifier_artefact_e2e` in 565.39 s — showing the
+      earlier 829 s timeout to be environmental — and stopped at
+      `ortho_l10n --test boundary` with six nested `cargo package … exceeded
+      the 240 second deadline` errors, 25 passing tests, and no assertion or
+      compiler diagnostic. The gate therefore remains incomplete, not green.
 
 ## Surprises & discoveries
 
@@ -549,7 +564,9 @@ MiB libtest thread is not generous.
   merely because the version string is unchanged. If the maintainers prefer the
   ADR-0010/ADR-0012 convention for a post-release addition, that is a separate,
   approved change and would also revise the compatibility statement the
-  changelog makes; it is not this branch's call.
+  changelog makes; it is not this branch's call. On 2026-11-01 the reviewer
+  replied to that reasoning and withdrew the finding
+  (`<review_comment_withdrawn>`), stating that no deviation request is needed.
 
 ## Outcomes & retrospective
 
@@ -1303,3 +1320,36 @@ committed `typos.toml` from the shared dictionary; here the rewrite is estate
 drift that the merge base shares, and the Decision log records why it is
 committed on this branch in its own commit rather than in a stacked base pull
 request.
+
+2026-11-01 inline-review revision: A CodeRabbit inline review on `322cc25e`
+raised eleven findings. Ten were accepted and repaired across five commits:
+documentation accuracy (`41391591`: the changelog no longer offers a
+`..Default::default()` construction that cannot compile, the user's guide
+describes the two inheritance keys as output pass-through, and it names
+`AgentCommand`); explicit token matching with a `compile_error!` fallback and a
+unit test (`304497fb`); removal of the write-only declaration flags so the
+parsed record is the single source of truth (`968b4cb3`); stronger value
+assertions in the parser tests, the IR decode test, and the named-width cases
+(`c8dc7199`); and independent generation of every leaf in the agent-context
+round-trip strategy (`14db71b9`). The eleventh asked for a documentation-IR
+version bump; it is rebutted in the Decision log and CodeRabbit withdrew it.
+
+The round-trip strategy was the only place where the suggested change was not
+applied literally. Its repeated leaf families are fixed-length vectors unpacked
+by `exact_leaves` rather than nested tuples: building the nested strategy in a
+debug build overran the libtest thread's 2 MiB stack, while the shipped flat
+form passes at 1.5 MiB. The property still draws all ten leaves independently,
+so the coverage the review asked for is met with more headroom, not less.
+
+2026-11-01 inline-review gate revision: Gates were re-run sequentially on
+`6c6ffe40`. `make check-fmt` passed (94 Markdown files unchanged after
+`mdtablefix`), `make markdownlint` passed (94 files, 0 issues, spelling clean,
+`typos.toml` unchanged), and `make nixie` passed. `make lint` had already
+passed on identical Rust content, since the final commit is Markdown-only. In
+`make test`, 103 targets ran: `ortho_config --test identifier_artefact_e2e`
+passed in 565.39 s, which showed the 2026-10-30 timeout to be environmental,
+and the run stopped at `ortho_l10n --test boundary` with six
+`cargo package for ortho_l10n, ortho_config exceeded the 240 second deadline`
+errors and 25 passing tests, with no assertion or compiler diagnostic. That is
+the same class of nested-Cargo deadline expiry recorded on 2026-10-31, so
+`make test` remains incomplete rather than green.
