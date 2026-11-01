@@ -3,9 +3,12 @@
 //! Kept in its own module so `sections.rs` and `generate/docs/mod.rs` stay
 //! under the repository's 400-line ceiling.
 //!
-//! Every parser-accepted token has an explicit arm here, and an unrecognized
-//! one emits nothing rather than inventing a value: the parser has already
-//! rejected invalid spellings, so the only remaining state is "undeclared".
+//! Every parser-accepted token maps to a typed IR variant here, and no
+//! unrecognized token invents a value. Most enum leaves share
+//! [`enum_option_tokens`], which converts a `snake_case` token generically and
+//! emits `None` when the token is absent; the parser is the gate that rejects
+//! invalid spellings, so `None` can only mean "undeclared" for a declaration
+//! that reached this stage.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -168,17 +171,68 @@ fn width_tokens(width: &RenderWidthAttr, krate: &TokenStream) -> TokenStream {
 /// Emits one `RendererField` entry for a declared output field.
 fn field_tokens(field: &RendererFieldAttr, krate: &TokenStream) -> TokenStream {
     let id = syn::LitStr::new(&field.id, proc_macro2::Span::call_site());
-    // The IR's localization enum has no `Unknown` fallback, so the two accepted
-    // tokens are matched explicitly rather than defaulted.
-    let localization = if field.localization == "localized" {
-        quote! { #krate::docs::RendererFieldLocalization::Localized }
-    } else {
-        quote! { #krate::docs::RendererFieldLocalization::NonLocalized }
+    // The IR's localization enum has no `Unknown` fallback, so both accepted
+    // tokens are matched explicitly. A third spelling cannot reach here through
+    // the parser, but emitting a diagnostic keeps a future drift between the
+    // accepted-token table and this match from mislabelling a field silently.
+    let localization = match field.localization.as_str() {
+        "localized" => quote! { #krate::docs::RendererFieldLocalization::Localized },
+        "non_localized" => quote! { #krate::docs::RendererFieldLocalization::NonLocalized },
+        other => {
+            let message = format!("unsupported renderer localization `{other}`");
+            quote! {{
+                compile_error!(#message);
+                #krate::docs::RendererFieldLocalization::NonLocalized
+            }}
+        }
     };
     quote! {
         #krate::docs::RendererField {
             id: String::from(#id),
             localization: #localization,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Focused checks on the field-localization token emission.
+
+    use super::*;
+
+    /// Builds a field attribute carrying the given localization token.
+    fn field_with(localization: &str) -> RendererFieldAttr {
+        RendererFieldAttr {
+            id: "message".to_owned(),
+            localization: localization.to_owned(),
+        }
+    }
+
+    /// Both accepted tokens emit their own variant, and an unrecognized one is
+    /// a diagnostic rather than a silent `NonLocalized`.
+    #[test]
+    fn localization_tokens_are_matched_explicitly() {
+        let krate = quote! { ortho_config };
+        let localized = field_tokens(&field_with("localized"), &krate).to_string();
+        let non_localized = field_tokens(&field_with("non_localized"), &krate).to_string();
+        let rejected = field_tokens(&field_with("translated"), &krate).to_string();
+
+        assert!(
+            localized.contains("RendererFieldLocalization :: Localized"),
+            "localized: {localized}"
+        );
+        assert!(
+            !localized.contains("NonLocalized"),
+            "localized must not fall through: {localized}"
+        );
+        assert!(
+            non_localized.contains("RendererFieldLocalization :: NonLocalized"),
+            "non_localized: {non_localized}"
+        );
+        assert!(rejected.contains("compile_error"), "rejected: {rejected}");
+        assert!(
+            rejected.contains("unsupported renderer localization"),
+            "rejected: {rejected}"
+        );
     }
 }
