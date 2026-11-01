@@ -5,15 +5,15 @@
 //! must be non-empty and unique within one record, and its localization token
 //! must be spelled exactly.
 
-use super::renderer_attrs::{assert_rejected, parse_renderer};
+use super::renderer_attrs::{Declaration, Needle, assert_rejected, parse_renderer};
 use anyhow::{Context, Result, ensure};
 
 /// A declared output field keeps its identifier and localization token.
 #[test]
 fn parses_declared_field() -> Result<()> {
-    let renderer = parse_renderer(
+    let renderer = parse_renderer(Declaration(
         r#"renderer(machine(field("error_code", localization = "non_localized")))"#,
-    )?;
+    ))?;
     let machine = renderer.machine.context("expected a machine record")?;
     let [field] = machine.fields.as_slice() else {
         return Err(anyhow::anyhow!("fields: {:?}", machine.fields.len()));
@@ -30,12 +30,12 @@ fn parses_declared_field() -> Result<()> {
 /// Fields keep source order, since the emitted IR preserves declaration order.
 #[test]
 fn preserves_field_declaration_order() -> Result<()> {
-    let renderer = parse_renderer(
+    let renderer = parse_renderer(Declaration(
         r#"renderer(human(
             field("zeta_message", localization = "localized"),
             field("alpha_code", localization = "non_localized")
         ))"#,
-    )?;
+    ))?;
     let human = renderer.human.context("expected a human record")?;
     let ids: Vec<&str> = human.fields.iter().map(|field| field.id.as_str()).collect();
     ensure!(ids == ["zeta_message", "alpha_code"], "ids: {ids:?}");
@@ -45,8 +45,9 @@ fn preserves_field_declaration_order() -> Result<()> {
 /// Unicode identifiers are accepted verbatim: the parser never normalizes them.
 #[test]
 fn accepts_unicode_field_identifier() -> Result<()> {
-    let renderer =
-        parse_renderer("renderer(machine(field(\"échec\", localization = \"localized\")))")?;
+    let renderer = parse_renderer(Declaration(
+        "renderer(machine(field(\"échec\", localization = \"localized\")))",
+    ))?;
     let machine = renderer.machine.context("expected a machine record")?;
     let [field] = machine.fields.as_slice() else {
         return Err(anyhow::anyhow!("expected one field"));
@@ -59,8 +60,8 @@ fn accepts_unicode_field_identifier() -> Result<()> {
 #[test]
 fn rejects_empty_field_identifier() {
     assert_rejected(
-        r#"renderer(human(field("", localization = "localized")))"#,
-        "field id must not be empty",
+        Declaration(r#"renderer(human(field("", localization = "localized")))"#),
+        Needle("field id must not be empty"),
     );
 }
 
@@ -68,8 +69,8 @@ fn rejects_empty_field_identifier() {
 #[test]
 fn rejects_field_without_localization() {
     assert_rejected(
-        r#"renderer(human(field("error_code")))"#,
-        "field requires localization",
+        Declaration(r#"renderer(human(field("error_code")))"#),
+        Needle("field requires localization"),
     );
 }
 
@@ -77,8 +78,8 @@ fn rejects_field_without_localization() {
 #[test]
 fn rejects_field_with_unknown_localization() {
     assert_rejected(
-        r#"renderer(human(field("error_code", localization = "maybe")))"#,
-        "unknown localization 'maybe'",
+        Declaration(r#"renderer(human(field("error_code", localization = "maybe")))"#),
+        Needle("unknown localization 'maybe'"),
     );
 }
 
@@ -86,8 +87,8 @@ fn rejects_field_with_unknown_localization() {
 #[test]
 fn rejects_field_with_unknown_policy() {
     assert_rejected(
-        r#"renderer(human(field("error_code", width = "localized")))"#,
-        "unknown field policy `width`",
+        Declaration(r#"renderer(human(field("error_code", width = "localized")))"#),
+        Needle("unknown field policy `width`"),
     );
 }
 
@@ -95,12 +96,14 @@ fn rejects_field_with_unknown_policy() {
 #[test]
 fn rejects_repeated_field_policy() {
     assert_rejected(
-        r#"renderer(human(field(
+        Declaration(
+            r#"renderer(human(field(
             "error_code",
             localization = "localized",
             localization = "non_localized"
         )))"#,
-        "duplicate field policy `localization`",
+        ),
+        Needle("duplicate field policy `localization`"),
     );
 }
 
@@ -108,23 +111,25 @@ fn rejects_repeated_field_policy() {
 #[test]
 fn rejects_duplicate_field_identifier() {
     assert_rejected(
-        r#"renderer(machine(
+        Declaration(
+            r#"renderer(machine(
             field("error_code", localization = "localized"),
             field("error_code", localization = "non_localized")
         ))"#,
-        "duplicate output field 'error_code'",
+        ),
+        Needle("duplicate output field 'error_code'"),
     );
 }
 
 /// The same identifier in different records is allowed: records are independent.
 #[test]
 fn allows_same_field_identifier_in_both_records() -> Result<()> {
-    let renderer = parse_renderer(
+    let renderer = parse_renderer(Declaration(
         r#"renderer(
             human(field("error_code", localization = "localized")),
             machine(field("error_code", localization = "non_localized"))
         )"#,
-    )?;
+    ))?;
     let human = renderer.human.context("expected a human record")?;
     let machine = renderer.machine.context("expected a machine record")?;
     let [human_field] = human.fields.as_slice() else {

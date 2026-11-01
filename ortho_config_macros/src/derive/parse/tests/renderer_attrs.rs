@@ -5,6 +5,10 @@
 //! because the generated IR has no way to express an unchecked value. Each test
 //! therefore asserts on the diagnostic text rather than only on `is_err()`, so
 //! a rejection for the wrong reason fails.
+//!
+//! The three string roles are distinct — a declaration handed to the parser, a
+//! leaf fragment spliced into one, and a diagnostic substring — so each gets
+//! its own newtype rather than being passed around as a bare `&str`.
 
 use super::super::doc_types::{RenderWidthAttr, RendererAttrs, RendererRecordAttrs};
 use super::super::*;
@@ -12,9 +16,31 @@ use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use syn::DeriveInput;
 
+/// A complete `renderer(...)` body, exactly as it appears in the attribute.
+#[derive(Clone, Copy)]
+pub(super) struct Declaration<'a>(pub(super) &'a str);
+
+/// One `key = "token"` leaf, as it is written inside a record group.
+#[derive(Clone, Copy)]
+pub(super) struct PolicyLeaf<'a>(pub(super) &'a str);
+
+/// A diagnostic substring that a rejected declaration must contain.
+#[derive(Clone, Copy)]
+pub(super) struct Needle<'a>(pub(super) &'a str);
+
+impl PolicyLeaf<'_> {
+    /// Splices the leaf into its own human record so the parser can see it.
+    ///
+    /// The surrounding declaration is the minimum that reaches policy-leaf
+    /// validation, so its shape lives here rather than in each test.
+    fn in_human_record(self) -> String {
+        format!("renderer(human({}))", self.0)
+    }
+}
+
 /// Parses a struct carrying only the given `renderer(...)` declaration.
-pub(super) fn parse_renderer(decl: &str) -> Result<RendererAttrs> {
-    let source = format!("#[ortho_config({decl})]\nstruct Demo {{ value: u8, }}");
+pub(super) fn parse_renderer(decl: Declaration<'_>) -> Result<RendererAttrs> {
+    let source = format!("#[ortho_config({})]\nstruct Demo {{ value: u8, }}", decl.0);
     let input: DeriveInput = syn::parse_str(&source).context("failed to parse test input")?;
     let (_, _, struct_attrs, _) = parse_input(&input).context("parse_input failed")?;
     struct_attrs
@@ -24,21 +50,22 @@ pub(super) fn parse_renderer(decl: &str) -> Result<RendererAttrs> {
 }
 
 /// Asserts that the declaration is rejected with a message containing `needle`.
-pub(super) fn assert_rejected(decl: &str, needle: &str) {
+pub(super) fn assert_rejected(decl: Declaration<'_>, needle: Needle<'_>) {
     let Err(error) = parse_renderer(decl) else {
-        panic!("expected `{decl}` to be rejected, but it parsed");
+        panic!("expected `{}` to be rejected, but it parsed", decl.0);
     };
     let message = format!("{error:#}");
     assert!(
-        message.contains(needle),
-        "expected rejection mentioning {needle:?}, got: {message}"
+        message.contains(needle.0),
+        "expected rejection mentioning {:?}, got: {message}",
+        needle.0
     );
 }
 
 /// A fully declared human record parses every policy leaf.
 #[test]
 fn parses_fully_declared_human_record() -> Result<()> {
-    let renderer = parse_renderer(
+    let renderer = parse_renderer(Declaration(
         r#"renderer(human(
             supported = true,
             tty = "adapts",
@@ -55,7 +82,7 @@ fn parses_fully_declared_human_record() -> Result<()> {
             progress_inheritance = "allowed",
             subprocess_inheritance = "forbidden"
         ))"#,
-    )?;
+    ))?;
     let human = renderer.human.context("expected a human record")?;
 
     assert_human_policy_leaves(&human)?;
@@ -75,9 +102,9 @@ fn width_name(width: &RenderWidthAttr) -> String {
 /// Both records may be declared independently in one attribute.
 #[test]
 fn parses_both_records_independently() -> Result<()> {
-    let renderer = parse_renderer(
+    let renderer = parse_renderer(Declaration(
         r#"renderer(human(colour = "always"), machine(supported = true, stdout = "structured"))"#,
-    )?;
+    ))?;
 
     let human = renderer.human.context("expected a human record")?;
     let machine = renderer.machine.context("expected a machine record")?;
@@ -106,7 +133,7 @@ fn parses_both_records_independently() -> Result<()> {
 /// A bare `supported` leaf means true, matching the bool attribute convention.
 #[test]
 fn bare_supported_leaf_means_true() -> Result<()> {
-    let renderer = parse_renderer("renderer(machine(supported))")?;
+    let renderer = parse_renderer(Declaration("renderer(machine(supported))"))?;
     let machine = renderer.machine.context("expected a machine record")?;
     ensure!(
         machine.supported == Some(true),
@@ -122,8 +149,9 @@ fn bare_supported_leaf_means_true() -> Result<()> {
 /// a long declaration without changing meaning.
 #[test]
 fn separate_groups_for_one_record_merge() -> Result<()> {
-    let renderer =
-        parse_renderer(r#"renderer(human(colour = "never"), human(width = "terminal"))"#)?;
+    let renderer = parse_renderer(Declaration(
+        r#"renderer(human(colour = "never"), human(width = "terminal"))"#,
+    ))?;
 
     let human = renderer.human.context("expected a human record")?;
     ensure!(human.colour.as_deref() == Some("never"), "colour");
@@ -135,12 +163,18 @@ fn separate_groups_for_one_record_merge() -> Result<()> {
     Ok(())
 }
 
-/// The two special width spellings parse to their enum shapes.
+/// The two special width spellings round-trip through the parser.
+///
+/// Deriving the declared token from the expected shape keeps the accepted
+/// spelling and the assertion message in one place, so they cannot drift.
 #[rstest]
-#[case::terminal("terminal", RenderWidthAttr::Terminal)]
-#[case::unbounded("unbounded", RenderWidthAttr::Unbounded)]
-fn parses_named_width(#[case] token: &str, #[case] expected: RenderWidthAttr) -> Result<()> {
-    let renderer = parse_renderer(&format!(r#"renderer(human(width = "{token}"))"#))?;
+#[case::terminal(RenderWidthAttr::Terminal)]
+#[case::unbounded(RenderWidthAttr::Unbounded)]
+fn parses_named_width(#[case] expected: RenderWidthAttr) -> Result<()> {
+    let declared = width_name(&expected);
+    let renderer = parse_renderer(Declaration(&format!(
+        r#"renderer(human(width = "{declared}"))"#
+    )))?;
     let human = renderer.human.context("expected a human record")?;
     let actual = human.width.context("expected a width")?;
     ensure!(
@@ -188,7 +222,7 @@ fn assert_human_output_leaves(human: &RendererRecordAttrs) -> Result<()> {
 #[case::one(1)]
 #[case::max(u64::from(u16::MAX))]
 fn accepts_width_within_range(#[case] columns: u64) -> Result<()> {
-    let renderer = parse_renderer(&format!("renderer(human(width = {columns}))"))?;
+    let renderer = parse_renderer(Declaration(&format!("renderer(human(width = {columns}))")))?;
     let human = renderer.human.context("expected a human record")?;
     ensure!(
         matches!(human.width, Some(RenderWidthAttr::Fixed(value)) if u64::from(value) == columns),
@@ -201,33 +235,45 @@ fn accepts_width_within_range(#[case] columns: u64) -> Result<()> {
 /// Zero columns is rejected because the IR counts are non-zero.
 #[test]
 fn rejects_zero_width() {
-    assert_rejected("renderer(human(width = 0))", "greater than zero");
+    assert_rejected(
+        Declaration("renderer(human(width = 0))"),
+        Needle("greater than zero"),
+    );
 }
 
 /// A width above `u16::MAX` is rejected rather than silently truncated.
 #[test]
 fn rejects_overflowing_width() {
-    assert_rejected("renderer(human(width = 65536))", "must not exceed 65535");
+    assert_rejected(
+        Declaration("renderer(human(width = 65536))"),
+        Needle("must not exceed 65535"),
+    );
 }
 
 /// An unrecognized width spelling is rejected.
 #[test]
 fn rejects_unknown_named_width() {
-    assert_rejected("renderer(human(width = \"wide\"))", "unknown width 'wide'");
+    assert_rejected(
+        Declaration(r#"renderer(human(width = "wide"))"#),
+        Needle("unknown width 'wide'"),
+    );
 }
 
 /// A non-string, non-integer width is rejected as the wrong literal type.
 #[test]
 fn rejects_width_with_wrong_literal_type() {
-    assert_rejected("renderer(human(width = true))", "expected");
+    assert_rejected(
+        Declaration("renderer(human(width = true))"),
+        Needle("expected"),
+    );
 }
 
 /// Unknown top-level renderer keys are rejected.
 #[test]
 fn rejects_unknown_renderer_key() {
     assert_rejected(
-        "renderer(audio(colour = \"auto\"))",
-        "unknown renderer attribute `audio`",
+        Declaration(r#"renderer(audio(colour = "auto"))"#),
+        Needle("unknown renderer attribute `audio`"),
     );
 }
 
@@ -235,8 +281,8 @@ fn rejects_unknown_renderer_key() {
 #[test]
 fn rejects_unknown_record_policy() {
     assert_rejected(
-        "renderer(human(hyperlink = \"always\"))",
-        "unknown renderer policy `hyperlink`",
+        Declaration(r#"renderer(human(hyperlink = "always"))"#),
+        Needle("unknown renderer policy `hyperlink`"),
     );
 }
 
@@ -245,44 +291,56 @@ fn rejects_unknown_record_policy() {
 /// The rows are deliberately uneven: each names a token list the IR also
 /// enforces, so a widened parser list would fail here first.
 #[rstest]
-#[case::tty(r#"tty = "sometimes""#, "unknown tty 'sometimes'")]
-#[case::closed_stdin(r#"closed_stdin = "hangup""#, "unknown closed_stdin 'hangup'")]
-#[case::colour(r#"colour = "on""#, "unknown colour 'on'")]
-#[case::emoji(r#"emoji = "maybe""#, "unknown emoji 'maybe'")]
-#[case::progress(r#"progress = "on""#, "unknown progress 'on'")]
-#[case::pager(r#"pager = "on""#, "unknown pager 'on'")]
-#[case::accessibility(r#"accessibility = "full""#, "unknown accessibility 'full'")]
-#[case::plain(r#"plain = "partial""#, "unknown plain 'partial'")]
-#[case::stdout(r#"stdout = "binary""#, "unknown stdout 'binary'")]
-#[case::stderr(r#"stderr = "binary""#, "unknown stderr 'binary'")]
+#[case::tty(PolicyLeaf(r#"tty = "sometimes""#), Needle("unknown tty 'sometimes'"))]
+#[case::closed_stdin(
+    PolicyLeaf(r#"closed_stdin = "hangup""#),
+    Needle("unknown closed_stdin 'hangup'")
+)]
+#[case::colour(PolicyLeaf(r#"colour = "on""#), Needle("unknown colour 'on'"))]
+#[case::emoji(PolicyLeaf(r#"emoji = "maybe""#), Needle("unknown emoji 'maybe'"))]
+#[case::progress(PolicyLeaf(r#"progress = "on""#), Needle("unknown progress 'on'"))]
+#[case::pager(PolicyLeaf(r#"pager = "on""#), Needle("unknown pager 'on'"))]
+#[case::accessibility(
+    PolicyLeaf(r#"accessibility = "full""#),
+    Needle("unknown accessibility 'full'")
+)]
+#[case::plain(PolicyLeaf(r#"plain = "partial""#), Needle("unknown plain 'partial'"))]
+#[case::stdout(PolicyLeaf(r#"stdout = "binary""#), Needle("unknown stdout 'binary'"))]
+#[case::stderr(PolicyLeaf(r#"stderr = "binary""#), Needle("unknown stderr 'binary'"))]
 #[case::progress_inheritance(
-    r#"progress_inheritance = "sometimes""#,
-    "unknown progress_inheritance 'sometimes'"
+    PolicyLeaf(r#"progress_inheritance = "sometimes""#),
+    Needle("unknown progress_inheritance 'sometimes'")
 )]
 #[case::subprocess_inheritance(
-    r#"subprocess_inheritance = "sometimes""#,
-    "unknown subprocess_inheritance 'sometimes'"
+    PolicyLeaf(r#"subprocess_inheritance = "sometimes""#),
+    Needle("unknown subprocess_inheritance 'sometimes'")
 )]
-fn rejects_unknown_token(#[case] leaf: &str, #[case] needle: &str) {
-    assert_rejected(&format!("renderer(human({leaf}))"), needle);
+fn rejects_unknown_token(#[case] leaf: PolicyLeaf<'_>, #[case] needle: Needle<'_>) {
+    assert_rejected(Declaration(&leaf.in_human_record()), needle);
 }
 
 /// A token leaf rejects a non-string literal.
 #[test]
 fn rejects_token_with_wrong_literal_type() {
-    assert_rejected("renderer(human(colour = 1))", "colour must be a string");
+    assert_rejected(
+        Declaration("renderer(human(colour = 1))"),
+        Needle("colour must be a string"),
+    );
 }
 
 /// `supported` rejects a non-boolean literal.
 #[test]
 fn rejects_supported_with_wrong_literal_type() {
-    assert_rejected("renderer(human(supported = \"yes\"))", "expected");
+    assert_rejected(
+        Declaration(r#"renderer(human(supported = "yes"))"#),
+        Needle("expected"),
+    );
 }
 
 /// Repeating a leaf, even across groups for the same record, is an error.
 #[rstest]
-#[case::same_group(r#"renderer(human(colour = "auto", colour = "never"))"#)]
-#[case::across_groups(r#"renderer(human(colour = "auto"), human(colour = "never"))"#)]
-fn rejects_duplicate_policy(#[case] decl: &str) {
-    assert_rejected(decl, "duplicate renderer policy `colour`");
+#[case::same_group(Declaration(r#"renderer(human(colour = "auto", colour = "never"))"#))]
+#[case::across_groups(Declaration(r#"renderer(human(colour = "auto"), human(colour = "never"))"#))]
+fn rejects_duplicate_policy(#[case] decl: Declaration<'_>) {
+    assert_rejected(decl, Needle("duplicate renderer policy `colour`"));
 }

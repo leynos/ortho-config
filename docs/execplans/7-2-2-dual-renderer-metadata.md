@@ -166,7 +166,9 @@ source failures. There is no time limit; queued compiler work is not a hang.
       arguments. The remaining finding is a string-heavy-argument score on the
       macro parser's test module; it is deferred until the hosted CodeScene
       check reports whether the hosted rule set counts test modules, because
-      the alternative is a metrics-driven rewrite of that test DSL.
+      the alternative is a metrics-driven rewrite of that test DSL. The hosted
+      check did count that module, so the deferral was resolved on 2026-11-01
+      (see below).
 - [x] (2026-10-31) A full gate run then reached the linters for the first time
       and failed on `doc_attrs.rs`, which had grown to 407 lines against
       Whitaker's 400-line module ceiling; the earlier `apply_nested_struct_attr`
@@ -184,6 +186,21 @@ source failures. There is no time limit; queued compiler work is not a hang.
       left untested — the five fixture workspace members and the pytest phase —
       were then certified separately and passed (`119 passed, 5 skipped`). The
       boundary expiry is recorded as environmental, not as green.
+- [x] (2026-11-01) The hosted `CodeScene Code Health Review` on the published
+      head reported two advisory findings, so both were repaired rather than
+      deferred. `renderer_mapping_tests.rs` still showed Code Duplication after
+      the shared builder, because four variants-for-variants tests kept
+      identical bodies; they now come from one `single_leaf_mapping_test!`
+      macro, which leaves a single body and a table of variant pairs per
+      family. `renderer_attrs.rs` scored 58.3% string-typed arguments against a
+      39% threshold; the declaration handed to the parser, the leaf fragment
+      spliced into one, and the expected diagnostic substring are distinct
+      roles, so each became its own newtype (`Declaration`, `PolicyLeaf`,
+      `Needle`) with a `pub(super)` field for the sibling field-test module.
+      The width test now derives its declared token from the expected enum
+      through `width_name`, so the accepted spelling and the assertion message
+      cannot drift. Local `cs review` reports 10.0 for both files; focused
+      suites pass (25 mapping cases and 47 macro parser cases).
 
 ## Surprises & discoveries
 
@@ -1032,3 +1049,15 @@ incomplete rather than green, and the boundary expiry is recorded as
 environmental. The PR description is now published from this session; hosted CI
 and review results remain outside this plan and are tracked in the delivery
 ledger.
+
+2026-11-01 hosted code-health revision: The hosted
+`CodeScene Code Health Review` reported two advisory findings on the published
+head, which answered the open question about whether the hosted rule set counts
+test modules: it does. The bridge mapping tests keep their four
+variant-for-variant families but now generate them from one
+`single_leaf_mapping_test!` macro, so the shape exists once rather than four
+times. The macro parser's test module replaces its bare string arguments with
+the `Declaration`, `PolicyLeaf`, and `Needle` newtypes, which also state each
+string's role at the call site; the width case derives its token from the
+expected enum so the two cannot drift. Both files measure 10.0 locally under
+`cs review`.

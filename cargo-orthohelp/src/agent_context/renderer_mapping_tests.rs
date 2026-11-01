@@ -6,7 +6,8 @@
 use super::renderer_tests::bridge_single;
 use ortho_config::{
     AccessibilityPolicy, ClosedStdinPolicy, InheritancePolicy, PlainPolicy, RenderWidth,
-    RendererField, RendererFieldLocalization, StreamContent, TogglePolicy, TtyPolicy,
+    RendererField, RendererFieldLocalization, RendererRecord, StreamContent, TogglePolicy,
+    TtyPolicy,
 };
 use rstest::rstest;
 
@@ -27,6 +28,46 @@ fn human_only(record: IrRecord) -> RendererMetadata {
         human: Some(record),
         machine: None,
     }
+}
+
+/// Bridges a human record declaring one policy leaf and returns the human slot.
+///
+/// The single-leaf policy families below all perform this step, so it lives in
+/// one place rather than being repeated in each mapping test.
+fn bridged_human(record: IrRecord) -> RendererRecord {
+    bridge_single(Some(human_only(record))).human
+}
+
+/// Declares a variant-for-variant mapping test for a single-leaf policy.
+///
+/// The closed-stdin, width, accessibility, and plain-output families differ
+/// only in their IR enum, wire enum, and record field, so the test shape lives
+/// in one macro rather than four near-identical functions.
+macro_rules! single_leaf_mapping_test {
+    (
+        $test:ident,
+        $ir_type:ty,
+        $wire_type:ty,
+        $leaf:ident;
+        $($case_name:ident: $ir_variant:ident => $wire_variant:ident),+ $(,)?
+    ) => {
+        #[doc = concat!(
+            "Every `", stringify!($ir_type),
+            "` variant maps to its exact wire counterpart."
+        )]
+        #[rstest]
+        $(
+            #[case::$case_name($ir_type::$ir_variant, $wire_type::$wire_variant)]
+        )+
+        fn $test(#[case] ir: $ir_type, #[case] expected: $wire_type) {
+            let human = bridged_human(IrRecord {
+                $leaf: Some(ir),
+                ..IrRecord::default()
+            });
+
+            assert_eq!(human.$leaf, Some(expected));
+        }
+    };
 }
 
 /// Every IR terminal-sensitivity variant maps to its exact wire counterpart.
@@ -50,22 +91,15 @@ fn tty_policy_maps_exactly(#[case] ir: IrTty, #[case] expected: TtyPolicy) {
     );
 }
 
-/// Every IR closed-stdin variant maps to its exact wire counterpart.
-#[rstest]
-#[case::ignored(IrClosedStdin::Ignored, ClosedStdinPolicy::Ignored)]
-#[case::eof(IrClosedStdin::Eof, ClosedStdinPolicy::Eof)]
-#[case::error(IrClosedStdin::Error, ClosedStdinPolicy::Error)]
-fn closed_stdin_policy_maps_exactly(
-    #[case] ir: IrClosedStdin,
-    #[case] expected: ClosedStdinPolicy,
-) {
-    let renderer = bridge_single(Some(human_only(IrRecord {
-        closed_stdin: Some(ir),
-        ..IrRecord::default()
-    })));
-
-    assert_eq!(renderer.human.closed_stdin, Some(expected));
-}
+single_leaf_mapping_test!(
+    closed_stdin_policy_maps_exactly,
+    IrClosedStdin,
+    ClosedStdinPolicy,
+    closed_stdin;
+    ignored: Ignored => Ignored,
+    eof: Eof => Eof,
+    error: Error => Error,
+);
 
 /// Every IR toggle variant maps to its exact wire counterpart.
 #[rstest]
@@ -87,18 +121,14 @@ fn toggle_policy_maps_exactly(#[case] ir: IrToggle, #[case] expected: TogglePoli
     assert_eq!(renderer.human.pager, Some(expected));
 }
 
-/// Every IR width shape maps to its exact wire counterpart, including `fixed`.
-#[rstest]
-#[case::terminal(IrWidth::Terminal, RenderWidth::Terminal)]
-#[case::unbounded(IrWidth::Unbounded, RenderWidth::Unbounded)]
-fn width_shape_maps_exactly(#[case] ir: IrWidth, #[case] expected: RenderWidth) {
-    let renderer = bridge_single(Some(human_only(IrRecord {
-        width: Some(ir),
-        ..IrRecord::default()
-    })));
-
-    assert_eq!(renderer.human.width, Some(expected));
-}
+single_leaf_mapping_test!(
+    width_shape_maps_exactly,
+    IrWidth,
+    RenderWidth,
+    width;
+    terminal: Terminal => Terminal,
+    unbounded: Unbounded => Unbounded,
+);
 
 /// A declared fixed width keeps its exact column count.
 #[test]
@@ -112,35 +142,24 @@ fn fixed_width_preserves_column_count() {
     assert_eq!(renderer.human.width, Some(RenderWidth::Fixed { columns }));
 }
 
-/// Every IR accessibility variant maps to its exact wire counterpart.
-#[rstest]
-#[case::unspecified(IrAccessibility::Unspecified, AccessibilityPolicy::Unspecified)]
-#[case::text_equivalent(IrAccessibility::TextEquivalent, AccessibilityPolicy::TextEquivalent)]
-fn accessibility_policy_maps_exactly(
-    #[case] ir: IrAccessibility,
-    #[case] expected: AccessibilityPolicy,
-) {
-    let renderer = bridge_single(Some(human_only(IrRecord {
-        accessibility: Some(ir),
-        ..IrRecord::default()
-    })));
+single_leaf_mapping_test!(
+    accessibility_policy_maps_exactly,
+    IrAccessibility,
+    AccessibilityPolicy,
+    accessibility;
+    unspecified: Unspecified => Unspecified,
+    text_equivalent: TextEquivalent => TextEquivalent,
+);
 
-    assert_eq!(renderer.human.accessibility, Some(expected));
-}
-
-/// Every IR plain-output variant maps to its exact wire counterpart.
-#[rstest]
-#[case::unsupported(IrPlain::Unsupported, PlainPolicy::Unsupported)]
-#[case::available(IrPlain::Available, PlainPolicy::Available)]
-#[case::always(IrPlain::Always, PlainPolicy::Always)]
-fn plain_policy_maps_exactly(#[case] ir: IrPlain, #[case] expected: PlainPolicy) {
-    let renderer = bridge_single(Some(human_only(IrRecord {
-        plain: Some(ir),
-        ..IrRecord::default()
-    })));
-
-    assert_eq!(renderer.human.plain, Some(expected));
-}
+single_leaf_mapping_test!(
+    plain_policy_maps_exactly,
+    IrPlain,
+    PlainPolicy,
+    plain;
+    unsupported: Unsupported => Unsupported,
+    available: Available => Available,
+    always: Always => Always,
+);
 
 /// Every IR stream-content variant maps to its exact wire counterpart.
 #[rstest]
