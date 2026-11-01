@@ -104,10 +104,13 @@ Retain bare `u32`/`u64` parameters and rely on argument naming and review.
 
 `artefact_lock_evidence_tests.rs` builds its fixtures from the newtypes too, so
 a swapped pair fails to compile in the tests as well as in the production
-module. The tests keep their named cases: the all-primitive `#[rstest]` tables
-became named `const` tables iterated by plain `#[test]` functions, and each row
-keeps its descriptive name as the leading `&str`, so a failing row still names
-the case that broke rather than an anonymous tuple.
+module. The three tables whose every argument was a primitive — the device
+splits, the device renderings, and the identity matches — became named `const`
+tables iterated by plain `#[test]` functions, carrying each row's descriptive
+name as the leading `&str` so a failure still names the case that broke rather
+than an anonymous tuple. The remaining `#[rstest]` tables take a string or an
+already-typed `Option<ProcessId>`, which carries its own name, so they stay as
+they are.
 
 The device split is still pinned by the seven cases that motivated it,
 including the two where the major's high bits and the minor's high bits sit
@@ -134,4 +137,5 @@ what to report.
 - [Developers' guide](../developers-guide.md), "Diagnosing a post-release lock
   hold".
 - [Issue #606](https://github.com/leynos/ortho-config/issues/606).
-- [Artefact-lock diagnostics PR #615](https://github.com/leynos/ortho-config/pull/615).
+- [Artefact-lock diagnostics PR
+  #615](https://github.com/leynos/ortho-config/pull/615).
