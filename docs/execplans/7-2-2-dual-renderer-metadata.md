@@ -7,9 +7,11 @@ repaired, and a fresh sequential gate run on the repaired candidate passed
 every gate except `make test`, which remains incomplete for the environmental
 reason recorded in Outcomes. The 2026-11-01 review then asked for stronger
 E3/E4 evidence and two documentation corrections; those are implemented, gated,
-and recorded in the Progress and Decision log below. The PR is published and
-under `pr-babysitting`; hosted CI and review state live in the delivery ledger
-rather than in this plan.
+and recorded in the Progress and Decision log below. The sequential gate run
+for that repaired head is recorded in Progress and the Revision note: every
+gate passed except `make test`, which stopped in a suite this branch does not
+touch. The PR is published and under `pr-babysitting`; hosted CI and review
+state live in the delivery ledger rather than in this plan.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -242,6 +244,17 @@ source failures. There is no time limit; queued compiler work is not a hang.
       and the same target failed the same way on an earlier attempt recorded
       under Outcomes, so the result is infrastructure, not a defect in this
       change. Every other target in the run passed.
+- [x] (2026-11-01) ExecPlan assessment actioned. CodeRabbit's assessment
+      `7-2-2-dual-renderer-metadata-20261101-a` on head `34ab7688` found no
+      production defect but raised three verification omissions and four
+      documentation points. E2's malformed-width and forward-token cases and
+      the E3/E4 assertions are implemented in the preceding commit;
+      `renderer.rs` now describes the custom decoder rather than the field
+      attributes, the changelog names `AgentCommand` and states how a literal
+      takes the default, and this plan's opening status describes the gate run
+      that has actually happened. The remaining documentation point, the
+      user's guide's accepted keys, was already closed. A candidate-bound
+      follow-up on the new head asks for re-assessment against this evidence.
 
 ## Surprises & discoveries
 
