@@ -1,10 +1,15 @@
 # Add dual-renderer metadata (7.2.2)
 
-Status: COMPLETE (2026-10-30, revalidated 2026-10-31) — implementation landed in
-`9588f063` (M1) and the M2 change set. A 2026-10-31 handoff review found and
-repaired a role-default defect in agent-context decoding; the repaired
-candidate requires a fresh sequential gate run, and the implementation changes
-are still unpublished at the time of writing (see Outcomes & retrospective).
+Status: COMPLETE (2026-10-30; gates re-run 2026-11-01; evidence hardened
+2026-11-01 after review) — implementation landed in `9588f063` (M1) and the M2
+change set. The 2026-10-31 role-default defect in agent-context decoding was
+repaired, and a fresh sequential gate run on the repaired candidate passed
+every gate except `make test`, which remains incomplete for the environmental
+reason recorded in Outcomes. The 2026-11-01 review then asked for stronger
+E3/E4 evidence and two documentation corrections; those are implemented, gated,
+and recorded in the Progress and Decision log below. The PR is published and
+under `pr-babysitting`; hosted CI and review state live in the delivery ledger
+rather than in this plan.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -201,13 +206,52 @@ source failures. There is no time limit; queued compiler work is not a hang.
       through `width_name`, so the accepted spelling and the assertion message
       cannot drift. Local `cs review` reports 10.0 for both files; focused
       suites pass (25 mapping cases and 47 macro parser cases).
+- [x] (2026-11-01) Review findings actioned. E3 now compares the whole
+      projected document with only the cosmetic `summary` stripped, instead of
+      a hand-picked projection, and carries a standing negative control that
+      mutates a projected field identifier; a real production mutation was run
+      against `walk` to confirm the property fails, then reverted and verified
+      identical. E4 gained a `--format all` case that proves the combined
+      format keeps the renderer-bearing `agent-context.json` beside the IR, man,
+      and PowerShell artefacts, plus a subprocess test that the policy report
+      is the sole stdout document in that mode while generation still proceeds.
+      Two documentation corrections closed real gaps: the changelog named
+      `AgentContext` where the field lives on `AgentCommand`, and the user's
+      guide's accepted-key list omitted `progress_inheritance` and
+      `subprocess_inheritance`. The fixture helpers became
+      `tests/fixtures/renderer_assertions.rs` and
+      `tests/fixtures/ir_identifier_audit.rs`, declared with `#[path]` from the
+      targets that use them, because a target-specific helper in the shared
+      `fixtures` module is dead code in every other target.
+- [x] (2026-11-01) Full sequential gate run on the reviewed candidate. `make
+      lint` passed (Clippy, Whitaker, and 100% docstring coverage);
+      `make nixie` passed. `make markdownlint` failed its spelling step on two
+      uses of the "-ise" spelling of "minimize" in this plan, which the
+      en-GB-oxendict gate rejects in favour of "-ize"; both were corrected and
+      the gate re-run.
+- [x] (2026-11-01) Gate results for the final candidate. `make lint` was
+      re-run after the last Rust doc-comment edit and exited 0 with all three
+      phases present in its log (`cargo doc`, `cargo clippy -D warnings`, and
+      Whitaker under `-D warnings`), ending at 100% docstring coverage.
+      `make markdownlint` exited 0 on its second run (94 files, 0 issues) and
+      `make nixie` exited 0. `make test` exited 2 on one target,
+      `ortho_config --test identifier_artefact_e2e`: its fixture build reported
+      `subprocess timed out after 829506ms`, with 5 passing and 1 failing after
+      956.19 s. That target is untouched by this branch — the diff against the
+      merge base is empty and its last change is `ab7f51e1` from 2026-10-22 —
+      and the same target failed the same way on an earlier attempt recorded
+      under Outcomes, so the result is infrastructure, not a defect in this
+      change. Every other target in the run passed.
 
 ## Surprises & discoveries
 
-The design's renderer default rows are still labelled planned. There is no
-current renderer field in `AgentCommand` or `DocMetadata`; `output_modes` is
-currently emitted as an empty vector. Introducing the field realizes those
-planned defaults rather than changing an existing renderer default.
+At planning time the design's renderer default rows were still labelled
+planned: neither `AgentCommand` nor `DocMetadata` carried a renderer field, and
+`output_modes` was emitted as an empty vector. Introducing the field therefore
+realized those planned defaults rather than changing an existing renderer
+default, which is why the role defaults could be chosen without a compatibility
+exception. Both types carry the field now; the Progress entries above record
+where each was added.
 
 The tool owns a separate `cargo-orthohelp/src/schema/mod.rs` IR mirror.
 Updating only the reusable library would silently lose metadata at this
@@ -306,6 +350,31 @@ is unrelated to this branch (the diff touches neither), so it is not committed
 here; the file was restored and the observation recorded for whoever adopts the
 dictionary update.
 
+The first attempt at an E3 negative control was vacuous, and the way it failed
+is worth keeping. Mutating `map_field` to localize the field identifier changed
+*both* the plain and the localized projection, because that mapping runs either
+way, so the two documents still compared equal and the property passed. A
+mutation is only a control for "changing the localizer changes nothing but
+prose" if it is conditional on the localizer being present. Applying the lookup
+inside `walk` only when a localizer is supplied made the property fail with
+proptest's minimized input `id: "a"` becoming `id: "localized summary for a"`.
+Both mutation sites were restored from a `cp` backup and verified with `cmp`
+and an empty `git diff --stat`; the shipped suite keeps a permanent in-process
+negative control so this protection does not depend on someone remembering the
+out-of-suite experiment.
+
+Two file-size ceilings shaped the same change. The E3 property target reached
+501 lines, so the generators and fixtures moved to
+`renderer_proptests_support.rs` (344 lines) behind a `#[path]` module
+declaration, leaving `renderer_proptests.rs` at 180. The nested end-to-end
+target was near the ceiling too, so its catalogue-identifier audit became
+`tests/fixtures/ir_identifier_audit.rs`. Splitting those helpers exposed a
+third constraint: the shared `tests/fixtures/mod.rs` is compiled into every
+`cargo-orthohelp` test target, so a helper only one target uses is `dead_code`
+everywhere else, and `#[expect(dead_code)]` would be an unfulfilled expectation
+in the targets that do use it. Declaring each helper module from the target
+that needs it is the only shape that satisfies both lints.
+
 ## Decision log
 
 - 2026-10-14, proposed: use a sibling renderer group and independent per-command
@@ -362,6 +431,39 @@ dictionary update.
   value, applies the slot default only when the leaf is absent, and rejects a
   present null. The public types and wire spelling are unchanged; only the
   decoding path is more precise.
+- 2026-11-01, implemented after review: E3 compares the *whole* projected
+  document after stripping only `summary`, rather than a projection assembled
+  by the test. A hand-picked projection can omit the very field whose
+  localization the property is meant to catch, and the reviewer was right that
+  the earlier comparison did not say what it excluded. Stripping one cosmetic
+  field states the permitted difference exactly once.
+- 2026-11-01, implemented after review: the E4 `--format all` case calls the
+  three existing per-format assertions and adds the agent-context one, so the
+  combined format is proved to keep every artefact rather than writing a fourth
+  independent reader. The policy-report test is separate because it asserts a
+  different contract — which document owns standard output — and generation
+  continuing is part of it, not an incidental side effect.
+- 2026-11-01, decided during the repair: target-specific fixture helpers are
+  declared from their target with `#[path]`, not added to the shared
+  `tests/fixtures` module. The shared module is compiled into every test
+  target, so a helper used by one target is dead code in the rest, and the
+  repository's lints deny it.
+- 2026-11-01, decided while gating, recorded as a deviation: the regenerated
+  `typos.toml` is committed on this branch rather than in a separate base pull
+  request. `make markdownlint` rewrites `typos.toml` from the shared
+  en-GB-oxendict dictionary before running the spelling gate, and the rewrite
+  here is unrelated to this feature: `typos.local.toml` is byte-identical to
+  the merge base, while the generator adds two `tokio` attribute patterns and
+  the `` `install-mold` `` and `` `mold` `` phrases, and drops the broad
+  `\bflavor =` pattern. The merge base's own copy is equally behind the
+  generator, so this is estate drift, not branch content. `AGENTS.md` asks for
+  such a change to land in a separate base pull request with this branch
+  stacked on it; that route needs a merge of the base pull request, which this
+  assignment does not authorize, and stacking on an unmerged base would leave
+  this pull request's diff and CI fan-out aimed at a branch that cannot land.
+  The regenerated file is therefore committed as its own atomic commit,
+  separate from the feature and documentation commits, so the review diff for
+  the feature stays focused and the generated fixed point is still recorded.
 
 ## Outcomes & retrospective
 
@@ -426,20 +528,21 @@ gate evidence actually collected on this branch is:
   20/21 with one infrastructure failure after it), and
   `agent_context_renderer_end_to_end` 25.
 
-`make test` has never completed on this host. Across seven attempts the run
+`make test` has never completed on this host. Across eight attempts the run
 always stopped short of the end of the workspace target list, and in no attempt
 did an assertion fail. The stopping point moved as the host's compile queue
 moved, which is what distinguishes this from a source failure:
 
-| Attempt | Stopping suite                                | Reported cause                                     |
-| ------- | --------------------------------------------- | -------------------------------------------------- |
-| 1       | `ortho_l10n --test boundary`                  | ten 240 s / 300 s nested-Cargo deadline expiries   |
-| 2       | `nested_subcommand_end_to_end`                | compiler-wrapper spawn failure                     |
-| 3       | `cargo-orthohelp --test rstest_bdd`           | 880 s BDD subprocess deadline, stale bridge marker |
-| 4       | `cargo-orthohelp --test rstest_bdd`           | same marker, reused by the aborted child           |
-| 5       | `ortho_config --test identifier_artefact_e2e` | 880 s fixture subprocess timeout                   |
-| 6       | `ortho_l10n --test boundary`                  | eight nested-Cargo deadline expiries (queue 103)   |
-| 7       | `ortho_l10n --test boundary`                  | identical eight expiries (queue reached 185)       |
+| Attempt | Stopping suite                                | Reported cause                                         |
+| ------- | --------------------------------------------- | ------------------------------------------------------ |
+| 1       | `ortho_l10n --test boundary`                  | ten 240 s / 300 s nested-Cargo deadline expiries       |
+| 2       | `nested_subcommand_end_to_end`                | compiler-wrapper spawn failure                         |
+| 3       | `cargo-orthohelp --test rstest_bdd`           | 880 s BDD subprocess deadline, stale bridge marker     |
+| 4       | `cargo-orthohelp --test rstest_bdd`           | same marker, reused by the aborted child               |
+| 5       | `ortho_config --test identifier_artefact_e2e` | 880 s fixture subprocess timeout                       |
+| 6       | `ortho_l10n --test boundary`                  | eight nested-Cargo deadline expiries (queue 103)       |
+| 7       | `ortho_l10n --test boundary`                  | identical eight expiries (queue reached 185)           |
+| 8       | `ortho_config --test identifier_artefact_e2e` | 829506 ms fixture subprocess timeout (attempt 5 again) |
 
 Attempt 3's eleven failures were not a source signal. The aborted child left
 `target/orthohelp-bridge-build.in-progress` naming a dead pid, and the bridge
@@ -484,6 +587,25 @@ policy refused every `gh` invocation in this session. That restriction no
 longer applies: the implementation, title, and description are published on the
 pull request, and hosted CI and review state are tracked in the delivery ledger
 rather than claimed here.
+
+The 2026-11-01 review evidence was collected on the repaired candidate before
+this plan update. E3's generators cover both renderer records, every policy
+family, declared and undeclared support, nested command paths, declared CLI
+inputs, and 0–16 output fields with 1–64 character Unicode identifiers, at 256
+cases per property; the library renderer suites pass 47/47. The standing
+negative-control test passes by showing the comparison notices a mutated field
+identifier, and the production mutation it stands in for failed with proptest's
+minimized input before being reverted. E4's subprocess targets pass at 26
+(`agent_context_renderer_end_to_end`, including the combined-mode policy-report
+test) and 22 (`nested_subcommand_end_to_end`, including the new `--format all`
+case that reads the renderer-bearing `agent-context.json` beside the IR, man,
+and PowerShell artefacts). Clippy with `-D warnings` over
+`cargo-orthohelp --all-targets --all-features` exits zero, which is also what
+proves the relocated fixture helpers are not dead code in any target that
+includes them. The documentation corrections were formatting- and
+spelling-gated. The plan's earlier certificates are retained only for the
+pre-repair commits they actually cover; a fresh full run for this candidate is
+recorded in the delivery ledger.
 
 ## Context and orientation
 
@@ -1061,3 +1183,37 @@ the `Declaration`, `PolicyLeaf`, and `Needle` newtypes, which also state each
 string's role at the call site; the width case derives its token from the
 expected enum so the two cannot drift. Both files measure 10.0 locally under
 `cs review`.
+
+2026-11-01 review-evidence revision: A review of the published candidate found
+that the E3 property compared a projection assembled by the test rather than
+the projected document, that its negative control was described but not
+shipped, and that E4 had no combined-`--format all` case covering the
+policy-report stdout rule. All three are now implemented. E3 strips only the
+cosmetic `summary` and compares the whole document, and it carries a standing
+negative-control test; a production mutation run confirmed the property fails
+when a field identifier is localized through the localizer path, and the
+mutation was reverted and verified byte-identical. E4 adds a `--format all`
+subprocess case and a `--check-agent-native` combined-mode test. Two
+documentation inaccuracies were corrected: the changelog now names
+`AgentCommand`, and the user's guide lists the two inheritance keys. Fixture
+helpers moved into `renderer_assertions.rs` and `ir_identifier_audit.rs` to
+respect both the 400-line ceiling and the dead-code lint that a shared test
+module imposes. The earlier gate certificates apply to the pre-repair commits;
+a fresh sequential run is recorded in Outcomes for this candidate.
+
+2026-11-01 final gate run: The sequential gates ran again on the
+review-repaired candidate. `make lint` passed with all three phases present —
+`cargo doc`, `cargo clippy --all-targets --all-features -D warnings`, and
+Whitaker under `-D warnings` — ending at 540/540 (100%) docstring coverage; it
+was re-run after the last Rust doc-comment edit so the certificate names the
+final content. `make markdownlint` and `make nixie` passed. `make test`
+certified the workspace apart from
+`ortho_config --test identifier_artefact_e2e`, whose fixture build reported
+`subprocess timed out after 829506ms` (5 passed, 1 failed, 956.19 s); that
+target is untouched by this branch and reproduced the same way on the
+2026-10-30 attempt, so the stopping point is environmental and `make test`
+remains incomplete rather than green. `make markdownlint` regenerates the
+committed `typos.toml` from the shared dictionary; here the rewrite is estate
+drift that the merge base shares, and the Decision log records why it is
+committed on this branch in its own commit rather than in a stacked base pull
+request.

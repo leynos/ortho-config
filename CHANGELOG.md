@@ -27,7 +27,7 @@ All notable changes to this project will be documented in this file.
   `cargo_orthohelp::schema::DocMetadata` gained a `renderer` field, and the
   localized IR used for per-locale artefacts carries it through. Code that
   assembles these documents by struct literal must name `renderer: None`;
-  `AgentContext` consumers must supply `renderer: RendererContract::default()`
+  `AgentCommand` consumers must supply `renderer: RendererContract::default()`
   or use `Default`. The field is `#[serde(default)]`, so the wire contract
   stays additive: JSON without `renderer` still deserializes, wire version 1
   and documentation IR 2.0 are unchanged, and no existing field changed shape,

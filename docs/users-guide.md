@@ -1852,7 +1852,10 @@ accept the same keys:
 - `accessibility = "unspecified"` or `"text_equivalent"`;
 - `plain = "unsupported"`, `"available"`, or `"always"` — whether unadorned
   output is available, which is not the same as colour being suppressed;
-- `stdout` and `stderr` — `"none"`, `"text"`, `"structured"`, or `"mixed"`; and
+- `stdout` and `stderr` — `"none"`, `"text"`, `"structured"`, or `"mixed"`;
+- `progress_inheritance` and `subprocess_inheritance` — `"allowed"` or
+  `"forbidden"`, stating whether progress reporting and child processes may
+  inherit this renderer's configuration; and
 - `field("id", localization = "localized")` or `"non_localized"` — which output
   fields may change with the human language and which are protocol data.
 
