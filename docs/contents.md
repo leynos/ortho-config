@@ -89,6 +89,9 @@
 - [ADR-0019: Use Cranelift for development builds](adrs/adr-0019-use-cranelift-for-development-builds.md):
   review the dev-fast backend, `-Zthreads=8`, the unwind-dependent test route,
   and the LLVM coverage exception.
+- [ADR-0020: Newtypes for lock evidence](adrs/adr-0020-lock-evidence-newtypes.md):
+  review the evidence vocabulary that makes a transposed pid, descriptor,
+  device, or inode a compile error, and the rejected newtype crates.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
