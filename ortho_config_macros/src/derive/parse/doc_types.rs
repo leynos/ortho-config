@@ -107,10 +107,6 @@ pub(crate) struct RendererAttrs {
     pub human: Option<RendererRecordAttrs>,
     /// Machine-facing rendering declaration, absent when not declared.
     pub machine: Option<RendererRecordAttrs>,
-    /// Whether a `human(...)` group has been parsed, so a repeat is rejected.
-    pub human_declared: bool,
-    /// Whether a `machine(...)` group has been parsed, so a repeat is rejected.
-    pub machine_declared: bool,
 }
 
 /// One renderer record's declared policy values.

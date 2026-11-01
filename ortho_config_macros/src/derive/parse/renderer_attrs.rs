@@ -59,34 +59,11 @@ fn parse_record_group(
     renderer: &mut RendererAttrs,
     role: RecordRole,
 ) -> syn::Result<()> {
-    let mut record = match role {
-        RecordRole::Human => {
-            let declared = renderer.human_declared;
-            renderer.human_declared = true;
-            debug_assert!(
-                !declared || renderer.human.is_some(),
-                "a declared human group must have a record"
-            );
-            renderer.human.take().unwrap_or_default()
-        }
-        RecordRole::Machine => {
-            let declared = renderer.machine_declared;
-            renderer.machine_declared = true;
-            debug_assert!(
-                !declared || renderer.machine.is_some(),
-                "a declared machine group must have a record"
-            );
-            renderer.machine.take().unwrap_or_default()
-        }
+    let record = match role {
+        RecordRole::Human => renderer.human.get_or_insert_default(),
+        RecordRole::Machine => renderer.machine.get_or_insert_default(),
     };
-
-    let parsed = nested.parse_nested_meta(|key| apply_record_field(&key, &mut record));
-
-    match role {
-        RecordRole::Human => renderer.human = Some(record),
-        RecordRole::Machine => renderer.machine = Some(record),
-    }
-    parsed
+    nested.parse_nested_meta(|key| apply_record_field(&key, record))
 }
 
 /// Applies one nested key inside a renderer record group.
