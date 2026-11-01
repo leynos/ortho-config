@@ -228,41 +228,53 @@ fn splits_device_numbers_by_the_glibc_layout() {
     }
 }
 
-/// Device halves and the text the kernel prints for them.
-const DEVICE_RENDERS: [(u64, u64, &str); 4] = [
-    (0x09, 0x02, "09:02"),
-    (0x00, 0x19, "00:19"),
-    (0x1234, 0x5678, "1234:5678"),
-    (0x00, 0x00, "00:00"),
+/// Device halves and the text the kernel prints for them, by case name.
+const DEVICE_RENDERS: [(&str, u64, u64, &str); 4] = [
+    ("tmpfs", 0x09, 0x02, "09:02"),
+    ("single_digit_minor", 0x00, 0x19, "00:19"),
+    ("wide", 0x1234, 0x5678, "1234:5678"),
+    ("zero", 0x00, 0x00, "00:00"),
 ];
 
 #[test]
 fn renders_devices_the_way_the_kernel_does() {
-    for (major, minor, expected) in DEVICE_RENDERS {
+    for (case, major, minor, expected) in DEVICE_RENDERS {
         assert_eq!(
             DeviceNumber::new(major, minor).to_string(),
             expected,
-            "the kernel prints each half as %02x, so single digits keep a leading zero",
+            "the {case} halves {major:#x}:{minor:#x} must print as the kernel does; \
+             each half is %02x, so single digits keep a leading zero",
         );
     }
 }
 
 /// A device and inode compared against the recorded lock's, and the verdict.
-const IDENTITY_MATCHES: [(DeviceNumber, Inode, bool); 4] = [
-    (LOCK_DEVICE, LOCK_INODE, true),
-    (LOCK_DEVICE, Inode::new(9_476_792), false),
-    (DeviceNumber::new(0x0a, 0x02), LOCK_INODE, false),
-    (DeviceNumber::new(0x09, 0x03), LOCK_INODE, false),
+const IDENTITY_MATCHES: [(&str, DeviceNumber, Inode, bool); 4] = [
+    ("same_device_and_inode", LOCK_DEVICE, LOCK_INODE, true),
+    ("different_inode", LOCK_DEVICE, Inode::new(9_476_792), false),
+    (
+        "different_major",
+        DeviceNumber::new(0x0a, 0x02),
+        LOCK_INODE,
+        false,
+    ),
+    (
+        "different_minor",
+        DeviceNumber::new(0x09, 0x03),
+        LOCK_INODE,
+        false,
+    ),
 ];
 
 #[test]
 fn matches_records_by_device_and_inode() {
     let record = granted_flock();
-    for (device, inode, expected) in IDENTITY_MATCHES {
+    for (case, device, inode, expected) in IDENTITY_MATCHES {
         assert_eq!(
             record.matches(LockFileIdentity::of(device, inode)),
             expected,
-            "a record must only be attributed to this lock when device and inode both match",
+            "the {case} case must only be attributed to this lock when device and inode \
+             both match",
         );
     }
 }
