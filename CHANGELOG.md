@@ -28,14 +28,13 @@ All notable changes to this project will be documented in this file.
   localized IR used for per-locale artefacts carries it through. Code that
   assembles these documents by struct literal must name `renderer: None`;
   `AgentCommand` consumers must supply `renderer: RendererContract::default()`,
-  or spread `..Default::default()` into the literal so the field takes its
-  default. The field is `#[serde(default)]`, so the wire contract stays
-  additive: JSON without `renderer` still deserializes, wire version 1 and
-  documentation IR 2.0 are unchanged, and no existing field changed shape,
-  spelling, ordering, or null-versus-omission rule. Applications that only
-  derive their configuration and read agent context need no change. This is a
-  Rust source break, not a JSON compatibility break; see roadmap 13.1 for the
-  constructor-based remedy.
+  because the type does not implement `Default`. The field is
+  `#[serde(default)]`, so the wire contract stays additive: JSON without
+  `renderer` still deserializes, wire version 1 and documentation IR 2.0 are
+  unchanged, and no existing field changed shape, spelling, ordering, or
+  null-versus-omission rule. Applications that only derive their configuration
+  and read agent context need no change. This is a Rust source break, not a
+  JSON compatibility break; see roadmap 13.1 for the constructor-based remedy.
 
 ## [0.10.0] - 2026-10-24
 

@@ -1854,8 +1854,8 @@ accept the same keys:
   output is available, which is not the same as colour being suppressed;
 - `stdout` and `stderr` — `"none"`, `"text"`, `"structured"`, or `"mixed"`;
 - `progress_inheritance` and `subprocess_inheritance` — `"allowed"` or
-  `"forbidden"`, stating whether progress reporting and child processes may
-  inherit this renderer's configuration; and
+  `"forbidden"`, stating whether progress reporting and subprocess output may
+  pass through directly rather than being captured or reformatted; and
 - `field("id", localization = "localized")` or `"non_localized"` — which output
   fields may change with the human language and which are protocol data.
 
@@ -1877,7 +1877,7 @@ reports the legacy defaults — human supported, machine not — so adding this
 feature changed nothing for existing commands.
 
 Because the wire contract is additive, the JSON stays compatible. The Rust
-source API is not: constructing documentation IR or an `AgentContext` by struct
+source API is not: constructing documentation IR or an `AgentCommand` by struct
 literal now needs the new field. Read [the changelog](../CHANGELOG.md) for the
 exact field to name if you build those values yourself; applications that only
 derive the configuration need no change.
