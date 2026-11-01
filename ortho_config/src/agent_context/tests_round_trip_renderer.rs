@@ -3,31 +3,43 @@
 use super::*;
 use proptest::{collection::vec, option, prelude::Just};
 
-/// Builds a renderer contract whose undeclared leaves stay `None`.
+/// Builds a renderer contract from two independently generated records.
 ///
-/// Only `supported` and the declared policy leaves vary, which keeps the
-/// strategy small while still exercising every wire-visible field.
+/// Each role is generated separately, so a case can declare every policy leaf
+/// on one side and none on the other.
 pub(super) fn any_agent_renderer() -> impl Strategy<Value = RendererContract> {
     (any_agent_record(), any_agent_record())
         .prop_map(|(human, machine)| RendererContract { human, machine })
 }
 
+/// Number of toggle leaves in one renderer record.
+const TOGGLE_LEAVES: usize = 4;
+/// Number of stream-category leaves in one renderer record.
+const STREAM_LEAVES: usize = 2;
+/// Number of inheritance leaves in one renderer record.
+const INHERITANCE_LEAVES: usize = 2;
+
 /// Builds one renderer record with independently chosen leaves.
+///
+/// Every optional leaf is drawn on its own, including the four toggles, both
+/// stream categories, and both inheritance claims: the wire record is copied
+/// field by field, so a coupled pair would hide a swapped assignment.
+///
+/// The repeated families are generated as fixed-length vectors rather than
+/// nested tuples. Both draw the leaves independently; the flat form keeps the
+/// strategy's debug-build stack use below the 2 MiB test-thread default, which
+/// a deeper tuple nest overruns.
 pub(super) fn any_agent_record() -> impl Strategy<Value = RendererRecord> {
     (
         any::<bool>(),
         option::of(tty_policy()),
         option::of(closed_stdin_policy()),
-        option::of(toggle_policy()),
-        (
-            option::of(render_width()),
-            option::of(accessibility_policy()),
-            option::of(plain_policy()),
-        ),
-        (
-            option::of(stream_content()),
-            option::of(inheritance_policy()),
-        ),
+        vec(option::of(toggle_policy()), TOGGLE_LEAVES),
+        option::of(render_width()),
+        option::of(accessibility_policy()),
+        option::of(plain_policy()),
+        vec(option::of(stream_content()), STREAM_LEAVES),
+        vec(option::of(inheritance_policy()), INHERITANCE_LEAVES),
         vec(any_agent_renderer_field(), 0..3),
     )
         .prop_map(
@@ -35,30 +47,47 @@ pub(super) fn any_agent_record() -> impl Strategy<Value = RendererRecord> {
                 supported,
                 tty,
                 closed_stdin,
-                colour,
-                (width, accessibility, plain),
-                (stdout, inheritance),
+                toggles,
+                width,
+                accessibility,
+                plain,
+                streams,
+                inheritances,
                 fields,
             )| {
+                let [colour, emoji, progress, pager] = exact_leaves(toggles);
+                let [stdout, stderr] = exact_leaves(streams);
+                let [progress_inheritance, subprocess_inheritance] = exact_leaves(inheritances);
                 RendererRecord {
                     supported,
                     tty,
                     closed_stdin,
                     colour,
-                    emoji: None,
-                    progress: None,
-                    pager: None,
+                    emoji,
+                    progress,
+                    pager,
                     width,
                     accessibility,
                     plain,
                     stdout,
-                    stderr: None,
-                    progress_inheritance: inheritance,
-                    subprocess_inheritance: None,
+                    stderr,
+                    progress_inheritance,
+                    subprocess_inheritance,
                     fields,
                 }
             },
         )
+}
+
+/// Converts a generated fixed-length family into its named leaves.
+///
+/// The strategy fixes the length, so a mismatch is a generator defect rather
+/// than an input case.
+fn exact_leaves<T, const N: usize>(leaves: Vec<T>) -> [T; N] {
+    let Ok(exact) = leaves.try_into() else {
+        panic!("the generating strategy must produce exactly {N} leaves");
+    };
+    exact
 }
 
 /// Builds one declared output field.
