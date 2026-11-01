@@ -8,8 +8,9 @@
 
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::{
-    DocMetadata, ORTHO_DOCS_IR_VERSION, RenderWidth, RendererField, RendererFieldLocalization,
-    RendererMetadata, RendererRecord, StreamContent, TogglePolicy, TtyPolicy,
+    AccessibilityPolicy, ClosedStdinPolicy, DocMetadata, InheritancePolicy, ORTHO_DOCS_IR_VERSION,
+    PlainPolicy, RenderWidth, RendererField, RendererFieldLocalization, RendererMetadata,
+    RendererRecord, StreamContent, TogglePolicy, TtyPolicy,
 };
 use rstest::rstest;
 use serde_json::{Value, json};
@@ -144,6 +145,7 @@ fn test_fully_declared_record_decodes() -> Result<()> {
     );
     ensure!(human.stdout == Some(StreamContent::Text), "stdout");
     ensure!(human.stderr == Some(StreamContent::Mixed), "stderr");
+    assert_secondary_policy_leaves(&human)?;
     ensure!(
         human.fields
             == [RendererField {
@@ -157,16 +159,53 @@ fn test_fully_declared_record_decodes() -> Result<()> {
     Ok(())
 }
 
+/// Asserts the record's closed-stdin, accessibility, and inheritance leaves.
+///
+/// These are the leaves the earlier test version only checked for presence, so
+/// a decoder that mapped one to the wrong variant could still pass the broader
+/// assertions.
+fn assert_secondary_policy_leaves(human: &RendererRecord) -> Result<()> {
+    ensure!(
+        human.closed_stdin == Some(ClosedStdinPolicy::Eof),
+        "closed_stdin: {:?}",
+        human.closed_stdin
+    );
+    ensure!(
+        human.accessibility == Some(AccessibilityPolicy::TextEquivalent),
+        "accessibility: {:?}",
+        human.accessibility
+    );
+    ensure!(
+        human.plain == Some(PlainPolicy::Available),
+        "plain: {:?}",
+        human.plain
+    );
+    ensure!(
+        human.progress_inheritance == Some(InheritancePolicy::Allowed),
+        "progress_inheritance: {:?}",
+        human.progress_inheritance
+    );
+    ensure!(
+        human.subprocess_inheritance == Some(InheritancePolicy::Forbidden),
+        "subprocess_inheritance: {:?}",
+        human.subprocess_inheritance
+    );
+    Ok(())
+}
+
 /// Every accepted width shape decodes to its matching IR variant.
 #[rstest]
-#[case::terminal(json!({ "kind": "terminal" }))]
-#[case::unbounded(json!({ "kind": "unbounded" }))]
-fn test_named_width_shapes_decode(#[case] width: Value) -> Result<()> {
+#[case::terminal(json!({ "kind": "terminal" }), RenderWidth::Terminal)]
+#[case::unbounded(json!({ "kind": "unbounded" }), RenderWidth::Unbounded)]
+fn test_named_width_shapes_decode(
+    #[case] width: Value,
+    #[case] expected: RenderWidth,
+) -> Result<()> {
     let renderer = decode_renderer(json!({ "human": { "width": width } }))?;
     let human = renderer
         .human
         .ok_or_else(|| anyhow!("expected a human record"))?;
-    ensure!(human.width.is_some(), "expected a width to be decoded");
+    ensure!(human.width == Some(expected), "width: {:?}", human.width);
     Ok(())
 }
 

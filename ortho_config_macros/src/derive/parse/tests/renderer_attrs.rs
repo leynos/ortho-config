@@ -185,10 +185,62 @@ fn parses_named_width(#[case] expected: RenderWidthAttr) -> Result<()> {
     Ok(())
 }
 
-/// Asserts the support and terminal leaves of a fully declared record.
+/// Asserts every leaf of the fully declared human record.
+///
+/// Each accepted token is declared with a distinct value, so a parser that
+/// stored one leaf in another leaf's slot cannot satisfy this helper.
 fn assert_human_policy_leaves(human: &RendererRecordAttrs) -> Result<()> {
-    assert_human_output_leaves(human)?;
-    Ok(())
+    ensure!(
+        human.supported == Some(true),
+        "supported: {:?}",
+        human.supported
+    );
+    ensure!(
+        human.tty.as_deref() == Some("adapts"),
+        "tty: {:?}",
+        human.tty
+    );
+    ensure!(
+        human.closed_stdin.as_deref() == Some("eof"),
+        "closed_stdin: {:?}",
+        human.closed_stdin
+    );
+    ensure!(
+        human.colour.as_deref() == Some("auto"),
+        "colour: {:?}",
+        human.colour
+    );
+    ensure!(
+        human.emoji.as_deref() == Some("never"),
+        "emoji: {:?}",
+        human.emoji
+    );
+    ensure!(
+        human.progress.as_deref() == Some("always"),
+        "progress: {:?}",
+        human.progress
+    );
+    ensure!(
+        human.pager.as_deref() == Some("never"),
+        "pager: {:?}",
+        human.pager
+    );
+    ensure!(
+        matches!(human.width, Some(RenderWidthAttr::Fixed(80))),
+        "width: {:?}",
+        human.width.as_ref().map(width_name)
+    );
+    ensure!(
+        human.accessibility.as_deref() == Some("text_equivalent"),
+        "accessibility: {:?}",
+        human.accessibility
+    );
+    ensure!(
+        human.plain.as_deref() == Some("available"),
+        "plain: {:?}",
+        human.plain
+    );
+    assert_human_output_leaves(human)
 }
 
 /// Asserts the declared stream and inheritance leaves of a record.
