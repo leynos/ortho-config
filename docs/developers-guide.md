@@ -565,13 +565,28 @@ spawn passed 12 of 12; the settling form then passed five consecutive full
 binary runs. A strict assertion in a gated suite would therefore be a check on
 the scheduler, not on the lock.
 
-`artefact_lock_evidence.rs` holds the pure half — the glibc `dev_t` split and
-the `/proc/locks` parser — tested on every platform, because a mis-split device
-or a skipped line both read as "nothing holds this lock". `/proc/locks` is a
-racing snapshot filtered to the reader's pid namespace, and `FLOCK` records
-name the acquiring process even when a child inherited the description, so the
-report states what it observed rather than implying a certainty the kernel does
-not offer.
+`artefact_lock_evidence.rs` holds the pure half — the glibc `dev_t` split, the
+`/proc/locks` parser, and the vocabulary they speak — tested on every platform,
+because a mis-split device or a skipped line both read as "nothing holds this
+lock". `/proc/locks` is a racing snapshot filtered to the reader's pid
+namespace, and `FLOCK` records name the acquiring process even when a child
+inherited the description, so the report states what it observed rather than
+implying a certainty the kernel does not offer. `artefact_lock_process.rs`
+holds the other impure half: reading `/proc/<pid>/stat` to name a recorded
+owner and say whether it is this process or a child of it. It is kept apart
+from the diagnostics so each file stays within the length cap, and because
+describing a process is a different concern from deciding what a hold means.
+
+The evidence vocabulary is built from newtypes — `ProcessId`, `Inode`,
+`Descriptor`, `DeviceNumber`, and `LockFileIdentity` — rather than bare
+integers. Every one of these is the same width as at least one other, and the
+functions above pass several side by side, so a transposed pair of `u32`s would
+compile, run, and quietly report the wrong holder. A `LockRecord` likewise
+stores its `DeviceNumber` whole instead of a split `major`/`minor` pair, which
+keeps the matching logic in `LockFileIdentity::holds` rather than spread across
+call sites that each have to recombine the halves correctly. See
+[ADR-0017](adrs/adr-0017-lock-evidence-newtypes.md) for why these are
+hand-written tuple structs rather than `newt-hype` or `the-newtype` wrappers.
 
 The scan reads ambient procfs through `std::fs` rather than a capability
 handle. That departs from the `AGENTS.md` preference for `cap_std`, and is
