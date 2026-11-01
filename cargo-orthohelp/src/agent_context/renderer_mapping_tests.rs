@@ -101,24 +101,69 @@ single_leaf_mapping_test!(
     error: Error => Error,
 );
 
-/// Every IR toggle variant maps to its exact wire counterpart.
+/// One of the four toggle leaves on a renderer record.
+///
+/// The four leaves share a three-variant vocabulary, so declaring them all with
+/// the same value — as a single case can only do — would hide a bridge that
+/// copies one leaf's value into another's slot. Naming the leaves lets the test
+/// declare one at a time and check where the value actually lands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToggleLeaf {
+    Colour,
+    Emoji,
+    Progress,
+    Pager,
+}
+
+impl ToggleLeaf {
+    /// Every toggle leaf, in declaration order.
+    const ALL: [Self; 4] = [Self::Colour, Self::Emoji, Self::Progress, Self::Pager];
+
+    /// Builds a record that declares only this leaf.
+    fn declare(self, ir: IrToggle) -> IrRecord {
+        let mut record = IrRecord::default();
+        match self {
+            Self::Colour => record.colour = Some(ir),
+            Self::Emoji => record.emoji = Some(ir),
+            Self::Progress => record.progress = Some(ir),
+            Self::Pager => record.pager = Some(ir),
+        }
+        record
+    }
+
+    /// Reads this leaf back from a bridged record.
+    fn read(self, human: &RendererRecord) -> Option<TogglePolicy> {
+        match self {
+            Self::Colour => human.colour,
+            Self::Emoji => human.emoji,
+            Self::Progress => human.progress,
+            Self::Pager => human.pager,
+        }
+    }
+}
+
+/// Every IR toggle variant maps to the exact leaf it was declared on.
+///
+/// Each case declares one leaf at a time, so a bridge that assigned a toggle to
+/// the wrong field leaves the declared leaf empty and fills a sibling. Both
+/// halves of that mistake fail here; declaring all four at once would give them
+/// equal values and let the swap pass.
 #[rstest]
 #[case::never(IrToggle::Never, TogglePolicy::Never)]
 #[case::auto(IrToggle::Auto, TogglePolicy::Auto)]
 #[case::always(IrToggle::Always, TogglePolicy::Always)]
 fn toggle_policy_maps_exactly(#[case] ir: IrToggle, #[case] expected: TogglePolicy) {
-    let renderer = bridge_single(Some(human_only(IrRecord {
-        colour: Some(ir),
-        emoji: Some(ir),
-        progress: Some(ir),
-        pager: Some(ir),
-        ..IrRecord::default()
-    })));
-
-    assert_eq!(renderer.human.colour, Some(expected));
-    assert_eq!(renderer.human.emoji, Some(expected));
-    assert_eq!(renderer.human.progress, Some(expected));
-    assert_eq!(renderer.human.pager, Some(expected));
+    for declared in ToggleLeaf::ALL {
+        let human = bridged_human(declared.declare(ir));
+        for leaf in ToggleLeaf::ALL {
+            let want = (leaf == declared).then_some(expected);
+            assert_eq!(
+                leaf.read(&human),
+                want,
+                "{leaf:?} after declaring only {declared:?}"
+            );
+        }
+    }
 }
 
 single_leaf_mapping_test!(

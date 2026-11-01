@@ -35,7 +35,10 @@ use crate::schema::{
     RenderWidth, RendererMetadata, RendererRecord, StreamContent, TogglePolicy, TtyPolicy,
 };
 use ortho_config::{
-    AgentContext, RendererFieldLocalization as WireLocalization, TogglePolicy as WireTogglePolicy,
+    AccessibilityPolicy as WireAccessibility, AgentContext, ClosedStdinPolicy as WireClosedStdin,
+    InheritancePolicy as WireInheritance, PlainPolicy as WirePlain, RenderWidth as WireWidth,
+    RendererFieldLocalization as WireLocalization, RendererRecord as WireRecord,
+    StreamContent as WireStream, TogglePolicy as WireTogglePolicy, TtyPolicy as WireTty,
 };
 use support::{
     RenamingLocalizer, bounded, future_token, generated_tree, node, populated_tree,
@@ -156,15 +159,13 @@ fn first_human_field_id(context: &AgentContext) -> String {
         .expect("the populated tree declares a human field")
 }
 
-/// Every declared policy leaf reaches the projection.
+/// Builds a record that declares every policy leaf.
 ///
-/// The generated property would stay green if the generator stopped producing
-/// a leaf, because both sides of its comparison would lose the same data. This
-/// pins one record that declares every leaf and asserts each one survives, so
-/// the generator's class coverage is observable rather than assumed.
-#[test]
-fn every_declared_leaf_reaches_the_projection() {
-    let record = RendererRecord {
+/// The values differ between leaves wherever the vocabulary allows, so the
+/// assertions below fail when the bridge copies one leaf into another's slot
+/// instead of reaching the matching field.
+fn fully_declared_record() -> RendererRecord {
+    RendererRecord {
         supported: Some(true),
         tty: Some(TtyPolicy::Adapts),
         closed_stdin: Some(ClosedStdinPolicy::Eof),
@@ -180,34 +181,55 @@ fn every_declared_leaf_reaches_the_projection() {
         progress_inheritance: Some(InheritancePolicy::Allowed),
         subprocess_inheritance: Some(InheritancePolicy::Forbidden),
         fields: Vec::new(),
+    }
+}
+
+/// Asserts each leaf of `fully_declared_record` arrives with its own value.
+///
+/// Presence alone would pass for a swapped pair, so the whole projected record
+/// is compared with a record built from the declared values. The four toggles
+/// share a three-variant vocabulary and therefore cannot all differ here; the
+/// declaration-order test in `renderer_mapping_tests` covers the duplicated
+/// pair, because it declares one toggle leaf at a time.
+fn assert_leaf_values(projected: &WireRecord) {
+    let expected = WireRecord {
+        supported: true,
+        tty: Some(WireTty::Adapts),
+        closed_stdin: Some(WireClosedStdin::Eof),
+        colour: Some(WireTogglePolicy::Auto),
+        emoji: Some(WireTogglePolicy::Never),
+        progress: Some(WireTogglePolicy::Always),
+        pager: Some(WireTogglePolicy::Auto),
+        width: Some(WireWidth::Terminal),
+        accessibility: Some(WireAccessibility::TextEquivalent),
+        plain: Some(WirePlain::Available),
+        stdout: Some(WireStream::Text),
+        stderr: Some(WireStream::Structured),
+        progress_inheritance: Some(WireInheritance::Allowed),
+        subprocess_inheritance: Some(WireInheritance::Forbidden),
+        fields: Vec::new(),
     };
+
+    assert_eq!(projected, &expected);
+}
+
+/// Every declared policy leaf reaches the projection.
+///
+/// The generated property would stay green if the generator stopped producing
+/// a leaf, because both sides of its comparison would lose the same data. This
+/// pins one record that declares every leaf and asserts each one survives with
+/// its declared value, so the generator's class coverage is observable rather
+/// than assumed.
+#[test]
+fn every_declared_leaf_reaches_the_projection() {
     let block = RendererMetadata {
-        human: Some(record),
+        human: Some(fully_declared_record()),
         machine: None,
     };
 
     let projected = project_renderer(&node("demo", Some(block), Vec::new())).human;
 
-    let leaves = [
-        projected.supported,
-        projected.tty.is_some(),
-        projected.closed_stdin.is_some(),
-        projected.colour.is_some(),
-        projected.emoji.is_some(),
-        projected.progress.is_some(),
-        projected.pager.is_some(),
-        projected.width.is_some(),
-        projected.accessibility.is_some(),
-        projected.plain.is_some(),
-        projected.stdout.is_some(),
-        projected.stderr.is_some(),
-        projected.progress_inheritance.is_some(),
-        projected.subprocess_inheritance.is_some(),
-    ];
-    assert!(
-        leaves.iter().all(|declared| *declared),
-        "every declared leaf must reach the projection: {leaves:?}"
-    );
+    assert_leaf_values(&projected);
 }
 
 /// The projection comparison detects a localized field identifier.
