@@ -33,7 +33,11 @@ use anyhow::{Context, Result, anyhow};
 
 use super::artefact_lock::{LockProbe, lock_path, probe_lock};
 #[cfg(target_os = "linux")]
-use super::lock_evidence::{DeviceNumber, LockRecord, parse_lock_record};
+use super::lock_evidence::{
+    Descriptor, DeviceNumber, Inode, LockFileIdentity, LockRecord, ProcessId, parse_lock_record,
+};
+#[cfg(target_os = "linux")]
+use super::lock_process::describe_process;
 use super::lock_support::SHORT_WAIT_THRESHOLD;
 
 /// Where the kernel publishes its lock table on Linux.
@@ -161,13 +165,14 @@ fn holder_lines(root: &Path, metadata: &fs::Metadata) -> Vec<String> {
     use std::os::unix::fs::MetadataExt;
 
     let device = DeviceNumber::from_raw(metadata.dev());
-    let inode = metadata.ino();
+    let inode = Inode::new(metadata.ino());
     let mut lines = vec![
         format!("lock file: {}", lock_path(root).display()),
         format!("device {device}, inode {inode}"),
     ];
-    let owners = append_record_lines(&mut lines, device, inode);
-    append_owner_lines(&mut lines, &owners, device, inode);
+    let identity = LockFileIdentity::of(device, inode);
+    let owners = append_record_lines(&mut lines, identity);
+    append_owner_lines(&mut lines, &owners, identity);
     lines
 }
 
@@ -206,7 +211,7 @@ fn recheck_line(root: &Path) -> String {
 /// a peer waiting — but their pid is never treated as an owner: a waiter does
 /// not hold anything.
 #[cfg(target_os = "linux")]
-fn append_record_lines(lines: &mut Vec<String>, device: DeviceNumber, inode: u64) -> Vec<u32> {
+fn append_record_lines(lines: &mut Vec<String>, identity: LockFileIdentity) -> Vec<ProcessId> {
     let records = match read_records() {
         Ok(records) => records,
         Err(report) => {
@@ -216,7 +221,7 @@ fn append_record_lines(lines: &mut Vec<String>, device: DeviceNumber, inode: u64
     };
     let matching: Vec<&LockRecord> = records
         .iter()
-        .filter(|record| record.matches(device, inode))
+        .filter(|record| record.matches(identity))
         .collect();
     if matching.is_empty() {
         lines.push(format!(
@@ -224,7 +229,7 @@ fn append_record_lines(lines: &mut Vec<String>, device: DeviceNumber, inode: u64
         ));
         return Vec::new();
     }
-    let own_pid = std::process::id();
+    let own_pid = ProcessId::new(std::process::id());
     let mut owners = Vec::new();
     let mut explained_inheritance = false;
     for record in matching {
@@ -258,11 +263,11 @@ fn read_records() -> Result<Vec<LockRecord>, String> {
 
 /// Appends one description per process still holding a descriptor on the lock.
 #[cfg(target_os = "linux")]
-fn append_owner_lines(lines: &mut Vec<String>, owners: &[u32], device: DeviceNumber, inode: u64) {
-    let own_pid = std::process::id();
+fn append_owner_lines(lines: &mut Vec<String>, owners: &[ProcessId], identity: LockFileIdentity) {
+    let own_pid = ProcessId::new(std::process::id());
     let mut skipped = 0_usize;
     for &pid in owners {
-        match inspect_holder(pid, device, inode) {
+        match inspect_holder(pid, identity) {
             Ok(descriptors) => append_owner(lines, pid, &descriptors, own_pid),
             Err(reason) => {
                 skipped = skipped.saturating_add(1);
@@ -283,7 +288,12 @@ fn append_owner_lines(lines: &mut Vec<String>, owners: &[u32], device: DeviceNum
 /// lock then survives inside an open file description the process inherited,
 /// which is the one case where the recorded pid is not the process to blame.
 #[cfg(target_os = "linux")]
-fn append_owner(lines: &mut Vec<String>, pid: u32, descriptors: &[u32], own_pid: u32) {
+fn append_owner(
+    lines: &mut Vec<String>,
+    pid: ProcessId,
+    descriptors: &[Descriptor],
+    own_pid: ProcessId,
+) {
     let described = describe_process(pid, own_pid);
     if descriptors.is_empty() {
         lines.push(format!(
@@ -298,73 +308,13 @@ fn append_owner(lines: &mut Vec<String>, pid: u32, descriptors: &[u32], own_pid:
     }
 }
 
-/// Names a process by pid, command, parent, and relation to the reporting one.
-#[cfg(target_os = "linux")]
-pub(super) fn describe_process(pid: u32, own_pid: u32) -> String {
-    match process_identity(pid) {
-        Some(identity) => format!(
-            "pid {pid} ({}), parent {}, {}",
-            identity.command,
-            identity.parent,
-            relation(pid, Some(identity.parent), own_pid)
-        ),
-        None => format!(
-            "pid {pid} (<stat unreadable>), {}",
-            relation(pid, None, own_pid)
-        ),
-    }
-}
-
-/// Labels a pid by how it relates to the process building the report.
-#[cfg(target_os = "linux")]
-const fn relation(pid: u32, parent: Option<u32>, own_pid: u32) -> &'static str {
-    if pid == own_pid {
-        return "this process";
-    }
-    match parent {
-        Some(reported) if reported == own_pid => "child of this process",
-        Some(_) => "other",
-        None => "other (parent unknown)",
-    }
-}
-
-/// What `/proc/<pid>/stat` says about one process.
-#[cfg(target_os = "linux")]
-#[derive(Debug)]
-pub(super) struct ProcessIdentity {
-    /// The command name the kernel records, truncated to 15 bytes by `comm`.
-    pub(super) command: String,
-    /// The pid of the process that forked this one.
-    pub(super) parent: u32,
-}
-
-/// Reads a process's command name and parent pid from `/proc/<pid>/stat`.
-///
-/// The command name sits in parentheses and may itself contain spaces or
-/// parentheses, so the fields after it are located from the *last* closing
-/// parenthesis rather than by splitting the whole line: splitting would make a
-/// process called `a) b` look like a different process entirely.
-#[cfg(target_os = "linux")]
-pub(super) fn process_identity(pid: u32) -> Option<ProcessIdentity> {
-    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    let open = stat.find('(')?;
-    let close = stat.rfind(')')?;
-    let command = stat.get(open.saturating_add(1)..close)?.to_owned();
-    let mut trailing = stat.get(close.saturating_add(1)..)?.split_whitespace();
-    // Past the command name the first field is the state and the second the
-    // parent pid.
-    let _state = trailing.next()?;
-    let parent = trailing.next()?.parse().ok()?;
-    Some(ProcessIdentity { command, parent })
-}
-
 /// Lists the descriptors in `pid` that refer to the locked file.
 ///
 /// `/proc/<pid>/fd` is unreadable once the process exits, and unreadable to
 /// another user; both are ordinary in a racing system, so they are returned as
 /// a reason the caller records and counts instead of a hard failure.
 #[cfg(target_os = "linux")]
-fn inspect_holder(pid: u32, device: DeviceNumber, inode: u64) -> Result<Vec<u32>, String> {
+fn inspect_holder(pid: ProcessId, identity: LockFileIdentity) -> Result<Vec<Descriptor>, String> {
     let directory = format!("/proc/{pid}/fd");
     let entries =
         fs::read_dir(&directory).map_err(|error| format!("{directory}: unreadable ({error})"))?;
@@ -374,10 +324,10 @@ fn inspect_holder(pid: u32, device: DeviceNumber, inode: u64) -> Result<Vec<u32>
         let Ok(name) = entry.file_name().into_string() else {
             continue;
         };
-        let Ok(descriptor) = name.parse::<u32>() else {
+        let Ok(descriptor) = name.parse().map(Descriptor::new) else {
             continue;
         };
-        if refers_to(&entry.path(), device, inode) {
+        if refers_to(&entry.path(), identity) {
             descriptors.push(descriptor);
         }
     }
@@ -390,10 +340,13 @@ fn inspect_holder(pid: u32, device: DeviceNumber, inode: u64) -> Result<Vec<u32>
 /// follows them, so this reads the metadata of the open file rather than of the
 /// link that points at it.
 #[cfg(target_os = "linux")]
-fn refers_to(path: &Path, device: DeviceNumber, inode: u64) -> bool {
+fn refers_to(path: &Path, identity: LockFileIdentity) -> bool {
     use std::os::unix::fs::MetadataExt;
 
     fs::metadata(path).is_ok_and(|metadata| {
-        metadata.ino() == inode && DeviceNumber::from_raw(metadata.dev()) == device
+        identity.holds(
+            DeviceNumber::from_raw(metadata.dev()),
+            Inode::new(metadata.ino()),
+        )
     })
 }
