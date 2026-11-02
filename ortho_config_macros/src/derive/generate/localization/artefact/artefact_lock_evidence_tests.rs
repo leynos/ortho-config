@@ -143,9 +143,13 @@ fn parses_an_unknown_lock_type_as_a_record() {
     let expected = LockRecord {
         kind: String::from("LEASE"),
         pid: Some(ProcessId::new(1)),
+        inode: Inode::new(1),
         ..granted_flock()
     };
     assert_eq!(
+        // The line keeps the fixture's device but names a shorter inode, so the
+        // expectation has to follow it: deriving everything from `granted_flock`
+        // would assert the parser had echoed the fixture rather than this line.
         parse_lock_record("13: LEASE ADVISORY WRITE 1 09:02:1 0 EOF"),
         Some(expected),
         "a never-seen lock type is still a record to report, not a line to skip",
