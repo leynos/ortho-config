@@ -341,6 +341,30 @@ source failures. There is no time limit; queued compiler work is not a hang.
       `cargo insta accept` accepted the expanded block, and the focused
       `golden_tests` target then passed; the full workspace run is re-run
       before publication.
+- [x] (2026-11-02) Full test gate, first attempt, and cache recovery. The
+      re-run reached `ortho_config --test documentation_examples_rust_tests`,
+      which reported 54 passed and 4 failed. No assertion or compiler
+      diagnostic was involved: one nested documented-CLI subprocess was given a
+      remaining budget of 19 ms because the test's 956 s envelope had been
+      consumed while waiting for compile-admission slots, and that failed build
+      left `target/documentation-examples/v2/build.in-progress`. The other three
+      failures were that marker doing its job — the cache refuses to build over
+      an interrupted nested build until its owner recovers it. After confirming
+      that no compiler writer remained, the marker was removed and the target
+      re-run alone: 58 passed, 0 failed, 13 ignored, in 611.03 s. The full suite
+      was then started again on the same content.
+- [x] (2026-11-02) Full test gate, second attempt, and a second saturation
+      timeout. The re-run certified every target up to
+      `ortho_config --test identifier_artefact_e2e`, which reported 5 passed
+      and 1 failed: `opt_in_artefact_is_schema_versioned_and_survives_a_warm_build`
+      failed with `build identifier artefact fixture: subprocess timed out
+      after 879104ms`. The log shows the nested `cargo build` queued behind a
+      compile-admission backlog that reached 424 requests, so the test's 956 s
+      envelope expired before the build could start. There was no assertion or
+      compiler diagnostic, the same target passed in 565.39 s on `6c6ffe40`,
+      and no cache marker was left behind. The suite was then re-run with
+      `--no-fail-fast` so that every remaining target is certified in one pass
+      rather than masked by the first failure.
 
 ## Surprises & discoveries
 
@@ -504,6 +528,28 @@ its own crate's tests, so expanding one requires following every reader before
 claiming the change is validated. Accepting the new snapshot was correct here
 because the diff was exactly the expanded renderer block, with no other field
 moving.
+
+A saturated compile queue can turn a documentation test's deadline into a
+poisoned build cache. The documentation-example suite gives each test a 956 s
+wall-clock envelope that is meant to bound nested Cargo builds, but the
+envelope starts before the test waits for a compile-admission slot, so under
+heavy contention the nested build inherits whatever remains — in one run, 19
+ms. The resulting failure is not benign: a documented CLI that fails mid-run
+leaves `build.in-progress` in the shared cache, and every later test refuses to
+build over it until an owner confirms the compiler writers stopped. The lesson
+is that these four failures were one environmental event plus three deliberate
+refusals, not four defects, and that the recovery is to remove the marker only
+after checking for surviving processes rather than to delete the cache.
+
+The same envelope also bounds the identifier-artefact end-to-end target, which
+builds the fixture in a nested `cargo build`. On the next full run that build
+waited behind a 424-request admission backlog and was killed at 879 s, so the
+target failed with a timeout rather than a diagnostic. The lesson generalizes:
+any test that shells out to Cargo inherits the host's compile-admission
+latency, and a timeout under saturation is evidence about the host, not about
+the change. The discriminator is the absence of any assertion or compiler
+diagnostic in the failure, together with a prior pass of the same target on
+identical content.
 
 ## Decision log
 
@@ -683,16 +729,18 @@ always stopped short of the end of the workspace target list, and in no attempt
 did an assertion fail. The stopping point moved as the host's compile queue
 moved, which is what distinguishes this from a source failure:
 
-| Attempt | Stopping suite                                | Reported cause                                         |
-| ------- | --------------------------------------------- | ------------------------------------------------------ |
-| 1       | `ortho_l10n --test boundary`                  | ten 240 s / 300 s nested-Cargo deadline expiries       |
-| 2       | `nested_subcommand_end_to_end`                | compiler-wrapper spawn failure                         |
-| 3       | `cargo-orthohelp --test rstest_bdd`           | 880 s BDD subprocess deadline, stale bridge marker     |
-| 4       | `cargo-orthohelp --test rstest_bdd`           | same marker, reused by the aborted child               |
-| 5       | `ortho_config --test identifier_artefact_e2e` | 880 s fixture subprocess timeout                       |
-| 6       | `ortho_l10n --test boundary`                  | eight nested-Cargo deadline expiries (queue 103)       |
-| 7       | `ortho_l10n --test boundary`                  | identical eight expiries (queue reached 185)           |
-| 8       | `ortho_config --test identifier_artefact_e2e` | 829506 ms fixture subprocess timeout (attempt 5 again) |
+| Attempt | Stopping suite                                          | Reported cause                                         |
+| ------- | ------------------------------------------------------- | ------------------------------------------------------ |
+| 1       | `ortho_l10n --test boundary`                            | ten 240 s / 300 s nested-Cargo deadline expiries       |
+| 2       | `nested_subcommand_end_to_end`                          | compiler-wrapper spawn failure                         |
+| 3       | `cargo-orthohelp --test rstest_bdd`                     | 880 s BDD subprocess deadline, stale bridge marker     |
+| 4       | `cargo-orthohelp --test rstest_bdd`                     | same marker, reused by the aborted child               |
+| 5       | `ortho_config --test identifier_artefact_e2e`           | 880 s fixture subprocess timeout                       |
+| 6       | `ortho_l10n --test boundary`                            | eight nested-Cargo deadline expiries (queue 103)       |
+| 7       | `ortho_l10n --test boundary`                            | identical eight expiries (queue reached 185)           |
+| 8       | `ortho_config --test identifier_artefact_e2e`           | 829506 ms fixture subprocess timeout (attempt 5 again) |
+| 9       | `ortho_config --test documentation_examples_rust_tests` | 19 ms remaining budget, then three cache refusals      |
+| 10      | `ortho_config --test identifier_artefact_e2e`           | 879104 ms fixture subprocess timeout (queue 424)       |
 
 Attempt 3's eleven failures were not a source signal. The aborted child left
 `target/orthohelp-bridge-build.in-progress` naming a dead pid, and the bridge
@@ -727,6 +775,19 @@ The two surfaces Cargo's fail-fast aborted before — the five `tests/fixtures/*
 workspace members and the pytest phase — were certified separately at the same
 head: the five fixture binaries compiled and ran (exit 0, no unit tests), and
 `pytest` reported `119 passed, 5 skipped`.
+
+Attempt 9 ran on the pre-merge-checks candidate and stopped at
+`ortho_config --test documentation_examples_rust_tests` with 54 passed and 4
+failed. One nested documented-CLI subprocess was given a 19 ms remaining budget
+because the test's 956 s envelope had been consumed waiting for admission; that
+failed build left `target/documentation-examples/v2/build.in-progress`, and the
+other three failures were the cache correctly refusing to build over it. After
+confirming no compiler writer remained, the marker was removed and the target
+re-run alone: 58 passed, 0 failed, 13 ignored, in 611.03 s. Attempt 10 then
+stopped at `ortho_config --test identifier_artefact_e2e` with 5 passed and 1
+failed, the fixture build timing out after 879104 ms behind a 424-request
+admission backlog. Neither attempt produced an assertion or compiler
+diagnostic, and both stopping points are suites this branch does not modify.
 
 So `make test` is recorded as **incomplete**, not green. That distinction is
 deliberate: the plan's tolerance clause covers infrastructure failures, but
@@ -1432,3 +1493,16 @@ The snapshot was accepted with `cargo insta accept` after confirming the diff
 was exactly the expected expansion, and the focused `golden_tests` target then
 passed. The full workspace run is re-run once more before publication, so the
 recorded result is the post-accept one.
+
+2026-11-02 second full-run revision: The post-accept `make test` run certified
+every target up to `ortho_config --test identifier_artefact_e2e`, which failed
+5 passed / 1 failed with
+`build identifier artefact fixture: subprocess timed out after 879104ms`. The
+nested fixture build had queued behind a compile-admission backlog of 424
+requests, so the test's 956 s envelope expired before the build began; there
+was no assertion or compiler diagnostic, the same target passed in 565.39 s on
+`6c6ffe40`, and no cache marker survived. The failure is therefore
+environmental, in the same class as the documentation deadline expiry recorded
+above. The suite is re-run with `--no-fail-fast` so that a single saturation
+event cannot mask the targets that follow it, and the result of that run is
+recorded in Outcomes.
