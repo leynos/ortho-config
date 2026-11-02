@@ -19,12 +19,14 @@ stronger value assertions in three suites), and the request to bump the
 documentation-IR version is rebutted with the approved design and withdrawn by
 the reviewer; both are recorded in the Decision log. Gates were re-run on the
 repaired head: formatting, Markdown, diagram, type, and lint gates pass, and
-`make test` again stops in `ortho_l10n --test boundary` on nested-Cargo
-deadline expiries, the same environmental class as before. A twelfth inline
-finding and the same review's pre-merge table (one error, three warnings) then
-required stronger value assertions, a derive-backed fixture declaring every
-leaf, compile-time renderer coverage, and a v0.11.0 migration guide; all four
-are implemented, and the Progress entry of 2026-11-01 records the evidence.
+`make test` again stops short of the end of the workspace on compile-admission
+saturation — most recently at `documentation_examples_rust_tests` and
+`identifier_artefact_e2e` — the same environmental class as before. A twelfth
+inline finding and the same review's pre-merge table (one error, three
+warnings) then required stronger value assertions, a derive-backed fixture
+declaring every leaf, compile-time renderer coverage, and a v0.11.0 migration
+guide; all four are implemented, and the Progress entry of 2026-11-01 records
+the evidence.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
