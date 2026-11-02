@@ -68,11 +68,17 @@ impl fmt::Display for Inode {
 }
 
 /// An open descriptor number within one process's descriptor table.
-#[cfg(any(target_os = "linux", test))]
+///
+/// Unlike the other newtypes here, this one is gated on the platform alone: a
+/// descriptor is only ever read from `/proc/<pid>/fd`, so on a host without
+/// procfs nothing would construct it and the three items below would all be
+/// dead code under `-D warnings`. The parser vocabulary keeps its `test` arm
+/// because it is exercised on every platform; this is not.
+#[cfg(target_os = "linux")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Descriptor(u32);
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 impl Descriptor {
     /// Names the descriptor the `/proc/<pid>/fd` entry is called.
     pub(super) const fn new(raw: u32) -> Self {
@@ -80,7 +86,7 @@ impl Descriptor {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 impl fmt::Display for Descriptor {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let raw = self.0;
