@@ -169,6 +169,7 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
     let value: Value = serde_json::from_str(&ir)?;
     let subcommands = array_field(&value, "subcommands")?;
     assert_app_names(subcommands, &["greet", "version", "admin"])?;
+    assert_ir_greet_renderer(subcommands)?;
 
     let admin = subcommands
         .iter()
@@ -180,6 +181,27 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
     )?;
     ir_identifier_audit::assert_no_respelled_identifier_misses(&value, FIXTURE_PACKAGE)?;
     Ok(())
+}
+
+/// Requires the `greet` IR entry to carry the complete declared renderer block.
+///
+/// The IR is the artefact every other output is rendered from, so a leaf that
+/// code generation dropped is caught here before it can be reported as present
+/// in agent context.
+fn assert_ir_greet_renderer(subcommands: &[Value]) -> Result<(), TestError> {
+    let greet = subcommands
+        .iter()
+        .find(|command| command.get("app_name").and_then(Value::as_str) == Some("greet"))
+        .ok_or("greet subcommand missing from IR")?;
+    let renderer = greet
+        .get("renderer")
+        .ok_or("greet subcommand carries no renderer block in IR")?;
+    let declared = renderer_assertions::expected_greet_renderer();
+    if *renderer == declared {
+        Ok(())
+    } else {
+        Err(format!("IR greet renderer should be {declared}, got {renderer}").into())
+    }
 }
 
 /// Asserts that split man pages include the nested admin command sections.

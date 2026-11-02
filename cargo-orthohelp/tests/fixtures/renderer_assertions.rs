@@ -17,11 +17,18 @@ pub(crate) fn expected_greet_renderer() -> Value {
         "human": {
             "supported": true,
             "tty": "adapts",
+            "closed_stdin": "eof",
             "colour": "auto",
+            "emoji": "never",
+            "progress": "always",
+            "pager": "auto",
             "width": {"kind": "terminal"},
+            "accessibility": "text_equivalent",
             "plain": "available",
             "stdout": "text",
-            "stderr": "text",
+            "stderr": "mixed",
+            "progress_inheritance": "allowed",
+            "subprocess_inheritance": "forbidden",
             "fields": [
                 {"id": "message", "localization": "localized"},
                 {"id": "error_code", "localization": "non_localized"}
@@ -30,13 +37,18 @@ pub(crate) fn expected_greet_renderer() -> Value {
         "machine": {
             "supported": true,
             "tty": "independent",
+            "closed_stdin": "error",
             "colour": "never",
+            "emoji": "auto",
             "progress": "never",
-            "pager": "never",
+            "pager": "always",
             "width": {"kind": "unbounded"},
+            "accessibility": "unspecified",
             "plain": "always",
             "stdout": "structured",
-            "stderr": "structured",
+            "stderr": "none",
+            "progress_inheritance": "forbidden",
+            "subprocess_inheritance": "allowed",
             "fields": [
                 {"id": "error_code", "localization": "non_localized"}
             ]
