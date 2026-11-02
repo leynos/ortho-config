@@ -20,7 +20,11 @@ documentation-IR version is rebutted with the approved design and withdrawn by
 the reviewer; both are recorded in the Decision log. Gates were re-run on the
 repaired head: formatting, Markdown, diagram, type, and lint gates pass, and
 `make test` again stops in `ortho_l10n --test boundary` on nested-Cargo
-deadline expiries, the same environmental class as before.
+deadline expiries, the same environmental class as before. A twelfth inline
+finding and the same review's pre-merge table (one error, three warnings) then
+required stronger value assertions, a derive-backed fixture declaring every
+leaf, compile-time renderer coverage, and a v0.11.0 migration guide; all four
+are implemented, and the Progress entry of 2026-11-01 records the evidence.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -124,7 +128,8 @@ source failures. There is no time limit; queued compiler work is not a hang.
   behaviour in response.
 - [x] (2026-10-14) Documentation gates passed: formatting, Markdown/spelling,
   and diagram validation; no unrelated tracked changes resulted.
-- [ ] Commit and publish this plan as a draft PR for approval.
+- [x] (2026-10-28) Committed and published this plan as a draft PR for
+  approval; the approval in the next item followed that publication.
 - [x] (2026-10-28) Obtain explicit approval, including the source compatibility
   decision.
 - [x] M1: deliver metadata types, derive, bridge, and contract tests together.
@@ -307,6 +312,35 @@ source failures. There is no time limit; queued compiler work is not a hang.
       `ortho_l10n --test boundary` with six nested `cargo package … exceeded
       the 240 second deadline` errors, 25 passing tests, and no assertion or
       compiler diagnostic. The gate therefore remains incomplete, not green.
+- [x] (2026-11-01) Inline review and pre-merge checks actioned. The twelfth
+      inline finding (assert projected values, not only presence) is repaired
+      in `0596aaac`: the projection case compares the whole record against the
+      declared values, and the toggle mapping test declares one leaf at a time
+      so a sibling-slot write fails in both halves. The pre-merge table on
+      `6c6ffe40` reported one error and three warnings, all accepted: the
+      derive-backed fixture now declares every policy leaf with values that
+      differ per leaf, and both the generated IR and the agent-context artefact
+      are asserted against the complete block; a v0.11.0 migration guide is
+      added and linked from the changelog, contents, README, and user's guide;
+      the publication Progress item is reconciled with `Status: COMPLETE`; and
+      renderer compile-time coverage gains a downstream pass fixture plus three
+      compile-fail fixtures with pinned diagnostics.
+- [x] (2026-11-02) Sequential gates on the pre-merge-checks candidate. The
+      three compile-fail `.stderr` files were pinned by a focused
+      `TRYBUILD=overwrite` probe against a temporary harness that ran only the
+      new fixtures, so the expected diagnostics were produced by the derive
+      rather than written by hand; the probe was then deleted. `make fmt`,
+      `make check-fmt` (95 Markdown files unchanged), `make typecheck`,
+      `make lint` (rustdoc, Clippy with `-D warnings`, Whitaker, docstring
+      coverage 100%), `make markdownlint` (95 files, 0 issues, spelling clean,
+      no `typos.toml` drift), and `make nixie` all pass. The first `make test`
+      run stopped at `cargo-orthohelp --test golden_tests`:
+      `golden::agent_context_tests::fixture_agent_context_matches_snapshot::case_3_nested`
+      failed because the fixture now declares all thirteen leaves while the
+      committed agent-context snapshot still recorded the seven-leaf block.
+      `cargo insta accept` accepted the expanded block, and the focused
+      `golden_tests` target then passed; the full workspace run is re-run
+      before publication.
 
 ## Surprises & discoveries
 
@@ -457,6 +491,19 @@ strategy it replaced, so the change does not erode the CI margin. The lesson is
 that a property generator's shape, not only its variant coverage, is a test
 resource: debug-build strategy construction is stack-hungry, and the default 2
 MiB libtest thread is not generous.
+
+Widening the derive-backed fixture to declare every renderer leaf invalidated a
+golden snapshot in a different crate. The fixture lives in
+`tests/fixtures/orthohelp_fixture`, but `cargo-orthohelp` renders it into
+`tests/golden/agent_context__nested_fixture.json.snap`, so the edit surfaced
+only as an insta mismatch in `cargo-orthohelp --test golden_tests` — a target
+the focused `ortho_config` suites never touch. Nothing about the change was
+wrong; the committed recording of its output had simply gone stale. That is a
+general hazard for fixture-driven snapshots: a fixture is an input to more than
+its own crate's tests, so expanding one requires following every reader before
+claiming the change is validated. Accepting the new snapshot was correct here
+because the diff was exactly the expanded renderer block, with no other field
+moving.
 
 ## Decision log
 
@@ -1353,3 +1400,35 @@ and the run stopped at `ortho_l10n --test boundary` with six
 errors and 25 passing tests, with no assertion or compiler diagnostic. That is
 the same class of nested-Cargo deadline expiry recorded on 2026-10-31, so
 `make test` remains incomplete rather than green.
+
+2026-11-01 pre-merge-checks revision: The review that followed the inline round
+reported one pre-merge error and three warnings, all accepted. Testing
+(Overall) asked for a derive-backed fixture that declares every leaf, with the
+generated IR and agent context both asserted. The fixture now declares all
+thirteen policy leaves on each record, with the repeated toggle pair chosen
+differently per record so a swap of any toggle pair is visible in at least one
+of them; the end-to-end oracle carries the complete block, and the combined
+format also asserts the `ir/en-US.json` entry directly rather than only the
+agent context derived from it. User-Facing Documentation asked for
+`docs/v0-11-0-migration-guide.md`; it exists and is linked from the changelog,
+`docs/contents.md`, `README.md`, and the user's guide upgrade section.
+Developer Documentation found the plan's publication Progress item unchecked
+while the status said COMPLETE; it is now a dated completion entry. Testing
+(Compile-Time / Ui) asked for renderer trybuild coverage: a downstream pass
+fixture declares both records with the whole vocabulary, and three compile-fail
+fixtures pin the diagnostics for an unknown nested key, an unknown policy
+token, and an out-of-bounds width.
+
+2026-11-02 pre-merge-checks gate revision: Gates were run sequentially on the
+repair candidate. The renderer `.stderr` files were generated by a focused
+`TRYBUILD=overwrite` probe rather than transcribed from a diagnostic, then the
+probe was removed. `make fmt`, `make check-fmt`, `make typecheck`, `make lint`
+(docstring coverage 100%), `make markdownlint`, and `make nixie` pass. The first
+`make test` run failed at
+`cargo-orthohelp --test golden_tests::…::case_3_nested`: the expanded fixture
+produces a thirteen-leaf renderer block, while the committed
+`agent_context__nested_fixture.json.snap` still held the seven-leaf recording.
+The snapshot was accepted with `cargo insta accept` after confirming the diff
+was exactly the expected expansion, and the focused `golden_tests` target then
+passed. The full workspace run is re-run once more before publication, so the
+recorded result is the post-accept one.
