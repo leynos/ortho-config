@@ -11,6 +11,8 @@ use std::time::Duration;
 use wait_timeout::ChildExt;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
+/// Allow Cargo builds to wait for shared compiler admission before compiling.
+pub(super) const CARGO_BUILD_TIMEOUT: Duration = Duration::from_secs(3_600);
 const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy)]

@@ -256,9 +256,10 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
             "--out-dir",
         ])
         .arg(output_directory.path());
-    let output = process_runner::run_command(
+    let output = process_runner::run_command_with_timeout(
         &mut command,
         Operation("run documented cargo-orthohelp flow"),
+        process_runner::CARGO_BUILD_TIMEOUT,
     )?;
     ensure!(
         output.status.success(),
