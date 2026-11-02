@@ -2817,7 +2817,7 @@ Linux. These compiler options require the pinned dated nightly; see
 [Toolchain pin and freshness](#toolchain-pin-and-freshness). Cranelift's
 unwinding limitation and the one test kept for LLVM coverage are recorded in
 the "Cranelift development backend" section and
-[ADR-0017](adrs/adr-0017-use-cranelift-for-development-builds.md).
+[ADR-0018](adrs/adr-0018-use-cranelift-for-development-builds.md).
 
 The maintainer has made four decisions that this section records: development
 and formatting use a dated nightly, dev-fast uses Cranelift and the parallel
@@ -3266,7 +3266,7 @@ because no member inherits them. They cannot simply be removed:
 This section records the known limitation of the selected dev-fast backend, the
 measurements that established it, and how to remeasure after a toolchain bump.
 The current route is defined in
-[ADR-0017](adrs/adr-0017-use-cranelift-for-development-builds.md).
+[ADR-0018](adrs/adr-0018-use-cranelift-for-development-builds.md).
 
 Current record: Pinned channel `nightly-2026-10-16`; initial measurement on
 2026-10-16; dev-fast adopted on 2026-10-23 with the test routing below.

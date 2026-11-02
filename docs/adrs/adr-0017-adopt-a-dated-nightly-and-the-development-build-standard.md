@@ -3,11 +3,11 @@
 ## Status
 
 Accepted, with the backend decision superseded by
-[ADR-0017](adr-0017-use-cranelift-for-development-builds.md). The repository
+[ADR-0018](adr-0018-use-cranelift-for-development-builds.md). The repository
 pins a dated nightly toolchain for development and formatting, takes the
 parallel `rustc` frontend and the `mold` linker as Cargo defaults, and keeps
 every non-development route off the standard. This ADR records the original
-decision not to select Cranelift; ADR-0017 adopts it for dev-fast builds with a
+decision not to select Cranelift; ADR-0018 adopts it for dev-fast builds with a
 documented unwind limitation.
 
 ## Date

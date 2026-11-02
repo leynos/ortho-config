@@ -348,7 +348,7 @@ controlled run provides usable cold-build evidence.
 ## Addendum (2026-10-26): Updated test and workflow budgets
 
 The adoption of the dated nightly in
-[ADR-0016](adr-0016-adopt-a-dated-nightly-and-the-development-build-standard.md)
+[ADR-0017](adr-0017-adopt-a-dated-nightly-and-the-development-build-standard.md)
 changed compiler cache keys and invalidated the warm sample used to set the
 whole-run budget. The current limits supersede the whole-run, watchdog and job
 ceilings above:
