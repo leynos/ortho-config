@@ -14,6 +14,9 @@ use crate::schema::{DocMetadata, InteractionKind, MutationKind};
 mod input;
 use input::build_input;
 
+mod renderer;
+use renderer::map_renderer;
+
 mod policy;
 pub use policy::apply_policy_to_context;
 
@@ -69,6 +72,7 @@ struct SelectorFlag<'a>(&'a str);
 ///     subcommands: Vec::new(),
 ///     windows: None,
 ///     behaviour: None,
+///     renderer: None,
 ///     profiles: None,
 /// };
 ///
@@ -231,6 +235,7 @@ fn walk(
         delivery_route: None,
         pagination: None,
         examples: Vec::new(),
+        renderer: map_renderer(meta.renderer.as_ref()),
     });
 
     for subcommand in &meta.subcommands {
@@ -309,6 +314,10 @@ mod default_display;
 
 #[cfg(test)]
 mod proptests;
+
+#[cfg(test)]
+#[path = "renderer_proptests.rs"]
+mod renderer_proptests;
 
 #[cfg(test)]
 mod tests;

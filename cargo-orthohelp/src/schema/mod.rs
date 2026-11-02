@@ -17,11 +17,17 @@ use serde::{Deserialize, Serialize};
 mod behaviour;
 mod content;
 mod field;
+mod renderer;
 
 pub use behaviour::{BehaviourMetadata, InteractionKind, MutationKind};
 pub use content::{Example, Link, Note};
 pub use field::{
     CliMetadata, DefaultValue, Deprecation, EnvMetadata, FieldMetadata, FileMetadata, ValueType,
+};
+pub use renderer::{
+    AccessibilityPolicy, ClosedStdinPolicy, InheritancePolicy, PlainPolicy, RenderWidth,
+    RendererField, RendererFieldLocalization, RendererMetadata, RendererRecord, StreamContent,
+    TogglePolicy, TtyPolicy,
 };
 
 /// Current IR schema version.
@@ -55,6 +61,13 @@ pub struct DocMetadata {
     /// names or flags.
     #[serde(default)]
     pub behaviour: Option<BehaviourMetadata>,
+    /// Optional declared human and machine rendering for this command.
+    ///
+    /// Absent (`None`) means the author made no declaration; consumers must
+    /// treat rendering as undeclared rather than inferring it from names,
+    /// flags, output formats, or the host locale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renderer: Option<RendererMetadata>,
     /// Profile selection metadata for opted-in structs (roadmap 9.1.1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<DocProfilesMeta>,

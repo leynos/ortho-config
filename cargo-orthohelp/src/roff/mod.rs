@@ -296,6 +296,7 @@ mod tests {
             fields: vec![],
             subcommands: vec![],
             windows: None,
+            renderer: None,
         }
     }
 

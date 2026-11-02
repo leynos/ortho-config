@@ -6,7 +6,7 @@
 use clap::Parser;
 use ortho_config::{
     AgentCommand, AgentContext, AgentExample, AgentInput, InteractionMode, MutationEffect,
-    OrthoConfig, serde_json, serialize_agent_context,
+    OrthoConfig, RendererContract, serde_json, serialize_agent_context,
 };
 use serde::{Deserialize, Serialize};
 
@@ -104,6 +104,7 @@ fn greet_command_context() -> AgentCommand {
             command: "hello-world greet --preamble \"Good morning\"".to_owned(),
             output_mode: Some("text".to_owned()),
         }],
+        renderer: RendererContract::default(),
     }
 }
 
@@ -153,6 +154,7 @@ fn take_leave_command_context() -> AgentCommand {
             command: "hello-world take-leave --channel email".to_owned(),
             output_mode: Some("text".to_owned()),
         }],
+        renderer: RendererContract::default(),
     }
 }
 

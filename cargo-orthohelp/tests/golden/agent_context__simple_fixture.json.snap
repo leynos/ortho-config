@@ -47,7 +47,15 @@ expression: snapshot
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
-      "examples": []
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
     }
   ],
   "profiles": {

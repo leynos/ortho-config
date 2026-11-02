@@ -1772,6 +1772,116 @@ never infers these facts from command names or flags.
 `interaction = "non_interactive"` combined with a `bypass` declaration is a
 compile error: a command that never prompts has nothing to bypass.
 
+## Declare how a command renders its output
+
+Behaviour metadata says what a command _does_. Renderer metadata says how it
+_writes_, so an agent can tell whether a command has a machine-readable mode
+and whether its output changes with a human language. Declare each renderer in
+its own nested group:
+
+<!-- tested-example: guide-renderer-metadata -->
+```rust
+use ortho_config::{OrthoConfig, OrthoConfigDocs};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "APP_",
+    renderer(
+        human(
+            supported = true,
+            tty = "adapts",
+            colour = "auto",
+            width = "terminal",
+            field("message", localization = "localized"),
+            field("error_code", localization = "non_localized")
+        ),
+        machine(
+            supported = true,
+            tty = "independent",
+            colour = "never",
+            progress = "never",
+            width = "unbounded",
+            plain = "always",
+            stdout = "structured",
+            field("error_code", localization = "non_localized")
+        )
+    )
+)]
+struct GreetArgs {
+    /// Who to greet.
+    #[ortho_config(default = String::from("world"))]
+    name: String,
+}
+
+fn main() {
+    // In the IR each renderer record is optional: `None` means that renderer was
+    // never declared, which the agent-context wire contract later resolves to the
+    // legacy defaults.
+    if let Some(machine) = GreetArgs::get_doc_metadata()
+        .renderer
+        .and_then(|renderer| renderer.machine)
+    {
+        let fields: Vec<&str> = machine
+            .fields
+            .iter()
+            .map(|field| field.id.as_str())
+            .collect();
+        println!(
+            "machine={:?} stdout={:?} fields={fields:?}",
+            machine.supported, machine.stdout
+        );
+    }
+}
+```
+
+The example prints
+`machine=Some(true) stdout=Some(Structured) fields=["error_code"]`. The
+`Option` wrappers are the point: a field the command did not declare stays
+absent instead of defaulting to a claim. Both `human(...)` and `machine(...)`
+accept the same keys:
+
+- `supported = true` or `false` — whether this renderer exists at all;
+- `tty = "independent"`, `"adapts"`, or `"requires"` — how much the output
+  depends on stdout being a terminal;
+- `closed_stdin = "ignored"`, `"eof"`, or `"error"` — behaviour when stdin is
+  closed, which matters because agents rarely attach a terminal;
+- `colour`, `emoji`, `progress`, and `pager` — `"never"`, `"auto"`, or
+  `"always"`;
+- `width = "terminal"`, `"unbounded"`, or a column count such as `width = 80`;
+- `accessibility = "unspecified"` or `"text_equivalent"`;
+- `plain = "unsupported"`, `"available"`, or `"always"` — whether unadorned
+  output is available, which is not the same as colour being suppressed;
+- `stdout` and `stderr` — `"none"`, `"text"`, `"structured"`, or `"mixed"`;
+- `progress_inheritance` and `subprocess_inheritance` — `"allowed"` or
+  `"forbidden"`, stating whether progress reporting and subprocess output may
+  pass through directly rather than being captured or reformatted; and
+- `field("id", localization = "localized")` or `"non_localized"` — which output
+  fields may change with the human language and which are protocol data.
+
+Declaring a renderer is a claim, not a probe. The derive never inspects command
+names, flags, or whether a terminal is attached, and the tool never infers
+capabilities from them. Two conventions follow from that:
+
+- Omit anything you have not decided. An undeclared key is reported as absent,
+  never as a reassuring default, so a reader can tell "not claimed" from
+  "claimed to be off".
+- Declare each command separately. A subcommand does not inherit its parent's
+  renderer block, because sibling commands commonly differ: one may print prose
+  and another emit JSON.
+
+An annotated command reports its declaration through the documentation IR and,
+via `cargo-orthohelp`, through agent context as a `renderer` object with
+`human` and `machine` records. A command with no `renderer(...)` group still
+reports the legacy defaults — human supported, machine not — so adding this
+feature changed nothing for existing commands.
+
+Because the wire contract is additive, the JSON stays compatible. The Rust
+source API is not: constructing documentation IR or an `AgentCommand` by struct
+literal now needs the new field. Read [the changelog](../CHANGELOG.md) for the
+exact field to name if you build those values yourself; applications that only
+derive the configuration need no change.
+
 ## Agent-native policy checking
 
 `cargo orthohelp --check-agent-native` runs an opt-in policy check against a
@@ -1947,6 +2057,9 @@ Annotate incrementally, starting with destructive commands:
 Each release with compatibility notes has a migration guide that separates
 required changes from improvements that can be adopted later:
 
+- [v0.11.0 migration guide](v0-11-0-migration-guide.md) — from v0.10.0. Only
+  Rust code that builds documentation IR or `AgentCommand` literals needs a
+  change; JSON, Fluent catalogues, and derived configuration do not.
 - [v0.10.0 migration guide](v0-10-0-migration-guide.md) — from v0.9.0. Most
   applications need no code changes; review explicit command-line values that
   restate defaults, Fluent catalogue identifiers, and struct literals of

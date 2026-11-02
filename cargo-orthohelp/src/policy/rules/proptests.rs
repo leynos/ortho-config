@@ -23,7 +23,9 @@
 use proptest::collection::vec;
 use proptest::prelude::*;
 
-use ortho_config::{AgentCommand, AgentContext, AgentInput, InteractionMode, MutationEffect};
+use ortho_config::{
+    AgentCommand, AgentContext, AgentInput, InteractionMode, MutationEffect, RendererContract,
+};
 
 use super::behaviour::check_behaviour;
 use crate::policy::{PolicyMode, PolicySeverity};
@@ -161,6 +163,7 @@ fn command() -> impl Strategy<Value = AgentCommand> {
                 delivery_route: None,
                 pagination: None,
                 examples: Vec::new(),
+                renderer: RendererContract::default(),
             },
         )
 }

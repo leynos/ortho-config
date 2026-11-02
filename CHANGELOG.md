@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added (renderer metadata)
+
+- **Dual-renderer metadata (roadmap 7.2.2).** Commands can now declare how they
+  render, not just what they do, through a sibling `renderer(...)` attribute
+  with independent `human(...)` and `machine(...)` groups. Each group can state
+  support, terminal sensitivity, closed-stdin behaviour, colour, emoji,
+  progress, pager, width, accessibility, plain-output availability, the stdout
+  and stderr content categories, and which output fields may be localized. The
+  declaration flows into documentation IR and, through the `cargo-orthohelp`
+  bridge, into agent context as a `renderer` object. Nothing is inferred from
+  command names, flags, terminal detection, or locale, and a subcommand does
+  not inherit its parent's declaration. Commands that declare nothing keep
+  their previous observable behaviour: human output supported, machine output
+  not. See [ADR-0016](docs/adrs/adr-0016-dual-renderer-metadata-surface.md) and
+  [the user's guide](docs/users-guide.md#declare-how-a-command-renders-its-output).
+
+### Changed (source compatibility)
+
+- **Breaking for struct-literal construction:** documentation IR
+  (`ortho_config::docs::DocMetadata`) and the mirrored
+  `cargo_orthohelp::schema::DocMetadata` gained a `renderer` field, and the
+  localized IR used for per-locale artefacts carries it through. Code that
+  assembles these documents by struct literal must name `renderer: None`;
+  `AgentCommand` consumers must supply `renderer: RendererContract::default()`,
+  because the type does not implement `Default`. The field is
+  `#[serde(default)]`, so the wire contract stays additive: JSON without
+  `renderer` still deserializes, wire version 1 and documentation IR 2.0 are
+  unchanged, and no existing field changed shape, spelling, ordering, or
+  null-versus-omission rule. Applications that only derive their configuration
+  and read agent context need no change. This is a Rust source break, not a
+  JSON compatibility break; see the
+  [v0.11.0 migration guide](docs/v0-11-0-migration-guide.md) for the exact
+  edits and roadmap 13.1 for the constructor-based remedy.
+
 ## [0.10.0] - 2026-10-24
 
 _Applications upgrading from 0.9 should follow the

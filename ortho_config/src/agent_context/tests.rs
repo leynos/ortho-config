@@ -16,6 +16,18 @@ use contract_support::*;
 #[path = "tests_round_trip.rs"]
 mod round_trip;
 
+#[path = "tests_renderer_legacy.rs"]
+mod renderer_legacy;
+
+#[path = "tests_renderer_defaults.rs"]
+mod renderer_defaults;
+
+#[path = "tests_renderer_wire.rs"]
+mod renderer_wire;
+
+#[path = "tests_wire_enums.rs"]
+mod wire_enums;
+
 #[rstest]
 fn agent_context_version_is_independent_from_docs_ir() {
     assert_agent_context_version_metadata();
@@ -274,52 +286,6 @@ fn unknown_top_level_fields_are_ignored_for_forward_compatibility() {
     assert_eq!(context.commands, [] as [AgentCommand; 0]);
 }
 
-#[rstest]
-#[case(AsyncSubmissionMode::Inline, "inline")]
-#[case(AsyncSubmissionMode::Submit, "submit")]
-fn async_submission_mode_serializes_canonical_wire_values(
-    #[case] mode: AsyncSubmissionMode,
-    #[case] expected: &str,
-) {
-    let value = serde_json::to_value(mode).expect("serialize async submission mode");
-    assert_eq!(value, expected);
-}
-
-#[rstest]
-#[case(InteractionMode::Unknown, "unknown")]
-#[case(InteractionMode::NonInteractive, "non_interactive")]
-#[case(InteractionMode::Interactive, "interactive")]
-fn interaction_mode_serializes_canonical_wire_values(
-    #[case] mode: InteractionMode,
-    #[case] expected: &str,
-) {
-    let value = serde_json::to_value(mode).expect("serialize interaction mode");
-    assert_eq!(value, expected);
-}
-
-#[rstest]
-#[case(PolicyMode::Off, "off")]
-#[case(PolicyMode::Warn, "warn")]
-#[case(PolicyMode::Deny, "deny")]
-fn policy_mode_serializes_canonical_wire_values(#[case] mode: PolicyMode, #[case] expected: &str) {
-    let value = serde_json::to_value(mode).expect("serialize policy mode");
-    assert_eq!(value, expected);
-}
-
-#[rstest]
-#[case(MutationEffect::Unknown, "unknown")]
-#[case(MutationEffect::ReadOnly, "read_only")]
-#[case(MutationEffect::Write, "write")]
-#[case(MutationEffect::Delete, "delete")]
-#[case(MutationEffect::Submit, "submit")]
-fn mutation_effect_serializes_canonical_wire_values(
-    #[case] effect: MutationEffect,
-    #[case] expected: &str,
-) {
-    let value = serde_json::to_value(effect).expect("serialize mutation effect");
-    assert_eq!(value, expected);
-}
-
 /// Returns a required object field for schema assertions, reporting the field
 /// name when the fixture is malformed.
 pub(super) fn field<'a>(value: &'a Value, name: &str) -> Result<&'a Value> {
@@ -376,6 +342,7 @@ pub(super) fn sample_agent_context() -> AgentContext {
                 command: "example-cli list --format json".to_owned(),
                 output_mode: Some("json".to_owned()),
             }],
+            renderer: RendererContract::default(),
         }],
         profiles: ProfilesDeclaration::unsupported(),
         feedback: SupportDeclaration { supported: false },

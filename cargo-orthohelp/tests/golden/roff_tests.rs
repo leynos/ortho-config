@@ -60,6 +60,7 @@ fn make_test_metadata(
         fields: vec![],
         subcommands: vec![],
         windows: None,
+        renderer: None,
     }
 }
 

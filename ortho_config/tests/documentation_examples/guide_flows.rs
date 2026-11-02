@@ -7,7 +7,7 @@
 
 use anyhow::{Context, Result, ensure};
 use ortho_config::serde_json::{self, Value};
-use ortho_config::{AgentCommand, AgentContext, InteractionMode, MutationEffect};
+use ortho_config::{AgentCommand, AgentContext, InteractionMode, MutationEffect, RendererContract};
 use std::path::Path;
 
 use crate::documentation_examples::{DocumentedExample, documented_example};
@@ -198,6 +198,7 @@ pub(super) fn assert_behaviour_check_flow(workspace: &mut ExampleWorkspace) -> R
         delivery_route: None,
         pagination: None,
         examples: Vec::new(),
+        renderer: RendererContract::default(),
     });
     let context_json = serde_json::to_string(&context)?;
     workspace.write_run_file(

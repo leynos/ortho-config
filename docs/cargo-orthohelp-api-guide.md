@@ -135,7 +135,7 @@ intentional omission of `summary` and `null` optional fields.
 <!-- tested-example: api-guide-agent-context-json -->
 ```rust
 use ortho_config::{
-    AgentCommand, AgentContext, InteractionMode, MutationEffect,
+    AgentCommand, AgentContext, InteractionMode, MutationEffect, RendererContract,
 };
 
 fn main() -> Result<(), serde_json::Error> {
@@ -154,6 +154,7 @@ fn main() -> Result<(), serde_json::Error> {
         delivery_route: None,
         pagination: None,
         examples: Vec::new(),
+        renderer: RendererContract::default(),
     };
 
     context.commands = vec![describe_command];
@@ -171,6 +172,7 @@ fn main() -> Result<(), serde_json::Error> {
         delivery_route: None,
         pagination: None,
         examples: Vec::new(),
+        renderer: RendererContract::default(),
     });
 
     println!("{}", serde_json::to_string_pretty(&context)?);

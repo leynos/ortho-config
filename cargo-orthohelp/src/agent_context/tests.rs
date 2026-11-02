@@ -307,5 +307,11 @@ use nested_support::*;
 #[path = "behaviour_tests.rs"]
 mod behaviour_tests;
 
+#[path = "renderer_tests.rs"]
+mod renderer_tests;
+
+#[path = "renderer_mapping_tests.rs"]
+mod renderer_mapping_tests;
+
 #[path = "tests_profiles.rs"]
 mod tests_profiles;

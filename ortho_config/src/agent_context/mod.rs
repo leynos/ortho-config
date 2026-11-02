@@ -36,6 +36,15 @@ mod profiles;
 
 pub use profiles::{ProfileSelectionContract, ProfilesDeclaration};
 
+mod renderer;
+mod renderer_wire;
+
+pub use renderer::{
+    AccessibilityPolicy, ClosedStdinPolicy, InheritancePolicy, PlainPolicy, RenderWidth,
+    RendererContract, RendererField, RendererFieldLocalization, RendererRecord, StreamContent,
+    TogglePolicy, TtyPolicy,
+};
+
 /// Top-level agent-context document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentContext {
@@ -143,6 +152,14 @@ pub struct AgentCommand {
     /// Short examples suitable for agent prompt context.
     #[serde(default)]
     pub examples: Vec<AgentExample>,
+    /// Declared human and machine rendering for this command.
+    ///
+    /// Defaults to the documented legacy compatibility values: human support
+    /// `true`, machine support `false`. Those are not observed runtime
+    /// capability, and undeclared policy stays absent rather than becoming an
+    /// affirmative promise.
+    #[serde(default)]
+    pub renderer: RendererContract,
 }
 
 /// Asynchronous submission metadata for a command.

@@ -4,12 +4,12 @@ use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{LitBool, Token};
 
+use super::doc_attrs_common::{parse_example_meta, parse_link_meta, parse_note_meta};
 use super::doc_types::{
-    DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
-    PrecedenceAttrs, WindowsAttrs,
+    DocFieldAttrs, DocStructAttrs, HeadingOverrides, PrecedenceAttrs, WindowsAttrs,
 };
 use super::literals::{lit_char, lit_str};
-use super::{FieldAttrs, discard_unknown, parse_behaviour_meta};
+use super::{FieldAttrs, discard_unknown, parse_behaviour_meta, parse_renderer_meta};
 
 /// Applies one documentation setting to the struct model.
 ///
@@ -36,18 +36,6 @@ pub(crate) fn apply_struct_doc_attr(
             out.bin_name = Some(lit_str(meta, "bin_name")?.value());
             Ok(true)
         }
-        "headings" => {
-            let mut headings = out.headings.clone();
-            parse_headings_meta(meta, &mut headings)?;
-            out.headings = headings;
-            Ok(true)
-        }
-        "precedence" => {
-            let mut precedence = out.precedence.take().unwrap_or_default();
-            parse_precedence_meta(meta, &mut precedence)?;
-            out.precedence = Some(precedence);
-            Ok(true)
-        }
         "example" => {
             out.examples.push(parse_example_meta(meta)?);
             Ok(true)
@@ -60,18 +48,6 @@ pub(crate) fn apply_struct_doc_attr(
             out.notes.push(parse_note_meta(meta)?);
             Ok(true)
         }
-        "windows" => {
-            let mut windows = out.windows.take().unwrap_or_default();
-            parse_windows_meta(meta, &mut windows)?;
-            out.windows = Some(windows);
-            Ok(true)
-        }
-        "behaviour" => {
-            let mut behaviour = out.behaviour.take().unwrap_or_default();
-            parse_behaviour_meta(meta, &mut behaviour)?;
-            out.behaviour = Some(behaviour);
-            Ok(true)
-        }
         "behavior" => Err(syn::Error::new(
             meta.path.span(),
             concat!(
@@ -79,8 +55,44 @@ pub(crate) fn apply_struct_doc_attr(
                 "(declares non-interactive execution and mutation-boundary metadata)"
             ),
         )),
-        _ => Ok(false),
+        _ => apply_nested_struct_attr(meta, key.as_str(), out),
     }
+}
+
+/// Applies one attribute whose value is a nested group.
+///
+/// Each group may be declared more than once, so an earlier declaration is
+/// carried into the parse and only replaced once the new group is valid.
+fn apply_nested_struct_attr(
+    meta: &ParseNestedMeta,
+    key: &str,
+    out: &mut DocStructAttrs,
+) -> syn::Result<bool> {
+    match key {
+        "headings" => {
+            let mut headings = out.headings.clone();
+            parse_headings_meta(meta, &mut headings)?;
+            out.headings = headings;
+        }
+        "precedence" => {
+            let mut precedence = out.precedence.take().unwrap_or_default();
+            parse_precedence_meta(meta, &mut precedence)?;
+            out.precedence = Some(precedence);
+        }
+        "windows" => {
+            let mut windows = out.windows.take().unwrap_or_default();
+            parse_windows_meta(meta, &mut windows)?;
+            out.windows = Some(windows);
+        }
+        "behaviour" => {
+            let mut behaviour = out.behaviour.take().unwrap_or_default();
+            parse_behaviour_meta(meta, &mut behaviour)?;
+            out.behaviour = Some(behaviour);
+        }
+        "renderer" => parse_renderer_meta(meta, out.renderer.get_or_insert_default())?,
+        _ => return Ok(false),
+    }
+    Ok(true)
 }
 /// Applies one documentation setting to a field's parsed attribute model.
 ///
@@ -217,72 +229,6 @@ fn parse_windows_meta(meta: &ParseNestedMeta, windows: &mut WindowsAttrs) -> syn
             return Ok(());
         }
         discard_unknown(&nested)
-    })
-}
-/// Parses one example and requires its code while leaving localized labels
-/// optional.
-fn parse_example_meta(meta: &ParseNestedMeta) -> syn::Result<DocExampleAttr> {
-    let mut title_id = None;
-    let mut code = None;
-    let mut body_id = None;
-    meta.parse_nested_meta(|nested| {
-        if nested.path.is_ident("title_id") {
-            title_id = Some(lit_str(&nested, "title_id")?.value());
-            return Ok(());
-        }
-        if nested.path.is_ident("code") {
-            code = Some(lit_str(&nested, "code")?.value());
-            return Ok(());
-        }
-        if nested.path.is_ident("body_id") {
-            body_id = Some(lit_str(&nested, "body_id")?.value());
-            return Ok(());
-        }
-        discard_unknown(&nested)
-    })?;
-    let code_value =
-        code.ok_or_else(|| syn::Error::new(meta.path.span(), "example requires code"))?;
-    Ok(DocExampleAttr {
-        title_id,
-        code: code_value,
-        body_id,
-    })
-}
-/// Parses a link with a required URI and an optional localized link label.
-fn parse_link_meta(meta: &ParseNestedMeta) -> syn::Result<DocLinkAttr> {
-    let mut text_id = None;
-    let mut uri = None;
-    meta.parse_nested_meta(|nested| {
-        if nested.path.is_ident("text_id") {
-            text_id = Some(lit_str(&nested, "text_id")?.value());
-            return Ok(());
-        }
-        if nested.path.is_ident("uri") {
-            uri = Some(lit_str(&nested, "uri")?.value());
-            return Ok(());
-        }
-        discard_unknown(&nested)
-    })?;
-    let uri_value = uri.ok_or_else(|| syn::Error::new(meta.path.span(), "link requires uri"))?;
-    Ok(DocLinkAttr {
-        text_id,
-        uri: uri_value,
-    })
-}
-/// Parses a localized note reference, rejecting notes without a message ID.
-fn parse_note_meta(meta: &ParseNestedMeta) -> syn::Result<DocNoteAttr> {
-    let mut text_id = None;
-    meta.parse_nested_meta(|nested| {
-        if nested.path.is_ident("text_id") {
-            text_id = Some(lit_str(&nested, "text_id")?.value());
-            return Ok(());
-        }
-        discard_unknown(&nested)
-    })?;
-    let text_id_value =
-        text_id.ok_or_else(|| syn::Error::new(meta.path.span(), "note requires text_id"))?;
-    Ok(DocNoteAttr {
-        text_id: text_id_value,
     })
 }
 /// Reads the explicit documentation value-type override for a field.

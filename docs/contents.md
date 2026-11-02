@@ -76,6 +76,10 @@
 - [ADR-0015: Reusable localization runtime](adrs/adr-0015-localization-runtime-boundary.md):
   review the reusable localization boundary, compatibility defaults, and shared
   identifier owner.
+- [ADR-0016: Dual-renderer metadata surface](adrs/adr-0016-dual-renderer-metadata-surface.md):
+  review the accepted `renderer(...)` derive group, the per-command human and
+  machine records, the role-specific legacy support defaults, and the width
+  encoding.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -121,6 +125,9 @@
   environment sources, parser-faithful clap defaults, optional profile
   overlays, or the Cargo external-subcommand helper while preserving
   process-backed defaults.
+- [v0.11.0 migration guide](v0-11-0-migration-guide.md): name the new
+  `renderer` field when building documentation IR or `AgentCommand` literals,
+  and optionally declare how a command renders.
 
 ## Testing and documentation references
 
@@ -199,6 +206,9 @@
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
+  - [Dual-renderer metadata](execplans/7-2-2-dual-renderer-metadata.md):
+    review the approval-gated plan for renderer support, presentation policies,
+    and stable protocol fields in roadmap 7.2.2.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for

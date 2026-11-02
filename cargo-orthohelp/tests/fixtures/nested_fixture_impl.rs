@@ -140,6 +140,7 @@ macro_rules! define_nested_fixture {
                 fields: Vec::new(),
                 subcommands: Vec::new(),
                 windows: None,
+                renderer: None,
             }
         }
 

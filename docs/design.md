@@ -1280,13 +1280,12 @@ flags on top of the derive macro while keeping the application logic explicit.
   `OrthoConfig::load`; see [roadmap.md](roadmap.md) §8.3.
 - **Consumer application alignment:** Weaver and Netsuke requirements should be
   pushed left into OrthoConfig when they describe reusable command contracts,
-  not when they describe semantic execution. Examples include renderer
-  metadata, JSON mode stream contracts, exit-code taxonomy metadata, skill
-  manifest validation, capability provenance metadata, profile redaction,
-  delivery and feedback parser contracts, and configurable execution ledgers.
-  The authoritative consumer dependency tier for those reusable capabilities is
-  [agent-native-cli-design.md](agent-native-cli-design.md)
-  §2.2.
+  not when they describe semantic execution. Renderer metadata has shipped
+  (roadmap 7.2.2); JSON mode stream contracts, exit-code taxonomy metadata,
+  skill manifest validation, capability provenance metadata, profile redaction,
+  delivery and feedback parser contracts, and configurable execution ledgers
+  remain. The authoritative consumer dependency tier for those reusable
+  capabilities is [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
 - **Trust-aware policy composition:** OrthoConfig should provide the runtime
   authority graph, monotonic policy families, explicit delegation, provenance,
   and diagnostics proposed in
@@ -1446,6 +1445,18 @@ generated documentation, generated agent context, and enforceable CLI policy.
   `ortho_config` can genuinely be built without is selected inside
   `ortho_config`, with a compile-fail fixture for the disabled state; the
   developers' guide records the contract and its tests.
+- **Declare renderer metadata rather than infer it (2026-10-30):** A command's
+  human and machine rendering is now declared through a sibling `renderer(...)`
+  attribute and carried through both documentation IR owners into agent
+  context, completing roadmap 7.2.2. Inference was rejected on purpose: command
+  names, flags, terminal detection, and locale all describe something other
+  than what the command actually emits, and a wrong guess here invites an agent
+  to pipe human prose into a parser. Support defaults stay per renderer (human
+  supported, machine not) so an undeclared command claims exactly what it
+  claimed before the field existed, and undeclared policy is reported as
+  absence rather than as an affirmative "no". Localization copies the block
+  verbatim, because it is presentation policy rather than text. ADR-0016
+  records the vocabulary.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

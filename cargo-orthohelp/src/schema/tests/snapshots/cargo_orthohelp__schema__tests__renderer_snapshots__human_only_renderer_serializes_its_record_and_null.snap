@@ -1,0 +1,32 @@
+---
+source: cargo-orthohelp/src/schema/tests/renderer_snapshots.rs
+expression: "snapshot_json(&RendererMetadata\n{ human: Some(fully_declared_record()), machine: None, })"
+---
+{
+  "human": {
+    "supported": true,
+    "tty": "adapts",
+    "closed_stdin": null,
+    "colour": "auto",
+    "emoji": null,
+    "progress": null,
+    "pager": null,
+    "width": {
+      "kind": "fixed",
+      "columns": 80
+    },
+    "accessibility": null,
+    "plain": "available",
+    "stdout": "text",
+    "stderr": null,
+    "progress_inheritance": null,
+    "subprocess_inheritance": null,
+    "fields": [
+      {
+        "id": "error_code",
+        "localization": "non_localized"
+      }
+    ]
+  },
+  "machine": null
+}

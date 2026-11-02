@@ -241,6 +241,7 @@ fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) ->
         subcommands,
         windows: None,
         behaviour: None,
+        renderer: None,
         profiles: None,
     }
 }

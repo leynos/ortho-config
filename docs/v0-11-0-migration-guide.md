@@ -1,0 +1,161 @@
+# Migration guide: v0.10.0 to v0.11.0
+
+## Who should read this
+
+Read this guide before upgrading an application or library from OrthoConfig
+v0.10.0 to v0.11.0. Applications that derive their configuration and read agent
+context need no code changes: every new capability is opt-in, and the wire
+contract stays additive.
+
+Two areas deserve a review before release:
+
+- Rust code that builds documentation IR or an `AgentCommand` with a struct
+  literal must name the new `renderer` field; and
+- authors who want to describe how a command renders can now adopt a
+  `renderer(...)` declaration.
+
+JSON consumers need no change, and neither do Fluent catalogues. The
+documentation IR version stays at 2.0, because the new field is optional and
+omitted when undeclared.
+
+## Impact at a glance
+
+| Priority             | Area                       | What to do                                                                   |
+| -------------------- | -------------------------- | ---------------------------------------------------------------------------- |
+| **Required**         | Dependency versions        | Update every OrthoConfig crate requirement to v0.11.0 together.              |
+| **Required if used** | Documentation-IR literals  | Name `renderer: None`, or the declared records, when building `DocMetadata`. |
+| **Required if used** | `AgentCommand` literals    | Supply `renderer: RendererContract::default()`.                              |
+| **Optional**         | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.         |
+| **Optional**         | Agent-native policy checks | Read the projected `renderer` block from agent context.                      |
+
+_Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
+
+## 1. Update dependency versions
+
+Update the runtime crate, and any direct macro or tooling dependency, as one
+unit.
+
+Before:
+
+```toml
+[dependencies]
+ortho_config = { version = "0.10.0", features = ["yaml"] }
+```
+
+After:
+
+```toml
+[dependencies]
+ortho_config = { version = "0.11.0", features = ["yaml"] }
+```
+
+## 2. Name `renderer` in documentation-IR literals
+
+`ortho_config::docs::DocMetadata` and the `cargo-orthohelp` mirror of it gained
+a `renderer` field. The field is optional and is omitted when undeclared, so
+JSON written by an earlier release still deserializes, and a document that
+declares nothing looks exactly as it did before.
+
+Before:
+
+```rust,no_run
+let metadata = DocMetadata {
+    ir_version: "2.0".to_owned(),
+    app_name: "demo".to_owned(),
+    // … the remaining fields, as before
+};
+```
+
+After:
+
+```rust,no_run
+let metadata = DocMetadata {
+    ir_version: "2.0".to_owned(),
+    app_name: "demo".to_owned(),
+    renderer: None,
+    // … the remaining fields, as before
+};
+```
+
+A document that does declare renderer metadata names both records instead.
+
+```rust,no_run
+let metadata = DocMetadata {
+    ir_version: "2.0".to_owned(),
+    app_name: "demo".to_owned(),
+    renderer: Some(RendererMetadata {
+        human: Some(RendererRecord {
+            supported: Some(true),
+            ..RendererRecord::default()
+        }),
+        machine: None,
+    }),
+    // … the remaining fields, as before
+};
+```
+
+## 3. Supply a renderer contract on `AgentCommand`
+
+`ortho_config::agent_context::AgentCommand` gained the same field, typed as
+`RendererContract`. `AgentCommand` does not implement `Default`, so a struct
+literal must now name the field:
+
+After:
+
+```rust,no_run
+let command = AgentCommand {
+    // … the remaining fields, as before
+    renderer: RendererContract::default(),
+};
+```
+
+`RendererContract::default()` is the legacy claim, not an observation: human
+output supported, machine output not. Use it for a command that declares
+nothing. If your code already declares renderer metadata, project that
+declaration instead.
+
+## 4. The wire contract is unchanged
+
+The field is `#[serde(default)]` on both the authoring IR and the agent-context
+wire. As a result:
+
+- JSON produced by v0.10.0 still decodes, and the `renderer` key is simply
+  absent;
+- documentation IR stays at 2.0, so consumers pinned to that version keep
+  decoding documents that carry the new field;
+- unknown policy tokens still normalize to `unknown` on the tolerant
+  agent-context side, and still fail on the strict authoring side.
+
+This is a Rust source break only. Roadmap 13.1 tracks the constructor-based
+remedy that will remove it.
+
+## 5. Optionally declare how a command renders
+
+Adoption is a sibling attribute to `behaviour(...)`, scoped the same way.
+
+```rust,ignore
+use clap::Parser;
+use ortho_config::OrthoConfig;
+use serde::Deserialize;
+
+#[derive(Debug, Parser, Deserialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "DEMO",
+    renderer(
+        human(supported = true, colour = "auto", width = "terminal"),
+        machine(supported = true, stdout = "structured")
+    )
+)]
+struct DemoConfig {
+    /// Recipient to greet.
+    recipient: String,
+}
+```
+
+The declaration is descriptive. It records what the author claims, and nothing
+is inferred from command names, flags, terminal detection, or the locale. A
+subcommand does not inherit its parent's declaration. The vocabulary, the
+defaults, and the omission-versus-null rule live in
+[ADR-0016](adrs/adr-0016-dual-renderer-metadata-surface.md), and the
+[user's guide](users-guide.md#declare-how-a-command-renders-its-output) shows
+the accepted keys with worked examples.

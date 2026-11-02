@@ -849,6 +849,17 @@ feed `cargo-orthohelp`. The reference CLI gains two subcommands:
 Both commands honour the agent-context output contracts already defined in
 [agent-native-cli-design.md](agent-native-cli-design.md) §6.2.
 
+Declared renderer metadata (ADR-0016) draws a boundary this surface must
+respect. A `renderer(...)` group classifies each output field as `localized` or
+`non_localized`, and that classification is protocol data: it tells a consumer
+which values may change with the human language and which are machine-readable
+identifiers. Localization therefore never rewrites the renderer block,
+translates its policy tokens, or renames a declared field id. Per-locale
+artefacts carry the block verbatim, so the same declaration appears in every
+locale while only the human-facing prose around it changes. A translator
+working through a Fluent catalogue is translating text the block *describes*,
+never the block itself.
+
 ## 12. Failure modes and risks
 
 - **clap patch releases adding `ErrorKind` variants.** `ErrorKind` is

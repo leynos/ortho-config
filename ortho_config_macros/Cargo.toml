@@ -38,3 +38,6 @@ rstest = "0.28.0"
 serde = { version = "1", features = ["derive"] }
 figment = { version = "0.10", default-features = false, features = ["test"] }
 proptest = "1.11.0"
+# `extra-traits` provides `Debug`/`PartialEq` for `syn::Type`, which the parser
+# unit tests rely on when asserting on parsed types and failed cases.
+syn = { version = "3", features = ["extra-traits"] }

@@ -33,6 +33,7 @@ pub(super) fn minimal_doc(locale: &str, about: &str) -> LocalizedDocMetadata {
         fields: vec![],
         subcommands: vec![],
         windows: None,
+        renderer: None,
     }
 }
 

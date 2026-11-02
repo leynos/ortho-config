@@ -142,4 +142,13 @@ fn assert_legacy_context_policy_defaults(context: &AgentContext) {
 
 /// Canonical pretty-printed schema-v1 JSON used by the wire-contract test.
 pub(super) const AGENT_CONTEXT_WIRE_CONTRACT_JSON: &str =
+    include_str!("fixtures/agent_context_renderer_contract.json").trim_ascii_end();
+
+/// Frozen pre-renderer schema-v1 JSON, kept as historical evidence.
+///
+/// This document was written before the `renderer` field existed. It must keep
+/// parsing, and it must still produce the documented legacy support defaults.
+/// Overwriting it with the current serializer's output would destroy the only
+/// evidence that old readers and old documents stay compatible.
+pub(super) const FROZEN_PRERENDERER_WIRE_JSON: &str =
     include_str!("fixtures/agent_context_wire_contract.json").trim_ascii_end();

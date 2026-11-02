@@ -238,13 +238,13 @@ unsafe mutation surfaces before release.
   - [x] Lint destructive commands that lack `--force` or equivalent approved
     metadata.
 
-- [ ] 7.2.2. Add dual-renderer metadata.
+- [x] 7.2.2. Add dual-renderer metadata.
   - Requires 7.2.1.
   - See agent-native-cli-design.md §6.2 and §6.2.1.
-  - [ ] Model human renderer support and machine renderer support separately.
-  - [ ] Model TTY sensitivity, closed-stdin behaviour, colour, emoji,
+  - [x] Model human renderer support and machine renderer support separately.
+  - [x] Model TTY sensitivity, closed-stdin behaviour, colour, emoji,
     progress, pager, width, accessibility, and plain-output policy.
-  - [ ] Model localized versus non-localized fields so protocol identifiers do
+  - [x] Model localized versus non-localized fields so protocol identifiers do
     not drift with human language.
 
 - [ ] 7.2.3. Add metadata for structured output and exit classes.

@@ -19,6 +19,10 @@
 //!   generation.
 //! - [`steps_agent_context`] — `when`/`then` steps for agent-context JSON
 //!   generation.
+//! - [`steps_renderer`] — `when`/`then` steps for declared renderer metadata,
+//!   as reported in agent-context JSON.
+//! - [`steps_ir_renderer`] — `then` steps for declared renderer metadata in
+//!   per-locale IR artefacts.
 //! - [`steps_policy_report`] — `when`/`then` steps for policy-report JSON
 //!   generation.
 //! - [`scenarios`] — wires each feature file to the step registry via
@@ -32,5 +36,7 @@ mod steps_agent_context;
 mod steps_cache;
 mod steps_cmd;
 mod steps_ir;
+mod steps_ir_renderer;
 mod steps_policy;
 mod steps_policy_report;
+mod steps_renderer;

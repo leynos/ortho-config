@@ -3,6 +3,8 @@
 use super::*;
 use ortho_config::docs as ortho_docs;
 
+mod renderer_snapshots;
+
 #[test]
 fn ir_version_matches_ortho_config() {
     assert_eq!(
@@ -81,6 +83,7 @@ fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
         subcommands: spec.subcommands,
         windows: spec.windows,
         behaviour: spec.behaviour,
+        renderer: None,
         profiles: None,
     }
 }

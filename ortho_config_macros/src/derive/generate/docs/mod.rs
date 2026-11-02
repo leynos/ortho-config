@@ -6,6 +6,7 @@
 mod behaviour;
 mod discovery;
 mod fields;
+mod renderer;
 pub(crate) mod sections;
 mod types;
 
@@ -63,6 +64,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
     })?;
     let subcommands = build_subcommands_metadata(args)?;
     let behaviour = behaviour::build_behaviour_metadata(&args.struct_attrs.doc, krate);
+    let renderer = renderer::build_renderer_metadata(&args.struct_attrs.doc, krate);
 
     let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
     let about_id = sections::about_id_tokens(&args.struct_attrs.doc, krate);
@@ -96,6 +98,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
                     subcommands: #subcommands,
                     windows: #windows,
                     behaviour: #behaviour,
+                    renderer: #renderer,
                     profiles: #profiles_tokens,
                 }
             }

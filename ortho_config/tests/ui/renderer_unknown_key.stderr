@@ -1,0 +1,5 @@
+error: unknown renderer policy `hologram`
+ --> tests/ui/renderer_unknown_key.rs:7:31
+  |
+7 | #[ortho_config(renderer(human(hologram = "always")))]
+  |                               ^^^^^^^^

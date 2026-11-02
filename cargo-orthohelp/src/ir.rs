@@ -5,8 +5,8 @@ use serde::Serialize;
 
 use crate::schema::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, DocMetadata, EnvMetadata,
-    Example, FieldMetadata, FileMetadata, Link, Note, PrecedenceMeta, SectionsMetadata, SourceKind,
-    ValueType, WindowsMetadata,
+    Example, FieldMetadata, FileMetadata, Link, Note, PrecedenceMeta, RendererMetadata,
+    SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
 };
 
 /// Localized documentation metadata resolved for a single locale.
@@ -32,6 +32,14 @@ pub struct LocalizedDocMetadata {
     pub subcommands: Vec<Self>,
     /// Windows-specific metadata.
     pub windows: Option<WindowsMetadata>,
+    /// Declared renderer metadata, cloned unchanged from the source document.
+    ///
+    /// The renderer block describes presentation rather than text, so
+    /// localization must copy it verbatim: dropping it here would remove the
+    /// declaration from every published per-locale artefact even though the
+    /// agent-context bridge still reported it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renderer: Option<RendererMetadata>,
 }
 
 /// Section metadata with resolved headings and content.
@@ -201,6 +209,7 @@ pub fn localize_doc(
             .map(|command| localize_doc(command, locale, localizer))
             .collect(),
         windows: metadata.windows.clone(),
+        renderer: metadata.renderer.clone(),
     }
 }
 

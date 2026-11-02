@@ -1,6 +1,8 @@
 //! Unit tests for the behaviour lint rules.
 
-use ortho_config::{AgentCommand, AgentContext, AgentInput, InteractionMode, MutationEffect};
+use ortho_config::{
+    AgentCommand, AgentContext, AgentInput, InteractionMode, MutationEffect, RendererContract,
+};
 use rstest::rstest;
 
 use super::behaviour::check_behaviour;
@@ -37,6 +39,7 @@ pub(super) fn command(
         delivery_route: None,
         pagination: None,
         examples: Vec::new(),
+        renderer: RendererContract::default(),
     }
 }
 
