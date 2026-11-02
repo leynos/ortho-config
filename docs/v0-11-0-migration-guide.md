@@ -134,7 +134,11 @@ remedy that will remove it.
 Adoption is a sibling attribute to `behaviour(...)`, scoped the same way.
 
 ```rust,ignore
-#[derive(Debug, Parser, OrthoConfig)]
+use clap::Parser;
+use ortho_config::OrthoConfig;
+use serde::Deserialize;
+
+#[derive(Debug, Parser, Deserialize, OrthoConfig)]
 #[ortho_config(
     prefix = "DEMO",
     renderer(
