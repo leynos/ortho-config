@@ -1,0 +1,5 @@
+error: width columns must be greater than zero
+ --> tests/ui/renderer_width_out_of_bounds.rs:7:39
+  |
+7 | #[ortho_config(renderer(human(width = 0)))]
+  |                                       ^
