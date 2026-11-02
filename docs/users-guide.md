@@ -2057,6 +2057,9 @@ Annotate incrementally, starting with destructive commands:
 Each release with compatibility notes has a migration guide that separates
 required changes from improvements that can be adopted later:
 
+- [v0.11.0 migration guide](v0-11-0-migration-guide.md) — from v0.10.0. Only
+  Rust code that builds documentation IR or `AgentCommand` literals needs a
+  change; JSON, Fluent catalogues, and derived configuration do not.
 - [v0.10.0 migration guide](v0-10-0-migration-guide.md) — from v0.9.0. Most
   applications need no code changes; review explicit command-line values that
   restate defaults, Fluent catalogue identifiers, and struct literals of

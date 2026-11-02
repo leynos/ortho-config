@@ -34,7 +34,9 @@ All notable changes to this project will be documented in this file.
   unchanged, and no existing field changed shape, spelling, ordering, or
   null-versus-omission rule. Applications that only derive their configuration
   and read agent context need no change. This is a Rust source break, not a
-  JSON compatibility break; see roadmap 13.1 for the constructor-based remedy.
+  JSON compatibility break; see the
+  [v0.11.0 migration guide](docs/v0-11-0-migration-guide.md) for the exact
+  edits and roadmap 13.1 for the constructor-based remedy.
 
 ## [0.10.0] - 2026-10-24
 

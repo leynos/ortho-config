@@ -125,6 +125,9 @@
   environment sources, parser-faithful clap defaults, optional profile
   overlays, or the Cargo external-subcommand helper while preserving
   process-backed defaults.
+- [v0.11.0 migration guide](v0-11-0-migration-guide.md): name the new
+  `renderer` field when building documentation IR or `AgentCommand` literals,
+  and optionally declare how a command renders.
 
 ## Testing and documentation references
 
