@@ -170,6 +170,9 @@
 
 ## Execution plans
 
+- [Import Kani and Verus tooling](execplans/import-prover-tools.md): review
+  the proposed pinned prover integration and its feature-adoption boundary.
+
 - [Reusable localization runtime][l10n-runtime-plan]:
   extract `ortho_l10n`, preserve compatibility, and verify consumer dependency
   boundaries.
