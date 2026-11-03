@@ -1,6 +1,6 @@
 # Import Kani and Verus tooling
 
-Status: DRAFT — awaiting implementation approval.
+Status: APPROVED — implementation authorized on 2026-11-03.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -106,8 +106,8 @@ report, not permission to bypass it.
   and reconcile the linked missing-values plan's deferred proof scope.
 - [x] (2026-11-03) Draft the import contract, milestones, and verification
   obligations; add the plan to `docs/contents.md`.
-- [ ] Validate and publish the plan; record publication evidence in the PR.
-- [ ] Receive explicit implementation approval.
+- [x] (2026-11-03) Publish the validated plan in draft PR #651.
+- [x] (2026-11-03) Receive explicit implementation approval from the user.
 - [ ] M1: land pinned installation and command-boundary contracts.
 - [ ] M2: land real verifier integration fixtures and registration rules.
 - [ ] M3: land bounded CI execution and contributor documentation.
@@ -160,11 +160,10 @@ enumeration. Production proofs remain feature-owned and approval-gated.
 
 ## Outcomes & retrospective
 
-The initial outcome is an implementation proposal with pinned donor evidence.
-No tool has been installed and no proof has been executed for this task.
-Documentation-only validation and publication belong in the PR evidence. The
-remaining outcome is a tested integration, reached only through M1–M3 following
-approval. Keep this status DRAFT when publishing the plan.
+The user approved implementation on 2026-11-03. The plan was published in draft
+PR #651 and implementation is now authorized within its constraints and
+tolerances. The remaining outcome is a tested integration, reached through
+M1–M3. No tool has been installed and no proof has been executed yet.
 
 ## Context and orientation
 
@@ -484,3 +483,6 @@ not implementation approval and does not discharge E1–E4.
 Revision note (2026-11-03): initial proposal separates installation and runner
 integration from feature-owned proof obligations, preserving the reviewed
 missing-values design and recording immutable donor evidence.
+
+Revision note (2026-11-03): mark the plan APPROVED following the user’s
+explicit instruction to begin implementation; M1–M3 remain outstanding.
