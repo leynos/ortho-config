@@ -164,6 +164,9 @@ mod tests {
     use std::process::Stdio;
     use tempfile::TempDir;
 
+    /// How long compiling one small helper may take before the test fails.
+    const COMPILE_TIMEOUT: Duration = Duration::from_secs(120);
+
     struct CompiledBinary {
         _dir: TempDir,
         path: Utf8PathBuf,
@@ -181,10 +184,14 @@ mod tests {
                 .context("write test binary source")?;
             let bin_path = dir.path().join("bin");
             let linker = host_rustc_linker();
-            let status = Command::new("rustc")
+            // nested-cargo-allow: timed the compile is bounded by `wait_with_timeout`
+            // below, and this binary runs in the serial `orthohelp_cache` group.
+            let mut compiler = Command::new("rustc")
                 .args(rustc_compile_args(&src_path, &bin_path, linker.as_deref()))
-                .status()
-                .context("compile test binary")?;
+                .spawn()
+                .context("start the test binary compile")?;
+            let status = wait_with_timeout(&mut compiler, COMPILE_TIMEOUT)
+                .context("compile test binary within its deadline")?;
             if !status.success() {
                 return Err(anyhow!(
                     "rustc must compile helper binary; exited with {status}"
