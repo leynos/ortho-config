@@ -82,6 +82,11 @@ jobs:
 
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        with:
+          # .cargo/config.toml selects mold on Linux, and the nested trybuild
+          # builds the coverage suite runs link with it, so the publisher
+          # needs it as ci.yml's lanes do.
+          install-mold: 'true'
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2

@@ -108,3 +108,19 @@ def test_mutation_lane_installs_mold() -> None:
     assert job["with"].get("install-mold") == "true", (
         "the mutation lane builds under .cargo/config.toml and needs mold"
     )
+
+
+def test_coverage_publisher_installs_mold() -> None:
+    """The publisher builds under .cargo/config.toml, which selects mold."""
+    jobs = _workflow("coverage-main.yml")["jobs"]
+    setups = [
+        step
+        for job in jobs.values()
+        for step in job.get("steps", [])
+        if "/setup-rust@" in str(step.get("uses"))
+    ]
+    assert setups, "the publisher must set Rust up"
+    for setup in setups:
+        assert (setup.get("with") or {}).get("install-mold") == "true", (
+            "the publisher must install the mold linker the configuration selects"
+        )
