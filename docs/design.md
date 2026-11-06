@@ -1156,6 +1156,26 @@ process-tree cleanup is bounded. The helpers are scoped to documentation tests
 and the production bridge; they are not general application subprocess APIs. See
 [ADR-014](adrs/adr-0014-documentation-build-ownership.md).
 
+### 4.20. Formal verification tooling boundary
+
+Kani and Verus are contributor tooling, not runtime dependencies. The
+repository owns the version pins in `tools/kani/VERSION` and
+`tools/verus/VERSION`, the Verus archive digest, the selected harnesses and
+proof files, and the CI lane. The pinned `rust-prover-tools` package owns
+downloading, archive validation, installation, and Verus process execution; no
+package source is vendored, and ordinary `make all`, `make test`, and
+`make lint` runs never install or execute a prover.
+
+Verus accepts only the Z3 build its release shipped with, so
+`make install-verus` installs the release bundle and `VERUS_Z3_PATH` names the
+solver inside it rather than a separately downloaded Z3. Kani harnesses are
+bounded by their unwind depth; a Verus proof may reason about a model that is
+not refined against runtime code. Both limits are stated wherever the evidence
+is reported. An empty production inventory fails with `FORMAL-EMPTY` instead of
+reporting a successful run, and the fixture lane asserts both acceptance and
+rejection so that a runner that verifies nothing cannot pass. See
+[ADR-0017](adrs/adr-0017-consumer-side-prover-tooling.md).
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
@@ -1192,6 +1212,10 @@ and the production bridge; they are not general application subprocess APIs. See
   targets), and the optional format parsers (`figment_json5`, `json5`,
   `serde_saphyr`, `toml`), so downstream libraries can import them via
   `ortho_config::` without declaring separate dependencies.
+- **Verification tooling (development only):** Kani and Verus are pinned in
+  `tools/` and installed through the shared `rust-prover-tools` package. They
+  are contributor tools, not crate dependencies, and never appear in a
+  `Cargo.toml`.
 
 ## 6. Historical implementation baseline
 
@@ -1457,6 +1481,14 @@ generated documentation, generated agent context, and enforceable CLI policy.
   absence rather than as an affirmative "no". Localization copies the block
   verbatim, because it is presentation policy rather than text. ADR-0016
   records the vocabulary.
+- **Import prover tooling without importing proof claims (2026-11-06):** Kani
+  and Verus enter the repository as opt-in contributor tooling pinned in
+  `tools/` and delegated to `rust-prover-tools`; ordinary gates never install
+  or run them. The lane is accepted on Linux x86_64 only, installs the solver
+  bundled with the pinned Verus release because Verus rejects a different Z3
+  build, and reports `FORMAL-EMPTY` when no production inputs are registered.
+  Fixture acceptance and rejection demonstrate the runners, not OrthoConfig
+  behaviour. ADR-0017 records the boundary and its limits.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

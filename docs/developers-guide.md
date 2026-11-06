@@ -52,6 +52,80 @@ members opted into the workspace lint table. An unavoidable generated-code
 exception must use an item-scoped `#[expect(..., reason = "...")]` that names
 the concrete limitation.
 
+## Kani and Verus verification tools
+
+The repository pins Kani in `tools/kani/VERSION` and Verus in
+`tools/verus/VERSION`, with the Verus archive digest in
+`tools/verus/SHA256SUMS`. The shared `rust-prover-tools` package runs through
+`uv tool run --python 3.14`; the Python 3.13 baseline for repository scripts
+does not change. Kani installs into the active `CARGO_HOME`. Verus installs
+under the ignored `.verus/` directory.
+
+A Verus release only accepts the Z3 build it shipped with, so
+`make install-verus` installs the release bundle and the Make boundary points
+`VERUS_Z3_PATH` at `<repository>/.verus/<version>/verus/z3`. The shared
+package's standalone `z3 install` command pins a solver for other repositories;
+do not use it here, because Verus aborts when the solver version differs from
+its release. `VERUS_Z3_PATH` remains overridable for local experiments.
+
+A Verus release also embeds the exact Rust toolchain it was built with and
+refuses to run under any other. `make install-verus` therefore reads the
+toolchain name from the installed release's `version.json` and installs it with
+`rustup`, so a runner that only has the repository's own pin still works. The
+name is not duplicated in this repository, and `VERUS_TOOLCHAIN_FILE` overrides
+the manifest path for tests.
+
+This lane is validated on Linux x86_64 only. The default Kani installer
+supports that platform, and the Verus installer defaults to the Linux archive,
+so do not expect these commands to produce a working setup elsewhere.
+
+Install and check the pinned tools with `make install-kani`, `make kani-check`,
+and `make install-verus`. Proof execution is opt-in: `make kani` runs the
+registered smoke harnesses, `make kani-full` runs every registered production
+harness, and `make verus VERUS_FLAGS='--proof-file path/to/proof.rs'` runs the
+explicit Verus input. `KANI`, `KANI_FLAGS`, `KANI_INSTALL_FLAGS`,
+`VERUS_FLAGS`, and `VERUS_INSTALL_FLAGS` are available for local overrides.
+
+An empty production inventory fails with a `FORMAL-EMPTY` diagnostic instead of
+reporting a successful proof run. Integration fixtures establish that the
+tooling accepts true claims and rejects false ones; they are not proofs of
+OrthoConfig behaviour. The ordinary `make all`, `make test`, and `make lint`
+targets do not install or run either prover.
+
+`make test-prover-tools-integration` runs the real pinned verifiers against
+`tests/fixtures/prover_tools/` and writes
+`target/prover-tools-fixtures/prover-evidence.json`. It sets
+`RUN_PROVER_TOOLS_INTEGRATION=1`, so the test module skips under ordinary
+`make test` and fails rather than skips here when a tool is missing. The target
+itself installs nothing; run `make install-kani` and `make install-verus` first.
+`make install-verus` may download the Rust toolchain the Verus release
+requires, so that step needs network access and changes the local rustup
+installation.
+
+Proof execution never installs anything either. `make verus` passes both
+`--no-install-missing` and `--no-ensure-toolchain` to the shared package, so a
+run with a missing Verus binary or a missing Rust toolchain fails instead of
+downloading one. The two options are independent: passing only the first still
+lets the runner invoke `rustup`, so keep both. `make install-verus` remains the
+single installing step.
+
+### Production proof inventory
+
+Production harnesses and proofs are registered by extending
+`KANI_SMOKE_HARNESSES`, `KANI_ALL_HARNESSES`, or `VERUS_PROOF_FILES` in the
+Makefile. Each entry must name, in the pull request that adds it:
+
+- the owning feature and crate;
+- the production source file under verification;
+- the harness or proof file and the exact symbol it reasons about;
+- the symbolic inputs and their bounds, including the Kani unwind depth;
+- every assumption, precondition, or modelled abstraction;
+- the expected check count and the negative control that must be rejected.
+
+No production entries exist yet. The fixtures under
+`tests/fixtures/prover_tools/` illustrate the required shape without
+registering production claims.
+
 ## Clap default inference
 
 The `cli_default_as_absent` default path is split between parse-time metadata

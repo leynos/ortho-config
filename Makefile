@@ -1,7 +1,12 @@
-.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker \
+	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
+	typecheck python-test-deps publish-check powershell-wrapper-validate \
+	test-workflow-contracts install-kani kani-check install-verus \
+	verus-toolchain kani kani-full verus test-prover-tools-integration FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
+CARGO_HOME ?= $(HOME)/.cargo
 WHITAKER ?= whitaker
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
@@ -57,6 +62,42 @@ PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_
 LADING_REF ?= b771852411b428ff6fc779cc3a68b153a8f2439a
 LADING ?= uvx --from git+https://github.com/leynos/lading@$(LADING_REF) lading
 POWERSHELL ?= pwsh
+
+# The shared package has a separate Python 3.14 requirement. Keep its isolated
+# interpreter and repository-local uv state out of the existing script tools.
+PROVER_TOOLS_SOURCE ?= 592558f7183b554fc749696246984c5d7300d029
+PROVER_TOOLS = $(UV_ENV) $(UV) tool run --python 3.14 --from \
+	'git+https://github.com/leynos/rust-prover-tools@$(PROVER_TOOLS_SOURCE)' \
+	prover-tools
+
+# shell_quote produces a POSIX shell expression for one literal value. The
+# package parses KANI's command string with shlex, so quote the path once for
+# that parser and again for this recipe's shell.
+shell_quote = '$(subst ','"'"',$(1))'
+KANI ?= $(CARGO_HOME)/bin/cargo-kani
+KANI_SHLEX_COMMAND = $(call shell_quote,$(KANI))
+KANI_COMMAND_ARGUMENT = $(call shell_quote,$(KANI_SHLEX_COMMAND))
+KANI_FLAGS ?=
+KANI_INSTALL_FLAGS ?=
+KANI_SMOKE_HARNESSES ?=
+KANI_ALL_HARNESSES ?=
+VERUS_FLAGS ?=
+VERUS_PROOF_FILES ?=
+VERUS_INSTALL_FLAGS ?=
+# A Verus release only accepts the Z3 build it shipped with: 0.2026.01.30
+# expects 4.12.5 and refuses to run against a newer solver. The shared package's
+# standalone `z3 install` pins 4.16.0 for other repositories, so use the
+# bundle's own solver instead of a separately downloaded one.
+VERUS_VERSION := $(strip $(shell cat tools/verus/VERSION 2>/dev/null))
+VERUS_Z3_PATH ?= $(CURDIR)/.verus/$(VERUS_VERSION)/verus/z3
+# Verus embeds the exact Rust toolchain it was built with and refuses to run
+# without it. The release names that toolchain in its own version.json, so read
+# it from there rather than duplicating a pin that could drift from the release.
+VERUS_TOOLCHAIN_FILE ?= $(CURDIR)/.verus/$(VERUS_VERSION)/verus/version.json
+VERUS_REQUIRED_TOOLCHAIN = $(strip $(shell sed -n \
+	's/.*"toolchain": *"\([^"]*\)".*/\1/p' \
+	$(call shell_quote,$(VERUS_TOOLCHAIN_FILE)) 2>/dev/null))
+
 ifeq ($(OS),Windows_NT)
 NULL_DEVICE ?= NUL
 else
@@ -125,6 +166,75 @@ test-workflow-contracts: ## Validate the workflow caller contracts, including th
 		--with 'hypothesis>=6,<7' pytest \
 		tests/workflow_contracts \
 		--doctest-modules -q
+
+install-kani: ## Install the repository-pinned Kani release in CARGO_HOME
+	PATH=$(call shell_quote,$(CARGO_HOME)/bin):$$PATH \
+		$(PROVER_TOOLS) kani install --repo-root $(call shell_quote,$(CURDIR)) \
+		$(KANI_INSTALL_FLAGS)
+
+kani-check: ## Check the selected Kani executable against tools/kani/VERSION
+	$(PROVER_TOOLS) kani check-version --repo-root \
+		$(call shell_quote,$(CURDIR)) --kani-command $(KANI_COMMAND_ARGUMENT)
+
+install-verus: ## Install the pinned Verus release and the Rust toolchain it needs
+	$(PROVER_TOOLS) verus install --repo-root \
+		$(call shell_quote,$(CURDIR)) $(VERUS_INSTALL_FLAGS)
+	@$(MAKE) --no-print-directory verus-toolchain
+
+# A separate target so the toolchain name is read after the install has written
+# version.json, rather than when this Makefile was first parsed.
+verus-toolchain: ## Ensure the Rust toolchain required by the pinned Verus is installed
+	@if [ -z "$(VERUS_REQUIRED_TOOLCHAIN)" ]; then \
+		printf '%s\n' \
+			'VERUS-TOOLCHAIN: $(VERUS_TOOLCHAIN_FILE) does not name a toolchain' >&2; \
+		exit 2; \
+	fi
+	rustup toolchain install $(call shell_quote,$(VERUS_REQUIRED_TOOLCHAIN)) --profile minimal
+
+kani: ## Run the registered Kani smoke harnesses
+	@if [ -z "$(strip $(KANI_SMOKE_HARNESSES))" ]; then \
+		printf '%s\n' 'FORMAL-EMPTY: no production Kani harnesses registered' >&2; \
+		exit 2; \
+	fi
+	$(MAKE) --no-print-directory kani-check
+	@set -e; for harness in $(KANI_SMOKE_HARNESSES); do \
+		$(call shell_quote,$(KANI)) $(KANI_FLAGS) --harness "$$harness"; \
+	done
+
+kani-full: ## Run every registered production Kani harness
+	@if [ -z "$(strip $(KANI_ALL_HARNESSES))" ]; then \
+		printf '%s\n' 'FORMAL-EMPTY: no production Kani harnesses registered' >&2; \
+		exit 2; \
+	fi
+	$(MAKE) --no-print-directory kani-check
+	@set -e; for harness in $(KANI_ALL_HARNESSES); do \
+		$(call shell_quote,$(KANI)) $(KANI_FLAGS) --harness "$$harness"; \
+	done
+
+verus: ## Run explicitly selected production Verus proof files
+	@if [ -z "$(strip $(VERUS_PROOF_FILES))" ] && \
+		[ -z "$(findstring --proof-file,$(VERUS_FLAGS))" ]; then \
+		printf '%s\n' 'FORMAL-EMPTY: no production Verus proofs registered' >&2; \
+		exit 2; \
+	fi
+# Execution never installs. `--no-install-missing` stops the runner fetching
+# the Verus binary, and `--no-ensure-toolchain` stops it running `rustup`; both
+# are treated as separate options, so passing only the first would still let a
+# proof run install a toolchain behind the caller's back. `make install-verus`
+# is the single installing step.
+	VERUS_Z3_PATH=$(call shell_quote,$(VERUS_Z3_PATH)) \
+		$(PROVER_TOOLS) verus run --repo-root $(call shell_quote,$(CURDIR)) \
+		--no-install-missing --no-ensure-toolchain \
+		$(foreach proof,$(VERUS_PROOF_FILES),--proof-file $(call shell_quote,$(proof))) \
+		$(VERUS_FLAGS)
+
+# Real-tool integration is opt-in so ordinary `make test` never downloads a
+# prover. This target is the only supported way to run it: it forwards the
+# selected Kani executable and fails, rather than skips, when a tool is absent.
+test-prover-tools-integration: ## Run the pinned Kani and Verus fixtures
+	RUN_PROVER_TOOLS_INTEGRATION=1 \
+		KANI=$(call shell_quote,$(KANI)) \
+		$(PYTEST) scripts/tests/test_prover_tools_integration.py -q
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
