@@ -116,8 +116,8 @@ report, not permission to bypass it.
   (`/tmp/prover-tools-m1-red.out`).
 - [x] (2026-11-06) M1: the pinned `install-kani`, `kani-check`,
   `install-verus`, `kani`, `kani-full`, and `verus` targets and the
-  command-boundary contracts are implemented. `make check-fmt`, `make lint`,
-  and `make typecheck` passed on the implementation tree.
+  command-boundary contracts are implemented. `make check-fmt`, `make lint`, and
+  `make typecheck` passed on the implementation tree.
 - [x] (2026-11-06) M2: `tests/fixtures/prover_tools/` holds the Kani package
   and both Verus files, and `make test-prover-tools-integration` runs them
   against the installed pins with acceptance and rejection evidence.
@@ -125,6 +125,12 @@ report, not permission to bypass it.
   `tests/workflow_contracts/prover_tools_workflow_test.py`, ADR-0017, and the
   developers' guide, design, layout, and index updates are implemented.
   Hosted-CI evidence is pending the pull-request run.
+- [x] (2026-11-06) M3: the first hosted `prover-tools` run failed one
+  integration test because Verus requires Rust 1.93.0 and the runner only
+  installed the repository's 1.99 pin. `make install-verus` now installs the
+  toolchain named in the release's `version.json`, with a contract test for
+  both the install and the missing-name failure. Hosted evidence is pending the
+  next pull-request run.
 
 ## Surprises & discoveries
 
@@ -162,6 +168,14 @@ Verus 0.2026.01.30.44ebdee with Z3 4.16.0 aborts with "expected z3 version
 4.12.5, found 4.16.0", while the release's bundled `.verus/<version>/verus/z3`
 reports 4.12.5 and verifies successfully. D5 is therefore revised below.[^10]
 
+The pinned Verus release embeds Rust 1.93.0 and refuses to run under another
+toolchain, but the repository pins 1.99. A workstation that happens to have
+1.93.0 installed hides the gap; a clean CI runner does not, and the first
+hosted run failed at `verus --version` with "required rust toolchain
+1.93.0-x86_64-unknown-linux-gnu not found". The release records that name in
+its own `version.json`, so installation can read it rather than duplicating a
+pin that would drift at the next Verus bump.
+
 ## Decision log
 
 D1 (2026-11-03): import consumer-side conventions and delegate installation to
@@ -194,6 +208,15 @@ exact solver version: with the separate `prover-tools z3 install` solver
 (4 verified, 0 errors) and rejects the negative one (postcondition not
 satisfied). The repository therefore ignores `.verus/` only and does not keep a
 `.cache/z3/` installation. `VERUS_Z3_PATH` remains an override.
+
+D6 (2026-11-06): `install-verus` also ensures the Rust toolchain the pinned
+Verus release requires. After the shared package installs the release, a
+sub-make reads the `toolchain` field from
+`<repository>/.verus/<version>/verus/version.json` and runs
+`rustup toolchain install <name> --profile minimal`. Reading the installed
+release's own manifest avoids a second hardcoded pin. A missing name fails with
+`VERUS-TOOLCHAIN` rather than skipping the step, and `VERUS_TOOLCHAIN_FILE`
+exists so the contract test can supply the manifest.
 
 ## Outcomes & retrospective
 

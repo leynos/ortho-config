@@ -77,6 +77,23 @@ def _fake_uv(tmp_path: Path) -> tuple[Path, Path]:
     return uv, capture
 
 
+def _fake_rustup(tmp_path: Path) -> tuple[Path, Path]:
+    """Create a `rustup` stand-in that records the toolchain it is asked for."""
+    log = tmp_path / "rustup-invocations.jsonl"
+    rustup = _write_executable(
+        tmp_path / "bin" / "rustup",
+        f"""
+        #!/usr/bin/env python3
+        import json
+        import sys
+        from pathlib import Path
+        with Path({str(log)!r}).open("a", encoding="utf-8") as output:
+            output.write(json.dumps({{"args": sys.argv[1:]}}) + "\\n")
+        """,
+    )
+    return rustup, log
+
+
 def _records(capture: Path) -> list[dict[str, object]]:
     """Return captured fake-package invocations in call order."""
     captured = capture.read_text(encoding="utf-8").splitlines()
@@ -294,19 +311,42 @@ def test_verus_forwards_explicit_proof_files_in_order(tmp_path: Path) -> None:
     assert _records(capture)[0]["verus_z3_path"] == VERUS_BUNDLED_Z3
 
 
-def test_verus_uses_the_solver_bundled_with_its_release(tmp_path: Path) -> None:
-    """Verus installation does not download a separate, incompatible solver."""
+def _verus_install_env(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
+    """Return an environment, capture file, rustup log, and release manifest."""
     env = os.environ.copy()
     uv, capture = _fake_uv(tmp_path)
+    rustup, rustup_log = _fake_rustup(tmp_path)
+    manifest = tmp_path / "version.json"
     env.update(
         {
-            "PATH": "/usr/bin:/bin",
+            "PATH": os.pathsep.join((str(rustup.parent), "/usr/bin", "/bin")),
             "PROVER_TOOLS_CAPTURE": str(capture),
             "UV": str(uv),
         }
     )
+    return env, capture, rustup_log, manifest
 
-    result = _run_make("install-verus", env=env)
+
+def test_verus_installation_uses_the_bundled_solver_and_required_toolchain(
+    tmp_path: Path,
+) -> None:
+    """Verus installs no separate solver and the Rust toolchain its release needs.
+
+    The release refuses to run under any other toolchain, and a CI runner only
+    has the repository's own pin, so installation must supply the one the
+    release names in its manifest.
+    """
+    env, capture, rustup_log, manifest = _verus_install_env(tmp_path)
+    manifest.write_text(
+        json.dumps({"verus": {"toolchain": "1.93.0-x86_64-unknown-linux-gnu"}}),
+        encoding="utf-8",
+    )
+
+    result = _run_make(
+        "install-verus",
+        env=env,
+        variables=(f"VERUS_TOOLCHAIN_FILE={manifest}",),
+    )
 
     assert result.returncode == 0, result.stderr
     records = _records(capture)
@@ -320,3 +360,35 @@ def test_verus_uses_the_solver_bundled_with_its_release(tmp_path: Path) -> None:
     assert "z3" not in records[0]["args"], (
         "a separate Z3 download would not match the Verus release"
     )
+    rustup_calls = [
+        json.loads(line)["args"]
+        for line in rustup_log.read_text(encoding="utf-8").splitlines()
+    ]
+    assert rustup_calls == [
+        [
+            "toolchain",
+            "install",
+            "1.93.0-x86_64-unknown-linux-gnu",
+            "--profile",
+            "minimal",
+        ]
+    ]
+
+
+def test_verus_installation_fails_when_the_release_names_no_toolchain(
+    tmp_path: Path,
+) -> None:
+    """An unreadable release manifest cannot silently skip the toolchain."""
+    env, capture, rustup_log, manifest = _verus_install_env(tmp_path)
+    manifest.write_text("{}", encoding="utf-8")
+
+    result = _run_make(
+        "install-verus",
+        env=env,
+        variables=(f"VERUS_TOOLCHAIN_FILE={manifest}",),
+    )
+
+    assert result.returncode != 0
+    assert "VERUS-TOOLCHAIN:" in result.stderr
+    assert len(_records(capture)) == 1, "the Verus install itself still ran"
+    assert not rustup_log.exists(), "no toolchain name means no rustup call"

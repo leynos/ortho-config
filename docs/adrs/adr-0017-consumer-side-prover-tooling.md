@@ -112,6 +112,13 @@ with "expected z3 version 4.12.5, found 4.16.0". The Make boundary therefore
 sets `VERUS_Z3_PATH` to the release's bundled solver and installs no separate
 Z3. `VERUS_Z3_PATH` remains overridable.
 
+Verus likewise embeds the Rust toolchain it was built with and refuses to run
+under any other; the pinned release requires 1.93.0, while the repository
+itself pins 1.99. `make install-verus` reads the required toolchain from the
+installed release's `version.json` and installs it with `rustup`, so the CI
+runner works without a second hardcoded pin that could drift from the Verus
+bump.
+
 ### Evidence and negative controls
 
 `tests/fixtures/prover_tools/` holds a Kani package and two Verus files. The
@@ -128,9 +135,9 @@ manual dispatch, and a weekly schedule. It installs, checks, and runs the
 fixtures on Linux x86_64 under a 30-minute ceiling, holds `contents: read`
 only, pins every action to a full commit, and uploads the evidence on success
 or failure. It does not run in the ordinary `ci.yml` matrix. sccache is
-disabled for the job: Kani drives its own compiler, which sccache cannot
-cache, so the shared setup action must not export a rustc wrapper that would
-intercept it.
+disabled for the job: Kani drives its own compiler, which sccache cannot cache,
+so the shared setup action must not export a rustc wrapper that would intercept
+it.
 
 ## Goals and non-goals
 

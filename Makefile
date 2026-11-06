@@ -1,8 +1,8 @@
 .PHONY: help all clean test boundary build release lint lint-clippy lint-whitaker \
 	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
 	typecheck python-test-deps publish-check powershell-wrapper-validate \
-	test-workflow-contracts install-kani kani-check install-verus kani \
-	kani-full verus test-prover-tools-integration FORCE
+	test-workflow-contracts install-kani kani-check install-verus \
+	verus-toolchain kani kani-full verus test-prover-tools-integration FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -90,6 +90,13 @@ VERUS_INSTALL_FLAGS ?=
 # bundle's own solver instead of a separately downloaded one.
 VERUS_VERSION := $(strip $(shell cat tools/verus/VERSION 2>/dev/null))
 VERUS_Z3_PATH ?= $(CURDIR)/.verus/$(VERUS_VERSION)/verus/z3
+# Verus embeds the exact Rust toolchain it was built with and refuses to run
+# without it. The release names that toolchain in its own version.json, so read
+# it from there rather than duplicating a pin that could drift from the release.
+VERUS_TOOLCHAIN_FILE ?= $(CURDIR)/.verus/$(VERUS_VERSION)/verus/version.json
+VERUS_REQUIRED_TOOLCHAIN = $(strip $(shell sed -n \
+	's/.*"toolchain": *"\([^"]*\)".*/\1/p' \
+	$(call shell_quote,$(VERUS_TOOLCHAIN_FILE)) 2>/dev/null))
 
 ifeq ($(OS),Windows_NT)
 NULL_DEVICE ?= NUL
@@ -169,9 +176,20 @@ kani-check: ## Check the selected Kani executable against tools/kani/VERSION
 	$(PROVER_TOOLS) kani check-version --repo-root \
 		$(call shell_quote,$(CURDIR)) --kani-command $(KANI_COMMAND_ARGUMENT)
 
-install-verus: ## Install the pinned Verus release, including its bundled Z3
+install-verus: ## Install the pinned Verus release and the Rust toolchain it needs
 	$(PROVER_TOOLS) verus install --repo-root \
 		$(call shell_quote,$(CURDIR)) $(VERUS_INSTALL_FLAGS)
+	@$(MAKE) --no-print-directory verus-toolchain
+
+# A separate target so the toolchain name is read after the install has written
+# version.json, rather than when this Makefile was first parsed.
+verus-toolchain: ## Ensure the Rust toolchain required by the pinned Verus is installed
+	@if [ -z "$(VERUS_REQUIRED_TOOLCHAIN)" ]; then \
+		printf '%s\n' \
+			'VERUS-TOOLCHAIN: $(VERUS_TOOLCHAIN_FILE) does not name a toolchain' >&2; \
+		exit 2; \
+	fi
+	rustup toolchain install $(call shell_quote,$(VERUS_REQUIRED_TOOLCHAIN)) --profile minimal
 
 kani: ## Run the registered Kani smoke harnesses
 	@if [ -z "$(strip $(KANI_SMOKE_HARNESSES))" ]; then \

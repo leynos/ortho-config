@@ -68,6 +68,13 @@ package's standalone `z3 install` command pins a solver for other repositories;
 do not use it here, because Verus aborts when the solver version differs from
 its release. `VERUS_Z3_PATH` remains overridable for local experiments.
 
+A Verus release also embeds the exact Rust toolchain it was built with and
+refuses to run under any other. `make install-verus` therefore reads the
+toolchain name from the installed release's `version.json` and installs it with
+`rustup`, so a runner that only has the repository's own pin still works. The
+name is not duplicated in this repository, and `VERUS_TOOLCHAIN_FILE` overrides
+the manifest path for tests.
+
 Install and check the pinned tools with `make install-kani`, `make kani-check`,
 and `make install-verus`. Proof execution is opt-in: `make kani` runs the
 registered smoke harnesses, `make kani-full` runs every registered production
