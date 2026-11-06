@@ -120,6 +120,12 @@ installed release's `version.json` and installs it with `rustup`, so the CI
 runner works without a second hardcoded pin that could drift from the Verus
 bump.
 
+Installation and execution stay separate. `make verus` passes
+`--no-install-missing` and `--no-ensure-toolchain`, so a proof run neither
+fetches a verifier nor mutates the rustup installation; a missing binary or
+toolchain fails the run instead. The shared package treats the two as
+independent options, so both are required.
+
 ### Evidence and negative controls
 
 `tests/fixtures/prover_tools/` holds a Kani package and two Verus files. The

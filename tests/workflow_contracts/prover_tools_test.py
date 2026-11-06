@@ -145,6 +145,9 @@ def test_verus_forwards_explicit_proof_files_in_order(tmp_path: Path) -> None:
     assert arguments[first + 1] == "proof dir/first.rs"
     assert arguments[second + 1] == "proof's second.rs"
     assert "--no-install-missing" in arguments
+    assert "--no-ensure-toolchain" in arguments, (
+        "execution must not install a toolchain; `make install-verus` owns that"
+    )
     assert arguments.count("--proof-file") == 2, (
         "the boundary must not add a default proof file of its own"
     )

@@ -217,9 +217,14 @@ verus: ## Run explicitly selected production Verus proof files
 		printf '%s\n' 'FORMAL-EMPTY: no production Verus proofs registered' >&2; \
 		exit 2; \
 	fi
+# Execution never installs. `--no-install-missing` stops the runner fetching
+# the Verus binary, and `--no-ensure-toolchain` stops it running `rustup`; both
+# are treated as separate options, so passing only the first would still let a
+# proof run install a toolchain behind the caller's back. `make install-verus`
+# is the single installing step.
 	VERUS_Z3_PATH=$(call shell_quote,$(VERUS_Z3_PATH)) \
 		$(PROVER_TOOLS) verus run --repo-root $(call shell_quote,$(CURDIR)) \
-		--no-install-missing \
+		--no-install-missing --no-ensure-toolchain \
 		$(foreach proof,$(VERUS_PROOF_FILES),--proof-file $(call shell_quote,$(proof))) \
 		$(VERUS_FLAGS)
 

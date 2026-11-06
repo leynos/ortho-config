@@ -136,6 +136,11 @@ report, not permission to bypass it.
   suite reported `11 passed in 7.91s`, and artefact 13502306744 holds the
   transcripts and `prover-evidence.json` with the accepted and rejected
   controls.
+- [x] (2026-11-06) M3 review follow-up: `make verus` now passes
+  `--no-install-missing` and `--no-ensure-toolchain`. The shared package treats
+  them as independent options, so the earlier single flag still allowed a proof
+  run to install a Rust toolchain. A contract assertion covers both flags, and
+  the developers' guide and ADR-0017 record that execution never installs.
 
 ## Surprises & discoveries
 

@@ -102,6 +102,13 @@ itself installs nothing; run `make install-kani` and `make install-verus` first.
 requires, so that step needs network access and changes the local rustup
 installation.
 
+Proof execution never installs anything either. `make verus` passes both
+`--no-install-missing` and `--no-ensure-toolchain` to the shared package, so a
+run with a missing Verus binary or a missing Rust toolchain fails instead of
+downloading one. The two options are independent: passing only the first still
+lets the runner invoke `rustup`, so keep both. `make install-verus` remains the
+single installing step.
+
 ### Production proof inventory
 
 Production harnesses and proofs are registered by extending
