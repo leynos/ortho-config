@@ -83,10 +83,10 @@
 - [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
   review the pinned Kani and Verus boundary, the bundled-solver decision, the
   opt-in integration evidence, and the limits of a fixture proof.
-- [ADR-0017: Adopt a dated nightly and the development build standard](adrs/adr-0017-adopt-a-dated-nightly-and-the-development-build-standard.md):
+- [ADR-0018: Adopt a dated nightly and the development build standard](adrs/adr-0018-adopt-a-dated-nightly-and-the-development-build-standard.md):
   review the pinned dated nightly, the Cargo defaults restated in Make recipes,
   the routes kept outside the standard, and build-tool provisioning.
-- [ADR-0018: Use Cranelift for development builds](adrs/adr-0018-use-cranelift-for-development-builds.md):
+- [ADR-0019: Use Cranelift for development builds](adrs/adr-0019-use-cranelift-for-development-builds.md):
   review the dev-fast backend, `-Zthreads=8`, the unwind-dependent test route,
   and the LLVM coverage exception.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed

@@ -1,13 +1,13 @@
-# Architectural decision record (ADR) 0017: Adopt a dated nightly and the development build standard
+# Architectural decision record (ADR) 0018: Adopt a dated nightly and the development build standard
 
 ## Status
 
 Accepted, with the backend decision superseded by
-[ADR-0018](adr-0018-use-cranelift-for-development-builds.md). The repository
+[ADR-0019](adr-0019-use-cranelift-for-development-builds.md). The repository
 pins a dated nightly toolchain for development and formatting, takes the
 parallel `rustc` frontend and the `mold` linker as Cargo defaults, and keeps
 every non-development route off the standard. This ADR records the original
-decision not to select Cranelift; ADR-0018 adopts it for dev-fast builds with a
+decision not to select Cranelift; ADR-0019 adopts it for dev-fast builds with a
 documented unwind limitation.
 
 ## Date
@@ -82,10 +82,10 @@ routes displacing the configuration instead.
   checked against the rustup manifests. It carries the date 2026-10-16 at the
   time of writing.
 - Put the initial standard in `.cargo/config.toml` as Cargo defaults and
-  restate it in Make recipes. ADR-0017 supersedes this decision's omission of
+  restate it in Make recipes. ADR-0019 supersedes this decision's omission of
   Cranelift and records the current development flags.
 - Initially do not adopt backend selection. The Cranelift backend was requested,
-  measured, and refused; ADR-0017 supersedes that decision for dev-fast builds,
+  measured, and refused; ADR-0019 supersedes that decision for dev-fast builds,
   while retaining the measurement as an explicit limitation.[^1] The
   re-measurement is tracked by
   [issue #598](https://github.com/leynos/ortho-config/issues/598), due by

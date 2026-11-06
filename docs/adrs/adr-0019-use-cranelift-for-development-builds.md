@@ -1,10 +1,10 @@
-# Architectural decision record (ADR) 0018: Use Cranelift for development builds
+# Architectural decision record (ADR) 0019: Use Cranelift for development builds
 
 ## Status
 
 Accepted. Development builds use Cranelift and the parallel `rustc` frontend;
 coverage builds use LLVM. This decision supersedes the backend exclusion in
-[ADR-0017](adr-0017-adopt-a-dated-nightly-and-the-development-build-standard.md).
+[ADR-0018](adr-0018-adopt-a-dated-nightly-and-the-development-build-standard.md).
 
 ## Date
 
@@ -12,7 +12,7 @@ coverage builds use LLVM. This decision supersedes the backend exclusion in
 
 ## Context and problem statement
 
-ADR-0017 adopted the dated nightly, `-Zthreads=8`, and Linux `mold`, but left
+ADR-0018 adopted the dated nightly, `-Zthreads=8`, and Linux `mold`, but left
 Cranelift out after measuring that it cannot unwind through Cranelift-compiled
 frames. The development build standard is now required to use the dev-fast
 route for all development builds, with `-Zthreads=8` included. Coverage must
