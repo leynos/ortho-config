@@ -58,6 +58,14 @@ LINUX_CFG: typ.Final[str] = 'cfg(target_os = "linux")'
 PREFLIGHT_SCRIPT: typ.Final[str] = "scripts/check-build-tools.sh"
 
 
+class MakeDryRunError(RuntimeError):
+    """Raised when the Make dry-run boundary cannot produce recipe lines."""
+
+
+class CargoConfigurationError(ValueError):
+    """Raised when parsed Cargo configuration has an unexpected table shape."""
+
+
 @dataclasses.dataclass(frozen=True)
 class Host:
     """A development host, as the Makefile and Cargo each name it.
@@ -118,9 +126,10 @@ def dry_run(target: str, *variables: str, host: Host | None = None) -> list[str]
 
     Raises
     ------
-    AssertionError
-        If ``make`` exits non-zero. A route that cannot be expanded must fail
-        the contract that asked, not read as an empty one.
+    MakeDryRunError
+        If Make is missing, cannot be started, or exits non-zero. A route that
+        cannot be expanded must fail the contract that asked, not read as an
+        empty one.
     """
     command = [
         make_executable(),
@@ -133,23 +142,34 @@ def dry_run(target: str, *variables: str, host: Host | None = None) -> list[str]
         *(host.variables() if host else []),
         *variables,
     ]
-    result = subprocess.run(  # noqa: S603 - resolved executable, fixed argument vector, no shell.
-        command,
-        cwd=REPOSITORY_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, (
-        f"{' '.join(command)} exited {result.returncode}: {result.stderr.strip()}"
-    )
+    try:
+        result = subprocess.run(  # noqa: S603 - resolved executable, fixed argument vector, no shell.
+            command,
+            cwd=REPOSITORY_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise MakeDryRunError(f"could not start {' '.join(command)}: {error}") from error
+    if result.returncode != 0:
+        raise MakeDryRunError(
+            f"{' '.join(command)} exited {result.returncode}: {result.stderr.strip()}"
+        )
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
 def make_executable() -> str:
-    """Return the resolved Make executable required by these contracts."""
+    """Return the resolved Make executable required by these contracts.
+
+    Raises
+    ------
+    MakeDryRunError
+        If ``make`` is not available on ``PATH``.
+    """
     executable = shutil.which("make")
-    assert executable is not None, "make is required to evaluate the Makefile contracts"
+    if executable is None:
+        raise MakeDryRunError("make is required to evaluate the Makefile contracts")
     return str(pathlib.Path(executable).resolve())
 
 
@@ -275,29 +295,96 @@ def development_flags(flags: list[str]) -> frozenset[str]:
     return frozenset(flags) & STANDARD_FLAGS
 
 
-def configured_flags(host: Host) -> frozenset[str]:
+def load_cargo_configuration(path: pathlib.Path = CONFIG_PATH) -> dict[str, object]:
+    """Read and parse Cargo's configuration at the explicit file boundary.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The configuration file to parse.
+
+    Returns
+    -------
+    dict of str to object
+        The parsed TOML document.
+
+    Raises
+    ------
+    OSError
+        If the file cannot be read.
+    tomllib.TOMLDecodeError
+        If the file is not valid TOML.
+    UnicodeError
+        If the file is not valid UTF-8.
+
+    Examples
+    --------
+    >>> isinstance(load_cargo_configuration(CONFIG_PATH), dict)
+    True
+    """
+    return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+def configured_flags(host: Host, document: dict[str, object]) -> frozenset[str]:
     """Return the ``rustflags`` Cargo applies when building natively on *host*.
 
     Cargo selects one source rather than merging: a matching ``[target.*]``
     table that sets ``rustflags`` replaces ``[build] rustflags`` outright. This
-    reads the configuration the same way, so the answer is what a bare
-    ``cargo build`` would pass, not a union of everything the file mentions.
+    query receives the parsed document so it does not own file I/O or TOML
+    parsing. Its answer is what a bare ``cargo build`` would pass, not a union
+    of everything the file mentions.
 
     Parameters
     ----------
     host : Host
         The host whose native build is read.
+    document : dict of str to object
+        Parsed Cargo configuration from :func:`load_cargo_configuration`.
 
     Returns
     -------
     frozenset of str
         The flags of the selected source.
+
+    Raises
+    ------
+    CargoConfigurationError
+        If the parsed document has a malformed table or ``rustflags`` value.
+
+    Examples
+    --------
+    >>> configured_flags(HOSTS["linux_x86_64"], {
+    ...     "target": {LINUX_CFG: {"rustflags": [THREADS_FLAG]}}
+    ... })
+    frozenset({'-Zthreads=8'})
     """
-    document = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    tables = document.get("target", {})
-    selected = tables.get(host.triple, {}).get("rustflags")
+    tables = _table_fields(document, "target")
+    selected = _table_fields(tables, host.triple).get("rustflags")
     if selected is None and "linux" in host.triple:
-        selected = tables.get(LINUX_CFG, {}).get("rustflags")
+        selected = _table_fields(tables, LINUX_CFG).get("rustflags")
     if selected is None:
-        selected = document.get("build", {}).get("rustflags", [])
+        selected = _table_fields(document, "build").get("rustflags", [])
+    if not isinstance(selected, list) or any(not isinstance(flag, str) for flag in selected):
+        raise CargoConfigurationError("Cargo rustflags configuration must be an array of strings")
     return frozenset(selected)
+
+
+def _table_fields(document: dict[str, object], table_name: str) -> dict[str, object]:
+    """Return a named TOML table or an empty table when it is absent.
+
+    Examples
+    --------
+    >>> _table_fields({}, "build")
+    {}
+
+    Raises
+    ------
+    CargoConfigurationError
+        If the named value exists but is not a TOML table.
+    """
+    value = document.get(table_name, {})
+    if not isinstance(value, dict):
+        raise CargoConfigurationError(
+            f"Cargo configuration table {table_name!r} must be a TOML table"
+        )
+    return value

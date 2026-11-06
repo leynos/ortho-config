@@ -1,0 +1,59 @@
+error: unused return value of `ortho_config_test_helpers::process::capture::Reader::is_finished` that must be used
+  --> tests/ui/process_api/reader_queries_must_use.rs:16:5
+   |
+16 |     reader.is_finished();
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> tests/ui/process_api/reader_queries_must_use.rs:1:9
+   |
+ 1 | #![deny(unused_must_use)]
+   |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+   |
+16 |     let _ = reader.is_finished();
+   |     +++++++
+
+error: unused return value of `ortho_config_test_helpers::process::capture::Reader::stream` that must be used
+  --> tests/ui/process_api/reader_queries_must_use.rs:17:5
+   |
+17 |     reader.stream();
+   |     ^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+17 |     let _ = reader.stream();
+   |     +++++++
+
+error: unused return value of `ortho_config_test_helpers::process::capture::Reader::error` that must be used
+  --> tests/ui/process_api/reader_queries_must_use.rs:18:5
+   |
+18 |     reader.error();
+   |     ^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+18 |     let _ = reader.error();
+   |     +++++++
+
+error: unused return value of `ortho_config_test_helpers::process::capture::Reader::was_cancelled` that must be used
+  --> tests/ui/process_api/reader_queries_must_use.rs:19:5
+   |
+19 |     reader.was_cancelled();
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+19 |     let _ = reader.was_cancelled();
+   |     +++++++
+
+error: unused return value of `ortho_config_test_helpers::process::capture::Reader::snapshot` that must be used
+  --> tests/ui/process_api/reader_queries_must_use.rs:20:5
+   |
+20 |     reader.snapshot();
+   |     ^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+20 |     let _ = reader.snapshot();
+   |     +++++++

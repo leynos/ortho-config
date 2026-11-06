@@ -2,8 +2,10 @@
 
 use anyhow::Result;
 use std::process::{Command, Output};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
+
+static CARGO_COMMAND_LOCK: Mutex<()> = Mutex::new(());
 
 /// Run `command` to completion or its individual deadline, whichever comes first.
 ///
@@ -57,18 +59,10 @@ fn run_with_optional_sequence_deadline(
     sequence_deadline: Option<Instant>,
     description: &str,
 ) -> Result<Output> {
-    // `cargo test` runs this binary's cases concurrently, and their Cargo
-    // commands share one target and package cache. Probe children do not share
-    // that state, so keep them out of the Cargo-only serialization queue.
-    static CARGO_COMMAND_LOCK: Mutex<()> = Mutex::new(());
-    let _cargo_guard =
-        if is_cargo_command(&command) {
-            Some(CARGO_COMMAND_LOCK.lock().map_err(|error| {
-                anyhow::anyhow!("nested Cargo command lock was poisoned: {error}")
-            })?)
-        } else {
-            None
-        };
+    // Cargo tests share a target and package cache, so only Cargo commands are serialized.
+    let _cargo_guard = is_cargo_command(&command)
+        .then(|| lock_cargo_commands(sequence_deadline))
+        .transpose()?;
 
     match sequence_deadline {
         Some(deadline) => crate::process_runner::run_with_deadline_until(
@@ -79,6 +73,32 @@ fn run_with_optional_sequence_deadline(
         ),
         None => crate::process_runner::run_with_deadline(command, command_deadline, description),
     }
+}
+
+fn lock_cargo_commands(deadline: Option<Instant>) -> Result<MutexGuard<'static, ()>> {
+    if let Some(deadline) = deadline {
+        loop {
+            match CARGO_COMMAND_LOCK.try_lock() {
+                Ok(guard) => return Ok(guard),
+                Err(TryLockError::Poisoned(error)) => {
+                    anyhow::bail!("nested Cargo command lock was poisoned: {error}");
+                }
+                Err(TryLockError::WouldBlock) => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        break;
+                    }
+                    std::thread::sleep(remaining.min(Duration::from_millis(10)));
+                }
+            }
+        }
+        anyhow::bail!(
+            "Cargo command reached enclosing sequence deadline while waiting for the lock"
+        )
+    }
+    CARGO_COMMAND_LOCK
+        .lock()
+        .map_err(|error| anyhow::anyhow!("nested Cargo command lock was poisoned: {error}"))
 }
 
 /// Identify Cargo itself so unrelated child probes bypass its shared-state lock.
@@ -93,7 +113,10 @@ mod tests {
     //! Behavioural tests for the boundary command runner.
 
     use super::super::process_state::assert_child_was_cleaned_up;
-    use super::{is_cargo_command, run_with_deadline, run_with_deadline_until};
+    use super::{
+        CARGO_COMMAND_LOCK, is_cargo_command, lock_cargo_commands, run_with_deadline,
+        run_with_deadline_until,
+    };
     use anyhow::{Context, Result, ensure};
     use cap_std::{ambient_authority, fs::Dir};
     use rstest::rstest;
@@ -247,7 +270,16 @@ mod tests {
     }
 
     #[rstest]
-    fn expired_sequence_deadline_does_not_spawn_child() -> Result<()> {
+    fn sequence_deadline_bounds_the_cargo_lock_and_rejects_expired_child() -> Result<()> {
+        let lock_guard = CARGO_COMMAND_LOCK.lock().expect("test Cargo lock");
+        let lock_error = lock_cargo_commands(Some(Instant::now() + Duration::from_millis(30)))
+            .expect_err("a held Cargo lock must not outlive its sequence deadline");
+        assert!(
+            format!("{lock_error:#}").contains("sequence deadline"),
+            "lock timeout reported the wrong scope: {lock_error:#}"
+        );
+        drop(lock_guard);
+
         let marker_root = tempfile::tempdir()?;
         let marker_dir = Dir::open_ambient_dir(marker_root.path(), ambient_authority())?;
         let expired_deadline = Instant::now()

@@ -61,7 +61,9 @@ jobs:
       # Cargo takes RUSTFLAGS in preference to every `rustflags` table in that
       # file, and cargo-llvm-cov appends `-Cinstrument-coverage` to this value,
       # so coverage is measured on the LLVM backend with the platform linker.
-      # Never set it to `''`: an empty value leaves the configuration in force.
+      # Keep RUSTFLAGS non-empty: an assigned empty value selects no flags.
+      # The setup-rust rustflags input is different; empty leaves RUSTFLAGS
+      # unset only when no value is already inherited.
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT

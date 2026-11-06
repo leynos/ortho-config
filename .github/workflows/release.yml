@@ -123,8 +123,10 @@ jobs:
       # Assigning RUSTFLAGS displaces the parallel frontend, Cranelift backend
       # and mold in `.cargo/config.toml`. The nested setup-rust would export
       # this same value by default; it is written out so the exclusion does
-      # not depend on an action default. Never set it to `''`: an empty value
-      # leaves the configuration in force.
+      # not depend on an action default. Keep RUSTFLAGS non-empty: an assigned
+      # empty value selects no flags. The setup-rust rustflags input is
+      # different; empty leaves RUSTFLAGS unset only when no value is already
+      # inherited.
       RUSTFLAGS: -D warnings
     steps:
       # The tag is the source of truth for the binary, so the packaging script

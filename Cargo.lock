@@ -1572,6 +1572,7 @@ dependencies = [
  "process-wrap",
  "proptest",
  "tracing",
+ "trybuild",
  "windows",
 ]
 

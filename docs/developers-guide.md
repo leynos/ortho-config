@@ -1312,13 +1312,14 @@ cache. Documentation workspaces keep their source, manifest, run files, and
 executable snapshots in private directories; a sidecar `fs4` lock protects
 build-and-snapshot ownership across processes. The BDD scenarios use a separate
 filesystem lease under the selected target while reading and updating their
-shared bridge cache. The identifier-artefact test owns a private target nested
-under the configured workspace target, so `cargo clean -p` cannot remove
-workspace test executables. It still uses Cargo's default shared package cache.
-Cargo retains compiler wrappers, job limits, warning enforcement, coverage
-settings, and allow-listed native build inputs. Application secrets and
-arbitrary application variables are excluded. Run-file paths must contain
-normal relative components only.
+shared bridge cache. The identifier-artefact test reuses a private target
+nested under the configured workspace target. It cleans only the fixture
+package at the start of a run, preserving compiled dependencies while keeping
+`cargo clean -p` away from workspace test executables. It still uses Cargo's
+default shared package cache. Cargo retains compiler wrappers, job limits,
+warning enforcement, coverage settings, and allow-listed native build inputs.
+Application secrets and arbitrary application variables are excluded. Run-file
+paths must contain normal relative components only.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:
@@ -2058,49 +2059,26 @@ Two rules follow from this:
   the hosted Windows runner's longest linker path so the next lengthening fails
   on Linux instead.
 
-### Rustflags sanitization for bridge builds
+### Bridge build environment
 
-The bridge build spawns `cargo build` and so inherits the parent environment.
-Under `cargo-llvm-cov` that environment contains `-Cinstrument-coverage` in
-`RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS`, which would make the bridge binary
-write profiling data into the test run. `cargo-orthohelp/src/rustflags.rs`
-sanitizes both variables before the child is spawned:
-`apply_sanitized_rustflags` is called only from `bridge::build_bridge_command`,
-which also removes `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`,
-`LLVM_PROFILE_FILE`, `CARGO_LLVM_COV_TARGET_DIR`, and `CARGO_TARGET_DIR` from
-the child.
+The bridge build starts a nested `cargo build`. Its environment policy lives in
+`cargo-orthohelp/src/bridge_build_environment.rs`. `BuildEnvironment` selects
+named build controls from the parent process, then clears the child's inherited
+environment and reapplies only those selected values. This keeps unrelated
+application variables out of the build while preserving the Cargo and toolchain
+settings the nested command needs.
 
-The contract, which `rustflags_proptests.rs` checks against an independent
-reference filter:
+The policy combines a closed allow-list with two narrow dynamic name patterns:
+Cargo target linker or rustflags settings, and Cargo registry index settings.
+Proxy and registry-index values are omitted when they are non-UTF-8 or contain
+`@`, `?`, or `#`, preventing credential-bearing URLs from reaching the child. If
+`RUSTC_WRAPPER` names `cargo-llvm-cov`, that wrapper is omitted because the
+coverage CLI is not a compiler wrapper for the nested Cargo process. Other
+selected Rust flags and profile settings pass through unchanged.
 
-- **Two variables, two delimiters.** `RUSTFLAGS` uses
-  `str::split_whitespace`, so any run of Unicode whitespace separates its
-  tokens; `CARGO_ENCODED_RUSTFLAGS` splits on Cargo's unit separator
-  (`U+001F`). The delimiter is chosen once and used in both directions, so a
-  value is never split on one separator and joined with the other. Do not merge
-  the two paths into one string-typed helper.
-- **What counts as a coverage token.** A compact `-Cinstrument-coverage`,
-  including the `-Cinstrument-coverage=<value>` form, or a bare `-C` whose
-  successor is `instrument-coverage` or starts with `instrument-coverage=`. The
-  split pair is removed as a pair, so the successor cannot survive as a stray
-  token.
-- **Surviving tokens keep their order.** Nothing is sorted or deduplicated.
-  When coverage removal changes the value, the survivors are rejoined with the
-  delimiter's separator — one ASCII space for `RUSTFLAGS`, `U+001F` for
-  `CARGO_ENCODED_RUSTFLAGS` — so separator runs are normalized on that path.
-- **An unchanged value passes through byte-for-byte**, whitespace runs
-  included, rather than being re-rendered from its tokens. Original spacing is
-  preserved only here, on the path that removes nothing.
-- **An emptied value removes the variable** rather than setting it to the empty
-  string. An empty `RUSTFLAGS` is not the same as no `RUSTFLAGS` to Cargo.
-- **Every change is logged.** A partial strip and a full removal each emit one
-  `debug` event naming the variable but not its value. The unchanged path emits
-  nothing, because it has nothing to report.
-
-`apply_sanitized_rustflags` reads the current process environment directly
-rather than taking an injected source. The module is therefore tested through
-those pure functions and the property filter, never by mutating the test
-process's environment.
+The selection rules are tested with injected environment lookups and inspected
+child command environments. Tests verify both which values are selected and
+that unrelated inherited variables do not reach the nested build.
 
 ## Scoped and policy-based configuration discovery
 
@@ -2767,11 +2745,11 @@ script of its own, on the Linux leg only.
 
 Whitaker takes none of the
 [development build standard](#development-build-standard). `make lint-whitaker`
-deliberately assigns `RUSTFLAGS="-D warnings"` alone and never
-`GATE_RUSTFLAGS`, because Whitaker runs on the toolchain its installer manages
-rather than on this repository's pinned nightly, and `mold` is not a
-prerequisite it can rely on. `build_standard_routing_test.py` holds the
-assignment to exactly `-D warnings`.
+deliberately assigns `STRICT_RUSTFLAGS` alone and never `GATE_RUSTFLAGS`,
+because Whitaker runs on the toolchain its installer manages rather than on
+this repository's pinned nightly, and `mold` is not a prerequisite it can rely
+on. `build_standard_routing_test.py` holds the assignment to exactly
+`-D warnings`.
 
 ### The advisory Clippy-on-beta lane
 
@@ -2920,10 +2898,11 @@ Notes on individual rows:
 - `make lint-clippy` runs two Cargo commands, `cargo doc` and `cargo clippy`,
   and the routing contract proves each separately. `make build` omits
   `-D warnings` by design.
-- `make lint-whitaker` assigns `RUSTFLAGS="-D warnings"` alone. Whitaker runs on
-  its installer-managed toolchain and takes none of the standard.
+- `make lint-whitaker` assigns `STRICT_RUSTFLAGS` (`-D warnings`) alone.
+  Whitaker runs on its installer-managed toolchain and takes none of the
+  standard.
 - `make msrv-build` runs on a stable compiler, which refuses the nightly-only
-  flags, so it assigns `-D warnings` alone to displace the configuration.
+  flags, so it assigns `STRICT_RUSTFLAGS` alone to displace the configuration.
 - Releases are not a development route and are not built on a stable compiler:
   they use the pinned nightly with production flags only. See
   [Releases use the pinned nightly](#releases-use-the-pinned-nightly).
@@ -3220,7 +3199,7 @@ in YAML so that it is not read as a number. The leg installs
 and runs `make msrv-build MSRV=${{ matrix.toolchain }}`. That target is:
 
 ```bash
-RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features
+RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features
 ```
 
 `MSRV` defaults to the manifest's `rust-version` as major.minor (currently

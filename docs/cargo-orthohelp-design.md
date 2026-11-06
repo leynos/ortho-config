@@ -987,10 +987,11 @@ has no presentation sink; `run_cargo` forwards the retained diagnostics to
 stderr after draining the JSON stream and emits a truncation notice when
 needed. IR cache publication remains atomic and skips replacement when the
 existing cache already contains identical content, preserving the established
-path and idempotent-write behaviour. The private `bridge/ir_cache.rs` module
-owns cache-file reads and publication; only bridge orchestration and its
-crate-local tests call it. It is not a general-purpose filesystem or cache
-abstraction.
+path and idempotent-write behaviour. Its trace events report the operation and
+outcome, and write size where applicable, without exposing cache paths. The
+private `bridge/ir_cache.rs` module owns cache-file reads and publication; only
+bridge orchestration and its crate-local tests call it. It is not a
+general-purpose filesystem or cache abstraction.
 
 The bridge cache lookup, target lock, Cargo build, executable snapshot, bridge
 execution, and IR publication emit named tracing spans or events. Outcome

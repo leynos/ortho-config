@@ -64,7 +64,9 @@ jobs:
       # standard, so they ignore this value. It also shields
       # `cargo +1.95.0 install merman-cli`, which reads this checkout's
       # configuration and runs on a stable compiler that refuses `-Zthreads`.
-      # Never set it to `''`: an empty value leaves the configuration in force.
+      # Keep RUSTFLAGS non-empty: an assigned empty value selects no flags.
+      # The setup-rust rustflags input is different; empty leaves RUSTFLAGS
+      # unset only when no value is already inherited.
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
@@ -557,8 +559,9 @@ jobs:
       # the development standard in `.cargo/config.toml` (the parallel
       # frontend, Cranelift backend and mold). setup-rust would export this
       # same value by default; it is written out so the exclusion does not depend on an
-      # action default. Never set it to `''`: an empty value leaves the
-      # configuration in force.
+      # action default. Keep RUSTFLAGS non-empty: an assigned empty value
+      # selects no flags. The setup-rust rustflags input is different; empty
+      # leaves RUSTFLAGS unset only when no value is already inherited.
       RUSTFLAGS: -D warnings
       # sccache. The shared Rust setup action installs it and, from this
       # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it

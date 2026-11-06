@@ -54,7 +54,7 @@ pub(super) fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), Orth
     })?;
     if existing.as_deref() == Some(json) {
         observability::completed("bridge_ir_cache_publish", "unchanged", started);
-        super::telemetry::ir_cache_unchanged(paths);
+        super::telemetry::ir_cache_unchanged();
         #[cfg(feature = "metrics")]
         super::telemetry_metrics::record_cache_event(
             super::telemetry_metrics::CacheOperation::Publish,
@@ -71,7 +71,7 @@ pub(super) fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), Orth
                     source,
                 }
             })?;
-        super::telemetry::ir_cache_write(paths, json.len());
+        super::telemetry::ir_cache_write(json.len());
         file.write_all(json.as_bytes())
             .map_err(|source| OrthohelpError::Io {
                 path: paths.ir_path.clone(),

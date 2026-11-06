@@ -30,3 +30,4 @@ windows = { version = "0.62.2", default-features = false, features = ["Win32_Fou
 
 [dev-dependencies]
 proptest = "1.11.0"
+trybuild = "1"

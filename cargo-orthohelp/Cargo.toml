@@ -3,6 +3,7 @@ name = "cargo-orthohelp"
 edition = "2024"
 version = "0.10.0"
 rust-version.workspace = true
+exclude = ["tests/compile_time.rs"]
 description = "OrthoConfig documentation tooling for IR generation."
 license.workspace = true
 repository.workspace = true

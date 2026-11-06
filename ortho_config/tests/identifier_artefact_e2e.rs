@@ -109,8 +109,9 @@ fn assert_entry_ownership(entries: &[Value]) -> Result<()> {
 #[serial]
 fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()> {
     let cargo = fixture_cargo()?;
-    // The fixture owns a fresh private target, so an initial Cargo clean would
-    // spend the scenario budget without removing any prior build output.
+    // Keep the target's dependency cache warm between runs while ensuring a
+    // previous opt-in build cannot make this first opt-out build pass by luck.
+    clean_fixture(&cargo)?;
     let first_out_dir = build_fixture(false, &cargo, None)?;
     ensure!(
         artefact_path(&first_out_dir)?.is_none(),

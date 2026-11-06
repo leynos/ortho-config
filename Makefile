@@ -58,6 +58,8 @@ STANDARD_RUSTFLAGS = $(if $(filter 1,$(BUILD_STANDARD)),\
 GATE_RUSTFLAGS = RUSTFLAGS="-D warnings $(STANDARD_RUSTFLAGS)"
 # A debug build keeps the caller's warning policy rather than imposing one.
 DEBUG_RUSTFLAGS = RUSTFLAGS="$(STANDARD_RUSTFLAGS)"
+# A strict warning policy without the development standard.
+STRICT_RUSTFLAGS = -D warnings
 # Release builds take none of the standard. Assigning `RUSTFLAGS` at all, even
 # to the empty string, displaces the configuration file's `rustflags` tables,
 # which is the whole mechanism.
@@ -313,10 +315,10 @@ lint-clippy: check-build-tools ## Run rustdoc and Clippy with warnings denied
 # Whitaker runs on the toolchain its installer manages, not on this
 # repository's, so it takes none of the development standard: the parallel
 # frontend and `mold` would be applied to a different compiler, and `mold` is
-# not a prerequisite it can rely on. The assignment is deliberately
-# `-D warnings` alone, and deliberately not GATE_RUSTFLAGS.
+# not a prerequisite it can rely on. The assignment deliberately uses
+# STRICT_RUSTFLAGS alone, not GATE_RUSTFLAGS.
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
+	RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(WHITAKER) --all -- --all-targets --all-features
 
 # The inventory is discovered inside the recipe and handed over NUL-separated.
 # `$(shell ...)` splits on whitespace and has no way to quote a path, so a file
@@ -388,7 +390,7 @@ typecheck: check-build-tools ## Typecheck workspace (cargo check)
 # standard's nightly-only flags, so `RUSTFLAGS` is assigned to displace the
 # configuration's `rustflags` tables rather than inherit them.
 msrv-build: ## Build every target on the declared MSRV toolchain (no tests)
-	RUSTFLAGS="-D warnings" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features $(BUILD_JOBS)
+	RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features $(BUILD_JOBS)
 
 install-build-tools: ## Install the pinned mold linker and the pinned toolchain
 	@scripts/install-build-tools.sh

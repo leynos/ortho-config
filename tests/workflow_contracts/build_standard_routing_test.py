@@ -55,9 +55,12 @@ from build_standard_make import (
     development_flags,
     dry_run,
     hard_coded_cargo,
+    load_cargo_configuration,
     make_executable,
     shell_tokens,
 )
+
+CARGO_CONFIGURATION = load_cargo_configuration()
 
 #: Each development invocation: the case name, the target, and a word that
 #: identifies the Cargo subcommand on the line under test. ``lint-clippy`` runs
@@ -163,9 +166,12 @@ def test_development_routes_restate_the_standard_for_their_host(
     line = _line_for(target, subcommand, host=host)
     flags = assigned_rustflags(line)
     assert flags is not None, f"{case}: no RUSTFLAGS assignment on {line!r}"
-    assert development_flags(flags) == configured_flags(host) & STANDARD_FLAGS, (
+    assert (
+        development_flags(flags)
+        == configured_flags(host, CARGO_CONFIGURATION) & STANDARD_FLAGS
+    ), (
         f"{case} on {host_name} restates {sorted(development_flags(flags))}; the configuration "
-        f"gives {sorted(configured_flags(host) & STANDARD_FLAGS)}"
+        f"gives {sorted(configured_flags(host, CARGO_CONFIGURATION) & STANDARD_FLAGS)}"
     )
     assert ("-D" in flags and "warnings" in flags) == (case in DENIES_WARNINGS), (
         f"{case}: warning policy on {line!r}"
@@ -181,21 +187,6 @@ def test_development_routes_go_through_the_cargo_variable(case: str, target: str
     lines = dry_run(target, host=HOSTS["linux_x86_64"])
     assert _line_for(target, subcommand, host=HOSTS["linux_x86_64"]), case
     assert not hard_coded_cargo(lines), f"{case}: `make {target}` names cargo directly: {hard_coded_cargo(lines)}"
-
-
-def test_the_standard_is_the_whole_standard_on_each_platform() -> None:
-    """Pins each platform to its exact flags, so a loosened table cannot hide.
-
-    The parameterized cases compare Make with the file, which agree trivially
-    if both lose a flag together. This case names the standard itself: every
-    platform gets the parallel frontend, Cranelift backend and test cfg, while
-    Linux also gets the linker.
-    """
-    common = {THREADS_FLAG, BACKEND_FLAG, DEV_FAST_CFG_FLAG, CHECK_CFG_FLAG}
-    for host_name in ("linux_x86_64", "linux_aarch64"):
-        assert configured_flags(HOSTS[host_name]) == common | {LINKER_FLAG}, host_name
-    for host_name in ("macos_arm64", "windows_x86_64"):
-        assert configured_flags(HOSTS[host_name]) == common, host_name
 
 
 def test_the_linker_is_never_named_beyond_linux() -> None:

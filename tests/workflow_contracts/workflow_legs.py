@@ -32,7 +32,7 @@ import itertools
 import re
 import typing as typ
 
-from build_standard_make import PREFLIGHT_SCRIPT, dry_run
+from build_standard_make import MakeDryRunError, PREFLIGHT_SCRIPT, dry_run
 from workflow_shell import make_goals
 
 #: Make variables a workflow may set per step or per job to change a route.
@@ -50,6 +50,7 @@ _UNRESOLVABLE: typ.Final[re.Pattern[str]] = re.compile(r"\b(?:inputs|vars|env|ne
 _MATRIX_COMPARISON: typ.Final[re.Pattern[str]] = re.compile(
     r"matrix\.([A-Za-z0-9_-]+)\s*(==|!=)\s*'([^']*)'"
 )
+type MakeRunner = typ.Callable[[str, list[str]], list[str]]
 
 
 class UnreadableRunnerError(RuntimeError):
@@ -268,7 +269,14 @@ def _comparison_holds(actual: str | None, operator: str, value: str) -> bool:
     return (operator == "==") == (actual == value)
 
 
-def reaches_the_suite(step: dict[str, object], leg: Leg) -> bool:
+def _make_dry_run(target: str, switches: list[str]) -> list[str]:
+    """Run Make's narrow dry-run boundary for one goal and its switches."""
+    return dry_run(target, *switches)
+
+
+def reaches_the_suite(
+    step: dict[str, object], leg: Leg, *, make_runner: MakeRunner = _make_dry_run
+) -> bool:
     """Report whether a step runs tests, or reaches the build-tools preflight.
 
     Parameters
@@ -277,12 +285,27 @@ def reaches_the_suite(step: dict[str, object], leg: Leg) -> bool:
         The parsed step.
     leg : Leg
         The leg it runs in; its job and step ``env`` can switch a Make route.
+    make_runner : MakeRunner
+        Narrow Make-output provider. The default executes the dry-run boundary;
+        tests can supply precomputed lines without starting a subprocess.
 
     Returns
     -------
     bool
         True for the coverage action, a direct test invocation, or a ``make``
         goal whose dry run reaches the preflight script.
+
+    Raises
+    ------
+    MakeDryRunError
+        If the default Make runner cannot resolve, start, or complete Make.
+
+    Examples
+    --------
+    >>> step = {"run": "make test"}
+    >>> leg = Leg("ci.yml", "build", {}, {})
+    >>> reaches_the_suite(step, leg, make_runner=lambda _goal, _switches: [PREFLIGHT_SCRIPT])
+    True
     """
     if _GENERATE_COVERAGE in str(step.get("uses", "")):
         return True
@@ -292,7 +315,7 @@ def reaches_the_suite(step: dict[str, object], leg: Leg) -> bool:
     env = {**_env(leg.job), **_env(step)}
     switches = [f"{name}={env[name]}" for name in MAKE_SWITCHES if name in env]
     return any(
-        PREFLIGHT_SCRIPT in dry_run(goal, *switches)
+        PREFLIGHT_SCRIPT in make_runner(goal, switches)
         for goals in make_goals(run)
         for goal in goals
     )

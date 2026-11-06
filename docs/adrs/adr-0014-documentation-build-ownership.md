@@ -137,11 +137,12 @@ lock, while nextest assigns the affected binaries to one test group. The
 independent-workspace regression retains its concurrent workers inside that
 test, so it continues to exercise cross-process artefact ownership.
 
-The identifier-artefact integration test gives its fixture a private target
-nested under Cargo's configured workspace target. Its package clean can then
-force a fresh build without deleting test executables that the outer Cargo
-workspace has already built. The fixture continues to use Cargo's default
-shared package cache.
+The identifier-artefact integration test gives its fixture a persistent,
+test-private target nested under Cargo's configured workspace target. Each run
+cleans only the fixture package before checking opt-out behaviour, retaining
+compiled dependencies for later runs without deleting test executables that the
+outer Cargo workspace has already built. The fixture continues to use Cargo's
+default shared package cache.
 
 The build cache is test infrastructure. It may reuse compiler output through
 Cargo's normal target and package-cache behaviour, but it must not relocate,
