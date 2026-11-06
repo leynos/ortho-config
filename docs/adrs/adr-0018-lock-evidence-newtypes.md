@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0017: Newtypes for lock evidence
+# Architectural decision record (ADR) 0018: Newtypes for lock evidence
 
 ## Status
 

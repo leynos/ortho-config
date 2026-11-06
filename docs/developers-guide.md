@@ -585,7 +585,7 @@ compile, run, and quietly report the wrong holder. A `LockRecord` likewise
 stores its `DeviceNumber` whole instead of a split `major`/`minor` pair, which
 keeps the matching logic in `LockFileIdentity::holds` rather than spread across
 call sites that each have to recombine the halves correctly. See
-[ADR-0017](adrs/adr-0017-lock-evidence-newtypes.md) for why these are
+[ADR-0018](adrs/adr-0018-lock-evidence-newtypes.md) for why these are
 handwritten tuple structs rather than `newt-hype` or `the-newtype` wrappers.
 
 The scan reads ambient procfs through `std::fs` rather than a capability

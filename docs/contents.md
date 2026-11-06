@@ -83,7 +83,7 @@
 - [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
   review the pinned Kani and Verus boundary, the bundled-solver decision, the
   opt-in integration evidence, and the limits of a fixture proof.
-- [ADR-0017: Newtypes for lock evidence](adrs/adr-0017-lock-evidence-newtypes.md):
+- [ADR-0018: Newtypes for lock evidence](adrs/adr-0018-lock-evidence-newtypes.md):
   review the evidence vocabulary that makes a transposed pid, descriptor,
   device, or inode a compile error, and the rejected newtype crates.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
