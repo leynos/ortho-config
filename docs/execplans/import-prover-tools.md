@@ -141,6 +141,13 @@ report, not permission to bypass it.
   them as independent options, so the earlier single flag still allowed a proof
   run to install a Rust toolchain. A contract assertion covers both flags, and
   the developers' guide and ADR-0017 record that execution never installs.
+- [x] (2026-11-06) M3 review follow-up: the missing-toolchain path was
+  exercised against the real runner. With the Verus binary installed and
+  `RUSTUP_HOME` pointing at an empty directory, `make verus` exited 2 with
+  "required rust toolchain 1.93.0-x86_64-unknown-linux-gnu not found" and left
+  that directory empty, so nothing was installed. The same command with the
+  toolchain present reported `4 verified, 0 errors`. The fake-`uv` contract
+  test covers the argv boundary; this pair covers the real failure path.
 
 ## Surprises & discoveries
 
