@@ -11,22 +11,23 @@ and recorded in the Progress and Decision log below. The sequential gate run
 for that repaired head is recorded in Progress and the Revision note: every
 gate passed except `make test`, which stopped in a suite this branch does not
 touch. The PR is published and under `pr-babysitting`; hosted CI and review
-state live in the delivery ledger rather than in this plan. A further inline
-review on 2026-11-01 raised eleven findings: ten are repaired (documentation
-accuracy, an explicit localization-token match with a diagnostic, removal of
-redundant parser flags, independent leaf generation in two property suites, and
-stronger value assertions in three suites), and the request to bump the
-documentation-IR version is rebutted with the approved design and withdrawn by
-the reviewer; both are recorded in the Decision log. Gates were re-run on the
-repaired head: formatting, Markdown, diagram, type, and lint gates pass, and
-`make test` again stops short of the end of the workspace on compile-admission
-saturation — most recently at `documentation_examples_rust_tests` and
-`identifier_artefact_e2e` — the same environmental class as before. A twelfth
-inline finding and the same review's pre-merge table (one error, three
-warnings) then required stronger value assertions, a derive-backed fixture
-declaring every leaf, compile-time renderer coverage, and a v0.11.0 migration
-guide; all four are implemented, and the Progress entry of 2026-11-01 records
-the evidence.
+state live in the delivery ledger rather than in this plan. It squash-merged to
+`main` on 2026-11-02 as `23c05326` after CodeRabbit approved the accepted head.
+A further inline review on 2026-11-01 raised eleven findings: ten are repaired
+(documentation accuracy, an explicit localization-token match with a
+diagnostic, removal of redundant parser flags, independent leaf generation in
+two property suites, and stronger value assertions in three suites), and the
+request to bump the documentation-IR version is rebutted with the approved
+design and withdrawn by the reviewer; both are recorded in the Decision log.
+Gates were re-run on the repaired head: formatting, Markdown, diagram, type,
+and lint gates pass, and `make test` again stops short of the end of the
+workspace on compile-admission saturation — most recently at
+`documentation_examples_rust_tests` and `identifier_artefact_e2e` — the same
+environmental class as before. A twelfth inline finding and the same review's
+pre-merge table (one error, three warnings) then required stronger value
+assertions, a derive-backed fixture declaring every leaf, compile-time renderer
+coverage, and a v0.11.0 migration guide; all four are implemented, and the
+Progress entry of 2026-11-01 records the evidence.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -367,6 +368,18 @@ source failures. There is no time limit; queued compiler work is not a hang.
       and no cache marker was left behind. The suite was then re-run with
       `--no-fail-fast` so that every remaining target is certified in one pass
       rather than masked by the first failure.
+- [x] (2026-11-02) Review convergence and merge. The twelfth inline finding and
+      the four pre-merge rows were repaired on `cb54cd55`; the only actionable
+      comment in the following review round was documentation-only (the
+      migration-guide example needed `Deserialize` and its imports), repaired
+      in `76154081` and confirmed resolved by CodeRabbit. Hosted CI on
+      `76154081` passed every check — `build-test` on Linux and Windows, both
+      advisory Clippy legs, all three packaging dry runs, CodeScene, and Gecko.
+      The automatic review was paused, so the queued `comenq` request was
+      superseded by the focused approval request; CodeRabbit approved the head
+      (review `5732540187`) and the redundant queue entry was removed. The PR
+      squash-merged to `main` at 2026-11-02T05:49:30Z as `23c05326`, and the
+      post-merge `Coverage (main)` run was observed separately.
 
 ## Surprises & discoveries
 
@@ -1508,3 +1521,11 @@ environmental, in the same class as the documentation deadline expiry recorded
 above. The suite is re-run with `--no-fail-fast` so that a single saturation
 event cannot mask the targets that follow it, and the result of that run is
 recorded in Outcomes.
+
+2026-11-02 merge revision: The final review round was documentation-only, and
+its single finding was repaired in `76154081`. Hosted CI passed every check on
+that head. The automatic review was paused, so the queued `comenq` request was
+superseded by the focused approval request; CodeRabbit approved the head (review
+`5732540187`), the redundant queue entry was removed, and the PR squash-merged
+to `main` as `23c05326` at 2026-11-02T05:49:30Z. The post-merge
+`Coverage (main)` run is observed separately from the PR checks.
