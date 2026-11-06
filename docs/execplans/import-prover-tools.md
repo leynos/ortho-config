@@ -129,8 +129,14 @@ report, not permission to bypass it.
   integration test because Verus requires Rust 1.93.0 and the runner only
   installed the repository's 1.99 pin. `make install-verus` now installs the
   toolchain named in the release's `version.json`, with a contract test for
-  both the install and the missing-name failure. Hosted evidence is pending the
-  next pull-request run.
+  both the install and the missing-name failure.
+- [x] (2026-11-06) M3 / E4: hosted run
+  [42217419559](https://github.com/leynos/ortho-config/actions/runs/42217419559)
+  passed on `602f9e06`. Every step ran, the log shows
+  `rustup toolchain install '1.93.0-x86_64-unknown-linux-gnu'`, the fixture
+  suite reported `11 passed in 7.91s`, and artefact 13502306744 holds the
+  transcripts and `prover-evidence.json` with the accepted and rejected
+  controls.
 
 ## Surprises & discoveries
 

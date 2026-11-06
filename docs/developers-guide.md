@@ -75,6 +75,10 @@ toolchain name from the installed release's `version.json` and installs it with
 name is not duplicated in this repository, and `VERUS_TOOLCHAIN_FILE` overrides
 the manifest path for tests.
 
+This lane is validated on Linux x86_64 only. The default Kani installer
+supports that platform, and the Verus installer defaults to the Linux archive,
+so do not expect these commands to produce a working setup elsewhere.
+
 Install and check the pinned tools with `make install-kani`, `make kani-check`,
 and `make install-verus`. Proof execution is opt-in: `make kani` runs the
 registered smoke harnesses, `make kani-full` runs every registered production
@@ -93,8 +97,10 @@ targets do not install or run either prover.
 `target/prover-tools-fixtures/prover-evidence.json`. It sets
 `RUN_PROVER_TOOLS_INTEGRATION=1`, so the test module skips under ordinary
 `make test` and fails rather than skips here when a tool is missing. The target
-does not install anything; run `make install-kani` and `make install-verus`
-first.
+itself installs nothing; run `make install-kani` and `make install-verus` first.
+`make install-verus` may download the Rust toolchain the Verus release
+requires, so that step needs network access and changes the local rustup
+installation.
 
 ### Production proof inventory
 

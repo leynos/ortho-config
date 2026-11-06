@@ -38,8 +38,9 @@ own, and which claims the lane may make.
   behaviour, and it must never be presented as though it does.
 - A negative control is part of the evidence: a lane that has never rejected a
   false claim has not shown that it can.
-- Linux x86_64 is the only platform both verifiers publish. Other platforms
-  must be recorded as unvalidated rather than silently skipped.
+- This lane is validated on Linux x86_64 only. Platforms the verifiers do not
+  publish for, and platforms this repository has not exercised, must be
+  recorded as unvalidated rather than silently skipped.
 - Compiler admission, the shared Cargo cache, and warnings-as-errors stay
   intact.
 
