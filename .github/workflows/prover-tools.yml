@@ -1,0 +1,90 @@
+name: Prover tools
+
+# The pinned Kani and Verus lanes install large verifier binaries, so they run
+# only when the tooling, its fixtures, or its contracts change. The weekly
+# schedule catches an upstream release or runner-image change that no pull
+# request would otherwise exercise, and a manual dispatch lets a maintainer
+# validate a branch without opening a pull request.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/prover-tools.yml
+      - Makefile
+      - tools/kani/VERSION
+      - tools/verus/VERSION
+      - tools/verus/SHA256SUMS
+      - tests/fixtures/prover_tools/**
+      - tests/workflow_contracts/prover_tools_test.py
+      - tests/workflow_contracts/prover_tools_workflow_test.py
+      - tests/workflow_contracts/workflow_reading.py
+      - tests/workflow_contracts/makefile_support.py
+      - scripts/tests/test_prover_tools_integration.py
+      - scripts/requirements-test.txt
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1" # Weekly, Monday 04:23 UTC
+
+# A superseded pull-request run has nothing left to teach, so cancel it. A
+# dispatch or scheduled run has no successor and always completes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Default the token to no scopes; the job opts in explicitly.
+permissions: {}
+
+jobs:
+  prover-tools:
+    name: prover-tools (linux-x86_64)
+    # Kani and Verus publish Linux x86_64 releases only. Other platforms stay
+    # unvalidated for this lane rather than silently skipped.
+    runs-on: ubuntu-24.04
+    # Installation plus every fixture invocation. A warm run of the integration
+    # target takes under 20 seconds; the ceiling covers a cold crate build and
+    # a slow package download without letting a hung verifier run for hours.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # Kani drives its own compiler (`kani-compiler`) through cargo, so an
+      # exported RUSTC_WRAPPER would hand that driver to sccache, which cannot
+      # cache it. Disable sccache rather than wrap a compiler it does not know.
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        with:
+          install-mold: 'true'
+          use-sccache: 'false'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+        with:
+          version: 'latest'
+
+      - name: Install the pinned Kani release
+        run: make install-kani
+
+      - name: Check the selected Kani executable
+        run: make kani-check
+
+      - name: Install the pinned Verus release
+        run: make install-verus
+
+      - name: Run the real-tool integration fixtures
+        run: make test-prover-tools-integration
+
+      # The transcripts and the evidence summary are the only record of what
+      # the verifiers actually reported, so keep them on failure as well.
+      - name: Upload verifier evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4  # v5
+        with:
+          name: prover-tools-evidence
+          path: target/prover-tools-fixtures/
+          if-no-files-found: ignore
+          retention-days: 14

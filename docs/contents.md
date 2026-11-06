@@ -80,6 +80,9 @@
   review the accepted `renderer(...)` derive group, the per-command human and
   machine records, the role-specific legacy support defaults, and the width
   encoding.
+- [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
+  review the pinned Kani and Verus boundary, the bundled-solver decision, the
+  opt-in integration evidence, and the limits of a fixture proof.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

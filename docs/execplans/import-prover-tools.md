@@ -108,9 +108,23 @@ report, not permission to bypass it.
   obligations; add the plan to `docs/contents.md`.
 - [x] (2026-11-03) Publish the validated plan in draft PR #651.
 - [x] (2026-11-03) Receive explicit implementation approval from the user.
-- [ ] M1: land pinned installation and command-boundary contracts.
-- [ ] M2: land real verifier integration fixtures and registration rules.
-- [ ] M3: land bounded CI execution and contributor documentation.
+- [x] (2026-11-03) M1 baseline workflow contracts passed at `2ad6f261`:
+  366 passed, 1 skipped
+  (`/tmp/test-workflow-contracts-ortho-config-import-prover-tools-baseline.out`).
+- [x] (2026-11-03) M1 red contracts fail on the expected missing pins/targets:
+  6 failed, including absent targets and the Kani pin
+  (`/tmp/prover-tools-m1-red.out`).
+- [x] (2026-11-06) M1: the pinned `install-kani`, `kani-check`,
+  `install-verus`, `kani`, `kani-full`, and `verus` targets and the
+  command-boundary contracts are implemented. `make check-fmt`, `make lint`,
+  and `make typecheck` passed on the implementation tree.
+- [x] (2026-11-06) M2: `tests/fixtures/prover_tools/` holds the Kani package
+  and both Verus files, and `make test-prover-tools-integration` runs them
+  against the installed pins with acceptance and rejection evidence.
+- [x] (2026-11-06) M3: `.github/workflows/prover-tools.yml`,
+  `tests/workflow_contracts/prover_tools_workflow_test.py`, ADR-0017, and the
+  developers' guide, design, layout, and index updates are implemented.
+  Hosted-CI evidence is pending the pull-request run.
 
 ## Surprises & discoveries
 
@@ -133,7 +147,20 @@ integration. Existing `tests/workflow_contracts/makefile_support.py` and
 `workflow_reading.py` provide reusable recipe and workflow readers. Reuse these
 before adding helpers. CodeGraph indexing timed out after 300 seconds during
 planning; targeted source-file inspection supplies the evidence for the build
-interfaces.
+interfaces. The official Kani documentation confirms `#[kani::proof]` harness
+selection, successful/failed verification results, Cargo integration, and Linux
+x86_64 prebuilt support.[^5][^6][^7] The current Verus guide describes static
+verification against user specifications over all executions; the guide is not
+tied to the imported binary pin, so the pinned runner remains the acceptance
+authority.[^8] Re-reading the live Netsuke PR found that its Kani command
+quoting still breaks on apostrophes, and installer subprocesses can select an
+earlier conflicting `cargo-kani`; both defects are covered by the new red
+command-boundary contract.[^9] The shared tool can install a standalone Z3
+binary under `.cache/z3/4.16.0/z3` and forwards `VERUS_Z3_PATH` to Verus, but
+that solver is not interchangeable with a Verus release: executing the pinned
+Verus 0.2026.01.30.44ebdee with Z3 4.16.0 aborts with "expected z3 version
+4.12.5, found 4.16.0", while the release's bundled `.verus/<version>/verus/z3`
+reports 4.12.5 and verifies successfully. D5 is therefore revised below.[^10]
 
 ## Decision log
 
@@ -158,12 +185,26 @@ production suites fail with an explicit diagnostic. A fixture success must
 never be presented as a proof of configuration loading or missing-value
 enumeration. Production proofs remain feature-owned and approval-gated.
 
+D5 (2026-11-03, revised 2026-11-06): `install-verus` runs only
+`prover-tools verus install`, and the Make boundary sets `VERUS_Z3_PATH` to the
+release's bundled `<repository>/.verus/<version>/verus/z3`. Verus enforces an
+exact solver version: with the separate `prover-tools z3 install` solver
+(4.16.0) the pinned Verus 0.2026.01.30.44ebdee aborts with "expected z3 version
+4.12.5, found 4.16.0", while the bundled solver verifies the positive fixture
+(4 verified, 0 errors) and rejects the negative one (postcondition not
+satisfied). The repository therefore ignores `.verus/` only and does not keep a
+`.cache/z3/` installation. `VERUS_Z3_PATH` remains an override.
+
 ## Outcomes & retrospective
 
 The user approved implementation on 2026-11-03. The plan was published in draft
 PR #651 and implementation is now authorized within its constraints and
 tolerances. The remaining outcome is a tested integration, reached through
-M1–M3. No tool has been installed and no proof has been executed yet.
+M1–M3. Kani 0.67.0 and Verus 0.2026.01.30.44ebdee are installed locally; all
+three positive Kani harnesses verify, the mutant harness fails with a
+counterexample, the positive Verus fixture reports 4 verified with 0 errors,
+and the negative fixture reports a postcondition failure. The opt-in
+integration target passes all ten tests in 16.67 seconds on a warm tree.
 
 ## Context and orientation
 
@@ -231,7 +272,9 @@ repository-local uv cache/tool directories. Add Make targets `install-kani`,
 installation and version checking delegate to `prover-tools kani install` and
 `prover-tools kani check-version`; proof execution uses the same selected
 Cargo-home executable directly. Verus execution delegates to
-`prover-tools verus run` with repeated `--proof-file` arguments.
+`prover-tools verus run` with repeated `--proof-file` arguments. Verus setup
+installs only the pinned release and points `VERUS_Z3_PATH` at the solver
+bundled inside it, as revised in D5.
 
 Expose `KANI`, `KANI_FLAGS`, `KANI_INSTALL_FLAGS`, `VERUS_FLAGS`, and
 `VERUS_INSTALL_FLAGS` as documented developer overrides. Select the default
@@ -376,7 +419,10 @@ runner/fork conventions, `contents: read`, no secrets, and the 30-minute limit.
 Run installs, checks, and the explicit integration target in order. Keep `uv`
 cache ownership with exactly one existing setup step; do not add a prover
 archive cache. Upload fixture logs and version/count summaries on success and
-failure with explicit 14-day retention.
+failure with explicit 14-day retention. Disable sccache for the job: Kani
+drives its own compiler, which sccache cannot cache, so the shared setup action
+must not export a rustc wrapper into the fixture build. The repository's
+sccache-wiring contract records this job as needing no backend.
 
 Do not introduce always-green production proof jobs. Document the later
 extension: a feature with approved production obligations registers them, adds
@@ -480,9 +526,40 @@ not implementation approval and does not discharge E1–E4.
 
 [^4]: [Shared prover tools at the proposed pin](https://github.com/leynos/rust-prover-tools/tree/592558f7183b554fc749696246984c5d7300d029).
 
+[^5]: [Kani attributes](https://model-checking.github.io/kani/reference/attributes.html)
+    explains that `#[kani::proof]` identifies a harness and is the smallest
+    verification unit.
+
+[^6]: [Using Kani](https://model-checking.github.io/kani/usage.html)
+    recommends `cargo kani` for Cargo packages and describes harness selection.
+
+[^7]: [Kani installation guide](https://model-checking.github.io/kani/install-guide.html)
+    lists `x86_64-unknown-linux-gnu` as a prebuilt platform.
+
+[^8]: [Verus guide](https://verus-lang.github.io/verus/guide/)
+    describes static verification against user specifications over executions.
+
+[^9]: [Netsuke PR #1063 at its live head](https://github.com/leynos/netsuke/pull/1063)
+    remains open at `15f413bac8fcda6a96c344261125aeddbfd2f774`; its latest
+    CodeRabbit follow-ups identify shell quoting and installer PATH precedence.
+
+[^10]: [Pinned shared-tool README](https://github.com/leynos/rust-prover-tools/blob/592558f7183b554fc749696246984c5d7300d029/README.md)
+    documents the separate Z3 install and `VERUS_Z3_PATH`; its source installs
+    Z3 under `.cache/z3/4.16.0/z3`. Measured on 2026-11-06, the pinned Verus
+    release rejects that solver and accepts only its bundled 4.12.5 build.
+
 Revision note (2026-11-03): initial proposal separates installation and runner
 integration from feature-owned proof obligations, preserving the reviewed
 missing-values design and recording immutable donor evidence.
 
 Revision note (2026-11-03): mark the plan APPROVED following the user’s
 explicit instruction to begin implementation; M1–M3 remain outstanding.
+
+Revision note (2026-11-06): record the D5 revision after measuring the solver
+mismatch, add the real-tool integration target and evidence file, and bound one
+fixture invocation at 240 seconds so the first invocation may compile the
+fixture crate; a warm run of all ten integration tests took 16.67 seconds.
+
+Revision note (2026-11-03): record the approved M1 baseline and official
+Kani/Verus documentation consulted through Firecrawl; this constrains fixture
+claims to runner behaviour and leaves pinned-binary execution as acceptance.

@@ -34,8 +34,11 @@ layout and the critical subdirectories new contributors usually need first.
 ├── target/
 ├── test_helpers/
 │   └── src/
-└── tests/
-    └── fixtures/
+├── tests/
+│   └── fixtures/
+└── tools/
+    ├── kani/
+    └── verus/
 ```
 
 Diagram 1: compact repository tree.
@@ -46,7 +49,8 @@ Table 1 describes the repository paths that define the workspace shape.
 
 | Path                    | Responsibility and conventions                                                                                                                                                                                                                                                             |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.github/`              | GitHub automation. Workflow definitions live under `.github/workflows/`; keep workflow changes small and validate YAML when possible.                                                                                                                                                      |
+| `.github/`              | GitHub automation. Workflow definitions live under `.github/workflows/`, including the opt-in `prover-tools.yml` verifier lane; keep workflow changes small and validate YAML when possible.                                                                                               |
+| `.verus/`               | Local Verus installation produced by `make install-verus`, including the solver bundled with the pinned release. Generated and ignored by Git; never edit or commit it.                                                                                                                    |
 | `cargo-orthohelp/`      | Workspace binary crate for generating localized documentation artefacts from `OrthoConfigDocs` metadata. Source code lives in `cargo-orthohelp/src/`; integration and golden tests live in `cargo-orthohelp/tests/`.                                                                       |
 | `docs/`                 | Long-lived project documentation. Use `docs/contents.md` as the index, `docs/users-guide.md` as the user's guide, `docs/developers-guide.md` as the developer's guide, `docs/design.md` and focused design documents for architecture, and `docs/roadmap.md` for active delivery planning. |
 | `docs/archive/`         | Historical documentation that should remain available but is no longer the active source for future work. The archived v0.8.0 roadmap lives here.                                                                                                                                          |
@@ -61,7 +65,8 @@ Table 1 describes the repository paths that define the workspace shape.
 | `scripts/`              | Python and shell-adjacent maintenance scripts for version bumping and release archives. Focused script tests live under `scripts/tests/`.                                                                                                                                                  |
 | `target/`               | Cargo build output, generated documentation, trybuild artefacts, and temporary build products. Do not edit or commit files from this directory.                                                                                                                                            |
 | `test_helpers/`         | Shared test helper crate. Put cross-crate fixtures, environment guards, and reusable assertions here rather than duplicating test infrastructure.                                                                                                                                          |
-| `tests/fixtures/`       | Workspace-level fixture crates and data used by integration, documentation, and generator tests. Fixtures should be minimal but representative.                                                                                                                                            |
+| `tests/fixtures/`       | Workspace-level fixture crates and data used by integration, documentation, and generator tests. Fixtures should be minimal but representative. `tests/fixtures/prover_tools/` holds the Kani package and Verus proof files exercised by the opt-in verifier lane.                         |
+| `tools/`                | Repository-owned tool pins. `tools/kani/VERSION` and `tools/verus/VERSION` name the verifier releases, and `tools/verus/SHA256SUMS` pins the Verus archive. Change them only with the matching integration evidence.                                                                       |
 
 ## Integration test inventory
 

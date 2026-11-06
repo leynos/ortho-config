@@ -97,6 +97,10 @@ NO_BACKEND_EXPECTED: typ.Final[dict[tuple[str, str], str]] = {
     ("release.yml", "verify-published-assets"): (
         "dry-runs cargo binstall against published archives"
     ),
+    ("prover-tools.yml", "prover-tools"): (
+        "disables sccache: Kani drives its own compiler, which sccache cannot "
+        "cache, so the job must not inherit the wrapper"
+    ),
 }
 
 _SHA = re.compile(r"@([0-9a-f]{40})\b")
