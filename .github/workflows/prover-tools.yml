@@ -15,6 +15,7 @@ on:
       - tools/verus/VERSION
       - tools/verus/SHA256SUMS
       - tests/fixtures/prover_tools/**
+      - tests/workflow_contracts/prover_tools_fakes.py
       - tests/workflow_contracts/prover_tools_test.py
       - tests/workflow_contracts/prover_tools_workflow_test.py
       - tests/workflow_contracts/workflow_reading.py

@@ -124,7 +124,6 @@ report, not permission to bypass it.
 - [x] (2026-11-06) M3: `.github/workflows/prover-tools.yml`,
   `tests/workflow_contracts/prover_tools_workflow_test.py`, ADR-0017, and the
   developers' guide, design, layout, and index updates are implemented.
-  Hosted-CI evidence is pending the pull-request run.
 - [x] (2026-11-06) M3: the first hosted `prover-tools` run failed one
   integration test because Verus requires Rust 1.93.0 and the runner only
   installed the repository's 1.99 pin. `make install-verus` now installs the
