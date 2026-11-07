@@ -159,14 +159,14 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         .and_then(|package| package.get("id"))
         .and_then(Value::as_str)
         .context("Cargo metadata omitted orthohelp_fixture's package id")?;
-    let workspace_target = PathBuf::from(workspace_target);
-    let workspace_target_dir = Dir::open_ambient_dir(&workspace_target, ambient_authority())?;
+    let workspace_target_path = PathBuf::from(workspace_target);
+    let workspace_target_dir = Dir::open_ambient_dir(&workspace_target_path, ambient_authority())?;
     match workspace_target_dir.create_dir(FIXTURE_TARGET_DIRECTORY) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error).context("create private Cargo target"),
     }
-    let target_directory = workspace_target.join(FIXTURE_TARGET_DIRECTORY);
+    let target_directory = workspace_target_path.join(FIXTURE_TARGET_DIRECTORY);
     Dir::open_ambient_dir(&target_directory, ambient_authority())?
         .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
         .context("write Cargo cache-directory tag")?;

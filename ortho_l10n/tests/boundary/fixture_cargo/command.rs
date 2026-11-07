@@ -76,29 +76,26 @@ fn run_with_optional_sequence_deadline(
 }
 
 fn lock_cargo_commands(deadline: Option<Instant>) -> Result<MutexGuard<'static, ()>> {
-    if let Some(deadline) = deadline {
-        loop {
-            match CARGO_COMMAND_LOCK.try_lock() {
-                Ok(guard) => return Ok(guard),
-                Err(TryLockError::Poisoned(error)) => {
-                    anyhow::bail!("nested Cargo command lock was poisoned: {error}");
+    let Some(sequence_deadline) = deadline else {
+        return CARGO_COMMAND_LOCK
+            .lock()
+            .map_err(|error| anyhow::anyhow!("nested Cargo command lock was poisoned: {error}"));
+    };
+    loop {
+        match CARGO_COMMAND_LOCK.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(TryLockError::Poisoned(error)) => {
+                anyhow::bail!("nested Cargo command lock was poisoned: {error}");
+            }
+            Err(TryLockError::WouldBlock) => {
+                let remaining = sequence_deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    anyhow::bail!("Cargo command reached sequence deadline waiting for the lock");
                 }
-                Err(TryLockError::WouldBlock) => {
-                    let remaining = deadline.saturating_duration_since(Instant::now());
-                    if remaining.is_zero() {
-                        break;
-                    }
-                    std::thread::sleep(remaining.min(Duration::from_millis(10)));
-                }
+                std::thread::sleep(remaining.min(Duration::from_millis(10)));
             }
         }
-        anyhow::bail!(
-            "Cargo command reached enclosing sequence deadline while waiting for the lock"
-        )
     }
-    CARGO_COMMAND_LOCK
-        .lock()
-        .map_err(|error| anyhow::anyhow!("nested Cargo command lock was poisoned: {error}"))
 }
 
 /// Identify Cargo itself so unrelated child probes bypass its shared-state lock.
@@ -274,7 +271,7 @@ mod tests {
         let lock_guard = CARGO_COMMAND_LOCK.lock().expect("test Cargo lock");
         let lock_error = lock_cargo_commands(Some(Instant::now() + Duration::from_millis(30)))
             .expect_err("a held Cargo lock must not outlive its sequence deadline");
-        assert!(
+        ensure!(
             format!("{lock_error:#}").contains("sequence deadline"),
             "lock timeout reported the wrong scope: {lock_error:#}"
         );

@@ -14,6 +14,7 @@ def test_reaches_the_suite_uses_precomputed_make_output() -> None:
     calls: list[tuple[str, list[str]]] = []
 
     def make_runner(target: str, switches: list[str]) -> list[str]:
+        """Record the query's goal and switches, then report the preflight step."""
         calls.append((target, switches))
         return [PREFLIGHT_SCRIPT]
 

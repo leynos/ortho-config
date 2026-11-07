@@ -36,6 +36,7 @@ def test_process_start_errors_keep_their_cause(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(build_standard_make, "make_executable", lambda: "make")
 
     def cannot_start(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Stand in for a Make process the host cannot start."""
         raise FileNotFoundError("make vanished")
 
     monkeypatch.setattr(build_standard_make.subprocess, "run", cannot_start)
@@ -53,6 +54,7 @@ def test_nonzero_make_exit_includes_exit_code_and_stderr(
     monkeypatch.setattr(build_standard_make, "make_executable", lambda: "make")
 
     def rejected_target(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Stand in for Make rejecting the requested target."""
         return subprocess.CompletedProcess(command, 2, "", "unknown target")
 
     monkeypatch.setattr(build_standard_make.subprocess, "run", rejected_target)
