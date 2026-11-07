@@ -44,14 +44,41 @@ fn names_the_reporting_process_as_such() {
     );
 }
 
+/// Returns every descriptor this process holds on `path`, read from procfs.
+///
+/// Deliberately independent of the diagnostics: the kernel's descriptor table is
+/// the fact a holder report is supposed to reproduce, so the test asks `/proc`
+/// itself rather than parsing the report and asserting it agrees with itself.
+#[cfg(target_os = "linux")]
+fn descriptors_holding(path: &std::path::Path) -> Result<Vec<u32>> {
+    use std::os::unix::fs::MetadataExt;
+
+    let target = std::fs::metadata(path).context("read the lock file's identity")?;
+    let want = (target.dev(), target.ino());
+    let entries = std::fs::read_dir("/proc/self/fd").context("list this process's descriptors")?;
+    let found = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let descriptor = entry.file_name().into_string().ok()?.parse::<u32>().ok()?;
+            let meta = std::fs::metadata(entry.path()).ok()?;
+            ((meta.dev(), meta.ino()) == want).then_some(descriptor)
+        })
+        .collect();
+    Ok(found)
+}
+
 /// Verifies a genuine hold is reported with the holder's own identity.
 ///
 /// This is the whole point of the module: issue #606's failures could say only
 /// that a released lock looked held. A report that names this process, the file,
 /// and the descriptor it still holds turns an unactionable boolean into the one
-/// fact needed to tell a leaked handle from a foreign holder. The assertion is
-/// on the *presence* of those facts, not on exact wording, so the report can be
-/// reworded without silently losing its evidence.
+/// fact needed to tell a leaked handle from a foreign holder.
+///
+/// The descriptor is checked against `/proc/self/fd`, not against the report's
+/// own text. Asserting that the report *contains* the words "holds the lock file
+/// open as fd" would pass for any descriptor at all, including one belonging to
+/// a different file; asking procfs for the descriptors on this file and
+/// requiring the report to name one of them is what makes the claim testable.
 #[cfg(target_os = "linux")]
 #[test]
 fn reports_the_process_and_descriptor_that_still_hold_the_lock() -> Result<()> {
@@ -66,6 +93,11 @@ fn reports_the_process_and_descriptor_that_still_hold_the_lock() -> Result<()> {
     create_lock(root.path()).context("create the lock file for the holder")?;
     let held = lock(root.path())?;
 
+    // Read before the report is built: the report scans `/proc` itself, and a
+    // second question about the same descriptor table is the independent answer
+    // this assertion compares it against.
+    let expected = descriptors_holding(&super::artefact_lock::lock_path(root.path()))?;
+
     let report =
         super::lock_diagnostics::ensure_released(root.path(), "the guard must release the lock")
             .expect_err("a lock this process still holds must be reported as held");
@@ -76,17 +108,29 @@ fn reports_the_process_and_descriptor_that_still_hold_the_lock() -> Result<()> {
         rendered.starts_with("the guard must release the lock"),
         "the caller's expectation must lead the report: {rendered}",
     );
-    for expected in [
+    for expected_text in [
         "is still held",
         "this process",
         "holds the lock file open as fd",
         "re-probe after",
     ] {
         ensure!(
-            rendered.contains(expected),
-            "the report must contain {expected:?}, but it did not: {rendered}",
+            rendered.contains(expected_text),
+            "the report must contain {expected_text:?}, but it did not: {rendered}",
         );
     }
+    ensure!(
+        !expected.is_empty(),
+        "the held guard must own at least one descriptor on the lock file, or this \
+         case asserts nothing about the report: {rendered}",
+    );
+    ensure!(
+        expected
+            .iter()
+            .any(|descriptor| rendered.contains(&format!("as fd {descriptor}"))),
+        "the report must name one of the descriptors procfs shows on this file \
+         {expected:?}, but it named none: {rendered}",
+    );
     Ok(())
 }
 
