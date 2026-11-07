@@ -21,6 +21,8 @@ WORKFLOWS: typ.Final[pathlib.Path] = (
 EXPORT_STEP: typ.Final[str] = "Shorten the Cargo target root for coverage (Windows)"
 RESTORE_STEP: typ.Final[str] = "Restore the default Cargo target root (Windows)"
 WINDOWS_ONLY: typ.Final[str] = "${{ matrix.platform == 'windows' }}"
+WINDOWS: typ.Final[str] = "windows"
+LINUX: typ.Final[str] = "linux"
 TARGET_ROOT_TEMPLATE: typ.Final[str] = r"$env:RUNNER_TEMP\cov"
 WORKSPACE_TARGET_TEMPLATE: typ.Final[str] = r"$env:GITHUB_WORKSPACE\target"
 LLVM_COV_TARGET_DIRECTORY: typ.Final[str] = "llvm-cov-target"
@@ -85,6 +87,38 @@ def _normalised_run(step: dict[str, object]) -> str:
 def _step_condition(step: dict[str, object]) -> str:
     """Return the step condition with YAML whitespace normalised."""
     return " ".join(str(step.get("if", "")).split())
+
+
+def _step_target_root_write(step: dict[str, object]) -> str | None:
+    """Return the root a step writes to `GITHUB_ENV`, if it writes one."""
+    if step.get("name") == EXPORT_STEP:
+        return TARGET_ROOT_TEMPLATE
+    if step.get("name") == RESTORE_STEP:
+        return WORKSPACE_TARGET_TEMPLATE
+    return None
+
+
+def _effective_target_roots(
+    steps: list[dict[str, object]], platform: str
+) -> list[str | None]:
+    """Return the effective root before each step, modelling `GITHUB_ENV`.
+
+    A step's write takes effect for the steps after it, and only on Windows,
+    where the two guarded steps run.
+
+    >>> _effective_target_roots([], "linux")
+    []
+    """
+    effective: list[str | None] = []
+    current: str | None = None
+    for step in steps:
+        effective.append(current)
+        if platform != WINDOWS or _step_condition(step) != WINDOWS_ONLY:
+            continue
+        written = _step_target_root_write(step)
+        if written is not None:
+            current = written
+    return effective
 
 
 def _environment_blocks(ci: WorkflowDocument) -> list[tuple[str, object]]:
@@ -259,6 +293,51 @@ def test_ci_has_no_unexpected_target_root_run_mentions() -> None:
         "CARGO_TARGET_DIR may appear only in the export and restore steps, and "
         "CARGO_LLVM_COV_TARGET_DIR must not appear in run blocks; "
         f"found {unexpected_mentions}. {LINUX_UNSET_EXPLANATION}"
+    )
+
+
+def test_effective_target_root_holds_through_both_passes_and_restores() -> None:
+    """The effective root, not just the step order, is checked end to end."""
+    steps = _build_test_steps(_ci_workflow())
+    coverage_indices = [
+        index
+        for index, step in enumerate(steps)
+        if COVERAGE_ACTION in str(step.get("uses", ""))
+    ]
+    assert len(coverage_indices) == 2, (
+        f"build-test has {len(coverage_indices)} coverage actions, not two"
+    )
+    first_index, second_index = coverage_indices
+    export_index, _ = _named_step(steps, EXPORT_STEP)
+    restore_index, _ = _named_step(steps, RESTORE_STEP)
+    wrapper_index, _ = _named_step(steps, "Validate PowerShell wrapper")
+    publish_index, _ = _named_step(steps, "Publish dry run")
+
+    windows = _effective_target_roots(steps, WINDOWS)
+    assert windows[export_index] is None, "Windows starts with no target root"
+    assert windows[first_index] == TARGET_ROOT_TEMPLATE, (
+        "the first Windows coverage pass must see the short root"
+    )
+    assert windows[second_index] == TARGET_ROOT_TEMPLATE, (
+        "the second Windows coverage pass must see the same short root"
+    )
+    assert all(
+        root == TARGET_ROOT_TEMPLATE
+        for root in windows[first_index:restore_index]
+    ), "one short root must cover both Windows coverage passes"
+    assert windows[restore_index] == TARGET_ROOT_TEMPLATE, (
+        "the restore step runs while the short root is still in effect"
+    )
+    assert windows[wrapper_index] == WORKSPACE_TARGET_TEMPLATE, (
+        "wrapper validation must see the restored workspace root"
+    )
+    assert windows[publish_index] == WORKSPACE_TARGET_TEMPLATE, (
+        "the publish dry run must see the restored workspace root"
+    )
+
+    linux = _effective_target_roots(steps, LINUX)
+    assert all(root is None for root in linux), (
+        f"Linux must never see a target root; {LINUX_UNSET_EXPLANATION}"
     )
 
 

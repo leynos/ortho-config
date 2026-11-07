@@ -3479,6 +3479,16 @@ passes would throw away the warm builds the second pass reuses. The leg prints
 `df -BM /` at each boundary: before lint, before and after the discard, and
 after each coverage pass.
 
+[ADR-0009](adrs/adr-0009-linux-build-test-runner-placement.md) records the
+decision.
+
+`runner_placement_test.py` holds all of this. It reads the fallback by position
+(the condition is exactly the fork test or the Dependabot author test), checks
+each leg's runners, and checks that no fork reaches Ubicloud, that the names
+are runner-independent, and that the job has a ceiling. It also checks the
+credentials step's guard and position, that the packaging legs stay hosted, and
+that the Linux leg discards the lint build trees before coverage.
+
 ### Windows coverage command-line headroom
 
 The Windows `cargo-orthohelp` bin-test compile in run 39645228205 reached
@@ -3500,15 +3510,7 @@ and an empty value is not equivalent to an unset variable. The restore is not an
 `always()` step; later Cargo consumers are skipped if coverage fails, and the
 always-running sccache statistics step does not build.
 
-[ADR-0009](adrs/adr-0009-linux-build-test-runner-placement.md) records the
-decision.
-
-`runner_placement_test.py` holds all of this. It reads the fallback by position
-(the condition is exactly the fork test or the Dependabot author test), checks
-each leg's runners, and checks that no fork reaches Ubicloud, that the names
-are runner-independent, and that the job has a ceiling. It also checks the
-credentials step's guard and position, that the packaging legs stay hosted, and
-that the Linux leg discards the lint build trees before coverage.
+[ADR-0018](adrs/adr-0018-windows-coverage-target-root.md) records the decision.
 
 ## CodeScene coverage belongs to main
 
