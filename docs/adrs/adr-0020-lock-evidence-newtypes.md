@@ -90,13 +90,12 @@ specific traits are needed, which is the case here.
 
 Retain bare `u32`/`u64` parameters and rely on argument naming and review.
 
-| Topic                     | A: Newtypes | B: `newt-hype` | C: `the-newtype` | D: Integers |
-| ------------------------- | ----------- | -------------- | ---------------- | ----------- |
-| Transposition is an error | Yes         | No             | No               | No          |
-| Inner integer reachable   | Only where  | Yes            | Yes              | Yes         |
-|                           | intended    |                |                  |             |
-| New dependency            | No          | Yes            | Yes              | No          |
-| Primitive Obsession score | Clear       | Likely clear   | Likely clear     | Flagged     |
+| Topic                     | A: Newtypes      | B: `newt-hype` | C: `the-newtype` | D: Integers |
+| ------------------------- | ---------------- | -------------- | ---------------- | ----------- |
+| Transposition is an error | Yes              | No             | No               | No          |
+| Inner integer reachable   | Only as intended | Yes            | Yes              | Yes         |
+| New dependency            | No               | Yes            | Yes              | No          |
+| Primitive Obsession score | Clear            | Likely clear   | Likely clear     | Flagged     |
 
 *Table 1: Comparison of the vocabulary options.*
 
@@ -112,10 +111,11 @@ than an anonymous tuple. The remaining `#[rstest]` tables take a string or an
 already-typed `Option<ProcessId>`, which carries its own name, so they stay as
 they are.
 
-The device split is still pinned by the seven cases that motivated it,
-including the two where the major's high bits and the minor's high bits sit
-above the low 32 bits. Those cases are what a naive two-mask split passes and
-then fails against a real filesystem.
+The device split is still pinned by the cases that motivated it, including one
+where the major's high bits sit above the low 32 bits and one where the minor's
+high bits run past bit 32, into the 32..44 range that only the widest minor
+field reaches. Those cases are what a naive two-mask split passes and then
+fails against a real filesystem.
 
 The diagnostics split across `artefact_lock_diagnostics.rs` (what a hold means),
 `artefact_lock_evidence.rs` (the evidence vocabulary and parser), and
@@ -123,6 +123,16 @@ The diagnostics split across `artefact_lock_diagnostics.rs` (what a hold means),
 keeps each file within the 400-line module cap, and it puts the reading of a
 process name beside neither the parsing of lock records nor the deciding of
 what to report.
+
+`artefact_lock_report_tests.rs` pins both settle outcomes against a *separate*
+holder process: one test releases the lock part-way through the window and
+asserts the settle returns `Ok` only after outlasting the release, and one
+leaves it held and asserts the settle reports the live owner and its open
+descriptor. The holder has to be a separate process. `flock` belongs to the
+open file description, and the suites in this binary fork helper processes,
+each fork duplicating the whole descriptor table; an in-process guard would
+therefore stay held under this process's name until the child's `exec`, and the
+tests would fail intermittently for the reason they exist to diagnose.
 
 ## Alternatives rejected
 

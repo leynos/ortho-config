@@ -655,6 +655,15 @@ spawn passed 12 of 12; the settling form then passed five consecutive full
 binary runs. A strict assertion in a gated suite would therefore be a check on
 the scheduler, not on the lock.
 
+That property applies to the tests of the diagnostics themselves. The tests
+that exercise the settling loop hold the lock from a helper *process*, through
+`lock_support::spawn_helper` with the `hold-until-asked` mode, and release it
+by request. An in-process guard would put the lock in the test binary's own
+descriptor table, where every peer suite's `fork` reaches it and keeps it alive
+under this process's name until the child's `exec`; a test written that way
+fails intermittently for the very reason it exists to diagnose. Holding in a
+helper's own table keeps both the hold and the release independent of any peer.
+
 `artefact_lock_evidence.rs` holds the pure half — the glibc `dev_t` split, the
 `/proc/locks` parser, and the vocabulary they speak — tested on every platform,
 because a mis-split device or a skipped line both read as "nothing holds this
@@ -700,7 +709,7 @@ Running the test binary directly needs the sysroot's target library directory
 on the loader path, or it fails to find `libstd`:
 
 ```sh
-LD_LIBRARY_PATH="$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/lib" \
+LD_LIBRARY_PATH="$(rustc --print target-libdir)" \
   target/debug/deps/ortho_config_macros-<hash> --test-threads=32
 ```
 
