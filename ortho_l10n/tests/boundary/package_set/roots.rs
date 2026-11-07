@@ -12,14 +12,14 @@
 //! contracts, which care about paths and normalized manifests rather than about
 //! how the archives were produced.
 
-use super::super::fixture_cargo::{BOUNDARY_ROOT, repository_root};
+use super::super::fixture_cargo::{repository_root, workspace_target_directory};
 use super::{PACKAGING_INVOCATIONS, package_sources};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use std::sync::OnceLock;
 
-/// Directory `cargo package` writes into, relative to the shared target root.
+/// Directory `cargo package` writes into, relative to Cargo's workspace target.
 const PACKAGE_DIRECTORY: &str = "package";
 
 /// One unpacked package root, with the paths a consumer patch needs.
@@ -165,9 +165,7 @@ pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
 /// Run both packaging invocations and collect the unpacked roots.
 fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
     let repository = repository_root()?;
-    let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
-    Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
-        .with_context(|| format!("create packaging target {target}"))?;
+    let target = workspace_target_directory(&repository)?;
 
     for invocation in &PACKAGING_INVOCATIONS {
         package_sources(&repository, &target, invocation)?;

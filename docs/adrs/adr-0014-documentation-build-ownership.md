@@ -137,11 +137,16 @@ lock, while nextest assigns the affected binaries to one test group. The
 independent-workspace regression retains its concurrent workers inside that
 test, so it continues to exercise cross-process artefact ownership.
 
-The identifier-artefact integration test gives its fixture a private target
-nested under Cargo's configured workspace target. Its package clean can then
-force a fresh build without deleting test executables that the outer Cargo
-workspace has already built. The fixture continues to use Cargo's default
-shared package cache.
+The identifier-artefact integration test reuses Cargo's configured workspace
+target so fixture builds can reuse compiled dependencies. It cleans only the
+`orthohelp_fixture` package before each forced rebuild; other workspace
+packages and test executables remain intact. Cargo's target lock serializes
+these nested builds with other Cargo users of the same target. The fixture
+continues to use Cargo's default shared package cache. Its cold build timed out
+after 955,445 ms, having spent the standard envelope waiting for compiler
+admission rather than compiling. The test therefore has a separate 1,080-second
+nextest allowance and a 1,076-second operation envelope; the workflow contract
+keeps this exception tied to the test binary and source constant.
 
 The build cache is test infrastructure. It may reuse compiler output through
 Cargo's normal target and package-cache behaviour, but it must not relocate,
@@ -299,13 +304,14 @@ helper may not terminate unrelated processes or restart shared cache services.
 
 The 600-second nextest per-test ceiling remains the default. The BDD target and
 the serialized documentation-scenario group have 960-second overrides. The
-1,800-second whole-run ceiling, 2,700-second Cargo watchdog, and workflow job
-ceilings remain in force. Documentation scenarios use a 956-second operation
-envelope, preserving two 2-second allowances within the 960-second per-test
-ceiling for child cleanup and test reporting. A subprocess receives the smaller
-of its operation budget and the scenario's remaining time. The 60-second
-execution and 30-second discovery policies remain independent of that build
-budget.
+identifier-artefact integration test has a dedicated 1,080-second override; its
+scenario deadline is 1,076 seconds, preserving two 2-second allowances for
+child cleanup and test reporting. The 1,800-second whole-run ceiling,
+2,700-second Cargo watchdog, and workflow job ceilings remain in force. Other
+documentation scenarios use a 956-second operation envelope inside their
+960-second override. A subprocess receives the smaller of its operation budget
+and the scenario's remaining time. The 60-second execution and 30-second
+discovery policies remain independent of that build budget.
 
 The BDD scenario's 956-second envelope starts after its in-process ownership
 gate. A direct-Cargo run serialized those scenarios before starting each

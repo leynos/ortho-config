@@ -30,8 +30,13 @@ def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None
     )
     assert execution_match is not None, "execution policy must declare its timeout"
     operations["execution"] = int(execution_match[1])
+    build_match = re.search(
+        r"Self::build_with_timeout\(Duration::from_secs\((\d+)\)\)", policy
+    )
+    assert build_match is not None, "build policy must declare its default timeout"
+    operations["build"] = int(build_match[1])
     cleanup_match = re.search(
-        r'Self::new\(\s*"build",\s*Duration::from_secs\(\d+\),\s*Duration::from_secs\((\d+)\)',
+        r'Self::new\(\s*"build",\s*timeout,\s*Duration::from_secs\((\d+)\)',
         policy,
     )
     scenario_match = re.search(r"PER_TEST_SECONDS:\s*u64\s*=\s*(\d+)", scenario)
@@ -50,6 +55,7 @@ def test_documentation_operations_leave_time_for_cleanup_and_reporting() -> None
     assert per_test > profile_allowance(nextest), (
         "documentation scenarios must use their measured per-test override"
     )
+    _assert_identifier_artefact_budget(nextest, per_test)
     whole_run = global_timeout(nextest)
     assert whole_run is not None, "nextest default profile must set global-timeout"
     envelope = per_test - 2 * cleanup
@@ -66,7 +72,6 @@ def _documentation_scenario_allowance(nextest: str) -> float:
     binaries = (
         "documented_command",
         "documentation_examples_rust_tests",
-        "identifier_artefact_e2e",
     )
     allowances: set[float] = set()
     for binary in binaries:
@@ -88,6 +93,52 @@ def _documentation_scenario_allowance(nextest: str) -> float:
         )
     assert len(allowances) == 1, "documentation scenario binaries must share one allowance"
     return allowances.pop()
+
+
+def _assert_identifier_artefact_budget(nextest: str, default_allowance: int) -> None:
+    """Tie the cold fixture build's envelope to its dedicated nextest tier."""
+    support = (SUPPORT / "identifier_artefact_e2e_support.rs").read_text(
+        encoding="utf-8"
+    )
+    timeout_match = re.search(
+        r"IDENTIFIER_ARTEFACT_TIMEOUT_SECS:\s*u64\s*=\s*([\d_]+)", support
+    )
+    assert timeout_match is not None, "identifier artefact test must declare its allowance"
+    # Rust allows `_` digit separators, and this constant is written `1_080`.
+    timeout = int(timeout_match[1].replace("_", ""))
+    assert "scenario::deadline_for(Some(IDENTIFIER_ARTEFACT_TIMEOUT_SECS))" in support, (
+        "identifier artefact scenario must use its declared allowance"
+    )
+    assert re.search(
+        r"Policy::build_with_timeout\(\s*Duration::from_secs\(\s*"
+        r"IDENTIFIER_ARTEFACT_TIMEOUT_SECS\s*,?\s*\)",
+        support,
+    ), "identifier artefact Cargo build must use its scenario allowance"
+
+    overrides = tomllib.loads(nextest)["profile"]["default"]["overrides"]
+    matching = [
+        override
+        for override in overrides
+        if re.search(r"binary\(identifier_artefact_e2e\)", override.get("filter", ""))
+    ]
+    assert len(matching) == 1, "identifier_artefact_e2e must have one dedicated override"
+    override = matching[0]
+    assert override.get("test-group") == "orthohelp_cache", (
+        "identifier_artefact_e2e must remain serialized with shared-cache tests"
+    )
+    allowance = budget_of(
+        "profile.default.overrides.identifier_artefact_e2e", override["slow-timeout"]
+    )
+    assert allowance == timeout, (
+        "identifier artefact scenario and nextest allowance must match"
+    )
+    assert allowance > default_allowance, (
+        "identifier artefact's cold dependency build needs its measured extra margin"
+    )
+    whole_run = global_timeout(nextest)
+    assert whole_run is not None and allowance < whole_run, (
+        "identifier artefact allowance must fit inside the whole-run budget"
+    )
 
 
 def _assert_bdd_scenario_budget(nextest: str, cleanup: int) -> None:
@@ -148,6 +199,7 @@ def test_shared_documentation_builds_start_after_peer_tests() -> None:
         "powershell_windows",
         "nested_subcommand_end_to_end",
         "documented_command",
+        "cli_dispatch",
         "documentation_examples_rust_tests",
         "agent_context_contract",
         "policy_report_contract",

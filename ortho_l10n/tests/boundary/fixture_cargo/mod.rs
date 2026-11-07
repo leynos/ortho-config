@@ -6,9 +6,9 @@
 //!
 //! - the fixture root carries its own `[workspace]` table, so Cargo treats it
 //!   as a workspace root instead of walking up to the repository workspace;
-//! - the child is given a target directory of its own under
-//!   [`BOUNDARY_ROOT`], so the nested resolution cannot contend with the parent
-//!   build's fingerprints.
+//! - the child uses the workspace target directory reported by Cargo, reusing
+//!   dependencies already built by the parent gate while keeping fixture
+//!   manifests and sources under [`BOUNDARY_ROOT`].
 //!
 //! The environment a child may inherit is a separate module, [`environment`],
 //! because it is the part a reviewer most needs to be able to check at a
@@ -20,6 +20,7 @@
 pub(crate) mod environment;
 pub(crate) mod manifest;
 pub(crate) mod metadata;
+pub(crate) mod target_directory;
 
 #[cfg(test)]
 #[path = "metadata_proptests.rs"]
@@ -28,23 +29,34 @@ mod metadata_proptests;
 pub(crate) use environment::{cargo_binary, inherited_toolchain};
 pub(crate) use manifest::{declared_dependencies, declared_path_dependencies};
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
+pub(crate) use target_directory::workspace_target_directory;
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use environment::CARGO_DEADLINE;
 use std::process::{Command, Output, Stdio};
+use std::sync::Mutex;
 use std::time::Duration;
 use wait_timeout::ChildExt as _;
 
-/// Directory under the repository target tree that owns every fixture root.
+/// Keep nested Cargo commands from competing for this suite's shared target.
+///
+/// The Rust test harness runs test functions concurrently, including under
+/// `cargo test`, where nextest's process-level test group does not apply. Every
+/// fixture uses the same target directory, so concurrent children turn one
+/// useful warm build into several deadline-bound contenders for compiler
+/// admission and Cargo's target lock.
+static CARGO_COMMAND: Mutex<()> = Mutex::new(());
+
+/// Directory under the repository target tree that owns every disposable root.
 ///
 /// One directory for the whole boundary suite means the packaging step, the
 /// nested consumer targets, and the shared package cache live together and can
 /// be discarded together.
 pub(crate) const BOUNDARY_ROOT: &str = "target/localization-boundary";
 
-/// One disposable foreign package root and its private target directory.
+/// One disposable foreign package root and the workspace target Cargo resolved.
 ///
 /// Dropping the value removes the root. The shared target directory is kept
 /// between runs on purpose: a warm package cache and a warm target make two
@@ -55,7 +67,7 @@ pub(crate) struct FixtureCargo {
     _tempdir: tempfile::TempDir,
     /// The temporary root as a UTF-8 path, which manifests are rendered from.
     root: Utf8PathBuf,
-    /// Target directory shared by the fixtures of one contract family.
+    /// Workspace target directory shared with the parent build.
     target: Utf8PathBuf,
 }
 
@@ -70,6 +82,7 @@ impl FixtureCargo {
     pub(crate) fn new() -> Result<Self> {
         let repository = repository_root()?;
         let boundary = repository.join(BOUNDARY_ROOT);
+        let target = workspace_target_directory(&repository)?;
         Dir::create_ambient_dir_all(&boundary, cap_std::ambient_authority())
             .with_context(|| format!("create boundary root {boundary}"))?;
         let tempdir = tempfile::Builder::new()
@@ -85,7 +98,7 @@ impl FixtureCargo {
         Ok(Self {
             _tempdir: tempdir,
             root,
-            target: boundary.join("cargo-target"),
+            target,
         })
     }
 
@@ -115,11 +128,11 @@ impl FixtureCargo {
 
     /// Run `cargo` with `args`, returning its captured output.
     ///
-    /// The child receives the allow-listed toolchain environment, a
-    /// `CARGO_TARGET_DIR` pointed at this fixture's private target, and
-    /// `--offline`. Offline is not an optimization: a boundary contract has to
-    /// prove resolution from the shared package cache, and a network fetch
-    /// would make it prove something about crates.io instead.
+    /// The child receives the allow-listed toolchain environment, the
+    /// workspace target Cargo resolved, and `--offline`. Offline is not an
+    /// optimization: a boundary contract has to prove resolution from the
+    /// shared package cache, and a network fetch would make it prove something
+    /// about crates.io instead.
     ///
     /// The child is deadline-bounded. A nested `cargo metadata` that hangs on
     /// the package-cache lock would otherwise consume the whole test allowance
@@ -255,6 +268,9 @@ pub(crate) fn run_with_deadline(
     deadline: Duration,
     description: &str,
 ) -> Result<Output> {
+    let _command_guard = CARGO_COMMAND
+        .lock()
+        .map_err(|_| anyhow::anyhow!("the boundary Cargo command gate was poisoned"))?;
     let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -72,14 +72,16 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: ordering holds for a wide range of both and would not notice either
 #: drifting away from the sample it was sized against.
 #:
-#: The largest allowances are the trybuild, `rstest_bdd`, and documentation
-#: scenario overrides, each 960 s or eight warning periods of 120 s. The
-#: trybuild allowance was 600 s until that class outgrew it --
-#: `crate_path_trybuild` passed
-#: at 572.5 s of 600 s on run 36068184976, and `must_use_compile_tests`
-#: was killed at 600.224 s on run 36070786646. The BDD allowance is
-#: measured independently in `documentation_budget_test.py`.
-REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 960.0
+#: The largest allowance is the boundary packaging override, 1,560 s or
+#: thirteen warning periods of 120 s. It covers two 720 s packaging
+#: invocations plus 120 s for root checks and reporting. The trybuild,
+#: `rstest_bdd`, and documentation scenario overrides are 960 s or eight
+#: warning periods of 120 s. The trybuild allowance was 600 s until that
+#: class outgrew it -- `crate_path_trybuild` passed at 572.5 s of 600 s on
+#: run 36068184976, and `must_use_compile_tests` was killed at 600.224 s on
+#: run 36070786646. The BDD allowance is measured independently in
+#: `documentation_budget_test.py`.
+REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 1560.0
 REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 30 * 60.0
 
 REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {

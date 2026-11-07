@@ -14,12 +14,26 @@ pub(crate) struct Policy {
 impl Policy {
     /// Fit inside the fixed scenario envelope after its cleanup reservations.
     pub(crate) const fn build() -> Self {
-        Self::new(
-            "build",
-            Duration::from_secs(956),
-            Duration::from_secs(2),
-            1024 * 1024,
-        )
+        Self::build_with_timeout(Duration::from_secs(956))
+    }
+
+    /// Create a build policy with a caller-selected operation cap.
+    ///
+    /// Use this only when the test binary has a matching nextest override;
+    /// callers must still bound the policy by their scenario's remaining time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// let allowance = Duration::from_secs(1_080);
+    /// let cleanup = Duration::from_secs(2);
+    /// let envelope = allowance.saturating_sub(cleanup.saturating_mul(2));
+    /// assert_eq!(envelope, Duration::from_secs(1_076));
+    /// ```
+    pub(crate) const fn build_with_timeout(timeout: Duration) -> Self {
+        Self::new("build", timeout, Duration::from_secs(2), 1024 * 1024)
     }
 
     /// Bound executable discovery independently from compilation and execution.

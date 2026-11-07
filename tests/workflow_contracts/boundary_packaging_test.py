@@ -9,7 +9,7 @@ reading, which shows up as an intermittent failure in a suite whose whole
 purpose is to be the evidence for a published graph.
 
 So ``.config/nextest.toml`` puts ``binary(boundary)`` in a single-threaded
-group of its own, and the fixture's packaging deadline is sized to fit
+group of its own, and the fixture's child deadlines are sized to fit
 inside the allowance that group runs under. Both halves are load-bearing
 and neither is visible from the other file:
 
@@ -18,9 +18,9 @@ and neither is visible from the other file:
 - a deadline longer than the per-test allowance can never fire, so the
   error naming the invocation that hung is never printed.
 
-The deadline and its invocation count are read from the sources rather
-than restated here, so the arithmetic and the code that enforces it
-cannot drift apart. See "Nextest test-group serialization" in
+The command deadlines and invocation count are read from the sources, and the
+effective allowance is resolved in file order, so the arithmetic and the code
+that enforces it cannot drift apart. See "Nextest test-group serialization" in
 ``docs/developers-guide.md``.
 
 Run via ``make test-workflow-contracts``.
@@ -33,7 +33,7 @@ import re
 import tomllib
 import typing as typ
 
-from nextest_budgets import profile_allowance
+from nextest_precedence import effective_allowances, selected_by_universe
 from timeout_budgets import NEXTEST_CONFIG
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
@@ -50,6 +50,7 @@ MANIFEST: typ.Final[pathlib.Path] = REPOSITORY_ROOT / CRATE / "Cargo.toml"
 PACKAGE_SET: typ.Final[pathlib.Path] = (
     REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "package_set" / "mod.rs"
 )
+ROOT_CHECKS_MARGIN_SECONDS: typ.Final[int] = 120
 
 
 def _overrides() -> list[dict[str, object]]:
@@ -68,8 +69,8 @@ def test_the_group_is_serial() -> None:
     """A group with two slots serializes nothing.
 
     Scenario: two packaged contracts run side by side. Invariant: the
-    group grants one thread, which is what makes the shared target
-    directory safe between processes.
+    group grants one thread, which is what makes the workspace target's shared
+    package directory safe between processes.
     """
     document = tomllib.loads(NEXTEST_CONFIG.read_text(encoding="utf-8"))
     groups = document["test-groups"]
@@ -149,31 +150,52 @@ def test_the_packaging_deadline_fits_inside_the_allowance() -> None:
     nextest stops the test, so the failure names the invocation that hung
     rather than reporting a bare timeout.
 
-    The deadline and the invocation count are both read from the fixture
-    rather than restated, so the arithmetic cannot drift from the code
-    that enforces it.
+    The command deadlines and invocation count are read from the fixtures,
+    and the allowance is resolved for this binary in file order. That keeps
+    the arithmetic tied to the bound the runner actually applies.
     """
-    source = PACKAGE_SET.read_text(encoding="utf-8")
-    deadline = int(
+    package_source = PACKAGE_SET.read_text(encoding="utf-8")
+    package_deadline = int(
         _single_match(
             r"PACKAGE_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
-            source,
+            package_source,
             "PACKAGE_DEADLINE declaration",
         )[1]
     )
     invocations = int(
         _single_match(
             r"PACKAGING_INVOCATIONS:\s*\[PackageInvocation;\s*(\d+)\]",
-            source,
+            package_source,
             "PACKAGING_INVOCATIONS array length",
         )[1]
     )
+    cargo_environment = (
+        REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "environment.rs"
+    ).read_text(encoding="utf-8")
+    cargo_deadline = int(
+        _single_match(
+            r"CARGO_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            cargo_environment,
+            "CARGO_DEADLINE declaration",
+        )[1]
+    )
 
-    allowance = profile_allowance(NEXTEST_CONFIG.read_text(encoding="utf-8"))
-    assert deadline * invocations < allowance, (
-        f"each packaging invocation is bounded at {deadline}s and {invocations} "
-        f"share one test, so they need {deadline * invocations}s of a "
-        f"{allowance:.0f}s per-test allowance. A bound that does not fit is never "
-        f"reached: nextest stops the test first and the error naming the hung "
-        f"invocation is lost"
+    config_text = NEXTEST_CONFIG.read_text(encoding="utf-8")
+    tier = effective_allowances(
+        config_text,
+        [BINARY],
+        reader=selected_by_universe([BINARY]),
+    )[BINARY]
+    assert not tier.is_unresolved, f"the {BINARY} allowance could not be resolved"
+    package_budget = package_deadline * invocations
+    assert package_budget + ROOT_CHECKS_MARGIN_SECONDS <= tier.allowance, (
+        f"{invocations} packaging invocations and the "
+        f"{ROOT_CHECKS_MARGIN_SECONDS}s root-check margin need "
+        f"{package_budget + ROOT_CHECKS_MARGIN_SECONDS}s, but nextest resolves "
+        f"binary({BINARY}) to {tier.allowance:.0f}s"
+    )
+    assert cargo_deadline + ROOT_CHECKS_MARGIN_SECONDS <= tier.allowance, (
+        f"a consumer Cargo command and the root-check margin need "
+        f"{cargo_deadline + ROOT_CHECKS_MARGIN_SECONDS}s, but nextest resolves "
+        f"binary({BINARY}) to {tier.allowance:.0f}s"
     )

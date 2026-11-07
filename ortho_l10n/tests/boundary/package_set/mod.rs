@@ -8,8 +8,9 @@
 //! sources, and the exact edges between them.
 //!
 //! There is no network step. `cargo package` is run offline against the shared
-//! package cache, and the resulting `.crate` files are unpacked into the same
-//! target directory. That produces the *stranger's* manifests - the normalized
+//! package cache, and the resulting `.crate` files are unpacked into the
+//! workspace target's `package/` directory. That produces the *stranger's*
+//! manifests - the normalized
 //! `Cargo.toml` with path dependencies rewritten - while leaving the sources
 //! identical to the workspace's.
 //!
@@ -62,21 +63,14 @@ use std::time::Duration;
 
 /// Longest either packaging invocation may run.
 ///
-/// Each invocation is bounded on its own, and every entry in
-/// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
-/// inside nextest's per-test allowance with room for the root checks around
-/// them: 2 x 240 s is 480 s of the 600 s base allowance, leaving 120 s. The
-/// figure is derived from the allowance rather than chosen for comfort,
-/// because a bound that does not fit never fires: nextest stops the test
-/// first, and the error naming the invocation that hung is never printed.
-///
-/// The second invocation reuses the first's target directory and is much
-/// shorter. For scale, the pair took 244 s on this host with the packaging
-/// target removed, which is an upper bound rather than a build time: it
-/// includes waiting for compile-admission slots, which the child inherits. So
-/// 240 s per invocation is generous against the whole pair rather than tight
-/// against either half.
-const PACKAGE_DEADLINE: Duration = Duration::from_secs(240);
+/// Both invocations share one test, and compiler-admission waiting is part of
+/// each child's time. The former 240- and 600-second bounds expired in
+/// successive full workspace tests while the shared compiler queue was busy.
+/// The 720-second bound allows additional queue time without leaving a child
+/// unbounded. The pair's 1,440 seconds fit inside the boundary binary's
+/// 1,560-second nextest allowance, leaving 120 seconds for root checks and
+/// reporting.
+const PACKAGE_DEADLINE: Duration = Duration::from_secs(720);
 
 /// The `cargo package` invocations that together produce all three roots.
 ///

@@ -233,7 +233,7 @@ fn opaque_callback_failure_preserves_primary_error_and_ownership(
 /// observation inconclusive, so contention must not be blamed on the parent.
 #[test]
 fn invoking_cargo_releases_its_profile_lock_before_running_tests() -> Result<()> {
-    let deadline = super::scenario::deadline();
+    let deadline = super::scenario::deadline_for(None);
     let executable = std::env::current_exe()?;
     let dependencies = executable.parent().context("test executable directory")?;
     ensure!(

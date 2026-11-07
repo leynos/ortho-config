@@ -27,7 +27,7 @@ pub(super) fn run_orthohelp(
     args: &[&str],
     destination: &Path,
 ) -> Result<Output> {
-    let deadline = scenario::deadline();
+    let deadline = scenario::deadline_for(None);
     let state = repository.join("target/documentation-workspaces");
     Dir::create_ambient_dir_all(&state, ambient_authority())?;
     let owner = tempfile::Builder::new()
