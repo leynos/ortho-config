@@ -6,12 +6,20 @@
 //! say only that a released lock looked held, and a report that is well-formed
 //! but names nobody would leave the defect exactly as undiagnosable as before.
 //!
-//! The tests that take the lock for real exist only where the lock itself does
-//! — on Linux, where the probe's read-only handle is documented to acquire the
-//! `flock`-backed exclusive lock without complaint. `accepts_a_lock_that_is_free`
-//! is deliberately ungated: it asserts only that a free lock passes, which every
-//! platform can answer, and it keeps the module compiling where the gated tests
-//! are removed.
+//! The tests that inspect a real hold exist only where a real hold can be
+//! observed — on Linux, where the probe's read-only handle is documented to
+//! acquire the `flock`-backed exclusive lock without complaint.
+//! `accepts_a_lock_that_is_free` is deliberately ungated: it asserts only that
+//! a free lock passes, which every platform can answer, and it keeps the module
+//! compiling where the gated tests are removed.
+//!
+//! Every test here that holds the lock does so through a helper *process*,
+//! never with an in-process guard. `flock` belongs to the open file
+//! description, and the suites in this binary fork helper processes; each fork
+//! duplicates the whole descriptor table, so an in-process guard would keep the
+//! lock alive in the child until its `exec`. That is the interference issue #606
+//! records, and holding the lock in a helper's own table is what keeps these
+//! tests measuring the settle loop rather than the scheduler.
 
 use anyhow::{Context, Result};
 
@@ -94,5 +102,109 @@ fn accepts_a_lock_that_is_free() -> Result<()> {
     let root = TempRoot::new()?;
     create_lock(root.path()).context("create the lock file for the probe")?;
     super::lock_diagnostics::ensure_released(root.path(), "an unheld lock must be reported free")?;
+    Ok(())
+}
+
+/// Verifies a lock released part-way through the window is accepted.
+///
+/// The holder is a *separate process*, and that is not incidental. `flock`
+/// belongs to the open file description, and the suites in this binary spawn
+/// helper processes; each spawn forks this process's whole descriptor table, so
+/// a guard held here would stay held in the child until its `exec`. A test that
+/// provoked the retry with an in-process guard would therefore be measuring the
+/// scheduler — the same interference issue #606 records. A helper holds the
+/// lock in its own descriptor table, where no peer's fork can reach it, so both
+/// the hold and the release are deterministic.
+///
+/// The elapsed-time check is what makes this non-vacuous. The helper guarantees
+/// the first probe reads `Held`, so an implementation that returned `Ok` on it
+/// would still satisfy the outcome alone; requiring the call to outlast the
+/// release delay proves a `Held` was observed and waited out.
+#[cfg(target_os = "linux")]
+#[test]
+fn settling_waits_out_a_release_from_another_process() -> Result<()> {
+    use super::fragment_tests::TempRoot;
+    use super::lock_support::{request_release, spawn_helper, wait_for, wait_for_holder};
+    use anyhow::ensure;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    /// Long enough that the first probe cannot plausibly follow the release,
+    /// and short enough to leave most of `SETTLE_BUDGET` as headroom.
+    const RELEASE_DELAY: Duration = Duration::from_millis(100);
+
+    let root = TempRoot::new()?;
+    let holder = spawn_helper(root.path(), "hold-until-asked")?;
+    // Only returns once the helper has recorded that it owns the lock, so the
+    // first probe below cannot race the acquisition.
+    wait_for_holder(root.path())?;
+
+    let release_root = root.path().to_path_buf();
+    let releaser = thread::spawn(move || {
+        thread::sleep(RELEASE_DELAY);
+        request_release(&release_root)
+    });
+
+    let started = Instant::now();
+    let outcome = super::lock_diagnostics::ensure_settles_free(
+        root.path(),
+        "a release part-way through the window must settle",
+    );
+    let waited = started.elapsed();
+    releaser
+        .join()
+        .map_err(|_| anyhow::anyhow!("the releasing thread panicked"))?
+        .context("request the holder's release")?;
+    // Joined before the outcome is reported, so a failure does not leave the
+    // helper waiting on its own timeout.
+    wait_for(holder, "holding helper")?;
+    outcome?;
+
+    ensure!(
+        waited >= RELEASE_DELAY,
+        "the settle must have outlasted the release, but it returned after \
+         {waited:?}; a first-probe success would satisfy the outcome check alone",
+    );
+    Ok(())
+}
+
+/// Verifies a lock held for the whole window is refused, with a report.
+///
+/// The holder is again a separate process, so the window belongs to a live
+/// owner rather than to a guard this process would have to explain. This is the
+/// half that keeps the success path from being vacuous: a settle that returned
+/// `Ok` merely because time passed, or that swallowed the report, fails here.
+#[cfg(target_os = "linux")]
+#[test]
+fn settling_refuses_a_lock_that_outlives_the_window() -> Result<()> {
+    use super::fragment_tests::TempRoot;
+    use super::lock_support::{request_release, spawn_helper, wait_for, wait_for_holder};
+    use anyhow::ensure;
+
+    let root = TempRoot::new()?;
+    let holder = spawn_helper(root.path(), "hold-until-asked")?;
+    wait_for_holder(root.path())?;
+
+    let error = super::lock_diagnostics::ensure_settles_free(root.path(), "a leak must not settle")
+        .expect_err("a lock held for the whole window must be reported, not accepted");
+
+    // Released before asserting for the reason the success path records: a
+    // failure must not leave the helper blocked until its own timeout expires.
+    request_release(root.path())?;
+    wait_for(holder, "holding helper")?;
+
+    let rendered = format!("{error:#}");
+    ensure!(
+        rendered.starts_with("a leak must not settle"),
+        "the caller's expectation must lead the report: {rendered}",
+    );
+    ensure!(
+        rendered.contains("is still held"),
+        "the report must say the lock was still held: {rendered}",
+    );
+    ensure!(
+        rendered.contains("holds the lock file open as fd"),
+        "the report must name the descriptor the live holder kept open: {rendered}",
+    );
     Ok(())
 }
