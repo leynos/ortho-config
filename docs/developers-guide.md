@@ -160,8 +160,12 @@ override that matches and sets it. A configuration can therefore list a binary
 in a 960 s entry and still run it at 600 s, if an earlier entry matches it and
 carries the base figure. A union of above-base entries cannot see that: the
 raised entry still names the binary, so the union reports it covered.
-`tests/workflow_contracts/nextest_precedence.py` walks the entries in file
-order and applies that rule, and
+`tests/workflow_contracts/nextest_override_reader.py` reads the profile's
+override entries in file order, and
+`tests/workflow_contracts/nextest_precedence.py` applies that rule to resolve
+the effective allowance. The reader owns the parsed override shape; a contract
+that needs effective allowances should use the resolver rather than add a
+second interpretation.
 `test_a_base_tier_entry_above_a_raised_one_removes_coverage` is the negative
 control, driven by inserting the shadowing entry into the fixture's copy of
 this file. The resolver reads only `[profile.default]`'s own list and applies no
@@ -186,23 +190,54 @@ raised entry produces. `nextest_precedence_test.py` covers both gated outcomes,
 the expression-less shape, the refused expression, and the surviving mark, each
 with the wrong answer it would have produced.
 
-Group membership and raised-allowance coverage are separate questions, and the
-contract asks a different thing of each. Every binary a group *serializes* must
-be a class member, because the raised allowance is written for the class and a
-serialized non-member would fall through to the base tier. The class itself is
-not required to be serialized: a binary can drive a child `cargo` and never
-touch the shared caches the group protects.
+The filter reader in `nextest_filterset.py` accepts disjunctions of
+`binary(...)` and exact `binary_id(package::target)` terms. It compares a
+binary ID's target component with the workspace-wide candidate names, so a
+same-named target in a different package may be conservatively marked too. Any
+other expression is left unresolved for every candidate: searching its text for
+a binary name is not enough, because `test(slow)`, `package(name)` and `all()`
+can select tests whose binary names do not occur in the expression. A third
+contract that needs filter resolution should use this reader through
+`nextest_precedence.py`; it should not add another interpretation of nextest's
+filter language.
 
-In this repository the two sets happen to coincide — the group's ten members
-(nine named in the group entry, plus `rstest_bdd` in its own) are exactly the
-class — but that is a property of the current configuration rather than
-something the contract enforces, and the configuration is free to narrow the
-group. `cli_dispatch` is the member where the distinction is worth naming: its
-child cargo was measured at 0.04 s on a warm tree, because its tests take the
-`cargo orthohelp --help` and argument-error paths rather than a bridge build,
-so the serialization it takes in the group costs the suite little today. The
-allowance it takes is sized for the nested build the class *can* reach, not for
-the cheapest path it currently takes.
+The reader split's historical equivalence can be reproduced when both commits
+are available locally. Set the revision variables to the commits before and
+after that split, then run:
+
+```sh
+: "${PRE_SPLIT_REVISION:?set the commit before the reader split}"
+: "${POST_SPLIT_REVISION:?set the commit after the reader split}"
+python3 -I scripts/verify_child_cargo_reader_equivalence.py \
+    "$PRE_SPLIT_REVISION" "$POST_SPLIT_REVISION"
+```
+
+The script extracts both reader sets and the pinned source tree, then compares
+class, non-class and per-marker membership plus every reached source path and
+its text across the contract's test-root inventory. This establishes
+preservation across that refactor; it does not independently prove the walker
+matches rustc.
+
+Group membership and raised-allowance coverage are separate questions, and the
+contract asks a different thing of each. Within its audited binary universe,
+every binary a group *serializes* must be a class member, because the raised
+allowance is written for the class and a serialized non-member would fall
+through to the base tier. Groups selecting only binaries outside that inventory
+belong to their own contracts. The class itself is not required to be
+serialized: a binary can drive a child `cargo` and never touch the shared
+caches the group protects.
+
+In this repository the two audited sets happen to coincide — the group's eleven
+members (nine named in the group entry, plus `identifier_artefact_e2e` and
+`rstest_bdd` in their own entries) are exactly the class — but that is a
+property of the current configuration rather than something the contract
+enforces, and the configuration is free to narrow the group. `cli_dispatch` is
+the member where the distinction is worth naming: its child cargo was measured
+at 0.04 s on a warm tree, because its tests take the `cargo orthohelp --help`
+and argument-error paths rather than a bridge build, so the serialization it
+takes in the group costs the suite little today. The allowance it takes is
+sized for the nested build the class *can* reach, not for the cheapest path it
+currently takes.
 
 The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
 same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
@@ -213,20 +248,32 @@ group serialized unless the shared-state access has been eliminated.
 The `boundary` binary has a group of its own, `boundary_packaging`. Its
 packaged contracts materialize the release once per *process*, and nextest runs
 each test in its own process, so without the group six of them run
-`cargo package` and unpack `target/localization-boundary/packaging-target` side
-by side. Cargo's package-cache lock does not cover that: it does not hold
+`cargo package` and unpack the same workspace target's `package/` directory
+side by side. Cargo's package-cache lock does not cover that: it does not hold
 readers out while a package root is removed and unpacked, so one process can
 replace a root another is reading. `make boundary` and `make test` start one
-process for the binary and need nothing extra, which is why the group exists
-only for nextest.
+process for the binary, and the packaged-set cache makes its materialization
+once. The Rust test harness still runs test functions concurrently, so the
+fixture's `run_with_deadline` gate serializes nested Cargo commands using the
+workspace target. The nextest group covers the separate-process package-root
+race; the in-process gate covers Cargo target contention under both nextest and
+`cargo test`.
+
+The suite keeps generated fixture manifests and sources under
+`target/localization-boundary`, but obtains the build target from
+`cargo metadata --offline --no-deps`. This is the same target Cargo selected
+for the parent workspace, so child resolution and package verification reuse
+its compiled dependencies. `fixture_cargo::workspace_target_directory` is the
+single reader for this boundary harness; fixture consumers and package
+materialization share it rather than inferring Cargo's target path separately.
 
 That group also fixes the per-test allowance arithmetic. One packaged test runs
-both `cargo package` invocations, each bounded at 240 s by `PACKAGE_DEADLINE`,
-so the pair has to fit inside the 600 s base allowance with room for the root
-checks around them. A deadline that did not fit could never fire: nextest would
-stop the test first, and the error naming the invocation that hung would never
-be printed. `boundary_packaging_test.py` reads the group, the manifest and the
-deadline so neither half can drift from the other.
+both `cargo package` invocations, each bounded at 720 s by `PACKAGE_DEADLINE`.
+The boundary override allows 1,560 s, leaving 120 s for root checks and
+reporting after both child deadlines. The earlier 600 s command bound expired
+during a full workspace test while compiler requests queued across repositories.
+`boundary_packaging_test.py` reads the group, manifest, command deadlines and
+the effective allowance so neither half can drift from the other.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -1251,9 +1298,13 @@ repeated Cargo package-cache lock messages and no compiler-progress evidence.
 The 956-second envelope is 1.60 times that observed lower bound. Its deadline
 counts cache and compiler-admission waits without estimating or subtracting
 them, and preserves two seconds for child cleanup and two for test reporting.
-Output does not reset either deadline. The workflow contract checks this
-ordering against nextest's 1,800-second whole-run limit, the 2,700-second Cargo
-watchdog, and the enclosing job ceiling. See
+Output does not reset either deadline. The identifier-artefact E2E binary has a
+dedicated 1,080-second allowance and a 1,076-second envelope: its cold
+downstream build timed out after 955,445 ms, having spent the standard envelope
+waiting for compiler admission rather than compiling. Its larger bound applies
+only to that binary. The workflow contract checks these relationships against
+nextest's 1,800-second whole-run limit, the 2,700-second Cargo watchdog, and
+the enclosing job ceiling. See
 [Test timeouts](#test-timeouts-the-tiers-this-repository-sets) and
 `documentation_budget_test.py`.
 
@@ -1272,13 +1323,13 @@ cache. Documentation workspaces keep their source, manifest, run files, and
 executable snapshots in private directories; a sidecar `fs4` lock protects
 build-and-snapshot ownership across processes. The BDD scenarios use a separate
 filesystem lease under the selected target while reading and updating their
-shared bridge cache. The identifier-artefact test owns a private target nested
-under the configured workspace target, so `cargo clean -p` cannot remove
-workspace test executables. It still uses Cargo's default shared package cache.
-Cargo retains compiler wrappers, job limits, warning enforcement, coverage
-settings, and allow-listed native build inputs. Application secrets and
-arbitrary application variables are excluded. Run-file paths must contain
-normal relative components only.
+shared bridge cache. The identifier-artefact test reuses the configured
+workspace target so its fixture can reuse compiled dependencies. Its
+`cargo clean -p orthohelp_fixture` operation is package-scoped and leaves other
+workspace packages and test executables intact. Cargo retains compiler
+wrappers, job limits, warning enforcement, coverage settings, and allow-listed
+native build inputs. Application secrets and arbitrary application variables
+are excluded. Run-file paths must contain normal relative components only.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:
@@ -2992,12 +3043,12 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                      |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for the trybuild and child-cargo classes |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                     |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                     |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                    |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                                                                                                 |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild and other child-cargo binaries; 1,080 s (120 s x 9) for `identifier_artefact_e2e`; 1,560 s (120 s x 13) for `boundary` |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                                                                                                                |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                                                                                                                |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                                                                                                               |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3010,7 +3061,10 @@ time. `cargo-orthohelp` BDD scenarios use the same 956-second envelope. These
 scenarios run under a 960-second nextest allowance, count Cargo lock and
 compiler admission time, and have no environment override; controlled
 regression tests inject short-lived policies directly so they cannot change
-parallel test processes.
+parallel test processes. The identifier-artefact E2E scenario has a dedicated
+1,080-second nextest allowance and a 1,076-second deadline, with the same two
+cleanup reservations. Its workflow contract ties that allowance to the test's
+source constant and requires it to remain below the whole-run timeout.
 
 The earlier separate-target implementation of the documented CLI flow took 56.5
 s and 120.7 s on hosted runners, 588.0 s and 593.6 s on a shared host, and
@@ -3117,11 +3171,12 @@ the contract rather than silently left on the base allowance:
 and `boolean_cli_trybuild` arrived that way from branches, and the contract is
 what caught each.
 
-The 960 s allowance is lower than the 1,800 s whole-run budget, which the
-ordering contract asserts. That comparison does not by itself guarantee a test
-using its full allowance finishes before the run deadline, since a test that
-starts late spends part of the budget waiting to be scheduled; it establishes
-that the allowance cannot exhaust the run on its own.
+The 960 s trybuild allowance, and the 1,560 s boundary allowance above it, are
+both lower than the 1,800 s whole-run budget, which the ordering contract
+asserts. That comparison does not by itself guarantee a test using its full
+allowance finishes before the run deadline, since a test that starts late
+spends part of the budget waiting to be scheduled; it establishes that the
+allowance cannot exhaust the run on its own.
 
 The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
 It has to fit inside the watchdog with nextest's termination procedure and a
@@ -3213,12 +3268,15 @@ live in `nextest_budgets.py`, `nextest_document.py`, `nextest_durations.py`,
 driven with controlled values in `timeout_reading_test.py`.
 
 Which binaries a raised allowance covers is a question about the Rust sources,
-so that contract reads them rather than a list. `child_cargo_tier.py` decides
-which test binaries drive a child `cargo` of their own, `rust_module_graph.py`
-answers which files a binary compiles, and `child_cargo_tier_test.py` compares
-the class with what `.config/nextest.toml` selects. `trybuild_tier.py` decides
-the trybuild class on its own, naming its marker in `TRYBUILD_CALL`, and reads
-the two classes the same way otherwise.
+so that contract reads them rather than a list. `child_cargo_tier.py`
+inventories the test binaries and combines their source readings, while
+`child_cargo_source_markers.py` owns the child-cargo marker patterns and
+`rust_module_graph.py` answers which files a binary compiles.
+`child_cargo_tier_test.py` checks the nextest allowance and group shape, and
+`child_cargo_membership_test.py` checks marker liveness and the source-backed
+membership controls. `trybuild_tier.py` decides the trybuild class on its own,
+naming its marker in `TRYBUILD_CALL`, and reads the two classes the same way
+otherwise.
 
 The two differ in how far they follow the language, and the difference is
 deliberate rather than an inconsistency to tidy away. `trybuild_tier.py` scans a
@@ -3231,6 +3289,10 @@ allowance. `child_cargo_tier.py` resolves the graph properly instead, because
 its markers are the kind a shared helper carries: an over-approximation there
 would attribute a helper's marker to any binary that happened to sit in the
 same directory, which is the false positive its own module docstring records.
+It follows lexical inline-module names using a source mask that ignores braces
+inside comments and literals, but it does not evaluate conditional compilation
+or macro-generated modules; its fallback inline search remains an
+over-approximation.
 
 Membership is decided by reaching files, not by grepping the `tests/` tree, and
 the difference is not academic. A grep for `Command::new("cargo")` also matches
