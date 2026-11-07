@@ -1,8 +1,8 @@
 //! Cargo helpers owned by the identifier-artefact integration test.
 //!
-//! The fixture uses a private target nested under Cargo's configured target
-//! directory so its clean operations cannot delete workspace test binaries.
-//! Cargo still uses the default shared package cache.
+//! The fixture reuses Cargo's configured workspace target so nested builds
+//! reuse compiled dependencies. Package-scoped clean operations preserve other
+//! workspace packages and test binaries.
 
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
@@ -12,10 +12,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
-const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
+const IDENTIFIER_ARTEFACT_TIMEOUT_SECS: u64 = 1_080;
 
 #[derive(Default)]
 struct CargoMessages {
@@ -97,13 +97,12 @@ fn lock_cargo_messages(messages: &Mutex<CargoMessages>) -> MutexGuard<'_, CargoM
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Owns the fixture's private Cargo target for this test run.
+/// Uses the workspace target while restricting clean operations to the fixture.
 pub(super) struct FixtureCargo {
     repository: PathBuf,
     target_directory: PathBuf,
     package_id: String,
     deadline: Instant,
-    _target_owner: tempfile::TempDir,
 }
 
 impl FixtureCargo {
@@ -118,9 +117,9 @@ impl FixtureCargo {
     }
 }
 
-/// Discover the fixture package and allocate a target private to this test.
+/// Discover the fixture package and reuse Cargo's configured workspace target.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
-    let deadline = scenario::deadline();
+    let deadline = scenario::deadline_for(Some(IDENTIFIER_ARTEFACT_TIMEOUT_SECS));
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("find fixture workspace")?
@@ -158,20 +157,11 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         .and_then(|package| package.get("id"))
         .and_then(Value::as_str)
         .context("Cargo metadata omitted orthohelp_fixture's package id")?;
-    let target_owner = tempfile::Builder::new()
-        .prefix("identifier-artefact-target-")
-        .tempdir_in(workspace_target)
-        .context("create private Cargo target")?;
-    let target_directory = target_owner.path().to_path_buf();
-    Dir::open_ambient_dir(&target_directory, ambient_authority())?
-        .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
-        .context("write Cargo cache-directory tag")?;
     Ok(FixtureCargo {
         repository,
-        target_directory,
+        target_directory: PathBuf::from(workspace_target),
         package_id: package_id.to_owned(),
         deadline,
-        _target_owner: target_owner,
     })
 }
 
@@ -206,7 +196,9 @@ pub(super) fn build_fixture(
         &mut command,
         process_runner::Operation("build identifier artefact fixture"),
         cargo.bounded_policy(
-            process_runner::Policy::build(),
+            process_runner::Policy::build_with_timeout(Duration::from_secs(
+                IDENTIFIER_ARTEFACT_TIMEOUT_SECS,
+            )),
             "build identifier artefact fixture",
         )?,
         move |chunk| lock_cargo_messages(&observed_messages).observe(chunk),

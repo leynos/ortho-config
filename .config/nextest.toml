@@ -128,14 +128,16 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # nested `cargo` on its clock, and neither the list nor any other assertion
 # could see the omission.
 #
-# The two sets coincide today -- these nine plus `rstest_bdd`'s own entry are
-# the whole class -- but the contract does not require that, and narrowing
-# this list is safe while every binary left out still takes a raised
-# allowance.
+# The group and class coincide today: these nine, the dedicated
+# `identifier_artefact_e2e` entry, and `rstest_bdd`'s own entry are the whole
+# class. The contract does not require that, and narrowing this group is safe
+# while every binary left out still takes a raised allowance.
 [test-groups]
 orthohelp_cache = { max-threads = 1 }
-# Serialized because its members package and unpack one shared target
-# directory from separate processes; see the override below.
+# Serialized because its members package and unpack one shared
+# `<workspace target>/package` directory from separate processes; see the
+# override below. Within one test process, the boundary fixture's Cargo gate
+# also protects builds that reuse this workspace target.
 boundary_packaging = { max-threads = 1 }
 
 # A documented-command run reached 595.9s with only Cargo package-cache lock
@@ -148,6 +150,14 @@ filter = 'binary(rstest_bdd)'
 test-group = 'orthohelp_cache'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
+# The artefact fixture compiles a downstream package through the shared target.
+# Its cold build reached 955s under healthy but busy compiler admission, so it
+# gets two minutes beyond the standard documentation-scenario allowance.
+[[profile.default.overrides]]
+filter = 'binary(identifier_artefact_e2e)'
+test-group = 'orthohelp_cache'
+slow-timeout = { period = "120s", terminate-after = 9 }
+
 # `binary(cli_dispatch)` is named here rather than left to the base allowance.
 # Its tests load the built tool and drive it through `cargo orthohelp`, so a
 # child cargo is on their clock exactly as it is on the others'; measured on a
@@ -156,7 +166,7 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # It was on the 600s base allowance until `child_cargo_tier_test.py` read the
 # class from the sources and reported it.
 [[profile.default.overrides]]
-filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e) | binary(cli_dispatch)'
+filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(cli_dispatch) | binary(agent_context_renderer_end_to_end)'
 test-group = 'orthohelp_cache'
 slow-timeout = { period = "120s", terminate-after = 8 }
 
@@ -167,15 +177,15 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # root is removed and unpacked, so one process can replace a root another is
 # reading. Serialize the binary.
 #
-# That also settles the per-test allowance. Two packaging invocations share one
-# test, and each is bounded at 240 s
-# (`ortho_l10n/tests/boundary/package_set`), so the pair fits inside the 600 s
-# base allowance with 120 s for the root checks around them. A bound that did
-# not fit would never fire: nextest would stop the test first, and the error
-# naming the invocation that hung would never be printed.
+# Two packaging invocations share one test, and each is bounded at 720 s
+# (`ortho_l10n/tests/boundary/package_set`). The 1,560 s allowance leaves 120 s
+# for root checks and reporting after both child deadlines. The former 600 s
+# child bound expired while compiler requests queued across repositories.
 #
-# `make boundary` and `make test` do not need this entry: each starts one
-# process for the binary, which initializes the cache once and reuses it.
+# `make boundary` and `make test` start one process for the binary. The
+# process-local package cache and Cargo-command gate handle their in-process
+# test concurrency; this group is for nextest's separate test processes.
 [[profile.default.overrides]]
 filter = 'binary(boundary)'
 test-group = 'boundary_packaging'
+slow-timeout = { period = "120s", terminate-after = 13 }

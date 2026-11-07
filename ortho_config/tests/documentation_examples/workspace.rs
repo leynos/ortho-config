@@ -85,7 +85,7 @@ impl ExampleWorkspace {
             root,
             directory,
             executables: BTreeMap::new(),
-            deadline: scenario::deadline(),
+            deadline: scenario::deadline_for(None),
         })
     }
 
