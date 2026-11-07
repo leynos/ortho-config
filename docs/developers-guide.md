@@ -642,6 +642,19 @@ with a live owner. The caller's own expectation stays the first line;
 diagnostic faults are folded into the report text and never replace the primary
 failure.
 
+The evidence starts at `probe_lock`, which takes one non-blocking observation
+and answers a `LockProbe` rather than a boolean. `LockProbe::Free` means the
+probe acquired the lock, so nothing held it; `LockProbe::Held` means something
+did, and carries the lock file's `Metadata`, read through the contending handle
+so the report can name the `device`/`inode` it failed on. The metadata is paid
+for only on the held path, because a free probe has already answered the
+question. The probe is read-only by construction — it opens the existing file
+without create or truncate and drops its own acquisition before returning — so
+an observation cannot create the lock file, clear it, or keep the lock it took.
+`is_free` is the boolean view of the same observation, kept for callers that
+only assert the lock's state; the diagnostics call `probe_lock` instead,
+because a hold they cannot describe is the defect this module exists to fix.
+
 Two assertions exist and the split between them is deliberate.
 `ensure_released` demands the lock be free at the instant it is probed, and is
 what the ignored fork diagnostic uses. `ensure_settles_free` retries within a
