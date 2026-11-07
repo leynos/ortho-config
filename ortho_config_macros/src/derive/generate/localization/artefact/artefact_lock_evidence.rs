@@ -350,3 +350,9 @@ fn parse_identity(field: &str) -> Option<(DeviceNumber, Inode)> {
 #[cfg(test)]
 #[path = "artefact_lock_evidence_tests.rs"]
 mod tests;
+// Properties over the same split, split out because the two suites together
+// exceed the module cap and because an invariant is a different claim from
+// the named examples beside it.
+#[cfg(test)]
+#[path = "artefact_lock_evidence_proptests.rs"]
+mod proptests;
