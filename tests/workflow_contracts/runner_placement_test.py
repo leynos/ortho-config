@@ -242,11 +242,17 @@ PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
     "Disk sample (before discard)": "${{ always() && matrix.platform == 'linux' }}",
     "Discard lint build trees": LINUX_ONLY,
     "Disk sample (before coverage)": "${{ always() && matrix.platform == 'linux' }}",
+    "Shorten the Cargo target root for coverage (Windows)": (
+        "${{ matrix.platform == 'windows' }}"
+    ),
     "Disk sample (after coverage with serde_saphyr)": (
         "${{ always() && matrix.platform == 'linux' }}"
     ),
     "Disk sample (after coverage without serde_saphyr)": (
         "${{ always() && matrix.platform == 'linux' }}"
+    ),
+    "Restore the default Cargo target root (Windows)": (
+        "${{ matrix.platform == 'windows' }}"
     ),
     "Merge coverage results": LINUX_ONLY,
     "Validate PowerShell wrapper": "${{ matrix.platform == 'windows' }}",

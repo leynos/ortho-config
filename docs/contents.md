@@ -83,6 +83,9 @@
 - [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
   review the pinned Kani and Verus boundary, the bundled-solver decision, the
   opt-in integration evidence, and the limits of a fixture proof.
+- [ADR-0018: Windows coverage target root](adrs/adr-0018-windows-coverage-target-root.md):
+  review the `CreateProcess` headroom decision, the 30-character hosted root,
+  the restore step, and the Linux-unset guarantee.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
