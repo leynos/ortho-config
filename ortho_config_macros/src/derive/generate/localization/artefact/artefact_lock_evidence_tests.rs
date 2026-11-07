@@ -29,7 +29,7 @@ const LOCK_DEVICE: DeviceNumber = DeviceNumber::new(0x09, 0x02);
 const LOCK_INODE: Inode = Inode::new(9_476_791);
 
 /// Builds the record a granted exclusive `flock` produces.
-fn granted_flock() -> LockRecord {
+pub(super) fn granted_flock() -> LockRecord {
     LockRecord {
         blocked: false,
         kind: String::from("FLOCK"),
