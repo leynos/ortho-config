@@ -105,6 +105,61 @@ fn accepts_a_lock_that_is_free() -> Result<()> {
     Ok(())
 }
 
+/// Verifies a probe that cannot be taken is reported, not read as "free".
+///
+/// The probe opens the existing lock file rather than creating one, so a
+/// missing file is an I/O error and not a free lock. Both assertions read the
+/// same `NotFound` the kernel returns, so neither platform detail nor a lock
+/// held by anyone is involved: the only thing under test is that the
+/// diagnostics propagate the failure with the caller's expectation on it,
+/// rather than folding it into the report or answering `Ok`.
+///
+/// Folding would be the tempting mistake — the report already swallows
+/// diagnostic faults so a failure to *explain* a hold cannot mask the hold —
+/// but a probe that never ran has not observed anything, and saying "free"
+/// there would hide a missing file behind a reassuring answer.
+#[test]
+fn settles_report_a_probe_error_instead_of_a_free_answer() -> Result<()> {
+    use super::fragment_tests::TempRoot;
+    use anyhow::ensure;
+
+    let root = TempRoot::new()?;
+    // Deliberately no `create_lock`: the file's absence is what the probe
+    // reports, and creating it would make the probe succeed.
+    ensure!(
+        !super::artefact_lock::lock_path(root.path()).exists(),
+        "the lock file must be absent for this case to test a probe failure",
+    );
+
+    let settle = super::lock_diagnostics::ensure_settles_free(root.path(), "a missing lock file")
+        .expect_err("a probe that cannot open the lock file must not answer `Ok`");
+    let immediate = super::lock_diagnostics::ensure_released(root.path(), "a missing lock file")
+        .expect_err("the strict assertion must report the same probe failure");
+
+    for (label, error) in [("settling", &settle), ("strict", &immediate)] {
+        let rendered = format!("{error:#}");
+        ensure!(
+            rendered.starts_with("a missing lock file"),
+            "the {label} failure must lead with the caller's expectation: {rendered}",
+        );
+        // Checked through the chain rather than the rendered text: the `Display`
+        // for an `ErrorKind` is not the `Display` of the `io::Error` carrying it,
+        // and matching on platform error prose would fail on another OS.
+        ensure!(
+            error.chain().any(|cause| cause
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound)),
+            "the {label} failure must carry the probe's own I/O error, not a report \
+             built from evidence it never gathered: {rendered}",
+        );
+        ensure!(
+            !rendered.contains("is still held"),
+            "a probe that never ran must not claim the lock was held: {rendered}",
+        );
+    }
+    Ok(())
+}
+
 /// Verifies a lock released part-way through the window is accepted.
 ///
 /// The holder is a *separate process*, and that is not incidental. `flock`
