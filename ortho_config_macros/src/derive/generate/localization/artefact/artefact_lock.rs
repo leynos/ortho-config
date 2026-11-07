@@ -154,12 +154,36 @@ pub(super) fn create_lock(root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Reports whether the publication lock is currently free.
+/// The outcome of one non-blocking observation of the publication lock.
 ///
-/// Never blocks: a held lock is reported as `false` rather than waited for, so
-/// callers can surface a stuck peer instead of hanging. This exists so lock
-/// regression tests can observe the lock's state through the same path the
-/// production code locks, rather than duplicating the filename.
+/// A contended probe carries the metadata of the handle that observed the
+/// contention, so a caller can name the file it could not lock rather than
+/// only the predicate it disproved. Answering "held" without saying which
+/// file was held is what left the intermittent post-release failures
+/// undiagnosable: the same boolean is produced by a leaked handle of our own
+/// and by an unrelated holder of the same inode.
+#[cfg(test)]
+#[derive(Debug)]
+pub(super) enum LockProbe {
+    /// No holder contended with the probe, so the lock is free.
+    Free,
+    /// Something still owned the lock when the probe tried to take it.
+    Held {
+        /// Metadata for the lock file, read through the contending handle.
+        ///
+        /// Captured on the contention path only: a free probe must not pay an
+        /// extra system call to answer a question the acquisition already
+        /// answered.
+        metadata: fs::Metadata,
+    },
+}
+
+/// Observes the publication lock without blocking, retaining what it observed.
+///
+/// Never blocks: a held lock is reported as [`LockProbe::Held`] rather than
+/// waited for, so callers can surface a stuck peer instead of hanging. This
+/// exists so lock regression tests can observe the lock's state through the
+/// same path the production code locks, rather than duplicating the filename.
 ///
 /// The probe is read-only by construction. It opens without create or
 /// truncate and its non-blocking acquisition is dropped before returning, so
@@ -167,16 +191,38 @@ pub(super) fn create_lock(root: &Path) -> std::io::Result<()> {
 /// lock it just took. It answers with the raw I/O error rather than
 /// `open_lock_file`'s spanned diagnostic, and a missing lock file is
 /// `NotFound` — call [`create_lock`] to set the probe up.
+///
+/// The read-only handle is deliberate even though [`fs::File::try_lock`]
+/// documents that "if the file is not open for writing, it is unspecified
+/// whether this function returns an error". Opening for writing would make
+/// the probe mutate the file's metadata and would let an observation create
+/// or truncate it, which is exactly what this probe must not do. On Linux the
+/// documented `flock`-backed implementation acquires an exclusive lock on a
+/// read-only descriptor without complaint; the portability caveat is accepted
+/// for a test-only probe rather than paid for with a write handle.
 #[cfg(test)]
-pub(super) fn is_free(root: &Path) -> std::io::Result<bool> {
+pub(super) fn probe_lock(root: &Path) -> std::io::Result<LockProbe> {
     let file = open_existing_lock_file(&lock_path(root))?;
-    let free = match file.try_lock() {
-        Ok(()) => true,
-        Err(fs::TryLockError::WouldBlock) => false,
+    let probe = match file.try_lock() {
+        Ok(()) => LockProbe::Free,
+        Err(fs::TryLockError::WouldBlock) => LockProbe::Held {
+            metadata: file.metadata()?,
+        },
         Err(fs::TryLockError::Error(error)) => return Err(error),
     };
     // The probe's own acquisition is released with this handle, exactly as
     // `LockGuard` releases the production lock.
     drop(file);
-    Ok(free)
+    Ok(probe)
+}
+
+/// Reports whether the publication lock is currently free.
+///
+/// The boolean view of [`probe_lock`], kept for callers that only assert the
+/// lock's state. A caller that needs to say *why* a released lock still looks
+/// held should call `probe_lock` — or, better, the diagnostics in
+/// `artefact_lock_diagnostics` — so the failure names a holder.
+#[cfg(test)]
+pub(super) fn is_free(root: &Path) -> std::io::Result<bool> {
+    Ok(matches!(probe_lock(root)?, LockProbe::Free))
 }
