@@ -180,34 +180,79 @@ def binaries_selected_by(
     >>> binaries_selected_by('binary_id(pkg::compile_fail)', ["compile_fail", "other"])
     {'compile_fail': True, 'other': False}
     """
-    matches = list(FILTER_TERM.finditer(filter_expression))
-    terms = [
-        (match.group("kind"), match.group("matcher"))
-        for match in matches
-    ]
-    if not terms:
-        message = f"the filter has no supported term: {filter_expression!r}"
-        raise UnreadableMatcherError(message)
-    gaps = [
-        filter_expression[left.end() : right.start()]
-        for left, right in zip(matches, matches[1:])
-    ]
-    if (
-        filter_expression[: matches[0].start()].strip()
-        or filter_expression[matches[-1].end() :].strip()
-        or any(gap.strip() != "|" for gap in gaps)
-    ):
-        message = (
-            f"the filter combines its supported terms with something other "
-            f"than a single `|`, which this reader does not evaluate; "
-            f"reading the terms alone could report a narrower expression as "
-            f"wider than it is: "
-            f"{filter_expression!r}"
-        )
-        raise UnreadableMatcherError(message)
-    for kind, matcher in terms:
-        _matches_term(kind, matcher.strip(), "")
+    terms = _supported_terms(filter_expression)
     return {
-        name: any(_matches_term(kind, term.strip(), name) for kind, term in terms)
+        name: any(_matches_term(kind, matcher, name) for kind, matcher in terms)
         for name in candidates
     }
+
+
+def _supported_terms(filter_expression: str) -> list[tuple[str, str]]:
+    """Return the trimmed terms of a single disjunction, refusing anything else.
+
+    Each matcher is validated here rather than per candidate, so an
+    unevaluable matcher fails once instead of once per binary name.
+
+    Examples
+    --------
+    >>> _supported_terms("binary(a) | binary_id(pkg::b)")
+    [('binary', 'a'), ('binary_id', 'pkg::b')]
+    """
+    matches = list(FILTER_TERM.finditer(filter_expression))
+    _refuse_unsupported_terms(filter_expression, matches)
+    terms = [(match.group("kind"), match.group("matcher").strip()) for match in matches]
+    for kind, matcher in terms:
+        _matches_term(kind, matcher, "")
+    return terms
+
+
+def _refuse_unsupported_terms(
+    filter_expression: str, matches: list[re.Match[str]]
+) -> None:
+    """Raise unless the expression is only supported terms joined by ``|``.
+
+    Examples
+    --------
+    >>> _refuse_unsupported_terms("binary(a)", [])
+    Traceback (most recent call last):
+    ...
+    nextest_filterset.UnreadableMatcherError: the filter has no supported term: 'binary(a)'
+    """
+    if not matches:
+        raise UnreadableMatcherError(
+            f"the filter has no supported term: {filter_expression!r}"
+        )
+    if _is_single_disjunction(filter_expression, matches):
+        return
+    raise UnreadableMatcherError(
+        f"the filter combines its supported terms with something other "
+        f"than a single `|`, which this reader does not evaluate; "
+        f"reading the terms alone could report a narrower expression as "
+        f"wider than it is: "
+        f"{filter_expression!r}"
+    )
+
+
+def _is_single_disjunction(
+    filter_expression: str, matches: list[re.Match[str]]
+) -> bool:
+    """Report whether the matched terms are separated by a single ``|`` each.
+
+    ``matches`` must be non-empty; the caller refuses an expression with no
+    supported term before asking this.
+
+    Examples
+    --------
+    >>> _is_single_disjunction("binary(a) | binary(b)", list(FILTER_TERM.finditer("binary(a) | binary(b)")))
+    True
+    >>> _is_single_disjunction("binary(a) & binary(b)", list(FILTER_TERM.finditer("binary(a) & binary(b)")))
+    False
+    """
+    separators = [
+        filter_expression[left.end() : right.start()].strip()
+        for left, right in zip(matches, matches[1:])
+    ]
+    leading = filter_expression[: matches[0].start()].strip()
+    trailing = filter_expression[matches[-1].end() :].strip()
+    has_outside = bool(leading) or bool(trailing)
+    return not has_outside and all(separator == "|" for separator in separators)

@@ -201,29 +201,57 @@ def _declarations(
     [('leaf', None, ('outer',))]
     """
     code = code_mask(text)
-    declarations = list(_MODULE.finditer(code))
     inline_names = {
         match.end() - 1: match.group("name")
         for match in _INLINE_MODULE.finditer(code)
     }
-    by_start = {match.start(): match for match in declarations}
+    by_start = {match.start(): match for match in _MODULE.finditer(code)}
     inline_stack: list[str | None] = []
     for position, character in enumerate(code):
         declaration = by_start.get(position)
         if declaration is not None:
-            attributes_start, attributes_end = declaration.span("attributes")
-            attribute_text = text[attributes_start:attributes_end]
-            attribute = _PATH_ATTRIBUTE.search(attribute_text)
-            inline_path = tuple(name for name in inline_stack if name is not None)
-            yield (
-                declaration.group("name"),
-                attribute.group("path") if attribute else None,
-                inline_path,
-            )
-        if character == "{":
-            inline_stack.append(inline_names.get(position))
-        elif character == "}" and inline_stack:
-            inline_stack.pop()
+            yield _declaration(declaration, text, inline_stack)
+        _update_scope(inline_stack, character, inline_names.get(position))
+
+
+def _declaration(
+    match: re.Match[str], text: str, inline_stack: list[str | None]
+) -> tuple[str, str | None, tuple[str, ...]]:
+    """Return one declaration's name, ``#[path]`` value and inline scope.
+
+    Examples
+    --------
+    >>> source = '#[path = "x.rs"]\\nmod y;'
+    >>> _declaration(_MODULE.search(source), source, [])
+    ('y', 'x.rs', ())
+    """
+    attributes_start, attributes_end = match.span("attributes")
+    attribute = _PATH_ATTRIBUTE.search(text[attributes_start:attributes_end])
+    scope = tuple(name for name in inline_stack if name is not None)
+    return (
+        match.group("name"),
+        attribute.group("path") if attribute else None,
+        scope,
+    )
+
+
+def _update_scope(
+    inline_stack: list[str | None], character: str, inline_name: str | None
+) -> None:
+    """Track inline-module nesting as braces open and close.
+
+    Examples
+    --------
+    >>> stack: list[str | None] = []
+    >>> _update_scope(stack, "{", "outer")
+    >>> _update_scope(stack, "}", None)
+    >>> stack
+    []
+    """
+    if character == "{":
+        inline_stack.append(inline_name)
+    elif character == "}" and inline_stack:
+        inline_stack.pop()
 
 
 def _declared_sources(

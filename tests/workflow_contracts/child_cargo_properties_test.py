@@ -79,24 +79,82 @@ def _nextest_config(entries: list[OverrideCase]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _entry_selects(entry: OverrideCase, name: str) -> bool | None:
+    """Report whether an entry claims a name, or ``None`` when it is unclear.
+
+    Examples
+    --------
+    >>> _entry_selects(OverrideCase("binary(a)", frozenset({"a"}), "raised"), "a")
+    True
+    >>> _entry_selects(OverrideCase("test(slow)", None, "raised"), "a") is None
+    True
+    """
+    if entry.selected_names is None:
+        return None
+    selected = name in entry.selected_names
+    if selected and entry.is_platform_gated:
+        return None
+    return selected
+
+
+def _allowance_for(setting: str | None) -> float:
+    """Map an override's slow-timeout setting to its allowance in seconds.
+
+    Examples
+    --------
+    >>> _allowance_for("raised"), _allowance_for("base")
+    (960.0, 600.0)
+    """
+    return 960.0 if setting == "raised" else 600.0
+
+
 def _reference_tier(
     name: str, entries: list[OverrideCase]
 ) -> tuple[float, str, bool, bool]:
-    """Resolve one candidate from generated facts, without parsing its TOML."""
-    allowance = 600.0
-    path = "profile.default"
-    unresolved = False
-    for index, entry in enumerate(entries):
-        if entry.allowance is None:
-            continue
-        selected = None if entry.selected_names is None else name in entry.selected_names
-        if selected is None or (entry.is_platform_gated and selected):
-            unresolved = True
-        elif selected:
-            allowance = 600.0 if entry.allowance == "base" else 960.0
-            path = f"profile.default.overrides[{index}]"
-            return allowance, path, allowance > 600.0, unresolved
-    return allowance, path, False, unresolved
+    """Resolve one candidate from generated facts, without parsing its TOML.
+
+    Examples
+    --------
+    >>> _reference_tier("a", [OverrideCase("binary(a)", frozenset({"a"}), "raised")])
+    (960.0, 'profile.default.overrides[0]', True, False)
+    """
+    claims = [
+        (index, _entry_selects(entry, name))
+        for index, entry in enumerate(entries)
+        if entry.allowance is not None
+    ]
+    decided = _first_claim(claims)
+    if decided is None:
+        return 600.0, "profile.default", False, _is_unresolved(claims)
+    index = claims[decided][0]
+    allowance = _allowance_for(entries[index].allowance)
+    path = f"profile.default.overrides[{index}]"
+    return allowance, path, allowance > 600.0, _is_unresolved(claims[:decided])
+
+
+def _first_claim(claims: list[tuple[int, bool | None]]) -> int | None:
+    """Return the position of the first claim that selects the name.
+
+    Examples
+    --------
+    >>> _first_claim([(0, False), (1, True), (2, None)])
+    1
+    """
+    return next(
+        (position for position, (_, selected) in enumerate(claims) if selected),
+        None,
+    )
+
+
+def _is_unresolved(claims: list[tuple[int, bool | None]]) -> bool:
+    """Report whether any claim in the sequence is undecidable.
+
+    Examples
+    --------
+    >>> _is_unresolved([(0, False), (1, None)])
+    True
+    """
+    return any(selected is None for _, selected in claims)
 
 
 @settings(max_examples=100, deadline=None)
