@@ -24,13 +24,13 @@ The rules, each of which this repository exercises:
   while the modules it declares live in ``tests/documentation_examples/``,
   shared by three binaries that each declare them.
 
-One shape is over-approximated rather than guessed at. An inline ``mod outer {
-... }`` contributes a directory component no file text reveals, so
-:func:`_search_one_level` takes one level of directory search in place of it.
-That can find a same-named file the compiler would not; the safe direction is
-a false positive, which puts a binary on a raised tier it does not need,
-against a false negative, which leaves a binary on the base allowance while it
-spawns a child build of its own.
+Inline ``mod outer { ... }`` blocks contribute their names to the directory
+used for file-loading declarations. :mod:`rust_source_mask` blanks comments and
+literals while preserving offsets, so braces in documentation or string values
+do not change that path. This remains a source-text approximation: conditional
+compilation and macro-generated modules are not evaluated, and
+:func:`_search_one_level` remains a conservative fallback when direct
+resolution finds no file.
 
 This module reads the *language* and knows nothing of any test class, for the
 reason :mod:`nextest_filterset` is kept apart from :mod:`trybuild_tier`: each
@@ -49,6 +49,7 @@ import typing as typ
 from pathlib import Path
 
 from source_scan import ScanError, listing, scan
+from rust_source_mask import code_mask
 
 __all__ = ["ScanError", "module_directory", "sources_reached"]
 
@@ -63,6 +64,7 @@ _MODULE = re.compile(
 )
 
 _PATH_ATTRIBUTE = re.compile(r'#\[[ \t]*path[ \t]*=[ \t]*"(?P<path>[^"]+)"[ \t]*\]')
+_INLINE_MODULE = re.compile(r"\bmod[ \t]+(?P<name>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\{")
 
 #: The names a crate root can have. A root file is its own module directory.
 _ROOT_NAMES: typ.Final[frozenset[str]] = frozenset({"lib.rs", "main.rs", "mod.rs"})
@@ -186,11 +188,42 @@ def _resolve(directory: Path, source: Path, name: str, attribute: str | None) ->
     return found or _search_one_level(directory, name)
 
 
-def _declarations(text: str) -> typ.Iterator[tuple[str, str | None]]:
-    """Yield each file-loading ``mod`` in ``text`` with its ``#[path]``."""
-    for declaration in _MODULE.finditer(text):
-        attribute = _PATH_ATTRIBUTE.search(declaration.group("attributes") or "")
-        yield declaration.group("name"), (attribute.group("path") if attribute else None)
+def _declarations(
+    text: str,
+) -> typ.Iterator[tuple[str, str | None, tuple[str, ...]]]:
+    """Yield file-loading modules with their attribute and inline scope.
+
+    Examples
+    --------
+    A child declared inside an inline module resolves beneath that module:
+
+    >>> list(_declarations("mod outer {\\n    mod leaf;\\n}\\n"))
+    [('leaf', None, ('outer',))]
+    """
+    code = code_mask(text)
+    declarations = list(_MODULE.finditer(code))
+    inline_names = {
+        match.end() - 1: match.group("name")
+        for match in _INLINE_MODULE.finditer(code)
+    }
+    by_start = {match.start(): match for match in declarations}
+    inline_stack: list[str | None] = []
+    for position, character in enumerate(code):
+        declaration = by_start.get(position)
+        if declaration is not None:
+            attributes_start, attributes_end = declaration.span("attributes")
+            attribute_text = text[attributes_start:attributes_end]
+            attribute = _PATH_ATTRIBUTE.search(attribute_text)
+            inline_path = tuple(name for name in inline_stack if name is not None)
+            yield (
+                declaration.group("name"),
+                attribute.group("path") if attribute else None,
+                inline_path,
+            )
+        if character == "{":
+            inline_stack.append(inline_names.get(position))
+        elif character == "}" and inline_stack:
+            inline_stack.pop()
 
 
 def _declared_sources(
@@ -221,8 +254,8 @@ def _declared_sources(
     """
     directory = module_directory(source, resolves_from_parent=resolves_from_parent)
     declared: list[tuple[Path, bool]] = []
-    for name, attribute in _declarations(text):
-        resolved = _resolve(directory, source, name, attribute)
+    for name, attribute, inline_path in _declarations(text):
+        resolved = _resolve(directory.joinpath(*inline_path), source, name, attribute)
         if len(resolved) > 1:
             message = (
                 f"{source} declares `mod {name};`, which resolves to more "
@@ -236,10 +269,9 @@ def _declared_sources(
 def sources_reached(root: Path) -> dict[Path, str]:
     """Return every source ``root`` compiles, mapped to its text.
 
-    A ``mod`` written with a body is not followed: the pattern requires the
-    semicolon that ends a file-loading declaration. Inline blocks have no file
-    of their own, and their bodies are reached by :func:`_search_one_level`
-    instead.
+    A ``mod`` written with a body is not followed as a file. Its lexical scope
+    is retained so declarations inside it resolve beneath the inline module's
+    directory component.
 
     The text is returned alongside the path so a caller that looks for a
     marker does not read every file a second time.

@@ -15,10 +15,11 @@ resolve that silently reached crates.io would prove something about the
 network rather than about the shipped graph.
 
 A third property is deliberately *not* asserted as a whole: the recipe must
-not claim a cold measurement. The fixtures keep ``target/localization-boundary``
-between runs, so a run is warm by design and the comment says so. Nothing here
-executes the suite — it takes minutes and builds foreign crates, which belongs
-to the gate runner and not to a contract test.
+not claim a cold measurement. Fixture roots stay under
+``target/localization-boundary``, while child Cargo commands reuse the workspace
+target Cargo resolves, so a run is warm by design. Nothing here executes the
+suite — it takes minutes and builds foreign crates, which belongs to the gate
+runner and not to a contract test.
 
 Run via ``make test-workflow-contracts``.
 """

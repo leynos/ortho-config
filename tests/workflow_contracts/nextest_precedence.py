@@ -58,8 +58,8 @@ import typing as typ
 
 from nextest_allowances import budget_of
 from nextest_budgets import profile_allowance
-from nextest_document import budget_tables
 from nextest_filterset import UnreadableMatcherError, binaries_selected_by
+from nextest_override_reader import Override, overrides_in_order
 
 __all__ = [
     "EffectiveTier",
@@ -68,37 +68,6 @@ __all__ = [
     "overrides_in_order",
     "selected_by_universe",
 ]
-
-
-class Override(typ.NamedTuple):
-    """One entry in a profile's override list, as nextest applies it.
-
-    Attributes
-    ----------
-    path : str
-        The entry's dotted path, for messages and for reporting which entry
-        supplied an allowance.
-    expression : str or None
-        Its ``filter`` value, or ``None`` for an entry selecting without a
-        filterset -- one gated on ``platform``, for instance.
-    entry : dict
-        The parsed table, so a caller can read the settings it configures.
-    """
-
-    path: str
-    expression: str | None
-    entry: dict[str, object]
-
-    @property
-    def is_platform_gated(self) -> bool:
-        """Whether applying this entry needs a platform decision.
-
-        An entry can carry *both* a ``filter`` and a ``platform`` key, and the
-        gate then narrows the filter rather than replacing it. Reading the
-        filter and ignoring the gate would apply a Windows-only entry to a
-        Linux run -- the direction that reports a shadowed binary as raised.
-        """
-        return "platform" in self.entry
 
 
 class FilterReader(typ.NamedTuple):
@@ -150,74 +119,6 @@ class EffectiveTier(typ.NamedTuple):
     is_unresolved: bool
 
 
-def overrides_in_order(config_text: str, profile: str = "default") -> list[Override]:
-    """Return one profile's overrides in the order nextest applies them.
-
-    Only the named profile's own list is read. An ``[[overrides]]`` entry
-    under another profile does not apply here, and reading several profiles
-    together is how coverage comes to be claimed by an entry the run never
-    consults.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-    profile : str
-        The profile whose override list to read.
-
-    Returns
-    -------
-    list of Override
-        Each entry in declaration order. The expression is ``None`` for an
-        entry that selects without a filterset, such as one gated on
-        ``platform``.
-
-    Examples
-    --------
-    >>> overrides_in_order(
-    ...     '[profile.default]\\nslow-timeout = "60s"\\n'
-    ...     '[[profile.default.overrides]]\\nfilter = "binary(a)"\\n'
-    ... )
-    [Override(path='profile.default.overrides[0]', expression='binary(a)', entry={'filter': 'binary(a)'})]
-    >>> overrides_in_order(
-    ...     '[profile.default]\\nslow-timeout = "60s"\\n'
-    ...     '[[profile.ci]]\\nslow-timeout = "30s"\\n'
-    ... )
-    []
-    """
-    prefix = f"profile.{profile}.overrides["
-    return [
-        Override(
-            path=path,
-            expression=entry["filter"] if isinstance(entry.get("filter"), str) else None,
-            entry=entry,
-        )
-        for path, entry in budget_tables(config_text)
-        if path.startswith(prefix)
-    ]
-
-
-def _could_name(expression: str, name: str) -> bool:
-    """Report whether an expression this reader refused could select ``name``.
-
-    Asked only after the reader has refused an expression, so the question is
-    whether refusing it is *unsafe for this name*, not what it selects. The
-    answer is a deliberate over-approximation: the name's text appearing
-    anywhere in the expression is taken as "it might". That can flag an
-    expression which in fact selects nothing by that name, costing a caller a
-    refusal it did not need; the opposite error would let an unreadable entry
-    shadow a raised one and report the class as correctly tiered.
-
-    Examples
-    --------
-    >>> _could_name("binary_id(ortho_config::compile_fail)", "compile_fail")
-    True
-    >>> _could_name("binary_id(ortho_config::compile_fail)", "cli_dispatch")
-    False
-    """
-    return name in expression
-
-
 def _tier_from(override: Override, base: float) -> EffectiveTier:
     """Return the tier one entry gives a name it selects.
 
@@ -255,9 +156,9 @@ def _decide(override: Override, name: str, reader: FilterReader) -> bool | None:
     replacing it, so a filter that reads and excludes the name excludes it
     whatever the platform decides. Where the filter selects the name and the
     gate is present, the platform is unknown, so the answer is ``None``. Only
-    where nothing at all can be read -- no expression, or one the reader
-    refused -- is the answer the deliberate over-approximation of
-    :func:`_could_name`.
+    where there is no expression or the reader refuses it, the answer is
+    undecidable for every candidate. A substring cannot bound the binary names
+    selected by terms such as ``test(slow)``, ``package(name)``, or ``all()``.
 
     Examples
     --------
@@ -286,9 +187,9 @@ def _decide(override: Override, name: str, reader: FilterReader) -> bool | None:
     >>> (_decide(gated, "cli_dispatch", reader), _decide(gated, "other_binary", reader))
     (None, False)
 
-    An entry selecting without any expression names anything it is admitted
-    for, so no name can be ruled out, and a refused expression falls back to a
-    substring test that ``other_binary`` passes:
+    An entry without an expression and a refused expression leave the
+    candidate unresolved because neither gives this reader a safe way to rule
+    the candidate out:
 
     >>> _decide(Override("profile.default.overrides[0]", None, {}), "x", reader)
     >>> _decide(
@@ -302,7 +203,7 @@ def _decide(override: Override, name: str, reader: FilterReader) -> bool | None:
     try:
         chosen = bool(reader.read(override.expression).get(name))
     except reader.refuses:
-        return None if _could_name(override.expression, name) else False
+        return None
     if chosen:
         return None if override.is_platform_gated else True
     return False
@@ -481,6 +382,7 @@ def selected_by_universe(candidates: typ.Iterable[str]) -> FilterReader:
     universe = list(candidates)
 
     def read(expression: str) -> dict[str, bool]:
+        """Read one expression against the captured candidate universe."""
         return binaries_selected_by(expression, universe)
 
     return FilterReader(read=read, refuses=REFUSES)

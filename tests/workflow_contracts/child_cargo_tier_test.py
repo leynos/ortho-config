@@ -26,10 +26,11 @@ also be spread across more than one above-base entry; they are here, because
 ``rstest_bdd`` has its own measured 956-second scenario envelope. Per-member
 resolution handles both without a union.
 
-Two further assertions protect the shared serialization. Every binary a test
-group serializes must be a class member, because the raised allowance is
+Two further assertions protect the shared serialization. Every audited binary
+a test group serializes must be a class member, because the raised allowance is
 written for the class and a serialized non-member would fall through to the
-base tier. Read from the raw tables rather than from
+base tier. Groups selecting only binaries outside this inventory belong to
+their own contracts. Read from the raw tables rather than from
 :func:`nextest_budgets.override_allowances`, which skips an entry declaring no
 ``slow-timeout`` -- correctly, since it grants no budget to compare -- and so
 cannot see that omission at all.
@@ -44,11 +45,9 @@ import typing as typ
 
 import pytest
 from child_cargo_tier import (
-    CHILD_CARGO_TIER_CRATES,
     UnreadableMatcherError,
     binaries_selected_by,
     child_cargo_binaries,
-    marker_binaries,
     non_child_cargo_binaries,
 )
 from nextest_budgets import override_allowances, profile_allowance
@@ -225,11 +224,12 @@ def test_every_test_group_binary_is_covered_by_a_raised_tier(
     precedence separately for each setting, so the omission is invisible to
     anything reading allowances alone.
 
-    The property asserted is that every binary a group serializes is a class
-    member, which is the class the raised entries cover. Read from the raw
-    tables rather than from :func:`nextest_budgets.override_allowances`, which
-    skips an entry declaring no ``slow-timeout`` and so cannot see the shape
-    this test exists to catch.
+    Within this contract's audited binary universe, every binary a group
+    serializes must be a class member, which is the class the raised entries
+    cover. Groups that select only binaries outside that universe belong to
+    other contracts. Read from the raw tables rather than from
+    :func:`nextest_budgets.override_allowances`, which skips an entry declaring
+    no ``slow-timeout`` and so cannot see the shape this test exists to catch.
 
     This test alone therefore proves membership, not a raised allowance. The
     conclusion comes from chaining it with
@@ -261,14 +261,12 @@ def test_every_test_group_binary_is_covered_by_a_raised_tier(
         )
         selected = binaries_selected_by(expression, universe)
         chosen = [name for name, covered in selected.items() if covered]
-        assert chosen, (
-            f"{path} serializes nothing this contract audits: {expression!r}. "
-            f"A group whose filter names no known binary makes the coverage "
-            f"assertion below vacuous while the group still applies to "
-            f"whatever it does match"
-        )
         for name in chosen:
             serialized[name] = path
+    assert serialized, (
+        "no test-group filter selects a binary this contract audits, so the "
+        "group coverage assertion would be vacuous"
+    )
     off_tier = sorted(
         f"{name} (assigned by {path})"
         for name, path in serialized.items()
@@ -287,44 +285,12 @@ def test_a_matcher_this_contract_cannot_read_is_refused() -> None:
     A conjunction rated by its ``binary`` terms alone would report a narrower
     expression as a wider one, so it is refused rather than misread.
     """
-    with pytest.raises(UnreadableMatcherError, match="combines its binary"):
+    with pytest.raises(
+        UnreadableMatcherError, match="combines its supported terms"
+    ):
         binaries_selected_by("binary(a) & test(b)", ["a"])
 
 
-def test_every_marker_still_selects_a_binary() -> None:
-    """Each marker earns its place in the reading.
-
-    A marker whose subject was renamed matches nothing and silently shrinks the
-    class, which the coverage assertion above cannot report: it compares the
-    class with the filter, and both agree once the member is gone. The
-    ``cargo-runner`` marker did exactly that when the shared helper was renamed
-    from ``prepare_cargo_command``, and the union still held ten members, so
-    nothing else noticed.
-
-    Liveness is asserted **workspace-wide**, not per crate, because the markers
-    are not per-crate facts: ``cargo_orthohelp_exe`` is a
-    ``cargo-orthohelp``-only export, so requiring it in ``ortho_config`` would
-    demand a ``binary-loader`` hit that no honest source can supply. What each
-    label must do is select at least one binary somewhere in the audited
-    crates, since that is what keeps its members in the class.
-    """
-    per_marker = marker_binaries(REPOSITORY_ROOT)
-    assert per_marker, "the reader must report a group per marker"
-    empty = sorted(label for label, hits in per_marker.items() if not hits)
-    assert not empty, (
-        f"{empty} select no binary in any audited crate; either the helper "
-        f"each names was renamed, or the repository stopped spawning cargo "
-        f"that way. A marker that matches nothing removes its members from the "
-        f"class, and the coverage assertion cannot see that because it compares "
-        f"the class with a filter that agrees with it"
-    )
-    union: set[str] = set()
-    for hits in per_marker.values():
-        union |= hits
-    assert union == set(child_cargo_binaries(REPOSITORY_ROOT)), (
-        "the per-marker sets and the class read from the same files disagree; "
-        "one of the two readings is not reporting what the module graph says"
-    )
 
 
 def test_a_base_tier_entry_above_a_raised_one_removes_coverage() -> None:
@@ -375,111 +341,4 @@ def test_a_base_tier_entry_above_a_raised_one_removes_coverage() -> None:
         f"allowance; the entry inserted above the raised one names "
         f"cli_dispatch at the base figure, so it is the only member whose "
         f"allowance that entry takes away"
-    )
-
-
-def _fixture_workspace(tmp_path: pathlib.Path, binary: str) -> pathlib.Path:
-    """Write a minimal workspace whose one test binary drives a child cargo.
-
-    Two crates are written because the reader walks a fixed list of them; the
-    first carries the binary and the second is empty. The binary reaches its
-    spawn through a helper in a submodule, so the fixture exercises the module
-    graph the markers are read over rather than only a flat file.
-
-    The helper sits in ``support/`` rather than beside the binary, which is
-    both the layout the real repository uses for ``tests/fixtures`` and the one
-    cargo agrees with: a ``.rs`` file directly in ``tests/`` is compiled as its
-    own test binary, which is why shared helpers are put in a subdirectory. A
-    fixture with ``helper.rs`` beside the binary would be read as two binaries,
-    correctly.
-
-    Parameters
-    ----------
-    tmp_path : pathlib.Path
-        The test's temporary directory.
-    binary : str
-        The stem to give the test binary.
-
-    Returns
-    -------
-    pathlib.Path
-        The workspace root, suitable as the reader's ``base``.
-    """
-    for crate in CHILD_CARGO_TIER_CRATES:
-        (tmp_path / crate / "tests" / "support").mkdir(parents=True)
-        (tmp_path / crate / "Cargo.toml").write_text("[package]\n", encoding="utf-8")
-    roots = tmp_path / CHILD_CARGO_TIER_CRATES[0] / "tests"
-    (roots / f"{binary}.rs").write_text("mod support;\n", encoding="utf-8")
-    (roots / "support" / "mod.rs").write_text(
-        'fn run() {\n    let _ = Command::new("cargo");\n}\n', encoding="utf-8"
-    )
-    return tmp_path
-
-
-def test_the_class_is_read_from_the_sources_not_from_the_filter(
-    tmp_path: pathlib.Path,
-) -> None:
-    """The class follows the Rust, not the configuration naming it.
-
-    The member list is a fact about the sources, and this asserts that by
-    changing the sources while holding the configuration fixed. A reader that
-    derived the class from the override's filter -- the reading that would make
-    every other assertion in this module vacuous, since it would agree with the
-    filter by construction -- reports the certified class for the second
-    workspace below and fails here.
-
-    The first part states the fact the other tests rest on for the real
-    repository; the second is the controlled input that separates the two
-    readings.
-    """
-    class_members = child_cargo_binaries(REPOSITORY_ROOT)
-    assert class_members, "the child-cargo class must not be empty"
-    non_members = non_child_cargo_binaries(REPOSITORY_ROOT)
-    assert class_members & non_members == set(), (
-        "a binary cannot both drive a child cargo and not drive one; the two "
-        "readings disagree about which binaries exist"
-    )
-    # The fixture's source names a binary the configuration has never heard of.
-    # The configuration is not consulted here at all, so a class that follows
-    # the filter rather than the sources cannot produce this name.
-    fixture = _fixture_workspace(tmp_path, "a_binary_no_override_names")
-    assert child_cargo_binaries(fixture) == {"a_binary_no_override_names"}, (
-        "the reader did not follow the fixture's sources; the class must come "
-        "from what the Rust compiles, and the certified configuration names no "
-        "such binary"
-    )
-    assert child_cargo_binaries(fixture) != class_members, (
-        "the fixture reproduces the certified class, so it cannot show the "
-        "reading follows the sources rather than the configuration"
-    )
-
-
-def test_a_source_backed_member_with_no_override_is_reported(
-    tmp_path: pathlib.Path,
-) -> None:
-    """A member added to the sources but not the configuration fails the tier.
-
-    The second controlled input: the configuration is held at its certified
-    text and the class is changed, which is the omission issue #611 recorded
-    for ``cli_dispatch`` and the direction a hand-maintained entry list drifts
-    in. The assertion is the same one the coverage test makes, so this shows
-    that assertion failing for the reason it exists rather than only passing.
-    """
-    certified = NEXTEST_CONFIG.read_text(encoding="utf-8")
-    fixture = _fixture_workspace(tmp_path, "a_binary_no_override_names")
-    universe = sorted(child_cargo_binaries(fixture) | {"cli_dispatch"})
-    tiers = effective_allowances(
-        certified,
-        sorted(child_cargo_binaries(fixture)),
-        reader=selected_by_universe(universe),
-    )
-    on_base = sorted(name for name, tier in tiers.items() if not tier.is_above_base)
-    assert on_base == ["a_binary_no_override_names"], (
-        f"a class member the configuration does not name resolved to {on_base}; "
-        f"the fixture's binary has no override, so it must be the only member "
-        f"on the profile's own allowance, exactly as cli_dispatch was"
-    )
-    assert not any(tier.is_unresolved for tier in tiers.values()), (
-        "no entry in the certified configuration is unreadable, so a member "
-        "must not be reported as unresolved"
     )

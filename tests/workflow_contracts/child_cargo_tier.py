@@ -25,10 +25,12 @@ declares it a member, and no other.
 rule keyed on the declared name would link a binary to a file it never
 compiles.
 
-The rules that turn a declaration into a file, and the crate-root rule this
-class is particularly exposed to, live in :mod:`rust_module_graph`. That
-split is the one :mod:`nextest_filterset` made from :mod:`trybuild_tier`:
-this module knows the class and not the language, that one the reverse.
+The rules that turn a declaration into a file live in
+:mod:`rust_module_graph`; the child-cargo marker patterns live in
+:mod:`child_cargo_source_markers`. This module inventories the audited test
+binaries and combines those source readings into the class. The split is the
+one :mod:`nextest_filterset` made from :mod:`trybuild_tier`: this module knows
+the class and not the filter language, that one the reverse.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``.
@@ -36,15 +38,19 @@ See "Test timeouts: the tiers this repository sets" in
 
 from __future__ import annotations
 
-import re
 import typing as typ
 from pathlib import Path
 
+from child_cargo_source_markers import (
+    CARGO_MARKERS,
+    ScanError,
+    carries_child_cargo,
+    marker_sources,
+)
 from nextest_filterset import (
     UnreadableMatcherError,
     binaries_selected_by as _binaries_selected_by,
 )
-from rust_module_graph import ScanError, sources_reached
 from source_scan import ManifestError, declared_test_targets, exists, listing, scan
 
 __all__ = [
@@ -65,87 +71,6 @@ __all__ = [
 #: behaviour harness runs an already-built example rather than invoking cargo,
 #: so auditing it would only invite a false positive.
 CHILD_CARGO_TIER_CRATES: typ.Final[tuple[str, ...]] = ("ortho_config", "cargo-orthohelp")
-
-#: What it looks like when a source starts a child `cargo`, by label. Three
-#: shapes, because the repository has three: a direct spawn, a spawn routed
-#: through the shared cargo-runner helper, and the orthohelp binary loader
-#: every test drives the built tool through.
-#:
-#: :func:`marker_binaries` reports each label's own set, and the contract
-#: asserts every one of them is non-empty. A marker that has gone dead --
-#: because the helper it names was renamed -- would silently shrink the class
-#: and let the coverage assertion pass over a binary that is no longer read at
-#: all, so the sets are asserted rather than assumed. A bare
-#: `prepare_cargo_command` marker did exactly that after the helper it named
-#: was renamed, and the replacement carries the old name in its pattern so the
-#: rename cannot recur silently.
-#: The direct-spawn pattern excludes a ``clap::``-qualified ``Command``, which
-#: is a *builder*: ``clap::Command::new("cargo")`` names a command for a help
-#: screen and starts no process. Reading it as a spawn puts a binary in the
-#: class that pays no nested build, and the contract then reports the
-#: configuration's filter as too wide -- blaming the configuration for a
-#: misreading of the Rust. Only the ``clap`` path is excluded: a
-#: ``std::process::`` qualification is a real spawn and is still read. The
-#: repository has one such builder, in ``ortho_config/src/cargo/mod.rs``,
-#: outside every test binary, so the exclusion changes no member today; it is
-#: here so that a test file using clap cannot be misread as spawning cargo.
-CARGO_MARKERS: typ.Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
-    ("cargo-spawn", re.compile(r'(?<!clap::)Command::new\(\s*"cargo"\s*\)')),
-    ("binary-loader", re.compile(r"\bcargo_orthohelp_exe\b")),
-    (
-        "cargo-runner",
-        re.compile(r"\bprepare_cargo_command_for_target_before\b|\bcargo_command\b"),
-    ),
-)
-
-
-def _reachable(root: Path) -> dict[str, list[Path]]:
-    """Return every marker found in the files ``root`` compiles, by label.
-
-    Examples
-    --------
-    A root that is not there compiles nothing:
-
-    >>> _reachable(Path("/nonexistent.rs"))
-    {}
-    """
-    found: dict[str, list[Path]] = {}
-    for source, text in sources_reached(root).items():
-        for label, marker in CARGO_MARKERS:
-            if marker.search(text):
-                found.setdefault(label, []).append(source)
-    return found
-
-
-def carries_child_cargo(root: Path) -> bool:
-    """Report whether compiling the binary rooted at ``root`` spawns cargo.
-
-    Parameters
-    ----------
-    root : pathlib.Path
-        The crate root of one test binary.
-
-    Returns
-    -------
-    bool
-        Whether any file ``root`` compiles carries a marker. A ``mod`` it
-        declares that lives outside the crate still counts, because
-        ``#[path]`` can name one.
-
-    Raises
-    ------
-    ScanError
-        If a source the binary compiles cannot be read, or a ``mod``
-        declaration resolves to more than one file.
-
-    Examples
-    --------
-    A source with no marker does not carry one:
-
-    >>> carries_child_cargo(Path("/nonexistent.rs"))
-    False
-    """
-    return bool(_reachable(root))
 
 
 def _crate_test_roots(base: Path, crate: str) -> list[tuple[str, Path]]:
@@ -274,7 +199,7 @@ def marker_binaries(base: Path) -> dict[str, frozenset[str]]:
     found: dict[str, set[str]] = {label: set() for label, _ in CARGO_MARKERS}
     for crate in CHILD_CARGO_TIER_CRATES:
         for name, source in _crate_test_roots(base, crate):
-            for label in _reachable(source):
+            for label in marker_sources(source):
                 found[label].add(name)
     return {label: frozenset(names) for label, names in found.items()}
 

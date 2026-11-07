@@ -52,6 +52,7 @@ def crate_tests(tmp_path: pathlib.Path) -> typ.Callable[[], pathlib.Path]:
     """
 
     def write() -> pathlib.Path:
+        """Create one empty fixture workspace and return its test directory."""
         for crate in CHILD_CARGO_TIER_CRATES:
             (tmp_path / crate / "tests").mkdir(parents=True, exist_ok=True)
             (tmp_path / crate / "Cargo.toml").write_text(
@@ -111,21 +112,30 @@ def test_a_path_module_keeps_its_own_siblings(
 def test_a_nested_inline_module_is_searched(
     crate_tests: typ.Callable[[], pathlib.Path],
 ) -> None:
-    """A ``mod`` block's children are in scope for the containing file.
+    """A nested inline module's child is resolved under its module directory.
 
-    ``mod inner { mod leaf; }`` puts ``leaf`` beside the *containing file*,
-    not inside a directory named after the block. A reader that derived a
-    directory from the inline module's name would look for ``inner/leaf.rs``
-    and miss the marker.
+    ``mod inner { mod leaf; }`` puts ``leaf`` at ``tests/inner/leaf.rs``.
+    A root-level ``tests/leaf.rs`` decoy makes a walk that drops the inline
+    module from the path fail this test rather than accidentally finding a
+    marker in the wrong place.
     """
     tests = crate_tests()
-    (tests / "leaf.rs").write_text(CARRIES, encoding="utf-8")
+    (tests / "inner").mkdir()
+    (tests / "inner" / "leaf.rs").write_text(CARRIES, encoding="utf-8")
+    (tests / "leaf.rs").write_text(PLAIN, encoding="utf-8")
     (tests / "inline_nested.rs").write_text(
-        "mod inner {\n    mod leaf;\n}\n", encoding="utf-8"
+        'mod inner {\n    const BRACE: &str = "}";\n    /* } */\n'
+        "    mod leaf;\n}\n",
+        encoding="utf-8",
     )
-    assert carries_child_cargo(tests / "inline_nested.rs") is True, (
-        "the inline module's child was looked for in a directory named after "
-        "the block rather than beside the containing file"
+    root = tests / "inline_nested.rs"
+    reached = sources_reached(root)
+    assert set(reached) == {root, tests / "inner" / "leaf.rs"}, (
+        "the nested module must reach inner/leaf.rs and must not use the "
+        "root-level decoy"
+    )
+    assert carries_child_cargo(root) is True, (
+        "removing inline-module traversal must leave the marker unreachable"
     )
 
 

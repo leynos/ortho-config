@@ -176,6 +176,36 @@ def test_a_refused_expression_shadows_and_does_not_supply() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("expression", "names"),
+    [
+        ("test(slow)", ("a", "slow")),
+        ("package(ortho_config)", ("a", "ortho_config")),
+        ("all()", ("a", "all")),
+        ("binary(a) & test(slow)", ("a", "slow")),
+    ],
+)
+def test_a_refused_filter_cannot_exclude_names_by_substring(
+    expression: str, names: tuple[str, str]
+) -> None:
+    """Unreadable filters remain possible matches for every candidate.
+
+    A text-substring approximation misses candidate ``a`` in the first three
+    filters. The readable raised entry below the refused base entry would then
+    hide the shadowing risk unless the unresolved mark is preserved.
+    """
+    unreadable = (
+        "[[profile.default.overrides]]\n"
+        f'filter = "{expression}"\n'
+        'slow-timeout = { period = "60s", terminate-after = 10 }\n'
+    )
+    resolved = _resolve(BASE_60 + unreadable + RAISED_120, *names)
+    assert all(tier.is_unresolved for tier in resolved.values()), (
+        f"refused filter {expression!r} was treated as excluding a candidate: "
+        f"{resolved!r}"
+    )
+
+
 @pytest.mark.parametrize("name", ["a", "unrelated_binary"])
 def test_only_the_entry_that_matches_supplies_the_figure(name: str) -> None:
     """The resolver returns the first matching entry's figure, not the last.
