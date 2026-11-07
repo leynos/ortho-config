@@ -199,7 +199,7 @@ fn parses_the_kernels_no_owner_sentinel_only_as_a_whole_field() {
 /// split that reads only the low halves passes every small case and then finds
 /// no records on a real filesystem. Naming each row keeps a failure pointing at
 /// the layout case that broke rather than at an anonymous input.
-const DEVICE_SPLITS: [(&str, u64, DeviceNumber); 7] = [
+const DEVICE_SPLITS: [(&str, u64, DeviceNumber); 8] = [
     ("tmpfs", 0x902, DeviceNumber::new(0x09, 0x02)),
     ("small_minor", 0x19, DeviceNumber::new(0x00, 0x19)),
     ("small_major", 0x801, DeviceNumber::new(0x08, 0x01)),
@@ -218,6 +218,15 @@ const DEVICE_SPLITS: [(&str, u64, DeviceNumber); 7] = [
         "minor_high_bits",
         0x120_fe34,
         DeviceNumber::new(0xfe, 0x1234),
+    ),
+    // The minor's high field runs to bit 43, but no other row sets a bit past
+    // 31 there, so a split that stopped reading at bit 32 would still pass
+    // them. This row reaches bits 32..44, the range only the widest minor
+    // field occupies.
+    (
+        "minor_high_bits_above_32",
+        0x0000_0abc_0000_0000,
+        DeviceNumber::new(0x00, 0xabc0_0000),
     ),
 ];
 
