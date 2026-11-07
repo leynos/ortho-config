@@ -15,12 +15,14 @@ struct State {
 
 /// Shares an armed kill attempt with the child wrapper installed before tree ownership.
 #[derive(Debug, Clone)]
-pub(crate) struct SpawnGuard {
+pub struct SpawnGuard {
     state: Arc<State>,
 }
 
 impl SpawnGuard {
-    pub(crate) fn new() -> Self {
+    /// Create an armed guard for a process-tree wrapper installation.
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             state: Arc::new(State {
                 armed: AtomicBool::new(true),
@@ -29,25 +31,33 @@ impl SpawnGuard {
         }
     }
 
-    pub(crate) fn install(&self, command: &mut CommandWrap) {
+    /// Install the guard before wrappers that can fail after spawning the root.
+    pub fn install(&self, command: &mut CommandWrap) {
         command.wrap(GuardWrapper {
             state: Arc::clone(&self.state),
         });
     }
 
-    pub(crate) fn disarm(&self) {
+    /// Disarm the guard once the complete wrapper chain owns the child.
+    pub fn disarm(&self) {
         self.state.armed.store(false, Ordering::Release);
     }
 
-    pub(crate) fn root_child_seen(&self) -> bool {
+    /// Report whether wrapper construction observed the spawned root child.
+    #[must_use]
+    pub fn root_child_seen(&self) -> bool {
         self.state.root_child_seen.load(Ordering::Acquire)
     }
 
-    pub(crate) fn kill_attempted(&self) -> bool {
+    /// Report whether dropping an incomplete wrapper requested termination.
+    #[must_use]
+    pub fn kill_attempted(&self) -> bool {
         self.state.kill_attempted.load(Ordering::Acquire)
     }
 
-    pub(crate) fn kill_error(&self) -> Option<String> {
+    /// Return any termination error recorded by an incomplete wrapper.
+    #[must_use]
+    pub fn kill_error(&self) -> Option<String> {
         if !self.kill_attempted() {
             return None;
         }
@@ -56,6 +66,12 @@ impl SpawnGuard {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
+    }
+}
+
+impl Default for SpawnGuard {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

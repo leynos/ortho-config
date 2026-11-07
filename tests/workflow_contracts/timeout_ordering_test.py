@@ -72,15 +72,28 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: ordering holds for a wide range of both and would not notice either
 #: drifting away from the sample it was sized against.
 #:
-#: The largest allowances are the trybuild, `rstest_bdd`, and documentation
-#: scenario overrides, each 960 s or eight warning periods of 120 s. The
-#: trybuild allowance was 600 s until that class outgrew it --
+#: The largest allowance is 2,200 s for the serialized boundary binary. The
+#: packaged-consumer scenario has one shared 2,100 s deadline across its
+#: packaging and fixture Cargo commands.
+#: Trybuild, `rstest_bdd`, and documentation scenarios each allow 960 s, or
+#: eight warning periods of 120 s. The trybuild allowance was 600 s until that
+#: class outgrew it --
 #: `crate_path_trybuild` passed
 #: at 572.5 s of 600 s on run 36068184976, and `must_use_compile_tests`
 #: was killed at 600.224 s on run 36070786646. The BDD allowance is
 #: measured independently in `documentation_budget_test.py`.
-REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 960.0
-REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 30 * 60.0
+REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 2_200.0
+#: The whole-run budget, raised from 1,800 s when the dated-nightly pin
+#: cold-missed sccache. Sized from the run that was cancelled rather than
+#: from the warm sample that predates the pin: the Windows leg ran
+#: 1,810.1 s, and its younger survivor had run 157.3 s when the timer
+#: fired, so it started at 1,652.8 s and could have run until
+#: 1,652.8 + its own 600 s allowance, or 2,252.8 s. That is an upper bound
+#: on its permitted end time. 2,300 s covers it with 47 s to spare; 1,800 s
+#: fell 452.8 s short. The
+#: comparison against the previous toolchain is 1,044.1 s over the same
+#: tests and features. See issue 614.
+REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 2_300.0
 
 REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {
     ("ci.yml", "build-test"): 2,
@@ -137,7 +150,7 @@ def test_each_coverage_job_runs_the_steps_it_is_meant_to() -> None:
 
     ``required`` is the sum of the watchdogs found plus the allowance, so
     deleting one of a job's two coverage steps lowers the requirement by
-    1,800 s and every timing assertion still passes, while the lane
+    3,300 s and every timing assertion still passes, while the lane
     silently measures half of what it did. Pinning the count by
     coordinate is what makes that deletion fail.
     """
@@ -220,7 +233,7 @@ def test_a_whole_run_budget_would_sit_inside_each_watchdog(
 ) -> None:
     """Tier three must not pre-empt tier two, and must fit inside tier one.
 
-    ``.config/nextest.toml`` sets ``global-timeout = "30m"``, so this
+    ``.config/nextest.toml`` sets ``global-timeout = "2300s"``, so this
     runs against the current tree: the whole-run budget has to sit above
     the largest per-test allowance, or the run ends before the slowest
     test can use its budget, and below the watchdog with nextest's

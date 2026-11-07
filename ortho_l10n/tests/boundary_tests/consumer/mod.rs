@@ -13,9 +13,14 @@
 use crate::boundary::consumer::{Dependency, DependencySource};
 use crate::boundary::fixture_cargo::Metadata;
 use crate::boundary::package_set::{
-    ConsumerFixture, assert_packaged_set_complete, prepare_packaged_set, unpacked_directory,
+    ConsumerFixture, assert_packaged_set_complete, prepare_packaged_set_until, unpacked_directory,
 };
 use anyhow::{Context, Result, ensure};
+use std::time::{Duration, Instant};
+
+/// The aggregate wall-clock limit for packaging and testing all packaged
+/// consumer shapes in this scenario.
+pub(crate) const PACKAGED_CONSUMER_SEQUENCE_DEADLINE: Duration = Duration::from_secs(2_100);
 
 /// Build and test a runtime consumer resolved from workspace path dependencies.
 #[test]
@@ -65,7 +70,8 @@ fn workspace_mixed_consumer_builds_and_tests() -> Result<()> {
 /// exactly this graph.
 #[test]
 fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
-    prepare_packaged_set()?;
+    let sequence_deadline = Instant::now() + PACKAGED_CONSUMER_SEQUENCE_DEADLINE;
+    prepare_packaged_set_until(sequence_deadline)?;
     assert_packaged_set_complete()?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
@@ -77,8 +83,13 @@ fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
             source.describe(),
         );
         let fixture = consumer_fixture(dependency, &source).with_context(|| shape.clone())?;
-        fixture.test().with_context(|| shape.clone())?;
-        assert_paths_for(dependency, &fixture.resolve_metadata()?).with_context(|| shape)?;
+        fixture
+            .test_until(sequence_deadline)
+            .with_context(|| shape.clone())?;
+        let metadata = fixture
+            .resolve_metadata_until(sequence_deadline)
+            .with_context(|| shape.clone())?;
+        assert_paths_for(dependency, &metadata).with_context(|| shape)?;
     }
     Ok(())
 }

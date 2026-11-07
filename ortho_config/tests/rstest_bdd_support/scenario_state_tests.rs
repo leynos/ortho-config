@@ -4,6 +4,10 @@ use super::LocalizerContext;
 use rstest::rstest;
 use std::sync::{Arc, PoisonError};
 
+#[cfg_attr(
+    ortho_config_dev_fast,
+    ignore = "Cranelift cannot unwind on a spawned thread; LLVM coverage runs this test"
+)]
 #[rstest]
 fn take_issues_recovers_from_poisoned_mutex() {
     let context = LocalizerContext {

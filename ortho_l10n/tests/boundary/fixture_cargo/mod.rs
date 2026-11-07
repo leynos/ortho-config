@@ -10,32 +10,31 @@
 //!   [`BOUNDARY_ROOT`], so the nested resolution cannot contend with the parent
 //!   build's fingerprints.
 //!
-//! The environment a child may inherit is a separate module, [`environment`],
-//! because it is the part a reviewer most needs to be able to check at a
-//! glance. The shape of Cargo's metadata document is a separate module too,
-//! [`metadata`], because it is an external tool contract rather than fixture
-//! plumbing. Reading a manifest *as data* - which edges a document declares,
-//! including under a platform table - is a third responsibility, [`manifest`].
+//! Child process deadlines and cleanup checks, inherited environment, Cargo
+//! metadata and manifest inspection each have a focused module: [`command`],
+//! [`process_state`], [`environment`], [`metadata`] and [`manifest`].
 
+mod command;
 pub(crate) mod environment;
 pub(crate) mod manifest;
 pub(crate) mod metadata;
+mod process_state;
 
 #[cfg(test)]
 #[path = "metadata_proptests.rs"]
 mod metadata_proptests;
 
+pub(crate) use command::{run_with_deadline, run_with_deadline_until};
 pub(crate) use environment::{cargo_binary, inherited_toolchain};
 pub(crate) use manifest::{declared_dependencies, declared_path_dependencies};
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use environment::CARGO_DEADLINE;
-use std::process::{Command, Output, Stdio};
-use std::time::Duration;
-use wait_timeout::ChildExt as _;
+use std::process::{Command, Output};
+use std::time::Instant;
 
 /// Directory under the repository target tree that owns every fixture root.
 ///
@@ -60,6 +59,15 @@ pub(crate) struct FixtureCargo {
 }
 
 impl FixtureCargo {
+    /// Shared host-filtered arguments for this fixture's metadata resolve paths.
+    const METADATA_ARGS: [&str; 5] = [
+        "metadata",
+        "--format-version=1",
+        "--all-features",
+        "--filter-platform",
+        "host-tuple",
+    ];
+
     /// Create an empty fixture root inside the repository target tree.
     ///
     /// # Errors
@@ -130,6 +138,24 @@ impl FixtureCargo {
     /// Returns an error when the Cargo process cannot be spawned or exceeds
     /// [`CARGO_DEADLINE`].
     pub(crate) fn cargo(&self, args: &[&str]) -> Result<Output> {
+        self.cargo_with_deadline(args, None)
+    }
+
+    /// Run `cargo` within an enclosing test sequence's deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Cargo cannot be spawned or the command or its
+    /// enclosing sequence exceeds its deadline.
+    pub(crate) fn cargo_until(&self, args: &[&str], sequence_deadline: Instant) -> Result<Output> {
+        self.cargo_with_deadline(args, Some(sequence_deadline))
+    }
+
+    fn cargo_with_deadline(
+        &self,
+        args: &[&str],
+        sequence_deadline: Option<Instant>,
+    ) -> Result<Output> {
         let mut command = Command::new(cargo_binary());
         // The subcommand has to come first: `--manifest-path` and `--offline`
         // are per-command flags, not global ones, so `cargo --manifest-path X
@@ -143,11 +169,13 @@ impl FixtureCargo {
             .env_clear()
             .envs(inherited_toolchain())
             .env("CARGO_TARGET_DIR", &self.target);
-        run_with_deadline(
-            command,
-            CARGO_DEADLINE,
-            &format!("cargo {}", args.join(" ")),
-        )
+        let description = format!("cargo {}", args.join(" "));
+        match sequence_deadline {
+            Some(deadline) => {
+                run_with_deadline_until(command, CARGO_DEADLINE, deadline, &description)
+            }
+            None => run_with_deadline(command, CARGO_DEADLINE, &description),
+        }
     }
 
     /// Run `cargo` and require a successful exit status.
@@ -157,6 +185,21 @@ impl FixtureCargo {
     /// Returns an error carrying both streams when Cargo exits non-zero.
     pub(crate) fn cargo_checked(&self, args: &[&str]) -> Result<String> {
         let output = self.cargo(args)?;
+        checked_stdout(&output, &format!("cargo {}", args.join(" ")))
+    }
+
+    /// Run `cargo` within an enclosing test sequence's deadline and require success.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Cargo fails or the command or its enclosing
+    /// sequence exceeds its deadline.
+    pub(crate) fn cargo_checked_until(
+        &self,
+        args: &[&str],
+        sequence_deadline: Instant,
+    ) -> Result<String> {
+        let output = self.cargo_until(args, sequence_deadline)?;
         checked_stdout(&output, &format!("cargo {}", args.join(" ")))
     }
 
@@ -187,13 +230,16 @@ impl FixtureCargo {
     /// Returns an error when Cargo cannot be spawned or exceeds the deadline.
     /// A non-zero exit is not an error here; the caller decides.
     pub(crate) fn resolve(&self) -> Result<Output> {
-        self.cargo(&[
-            "metadata",
-            "--format-version=1",
-            "--all-features",
-            "--filter-platform",
-            "host-tuple",
-        ])
+        self.cargo(&Self::METADATA_ARGS)
+    }
+
+    /// Resolve metadata while respecting an enclosing test sequence's deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Cargo cannot be spawned or either deadline expires.
+    pub(crate) fn resolve_until(&self, sequence_deadline: Instant) -> Result<Output> {
+        self.cargo_until(&Self::METADATA_ARGS, sequence_deadline)
     }
 
     /// Resolve and parse the fixture root, requiring Cargo to succeed.
@@ -208,6 +254,17 @@ impl FixtureCargo {
     /// single JSON document the contract expects.
     pub(crate) fn resolve_metadata(&self) -> Result<Metadata> {
         let output = self.resolve()?;
+        Metadata::parse(&checked_stdout(&output, "cargo metadata")?)
+    }
+
+    /// Resolve and parse metadata within an enclosing test sequence's deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Cargo fails, metadata is unreadable, or either
+    /// deadline expires.
+    pub(crate) fn resolve_metadata_until(&self, sequence_deadline: Instant) -> Result<Metadata> {
+        let output = self.resolve_until(sequence_deadline)?;
         Metadata::parse(&checked_stdout(&output, "cargo metadata")?)
     }
 }
@@ -233,84 +290,6 @@ fn checked_stdout(output: &Output, label: &str) -> Result<String> {
         String::from_utf8_lossy(&output.stderr),
     );
     Ok(stdout)
-}
-
-/// Run `command` to completion or the deadline, whichever comes first.
-///
-/// Both streams are drained on their own threads. A nested Cargo build prints
-/// far more than a pipe buffer holds, and a runner that waits for the exit
-/// status before reading the pipes therefore deadlocks: the child blocks
-/// writing, the parent blocks waiting, and the deadline reports a hang that is
-/// really the harness's own. Draining concurrently removes that failure mode,
-/// so a reported deadline means the child itself made no progress.
-///
-/// # Errors
-///
-/// Returns an error when the child cannot be spawned or collected, or when it
-/// is still running at the deadline. A timed-out child is killed before the
-/// error is returned, so the test process is not left with an orphan holding
-/// the package-cache lock.
-pub(crate) fn run_with_deadline(
-    mut command: Command,
-    deadline: Duration,
-    description: &str,
-) -> Result<Output> {
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("spawn {description}"))?;
-    let stdout_reader = drain(
-        child.stdout.take(),
-        &format!("read stdout of {description}"),
-    )?;
-    let stderr_reader = drain(
-        child.stderr.take(),
-        &format!("read stderr of {description}"),
-    )?;
-
-    let waited = child
-        .wait_timeout(deadline)
-        .with_context(|| format!("wait for {description}"))?;
-    let Some(status) = waited else {
-        // Reap the child: a killed process releases its package-cache lock and
-        // its compile-admission slot, which a leaked one would hold.
-        let _killed = child.kill();
-        let _reaped = child.wait();
-        bail!(
-            "{description} exceeded the {} second deadline",
-            deadline.as_secs(),
-        );
-    };
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("the stdout reader of {description} panicked"))?
-        .with_context(|| format!("read stdout of {description}"))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("the stderr reader of {description} panicked"))?
-        .with_context(|| format!("read stderr of {description}"))?;
-    Ok(Output {
-        status,
-        stdout,
-        stderr,
-    })
-}
-
-/// Start a thread that reads `handle` to end of file.
-fn drain<R: std::io::Read + Send + 'static>(
-    handle: Option<R>,
-    description: &str,
-) -> Result<std::thread::JoinHandle<std::io::Result<Vec<u8>>>> {
-    let mut stream = handle.with_context(|| format!("capture {description}"))?;
-    std::thread::Builder::new()
-        .name(description.to_owned())
-        .spawn(move || {
-            let mut buffer = Vec::new();
-            stream.read_to_end(&mut buffer)?;
-            Ok(buffer)
-        })
-        .with_context(|| format!("start the reader for {description}"))
 }
 
 /// Path of the repository root, derived from this crate's manifest directory.

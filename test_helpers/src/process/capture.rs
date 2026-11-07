@@ -8,16 +8,20 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 #[cfg(test)]
-#[path = "process_runner_capture_property_tests.rs"]
+#[path = "capture_property_tests.rs"]
 mod property_tests;
 
 const PIPE_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
+/// A point-in-time copy of a reader's captured prefix and byte counts.
 #[derive(Clone, Debug)]
-pub(crate) struct Snapshot {
-    pub(super) bytes: Vec<u8>,
-    pub(super) bytes_seen: u64,
-    pub(super) truncated: bool,
+pub struct Snapshot {
+    /// Captured bytes, truncated at the reader's configured limit.
+    pub bytes: Vec<u8>,
+    /// Total number of bytes read, including bytes beyond the capture limit.
+    pub bytes_seen: u64,
+    /// Whether the stream exceeded the configured capture limit.
+    pub truncated: bool,
 }
 
 #[derive(Default)]
@@ -119,7 +123,7 @@ enum ReaderEnd {
 }
 
 /// Owns a cancellable drain thread and exposes partial capture while it runs.
-pub(crate) struct Reader {
+pub struct Reader {
     stream: &'static str,
     progress: Arc<Mutex<Progress>>,
     cancellation: Arc<AtomicBool>,
@@ -129,7 +133,14 @@ pub(crate) struct Reader {
 }
 
 impl Reader {
-    pub(crate) fn spawn<PipeHandle, Observer>(
+    /// Start a reader that captures up to `output_limit` bytes and optionally
+    /// observes every drained chunk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pipe cannot be prepared or the reader thread
+    /// cannot be started.
+    pub fn spawn<PipeHandle, Observer>(
         stream: &'static str,
         pipe_handle: PipeHandle,
         output_limit: usize,
@@ -167,7 +178,8 @@ impl Reader {
         })
     }
 
-    pub(crate) fn refresh(&mut self) {
+    /// Collect a finished reader thread without blocking on an active one.
+    pub fn refresh(&mut self) {
         let Some(active_join) = self.join.as_ref() else {
             return;
         };
@@ -184,31 +196,43 @@ impl Reader {
         }
     }
 
-    pub(crate) const fn is_finished(&self) -> bool {
+    /// Report whether the reader thread has been joined or detached.
+    #[must_use]
+    pub const fn is_finished(&self) -> bool {
         self.join.is_none()
     }
 
-    pub(crate) const fn stream(&self) -> &'static str {
+    /// Return the stream name used to start this reader.
+    #[must_use]
+    pub const fn stream(&self) -> &'static str {
         self.stream
     }
 
-    pub(crate) fn error(&self) -> Option<&str> {
+    /// Return a read or thread failure captured by the reader.
+    #[must_use]
+    pub fn error(&self) -> Option<&str> {
         self.error.as_deref()
     }
 
-    pub(crate) fn was_cancelled(&self) -> bool {
+    /// Report whether the reader stopped at a cancellation request.
+    #[must_use]
+    pub fn was_cancelled(&self) -> bool {
         self.completion == Some(ReaderEnd::Cancelled)
     }
 
-    pub(crate) fn snapshot(&self) -> Snapshot {
+    /// Return the bytes and truncation state captured so far.
+    #[must_use]
+    pub fn snapshot(&self) -> Snapshot {
         lock_progress(&self.progress).snapshot()
     }
 
-    pub(crate) fn request_stop(&self) {
+    /// Ask the nonblocking reader to stop at its next poll.
+    pub fn request_stop(&self) {
         self.cancellation.store(true, Ordering::Release);
     }
 
-    pub(crate) fn join_until(&mut self, deadline: Instant) {
+    /// Join a completed reader without blocking beyond `deadline`.
+    pub fn join_until(&mut self, deadline: Instant) {
         while !self.is_finished() && Instant::now() < deadline {
             self.refresh();
             if !self.is_finished() {
@@ -220,7 +244,8 @@ impl Reader {
         self.refresh();
     }
 
-    pub(crate) fn detach_if_running(&mut self) -> bool {
+    /// Detach an active reader and report whether it was still running.
+    pub fn detach_if_running(&mut self) -> bool {
         if self.join.as_ref().is_some_and(JoinHandle::is_finished) {
             self.refresh();
             return false;

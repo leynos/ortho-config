@@ -1,8 +1,9 @@
 //! Cargo helpers owned by the identifier-artefact integration test.
 //!
-//! The fixture uses a private target nested under Cargo's configured target
-//! directory so its clean operations cannot delete workspace test binaries.
-//! Cargo still uses the default shared package cache.
+//! The fixture reuses a private target nested under Cargo's configured target
+//! directory, so package cleans cannot delete workspace test binaries and
+//! repeated runs can reuse dependency artefacts. Cargo still uses the default
+//! shared package cache.
 
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
@@ -15,6 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
 const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
+const FIXTURE_TARGET_DIRECTORY: &str = "identifier-e2e";
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
 
 #[derive(Default)]
@@ -103,7 +105,6 @@ pub(super) struct FixtureCargo {
     target_directory: PathBuf,
     package_id: String,
     deadline: Instant,
-    _target_owner: tempfile::TempDir,
 }
 
 impl FixtureCargo {
@@ -118,7 +119,7 @@ impl FixtureCargo {
     }
 }
 
-/// Discover the fixture package and allocate a target private to this test.
+/// Discover the fixture package and select its persistent private target.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
     let deadline = scenario::deadline();
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -158,11 +159,14 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         .and_then(|package| package.get("id"))
         .and_then(Value::as_str)
         .context("Cargo metadata omitted orthohelp_fixture's package id")?;
-    let target_owner = tempfile::Builder::new()
-        .prefix("identifier-artefact-target-")
-        .tempdir_in(workspace_target)
-        .context("create private Cargo target")?;
-    let target_directory = target_owner.path().to_path_buf();
+    let workspace_target_path = PathBuf::from(workspace_target);
+    let workspace_target_dir = Dir::open_ambient_dir(&workspace_target_path, ambient_authority())?;
+    match workspace_target_dir.create_dir(FIXTURE_TARGET_DIRECTORY) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error).context("create private Cargo target"),
+    }
+    let target_directory = workspace_target_path.join(FIXTURE_TARGET_DIRECTORY);
     Dir::open_ambient_dir(&target_directory, ambient_authority())?
         .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
         .context("write Cargo cache-directory tag")?;
@@ -171,7 +175,6 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         target_directory,
         package_id: package_id.to_owned(),
         deadline,
-        _target_owner: target_owner,
     })
 }
 
@@ -253,13 +256,19 @@ pub(super) fn artefact_path(out_dir: &Path) -> Result<Option<PathBuf>> {
         Ok(directory) => directory,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
-            return Err(error).context("open fixture build-script output directory");
+            return Err(error).with_context(|| {
+                format!(
+                    "open fixture build-script output directory {}",
+                    out_dir.display()
+                )
+            });
         }
     };
     let relative_path = Path::new("ortho-config/cli-identifiers.json");
-    Ok(directory
-        .exists(relative_path)
-        .then(|| out_dir.join(relative_path)))
+    let exists = directory
+        .try_exists(relative_path)
+        .with_context(|| format!("inspect identifier artefact under {}", out_dir.display()))?;
+    Ok(exists.then(|| out_dir.join(relative_path)))
 }
 
 /// Read the emitted identifier artefact, failing when it is absent.
@@ -279,4 +288,30 @@ fn retain_runner_error(error: anyhow::Error, operation: &str) -> anyhow::Error {
     } else {
         error.context(format!("{operation} subprocess failed"))
     }
+}
+
+#[test]
+fn artefact_path_reports_non_not_found_lookup_errors() {
+    let output = tempfile::tempdir().expect("create a temporary output directory");
+    Dir::open_ambient_dir(output.path(), ambient_authority())
+        .expect("open the temporary output directory")
+        .write("ortho-config", "not a directory")
+        .expect("write a file at the artefact directory path");
+
+    let error = artefact_path(output.path())
+        .expect_err("a non-directory artefact parent must not read as absence");
+    let io_error = error
+        .downcast_ref::<io::Error>()
+        .expect("the cause is the filesystem error");
+    assert_ne!(
+        io_error.kind(),
+        io::ErrorKind::NotFound,
+        "the invalid parent must report its filesystem error"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains(&output.path().display().to_string()),
+        "the error names the output directory: {error}"
+    );
 }

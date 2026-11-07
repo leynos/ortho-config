@@ -49,7 +49,8 @@ impl CommandWrapper for ProcessGroupOwner {
     }
 }
 
-pub(super) fn configure(command: &mut CommandWrap) {
+/// Configure a wrapped command to own a Unix process group.
+pub fn configure(command: &mut CommandWrap) {
     command.wrap(ProcessGroupOwner);
 }
 
@@ -253,10 +254,9 @@ fn group_has_writers(group: Pid) -> io::Result<bool> {
     Ok(false)
 }
 
+/// Read a process stat entry while treating a vanished process as absent.
 #[cfg(target_os = "linux")]
-pub(crate) fn read_proc_stat(
-    read: impl FnOnce() -> io::Result<String>,
-) -> io::Result<Option<String>> {
+pub fn read_proc_stat(read: impl FnOnce() -> io::Result<String>) -> io::Result<Option<String>> {
     match read() {
         Ok(stat) => Ok(Some(stat)),
         Err(error) if process_entry_disappeared(&error) => Ok(None),

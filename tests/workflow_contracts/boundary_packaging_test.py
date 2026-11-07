@@ -33,7 +33,7 @@ import re
 import tomllib
 import typing as typ
 
-from nextest_budgets import profile_allowance
+from nextest_allowances import budget_of
 from timeout_budgets import NEXTEST_CONFIG
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
@@ -45,10 +45,25 @@ BINARY: typ.Final[str] = "boundary"
 GROUP: typ.Final[str] = "boundary_packaging"
 CRATE: typ.Final[str] = "ortho_l10n"
 
+#: Time reserved inside nextest's allowance for unpacking and root checks.
+PACKAGING_REMAINDER_SECONDS: typ.Final[int] = 120
+
 #: The manifest declaring the binary, and the fixture declaring its deadline.
 MANIFEST: typ.Final[pathlib.Path] = REPOSITORY_ROOT / CRATE / "Cargo.toml"
 PACKAGE_SET: typ.Final[pathlib.Path] = (
     REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "package_set" / "mod.rs"
+)
+CARGO_ENVIRONMENT: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "environment.rs"
+)
+FIXTURE_CARGO: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "mod.rs"
+)
+CONSUMER_TESTS: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary_tests" / "consumer" / "mod.rs"
+)
+CONSUMER_MODEL: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "consumer" / "mod.rs"
 )
 
 
@@ -62,6 +77,24 @@ def _overrides() -> list[dict[str, object]]:
 def _group_entries(name: str) -> list[dict[str, object]]:
     """Return the overrides assigning a test to ``name``."""
     return [entry for entry in _overrides() if entry.get("test-group") == name]
+
+
+def _boundary_allowance() -> float:
+    """Return the per-test ceiling that applies to the boundary binary."""
+    entries = [
+        entry
+        for entry in _overrides()
+        if entry.get("filter") == f"binary({BINARY})"
+    ]
+    assert len(entries) == 1, (
+        f"expected one timeout override for binary({BINARY}), found {len(entries)}"
+    )
+    assert "slow-timeout" in entries[0], (
+        f"the timeout override for binary({BINARY}) has no slow-timeout"
+    )
+    return budget_of(
+        "profile.default.overrides[binary(boundary)]", entries[0]["slow-timeout"]
+    )
 
 
 def test_the_group_is_serial() -> None:
@@ -126,7 +159,12 @@ def test_no_other_override_assigns_the_boundary_binary() -> None:
     )
 
 
-def _single_match(pattern: str, source: str, what: str) -> re.Match[str]:
+def _single_match(
+    pattern: str,
+    source: str,
+    what: str,
+    path: pathlib.Path = PACKAGE_SET,
+) -> re.Match[str]:
     """Return the one match of ``pattern``, or fail naming ``what``.
 
     A regex that matches nothing and one that matches twice are both a
@@ -135,7 +173,7 @@ def _single_match(pattern: str, source: str, what: str) -> re.Match[str]:
     """
     matches = list(re.finditer(pattern, source))
     assert len(matches) == 1, (
-        f"expected exactly one {what} in {PACKAGE_SET}, found {len(matches)}; "
+        f"expected exactly one {what} in {path}, found {len(matches)}; "
         f"this contract cannot read the figure it is meant to check"
     )
     return matches[0]
@@ -169,11 +207,125 @@ def test_the_packaging_deadline_fits_inside_the_allowance() -> None:
         )[1]
     )
 
-    allowance = profile_allowance(NEXTEST_CONFIG.read_text(encoding="utf-8"))
-    assert deadline * invocations < allowance, (
+    allowance = _boundary_allowance()
+    required = deadline * invocations + PACKAGING_REMAINDER_SECONDS
+    assert required < allowance, (
         f"each packaging invocation is bounded at {deadline}s and {invocations} "
-        f"share one test, so they need {deadline * invocations}s of a "
-        f"{allowance:.0f}s per-test allowance. A bound that does not fit is never "
-        f"reached: nextest stops the test first and the error naming the hung "
-        f"invocation is lost"
+        f"share one test, so they and the {PACKAGING_REMAINDER_SECONDS}s "
+        f"unpacking/check reserve need {required}s of a {allowance:.0f}s "
+        f"per-test allowance. A bound that does not fit is never reached: "
+        f"nextest stops the test first and the error naming the hung invocation "
+        "is lost"
+    )
+
+
+def test_the_nested_cargo_deadline_fits_inside_the_allowance() -> None:
+    """A child deadline must fire before nextest stops its parent test."""
+    source = CARGO_ENVIRONMENT.read_text(encoding="utf-8")
+    deadline = int(
+        _single_match(
+            r"CARGO_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            source,
+            "CARGO_DEADLINE declaration",
+            CARGO_ENVIRONMENT,
+        )[1]
+    )
+
+    allowance = _boundary_allowance()
+    assert deadline < allowance, (
+        f"a nested Cargo invocation is bounded at {deadline}s, but binary({BINARY}) "
+        f"has a {allowance:.0f}s per-test allowance. Nextest would stop the test "
+        f"before the fixture reports which child exceeded its deadline"
+    )
+
+
+def test_packaged_consumers_route_every_child_through_shared_deadline() -> None:
+    """Every child Cargo command receives the sequence's shared deadline."""
+    package_source = PACKAGE_SET.read_text(encoding="utf-8")
+    test_source = CONSUMER_TESTS.read_text(encoding="utf-8")
+    fixture_module_source = FIXTURE_CARGO.read_text(encoding="utf-8")
+
+    assert "prepare_packaged_set_until(sequence_deadline)?" in test_source, (
+        "packaging must consume the packaged-consumer sequence deadline"
+    )
+    assert ".test_until(sequence_deadline)" in test_source, (
+        "consumer test commands must receive the shared sequence deadline"
+    )
+    assert "resolve_metadata_until(sequence_deadline)" in test_source, (
+        "consumer metadata commands must receive the shared sequence deadline"
+    )
+    assert "run_with_deadline_until(command, PACKAGE_DEADLINE, deadline" in package_source, (
+        "packaging subprocesses must receive the shared sequence deadline"
+    )
+    assert "self.cargo_until(args, sequence_deadline)" in fixture_module_source, (
+        "fixture Cargo commands must route through the shared-deadline runner"
+    )
+
+
+def test_packaged_consumer_sequence_deadline_covers_child_commands() -> None:
+    """The shared child-command deadline fits the test allowance.
+
+    The three consumer shapes each run ``cargo test`` and ``cargo metadata``
+    after the two packaging commands. Their independent command ceilings exceed
+    the test allowance, so all eight commands must receive one shared deadline.
+    """
+    package_source = PACKAGE_SET.read_text(encoding="utf-8")
+    test_source = CONSUMER_TESTS.read_text(encoding="utf-8")
+    model_source = CONSUMER_MODEL.read_text(encoding="utf-8")
+    fixture_source = CARGO_ENVIRONMENT.read_text(encoding="utf-8")
+
+    package_deadline = int(
+        _single_match(
+            r"PACKAGE_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            package_source,
+            "PACKAGE_DEADLINE declaration",
+        )[1]
+    )
+    packaging_invocations = int(
+        _single_match(
+            r"PACKAGING_INVOCATIONS:\s*\[PackageInvocation;\s*(\d+)\]",
+            package_source,
+            "PACKAGING_INVOCATIONS array length",
+        )[1]
+    )
+    cargo_deadline = int(
+        _single_match(
+            r"CARGO_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            fixture_source,
+            "CARGO_DEADLINE declaration",
+            CARGO_ENVIRONMENT,
+        )[1]
+    )
+    consumer_shapes = int(
+        _single_match(
+            r"pub\(crate\) const ALL:\s*\[Self;\s*(\d+)\]",
+            model_source,
+            "consumer shape count",
+            CONSUMER_MODEL,
+        )[1]
+    )
+    sequence_deadline = int(
+        _single_match(
+            r"PACKAGED_CONSUMER_SEQUENCE_DEADLINE:\s*Duration\s*=\s*Duration::from_secs\(([\d_]+)\)",
+            test_source,
+            "packaged-consumer sequence deadline",
+            CONSUMER_TESTS,
+        )[1]
+        .replace("_", "")
+    )
+
+    fixture_commands = consumer_shapes * 2
+    independent_deadlines = (
+        package_deadline * packaging_invocations
+        + cargo_deadline * fixture_commands
+        + PACKAGING_REMAINDER_SECONDS
+    )
+    allowance = _boundary_allowance()
+    assert independent_deadlines > sequence_deadline, (
+        f"the independently bounded commands need {independent_deadlines}s; "
+        f"the {sequence_deadline}s shared deadline would not cap them"
+    )
+    assert sequence_deadline + 100 <= allowance, (
+        f"the {sequence_deadline}s shared deadline needs 100s for teardown, "
+        f"but the boundary test allowance is only {allowance:.0f}s"
     )

@@ -105,6 +105,11 @@ result_large_err                    = "deny"
 unknown_lints                       = "deny"
 renamed_and_removed_lints           = "deny"
 missing_docs                        = "deny"
+# Whitaker replaces RUSTFLAGS, so register the test cfg outside `.cargo/config`.
+
+[workspace.lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = ["cfg(ortho_config_dev_fast)"]
 
 [workspace.lints.rustdoc]
 missing_crate_level_docs            = "deny"

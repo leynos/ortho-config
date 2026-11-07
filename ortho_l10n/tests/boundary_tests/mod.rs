@@ -9,6 +9,11 @@
 #[path = "../boundary/mod.rs"]
 mod boundary;
 
+// Preserve ortho_l10n's forbidden test-helper package boundary while sharing
+// the same process-tree implementation used by the documentation harness.
+#[path = "../../../test_helpers/src/process/mod.rs"]
+mod process_runner;
+
 mod closure;
 mod consumer;
 mod manifests;
