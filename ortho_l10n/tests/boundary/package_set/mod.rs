@@ -65,18 +65,22 @@ use std::time::Duration;
 /// Each invocation is bounded on its own, and every entry in
 /// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
 /// inside nextest's per-test allowance with room for the root checks around
-/// them: 2 x 240 s is 480 s of the 600 s base allowance, leaving 120 s. The
-/// figure is derived from the allowance rather than chosen for comfort,
-/// because a bound that does not fit never fires: nextest stops the test
-/// first, and the error naming the invocation that hung is never printed.
+/// them: 2 x 440 s is 880 s of the 960 s the `boundary_packaging` override
+/// grants, leaving 80 s. The figure is derived from the allowance rather than
+/// chosen for comfort, because a bound that does not fit never fires: nextest
+/// stops the test first, and the error naming the invocation that hung is
+/// never printed.
 ///
 /// The second invocation reuses the first's target directory and is much
-/// shorter. For scale, the pair took 244 s on this host with the packaging
-/// target removed, which is an upper bound rather than a build time: it
-/// includes waiting for compile-admission slots, which the child inherits. So
-/// 240 s per invocation is generous against the whole pair rather than tight
-/// against either half.
-const PACKAGE_DEADLINE: Duration = Duration::from_secs(240);
+/// shorter. The pair took 244 s on this host with the packaging target removed,
+/// which is an upper bound rather than a build time: it includes waiting for
+/// compile-admission slots, which the child inherits. The bounds were 240 s
+/// when six packaged contracts timed out on a shared host with 340 compile
+/// requests queued behind them; the failure named the deadline but discarded
+/// the queue lines the child had printed, so the wait could not be told apart
+/// from a hang. The tail is now reported with the error, and the bound leaves
+/// room for the admission queue that a shared host produces.
+const PACKAGE_DEADLINE: Duration = Duration::from_secs(440);
 
 /// The `cargo package` invocations that together produce all three roots.
 ///

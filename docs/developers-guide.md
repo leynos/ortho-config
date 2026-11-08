@@ -231,17 +231,35 @@ each test in its own process, so without the group six of them run
 `cargo package` and unpack `target/localization-boundary/packaging-target` side
 by side. Cargo's package-cache lock does not cover that: it does not hold
 readers out while a package root is removed and unpacked, so one process can
-replace a root another is reading. `make boundary` and `make test` start one
-process for the binary and need nothing extra, which is why the group exists
-only for nextest.
+replace a root another is reading.
 
-That group also fixes the per-test allowance arithmetic. One packaged test runs
-both `cargo package` invocations, each bounded at 240 s by `PACKAGE_DEADLINE`,
-so the pair has to fit inside the 600 s base allowance with room for the root
-checks around them. A deadline that did not fit could never fire: nextest would
-stop the test first, and the error naming the invocation that hung would never
-be printed. `boundary_packaging_test.py` reads the group, the manifest and the
-deadline so neither half can drift from the other.
+`cargo test` and `make boundary` start one process for the binary but run its
+tests as threads, so the group cannot help there. The fixture's
+`run_with_deadline` therefore holds a process-wide mutex across each nested
+Cargo invocation. It is acquired before the child is spawned, so time a sibling
+spends holding the shared target directory's build lock is never charged to the
+deadline of the call that is counting. Without it, the consumer contracts and
+the four negative controls queue on the one target directory they share, and a
+healthy child waiting for its turn reads as a hang.
+
+The same override carries the per-test allowance, 960 s (120 s x 8). One
+packaged test runs both `cargo package` invocations, each bounded at 440 s by
+`PACKAGE_DEADLINE`, so the pair fits with 80 s for the root checks around them.
+A consumer contract resolves and then builds, each call bounded at 440 s by
+`CARGO_DEADLINE`, for the same reason. A deadline that did not fit could never
+fire: nextest would stop the test first, and the error naming the invocation
+that hung would never be printed. `boundary_packaging_test.py` reads the group,
+the manifest, the override's allowance and both deadlines so neither half can
+drift from the other.
+
+The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
+against the 600 s base allowance. They were reached on a shared host while the
+children queued behind 340 compile-admission requests, and the timeout error
+discarded the child's output, including the lines that named the queue, so the
+failure could not be attributed. `run_with_deadline` now retains a bounded tail
+of each stream and includes it in the deadline error; the tail is what
+distinguishes compile-admission waiting, package-cache waiting, and a hang from
+one another.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -1289,10 +1307,17 @@ build-and-snapshot ownership across processes. The BDD scenarios use a separate
 filesystem lease under the selected target while reading and updating their
 shared bridge cache. The identifier-artefact test owns a private target nested
 under the configured workspace target, so `cargo clean -p` cannot remove
-workspace test executables. It still uses Cargo's default shared package cache.
-Cargo retains compiler wrappers, job limits, warning enforcement, coverage
-settings, and allow-listed native build inputs. Application secrets and
-arbitrary application variables are excluded. Run-file paths must contain
+workspace test executables. That directory has a fixed name rather than a
+per-run temporary one: every phase of the test starts with
+`cargo clean -p orthohelp_fixture`, so the fixture and its build script are
+rebuilt and report their output directory every time, while the dependency
+build beneath them is reused between runs. A per-run target rebuilt
+`ortho_config`, its macros, Clap and Serde from cold on every invocation, which
+is where the scenario's 956-second envelope went on a shared host without
+producing a source diagnostic. It still uses Cargo's default shared package
+cache. Cargo retains compiler wrappers, job limits, warning enforcement,
+coverage settings, and allow-listed native build inputs. Application secrets
+and arbitrary application variables are excluded. Run-file paths must contain
 normal relative components only.
 
 The contracts are split across integration-test targets by concern, following
@@ -3007,12 +3032,12 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                          |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                         |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD, documentation and boundary packaging scenarios |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                                              |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                                              |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                                             |
 
 *Table: the timers that can end a run, innermost first.*
 

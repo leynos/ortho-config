@@ -16,10 +16,13 @@
 //! [`metadata`], because it is an external tool contract rather than fixture
 //! plumbing. Reading a manifest *as data* - which edges a document declares,
 //! including under a platform table - is a third responsibility, [`manifest`].
+//! Running a child under a deadline, and retaining enough of its output to say
+//! what it was waiting for, is a fourth, [`process`].
 
 pub(crate) mod environment;
 pub(crate) mod manifest;
 pub(crate) mod metadata;
+pub(crate) mod process;
 
 #[cfg(test)]
 #[path = "metadata_proptests.rs"]
@@ -28,14 +31,13 @@ mod metadata_proptests;
 pub(crate) use environment::{cargo_binary, inherited_toolchain};
 pub(crate) use manifest::{declared_dependencies, declared_path_dependencies};
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
+pub(crate) use process::run_with_deadline;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use environment::CARGO_DEADLINE;
-use std::process::{Command, Output, Stdio};
-use std::time::Duration;
-use wait_timeout::ChildExt as _;
+use std::process::{Command, Output};
 
 /// Directory under the repository target tree that owns every fixture root.
 ///
@@ -233,84 +235,6 @@ fn checked_stdout(output: &Output, label: &str) -> Result<String> {
         String::from_utf8_lossy(&output.stderr),
     );
     Ok(stdout)
-}
-
-/// Run `command` to completion or the deadline, whichever comes first.
-///
-/// Both streams are drained on their own threads. A nested Cargo build prints
-/// far more than a pipe buffer holds, and a runner that waits for the exit
-/// status before reading the pipes therefore deadlocks: the child blocks
-/// writing, the parent blocks waiting, and the deadline reports a hang that is
-/// really the harness's own. Draining concurrently removes that failure mode,
-/// so a reported deadline means the child itself made no progress.
-///
-/// # Errors
-///
-/// Returns an error when the child cannot be spawned or collected, or when it
-/// is still running at the deadline. A timed-out child is killed before the
-/// error is returned, so the test process is not left with an orphan holding
-/// the package-cache lock.
-pub(crate) fn run_with_deadline(
-    mut command: Command,
-    deadline: Duration,
-    description: &str,
-) -> Result<Output> {
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("spawn {description}"))?;
-    let stdout_reader = drain(
-        child.stdout.take(),
-        &format!("read stdout of {description}"),
-    )?;
-    let stderr_reader = drain(
-        child.stderr.take(),
-        &format!("read stderr of {description}"),
-    )?;
-
-    let waited = child
-        .wait_timeout(deadline)
-        .with_context(|| format!("wait for {description}"))?;
-    let Some(status) = waited else {
-        // Reap the child: a killed process releases its package-cache lock and
-        // its compile-admission slot, which a leaked one would hold.
-        let _killed = child.kill();
-        let _reaped = child.wait();
-        bail!(
-            "{description} exceeded the {} second deadline",
-            deadline.as_secs(),
-        );
-    };
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("the stdout reader of {description} panicked"))?
-        .with_context(|| format!("read stdout of {description}"))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("the stderr reader of {description} panicked"))?
-        .with_context(|| format!("read stderr of {description}"))?;
-    Ok(Output {
-        status,
-        stdout,
-        stderr,
-    })
-}
-
-/// Start a thread that reads `handle` to end of file.
-fn drain<R: std::io::Read + Send + 'static>(
-    handle: Option<R>,
-    description: &str,
-) -> Result<std::thread::JoinHandle<std::io::Result<Vec<u8>>>> {
-    let mut stream = handle.with_context(|| format!("capture {description}"))?;
-    std::thread::Builder::new()
-        .name(description.to_owned())
-        .spawn(move || {
-            let mut buffer = Vec::new();
-            stream.read_to_end(&mut buffer)?;
-            Ok(buffer)
-        })
-        .with_context(|| format!("start the reader for {description}"))
 }
 
 /// Path of the repository root, derived from this crate's manifest directory.

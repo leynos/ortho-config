@@ -122,12 +122,13 @@ fn no_forbidden_package_appears_in_a_workspace_runtime_consumer() -> Result<()> 
 /// Each negative control must fail, and fail *for its injected edge*.
 ///
 /// One case per injection rather than a loop, so a failure names the injection
-/// that produced it instead of stopping at the first one in enum order, and
-/// nextest can schedule the four nested Cargo runs independently. Each case
-/// spawns a `cargo metadata` of its own; each is deadline-bounded by the
+/// that produced it instead of stopping at the first one in enum order. Each
+/// case spawns a `cargo metadata` of its own; each is deadline-bounded by the
 /// fixture's own [`CARGO_DEADLINE`], and they share one fixture target
-/// directory, so running them concurrently costs one warm resolve rather than
-/// four cold ones.
+/// directory. The shared target is why [`run_with_deadline`] serializes nested
+/// Cargo invocations within the process: under `cargo test` these cases are
+/// threads racing for one build-directory lock, and a sibling's lock wait must
+/// not be charged to the case that is counting.
 ///
 /// [`run_negative_control`] does the whole assertion: it requires Cargo to
 /// *resolve* the injected edge and then requires the closure check to reject

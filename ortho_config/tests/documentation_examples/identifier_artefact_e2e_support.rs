@@ -3,6 +3,17 @@
 //! The fixture uses a private target nested under Cargo's configured target
 //! directory so its clean operations cannot delete workspace test binaries.
 //! Cargo still uses the default shared package cache.
+//!
+//! The private target is stable across runs, not a per-run temporary directory.
+//! Every build in this test starts with [`clean_fixture`], so the fixture
+//! package and its build script are always rebuilt and always report their
+//! output directory; what the stable target preserves is the dependency build
+//! beneath them. A per-run target rebuilt `ortho_config`, its macros, Clap and
+//! Serde from cold on every invocation, which is where the time went: on a
+//! shared host with a busy compile-admission queue the fixture build consumed
+//! its whole 956-second envelope without a single source diagnostic. Only
+//! `orthohelp_fixture` itself is cleaned between phases, which is what the
+//! test's warm-build claim is about.
 
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
@@ -97,13 +108,18 @@ fn lock_cargo_messages(messages: &Mutex<CargoMessages>) -> MutexGuard<'_, CargoM
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Owns the fixture's private Cargo target for this test run.
+/// Names the fixture's private Cargo target.
+///
+/// Nested under the workspace target so `cargo clean` of the workspace removes
+/// it, and named so consecutive runs reuse the dependency build.
+const TARGET_DIRECTORY_NAME: &str = "identifier-artefact-target";
+
+/// Describes the fixture's private Cargo target and scenario deadline.
 pub(super) struct FixtureCargo {
     repository: PathBuf,
     target_directory: PathBuf,
     package_id: String,
     deadline: Instant,
-    _target_owner: tempfile::TempDir,
 }
 
 impl FixtureCargo {
@@ -118,7 +134,10 @@ impl FixtureCargo {
     }
 }
 
-/// Discover the fixture package and allocate a target private to this test.
+/// Discover the fixture package and locate its private Cargo target.
+///
+/// The target directory is stable across runs; its dependencies stay warm while
+/// each phase's [`clean_fixture`] forces the fixture package itself to rebuild.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
     let deadline = scenario::deadline();
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -158,11 +177,9 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         .and_then(|package| package.get("id"))
         .and_then(Value::as_str)
         .context("Cargo metadata omitted orthohelp_fixture's package id")?;
-    let target_owner = tempfile::Builder::new()
-        .prefix("identifier-artefact-target-")
-        .tempdir_in(workspace_target)
+    let target_directory = Path::new(workspace_target).join(TARGET_DIRECTORY_NAME);
+    Dir::create_ambient_dir_all(&target_directory, ambient_authority())
         .context("create private Cargo target")?;
-    let target_directory = target_owner.path().to_path_buf();
     Dir::open_ambient_dir(&target_directory, ambient_authority())?
         .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
         .context("write Cargo cache-directory tag")?;
@@ -171,7 +188,6 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         target_directory,
         package_id: package_id.to_owned(),
         deadline,
-        _target_owner: target_owner,
     })
 }
 
