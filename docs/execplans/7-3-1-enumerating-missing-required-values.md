@@ -43,15 +43,23 @@ secrets are copied into the missing-values report.
 - Run gates sequentially through the scrutineer agent, with logs in `/tmp`.
   Preserve compiler admission and the shared Cargo cache. Do not install or
   alter Whitaker. Do not use `/tmp` as a build directory.
+- Keep prover execution opt-in and feature-owned, per
+  `docs/adrs/adr-0017-consumer-side-prover-tooling.md`. Do not add `make kani`,
+  `make kani-full`, or `make verus` to this plan's ordinary gates. With an
+  empty inventory they exit 2 with `FORMAL-EMPTY` by design; that is neither a
+  pass nor a failure of this work. `make test-prover-tools-integration` is
+  evidence about the runners and must never be cited as evidence about this
+  feature.
 
 ## Tolerances (exception triggers)
 
 Stop and record a proposed deviation, with status BLOCKED, if recursive schema
 coverage cannot meet the contract without changing unrelated provider or Serde
 behaviour; if a new production dependency is needed; if error handling requires
-replaying custom deserializers; or if source naming cannot be made truthful
-without a broader configuration-format migration. Obtain explicit approval of
-the deviation before continuing.
+replaying custom deserializers; if source naming cannot be made truthful
+without a broader configuration-format migration; or if a re-evaluation under
+D5 selects Kani or Verus. Obtain explicit approval of the deviation before
+continuing.
 
 The new typed error and the narrowly scoped nested-schema API proposed here are
 part of the approval request. M1 signature refinements implementing the
@@ -80,9 +88,17 @@ route by actually supplying a value through it. Metadata snapshots alone are
 insufficient.
 
 An abstract model can describe the wrong loader. Keep the runtime-to-model
-mapping explicit and test its adapters. Verus is not configured in this
-checkout. The proposed collector is straightforward filtering; property tests
-are proportionate, and no formal verification result is claimed.
+mapping explicit and test its adapters. PR #651 imported pinned Kani and Verus
+runners, but no production harness or proof exists. The proposed collector is
+straightforward filtering; property tests are proportionate, and no formal
+verification result is claimed.
+
+Available tooling creates its own risk: a proof added because a runner now
+exists would be well-formed and vacuous about the actual hazards, schema
+fidelity and source resolution. D5 therefore ties adoption to the kernel's
+content. Kani's ability to compile the production crate also remains unclaimed.
+ADR-0017 kept that question out of its fixture evidence, so any harness starts
+with a compatibility probe rather than an assumption.
 
 ## Progress
 
@@ -95,7 +111,9 @@ are proportionate, and no formal verification result is claimed.
   across three agents and reconcile its findings.
 - [x] (2026-10-14) Preliminary formatting, Markdown/spelling, and diagram
   validation passed; the final candidate will be rechecked before commit.
-- [ ] Commit and publish the reviewed plan as a draft PR.
+- [x] (2026-10-14) Commit and publish the reviewed plan as draft PR #589.
+- [x] (2026-11-06) Rebase onto `ddba3578` (PR #651 landed) and revise this plan:
+  prover command surface, inventory obligations, D5, and refreshed baseline.
 - [ ] Obtain explicit plan approval.
 - [ ] M1: establish exact schema and source contracts with executable evidence.
 - [ ] M2: implement and property-test collection with typed diagnostics.
@@ -125,9 +143,28 @@ recursive for subcommands, not for arbitrary nested data structures.
 The requested `docs/rtest-bdd-users-guide.md` spelling refers to the existing
 `docs/rstest-bdd-users-guide.md`; use the latter. The live Makefile's test gate
 includes all targets/features and Python tests, beyond the older summary in
-AGENTS.md. No repository Verus harness or proof target currently exists.
-Ordinary config fields are wrapped in Option in the generated CLI, allowing
-missing values to reach final merge; explicit clap constraints remain separate.
+AGENTS.md. Ordinary config fields are wrapped in Option in the generated CLI,
+allowing missing values to reach final merge; explicit clap constraints remain
+separate.
+
+PR #651 removes this plan's earlier premise that no prover tooling exists. Make
+targets, pins, and a CI lane are present, while the production inventory is
+deliberately empty, and `docs/execplans/import-prover-tools.md` names this plan
+as a motivating consumer without reversing D4. That lane's workflow triggers on
+tooling and fixture paths only. A production proof would not run on a change to
+the code it reasons about until those paths are extended. No workspace manifest
+declares `cfg(kani)`, so a production harness would trip the denied
+`unexpected_cfgs` warning until one does; the fixture declares its own.
+
+The rebase also corrected three baseline assumptions unrelated to provers.
+`docs/scripting-standards.md` now exists. `OrthoError` has no consumer in
+`ortho_config/src/localizer/` or `ortho_l10n/`, and ADR-0015 forbids the latter
+from depending on configuration, so the classification sites to update are the
+two `error_category` functions in `ortho_config/src/merge_telemetry.rs`
+(exhaustive) and `ortho_config/src/discovery/telemetry.rs` (wildcard to its
+"other" category). Behavioural scenarios bind through the `rstest_bdd` test
+target in `tests/rstest_bdd_support/behaviour/scenarios.rs`, rather than a
+per-feature runner.
 
 ## Decision log
 
@@ -156,6 +193,21 @@ specification below but do not introduce an artificial Verus milestone. If M1
 reveals non-trivial contractual logic requiring an exhaustive guarantee, stop
 and revise the proof sketch and implementation plan together for approval.
 
+D5 (2026-11-06, proposed, after PR #651): retain D4. The import removes a cost
+and leaves its reason intact, since a proof of an ordered Boolean filter still
+says nothing about schema fidelity or source resolution. `proptest` satisfies
+the repository's invariant rule, which permits it or Kani. No harness, proof,
+or inventory entry is planned, and none may be added to populate the new lane.
+
+Re-evaluate at the M1 and M2 checkpoints against the kernel actually written,
+recording the verdict and its evidence in this section. Propose Kani if the
+kernel grows beyond ordered filtering, for example if activation and
+blocked-ancestor classification become logic where every path within a stated
+bound matters, and it can be isolated from Serde values, strings, and maps.
+Propose Verus only if a stable pure kernel needs a guarantee without a bound.
+Either verdict triggers the tolerance above and a dedicated, approved
+milestone, following the conditions under "Proof sketch before implementation".
+
 ## Outcomes & retrospective
 
 The Wyvern team established the current merge boundary. Pandalump/Wafflecat
@@ -171,6 +223,11 @@ confirmed their findings resolved. Preliminary `make fmt`, `make check-fmt`,
 requires a final documentation gate run before commit; the PR records that
 result without implying runtime validation. Implementation completion requires
 every acceptance item below; a plan PR cannot mark roadmap item 7.3.1 done.
+
+The 2026-11-06 revision is a documentation change after a clean rebase. It adds
+no proof and validates no runtime behaviour. Its design consequence is D5,
+which replaces a tooling obstacle with an explicit content test for adopting a
+prover.
 
 ## Context and orientation
 
@@ -188,13 +245,22 @@ telemetry matches when adding a variant. Existing naming helpers are in
 `ortho_config_macros/src/derive/parse/serde_attrs.rs`, `derive/build/cli/`, and
 `derive/generate/docs/fields/`.
 
+Kani is a bounded model checker: a passing harness says nothing beyond its
+unwind bound. Verus proves logical obligations over a specified model, which
+supports a runtime claim only through an explicit refinement relation to
+production code. Both are contributor tools pinned in `tools/`, delegated to
+`rust-prover-tools`, and never Cargo dependencies. Read `docs/design.md` §4.20
+and "Kani and Verus verification tools" in `docs/developers-guide.md` before
+changing any verification decision here.
+
 ## Conformance basis
 
-The baseline is commit `dc979878b5728bbb23866df9c05c2570bdb5629e`. There is no
-separate terms-of-reference document for this task. Governing requirements are
-roadmap 7.3.1 and the user's planning and testing instructions. The completed
-`docs/execplans/5-1-1-reconcile-design-with-actual-error-surface.md` is audit
-evidence, not an implementation specification.
+The baseline is commit `ddba3578fae04227e426ea3a61aa2b24aa043232`, the landing
+of PR #651, rebased from `dc979878b5728bbb23866df9c05c2570bdb5629e`. There is
+no separate terms-of-reference document for this task. Governing requirements
+are roadmap 7.3.1 and the user's planning and testing instructions. The
+completed `docs/execplans/5-1-1-reconcile-design-with-actual-error-surface.md`
+is audit evidence, not an implementation specification.
 
 - R1: all missing requirements together, from
   `docs/improved-error-message-design.md` §§1–3. M1–M3 discharge through typed
@@ -210,6 +276,10 @@ evidence, not an implementation specification.
   error classification outside this feature and avoid schema ownership drift.
 - R5: quality and documentation requirements. M1–M4 use the testing references
   below and M4 updates user, developer, and architecture guidance.
+- R6: honest formal-verification claims, from ADR-0017 and the production proof
+  inventory in `docs/developers-guide.md`. M1 and M2 discharge it by recording
+  a D5 verdict. M4 confirms that any claim names its tool version and bound,
+  and that the inventory matches the verdict.
 
 Read `docs/rust-testing-with-rstest-fixtures.md`,
 `docs/rust-doctest-dry-guide.md`,
@@ -217,16 +287,13 @@ Read `docs/rust-testing-with-rstest-fixtures.md`,
 `docs/localizable-rust-libraries-with-fluent.md`,
 `docs/complexity-antipatterns-and-refactoring-strategies.md`,
 `docs/rstest-bdd-users-guide.md` before writing the corresponding tests,
-helpers, or localization. The requested `docs/scripting-standards.md` is absent
-at the baseline. Do not invent its contents: use AGENTS.md and the developer
-guide for existing script conventions, record this missing reference, and
-consult the supplied standard if it becomes available. No new script is needed
-for this implementation.
+helpers, or localization. No new script is needed for this implementation; if
+that changes, follow `docs/scripting-standards.md`, which is now present.
 
 Use the `codegraph-mcp` and `rust-router` skills for navigation and Rust work;
 route error design to `rust-errors`, fixtures to `rust-unit-testing`, and
-verification to `rust-verification`, `proptest`, and `verus`. Use `execplans`
-to maintain this file, `firecrawl-mcp` for external gaps, and
+verification to `rust-verification`, `proptest`, `kani`, and `verus`. Use
+`execplans` to maintain this file, `firecrawl-mcp` for external gaps, and
 `logisphere-experts` to review material design changes. Follow `commit-message`
 and `pr-creation` for delivery. Read each skill's SKILL.md before applying it.
 
@@ -318,25 +385,53 @@ faults. Use inhabited witnesses: empty input, no missing values, two missing
 values separated by a supplied value, and an absent required object with no
 required children. No unbounded proof is claimed by sampled tests.
 
-Verus becomes warranted only if a later approved design introduces a stable,
-non-trivial semantic kernel whose guarantee must be exhaustive. Before that
-implementation, revise this section with preconditions, postconditions,
-representation relationships, and semantic lemma sketches. Add a dedicated
-milestone and pinned toolchain/runner, using the `verus` skill and
-`rust-prover-tools`; its acceptance must include the following command as well
-as `make check-fmt`, `make lint`, and `make test`:
+A prover becomes warranted only if a later approved design introduces a stable,
+non-trivial semantic kernel, as D5 defines it. Before that implementation,
+revise this section with preconditions, postconditions, representation
+relationships, and semantic lemma sketches. Add a dedicated milestone using the
+`kani` or `verus` skill. PR #651 supplies the pins, installers, and runners, so
+that milestone adds production entries rather than tooling. Each entry extends
+`KANI_SMOKE_HARNESSES`, `KANI_ALL_HARNESSES`, or `VERUS_PROOF_FILES` in the
+Makefile and names, in its pull request, the owning feature and crate, the
+production source file, the harness or proof file and exact symbol, the
+symbolic inputs and bounds including the Kani unwind depth, every assumption,
+the expected check count, and the negative control that must be rejected. Its
+acceptance adds the applicable commands below to `make check-fmt`, `make lint`,
+`make typecheck`, `make test`, and `make test-workflow-contracts`:
 
 ```bash
-prover-tools verus run --repo-root . --proof-file verus/missing_required_values.rs
+make install-kani   # Once per CARGO_HOME: installs the pinned release.
+make kani           # Runs the registered smoke harnesses after a version check.
+make kani-full      # Runs every registered harness.
+make install-verus  # Once: needs network access and may change rustup.
+make verus          # Runs VERUS_PROOF_FILES; never installs anything.
 ```
 
-That future proof must verify the production kernel or establish an explicit
-refinement relation, with adapter tests covering the executable integration. It
-must be substantive and non-vacuous, and use no `assume`, `admit`, external
-proof bodies, or equivalent trusted shortcuts. Leave speculative theorem
-statements in documentation until that approved milestone. Do not add passing
-proof stubs, install Verus, or treat tool absence as a successful proof now.
-Formatting, localization, and integration plumbing remain conventionally tested.
+A Kani harness must exercise the real pure kernel behind `cfg(kani)`, with the
+configuration declared to the lint. Probe first that Kani's bundled compiler
+can build the owning crate, including its dependencies. If it cannot, record a
+deviation: extracting a kernel crate is a new boundary needing approval, and a
+copied model would need the refinement relation below.
+
+A Verus proof stays outside the Cargo workspace and runs under the toolchain
+its release embeds, currently 1.93.0 rather than the repository's 1.99. It must
+verify the production kernel or establish an explicit refinement relation, with
+adapter tests covering the executable integration. It must be substantive and
+non-vacuous, and use no `assume`, `admit`, external proof bodies, or equivalent
+trusted shortcuts. Leave speculative theorem statements in documentation until
+that approved milestone.
+
+The same milestone must extend `.github/workflows/prover-tools.yml` so its path
+triggers cover the harness or proof and its production dependencies, adding a
+bounded Kani pull-request smoke lane, a full scheduled lane, and scheduled or
+manual Verus execution. Promoting Verus to a required check needs measured
+stability and a separate decision. Evidence must name the tool version and
+bound, and record that the lane is validated on Linux x86_64 only.
+
+Do not add passing proof stubs or placeholder inventory entries, and do not
+treat `FORMAL-EMPTY`, tool absence, or fixture evidence as a successful proof
+now. Formatting, localization, and integration plumbing remain conventionally
+tested.
 
 ### Executable assurance and external assumptions
 
@@ -433,9 +528,10 @@ must be recorded in `docs/design.md`. Sweep for equivalent helpers before
 adding each abstraction. Reuse naming functions where their semantics match;
 never consume `doc.env` or `doc.file_key` overrides without provider evidence.
 
-No production dependency is planned. `googletest` and `pretty_assertions` are
-already workspace dependencies; use authorized dev dependencies for `insta` and
-`proptest` where missing. No verifier dependency is introduced by this plan.
+No production dependency is planned. `googletest`, `pretty_assertions`,
+`insta`, and `proptest` are already `ortho_config` dev dependencies; authorized
+additions apply only to another crate that lacks one. No verifier dependency is
+introduced: Kani and Verus never appear in a `Cargo.toml`.
 
 ## Milestones and plateaus
 
@@ -451,18 +547,20 @@ in the integration milestone and observe red again. Do not commit failing tests
 or disable them to manufacture a green checkpoint.
 
 Record a support matrix and exact API signatures in the improved-error design
-and a new ADR linked from `docs/design.md` and `docs/contents.md`. This
+and the next available ADR under `docs/adrs/`, using the four-digit filename
+convention and linked from `docs/design.md` and `docs/contents.md`. This
 milestone must show the nested schema is feasible without evaluating custom
 defaults or deserializers twice, or it stops for an approved deviation. Do not
 retrofit arbitrary Serde reflection. Resolve clap eager-required parsing
 explicitly: configuration-backed fields must reach merging, while help/version
 and genuine CLI-only constraints retain their existing paths.
 
-Acceptance E1 is passing characterization coverage and a recorded expected red
-failure for the aggregate contract. R1/R2/R4 are specified, not yet delivered.
-Run all ordinary gates before the coherent schema/design checkpoint commit.
-Remaining gap: production diagnostics and collection property coverage.
-Recovery is to revert the checkpoint atomically; no migration layer is needed.
+Acceptance E1 is passing characterization coverage, a recorded expected red
+failure for the aggregate contract, and a D5 verdict against the settled
+schema. R1/R2/R4 are specified, not yet delivered. Run all ordinary gates
+before the coherent schema/design checkpoint commit. Remaining gap: production
+diagnostics and collection property coverage. Recovery is to revert the
+checkpoint atomically; no migration layer is needed.
 
 ### M2 — typed report and property-tested collection
 
@@ -474,10 +572,11 @@ runtime-to-model mapping, especially canonical paths and ancestor validity.
 Acceptance E2 comprises the schema/collector-only subset of V1 and V2 evidence
 (the real-loader assertions become acceptance in M3), typed payload/display
 snapshots, inhabited boundary witnesses, and rejection of deliberate omission,
-insertion, and ordering faults. Restore the correct code after each negative
-control. Run `make check-fmt`, `make lint`, and `make test` sequentially.
-Remaining gap: generated loader wiring and user recovery. Revert M2 as one
-coherent unit if its API or representation cannot satisfy the contract.
+insertion, and ordering faults, plus a D5 verdict against the written kernel.
+Restore the correct code after each negative control. Run `make check-fmt`,
+`make lint`, `make typecheck`, and `make test` sequentially. Remaining gap:
+generated loader wiring and user recovery. Revert M2 as one coherent unit if
+its API or representation cannot satisfy the contract.
 
 ### M3 — generated loaders and one-diagnostic recovery
 
@@ -489,11 +588,15 @@ raw generic `from_value_merge<T>` behaviour when only `DeserializeOwned` is
 known; do not claim it has metadata it cannot possess. Add tests proving this
 boundary.
 
-Add error classification tests for telemetry and localization consumers of
-OrthoError. Preserve existing source attribution and metric labels for old
-variants, choose a stable low-cardinality category for the new variant, and
-never emit supplied values or secrets. The initial display contract is English;
-existing localization entrypoints must retain it deliberately when no dedicated
+Add error classification tests for both `error_category` functions, in
+`ortho_config/src/merge_telemetry.rs` and
+`ortho_config/src/discovery/telemetry.rs`. The second has a wildcard arm, so
+the compiler will not point at it. Preserve existing source attribution and
+metric labels for old variants, choose a stable low-cardinality category for
+the new variant, and never emit supplied values or secrets. Any translated
+rendering stays in `ortho_config`, because `ortho_l10n` must not depend on
+configuration (ADR-0015). The initial display contract is English; existing
+localization entrypoints must retain it deliberately when no dedicated
 translation exists, without panics or rewriting the canonical typed paths.
 Document that fallback rather than expanding phase 11 localization scope.
 
@@ -506,8 +609,11 @@ pure diagnostics or injected loaders. Keep canonical data locale-independent;
 use existing localizer interfaces for any supported translated rendering.
 
 Add the following specification at
-`ortho_config/tests/features/missing_required_values.feature`, with a runner in
-`ortho_config/tests/missing_required_values_bdd.rs`:
+`ortho_config/tests/features/missing_required_values.feature`, bound by a
+`scenarios!` entry in
+`ortho_config/tests/rstest_bdd_support/behaviour/scenarios.rs` with steps under
+`behaviour/steps/`. `scenarios!` is not tracked by Cargo, so touch that file
+after editing the feature, or the binary will run stale scenarios:
 
 ```gherkin
 Feature: Recover all missing configuration from one diagnostic
@@ -549,9 +655,11 @@ one-round correction. Update `docs/developers-guide.md` for schema ownership,
 source injection, tests, and the verification scope and limits. Reconcile
 `docs/improved-error-message-design.md`, `docs/design.md`, and the phase-5
 status paragraph in `docs/agent-native-cli-design.md`. Reference the ADR where
-schema representation and proof obligations influence architecture. Update the
-changelog using its skill; update documentation examples/registries if their
-contracts change.
+schema representation and proof obligations influence architecture. Unless D5
+selected a prover, the guide's statement that no production inventory entries
+exist stays true; do not reword it to imply this feature was verified. Update
+the changelog using its skill; update documentation examples/registries if
+their contracts change.
 
 Only after E1–E3 and all gates pass, mark roadmap task 7.3.1 and its three
 subtasks done (`[x]`), using the `mapsplice` skill for structural roadmap
@@ -576,22 +684,24 @@ final gate sequence:
 set -o pipefail
 make check-fmt 2>&1 | tee /tmp/check-fmt-ortho-config-7-3-1.out
 make lint 2>&1 | tee /tmp/lint-ortho-config-7-3-1.out
+make typecheck 2>&1 | tee /tmp/typecheck-ortho-config-7-3-1.out
 make test 2>&1 | tee /tmp/test-ortho-config-7-3-1.out
 make markdownlint 2>&1 | tee /tmp/markdownlint-ortho-config-7-3-1.out
 make nixie 2>&1 | tee /tmp/nixie-ortho-config-7-3-1.out
 ```
 
-Run commands individually and stop at failure. No Verus proof milestone is
-selected for this design. If a later approved revision adds one, run its
-explicit proof gate in addition to these commands. Run `make fmt` after
-documentation edits, inspect its diff, and retain only relevant changes. For
-implementation, run relevant baseline tests before edits; use a focused red
-command before production changes, the same command after the fix, then full
-gates. Suggested new targets are:
+Run commands individually and stop at failure. No prover milestone is selected
+for this design, so these gates exclude `make kani`, `make kani-full`, and
+`make verus`. If an approved D5 revision adds one, run its proof gates in
+addition to these commands. Run `make fmt` after documentation edits, inspect
+its diff, and retain only relevant changes. For implementation, run relevant
+baseline tests before edits; use a focused red command before production
+changes, the same command after the fix, then full gates. Suggested new targets
+are:
 
 ```bash
 cargo test -p ortho_config --test missing_required_values
-cargo test -p ortho_config --test missing_required_values_bdd
+cargo test -p ortho_config --test rstest_bdd missing_required_values
 cargo test -p ortho_config --test missing_required_values_e2e
 cargo test -p ortho_config_macros
 ```
@@ -605,7 +715,7 @@ invocation is not a pass.
 For this documentation-only plan publication, run `make fmt`, `make check-fmt`,
 `make markdownlint`, and `make nixie`. No runtime code changes justify a new
 full Rust compilation during planning. Implementation milestones must run the
-three ordinary gates explicitly requested above.
+four ordinary code gates listed above, and the Markdown gates for documentation.
 
 ## Idempotence and recovery
 
@@ -618,10 +728,10 @@ revert its tests, API changes, and documentation together.
 
 Push with the standard SSH Git client after verifying the GitHub identity.
 Refresh the explicit `origin` tracking ref after URL-based pushes and confirm
-the remote SHA. Publish this plan as a draft PR titled
-`Plan: Enumerate missing required values (7.3.1)`, with a branch-wise plan link
-and a terminal References section linking the Lody session. Approval must be
-explicit before M1 starts.
+the remote SHA. Draft PR #589, titled
+`Plan: Enumerate missing required values (7.3.1)`, publishes this plan with a
+branch-wise plan link and a terminal References section linking the Lody
+session. Approval must be explicit before M1 starts.
 
 ## Artefacts and research notes
 
@@ -639,3 +749,11 @@ preflight assumption with the live declarative merge boundary, and makes
 recursive schema coverage an explicit approval decision. Expert review removed
 an artificial filter-proof milestone and strengthened nested parent and repair
 semantics.
+
+Revision note (2026-11-06): rebased onto the landing of PR #651. Records that
+pinned Kani and Verus runners now exist with an empty production inventory,
+replaces the direct `prover-tools` command with the Make surface and inventory
+obligations, and adds D5 and R6 while retaining D4. Also corrects the baseline,
+the scripting-standards note, telemetry and localization sites, the BDD
+binding, dev dependencies, and the gate list, which now includes
+`make typecheck`. Remaining work is unchanged: approval, then M1–M4.
