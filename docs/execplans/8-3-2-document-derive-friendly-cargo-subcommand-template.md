@@ -110,9 +110,10 @@ extending the contract.
 - [x] (2026-11-08) Passed rebase `make check-fmt`, `make typecheck`, and
   `make lint`; inspected the failed `make test` boundary-fixture deadlines.
 - [x] (2026-11-08) Diagnosed the eight boundary-fixture timeouts in stacked
-  PR [#662](https://github.com/leynos/ortho-config/pull/662), which adopts
-  [issue #644](https://github.com/leynos/ortho-config/issues/644). Passed the
-  full gate set, committed this revision, and published it with an explicit
+  PR [#664](https://github.com/leynos/ortho-config/pull/664), which adopts
+  [issue #644](https://github.com/leynos/ortho-config/issues/644) and replaces
+  PR #662 after a no-op fast-forward merge that never reached `main`. Passed
+  the full gate set, committed this revision, and published it with an explicit
   force-with-lease.
 - [ ] Receive explicit implementation approval.
 - [ ] M1: publish and exercise both derive examples.
@@ -193,18 +194,20 @@ speculative source repair is justified. This was a separate boundary-runner
 validation blocker, not a recurrence of the resolved documentation-runner
 repair.
 
-The follow-up investigation, published as stacked
-[PR #662](https://github.com/leynos/ortho-config/pull/662) and adopting
+The follow-up investigation, published as the bottom layer of the stack in
+[PR #664](https://github.com/leynos/ortho-config/pull/664) and adopting
 [issue #644](https://github.com/leynos/ortho-config/issues/644), proved the
-cause and removed it. The fixture now drains both child streams, retains a
-bounded tail of each, and reports that tail in a deadline error, so admission
-and package-cache waiting are attributable. Nested Cargo calls are serialized
-inside the test process, the per-child deadline is 440 seconds within a
-960-second boundary allowance, and the identifier-artefact fixture reuses a
-stable target directory. `make boundary` then passed 32 of 32 cases with one
-ignored, and all seven deterministic gates passed on this revision, with logs
-under `/tmp` named for the `issue-644-nested-cargo-timeouts` branch. The
-revision is therefore validated and published on the plan branch.
+cause and removed it. It replaces PR #662, whose base was this plan branch and
+whose merge only fast-forwarded it without reaching `main`. The fixture now
+drains both child streams, retains a bounded tail of each, and reports that
+tail in a deadline error, so admission and package-cache waiting are
+attributable. Nested Cargo calls are serialized inside the test process, the
+per-child deadline is 440 seconds within a 960-second boundary allowance, and
+the identifier-artefact fixture reuses a stable target directory.
+`make boundary` then passed 32 of 32 cases with one ignored, and all seven
+deterministic gates passed on this revision, with logs under `/tmp` named for
+the `issue-644-nested-cargo-timeouts` branch. The revision is therefore
+validated and published on the plan branch.
 
 At implementation completion, reconcile upstream documents and acceptance
 evidence before marking the plan COMPLETE.
