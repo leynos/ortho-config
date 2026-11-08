@@ -136,7 +136,8 @@
   process-backed defaults.
 - [v0.11.0 migration guide](v0-11-0-migration-guide.md): name the new
   `renderer` field when building documentation IR or `AgentCommand` literals,
-  and optionally declare how a command renders.
+  optionally declare how a command renders, collect bridge-cache metrics from
+  the CLI, and adopt the shared test subprocess helpers.
 
 ## Testing and documentation references
 

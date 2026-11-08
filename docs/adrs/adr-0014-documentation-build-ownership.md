@@ -137,12 +137,11 @@ lock, while nextest assigns the affected binaries to one test group. The
 independent-workspace regression retains its concurrent workers inside that
 test, so it continues to exercise cross-process artefact ownership.
 
-The identifier-artefact integration test gives its fixture a persistent,
-test-private target nested under Cargo's configured workspace target. Each run
-cleans only the fixture package before checking opt-out behaviour, retaining
-compiled dependencies for later runs without deleting test executables that the
-outer Cargo workspace has already built. The fixture continues to use Cargo's
-default shared package cache.
+The identifier-artefact integration test gives its fixture a private target
+nested under Cargo's configured workspace target. Its package clean can then
+force a fresh build without deleting test executables that the outer Cargo
+workspace has already built. The fixture continues to use Cargo's default
+shared package cache.
 
 The build cache is test infrastructure. It may reuse compiler output through
 Cargo's normal target and package-cache behaviour, but it must not relocate,
@@ -377,6 +376,33 @@ runner clears the environment without restoring `RUSTC_WRAPPER`;
 separate repair. Detailed timings and evidence limits are in the developers'
 guide's [cold-run budget account][cold-run-budget].
 
+## Addendum (2026-10-26): Bridge-cache metrics
+
+The bridge's intermediate-representation (IR) cache gained an optional metrics
+surface without changing its ownership. Persistence stays in the private
+`bridge/ir_cache.rs` unit, which returns a closed publish outcome and a
+stage-tagged publish error and records nothing itself; the bridge orchestration
+boundary names the outcome in tracing and, with the `metrics` feature enabled,
+in the counter `cargo_orthohelp.bridge_cache.events`. Both labels, `operation`
+and `outcome`, come from closed enums, so no path, cache key, or error string
+can become a label.
+
+The `metrics` facade discards updates until the process installs a recorder, so
+the standalone `cargo-orthohelp` binary now installs a `tracing`-backed
+recorder before any bridge work. A host that installs its own recorder first
+keeps it. The design is recorded in the [cargo-orthohelp design][bridge-design].
+
+## Addendum (2026-11-06): Persistent test-private fixture target
+
+The identifier-artefact fixture keeps a persistent target directory,
+`identifier-e2e`, under Cargo's configured workspace target, tagged with
+`CACHEDIR.TAG`, instead of creating one per run. Each run cleans only the
+`orthohelp_fixture` package within that directory before checking opt-out
+behaviour, so later runs reuse compiled dependencies. The guarantees above
+still hold: the outer workspace's test executables are never deleted, and the
+fixture still uses Cargo's default shared package cache. The original paragraph
+is retained as the record of the decision the fixture was introduced under.
+
 ## Consequences
 
 - Documentation-test workspaces reuse compiler outputs through Cargo while
@@ -410,4 +436,5 @@ guide's [cold-run budget account][cold-run-budget].
   ../developers-guide.md#test-timeouts-the-tiers-this-repository-sets
 [cold-run-budget]:
   ../developers-guide.md#the-whole-run-budget-was-resized-from-a-cold-run
+[bridge-design]: ../cargo-orthohelp-design.md#633-bridge-build-ownership-and-recovery
 [file-lock]: https://docs.rs/fs4/1.1.0/fs4/trait.FileExt.html

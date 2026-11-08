@@ -1974,9 +1974,14 @@ different boundary rule: every event here is diagnostic only. None decides
 anything, none is a contract a consumer may filter against, and no control flow
 returns through an emitter. The modules are grouped by the fact they report:
 
-- `bridge/telemetry.rs` — the ephemeral bridge build (`succeeded`, `failed`
-  with the child's standard error) and the IR cache (`unchanged`, `write`).
-  `bridge/mod.rs` additionally logs a cache hit when it returns cached IR.
+- `bridge/telemetry.rs` — the IR cache only (`hit`, `miss`, `unchanged`,
+  `write`), one function per spelling so the function that decides something
+  never spells an event.
+- `bridge_build_telemetry.rs` — the build's recovery markers and generated
+  output cleanup.
+- `bridge_observability.rs` — the completed/failed pairs for the Cargo build,
+  executable snapshot, bridge execution, and cache operations, including the
+  child's standard error on a failed build.
 - `output/mod.rs` — the atomic JSON write: the start, the completion with its
   byte count, the stdout path, and one failure event per fallible step
   (prepare, open, write, flush, sync, rename, and parent-directory sync).
@@ -1990,6 +1995,27 @@ standard error because a bridge build failure is otherwise opaque to the user,
 and that text is the only way to diagnose one. Do not extend the same treatment
 to `discovery`, whose inputs are configuration values and are exactly what the
 closed vocabulary exists to keep out.
+
+The IR cache is a persistence unit with no observability of its own.
+`bridge/ir_cache.rs` returns a closed `PublishOutcome` (`Unchanged` or
+`Updated`) and a `PublishError` tagged with the `Read` or `Write` stage that
+produced it; it never records a span or a counter. `bridge/mod.rs` owns the
+publish policy: `publish_ir_cache` maps that outcome onto
+`bridge_observability`, onto `bridge/telemetry.rs`, and, behind the `metrics`
+feature, onto `bridge/telemetry_metrics.rs`. Keep the split. A second caller
+recording the same fact would double-count it, and a persistence test should
+not need a metrics recorder.
+
+The counter is `cargo_orthohelp.bridge_cache.events`, and both of its labels
+(`operation`, `outcome`) are drawn from the closed enums in
+`bridge/telemetry_metrics.rs`. Never attach a path, cache key, or error string.
+The `metrics` facade drops every update unless the process installs a recorder,
+so the `cargo-orthohelp` binary installs `src/metrics_recorder.rs` before any
+bridge work. That recorder emits one `tracing` event per update under the
+`cargo_orthohelp::metrics` target and leaves the process-wide slot alone when a
+host has already claimed it. Its contract test drives a real cache emission
+through the installed recorder, so a regression in the event shape or in the
+install hook fails the suite rather than silently dropping the counter.
 
 ## Digest rendering
 

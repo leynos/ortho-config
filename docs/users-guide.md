@@ -1098,6 +1098,34 @@ fn main() {
 change. `EnvSource` deliberately supports lookup by name but not enumeration;
 discovery cannot accidentally scan or log unrelated environment values.
 
+## Run test subprocesses under a deadline
+
+Tests that start another process need three things the standard library does
+not provide together: a deadline that does not move, bounded capture of each
+output stream, and a guarantee that no descendant outlives the test. The
+`ortho_config_test_helpers` crate supplies them through
+`ortho_config_test_helpers::process`.
+
+Call `run_with_deadline` when one command has its own budget: it takes the
+`Command`, a `Duration`, and a human-readable description, and returns the
+captured `Output`. Call `run_with_deadline_until` instead when an enclosing
+test sequence owns a shared deadline; the earlier of the two limits applies,
+and time already spent, including waiting for a caller-owned lock, is charged
+to the sequence budget. Both report a failure that names the description, the
+duration, and the scope whose budget expired, so a timeout reads as a failed
+budget rather than an opaque panic.
+
+The helpers own execution, cleanup, and capture only. The caller still builds
+the command, chooses its environment, serializes it against other tests, and
+interprets the returned status and output. Capture is bounded at 1 MiB per
+stream while remaining drained, so a chatty child cannot exhaust memory or
+deadlock on a full pipe. Output activity does not extend a deadline.
+
+These helpers are test-only: use them from tests and test fixtures, never from
+production code. A test runner that needs its own diagnostics or capture policy
+uses the lower-level module for its platform rather than a second process-tree
+implementation.
+
 ## Resolve discovery and merging without process state
 
 The previous section isolates file discovery. Tests and embedding applications
@@ -1578,13 +1606,20 @@ The counter is `cargo_orthohelp.bridge_cache.events`. Its bounded `operation`
 label is `lookup` or `publish`; its `outcome` label is `hit`, `miss`,
 `read_failed`, `unchanged`, `updated`, or `write_failed`.
 
-The feature is opt-in and does not install a metrics recorder. The standalone
-CLI does not install one either, so events are collected only when the process
-provides its own `metrics` recorder. Without a recorder, the metrics facade
-drops them. The feature is additive and disabled by default; no migration is
-needed to keep using existing commands. For the upgrade summary, see the
-[bridge-cache metrics entry](v0-10-0-migration-guide.md#bridge-cache-metrics)
-in the v0.10.0 migration guide.
+With the feature enabled, the standalone CLI installs a `tracing`-backed
+recorder at startup, so each counter update is written to standard error as a
+structured `tracing` event under the `cargo_orthohelp::metrics` target. Set
+`RUST_LOG=cargo_orthohelp::metrics=debug` to collect them with the rest of the
+tool's diagnostics. A process that installs its own `metrics` recorder before
+the CLI starts keeps it, because the CLI claims the process-wide recorder slot
+only when it is free, so an embedding application can export to its own sink.
+Without any recorder the metrics facade drops events, which is the behaviour a
+plain `cargo orthohelp` run without the feature keeps.
+
+The feature is additive and disabled by default; no migration is needed to keep
+using existing commands. For the upgrade summary, see the
+[bridge-cache metrics entry](v0-11-0-migration-guide.md#6-collect-bridge-cache-metrics-from-the-cli)
+in the v0.11.0 migration guide.
 
 ## Generate every format at once
 
