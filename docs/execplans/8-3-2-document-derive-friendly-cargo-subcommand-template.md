@@ -36,9 +36,11 @@ options struct's existing fields when adapting the template.
 
 Follow `AGENTS.md`, the documentation style guide, and the live Makefile. Keep
 each Rust file below 400 lines. Every new public-guide fence needs a unique
-`tested-example` marker and executable validation. Keep
-`ortho_config/README.md` identical to the root README. Do not mutate the
-process environment in tests; use existing child-process environment setup.
+`tested-example` marker and executable validation. Keep the root README as the
+package README source through `readme = "../README.md"` in
+`ortho_config/Cargo.toml`; do not recreate a packaged README copy. Do not
+mutate the process environment in tests; use existing child-process environment
+setup.
 
 Run all gates sequentially through a scrutineer agent with `tee` logs and
 pipeline failure propagation. Preserve compiler admission and the shared Cargo
@@ -71,16 +73,22 @@ explain the distinction beside the example.
 
 A medium-likelihood risk is documentation-test drift: an unregistered or copied
 snippet can look correct without being tested. Compile the actual marked
-fences, register both IDs, and retain the README parity test.
+fences, register both IDs, and retain the package README source test.
 
-Implementation validation is currently blocked by the existing runner.
-`ExampleWorkspace::new` uses `tempfile::tempdir()` and the child runner places
-its Cargo target below that directory. `TMPDIR` is unset on this host, so this
-would build under `/tmp`. Its Cargo environment allow-list also drops the live
-`RUSTC_WRAPPER` and `RUSTDOC` admission adapters. No nested build, including
-`make test`, may run until prerequisite P0 below is discharged. Plan
-publication uses documentation gates and is not blocked by this runtime
-prerequisite.
+The original runner blocker was resolved upstream by the changes now present in
+`ab7f51e1` (PR #452). Documentation workspaces live under
+`target/documentation-workspaces`; builds reuse Cargo's resolved target through
+the build-state and cache modules. `cargo_environment.rs` preserves
+`RUSTC_WRAPPER`, `RUSTDOC`, and the shared Cargo cache. Keep these guarantees
+when adding example tests rather than recreating the old temporary runner.
+
+Admission waiting still consumes the fixed 956-second scenario envelope inside
+the 960-second nextest allowance. The build policy allows at most 956 seconds,
+with discovery and executable policies bounded separately and capped by the
+remaining scenario time. Submit gates once even when the healthy pool is full;
+do not wait for unrelated worktrees to become idle. Report a deadline failure
+with its log and admission evidence rather than bypassing controls or silently
+extending the contract.
 
 ## Progress
 
@@ -96,6 +104,16 @@ prerequisite.
 - [x] (2026-10-14) Validated documentation gates, committed `527822d6`,
   pushed, configured the requested upstream, and published draft pull request
   (PR) [#590](https://github.com/leynos/ortho-config/pull/590).
+- [x] (2026-11-08) Rebased both plan commits without conflicts onto
+  `ddba3578fae04227e426ea3a61aa2b24aa043232`, including merged PR #651, and
+  refreshed the runner and formal-tooling contracts.
+- [x] (2026-11-08) Passed rebase `make check-fmt`, `make typecheck`, and
+  `make lint`; inspected the failed `make test` boundary-fixture deadlines.
+- [x] (2026-11-08) Diagnosed the eight boundary-fixture timeouts in stacked
+  PR [#662](https://github.com/leynos/ortho-config/pull/662), which adopts
+  [issue #644](https://github.com/leynos/ortho-config/issues/644). Passed the
+  full gate set, committed this revision, and published it with an explicit
+  force-with-lease.
 - [ ] Receive explicit implementation approval.
 - [ ] M1: publish and exercise both derive examples.
 - [ ] M2: reconcile documentation and mark 8.3.2 done after final gates.
@@ -108,10 +126,14 @@ installed-binary name. The new material must distinguish these surfaces rather
 than silently rewriting the requirement.
 
 The requested `docs/rtest-bdd-users-guide.md` is named
-`docs/rstest-bdd-users-guide.md` in this checkout. The requested
-`docs/scripting-standards.md` does not exist. No script is proposed, so this
-missing reference does not prevent planning; repository instructions govern
-commands, and any later script proposal must first resolve the missing guide.
+`docs/rstest-bdd-users-guide.md` in this checkout. The initially absent
+`docs/scripting-standards.md` is now available on the rebased target. No script
+is proposed; consult that guide if scripting becomes necessary.
+
+PR #651, merged on 2026-11-06 as `ddba3578`, imports consumer-side Kani and
+Verus tooling. It supplies pins, command wrappers, positive and negative
+fixtures, and an opt-in Continuous Integration (CI) lane. It does not prove a
+configuration property or require this documentation task to add a proof.
 
 ## Decision log
 
@@ -125,54 +147,104 @@ commands, and any later script proposal must first resolve the missing guide.
   dispatch contract. No new algorithm, business rule, or semantic kernel needs
   Verus, Kani, property testing, or output-format snapshots.
 
+- 2026-11-08: Incorporate PR #651 and
+  [ADR-0017](../adrs/adr-0017-consumer-side-prover-tooling.md) as the formal
+  tooling contract. Retain ordinary executable tests for 8.3.2; existing
+  tooling is not a reason to invent a semantic lemma.
+- 2026-11-08: Retire the old P0 repair requirement based on the upstream
+  runner implementation and its tests. Keep P0 as a live preflight check of the
+  accepted target, environment, and deadline contracts. This refresh does not
+  approve feature implementation.
+
 ## Outcomes & retrospective
 
 The reviewed plan and index were published in draft PR
 [#590](https://github.com/leynos/ortho-config/pull/590), initially at commit
 `527822d6`. The requested branch tracks its matching `origin` branch. No
-implementation is approved or delivered; P0 remains an implementation
-validation prerequisite.
+implementation is approved or delivered. The historical runner repair
+requirement is discharged by upstream source changes; P0 now checks that the
+execution environment respects the current runner contract.
 
-Planning validation passed: `make fmt`, `make check-fmt`, `make markdownlint`
-including spelling, `make nixie`, and `git diff --check`. Logs are under `/tmp`
-with names `check-fmt-ortho-config-8-3-2-plan.out`,
+Historical October planning validation passed: `make fmt`, `make check-fmt`,
+`make markdownlint` including spelling, `make nixie`, and `git diff --check`.
+Logs are under `/tmp` with names `check-fmt-ortho-config-8-3-2-plan.out`,
 `markdownlint-ortho-config-8-3-2-plan.out`, and
 `nixie-ortho-config-8-3-2-plan.out`. Spelling regeneration produced no tracked
 change. Rust lint and runtime tests were not run for this plan-only change. The
-publication-record update receives the same documentation gates before its
-commit. At implementation completion, reconcile upstream documents and
-acceptance evidence before marking the plan COMPLETE.
+publication-record update received the same documentation gates before its
+commit. The November revision is covered by the gate set recorded below.
+
+November rebase validation passed `make check-fmt`, `make typecheck`, and
+`make lint`. Their logs are `/tmp/check-fmt-ortho-832-rebase-20261108.out`,
+`/tmp/typecheck-ortho-832-rebase-20261108.out`, and
+`/tmp/lint-ortho-832-rebase-20261108.out`. The first test run was interrupted
+without a terminal result. The resumed `make test` failed with eight
+`ortho_l10n` boundary-test timeouts: six cases shared a cached packaging
+failure at 240 seconds, and two consumer tests reached their 300-second limits.
+See `/tmp/test-ortho-832-rebase-20261108-resumed.out`. Earlier suites,
+including executable documentation tests, passed, but the overall gate failed
+and later tests are not established by that run.
+
+The boundary helper captures child output but omits it from timeout errors.
+Consequently, the retained evidence cannot distinguish admission waiting,
+Cargo-lock waiting, or compilation time. Healthy but occupied admission slots
+make contention plausible, not proven. No deadline increase, wrapper bypass, or
+speculative source repair is justified. This was a separate boundary-runner
+validation blocker, not a recurrence of the resolved documentation-runner
+repair.
+
+The follow-up investigation, published as stacked
+[PR #662](https://github.com/leynos/ortho-config/pull/662) and adopting
+[issue #644](https://github.com/leynos/ortho-config/issues/644), proved the
+cause and removed it. The fixture now drains both child streams, retains a
+bounded tail of each, and reports that tail in a deadline error, so admission
+and package-cache waiting are attributable. Nested Cargo calls are serialized
+inside the test process, the per-child deadline is 440 seconds within a
+960-second boundary allowance, and the identifier-artefact fixture reuses a
+stable target directory. `make boundary` then passed 32 of 32 cases with one
+ignored, and all seven deterministic gates passed on this revision, with logs
+under `/tmp` named for the `issue-644-nested-cargo-timeouts` branch. The
+revision is therefore validated and published on the plan branch.
+
+At implementation completion, reconcile upstream documents and acceptance
+evidence before marking the plan COMPLETE.
 
 ## Context and orientation
 
 `docs/roadmap.md` §8.3 records the completed hand-built helper and the four
 remaining acceptance bullets for 8.3.2. `docs/design.md` §4.17 and
-`docs/adr-004-cargo-external-subcommand-entry-point.md` define the entry-point
-boundary. `ortho_config/src/cargo/mod.rs` owns the hand-built helper.
-`cargo-orthohelp/src/cli/mod.rs` contains the existing `Cli`,
+`docs/adrs/adr-0004-cargo-external-subcommand-entry-point.md` define the
+entry-point boundary. `ortho_config/src/cargo/mod.rs` owns the hand-built
+helper. `cargo-orthohelp/src/cli/mod.rs` contains the existing `Cli`,
 `CargoSubcommand::Orthohelp(Args)`, and `Args` structures; these are evidence,
 not required reading for users of the finished template.
 
 Extend the Cargo external-subcommand section of `docs/users-guide.md` and add a
-short standalone section near the helper mention in `README.md`. Mirror the
-README into `ortho_config/README.md`. The guide currently tells derive users to
-consult internals instead of providing a template.
+short standalone section near the helper mention in `README.md`. The package
+uses that README directly. Expand the guide's short derive-wrapper pointer into
+a standalone template.
 
 `ortho_config/tests/documentation_examples/mod.rs` extracts the exact fenced
 source. `documentation_examples_tests.rs` in the same tests directory owns
-`EXPECTED_EXAMPLE_IDS` and README parity. The existing integration target
-`documentation_examples_rust_tests` already exercises Cargo dispatch through
-`ExampleWorkspace::add_binary_as`, `build`, `run`, and `run_cargo_subcommand`.
-Its source has 369 lines at the planning baseline; place the new test in a
-small child module rather than exceeding 400 lines.
+`EXPECTED_EXAMPLE_IDS` and the package README source contract. The existing
+integration target `documentation_examples_rust_tests` already exercises Cargo
+dispatch through `ExampleWorkspace::add_binary_as`, `build`, `run`, and
+`run_cargo_subcommand`. The target is now split into focused child modules,
+including `documentation_examples/cargo_flows.rs` for the existing Cargo helper
+test. Add the derive tests as a neighbouring child module. The generated
+manifest now belongs to
+`documentation_examples/workspace_layout.rs::render_manifest`. The existing
+Cargo and general example tests use the shared
+`serial_test::serial(documentation_build)` lock; reuse that same lock.
 
 ## Conformance basis
 
-The repository baseline is `dc979878b5728bbb23866df9c05c2570bdb5629e`. There is
-no separate terms-of-reference document for this task. The normative sources
-are roadmap 8.3.2, design §4.17, ADR-004 including its 2026-08-09 amendment,
-and the user's explicit requirements. Recheck their revisions when
-implementation begins.
+The current repository baseline is `ddba3578fae04227e426ea3a61aa2b24aa043232`
+(PR #651). The original October planning baseline was
+`dc979878b5728bbb23866df9c05c2570bdb5629e`. There is no separate
+terms-of-reference document for this task. The normative sources are roadmap
+8.3.2, design §4.17, ADR-004 including its 2026-08-09 amendment, and the user's
+explicit requirements. Recheck their revisions when implementation begins.
 
 R1 is the complete derive wrapper in both public guides. R2 is Cargo's injected
 argument and both invocation forms. R3 is the unchanged configuration-loading
@@ -184,8 +256,8 @@ recording after all acceptance evidence passes.
 Consult these repository references for the following specific boundaries:
 
 - [Design](../design.md) §4.17 and
-  [ADR-004](../adr-004-cargo-external-subcommand-entry-point.md) govern wrapper
-  shape and entry-point ownership.
+  [ADR-004](../adrs/adr-0004-cargo-external-subcommand-entry-point.md) govern
+  wrapper shape and entry-point ownership.
 - [CLI localization](../cli-localization-design.md) and
   [Fluent library design](../localizable-rust-libraries-with-fluent.md) keep
   localization and subscriber setup under application authority.
@@ -203,6 +275,11 @@ Consult these repository references for the following specific boundaries:
 - [BDD guidance](../rstest-bdd-users-guide.md) applies if scenarios change;
   [complexity guidance](../complexity-antipatterns-and-refactoring-strategies.md)
   supports a small test module and reuse of existing process helpers.
+- [Consumer-side prover tooling ADR](../adrs/adr-0017-consumer-side-prover-tooling.md)
+  and [tooling import plan](import-prover-tools.md) distinguish runner fixtures
+  from production claims and define opt-in verification commands.
+- [Scripting standards](../scripting-standards.md) govern any future scripts;
+  none are needed for this task.
 - [Developer's guide](../developers-guide.md),
   [repository layout](../repository-layout.md), and
   [documentation style](../documentation-style-guide.md) govern maintenance.
@@ -233,11 +310,12 @@ and be registered. Add an `rstest` case per fence to
 `ortho_config/tests/documentation_examples/cargo_derive.rs`, included by the
 existing Rust-example target. Build each exact fence as `cargo-demo` once and
 reuse that binary for every option, help, and failure probe. Serialize the two
-expensive cases with the existing `serial_test` support, using a common lock
-name on the parameterized test. Ensure both fences execute. The red stage fails
-because those IDs do not exist; the green stage succeeds only after both
-published examples exist and compile. Keep README parity covered by
-`published_crate_readme_matches_repository_readme`.
+expensive cases with the existing `serial_test` support, using the existing
+`documentation_build` lock on the parameterized test. Ensure both fences
+execute. The red stage fails because those IDs do not exist; the green stage
+succeeds only after both published examples exist and compile. Keep the package
+README source contract covered by
+`published_crate_packages_the_repository_readme`.
 
 V2 (R2): for each compiled example, execute both direct and Cargo-dispatched
 forms with `--verbose` and without that option; assert the observable option
@@ -249,10 +327,10 @@ with `.with_max_level(tracing::Level::DEBUG)`, `.without_time()`,
 `.with_writer(std::io::stderr)`. This example deliberately enables debug output
 without relying on `RUST_LOG`, which the Cargo-dispatch runner does not
 forward. Explain that production applications own subscriber configuration. Add
-`tracing = "0.1"` to `render_manifest` in `documentation_examples/workspace.rs`
-and show it with `tracing-subscriber = "0.3"` and clap derive in both
-dependency recipes. Do not accept exit status alone as evidence that the
-argument was consumed.
+`tracing = "0.1"` to `render_manifest` in
+`documentation_examples/workspace_layout.rs` and show it with
+`tracing-subscriber = "0.3"` and clap derive in both dependency recipes. Do not
+accept exit status alone as evidence that the argument was consumed.
 
 V3 (R2, R4): check root help, inner help through direct invocation, and inner
 help through Cargo dispatch. The selected naming contract should render
@@ -284,11 +362,44 @@ exhaustive claim is neither made nor required.
 
 No new business logic or non-trivial invariant is introduced. The argument
 relationship is integration plumbing over documented third-party interfaces.
-Verus is not warranted; no proof milestone or speculative lemma is proposed. If
-a future design introduces a pure semantic kernel, stop and revise the abstract
-specification, preconditions, postconditions, and candidate lemmas before
-implementation. Any selected formal proof must use Verus substantively, without
-`assume`, `admit`, or trusted proof bodies, alongside executable tests.
+Verus is not warranted; no proof milestone or speculative lemma is proposed.
+The tooling import does not change that assessment. Its positive and rejecting
+fixtures prove the tool boundary works, not that the Cargo template or
+configuration merge pipeline is correct.
+
+If a future approved design introduces a pure semantic kernel, first revise the
+abstract specification, preconditions, postconditions, representation
+relationship, and candidate lemmas. Follow ADR-0017: register the production
+inputs in `KANI_SMOKE_HARNESSES`, `KANI_ALL_HARNESSES`, or `VERUS_PROOF_FILES`
+and name their owning feature, production symbol, symbolic inputs and bounds,
+and model-to-production refinement evidence. Record assumptions, the expected
+check count, and the negative control beside each registered claim. Any
+selected formal proof must use Verus substantively, without `assume`, `admit`,
+or trusted proof bodies, alongside executable tests.
+
+The imported pins are Kani `0.67.0` and Verus `0.2026.01.30.44ebdee`, owned by
+`tools/kani/VERSION`, `tools/verus/VERSION`, and `tools/verus/SHA256SUMS`. The
+Makefile delegates to `rust-prover-tools` at
+`592558f7183b554fc749696246984c5d7300d029`. Use those sources of truth rather
+than copying tooling or installing floating versions. The lane is validated on
+Linux x86_64 only. Verus uses its bundled Z3 and the Rust toolchain named in
+its release manifest; the repository toolchain alone is not sufficient.
+
+For such a future proof milestone, the explicit acceptance command is
+`make verus VERUS_PROOF_FILES='path/to/approved-proof.rs'`, replacing the
+placeholder with the registered proof. Run `make kani-check`, `make kani`, and
+`make kani-full` only if production Kani harnesses are selected. Empty
+inventories intentionally fail with `FORMAL-EMPTY`; never count that as a pass
+or fill the inventory with tooling fixtures. Installation is a separate step
+through `make install-kani` and `make install-verus`; proof execution never
+installs missing binaries or toolchains. Preserve both `--no-install-missing`
+and `--no-ensure-toolchain` in the Verus recipe.
+
+`make test-prover-tools-integration` is the opt-in real-tool fixture check and
+writes `target/prover-tools-fixtures/prover-evidence.json`. It is not an 8.3.2
+acceptance requirement. Ordinary `make test`, `make lint`, and `make all` do
+not install or execute provers, and integration fixtures skip under ordinary
+tests. Continue ordinary gates without installing provers for this plan.
 
 `rstest-bdd` is not needed for an additional duplicate scenario: these are
 executable documentation contracts in an existing integration target. No
@@ -297,31 +408,28 @@ open-ended transformation or state machine warrants `proptest` or Kani.
 
 ## Plan of work
 
-P0 is a mandatory pre-M1 prerequisite, distinct from approval of this plan. The
-current runner violates the two host constraints recorded in Risks. Accept an
-independently reviewed upstream repair, or obtain separate approval for a
-bounded runner repair. Its evidence must show that nested Cargo retains the
-active `RUSTC_WRAPPER` and `RUSTDOC`, uses a writable build target outside
-`/tmp`, and retains the shared Cargo cache. A command-scoped `TMPDIR` outside
-`/tmp` can solve the location issue but cannot repair the wrapper allow-list.
-Do not substitute a parallel fixture runner or weaken isolation. Record the
-repair revision and checks here before any nested baseline or `make test`. Also
-inspect `documentation_examples/process_runner.rs`: its 600-second subprocess
-deadline includes compiler-admission waiting time. The prerequisite must
-establish an admission-compatible timeout policy so queued builds are not
-terminated as hung; any deadline repair belongs to the separately reviewed
-runner change. Until then, implementation validation remains BLOCKED; the plan
-can still be reviewed and published. After P0 and explicit plan approval,
-recheck the live baseline and establish the existing documentation tests as
-passing.
+P0 runs before the November rebase test gate and again before M1; the formerly
+required runner repair has landed upstream. Inspect `workspace.rs`,
+`workspace_layout.rs`, `cargo_environment.rs`, `build_state.rs`,
+`build_cache.rs`, `scenario.rs`, and `process_runner_policy.rs` under
+`ortho_config/tests/documentation_examples/`. Confirm the resolved Cargo target
+is outside `/tmp`, the active compiler-admission adapters and shared Cargo
+cache are preserved, and the fixed scenario and cleanup deadlines remain
+intact. Reuse the existing build-state leases and shared `documentation_build`
+lock rather than introducing a second runner or cache. Source inspection
+establishes the repair; the requested rebase gates provide current execution
+evidence. Report any failed prerequisite without treating a healthy occupied
+compiler pool as a blocker. After explicit plan approval, establish the
+existing documentation tests as passing before adding feature examples.
 
 For M1, add the two expected IDs and a new small `cargo_derive` test module. Use
 `#[path = "documentation_examples/cargo_derive.rs"] mod cargo_derive;` in
 `documentation_examples_rust_tests.rs`; reuse the sibling `workspace` and
 `documentation_examples` modules. Keep any local case runner private to this
-module and document its allowed call sites in the developer's guide in M1,
-before introducing it; do not create a second shared workspace or command
-runner. Run the red test before adding the examples.
+module, following the developer guide's existing Public documentation examples
+ownership contract. Document a new helper boundary before introducing one only
+if the implementation extends that contract; do not create a second shared
+workspace or command runner. Run the red test before adding the examples.
 
 Then add complete examples with imports, `Cli`, enum, existing-style options
 struct, and `main`. Enable clap's `derive` feature in the shown dependency
@@ -334,20 +442,22 @@ application logic receives it. Link existing configuration-merging guidance
 rather than inventing a new loader. Include both help forms and the required
 direct token.
 
-Add the user's-guide subsection and replace the existing instruction to read
-`cargo-orthohelp` internals. Keep README material compact but independently
-adaptable. Mirror the packaged README. Document the installed-binary help
-spelling beside the derive example and distinguish the helper's Cargo usage
-spelling. Keep existing binary-level tracing and diagnostic obligations visible.
+Add the user's-guide subsection and expand the existing short pointer to the
+`cargo-orthohelp` derive wrapper. Keep README material compact but
+independently adaptable. Preserve the manifest's direct root-README reference.
+Document the installed-binary help spelling beside the derive example and
+distinguish the helper's Cargo usage spelling. Keep existing binary-level
+tracing and diagnostic obligations visible.
 
 For M2, record the template naming distinction in design §4.17 and add a
 cross-reference to the guide. The accepted ADR needs no new architectural
 decision; if the text implies the amendment covers all derive templates, add a
 narrow clarification rather than changing the accepted helper. Finalize the
-developer-guide cross-references to the fence IDs and ownership recorded in M1.
-Reconcile links and record the implementation evidence. Mark roadmap 8.3.2 and
-all four acceptance bullets done using checked boxes only after R1–R4 pass. Do
-not mark 8.3.3 or 8.3.4 done.
+developer-guide cross-references only if M1 adds a new ownership or reuse
+contract; the existing public-documentation example policy already covers a
+private test module. Reconcile links and record the implementation evidence.
+Mark roadmap 8.3.2 and all four acceptance bullets done using checked boxes
+only after R1–R4 pass. Do not mark 8.3.3 or 8.3.4 done.
 
 ## Milestones and plateaus
 
@@ -392,8 +502,9 @@ A scrutineer runs these sequentially, each with `set -o pipefail` and a separate
 ```sh
 make fmt
 make check-fmt
-make lint
 make test
+make typecheck
+make lint
 make markdownlint
 make nixie
 ```
@@ -403,15 +514,18 @@ For example, use
 enabled. Inspect formatting changes and retain only intended edits. Never run
 these commands concurrently. `make test` runs all-target/all-feature Rust tests
 and Python tests in the live Makefile; do not substitute the older simplified
-command quoted in generic guidance. `make lint` includes rustdoc, Clippy, and
-Whitaker. A missing Whitaker installation is a reported blocker. Generated
-spelling changes require the repository's separate-base-change workflow if
-unrelated; never hand-edit `typos.toml`.
+command quoted in generic guidance. `make lint` includes rustdoc, Clippy,
+Whitaker, and Python docstring coverage. A missing Whitaker installation is a
+reported blocker. Generated spelling changes require the repository's
+separate-base-change workflow if unrelated; never hand-edit `typos.toml`.
 
-For this plan-only PR, run documentation formatting, `make check-fmt`,
-`make markdownlint`, and `make nixie`. Runtime tests are not implementation
-approval and need not execute speculative examples. Record any blocked gates
-explicitly rather than calling them passed.
+The original October plan-only publication ran documentation gates. The
+November rebase explicitly requires `make check-fmt`, `make test`,
+`make typecheck`, and `make lint`, plus the documentation gates for this
+revised plan. Run them sequentially against the rebased candidate and record
+passed, failed, or blocked outcomes separately. Do not reuse the October gate
+evidence as evidence for this candidate. No feature implementation is
+authorized by running these validation commands.
 
 ## Validation and acceptance
 
@@ -427,11 +541,11 @@ used crate and feature, package or binary naming, installation command, and
 `PATH` step against only its published instructions. The richer generated test
 manifest must not mask an omitted dependency.
 
-Acceptance also requires exact-fence tests for both documents, README parity,
-unchanged merge semantics, recorded successful gates, and a checked roadmap
-entry only at implementation completion. The implementor records red, green,
-negative-control, and final gate log paths in this plan. Reviewers must be able
-to distinguish passed, not run, and blocked evidence.
+Acceptance also requires exact-fence tests for both documents, the package
+README source contract, unchanged merge semantics, recorded successful gates,
+and a checked roadmap entry only at implementation completion. The implementor
+records red, green, negative-control, and final gate log paths in this plan.
+Reviewers must be able to distinguish passed, not run, and blocked evidence.
 
 ## Idempotence and recovery
 
@@ -485,3 +599,13 @@ runner prerequisite, and reserves all implementation for explicit approval.
 Revision note (2026-10-14): recorded passed documentation gates, initial plan
 commit, upstream tracking, and draft PR publication. Implementation approval
 and the P0 runner prerequisite remain outstanding.
+
+Revision note (2026-11-08): rebased onto merged PR #651, incorporated ADR-0017
+and its opt-in prover command contract, retained the no-new-proof decision, and
+refreshed P0, module paths, build serialization, available references, and
+validation commands against the current target. Feature implementation still
+awaits explicit approval; the earlier P0 repair blocker is historical.
+
+Revision note (2026-11-08): recorded passed formatting, typecheck, and lint
+checks and the failed boundary-test deadlines. Publication is blocked on
+successful validation; no feature implementation or runner repair was made.
