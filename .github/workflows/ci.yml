@@ -492,12 +492,6 @@ jobs:
         shell: pwsh
         run: choco install make --yes --no-progress
 
-      # .cargo/config.toml selects the mold linker on Linux, and the job sets
-      # no RUSTFLAGS, so the configuration applies to Clippy's build scripts.
-      - name: Install mold
-        if: ${{ matrix.platform == 'linux' }}
-        run: sudo apt-get install --yes --no-install-recommends mold
-
       - name: Clippy (beta)
         env:
           CARGO: cargo +beta

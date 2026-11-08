@@ -9,10 +9,13 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 from build_tools_test_support import (
     INSTALL,
     OfflineInstall,
+    _fake_uname,
     _pinned_channel,
     _pinned_components,
     _pinned_profile,
@@ -21,6 +24,13 @@ from build_tools_test_support import (
     offline_install,
     tools,
 )
+
+
+def _quoting_scratch(root: pathlib.Path) -> pathlib.Path:
+    """Return an empty ``TMPDIR`` whose path only works when it stays quoted."""
+    scratch = root / "scratch 'quoted' dir"
+    scratch.mkdir()
+    return scratch
 
 
 def test_install_refuses_an_archive_with_the_wrong_digest(offline_install: OfflineInstall) -> None:
@@ -121,3 +131,44 @@ def test_install_fails_when_host_os_cannot_be_detected(
     assert "could not determine host operating system using uname -s" in result.stderr
     assert not (offline_install.root / "prefix" / "bin").exists()
     assert not (offline_install.root / "rustup.log").exists()
+
+
+def test_install_skips_mold_on_a_non_linux_host(offline_install: OfflineInstall) -> None:
+    """A non-Linux host downloads no Linux linker and still installs the toolchain."""
+    _fake_uname(offline_install.tools, machine="arm64", system="Darwin")
+    result = _run(INSTALL, offline_install.env(offline_install.sums_line))
+    assert result.returncode == 0, result.stderr
+    assert "mold is Linux-only; skipping on Darwin" in result.stderr, result.stderr
+    assert "downloading" not in result.stderr, "a Linux-only archive was fetched"
+    assert not (offline_install.root / "prefix" / "bin").exists(), (
+        "mold must not be unpacked on an unsupported host"
+    )
+    assert (offline_install.root / "rustup.log").is_file(), (
+        "skipping the linker must not skip the toolchain"
+    )
+
+
+def test_install_removes_its_scratch_directory_after_success(
+    offline_install: OfflineInstall,
+) -> None:
+    """A quote-bearing ``TMPDIR`` must not break the cleanup trap."""
+    scratch = _quoting_scratch(offline_install.root)
+    result = _run(
+        INSTALL,
+        {**offline_install.env(offline_install.sums_line), "TMPDIR": str(scratch)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert (offline_install.root / "prefix" / "bin" / "ld.mold").is_file(), result.stderr
+    assert list(scratch.iterdir()) == [], "a successful install left its scratch directory behind"
+
+
+def test_install_removes_its_scratch_directory_after_failure(
+    offline_install: OfflineInstall,
+) -> None:
+    """The cleanup trap must run on the failing path too."""
+    scratch = _quoting_scratch(offline_install.root)
+    wrong = "0" * 64 + offline_install.sums_line[64:]
+    result = _run(INSTALL, {**offline_install.env(wrong), "TMPDIR": str(scratch)})
+    assert result.returncode != 0, result.stderr
+    assert "checksum mismatch" in result.stderr, result.stderr
+    assert list(scratch.iterdir()) == [], "a failed install left its scratch directory behind"
