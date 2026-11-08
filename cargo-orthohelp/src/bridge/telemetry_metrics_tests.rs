@@ -1,13 +1,16 @@
 //! Behavioural contracts for the optional bridge cache metrics.
 
+use super::ir_cache::{PublishError, PublishOutcome, write_ir_cache};
 use super::telemetry_metrics::{CacheOperation, CacheOutcome, record_cache_event};
-use super::{BridgeCache, BridgeConfig, load_or_build_ir_inner, write_ir_cache};
+use super::{BridgeCache, BridgeConfig, load_or_build_ir_inner, publish_ir_cache};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use rstest::rstest;
 use std::collections::BTreeSet;
 use std::error::Error;
+use std::io;
+use std::sync::{Arc, Mutex};
 
 const CACHE_EVENT_METRIC: &str = "cargo_orthohelp.bridge_cache.events";
 
@@ -171,15 +174,17 @@ fn publish_metrics_cover_update_unchanged_and_failures() -> Result<(), Box<dyn E
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     metrics::with_local_recorder(&recorder, || {
-        let publish = write_ir_cache(&success_cache, CONTENT);
+        // Metrics are recorded by the orchestration boundary, not by the cache
+        // unit, so the events must be driven through `publish_ir_cache`.
+        let publish = publish_ir_cache(&success_cache, CONTENT);
         assert!(publish.is_ok(), "cache publish failed: {publish:?}");
-        let unchanged = write_ir_cache(&success_cache, CONTENT);
+        let unchanged = publish_ir_cache(&success_cache, CONTENT);
         assert!(
             unchanged.is_ok(),
             "identical cache publish failed: {unchanged:?}"
         );
-        assert!(write_ir_cache(&failed_read_cache, CONTENT).is_err());
-        assert!(write_ir_cache(&failed_write_cache, CONTENT).is_err());
+        assert!(publish_ir_cache(&failed_read_cache, CONTENT).is_err());
+        assert!(publish_ir_cache(&failed_write_cache, CONTENT).is_err());
     });
 
     let counters = metric_counters(snapshotter.snapshot());
@@ -189,6 +194,114 @@ fn publish_metrics_cover_update_unchanged_and_failures() -> Result<(), Box<dyn E
     assert_eq!(event_count(&counters, "publish", "read_failed"), 1);
     assert_eq!(event_count(&counters, "publish", "write_failed"), 1);
     Ok(())
+}
+
+/// The cache unit reports what it did and records nothing.
+///
+/// Observation belongs to the bridge workflow: keeping `write_ir_cache` free
+/// of tracing and metrics lets it be tested for persistence alone, and stops a
+/// second caller from double-counting an event the boundary already recorded.
+#[rstest]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions report cache outcome mismatches more clearly than errors"
+)]
+fn write_ir_cache_reports_outcomes_without_recording_metrics() -> Result<(), Box<dyn Error>> {
+    const CONTENT: &str = "cached IR";
+    const OTHER: &str = "refreshed IR";
+
+    let root = tempfile::tempdir()?;
+    let cache = bridge_cache(&root)?;
+
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    metrics::with_local_recorder(&recorder, || -> Result<(), Box<dyn Error>> {
+        assert_eq!(
+            write_ir_cache(&cache, CONTENT).map_err(PublishError::into_source)?,
+            PublishOutcome::Updated,
+            "a first publish writes the cache"
+        );
+        assert_eq!(
+            write_ir_cache(&cache, CONTENT).map_err(PublishError::into_source)?,
+            PublishOutcome::Unchanged,
+            "identical content leaves the cache entry untouched"
+        );
+        assert_eq!(
+            write_ir_cache(&cache, OTHER).map_err(PublishError::into_source)?,
+            PublishOutcome::Updated,
+            "changed content replaces the cache entry"
+        );
+        Ok(())
+    })?;
+
+    assert!(
+        metric_counters(snapshotter.snapshot()).is_empty(),
+        "the cache unit must not record metrics; the orchestration boundary does"
+    );
+    Ok(())
+}
+
+/// The CLI's installed recorder is the production collection path.
+///
+/// `main` installs this recorder before any bridge work, so the counters the
+/// cache boundary emits reach the operator's `tracing` pipeline instead of the
+/// `metrics` facade's discarding default. The test drives one real emission
+/// rather than calling the recorder directly, so it fails if the event shape,
+/// the `tracing` target, or the install hook regresses.
+#[rstest]
+fn installed_recorder_exports_cache_events_to_tracing() {
+    crate::metrics_recorder::install();
+
+    let captured = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_ansi(false)
+        .with_writer({
+            let writer_buffer = Arc::clone(&captured);
+            move || CapturedWriter(Arc::clone(&writer_buffer))
+        })
+        .finish();
+
+    tracing::subscriber::with_default(subscriber, || {
+        record_cache_event(CacheOperation::Lookup, CacheOutcome::Hit);
+    });
+
+    let output = String::from_utf8(
+        captured
+            .lock()
+            .expect("captured tracing output is readable")
+            .clone(),
+    )
+    .expect("tracing output is UTF-8");
+
+    assert!(
+        output.contains(CACHE_EVENT_METRIC),
+        "the exported event must name the metric: {output}"
+    );
+    assert!(
+        output.contains("operation=lookup") && output.contains("outcome=hit"),
+        "the exported event must carry the bounded labels: {output}"
+    );
+}
+
+/// Writer that collects a subscriber's rendered output for assertions.
+struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+impl io::Write for CapturedWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        // A poisoned lock means another test thread panicked mid-write; report
+        // it as a write failure rather than panicking the subscriber.
+        let mut captured = self
+            .0
+            .lock()
+            .map_err(|_| io::Error::other("captured tracing output is poisoned"))?;
+        captured.extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 #[rstest]

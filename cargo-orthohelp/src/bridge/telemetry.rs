@@ -35,10 +35,11 @@ pub(super) fn ir_cache_miss() {
 
 /// Report that the cached IR already matches, so the write was skipped.
 ///
-/// Each emission lives in its own function so `write_ir_cache` holds at most
-/// one `tracing` call: when a dependent crate enables `tracing`'s `log`
-/// bridge, Cargo's feature unification expands every event into a branch
-/// ladder that counts against the workspace's cognitive-complexity ceiling.
+/// Each emission lives in its own function so the publish boundary holds at
+/// most one `tracing` call per outcome: when a dependent crate enables
+/// `tracing`'s `log` bridge, Cargo's feature unification expands every event
+/// into a branch ladder that counts against the workspace's
+/// cognitive-complexity ceiling.
 pub(super) fn ir_cache_unchanged() {
     tracing::debug!(
         operation = "bridge_ir_cache_publish",

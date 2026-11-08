@@ -27,7 +27,7 @@ mod workspace;
 
 use bridge_build_environment::BuildEnvironment;
 use execution::run_bridge;
-use ir_cache::{read_cached_ir, write_ir_cache};
+use ir_cache::{PublishOutcome, PublishStage, read_cached_ir, write_ir_cache};
 use workspace::BridgeWorkspace;
 
 /// Stable IR cache identity and Cargo-owned compiler state.
@@ -152,9 +152,74 @@ fn load_or_build_ir_inner(
         &private_paths.binary_name,
     )?;
     let ir_json = run_bridge(&executable)?;
-    write_ir_cache(paths, &ir_json)?;
+    publish_ir_cache(paths, &ir_json)?;
 
     Ok(ir_json)
+}
+
+/// Publish generated IR and record the outcome at the orchestration boundary.
+///
+/// The cache unit reports what it did; naming the outcome in tracing and
+/// metrics belongs here, where the bridge workflow owns its observability
+/// policy.
+fn publish_ir_cache(paths: &BridgeCache, ir_json: &str) -> Result<(), OrthohelpError> {
+    let started = Instant::now();
+    match write_ir_cache(paths, ir_json) {
+        Ok(outcome) => {
+            record_publish_success(outcome, ir_json.len(), started);
+            Ok(())
+        }
+        Err(error) => {
+            record_publish_failure(error.stage(), started);
+            Err(error.into_source())
+        }
+    }
+}
+
+/// Record a successful publish without adding unbounded labels.
+fn record_publish_success(outcome: PublishOutcome, written: usize, started: Instant) {
+    match outcome {
+        PublishOutcome::Unchanged => {
+            observability::completed("bridge_ir_cache_publish", "unchanged", started);
+            telemetry::ir_cache_unchanged();
+            #[cfg(feature = "metrics")]
+            telemetry_metrics::record_cache_event(
+                telemetry_metrics::CacheOperation::Publish,
+                telemetry_metrics::CacheOutcome::Unchanged,
+            );
+        }
+        PublishOutcome::Updated => {
+            observability::completed("bridge_ir_cache_publish", "updated", started);
+            telemetry::ir_cache_write(written);
+            #[cfg(feature = "metrics")]
+            telemetry_metrics::record_cache_event(
+                telemetry_metrics::CacheOperation::Publish,
+                telemetry_metrics::CacheOutcome::Updated,
+            );
+        }
+    }
+}
+
+/// Record a failed publish without exposing paths, keys, or error text.
+fn record_publish_failure(stage: PublishStage, started: Instant) {
+    match stage {
+        PublishStage::Read => {
+            observability::failed("bridge_ir_cache_publish", "read_failed", started);
+            #[cfg(feature = "metrics")]
+            telemetry_metrics::record_cache_event(
+                telemetry_metrics::CacheOperation::Publish,
+                telemetry_metrics::CacheOutcome::ReadFailed,
+            );
+        }
+        PublishStage::Write => {
+            observability::failed("bridge_ir_cache_publish", "write_failed", started);
+            #[cfg(feature = "metrics")]
+            telemetry_metrics::record_cache_event(
+                telemetry_metrics::CacheOperation::Publish,
+                telemetry_metrics::CacheOutcome::WriteFailed,
+            );
+        }
+    }
 }
 
 /// Creates the bridge crate directory tree (bridge root and `src/`) if absent.

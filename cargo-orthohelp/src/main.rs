@@ -16,6 +16,8 @@ mod hex;
 mod ir;
 mod locale;
 mod metadata;
+#[cfg(feature = "metrics")]
+mod metrics_recorder;
 mod output;
 pub mod policy;
 pub mod powershell;
@@ -41,6 +43,10 @@ use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
+    // The `metrics` facade discards updates until a recorder is installed, so
+    // the CLI installs its export path before it can emit any counter.
+    #[cfg(feature = "metrics")]
+    metrics_recorder::install();
     let (cli, format_was_explicit) = match parse_cli() {
         Ok(parsed) => parsed,
         Err(error) => exit_for_clap_error(&error),

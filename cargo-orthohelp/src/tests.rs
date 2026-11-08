@@ -186,9 +186,14 @@ fn write_ir_cache_propagates_a_non_missing_read_failure() {
     let error = write_ir_cache(&paths, r#"{"ir_version":"1.0.0"}"#)
         .expect_err("an unreadable cache entry must not be overwritten");
 
+    assert_eq!(
+        error.stage(),
+        PublishStage::Read,
+        "an unreadable cache entry must be reported as a read failure"
+    );
     assert!(
-        matches!(error, OrthohelpError::Io { .. }),
-        "cache-read failure surfaced as {error:?}"
+        matches!(error.into_source(), OrthohelpError::Io { .. }),
+        "cache-read failure must keep its I/O error"
     );
 }
 
@@ -262,10 +267,18 @@ fn write_ir_cache_is_idempotent() {
         ir_path: bridge_dir.join("ir.json"),
     };
 
-    write_ir_cache(&paths, CONTENT).expect("first write");
+    assert_eq!(
+        write_ir_cache(&paths, CONTENT).expect("first write"),
+        PublishOutcome::Updated,
+        "an absent cache entry must report that it was written"
+    );
     let mtime1 = read_mtime(&bridge, "ir.json").expect("read cache file mtime");
 
-    write_ir_cache(&paths, CONTENT).expect("idempotent write");
+    assert_eq!(
+        write_ir_cache(&paths, CONTENT).expect("idempotent write"),
+        PublishOutcome::Unchanged,
+        "identical content must report that the cache was left untouched"
+    );
     let mtime2 = poll_mtime_until(&bridge, "ir.json", MTIME_TIMEOUT, |mtime| mtime == mtime1)
         .expect("poll mtime until unchanged");
 
@@ -276,7 +289,11 @@ fn write_ir_cache_is_idempotent() {
 
     let next_filesystem_tick = mtime2 + Duration::from_secs(1);
     poll_clock_after(next_filesystem_tick, MTIME_TIMEOUT);
-    write_ir_cache(&paths, OTHER).expect("write new content");
+    assert_eq!(
+        write_ir_cache(&paths, OTHER).expect("write new content"),
+        PublishOutcome::Updated,
+        "changed content must report that the cache was rewritten"
+    );
     let mtime3 = poll_mtime_until(&bridge, "ir.json", MTIME_TIMEOUT, |mtime| mtime > mtime2)
         .expect("poll mtime until changed");
 
