@@ -114,6 +114,8 @@ with a compatibility probe rather than an assumption.
 - [x] (2026-10-14) Commit and publish the reviewed plan as draft PR #589.
 - [x] (2026-11-06) Rebase onto `ddba3578` (PR #651 landed) and revise this plan:
   prover command surface, inventory obligations, D5, and refreshed baseline.
+- [x] (2026-11-09) Rebase both plan commits onto the timeout fix in PR #664;
+  retain their patches unchanged and record the temporary parent boundary.
 - [ ] Obtain explicit plan approval.
 - [ ] M1: establish exact schema and source contracts with executable evidence.
 - [ ] M2: implement and property-test collection with typed diagnostics.
@@ -252,6 +254,28 @@ production code. Both are contributor tools pinned in `tools/`, delegated to
 `rust-prover-tools`, and never Cargo dependencies. Read `docs/design.md` §4.20
 and "Kani and Verus verification tools" in `docs/developers-guide.md` before
 changing any verification decision here.
+
+### Temporary base and return to main
+
+As requested on 2026-11-09, this branch and draft PR #589 temporarily target
+`issue-644-nested-cargo-timeouts`, whose inherited head is
+`26275a4efe31d3cf84cf8ec3e265782a28a832f3` in
+[PR #664](https://github.com/leynos/ortho-config/pull/664). That parent
+addresses the nested Cargo timeouts that prevented implementation against the
+latest main. Its code remains parent-owned; this branch adds only the plan and
+its documentation revisions. The two existing plan commits replayed unchanged,
+with no conflicts, from their exclusive old base `ddba3578`.
+
+After #664 merges, the implementing agent can fetch `origin/main`, verify the
+parent's landing, and rebase this branch back onto main using the `rebase`
+skill. Preserve the inherited parent boundary above: replay only this branch's
+commits after it, rather than replaying the timeout fix after a squash merge.
+If the parent branch changes first, reconcile its history before choosing a new
+boundary. Preserve recovery refs and the expected remote head, audit the
+range-diff, run gates appropriate to the resulting changes, and push with an
+explicit force-with-lease. Retarget PR #589 to `main` and verify its final
+diff. This base change does not approve feature implementation; M1 still
+requires explicit plan approval.
 
 ## Conformance basis
 
@@ -757,3 +781,7 @@ obligations, and adds D5 and R6 while retaining D4. Also corrects the baseline,
 the scripting-standards note, telemetry and localization sites, the BDD
 binding, dev dependencies, and the gate list, which now includes
 `make typecheck`. Remaining work is unchanged: approval, then M1–M4.
+
+Revision note (2026-11-09): restack onto PR #664 and record its inherited
+boundary and the return-to-main procedure after merge. Preserve the earlier
+prover-tooling decisions and the implementation approval gate.
