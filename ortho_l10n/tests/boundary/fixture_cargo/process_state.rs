@@ -1,6 +1,83 @@
 //! Platform-specific process checks for boundary command runner tests.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use cap_std::fs::Dir;
+
+/// Verify the descendant whose PID `directory` records has left the process table.
+///
+/// A reparented descendant cannot be checked with `waitpid`: it reports
+/// `ECHILD` whether or not the process still lives. This reads the PID the
+/// child wrote before it blocked, then probes the process table directly.
+pub(super) fn assert_recorded_process_absent(directory: &Dir) -> Result<()> {
+    let process_id = directory
+        .read_to_string("pipe-holder-pid")?
+        .trim()
+        .parse()
+        .context("parse the pipe-holding descendant PID")?;
+    assert_process_absent(process_id)
+}
+
+/// Poll until `process_id` has no process-table entry, for up to two seconds.
+///
+/// The allowance covers the runner's own kill and the operating system's
+/// reaping without turning a leaked descendant into an intermittent failure.
+#[cfg(unix)]
+fn assert_process_absent(process_id: u32) -> Result<()> {
+    use anyhow::bail;
+    use nix::errno::Errno;
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    let pid = Pid::from_raw(i32::try_from(process_id)?);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match kill(pid, None) {
+            Err(Errno::ESRCH) => return Ok(()),
+            Err(error) => return Err(error).context("probe whether the descendant exited"),
+            Ok(()) => {}
+        }
+        if Instant::now() >= deadline {
+            bail!("descendant {process_id} is still running after the runner returned");
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// Poll until `process_id` has no process-table entry, for up to two seconds.
+///
+/// The allowance covers the runner's own kill and the operating system's
+/// reaping without turning a leaked descendant into an intermittent failure.
+#[cfg(windows)]
+fn assert_process_absent(process_id: u32) -> Result<()> {
+    use anyhow::{anyhow, bail};
+    use std::thread;
+    use std::time::{Duration, Instant};
+    use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    use windows::core::HRESULT;
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        // SAFETY: a handle `OpenProcess` returns is closed before the loop repeats.
+        match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) } {
+            Err(error) if error.code() == HRESULT::from_win32(ERROR_INVALID_PARAMETER.0) => {
+                return Ok(());
+            }
+            Err(error) => return Err(anyhow!("probe whether the descendant exited: {error:?}")),
+            Ok(handle) => {
+                // SAFETY: `OpenProcess` returned this valid handle to the probe.
+                unsafe { CloseHandle(handle) }
+                    .map_err(|error| anyhow!("close Windows descendant probe handle: {error:?}"))?;
+            }
+        }
+        if Instant::now() >= deadline {
+            bail!("descendant {process_id} is still running after the runner returned");
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
 
 /// Verify a timed-out command has been reaped or removed from the process table.
 #[cfg(unix)]

@@ -109,7 +109,9 @@ fn is_cargo_command(command: &Command) -> bool {
 mod tests {
     //! Behavioural tests for the boundary command runner.
 
-    use super::super::process_state::assert_child_was_cleaned_up;
+    use super::super::process_state::{
+        assert_child_was_cleaned_up, assert_recorded_process_absent,
+    };
     use super::{
         CARGO_COMMAND_LOCK, is_cargo_command, lock_cargo_commands, run_with_deadline,
         run_with_deadline_until,
@@ -219,11 +221,7 @@ mod tests {
             "runner waited for the descendant's inherited output pipes: {:?}",
             started.elapsed()
         );
-        thread::sleep(PIPE_HOLDER_DELAY);
-        ensure!(
-            !marker_dir.exists("pipe-holder-finished"),
-            "the descendant finished naturally instead of being terminated"
-        );
+        assert_recorded_process_absent(&marker_dir)?;
         Ok(())
     }
 
@@ -391,6 +389,8 @@ mod tests {
         let root = std::env::var_os(CHILD_MARKER_ROOT_ENV)
             .context("locate the marker root for the pipe-holding descendant")?;
         let directory = Dir::open_ambient_dir(root, ambient_authority())?;
+        let process_id = std::process::id().to_string();
+        directory.write("pipe-holder-pid", process_id.as_bytes())?;
         directory.write("pipe-holder-started", b"started")?;
         thread::sleep(PIPE_HOLDER_DELAY);
         directory.write("pipe-holder-finished", b"finished")?;

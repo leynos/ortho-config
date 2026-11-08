@@ -1,3 +1,8 @@
+//! Compile-fail fixture: discarding a `Reader` query must be diagnosed.
+//!
+//! `process_api_compile_contracts` compares the output against
+//! `reader_queries_must_use.stderr`, which records this file's line numbers.
+
 #![deny(unused_must_use)]
 
 use std::process::{Command, Stdio};

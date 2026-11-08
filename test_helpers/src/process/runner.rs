@@ -84,7 +84,7 @@ fn run_with_optional_sequence_deadline(
         sequence_deadline.map_or((command_deadline, "command"), |sequence| {
             let remaining = sequence.saturating_duration_since(Instant::now());
             if remaining < command_deadline {
-                (remaining, "shared sequence")
+                (remaining, "shared sequence (remaining budget)")
             } else {
                 (command_deadline, "command")
             }
@@ -332,9 +332,9 @@ fn wait_for_process(
         }
         if Instant::now() >= command_deadline.at {
             bail!(
-                "{} exceeded the {} second {} deadline",
+                "{} exceeded the {:?} {} deadline",
                 command_deadline.description,
-                command_deadline.duration.as_secs(),
+                command_deadline.duration,
                 command_deadline.scope,
             );
         }
