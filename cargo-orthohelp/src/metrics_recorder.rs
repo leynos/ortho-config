@@ -12,6 +12,7 @@
 //! it. The labels carried by these events come from the bridge cache's closed
 //! enums, so the exported label set stays bounded.
 
+use std::fmt;
 use std::sync::Arc;
 
 use metrics::{
@@ -71,57 +72,51 @@ impl TracingMetric {
         }
     }
 
-    /// Report one counter update.
-    fn report_count(&self, value: u64) {
-        tracing::debug!(
-            target: "cargo_orthohelp::metrics",
-            metric = %self.metric,
-            labels = %self.labels,
-            value,
-            "counter updated"
-        );
-    }
-
-    /// Report one gauge or histogram update, naming the verb that produced it.
-    fn report_value(&self, kind: &'static str, value: f64) {
+    /// Report one update, naming the verb that produced it.
+    ///
+    /// Every metric kind shares one event shape, so a consumer parses `kind`
+    /// rather than guessing the payload type from the metric family. The value
+    /// is rendered exactly as the emitter supplied it: counters keep integer
+    /// precision without a lossy conversion to `f64`.
+    fn report(&self, kind: &'static str, value: impl fmt::Display) {
         tracing::debug!(
             target: "cargo_orthohelp::metrics",
             metric = %self.metric,
             labels = %self.labels,
             kind,
-            value,
-            "value metric updated"
+            value = %value,
+            "metric updated"
         );
     }
 }
 
 impl CounterFn for TracingMetric {
     fn increment(&self, value: u64) {
-        self.report_count(value);
+        self.report("counter_increment", value);
     }
 
     fn absolute(&self, value: u64) {
-        self.report_count(value);
+        self.report("counter_absolute", value);
     }
 }
 
 impl GaugeFn for TracingMetric {
     fn increment(&self, value: f64) {
-        self.report_value("gauge_increment", value);
+        self.report("gauge_increment", value);
     }
 
     fn decrement(&self, value: f64) {
-        self.report_value("gauge_decrement", value);
+        self.report("gauge_decrement", value);
     }
 
     fn set(&self, value: f64) {
-        self.report_value("gauge_set", value);
+        self.report("gauge_set", value);
     }
 }
 
 impl HistogramFn for TracingMetric {
     fn record(&self, value: f64) {
-        self.report_value("histogram_record", value);
+        self.report("histogram_record", value);
     }
 }
 

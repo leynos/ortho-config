@@ -258,7 +258,7 @@ mod tests {
         thread::sleep(CHILD_COMPLETION_DELAY + Duration::from_millis(250));
         assert_child_was_cleaned_up(child_pid)?;
         ensure!(
-            !marker_dir.exists("completed"),
+            !marker_dir.exists("finished"),
             "the timed-out child must not continue running after the runner returns"
         );
         Ok(())
@@ -352,16 +352,25 @@ mod tests {
         Ok(())
     }
 
-    fn write_delayed_markers() -> Result<()> {
+    /// Write the marker lifecycle a supervised child reports while it runs.
+    ///
+    /// `prefix` keeps one child's `pid`, `started`, and `finished` markers
+    /// distinct from another's in a shared directory; the last marker lands
+    /// after `delay`, so a missing one proves the child was killed.
+    fn write_marker_lifecycle(prefix: &str, delay: Duration) -> Result<()> {
         let root = std::env::var_os(CHILD_MARKER_ROOT_ENV)
-            .context("locate the marker root for the child process test")?;
+            .context("locate the marker root for a supervised child")?;
         let directory = Dir::open_ambient_dir(root, ambient_authority())?;
         let process_id = std::process::id().to_string();
-        directory.write("pid", process_id.as_bytes())?;
-        directory.write("started", b"started")?;
-        thread::sleep(CHILD_COMPLETION_DELAY);
-        directory.write("completed", b"completed")?;
+        directory.write(format!("{prefix}pid"), process_id.as_bytes())?;
+        directory.write(format!("{prefix}started"), b"started")?;
+        thread::sleep(delay);
+        directory.write(format!("{prefix}finished"), b"finished")?;
         Ok(())
+    }
+
+    fn write_delayed_markers() -> Result<()> {
+        write_marker_lifecycle("", CHILD_COMPLETION_DELAY)
     }
 
     fn write_pipe_holding_root() -> Result<()> {
@@ -386,14 +395,6 @@ mod tests {
     }
 
     fn write_pipe_holder() -> Result<()> {
-        let root = std::env::var_os(CHILD_MARKER_ROOT_ENV)
-            .context("locate the marker root for the pipe-holding descendant")?;
-        let directory = Dir::open_ambient_dir(root, ambient_authority())?;
-        let process_id = std::process::id().to_string();
-        directory.write("pipe-holder-pid", process_id.as_bytes())?;
-        directory.write("pipe-holder-started", b"started")?;
-        thread::sleep(PIPE_HOLDER_DELAY);
-        directory.write("pipe-holder-finished", b"finished")?;
-        Ok(())
+        write_marker_lifecycle("pipe-holder-", PIPE_HOLDER_DELAY)
     }
 }

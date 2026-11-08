@@ -176,26 +176,23 @@ fn publish_ir_cache(paths: &BridgeCache, ir_json: &str) -> Result<(), OrthohelpE
     }
 }
 
+/// Observability event name shared by every publish outcome.
+const PUBLISH_EVENT: &str = "bridge_ir_cache_publish";
+
 /// Record a successful publish without adding unbounded labels.
 fn record_publish_success(outcome: PublishOutcome, written: usize, started: Instant) {
     match outcome {
         PublishOutcome::Unchanged => {
-            observability::completed("bridge_ir_cache_publish", "unchanged", started);
+            observability::completed(PUBLISH_EVENT, "unchanged", started);
             telemetry::ir_cache_unchanged();
             #[cfg(feature = "metrics")]
-            telemetry_metrics::record_cache_event(
-                telemetry_metrics::CacheOperation::Publish,
-                telemetry_metrics::CacheOutcome::Unchanged,
-            );
+            record_publish_metric(telemetry_metrics::CacheOutcome::Unchanged);
         }
         PublishOutcome::Updated => {
-            observability::completed("bridge_ir_cache_publish", "updated", started);
+            observability::completed(PUBLISH_EVENT, "updated", started);
             telemetry::ir_cache_write(written);
             #[cfg(feature = "metrics")]
-            telemetry_metrics::record_cache_event(
-                telemetry_metrics::CacheOperation::Publish,
-                telemetry_metrics::CacheOutcome::Updated,
-            );
+            record_publish_metric(telemetry_metrics::CacheOutcome::Updated);
         }
     }
 }
@@ -204,22 +201,22 @@ fn record_publish_success(outcome: PublishOutcome, written: usize, started: Inst
 fn record_publish_failure(stage: PublishStage, started: Instant) {
     match stage {
         PublishStage::Read => {
-            observability::failed("bridge_ir_cache_publish", "read_failed", started);
+            observability::failed(PUBLISH_EVENT, "read_failed", started);
             #[cfg(feature = "metrics")]
-            telemetry_metrics::record_cache_event(
-                telemetry_metrics::CacheOperation::Publish,
-                telemetry_metrics::CacheOutcome::ReadFailed,
-            );
+            record_publish_metric(telemetry_metrics::CacheOutcome::ReadFailed);
         }
         PublishStage::Write => {
-            observability::failed("bridge_ir_cache_publish", "write_failed", started);
+            observability::failed(PUBLISH_EVENT, "write_failed", started);
             #[cfg(feature = "metrics")]
-            telemetry_metrics::record_cache_event(
-                telemetry_metrics::CacheOperation::Publish,
-                telemetry_metrics::CacheOutcome::WriteFailed,
-            );
+            record_publish_metric(telemetry_metrics::CacheOutcome::WriteFailed);
         }
     }
+}
+
+/// Count one publish outcome under the metric's `Publish` operation.
+#[cfg(feature = "metrics")]
+fn record_publish_metric(outcome: telemetry_metrics::CacheOutcome) {
+    telemetry_metrics::record_cache_event(telemetry_metrics::CacheOperation::Publish, outcome);
 }
 
 /// Creates the bridge crate directory tree (bridge root and `src/`) if absent.
