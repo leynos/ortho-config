@@ -225,6 +225,8 @@
   - [Dual-renderer metadata](execplans/7-2-2-dual-renderer-metadata.md):
     review the approval-gated plan for renderer support, presentation policies,
     and stable protocol fields in roadmap 7.2.2.
+  - [Structured output and exit metadata](execplans/7-2-3-structured-output-and-exit-metadata.md):
+    review the proposed metadata, lint and exit-contract work for roadmap 7.2.3.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
