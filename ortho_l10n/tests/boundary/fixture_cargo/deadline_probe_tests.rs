@@ -189,17 +189,8 @@ fn escapee_holder() -> Result<()> {
 /// starting a nested test binary quickly.
 #[test]
 fn deadline_diagnostic_reports_the_child() -> Result<()> {
-    let scratch = TempDir::new().context("create the deadline-probe scratch directory")?;
-    let child = spawn_owned_probe("deadline_output_probe", scratch.path())?;
-    wait_for_ready_in(scratch.path())?;
-    let error = match supervise(child, PROBE_DEADLINE, "deadline probe") {
-        Err(error) => error,
-        Ok(output) => anyhow::bail!(
-            "a probe that sleeps past its deadline should time out; it exited with {:?}:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-        ),
-    };
+    let (_scratch, error) =
+        fail_after_readiness("deadline_output_probe", PROBE_DEADLINE, "deadline probe")?;
     let message = format!("{error:#}");
     for expected in [
         "deadline probe exceeded",
@@ -221,17 +212,7 @@ fn deadline_diagnostic_reports_the_child() -> Result<()> {
 /// copies of this binary.
 #[test]
 fn deadline_kills_the_whole_process_tree() -> Result<()> {
-    let scratch = TempDir::new().context("create the tree-probe scratch directory")?;
-    let child = spawn_owned_probe("tree_probe", scratch.path())?;
-    wait_for_ready_in(scratch.path())?;
-    let error = match supervise(child, PROBE_DEADLINE, "tree probe") {
-        Err(error) => error,
-        Ok(output) => anyhow::bail!(
-            "a probe whose descendant outlives the deadline should time out; it exited with {:?}:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-        ),
-    };
+    let (scratch, error) = fail_after_readiness("tree_probe", PROBE_DEADLINE, "tree probe")?;
     ensure!(
         format!("{error:#}").contains("tree probe exceeded"),
         "the error should name the timed-out probe:\n{error:#}",
@@ -241,24 +222,81 @@ fn deadline_kills_the_whole_process_tree() -> Result<()> {
     wait_for_lock_release(scratch.path())
 }
 
+/// Spawn a probe, wait for its readiness marker, and require supervision to fail.
+///
+/// The deadline is applied only after the probe says it is ready, so a
+/// saturated host's start-up delay is never charged to the runner. The returned
+/// directory must stay in scope while the caller still needs the probe's
+/// descendants: they use it to take their lock and to learn when to exit.
+fn fail_after_readiness(
+    filter: &str,
+    deadline: Duration,
+    operation: &str,
+) -> Result<(TempDir, anyhow::Error)> {
+    let scratch =
+        TempDir::new().with_context(|| format!("create the {filter} scratch directory"))?;
+    let child = spawn_owned_probe(filter, scratch.path())?;
+    wait_for_ready_in(scratch.path())?;
+    match supervise(child, deadline, operation) {
+        Err(error) => Ok((scratch, error)),
+        Ok(output) => anyhow::bail!(
+            "{operation} should have failed; it exited with {:?}:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+        ),
+    }
+}
+
 /// A descendant that keeps a pipe open must not block reader collection.
 ///
-/// The survivor is released only after the assertions, so a runner that waited
-/// for it could not return inside [`COLLECTION_BOUND`] — it would have to wait
-/// out the survivor's own release cap. Checking `lock_is_held` before releasing
-/// makes that causal: the pipe really was open when the runner gave up on it,
-/// rather than having been closed by a descendant that had already died.
+/// The direct child exits normally here, so only the bounded reader collection
+/// can make the still-open pipe reportable.
 #[test]
 fn a_descendant_holding_the_pipe_cannot_block_collection() -> Result<()> {
-    let scratch = TempDir::new().context("create the pipe-probe scratch directory")?;
-    let child = spawn_owned_probe("held_pipe_probe", scratch.path())?;
+    assert_survivor_is_reported(
+        "held_pipe_probe",
+        PROBE_DEADLINE * 4,
+        "held-pipe probe",
+        "pipe remained open",
+    )
+}
+
+/// A timeout must be reportable even when a descendant escaped the kill.
+#[cfg(unix)]
+#[test]
+fn a_timeout_is_not_blocked_by_a_pipe_holding_escapee() -> Result<()> {
+    assert_survivor_is_reported(
+        "escapee_probe",
+        PROBE_DEADLINE,
+        "escapee probe",
+        "escapee probe exceeded",
+    )
+}
+
+/// Run a probe whose descendant survives, and assert it is reported promptly.
+///
+/// `expected` names the diagnostic that proves the right path was taken: a
+/// still-open pipe after a normal exit, or a deadline that expired. The
+/// survivor is released only after the assertions, so a runner that waited for
+/// it could not return inside [`COLLECTION_BOUND`]; checking `lock_is_held`
+/// before releasing makes that causal rather than a race against a clock, and
+/// shows the runner gave up while the descendant was genuinely alive.
+fn assert_survivor_is_reported(
+    filter: &str,
+    deadline: Duration,
+    operation: &str,
+    expected: &str,
+) -> Result<()> {
+    let scratch =
+        TempDir::new().with_context(|| format!("create the {filter} scratch directory"))?;
+    let child = spawn_owned_probe(filter, scratch.path())?;
     wait_for_ready_in(scratch.path())?;
     let started = Instant::now();
-    let error = match supervise(child, PROBE_DEADLINE * 4, "held-pipe probe") {
+    let error = match supervise(child, deadline, operation) {
         Err(error) => error,
         Ok(output) => anyhow::bail!(
-            "a descendant holding the pipe should be reported, not waited for; \
-             the child exited with {:?}:\n{}",
+            "{operation} should be reported while its descendant holds the pipe; \
+             it exited with {:?}:\n{}",
             output.status,
             String::from_utf8_lossy(&output.stderr),
         ),
@@ -269,51 +307,15 @@ fn a_descendant_holding_the_pipe_cannot_block_collection() -> Result<()> {
         "the runner waited for the descendant instead of bounding its readers: {elapsed:?}",
     );
     ensure!(
-        format!("{error:#}").contains("pipe remained open"),
-        "the error should name the still-open pipe:\n{error:#}",
+        format!("{error:#}").contains(expected),
+        "the error should report {expected:?}:\n{error:#}",
     );
     // Non-vacuity: the descendant must have outlived its parent. If the lock
     // were free, the test would prove only that the runner handled a closed
-    // pipe.
+    // pipe or an already-dead process.
     ensure!(
         lock_is_held(scratch.path())?,
-        "the pipe-holding descendant should still be alive when the runner returns",
-    );
-    release_holder(scratch.path())?;
-    wait_for_lock_release(scratch.path())
-}
-
-/// A timeout must be reportable even when a descendant escaped the kill.
-#[cfg(unix)]
-#[test]
-fn a_timeout_is_not_blocked_by_a_pipe_holding_escapee() -> Result<()> {
-    let scratch = TempDir::new().context("create the escapee-probe scratch directory")?;
-    let child = spawn_owned_probe("escapee_probe", scratch.path())?;
-    wait_for_ready_in(scratch.path())?;
-    let started = Instant::now();
-    let error = match supervise(child, PROBE_DEADLINE, "escapee probe") {
-        Err(error) => error,
-        Ok(output) => anyhow::bail!(
-            "a probe whose escaped descendant holds its pipes should time out; \
-             it exited with {:?}:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr),
-        ),
-    };
-    let elapsed = started.elapsed();
-    ensure!(
-        elapsed < COLLECTION_BOUND,
-        "the runner waited for the escaped descendant instead of bounding its readers: {elapsed:?}",
-    );
-    ensure!(
-        format!("{error:#}").contains("escapee probe exceeded"),
-        "the error should name the timed-out probe:\n{error:#}",
-    );
-    // Non-vacuity: the escapee must have outlived the kill. If the lock were
-    // free, the test would prove only that the runner handled a dead process.
-    ensure!(
-        lock_is_held(scratch.path())?,
-        "the escaped descendant should have survived the process-group kill",
+        "the descendant should still be alive when the runner returns",
     );
     release_holder(scratch.path())?;
     wait_for_lock_release(scratch.path())

@@ -232,18 +232,13 @@ fn kill_after_deadline(
 }
 
 /// Reap a killed child, giving up after `grace` instead of blocking forever.
+///
+/// A failed wait here is not worth reporting: the caller is already building a
+/// deadline failure, and the child was just sent a termination request. The
+/// bound exists so a process wedged in an uninterruptible wait cannot stall the
+/// diagnostic.
 fn reap_within(child: &mut dyn ChildWrapper, grace: Duration) -> Option<ExitStatus> {
-    let limit = Instant::now() + grace;
-    loop {
-        if let Ok(Some(status)) = child.try_wait() {
-            return Some(status);
-        }
-        let now = Instant::now();
-        if now >= limit {
-            return None;
-        }
-        std::thread::sleep(POLL_INTERVAL.min(limit.saturating_duration_since(now)));
-    }
+    wait_until(child, grace).ok().flatten()
 }
 
 /// Build the error for a child that outlived its deadline.
