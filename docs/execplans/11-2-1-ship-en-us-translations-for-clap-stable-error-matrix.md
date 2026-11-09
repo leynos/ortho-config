@@ -1,7 +1,8 @@
 # Ship the en-US clap error matrix (11.2.1)
 
-Status: BLOCKED at M0 — the build-time identity contract is not implementable;
-awaiting acceptance of a replacement mechanism (2026-11-09).
+Status: M0 complete — the consumer build-time identity contract is infeasible.
+The pre-publication workspace gate is selected at the user's request. Update
+the governing design documents before feature implementation (2026-11-09).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -9,48 +10,72 @@ Conformance basis, and Verification plan current at every milestone.
 
 ## Purpose / big picture
 
-Consumers will be able to enumerate every supported clap error kind, identify
-which Fluent message to override, and receive embedded en-US text for every
-non-display error. Help and version requests will pass through untouched. A
-compile-time coverage assertion will fail when the resolved clap enum grows
-without a corresponding matrix entry. This is roadmap task 11.2.1 only.
+Consumers will be able to enumerate the clap error kinds supported by this
+release, identify which Fluent message to override, and receive embedded en-US
+text for every non-display error. Help and version requests will pass through
+untouched. A pre-publication test gate will compare the source inventory for
+the supported clap identity with its reviewed count and fail when that
+inventory changes. A compile-time assertion will separately ensure that the
+matrix length equals that reviewed count. This is roadmap task 11.2.1 only.
 
-The deliverable of this branch is this reviewed plan, not the feature. Approval
-of the plan authorizes the milestones below, including the bounded feasibility
-investigation; it does not authorize replacing the design's coverage mechanism
-if that investigation fails.
+The deliverable of this branch is this reviewed plan, not the feature. M0
+established that the approved build-time mechanism cannot bind consumers to
+their governing Clap resolution. At the user's request, this revision selects
+the recommended pre-publication workspace gate. Before feature implementation,
+amend the governing design and ADR and reconcile the roadmap wording. This plan
+revision implements no feature.
 
 ## Constraints
 
-Implement [CLI localization design](../cli-localization-design.md) §§6.1,
-6.1.1, and 6.2. The coverage gate must bind the total declared-variant count to
-a supported `clap_builder` package identity (version, source identity, and
-checksum), verify that the compiled `clap` facade's dependency edge reaches
-that exact package, and fail closed for unknown, overridden, or ambiguous
-identities. Only then may the build script emit the manifest's total declared
-variant count and the test's `const_assert_eq!` compare it with the matrix
-length. The build script does not classify variants; translated versus
-display-only is represented solely by the exhaustive public matrix. Never use
-an unbound hard-coded count, registry-directory glob, enum discriminant
-maximum, or a second independently resolved dependency as the authoritative
-inventory.
+Implement the public matrix and en-US strings from
+[CLI localization design](../cli-localization-design.md) §§6.1 and 6.2. Replace
+§6.1.1's unsupported consumer build-script binding with a pre-publication
+workspace gate. The gate must read the governing workspace `Cargo.lock` for the
+selected production `clap` package identity (version, source, checksum) and its
+`clap` → `clap_builder` dependency edge, then cross-check the resolution with
+`cargo metadata --locked --offline` using the workspace's production
+target/features. Resolve the metadata `manifest_path` for that exact
+`clap_builder` package and count its top-level `ErrorKind` variants with `syn`.
+
+Support only an explicitly reviewed identity and an unambiguous, audited
+variant inventory. Fail the gate on unknown or overridden identities,
+lock/metadata/source/edge mismatches, ambiguous resolution, or cfg-dependent
+declarations whose complete inventory has not been audited. The parser counts
+every declared variant without classifying display-only entries. Keep a
+reviewed test constant for the supported identity's variant count.
+Independently require the source count to equal that reviewed count, then use
+`static_assertions::const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT)`
+to compare the matrix length to the reviewed constant. Source growth therefore
+fails the publication gate until reviewed and the constant is deliberately
+updated; the compile-time assertion alone does not detect dependency source
+growth.
+
+This gate describes the repository's selected workspace resolution at
+publication time. It does not claim to identify an external consumer's Clap
+resolution or reject that consumer's build. Do not add `build.rs`, `rustc-env`,
+`OUT_DIR` count artefacts, or a consumer-side identity rejection. Do not use an
+unbound hard-coded count, registry-directory glob, enum discriminant maximum,
+or a second independently resolved dependency as the authoritative inventory.
 
 Preserve the four existing Fluent identifiers and their argument contracts.
 Ship en-US strings unconditionally. Add the public enum and constant through
 both existing export layers. Use the matrix as the runtime mapping authority;
-all three display-only entries bypass lookup and return the original error.
-Future unrecognized kinds retain the current fallback path until the coverage
-failure is repaired. Do not implement the coverage-report builder, richer clap
-context preservation, locale lifecycle, embed bridge, or derive work. Those
-belong to other roadmap entries.
+all three display-only entries bypass lookup and return the original error. The
+publication gate detects a changed supported source inventory before release;
+runtime builds retain the crate's existing fallback behaviour for any kind the
+current matrix does not translate. Do not implement the coverage-report
+builder, richer clap context preservation, locale lifecycle, embed bridge, or
+derive work. Those belong to other roadmap entries.
 
 Keep the declared MSRV, Rust 1.89, and validate with the workspace toolchain in
 `rust-toolchain.toml` (currently Rust 1.99); retain caret dependency
 requirements. Do not change the toolchain, compiler admission, shared Cargo
 cache, or Whitaker installation. Use capability-oriented filesystem access and
-UTF-8 paths in new build tooling. New Rust files must have module documentation
-and remain at most 400 lines. Do not add runtime dependencies for build-time
-source inspection.
+UTF-8 paths in new Rust test tooling. New Rust files must have module
+documentation and remain at most 400 lines. Do not add runtime or build
+dependencies for source inspection. Keep `cargo_metadata` and `syn` scoped to
+the publication gate and its tests, and `static_assertions` scoped to the
+matrix test.
 
 Implementation uses test-first development. Do not commit an intentionally
 failing red stage. Every code milestone must pass sequential `make check-fmt`,
@@ -60,35 +85,38 @@ under `target/`.
 
 ## Tolerances (exception triggers)
 
-Stop implementation and set this plan to BLOCKED if the active dependency
-source cannot be identified without guessing, if the build probe requires a
-network request or recursive compilation, or if ordinary downstream builds
-require an undocumented user-supplied path. Record the failed assumption,
-options, and upstream design impact, then obtain explicit acceptance before
-changing the mechanism. A workspace-only success is insufficient.
-
-Escalate public APIs beyond the requested enum and constant, changes outside
-the runtime localizer/build support/tests and their documentation, toolchain
-changes, or dependencies outside the build/test candidates listed below. There
-is no time limit. Infrastructure failures are blocked validation, not
-permission to weaken a gate. Disk exhaustion requires stopping and reporting.
+Stop implementation and set this plan to BLOCKED if the publication gate cannot
+uniquely match the locked production facade edge to an explicitly supported
+`clap_builder` identity, resolve its source manifest, or count its complete
+`ErrorKind` inventory. Unknown identities, source overrides, mismatches,
+ambiguous graphs, and unaudited cfg-dependent declarations must fail closed. Do
+not claim or add a downstream consumer rejection guarantee. Record the evidence
+and return to the design owner if the selected workspace-gate contract cannot
+be met. Escalate public APIs beyond the requested enum and constant, changes
+outside the runtime localizer, publication-gate/test support, and their
+documentation, toolchain changes, or dependencies outside the test-only
+candidates listed below. There is no time limit. Infrastructure failures are
+blocked validation, not permission to weaken a gate. Disk exhaustion requires
+stopping and reporting.
 
 ## Risks
 
-- High impact, **realized** (2026-11-09): the resolver cannot prove that the
-  compiled facade reaches that exact builder, because a dependency's build
-  script cannot observe its dependent's resolution in any consumption form
-  except our own workspace build. M0 stopped here; see "M0 outcome". The
-  identity manifest is reduced from a build-time contract to a pre-publication
-  test gate under the recommended option.
+- High impact, **realized and addressed by the selected plan revision**
+  (2026-11-09): a dependency build script cannot establish the consumer's
+  governing resolution. M0 found this limitation for external path and
+  unpacked-package consumers; the workspace probe could observe its governing
+  resolution. The selected contract checks the repository's supported workspace
+  resolution at publication time only; see "M0 outcome". It makes no claim
+  about arbitrary downstream dependency graphs.
 - High impact, medium likelihood: equal matrix and enum lengths can conceal a
   duplicate plus an omission. Test uniqueness and exact inventory agreement.
 - Medium impact, high likelihood: clap does not supply every context variable
   for every error construction. Inventory real contexts before writing FTL;
   generic errors must render without unresolved Fluent variables.
-- Medium impact, medium likelihood: count output becomes stale after a lock,
-  source, patch, or Cargo configuration change. Bind it to the resolved
-  identity and exercise rerun invalidation; never reuse stale output.
+- Medium impact, medium likelihood: the reviewed count can become stale after
+  a lock, source, patch, or Cargo configuration change. Recompute source
+  inventory in the publication gate and fail when it differs from the reviewed
+  identity record; never accept stale count evidence.
 - Medium impact, medium likelihood: changing the missing-argument help variant
   to pass-through affects existing BDD expectations. Update those expectations
   deliberately while retaining actual `MissingSubcommand` translation tests.
@@ -111,11 +139,14 @@ permission to weaken a gate. Disk exhaustion requires stopping and reporting.
 - [x] Validate documentation and workflow contracts; prepare the revised plan
   for publication.
 - [x] (2026-11-09) Obtain explicit implementation approval.
-- [x] (2026-11-09) M0: identity-manifest and facade-edge feasibility
-      investigated; outcome BLOCKED. See "M0 outcome" below.
-- [ ] Accept a replacement coverage mechanism (tolerance trigger).
-- [ ] M1: ship canonical matrix, strings, and runtime integration.
-- [ ] M2: ship mechanical count gate and fault-detection evidence.
+- [x] (2026-11-09) M0: investigate identity-manifest and facade-edge
+      feasibility; original build-time mechanism reached its stop condition.
+- [x] (2026-11-09) Select the pre-publication workspace gate after M0.
+- [ ] M0.1: amend design §6.1.1 and an ADR, and reconcile roadmap wording
+      before feature implementation.
+- [ ] M1: implement the canonical matrix, strings, and runtime integration.
+- [ ] M2: implement the test-only reviewed count assertion, pre-publication
+      inventory gate, and fault-detection evidence.
 - [ ] M3: finish consumer documentation and mark roadmap task done.
 
 ## Surprises & discoveries
@@ -123,13 +154,13 @@ permission to weaken a gate. Disk exhaustion requires stopping and reporting.
 The plan first incorporated merged PR #651 at
 `ddba3578fae04227e426ea3a61aa2b24aa043232`. On 2026-11-09 it was restacked onto
 the timeout-fix branch for PR #664 at
-`501ab83134eaba0f9e97e1daeaa29c793a819c53`. The current workspace lockfile
-resolves clap_builder 4.6.7, but the plan must resolve and match the supported
-identity at implementation time rather than treating this snapshot as a
-consumer-wide constant. The design's 4.6.0 identity is an illustrative example,
-not this lockfile's current resolution; reconcile that wording during M0. The
-current upstream API inventory has 17 variants; M0 will bind that count to the
-identity manifest and verify the compiled facade edge.
+`501ab83134eaba0f9e97e1daeaa29c793a819c53`. The M0 probe observed `clap` and
+`clap_builder` 4.6.7 in the workspace. The design's 4.6.0 identity is
+illustrative, not the observed workspace resolution. M0 found that consumer
+build scripts cannot bind to downstream resolution; the selected gate records
+and checks only the explicitly supported workspace identity. The upstream API
+inventory observed during M0 had 17 variants; the implementation must recount
+the source resolved at gate time and compare it with a reviewed constant.
 
 M0 (2026-11-09) falsified that binding. A dependency's build script cannot
 observe its dependent's dependency resolution. The only consumption form where
@@ -145,18 +176,20 @@ The requested nine additions plus four existing entries total thirteen.
 `InvalidSubcommand`, explicitly named by §6.1, is also required: ten new
 translations produce fourteen translated entries and three sentinels.
 
-The sample `.parse().unwrap()` inside a const initializer in §6.1.1 is not an
-executable const recipe. Emit a numeric Rust constant in `OUT_DIR` alongside
-the required environment value, both derived from the same validated manifest
-entry; do not create a speculative decimal parser merely to reproduce the
-illustration.
+The design's build-script outputs are removed by the selected mechanism. The
+source inventory is read by a pre-publication test; because that runtime test
+value cannot initialize a Rust const, keep a reviewed count constant in the
+test source, compare the parsed source count to it, and use `const_assert_eq!`
+only for matrix length versus the reviewed count.
 
 PR #617 completed the reusable `ortho_l10n` extraction; PR #651 added pinned,
 opt-in Kani/Verus tooling. The Fluent runtime and embedded catalogues now live
-in `ortho_l10n`; the Clap adapter, exhaustive matrix, and Clap-specific build
-gate remain in `ortho_config`. The prover tooling's integration fixtures
-validate the runner and its negative controls, not this feature's production
-claims. This finite enum/catalogue mapping does not warrant a Verus proof.
+in `ortho_l10n`; the Clap adapter, exhaustive matrix, and Clap-specific
+pre-publication test gate remain in `ortho_config`. The prover tooling's
+integration fixtures validate the runner and its negative controls, not this
+feature's production claims. This finite enum/catalogue mapping and bounded
+source counter do not warrant a Verus proof; tests and explicit inventory
+review are proportionate.
 
 `DisplayHelpOnMissingArgumentOrSubcommand` currently maps to the missing
 subcommand message. The new sentinel contract requires pass-through instead.
@@ -165,22 +198,22 @@ rendered tail. Rich structured context preservation remains task 11.2.2.
 
 ## Decision log
 
-- 2026-10-14: retain the prescribed build-script mechanism, with M0 as an
-  explicit feasibility decision. The original source-resolution approach was
-  not proven and is superseded by the identity-manifest contract below.
-- 2026-11-08: a count is authoritative only when bound to a supported package
-  identity and the compiled facade edge; unknown identities fail closed.
-- 2026-11-09: M0 is BLOCKED. The prescribed build-time identity check cannot be
-  discharged for consumers, so no feature code is written under the current
-  mechanism. Evidence, closed routes, options, and upstream impact are recorded
-  in "M0 outcome".
-- 2026-11-09 (proposed, awaiting acceptance): bind the count at the
-  pre-publication test gate rather than in a build script, using the workspace
-  `Cargo.lock`, `cargo metadata --locked --offline`, and a `syn` count of the
-  resolved `clap_builder` source. Not adopted until accepted.
-- 2026-11-09: no `ortho_config/tests/fixtures/clap_error_build_probe/` fixture
-  is added while the mechanism is rejected. The probe recipes live inline in
-  "M0 outcome", and the durable fixture follows the accepted mechanism.
+- 2026-10-14: propose the design's build-script mechanism, with M0 as an
+  explicit feasibility decision. M0 later falsified its downstream identity
+  assumption; see the outcome below.
+- 2026-11-08: require identity and facade-edge evidence; the chosen mechanism
+  narrows that guarantee to the supported workspace publication gate.
+- 2026-11-09: M0 completed with a no-go for the original build-time binding.
+  At the user's request, this revision selects the pre-publication workspace
+  gate, preserving the public total-count requirement while removing
+  unsupported consumer claims.
+- 2026-11-09: amend design §6.1.1 and record the mechanism in an ADR before
+  runtime implementation. Reconcile roadmap wording. The present change records
+  the plan decision only.
+- 2026-11-09: put metadata/source-count checks in a dedicated test-only
+  publication gate. Keep the reviewed count constant in test source; compare
+  the parsed count to it at test time, and assert matrix length against it at
+  compile time. No build-script fixture or generated build output is needed.
 - 2026-10-14: include `InvalidSubcommand` and all three sentinels, following the
   complete-matrix requirement and the design rather than an incomplete list.
 - 2026-10-14: use finite exhaustive tests for the matrix and property tests for
@@ -198,16 +231,13 @@ targets that branch. Formatting, lint, typecheck, and full tests passed on the
 rebased candidate. Documentation and workflow-contract checks also passed; the
 revised plan is ready for review.
 
-Implementation was approved on 2026-11-09 and M0 ran immediately. M0 did not
-reach a "go": the primary engineering risk, proving that the manifest identity
-matches the enum exposed by the compiled Clap facade, is not merely unresolved
-but unachievable for consumers, for the reasons recorded in "M0 outcome". The
-plan is therefore BLOCKED at E0 and no feature code exists. The retrospective
-on this milestone is that the risk was correctly identified and correctly
-scoped to an explicit feasibility gate: the gate did its job by preventing a
-build script that would have bound the wrong lockfile for every consumer,
-silently and invisibly. The remaining decision is which replacement mechanism
-to accept.
+The earlier plan was approved on 2026-11-09, and M0 ran immediately. M0 ended
+with a no-go for the original build-time identity binding: the evidence showed
+that a dependency build script cannot reliably establish an external consumer's
+governing Clap resolution. At the user's request, this revision selects the
+recommended pre-publication workspace gate. The governing design and roadmap
+wording still need reconciliation, and the mechanism decision must be recorded
+in an ADR before implementation. No feature code exists yet.
 
 Earlier validation on main hit inherited 240-second packaging and 300-second
 consumer deadlines. On the initial PR #664 parent (`26275a4e`), the ordinary
@@ -297,8 +327,9 @@ Trace the three requirements as follows:
   cases and CLI tests; M3, consumer documentation.
 - R2, design §6.2 exhaustive public matrix: M1, independent inventory,
   uniqueness, public-import, override, and pass-through tests.
-- R3, design §6.1.1 total-count mechanism: M0 feasibility evidence; M2 exact
-  source identity, compile-time assertion, and deliberate count-drift failure.
+- R3, design §6.1.1 total-count mechanism: M0 evidence and selected deviation;
+  M0.1, design/ADR/roadmap reconciliation; M2, workspace identity gate, source
+  count comparison, matrix const assertion, and deliberate drift controls.
 
 Read these references before implementation; they own the surrounding rules:
 
@@ -342,54 +373,69 @@ Rust design; follow the router to `rust-unit-testing`, `rust-verification`, and
 unresolved external contracts, `logisphere-experts` for design review,
 `commit-message` for commits, and `pr-creation` for publication. Reuse existing
 metadata helpers only if their boundary-test ownership permits it; do not
-introduce a dependency from the standalone localization runtime to Clap or from
-runtime code to an executable. Before any helper extraction, search for an
-equivalent and document ownership and permitted reuse in the developers' guide.
-Build-probe helpers belong only to build support and its tests.
+introduce a dependency from the standalone localization runtime to Clap. Before
+any helper extraction, search for an equivalent and document ownership and
+permitted reuse in the developers' guide. Publication-gate helpers belong only
+to test support and the gate.
 
 ## Verification plan
 
 ### Model, preconditions, and representation
 
-Let E be the finite set of declared variants in the exact dependency enum
-re-exported by the compiled clap facade. Let M be the sequence of public matrix
-pairs. Each pair's first component is a real `ErrorKind`; its second is either
-`Translated(id)` or `DisplayOnly`. Let D be the three display variants listed
-in §6.1. The validated manifest count N must equal the cardinality of E.
+Let I be the explicitly supported `clap_builder` identity, recorded by package
+version, registry/source identity, and Cargo.lock checksum. Let E(I) be the set
+of top-level `ErrorKind` variants parsed from the `manifest_path` resolved for
+that identity by workspace `cargo metadata --locked --offline`. The gate also
+checks that the selected production `clap` package and its normal dependency
+edge resolve to I for the configured publication target and features. Unknown,
+overridden, ambiguous, mismatched, or incompletely audited cfg-dependent
+inventories have no accepted E(I) and fail the gate.
 
-The required postconditions are: each member of E occurs exactly once in M;
-exactly D receives the sentinel; every other row names a unique, renderable
-embedded English message; runtime lookup agrees with M; and display-only errors
-return unchanged without consulting the localizer.
+Let N(I) be the reviewed integer constant in the matrix test for I, and M the
+public sequence of matrix pairs. Each pair has a real `ErrorKind` and either
+`Translated(id)` or `DisplayOnly`; D is the three display variants from §6.1.
+The publication test requires the freshly parsed source count to equal N(I).
+Rust's `const_assert_eq!` separately requires `len(M) == N(I)`. The source
+parser's runtime result cannot initialize a Rust const. Therefore a source
+variant addition fails the publication test until reviewed; after updating
+N(I), a missing or extra matrix row fails the compile-time assertion. The
+assertion alone is not an upstream-source-growth detector.
 
-The finite coverage argument is that distinct keys drawn from E, together with
-`len(M) == N == |E|`, cover E. Length equality alone lacks the distinctness
-premise. This is a review argument discharged for the concrete inventory, not a
-claim of a machine-checked theorem. No contractual business algorithm or
+The remaining postconditions are that each member of E(I) occurs exactly once
+in M; exactly D receives the sentinel; every other row names a unique,
+renderable embedded English message; runtime lookup agrees with M; and
+display-only errors return unchanged without consulting the localizer. The
+finite coverage argument is that distinct keys drawn from E(I), together with
+`len(M) == N(I) == |E(I)|`, cover the inventory. Length equality alone lacks
+the distinctness premise. This is a review argument discharged for the concrete
+inventory, not a machine-checked theorem. No contractual business algorithm or
 unbounded semantic kernel is introduced, so Verus, Kani, and solver scaffolding
-would not improve the relevant assurance. If implementation introduces such a
-kernel, stop and revise the specification and architecture before selecting
-Verus; never use `assume`, `admit`, or trusted bodies to bypass a proof.
+would not improve the relevant assurance. Never use `assume`, `admit`, or
+trusted bodies to bypass a proof.
 
-Axioms are Cargo's package-resolution and build-output contracts, clap's
-published type and context contracts, Rust's typed enum constructors and const
-evaluation, and Fluent's parser/formatter contract. Tests exercise our use of
-these boundaries; they do not purport to prove those dependencies correct.
+Axioms are Cargo's locked workspace resolution and metadata contracts, the
+selected registry package's source layout, clap's published type and context
+contracts, Rust's typed enum constructors and const evaluation, and Fluent's
+parser/formatter contract. Tests exercise our use of these boundaries; they do
+not purport to prove those dependencies correct. The gate establishes only the
+repository's configured publication graph, not downstream consumer graphs.
 
 ### V1: exact inventory and uniqueness
 
 Add `ortho_config/tests/clap_error_matrix.rs` with an independently enumerated
 `rstest` table for the exact supported `clap_builder` identity. Check pairwise
 key uniqueness, identifier uniqueness, exact expected kind membership, and the
-sentinel partition. Compare the table with the identity's declared count in M2.
-Compile imports through both `ortho_config` and `ortho_config::localizer`. Use
-`googletest` matchers for variants and collections and `pretty_assertions` for
-equality.
+sentinel partition. Compare the table length with the reviewed identity count
+using the compile-time assertion; the publication gate independently counts
+source variants. Compile imports through both `ortho_config` and
+`ortho_config::localizer`. Use `googletest` matchers for variants and
+collections and `pretty_assertions` for equality.
 
-The witnesses include every real kind and all three sentinels. Replace a row
-with a duplicate while keeping length unchanged: the uniqueness/inventory test
-must fail. Remove a row: the M2 const assertion must fail. These controls
-prevent a shared production/test omission from looking exhaustive.
+The witnesses include every supported real kind and all three sentinels.
+Replace a row with a duplicate while keeping length unchanged: the
+uniqueness/inventory test must fail. Remove or add a row: the M2 const
+assertion must fail. These controls prevent a shared production/test omission
+from looking exhaustive.
 
 ### V2: messages, overrides, and missing context
 
@@ -456,64 +502,65 @@ exit status for help, version, missing-input help, and a translated parser
 error. Keep fixture compilation sequential and outside `/tmp`; inject locale
 and colour settings through the child process rather than mutate global env.
 
-### V4: identity-manifest correctness and freshness
+### V4: publication identity, source inventory, and freshness
 
-Test the manifest parser/generator independently from the build-time runtime
-identity check. If a generator derives count data from source, use `syn` rather
-than regex and count every declaration, including display shapes, without a
-classification list. Use `proptest` for bounded syntax cases: insertion adds
-one declaration; reordering, comments, attributes, and discriminants do not
-change the count; malformed or ambiguous declarations fail. If the design's
-manifest is wholly checked in rather than generated, apply property tests only
-to any actual parser/normalizer introduced, not to a speculative source parser.
+Implement the publication check as a test-only gate, not a build script. Read
+the root workspace `Cargo.lock` and select the unique locked `clap` package
+used by `ortho_config` as a normal production dependency for the configured
+target and features. Verify its package version, source identity, and checksum
+against the lock entry. Follow the resolved `clap` → `clap_builder` normal
+dependency edge and require one unambiguous `clap_builder` package identity.
+Cross-check both package IDs and the edge with workspace
+`cargo metadata --locked --offline` for that same target/features selection.
+Reject lock/metadata disagreement, source override, multiple candidates,
+missing edges, unexpected dependency kinds, or unsupported identities. For the
+supported registry identity, use metadata's `manifest_path` to locate the exact
+source defining `ErrorKind`; do not infer the path from registry directory
+names.
 
-The decisive controls distinguish identity from count. An unsupported or
-source-overridden identity must fail closed before emitting a count, even if
-its source appears to match. For a supported identity, change only its manifest
-count while leaving the matrix unchanged and require the `const_assert_eq!`
-failure; restore it, then update the manifest and matrix together and require
-the semantic inventory tests to pass. A mismatched version, source identity,
-checksum, or `clap` facade edge must fail before the assertion. Change an input
-used by the resolver and show that Cargo reruns the gate. Never claim that an
-unsupported path-patched source reaches the const assertion. Restore all
-controls before gates and commits.
+Parse the enum with `syn` and count all top-level variants without assigning
+meaning to any of them. Audit attributes and cfg conditions for the supported
+source. If the inventory's compiled shape cannot be established exhaustively,
+fail closed and require an explicit source-support decision. Use `proptest` on
+the implemented parser: adding a variant adds one, while declaration order,
+comments, and discriminants do not change the count; malformed input fails, and
+unsupported conditional declarations fail closed. Record generator acceptance
+and classification so every relevant case is exercised. Do not filter away
+declaration forms relevant to the supported source.
+
+Keep `CLAP_ERROR_KIND_COUNT` as a reviewed test constant associated with the
+allow-listed package identity. The gate independently requires the parsed
+source count to equal that constant. In the matrix test, compile
+`static_assertions::const_assert_eq!(CLAP_ERROR_IDS.len(),
+CLAP_ERROR_KIND_COUNT)`.
+Thus source growth fails the publication gate until reviewed; after the
+constant is updated, a matrix omission or extra row fails the const assertion.
+The assertion does not parse source or detect upstream growth by itself.
+
+Negative controls must prove the checks are live: alter the supported identity
+checksum/source or facade edge and require identity validation to fail; supply
+an unknown identity and require a fail-closed diagnostic; alter only the parsed
+source count and require the publication test to fail against the reviewed
+constant; update the constant without the matrix and require compile failure;
+and introduce a duplicate plus omission with unchanged length and require the
+semantic inventory test to fail. Restore all controls before the final gates.
+The gate validates this repository's publication graph only; consumer
+end-to-end tests continue to verify observable behaviour, not a downstream
+dependency-identity guarantee.
 
 ## Plan of work and milestones
 
-### M0: establish identity-manifest feasibility after approval
+### M0: establish the original identity-manifest feasibility
 
-Read current source, dependency graph, and relevant Cargo documentation again.
-Use disposable fixtures under `target/` to establish how the build script
-identifies the resolved `clap_builder` package, matches its version/source/
-checksum against the supported count manifest, and verifies the resolved `clap`
-facade edge points to that exact package. Determine which Cargo source forms
-can be resolved deterministically (for example the registry source identity);
-unsupported source replacements, vendored sources, path patches, ambiguous
-graphs, or unknown checksums must fail closed unless the identity contract can
-be proved for them. Do not silently fall back to the workspace lockfile or a
-package-name match.
+M0 tested the proposed build-script identity resolver against workspace,
+external path, and unpacked packaged consumption. Preserve its evidence and
+historical probe commands below. The experiment found the build script could
+not establish the external consumer's governing lock and compiled facade edge.
+M0 therefore ended the original mechanism at its stop condition. It did not
+implement a fallback or feature code. Its acceptance result is a documented
+no-go for the original design, not a go for the feature.
 
-Record commands and evidence for the workspace build, an external path
-consumer, and an unpacked packaged consumer. Exercise renamed dependencies,
-feature selection, target-specific edges, multiple Clap versions, and
-source-override cases to establish supported and rejected boundaries. A
-packaged consumer must build the unpacked Cargo archive outside this workspace;
-a checkout path dependency is not equivalent. Check that resolution neither
-recursively compiles nor mutates lock files, fetches network data, or hangs
-behind a parent Cargo process. Preserve compiler admission and the shared Cargo
-cache throughout.
-
-Acceptance E0 requires deterministic identity resolution, a verified facade
-edge, documented supported identities/source forms, and explicit failures for
-unsupported or ambiguous cases. If this cannot be established, stop: record
-BLOCKED and propose a design clarification rather than accepting an unbound
-count or adding a consumer escape hatch. No feature code is implemented before
-this decision. Record reproducible fixture recipes under
-`ortho_config/tests/fixtures/clap_error_build_probe/`; generated projects and
-build products live under `target/`, while the durable recipe remains tracked.
-Production code is still unchanged. Commit only a coherent, gated result.
-
-#### M0 outcome (2026-11-09): BLOCKED
+#### M0 outcome (2026-11-09): original mechanism stopped; evidence retained
 
 The build-time identity contract holds for our own workspace build and for no
 other consumption form. A dependency's build script cannot observe its
@@ -557,9 +604,10 @@ versions, and source overrides were not exercised: the decisive failure occurs
 earlier, because no governing lock is reachable at all, so those sub-cases
 cannot change the verdict.
 
-This satisfies the first tolerance trigger, "the active dependency source
-cannot be identified without guessing", and it defeats a workspace-only
-success, which the tolerance explicitly rejects. No feature code was written.
+This satisfied the original tolerance trigger, "the active dependency source
+cannot be identified without guessing", and ruled out the original build-time
+mechanism. The revised decision accepts a workspace publication gate with an
+explicitly limited guarantee. No feature code was written.
 
 **Upstream design impact.** Design §6.1.1 requires a build-time check binding
 the count to the resolved `clap_builder` identity and to the compiled `clap`
@@ -567,27 +615,26 @@ facade edge. That requirement rests on an assumption Cargo does not support for
 consumers, so §6.1.1 needs amendment whichever option is accepted. The public
 surface in §6.2, the enum and the constant, is unaffected.
 
-**Options.**
+**Decision and rejected options.** At the user's request, this revision selects
+the recommended option: move identity binding to the pre-publication workspace
+test gate. Read the workspace `Cargo.lock` for package identity and edge;
+cross-check with `cargo metadata --locked --offline` (M0 observed exit 0,
+`clap` 4.6.7, `clap_builder` 4.6.7, the facade edge, and a `manifest_path` into
+the resolved source); count source variants with `syn`; and compare with a
+reviewed identity-specific test constant. Keep `const_assert_eq!` for matrix
+length versus that constant. This retains total-count coverage and fail-closed
+publication checks without claiming downstream consumer rejection. It removes
+`build.rs`, `rustc-env`, `OUT_DIR` count output, and build-time identity
+resolution.
 
-1. *Recommended.* Move the identity binding from build time to the
-   pre-publication test gate. Read the governing workspace `Cargo.lock` for
-   version, source, checksum, and the `clap`-to-`clap_builder` edge; confirm
-   the same resolution with `cargo metadata --locked --offline`, verified here
-   as exit 0 with `clap` 4.6.7, `clap_builder` 4.6.7, the facade edge, and a
-   `manifest_path` into the resolved source; then count `ErrorKind`
-   declarations in that source with `syn`. This retains the total-count gate,
-   the `const_assert_eq!`, fail-closed unknown identities, and the ban on
-   display classification in support code. It drops the build script, the
-   `rustc-env` value, the `OUT_DIR` constant, and the consumer-side rejection,
-   which cannot be sound.
-2. Keep the build script but emit nothing outside a workspace build. Rejected:
-   this is the consumer escape hatch the tolerances forbid, and it leaves the
-   check vacuous for every consumer.
-3. Ask `clap` upstream for a version constant or a `links` key. Out of scope and
-   not available now.
-4. Publish a bridge crate declaring `links`. Rejected as unsound: such a
-   package's own build script is equally blind to its dependent's resolution,
-   so its metadata value would be a hard-coded literal.
+The following alternatives remain rejected:
+
+1. Emit nothing outside a workspace build. This creates the consumer escape
+   hatch the original tolerance forbade and leaves downstream checking vacuous.
+2. Ask clap upstream for a version constant or a `links` key. Neither is
+   available in the observed API and this task cannot add it.
+3. Publish a bridge crate declaring `links`. Its build script is equally blind
+   to its dependent's resolution, so the value would be a hard-coded literal.
 
 Recipes, kept out of the product tree:
 
@@ -607,9 +654,14 @@ tar xzf target/package/ortho_config-0.10.0.crate -C target/m0/unpacked
 cargo build --offline --manifest-path target/m0/pkg-consumer/Cargo.toml
 ```
 
-Awaiting explicit acceptance of an option before M1, as the Tolerances and the
-Purpose statement require; approval of this plan did not authorize replacing
-the coverage mechanism.
+#### Selected mechanism handoff
+
+At the user's request, this revision selects the pre-publication gate. Before
+feature code, perform M0.1: amend `docs/cli-localization-design.md` §6.1.1 and
+record the substantive change in an ADR; reconcile any roadmap wording that
+implies consumer-side failure; and update this ExecPlan's conformance links.
+The selected mechanism limits identity assurance to the repository's configured
+publication graph. It does not require a consumer to run our test gate.
 
 ### M1: canonical matrix and executable translations
 
@@ -630,55 +682,58 @@ documentation and consumer guidance alongside the behaviour change.
 
 Acceptance E1 is all V1–V3 tests passing, red evidence retained in this plan,
 all ordinary gates green, and unchanged existing-identifier override tests.
-Review R1/R2 conformance and upstream assumptions before committing. Remaining
-gap: the automatic upstream-growth detector in M2. Recovery is to fix forward
-or revert this atomic milestone, without adding compatibility shims.
+Review R1/R2 conformance and upstream assumptions before committing. The
+publication inventory check remains for M2. Recovery is to fix forward or
+revert this atomic milestone, without adding compatibility shims.
 
-### M2: total-count build script and compile-time coverage
+### M2: pre-publication inventory gate and compile-time matrix assertion
 
-Only after E0, add `ortho_config/build.rs` and narrow build-support modules
-using the proven identity method. Read the count from the checked-in supported
-identity manifest (or its deterministic generator, if M0 establishes one), then
-verify the compiled dependency resolution and facade edge before emitting
-`cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>` and a numeric constant
-in `OUT_DIR/clap_error_kind_count.rs`. Both values must come from the same
-validated identity entry. Do not ship an unbound hard-coded count or a
-best-effort source fallback. Generate any test inventory only where the design
-requires it and never classify variants in build support. Register every
-manifest and resolution input for rerun and demonstrate invalidation. Do not
-overwrite outputs until inspection succeeds, and never silently reuse stale
-output. Unknown identity, source/checksum mismatch, facade-edge mismatch,
-ambiguity, and resolution failures must fail with an actionable diagnostic
-naming the operation and package/version when known.
+After completing M0.1, add a test-only `ortho_config` publication gate. The
+implementation must read the workspace lock, identify the selected production
+`clap` package and normal facade edge, and confirm both against
+`cargo metadata --locked --offline` using the configured target/features. Check
+version, source, and checksum against the locked supported identity. Follow the
+metadata-resolved `clap` dependency edge to exactly one `clap_builder`, resolve
+its `manifest_path`, and use `syn` to count every top-level `ErrorKind`
+variant. Do not read consumer locks or pretend to reject consumer builds. Fail
+closed before publishing for unknown identities, altered sources, checksum or
+edge mismatches, ambiguous candidates, metadata disagreement, and unaudited cfg
+shapes. Do not add `build.rs`, `rustc-env`, `OUT_DIR` artefacts, or generated
+build outputs for this check.
 
-In `clap_error_matrix.rs`, include the generated constant and call
-`static_assertions::const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT)`.
-Also verify agreement with the emitted environment value at runtime. Keep the
-assertion in the test suite as §6.1.1 prescribes: ordinary downstream library
-builds do not run dependency tests. The build script's identity check still
-runs for consumers and rejects unknown identities; the const assertion is a
-pre-publication test gate for a supported identity, not a claim that every
-consumer build rejects a new variant added under an already-supported source.
+Keep the supported identity and reviewed total in the test as explicit data.
+The gate compares its parsed source count to the reviewed count at test time.
+Use
+`static_assertions::const_assert_eq!(CLAP_ERROR_IDS.len(),
+CLAP_ERROR_KIND_COUNT)`
+to check the matrix against that reviewed constant at compile time. The
+test-time parsed value cannot initialize the Rust const. A new source variant
+therefore fails the publication gate until reviewed; after the count is
+intentionally updated, a missing or extra matrix row fails the const assertion.
+Unknown identities fail our publication gate only; no consumer build rejection
+is promised.
 
-Start with a supported-identity manifest-count mismatch fixture and verify it
-fails at the const assertion; separately verify that a new or overridden
-unsupported source fails closed before count emission. Restore the supported
-manifest/matrix and prove semantic inventory tests pass. Run V4 and all
-ordinary gates. Acceptance E2 includes E0 identity cases, count consistency for
-the resolved supported identity, fail-closed unknown identity, duplicate row
-rejection, rerun evidence, and no display classification in build support.
-Commit after a conformance review of R3; remaining gap is final documentation
-reconciliation.
+Add durable fixtures for supported and unsupported lock/source identities, the
+`clap` facade edge, variant-count drift, and matrix drift. Require each
+negative control to fail for its stated reason; restore all mutations before
+running gates. Acceptance E2 requires the supported workspace graph to pass,
+unknown or mismatched identities to fail closed, source-count drift to fail
+test-time comparison, matrix length drift to fail the const assertion, and
+semantic tests to reject duplicate-plus-omission errors. Include an explicit
+rerun/freshness check if the gate caches parsed results; otherwise do not add
+cache invalidation machinery. No support code classifies display-only variants.
+Commit after a conformance review of revised R3.
 
 ### M3: reconcile documentation and complete delivery
 
 Update `docs/users-guide.md` with matrix enumeration, override IDs, sentinel
 handling, and the missing-input help change. Update `docs/developers-guide.md`
-with build-probe ownership, prerequisites, troubleshooting, freshness inputs,
-and the procedure when clap adds a variant. Update §6.1.1 of the localization
-design with the established mechanism and its limits; use `docs/design.md` for
-the component boundary where appropriate. Record substantive choices in an ADR
-and link it from both design and contents. Do not advertise deferred APIs.
+with publication-gate ownership, prerequisites, troubleshooting, and the
+procedure when clap adds a variant. M0.1 must update §6.1.1 of the localization
+design to state the supported workspace-only guarantee and its limits, and
+record the deviation in an ADR linked from the design and contents. Use
+`docs/design.md` for the component boundary where appropriate. Do not advertise
+deferred APIs or consumer-side identity rejection.
 
 Run all ordinary gates, documentation gates, focused integration tests, and new
 executable doctests. Reconcile all R1–R3 evidence and upstream decisions. Only
@@ -700,15 +755,15 @@ cargo test -p ortho_config --test clap_error_matrix
 cargo test -p ortho_config --test clap_error_translations
 cargo test -p ortho_config --test clap_error_cli
 cargo test -p ortho_config --test rstest_bdd
-cargo test -p ortho_config --test clap_error_build_probe
+cargo test -p ortho_config --test clap_error_coverage --locked --offline
 cargo test -p ortho_config --doc
 ```
 
 New target commands become available in their named milestones. Their expected
 result is a nonzero executed test count, all named cases passing, and no
-ignored failures. Keep seed/failure records for property tests. Record
-fixture-build commands and exact expected compile diagnostics in M0/M2 once
-established; they are not invented here before the resolver experiment.
+ignored failures. Keep seed/failure records for property tests. Record the gate
+fixture commands and exact expected diagnostics in M2 when the test target is
+implemented; M0 historical probe commands are retained in the outcome above.
 
 Use the canonical Make targets, not a reduced substitute. The live Makefile
 runs rustdoc, Clippy, and Whitaker for lint; test includes all-feature Rust
@@ -744,14 +799,14 @@ pub const CLAP_ERROR_IDS: &[(clap::error::ErrorKind, ClapErrorTranslation)];
 ```
 
 The declaration above specifies the constant's type; its actual definition must
-supply every row. Build support should use the narrowest mechanism that
-resolves and validates the identity manifest against the compiled facade edge.
-Use `cargo_metadata` only if M0 demonstrates that route observes the required
-consumer graph. Add a source parser such as `syn` only if the accepted manifest
-workflow needs one. Reuse workspace versions compatible with Rust 1.89; add
-`static_assertions` as a caret dev-dependency. Existing dev dependencies
-already include `rstest`, `rstest-bdd`, `googletest`, `pretty_assertions`,
-`insta`, and `proptest`. No solver dependency is planned.
+supply every row. The publication test should use `cargo_metadata` to validate
+the workspace production facade edge and `syn` to count variants from the
+resolved package source. Both are test-only; neither participates in a build
+script. Keep the reviewed supported identity/count beside the matrix test and
+use `static_assertions` there for matrix-length comparison. Reuse workspace
+versions compatible with Rust 1.89 and caret requirements. Existing dev
+dependencies already include `rstest`, `rstest-bdd`, `googletest`,
+`pretty_assertions`, `insta`, and `proptest`. No solver dependency is planned.
 
 ## Idempotence and recovery
 
@@ -774,8 +829,8 @@ External contracts checked through Firecrawl on 2026-10-14:
   package IDs, resolved edges, manifest paths, and locked/offline behaviour.
   `--no-deps` cannot provide the required dependency graph.
 - [Cargo build scripts](https://doc.rust-lang.org/cargo/reference/build-scripts.html):
-  build inputs, `OUT_DIR`, environment output, and rerun directives. These
-  contracts do not by themselves prove the candidate's consumer graph identity.
+  historical M0 context for the rejected build-time mechanism. These contracts
+  do not prove a dependency's consumer graph identity.
 
 Wyvern evidence was exchanged using context packs `pk_nry25fav` and
 `pk_n7jcfn3g`, plus documentation pack `pk_qmi5dgej`; this document contains
@@ -809,3 +864,11 @@ implementation approval gate.
 Revision note (2026-11-09): temporarily base the plan on PR #664 to inherit the
 nested Cargo timeout fix; record the parent boundary and the implementing
 agent's return-to-main procedure after that PR merges.
+
+Revision note (2026-11-09): record M0's evidence that the approved consumer
+build-time identity binding is unavailable, select the pre-publication
+workspace gate at the user's request, and replace build-script milestones with
+a test-time source inventory comparison plus a matrix-versus-reviewed-count
+const assertion. The implementor must reconcile §6.1.1 and the roadmap and
+record the choice in an ADR before feature implementation. The guarantee covers
+the configured workspace publication graph only.
