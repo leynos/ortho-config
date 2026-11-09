@@ -74,7 +74,8 @@ explicitly approves it and the prerequisites below are complete.
   dependency is required, or the library must own file I/O or unrestricted
   source parsing.
 - Stop if implementation exceeds 30 changed files or 1,500 net non-generated
-  lines, or any Rust source file would exceed 400 lines.
+  lines, or any Rust source file would exceed 400 lines. Exclude this ExecPlan
+  from file-count and line-count tolerances.
 - Stop if review proposes materially different API or example binding
   semantics; record options and impacts before changing this design.
 - Stop after two focused repairs for the same failing gate.
@@ -125,6 +126,46 @@ explicitly approves it and the prerequisites below are complete.
 - [x] (2026-10-14 19:38Z) Planning gates passed: `make fmt`,
   `make check-fmt`, `make lint`, `make test`, `make markdownlint` (including
   spelling), and `make nixie`. Only the plan and documentation index changed.
+- [x] (2026-11-08) Rebased onto PR #651 merge `ddba3578`; retained both
+  index entries in the sole conflict and reconciled the existing prover lane.
+  Rechecked that 7.1.2 and 7.1.3 remain incomplete.
+- Historical validation on the PR #651 base: formatting passed on
+  2026-11-08, but the resumed `make test` failed in eight localization-boundary
+  cases: six package operations exceeded 240 seconds and two consumer test
+  operations exceeded 300 seconds. The interrupted earlier run had no terminal
+  result. `make typecheck` and `make lint` subsequently passed. Retain
+  `/tmp/ortho-632-resume-test.out`; do not treat elapsed deadlines as proof of
+  a source defect or as a passing gate. Commit and push remain gated on
+  successful validation of the replacement base below.
+- [x] (2026-11-09) Rebased the two planning commits onto PR #664 at
+  `26275a4efe31d3cf84cf8ec3e265782a28a832f3` without conflicts; range-diff
+  confirms both patches are unchanged. Restored the PR #651 plan revision.
+- [x] (2026-11-09) Formatting, typecheck, lint (including Whitaker),
+  Markdown/spelling, and diagram checks passed on the PR #664 base.
+- Historical validation on the initial PR #664 base: the full run ended with
+  exit 143, without a complete result. Its retry passed the earlier suites but
+  rejected a stale documentation-cache ownership marker. After confirming no
+  owned compiler writers remained, recovered only that marker under the
+  exclusive cache lock; retained the marker and gate logs under
+  `/tmp/ortho-632-*`. Neither a terminated run nor successful cache recovery
+  counts as a passing test gate. The focused documentation suite then passed
+  all eight tests. A subsequent full run reached the boundary suite: 25 passed,
+  seven hit the unchanged 440-second nested-build deadlines, and one was
+  ignored. Captured diagnostics show active compilation, including
+  compiler-admission waits. Complete the existing package-build caches and
+  rerun the unchanged gates; do not widen deadlines or treat cache preparation
+  as acceptance evidence.
+- [x] (2026-11-09) Both standalone package-verification commands completed
+  successfully with the shared cache and existing target directories. The
+  unchanged `make boundary` gate then passed: 32 passed, zero failed, one
+  ignored. Cold compilation exceeded the child budget on this shared host; this
+  evidence does not establish a cold-cache timing guarantee. The final full
+  test run passed, including all workspace tests, 32 boundary tests (one
+  ignored), and 119 Python tests (16 skipped). Evidence:
+  `/tmp/ortho-632-664-test-final.out`.
+- [ ] Restack onto PR #664's updated head, validate, and publish. Its parent
+  advanced during validation; the results above describe the initial `26275a4e`
+  parent, not the updated candidate.
 - [ ] Begin implementation only after explicit approval and EP-M0 passes.
 
 ## Surprises & discoveries
@@ -142,10 +183,14 @@ explicitly approves it and the prerequisites below are complete.
   Evidence: `docs/roadmap.md` and `cargo-orthohelp/src/policy/config/mod.rs`.
   Impact: implementation must wait for the 7.1 policy and an explicit
   per-command effective option surface from the consumer or bridge.
-- Observation: `docs/scripting-standards.md` is absent. The requested
-  `docs/rtest-bdd-users-guide.md` is also absent; the repository has
-  `docs/rstest-bdd-users-guide.md`. Impact: signpost the existing guide and do
-  not invent a missing document.
+- Observation (refreshed 2026-11-08): `docs/scripting-standards.md` now
+  exists, and ADRs moved under `docs/adrs/`. The requested
+  `docs/rtest-bdd-users-guide.md` remains a typo for
+  `docs/rstest-bdd-users-guide.md`. Use the current paths below.
+- Observation: PR #651 supplies pinned prover tooling, command-boundary tests,
+  and accepting/rejecting fixtures. These demonstrate runner operation, not
+  skill-validation correctness. Production proof inventories are empty and fail
+  with `FORMAL-EMPTY`; ordinary gates do not execute provers.
 - Prior art: the Agent Skills specification defines YAML frontmatter and
   Markdown body but no standardized command/example grammar for arbitrary
   prose. It points to `skills-ref` for structure and naming validation. This
@@ -154,6 +199,19 @@ explicitly approves it and the prerequisites below are complete.
   2026-10-14).
 
 ## Decision log
+
+- Decision (2026-11-09): Temporarily target
+  `issue-644-nested-cargo-timeouts` (PR #664). Its serialized nested Cargo
+  operations and bounded diagnostic capture address the timeout blocker in the
+  validation infrastructure. This does not complete the vocabulary
+  prerequisites or approve feature implementation. After #664 merges, the
+  implementing agent must fetch `main`, verify the merge is reachable there,
+  and rebase this branch's own commits onto `origin/main`, then retarget its PR
+  to `main`. Use the rebase skill to establish the replay boundary: the
+  inherited parent is `26275a4efe31d3cf84cf8ec3e265782a28a832f3`, not the
+  eventual squash-merge commit. Recheck this boundary if the parent advances;
+  preserve recovery refs and avoid replaying the parent's changes. Repeat
+  required gates and publish with an explicit force-with-lease.
 
 - Decision: Propose `cargo_orthohelp::skill_validation` as a reusable API
   called by consumers. Consumers retain manifest I/O, format checks, prose
@@ -185,14 +243,20 @@ explicitly approves it and the prerequisites below are complete.
   non-trivial contractual logic, pause and revise the proof sketch before
   proceeding. Date/Author: 2026-10-14, draft after expert review.
 
+- Decision: Reuse PR #651 and ADR-0017 for any later proof milestone; do not
+  add another installer, tool pin, or fixture-only proof claim. Tool
+  availability does not change the proportionate verification decision for this
+  feature. Date/Author: 2026-11-08, draft revision requested by maintainer.
+
 ## Outcomes & retrospective
 
 Planning only. No implementation has started. Wyvern reconnaissance and all six
-expert perspectives have been reconciled. Full repository checks passed for
-this documentation-only change; they do not constitute feature acceptance. The
-shared compiler cache was unavailable, so the admitted builds ran uncached.
-Record implementation outcomes and lessons at later milestones. Do not mark the
-plan complete while prerequisites, design updates, or acceptance gates remain.
+expert perspectives have been reconciled. The original October repository
+checks passed for that planning snapshot; they do not constitute feature
+acceptance. The shared compiler cache was unavailable, so the admitted builds
+ran uncached. Record implementation outcomes and lessons at later milestones.
+Do not mark the plan complete while prerequisites, design updates, or
+acceptance gates remain.
 
 ## Context and orientation
 
@@ -216,7 +280,13 @@ domain semantics.
 
 ## Conformance basis
 
-- Planning base: `dc979878b5728bbb23866df9c05c2570bdb5629e` on branch
+- Current temporary base: `26275a4efe31d3cf84cf8ec3e265782a28a832f3`
+  (`issue-644-nested-cargo-timeouts`, PR #664), which includes the following PR
+  #651 base. Return to `main` after #664 merges as described in the decision
+  log; do not infer feature approval from that merge.
+- Previous planning base: `ddba3578fae04227e426ea3a61aa2b24aa043232`
+  (PR #651, merged 2026-11-06), rebased from original planning base
+  `dc979878b5728bbb23866df9c05c2570bdb5629e` on branch
   `6-3-2-skill-manifest-validation`. Recheck the base and prerequisite state
   before implementation; this planning snapshot does not certify future heads.
 - `docs/roadmap.md` §6.3.2 requires real command-path and flag validation,
@@ -227,11 +297,15 @@ domain semantics.
   downstream apps and says manifests are checked against command metadata. §5
   defines canonical verbs, flags, policy, and global-option glossary. Reconcile
   its ownership with current Rustdoc before implementation.
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` governs
-  agent-context schema ownership. [ADR-008][adr-008] governs opt-in policy
-  modes and exceptions.
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
+  governs agent-context schema ownership. [ADR-008][adr-008] governs opt-in
+  policy modes and exceptions.
 - `docs/execplans/6-3-1-skill-manifest-metadata.md` is the preceding schema
   decision; validation was explicitly deferred to 6.3.2.
+- [ADR-0017][adr-0017], `docs/design.md` prover-tooling section,
+  `docs/developers-guide.md` verification tools and production inventory, and
+  `docs/execplans/import-prover-tools.md` govern tool ownership and evidence.
+  Their fixture acceptance is not feature proof acceptance.
 - Trace links: `ROADMAP-6.3.2-PATH-FLAG` -> `EP-M2` -> structural tests,
   property oracle, and negative controls; `ROADMAP-6.3.2-EXAMPLES-VOCAB-GLOBAL`
   -> `EP-M3` -> normalized example and policy tests plus fixture integration;
@@ -316,9 +390,47 @@ independent executable oracles, while the uncertain integration boundary is
 consumer extraction and real bridge metadata. Verus would add little assurance
 for the membership helper and would not prove the integration obligations. If
 implementation adds a stateful or non-trivial all-input contract, return to
-proof-sketch-first design, select Verus only if warranted, pin the tool, and
-add an explicit command and acceptance criterion before implementation. Do not
-add `assume`, `admit`, or trusted proof shortcuts.
+proof-sketch-first design, select Verus only if warranted, reuse the repository
+pins and Make targets from PR #651, and add a feature-owned proof milestone
+before implementation. Do not add `assume`, `admit`, or trusted proof shortcuts.
+
+### Existing prover tooling and conditional proof acceptance
+
+PR #651 already pins Kani through `tools/kani/VERSION` and Verus through
+`tools/verus/VERSION` and `tools/verus/SHA256SUMS`. The Makefile pins the shared
+`rust-prover-tools` package. Reuse these sources of truth rather than copying
+versions into feature code. The lane is validated on Linux x86_64. No prover
+installation or execution is required for this planning revision or for the
+currently selected membership/property-test strategy.
+
+If an approved revision selects a substantive unbounded contract, first state
+its abstract model, satisfiable premises, representation relationship to the
+production Rust symbol, and semantic lemma sketches. Register the feature-owned
+proof in `VERUS_PROOF_FILES`, naming its owner, source symbol, assumptions,
+expected check count, and rejecting negative control as ADR-0017 requires.
+Require `make verus` with that non-empty inventory to succeed, alongside
+`make check-fmt`, `make typecheck`, `make lint`, and `make test`. A focused run
+may use `make verus VERUS_FLAGS='--proof-file path/to/proof.rs'`, replacing the
+placeholder with the approved proof file. Verification must establish the
+property from its premises, include executable-to-model refinement evidence,
+and reject the negative control; fixture proofs alone cannot discharge it. Do
+not add speculative proof bodies or trust shortcuts.
+
+Provisioning is separate: `make install-verus` installs the pinned bundle and
+its required Rust toolchain. Execution uses the bundled Z3 and both
+`--no-install-missing` and `--no-ensure-toolchain`; missing prerequisites must
+fail without installation. Do not replace these boundaries or run installation
+implicitly. `make test-prover-tools-integration` is an opt-in runner check, not
+a production proof, and requires tools to be installed first.
+
+If a later approved design instead needs bounded exhaustive exploration,
+register its Kani harnesses in `KANI_SMOKE_HARNESSES` and `KANI_ALL_HARNESSES`,
+document symbolic inputs and unwind bounds, and require `make kani-check`,
+`make kani`, and `make kani-full` with a rejecting control. Use
+`make install-kani` only for explicit provisioning. Neither empty-inventory
+`FORMAL-EMPTY` failures nor skipped integration tests count as verification.
+Tests still cover extraction, diagnostics, policy integration, and externally
+observable behaviour even if a future proof establishes an underlying kernel.
 
 External assumptions: clap's generated command tree represents its configured
 commands; the consumer or bridge supplies a correct explicit effective-option
@@ -331,10 +443,13 @@ extraction limitations.
 
 ### EP-M0: Recheck prerequisites and reconcile design
 
-Verify 6.3.1, 7.1.2, and 7.1.3 on the implementation base. Confirm 7.1 exports
-canonical rules and exceptions. Roadmap 7.1.3 does not promise inherited-option
-metadata, so also identify an explicit consumer- or bridge-resolved effective
-option set for each command, including global-option classification. Reconcile
+Verify 6.3.1, 7.1.2, and 7.1.3 on the implementation base. PR #651 completes
+tooling only; it does not satisfy the vocabulary prerequisites. Recheck
+ADR-0017 and retain the selected test strategy unless new semantic obligations
+justify an approved proof milestone. Confirm 7.1 exports canonical rules and
+exceptions. Roadmap 7.1.3 does not promise inherited-option metadata, so also
+identify an explicit consumer- or bridge-resolved effective option set for each
+command, including global-option classification. Reconcile
 `agent-native-cli-design.md` §3.4 with current Rustdoc and policy pipeline:
 define a reusable validator API invoked by consumers, with downstream I/O and
 extraction. Record any required design or ADR update before code work.
@@ -460,10 +575,10 @@ Create/update an ADR if ownership or result separation is a substantive
 architecture decision. Update `docs/contents.md`. Mark roadmap 6.3.2 done only
 after all accepted behaviour and gates pass.
 
-At every major milestone run `make check-fmt`, `make lint`, and `make test`
-sequentially. Final acceptance also runs `make markdownlint` and `make nixie`.
-Use `/tmp` logs per repository convention, inspect terminal summaries, and do
-not parallelize gates.
+At every major milestone run `make check-fmt`, `make typecheck`, `make lint`,
+and `make test` sequentially. Final acceptance also runs `make markdownlint` and
+`make nixie`. Use `/tmp` logs per repository convention, inspect terminal
+summaries, and do not parallelize gates.
 
 ## Milestones and plateaus
 
@@ -513,13 +628,13 @@ schema/dependency; links current.
 
 Requirements: all roadmap bullets and documentation obligations. End state:
 docs match implementation and all sequential gates pass. Evidence:
-`make check-fmt`, `make lint`, `make test`, `make markdownlint`, `make nixie`,
-and BDD/E2E targets pass. Mark roadmap item done only now. Recovery: repair
-from cited logs and rerun affected plus downstream gates in sequence. Remaining
-gaps: none except recorded follow-up. Compatibility decision: none.
-Conformance: requirements/docs agree; deviations accepted; assumptions and
-residual gaps recorded; dependencies authorized; trust/persistence unchanged;
-trace and evidence current.
+`make check-fmt`, `make typecheck`, `make lint`, `make test`,
+`make markdownlint`, `make nixie`, and BDD/E2E targets pass. Mark roadmap item
+done only now. Recovery: repair from cited logs and rerun affected plus
+downstream gates in sequence. Remaining gaps: none except recorded follow-up.
+Compatibility decision: none. Conformance: requirements/docs agree; deviations
+accepted; assumptions and residual gaps recorded; dependencies authorized;
+trust/persistence unchanged; trace and evidence current.
 
 ## Concrete steps
 
@@ -632,8 +747,9 @@ boundaries may not.
 No runtime dependency is proposed. Verify existing workspace test dependencies
 at EP-M1; add the authorized `googletest` and `pretty_assertions` as
 dev-dependencies if missing, using caret requirements. `rstest-bdd` is already
-used and follows the repository's existing runner. No proof tool or runtime
-crate is added.
+used and follows the repository's existing runner. The repository already owns
+prover tooling from PR #651; this feature adds no proof tool, installation
+path, or runtime crate.
 
 ## Documentation and skill signposts
 
@@ -647,8 +763,10 @@ Consult/update the relevant portions of `docs/design.md`,
 `docs/complexity-antipatterns-and-refactoring-strategies.md`, and
 `docs/rstest-bdd-users-guide.md`. The request's `docs/rtest-bdd-users-guide.md`
 spelling is not present; the correctly named repository guide is
-`docs/rstest-bdd-users-guide.md`. `docs/scripting-standards.md` is absent and
-no script is proposed.
+`docs/rstest-bdd-users-guide.md`. `docs/scripting-standards.md` now exists;
+consult it if a later approved change introduces scripts. No script is
+currently proposed. Consult [ADR-0017][adr-0017] and the developers' guide
+before any proof adoption.
 
 Read `$execplans`, `$rust-router`, `$rust-verification`, `$rust-unit-testing`,
 `$proptest`, and `$domain-cli-and-daemons` before their implementation facets.
@@ -670,4 +788,14 @@ OrthoConfig format mandate.
   spelling check rejected their wording. Meaning and remaining work are
   unchanged.
 
-[adr-008]: ../adr-008-opt-in-agent-native-policy-configuration.md
+- 2026-11-08: Rebased onto PR #651, preserved both conflicting index entries,
+  refreshed moved ADR and scripting references, and specified reuse of the
+  existing prover lane for any future approved proof milestone. The selected
+  test strategy, incomplete vocabulary prerequisites, and approval gate remain.
+
+- 2026-11-09: Restacked on PR #664 to incorporate the nested Cargo timeout
+  fix. Recorded the temporary target, exact replay boundary, and implementing
+  agent's return-to-main procedure without changing feature scope.
+
+[adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
+[adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
