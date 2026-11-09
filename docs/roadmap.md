@@ -662,14 +662,15 @@ later progressively add opinion.
     (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`,
     `DisplayVersion`) appear with the `DisplayOnly` sentinel, so the gate
     reduces to a simple length comparison.
-  - [ ] Implement the mechanical coverage gate (build script plus
-    `const_assert_eq!`) as specified in
-    [cli-localization-design.md §6.1.1](cli-localization-design.md). The
-    design document owns the mechanism; this task implements it. The
-    build script emits the **total** `ErrorKind` variant count without
-    classifying display-only variants, because the exhaustive matrix
-    pairs each variant with either a translated identifier or the
-    sentinel.
+  - [ ] Implement the mechanical coverage gate (a test-only pre-publication
+    check plus `const_assert_eq!`) as specified in
+    [cli-localization-design.md §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate).
+    The design document owns the mechanism; this task implements it. No build
+    script, `rustc-env` value, or generated build output is introduced, and no
+    consumer build is required to run the check. The gate counts the **total**
+    `ErrorKind` variants of this workspace's resolved `clap_builder` without
+    classifying display-only variants, because the exhaustive matrix pairs each
+    variant with either a translated identifier or the sentinel.
 
 - [ ] 11.2.2. Switch error localization to clap's mutation surface.
   - Requires 11.2.1.

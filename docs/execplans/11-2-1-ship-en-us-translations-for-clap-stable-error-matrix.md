@@ -1,8 +1,8 @@
 # Ship the en-US clap error matrix (11.2.1)
 
-Status: M0 complete — the consumer build-time identity contract is infeasible.
-The pre-publication workspace gate is selected at the user's request. Update
-the governing design documents before feature implementation (2026-11-09).
+Status: M0.1 complete — the governing design, ADR-0018, roadmap wording, and
+developers' guide now describe the pre-publication workspace gate. Feature
+implementation proceeds at M1 (2026-11-09).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -18,12 +18,13 @@ the supported clap identity with its reviewed count and fail when that
 inventory changes. A compile-time assertion will separately ensure that the
 matrix length equals that reviewed count. This is roadmap task 11.2.1 only.
 
-The deliverable of this branch is this reviewed plan, not the feature. M0
-established that the approved build-time mechanism cannot bind consumers to
-their governing Clap resolution. At the user's request, this revision selects
-the recommended pre-publication workspace gate. Before feature implementation,
-amend the governing design and ADR and reconcile the roadmap wording. This plan
-revision implements no feature.
+The deliverable of this branch is the feature, its pre-publication gate, and
+the governing documents that describe them. M0 established that the approved
+build-time mechanism cannot bind consumers to their governing Clap resolution.
+At the user's request the pre-publication workspace gate replaced it, and M0.1
+amended the design, recorded ADR-0018, and reconciled the roadmap and the
+developers' guide. M1 onward implements the matrix, strings, runtime
+integration, and gate.
 
 ## Constraints
 
@@ -142,8 +143,9 @@ stopping and reporting.
 - [x] (2026-11-09) M0: investigate identity-manifest and facade-edge
       feasibility; original build-time mechanism reached its stop condition.
 - [x] (2026-11-09) Select the pre-publication workspace gate after M0.
-- [ ] M0.1: amend design §6.1.1 and an ADR, and reconcile roadmap wording
-      before feature implementation.
+- [x] (2026-11-09) M0.1: amended design §6.1.1, §6.1, and §12; recorded
+      [ADR-0018](../adrs/adr-0018-pre-publication-clap-coverage-gate.md);
+      reconciled roadmap 11.2.1 and the developers' guide; indexed the ADR.
 - [ ] M1: implement the canonical matrix, strings, and runtime integration.
 - [ ] M2: implement the test-only reviewed count assertion, pre-publication
       inventory gate, and fault-detection evidence.
@@ -214,6 +216,11 @@ rendered tail. Rich structured context preservation remains task 11.2.2.
   publication gate. Keep the reviewed count constant in test source; compare
   the parsed count to it at test time, and assert matrix length against it at
   compile time. No build-script fixture or generated build output is needed.
+- 2026-11-09: M0.1 complete. Design §6.1.1 is retitled "Pre-publication
+  coverage gate" and states the workspace-only limit; §6.1 and §12 point at it;
+  ADR-0018 records the decision and the rejected alternatives; roadmap 11.2.1
+  and the developers' guide no longer claim a build script or a consumer
+  guarantee; `docs/contents.md` indexes the ADR.
 - 2026-10-14: include `InvalidSubcommand` and all three sentinels, following the
   complete-matrix requirement and the design rather than an incomplete list.
 - 2026-10-14: use finite exhaustive tests for the matrix and property tests for
@@ -327,9 +334,11 @@ Trace the three requirements as follows:
   cases and CLI tests; M3, consumer documentation.
 - R2, design §6.2 exhaustive public matrix: M1, independent inventory,
   uniqueness, public-import, override, and pass-through tests.
-- R3, design §6.1.1 total-count mechanism: M0 evidence and selected deviation;
-  M0.1, design/ADR/roadmap reconciliation; M2, workspace identity gate, source
-  count comparison, matrix const assertion, and deliberate drift controls.
+- R3, design §6.1.1 total-count mechanism, as amended by
+  [ADR-0018](../adrs/adr-0018-pre-publication-clap-coverage-gate.md): M0
+  evidence and selected deviation; M0.1, design/ADR/roadmap reconciliation; M2,
+  workspace identity gate, source count comparison, matrix const assertion, and
+  deliberate drift controls.
 
 Read these references before implementation; they own the surrounding rules:
 
@@ -354,6 +363,9 @@ Read these references before implementation; they own the surrounding rules:
 - [ADR 0015](../adrs/adr-0015-localization-runtime-boundary.md) and the
   [users' guide](../users-guide.md) describe the extracted runtime boundary;
   keep Clap-specific APIs in `ortho_config`.
+- [ADR 0018](../adrs/adr-0018-pre-publication-clap-coverage-gate.md) owns the
+  pre-publication coverage gate and supersedes the build-time identity
+  mechanism design §6.1.1 previously proposed.
 - [ADR 0017](../adrs/adr-0017-consumer-side-prover-tooling.md), the
   [Kani/Verus tooling plan](import-prover-tools.md), and the
   [developers' guide](../developers-guide.md#kani-and-verus-verification-tools)
