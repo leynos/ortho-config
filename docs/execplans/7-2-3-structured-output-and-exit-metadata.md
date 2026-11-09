@@ -28,11 +28,32 @@ false or undeclared, unless enforcement is off.
 
 ## Conformance basis
 
-The baseline is commit `ddba3578fae04227e426ea3a61aa2b24aa043232`. There is no
-separate task-specific terms-of-reference document. The governing requirements
-are [roadmap 7.2.3](../roadmap.md), the user's planning request, and
+The original design baseline is commit
+`ddba3578fae04227e426ea3a61aa2b24aa043232`. There is no separate task-specific
+terms-of-reference document. The governing requirements are
+[roadmap 7.2.3](../roadmap.md), the user's planning request, and
 [agent-native CLI design](../agent-native-cli-design.md) §§6.2, 6.2.2, 8.1 and
 8.2. Roadmap 7.2.1 and 7.2.2 are complete at this baseline.
+
+The implementation prerequisite is temporarily
+`issue-644-nested-cargo-timeouts` at
+`8309e3b41287f2fb9b70016194b8bfe2235db4fd`, tracked by
+[PR #664](https://github.com/leynos/ortho-config/pull/664). The user identified
+its nested Cargo timeout fix as necessary to implement this plan on current
+`main`. On 2026-11-09 the plan branch was rebased onto that exact parent and
+[PR #661](https://github.com/leynos/ortho-config/pull/661) was prepared for
+retargeting to it. This changes the execution prerequisite, not the feature
+scope or approval status.
+
+Once #664 merges, the implementing agent may rebase this branch back onto
+freshly fetched `origin/main` and retarget #661 to `main`. Use the `rebase`
+skill: first verify #664's merged state and landing commit, preserve the
+current head, and identify the exclusive inherited parent boundary. The
+recorded parent above is the initial boundary receipt, not permission to ignore
+later parent changes. Replay only this branch's plan/implementation commits; do
+not replay the timeout-fix commits after a squash merge. Audit with
+`git range-diff`, rerun the applicable gates, lease-push against the observed
+remote head, refresh tracking, and verify the PR base and head.
 
 The traceability chain is:
 
@@ -172,7 +193,11 @@ all possible public values are validated.
   schema defaults, enum fallback, grammar, stdout purpose and doctest findings.
 - [x] (2026-11-08) Validate the revised planning document: formatting,
   format checking, Markdown/spelling and Mermaid gates all passed.
-- [ ] Commit, push, configure the named upstream, and create the draft PR.
+- [x] (2026-11-08) Commit, push, configure the named upstream, and create
+  draft PR #661.
+- [x] (2026-11-09) Rebase the sole plan commit onto the #664 prerequisite;
+  `git range-diff` confirms an unchanged patch and no conflicts.
+- [ ] Publish the prerequisite note and retarget PR #661 to the timeout fix.
 - [ ] Obtain explicit plan approval.
 - [ ] M1: metadata, derive transport, documentation and integration coverage.
 - [ ] M2: structured-output lint and executable consumer examples.
@@ -628,3 +653,7 @@ the implementation scope.
 2026-11-08: recorded successful planning gates and resolved expert findings.
 The final prose update receives the documentation gates again before commit.
 Implementation milestones remain untouched and await approval.
+
+2026-11-09: record the user-requested temporary #664 prerequisite and the safe
+return-to-main procedure after it merges. The original plan commit rebased
+unchanged; implementation remains subject to explicit approval.
