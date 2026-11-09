@@ -4,39 +4,58 @@
 //! waiting for a compile-admission slot or a package-cache lock without ever
 //! reaching a compiler. This module makes that wait attributable: the child's
 //! streams are drained on their own threads, a bounded tail of each is
-//! published while it runs, and a deadline error carries that tail.
+//! published while it runs, and a deadline error carries that tail. The
+//! draining and retention live in [`readers`]; this module owns the child's
+//! lifetime.
 //!
-//! It also serializes nested invocations within the test process. `cargo test`
-//! runs a binary's tests as threads, which is the one runner where nextest's
-//! `boundary_packaging` group cannot help.
+//! It also owns the child's whole process tree. A nested Cargo build is a tree:
+//! `cargo` starts `rustc`, build scripts, and linkers beneath itself. Killing
+//! only the direct child leaves those descendants running, still compiling,
+//! still holding the output pipes, the package-cache lock, and their
+//! compile-admission slots. The runner therefore spawns the child as the leader
+//! of its own process group (Unix) or inside its own Job Object (Windows), and
+//! terminates that whole tree on the deadline. Reader collection is bounded in
+//! both outcomes: after a normal exit a descendant may hold a pipe open, and
+//! waiting for that descendant is the same hang by another route.
+//!
+//! Finally, it serializes nested invocations within the test process. `cargo
+//! test` runs a binary's tests as threads, which is the one runner where
+//! nextest's `boundary_packaging` group cannot help.
 
 #[cfg(test)]
 #[path = "deadline_probe_tests.rs"]
 mod deadline_probe_tests;
+#[cfg(test)]
+#[path = "probe_support.rs"]
+mod probe_support;
+#[path = "readers.rs"]
+mod readers;
 
+use self::readers::{READER_GRACE, StreamCapture, StreamEvidence, drain};
 use anyhow::{Context, Result};
-use std::collections::VecDeque;
-use std::io::{self, Read};
-use std::process::{Command, Output, Stdio};
-use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
-use std::thread::JoinHandle;
+#[cfg(windows)]
+use process_wrap::std::JobObject;
+#[cfg(unix)]
+use process_wrap::std::ProcessGroup;
+use process_wrap::std::{ChildWrapper, CommandWrap};
+use std::process::{Command, ExitStatus, Output, Stdio};
+use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::{Duration, Instant};
-use wait_timeout::ChildExt as _;
 
-/// Bytes kept from the end of each child stream to explain a deadline failure.
+/// How long the runner waits for a killed tree to be reaped.
 ///
-/// The tail, not the head, is the part that says what the child was doing when
-/// the deadline expired: compile-admission queue lines and the rustc heartbeat
-/// are printed repeatedly, and the last one names the wait that was in force.
-const DIAGNOSTIC_TAIL_BYTES: usize = 64 * 1024;
+/// `SIGKILL` and `TerminateJobObject` are not blocked by ordinary process
+/// cleanup, so this normally completes at once. The bound exists so a process
+/// wedged in an uninterruptible kernel wait cannot stall the runner after it
+/// has already decided the child timed out.
+const REAP_GRACE: Duration = Duration::from_secs(5);
 
-/// How long a stream reader may keep draining after a timed-out child is killed.
+/// How often a running child and its stream readers are polled.
 ///
-/// The killed child's own copies of its pipes close, but a build script, linker,
-/// or other descendant it started may still hold one. The suite has to report
-/// what it captured instead of blocking on that descendant, so a reader which
-/// has not reached end of file by then is detached.
-const READER_GRACE: Duration = Duration::from_secs(2);
+/// Ten milliseconds keeps the deadline close to the requested duration without
+/// a busy loop; the child and the reader threads are polled at the same
+/// cadence, so a bounded wait costs at most one interval beyond its grace.
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Serializes nested Cargo invocations within one test process.
 ///
@@ -65,54 +84,166 @@ static NESTED_CARGO: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 /// heartbeat lines it does print are the only evidence that distinguishes the
 /// wait from a hang. Discarding them made earlier failures unattributable.
 ///
-/// Nested invocations are serialized within the process; see [`NESTED_CARGO`].
+/// The child is made the root of its own process tree, so a deadline kill ends
+/// the compilers it started rather than only the Cargo process that fronted
+/// them. Nested invocations are additionally serialized within the process;
+/// see [`NESTED_CARGO`].
 ///
 /// # Errors
 ///
-/// Returns an error when the child cannot be spawned or collected, or when it
-/// is still running at the deadline. A timed-out child is killed before the
-/// error is returned, so the test process is not left with an orphan holding
-/// the package-cache lock. The error carries the bounded tail of both streams.
+/// Returns an error when the child cannot be spawned or collected, when it is
+/// still running at the deadline, or when its output remains open after it has
+/// exited. A timed-out child's whole tree is killed before the error is
+/// returned, so the test process is not left with an orphan holding the
+/// package-cache lock. The error carries the bounded tail of both streams.
 pub(crate) fn run_with_deadline(
-    mut command: Command,
+    command: Command,
     deadline: Duration,
     description: &str,
 ) -> Result<Output> {
     let _serialized = NESTED_CARGO.lock().unwrap_or_else(PoisonError::into_inner);
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("spawn {description}"))?;
-    let mut stdout_reader = drain(child.stdout.take(), &format!("stdout of {description}"))?;
-    let mut stderr_reader = drain(child.stderr.take(), &format!("stderr of {description}"))?;
+    let spawned = spawn_owned(command).with_context(|| format!("spawn {description}"))?;
+    supervise(spawned, deadline, description)
+}
 
-    let waited = child
-        .wait_timeout(deadline)
-        .with_context(|| format!("wait for {description}"))?;
-    let Some(status) = waited else {
-        // Reap the child: a killed process releases its package-cache lock and
-        // its compile-admission slot, which a leaked one would hold.
-        let _killed = child.kill();
-        let _reaped = child.wait();
-        // Give the killed child's readers a bounded chance to finish, so the
-        // diagnostic includes everything already written to the pipes.
-        stdout_reader.finish_after_kill(READER_GRACE);
-        stderr_reader.finish_after_kill(READER_GRACE);
-        return Err(deadline_failure(
+/// Supervise a process tree that is already running.
+///
+/// The deadline is measured from this call, not from the spawn. That matters
+/// for the probe regressions: process startup on a saturated host can take tens
+/// of seconds, and a deadline that started at spawn would report the host's
+/// scheduling delay as the runner failing to bound the child. A caller that
+/// needs setup to complete first spawns through [`spawn_owned`], waits for the
+/// child's own readiness signal, and only then supervises it.
+///
+/// This does not take the [`NESTED_CARGO`] serialization, so a caller that
+/// bypasses [`run_with_deadline`] must not supervise a Cargo child.
+pub(super) fn supervise(
+    mut child: Box<dyn ChildWrapper>,
+    deadline: Duration,
+    description: &str,
+) -> Result<Output> {
+    let mut stdout_reader = drain(child.stdout().take(), "stdout", description)?;
+    let mut stderr_reader = drain(child.stderr().take(), "stderr", description)?;
+
+    let outcome =
+        wait_until(child.as_mut(), deadline).with_context(|| format!("wait for {description}"))?;
+    let Some(status) = outcome else {
+        return Err(kill_after_deadline(
+            child.as_mut(),
             description,
             deadline,
-            &stdout_reader.evidence(),
-            &stderr_reader.evidence(),
+            &mut Streams {
+                stdout: &mut stdout_reader,
+                stderr: &mut stderr_reader,
+            },
         ));
     };
-    let stdout = stdout_reader.join()?;
-    let stderr = stderr_reader.join()?;
+    let stdout = stdout_reader
+        .finish_after_exit(READER_GRACE)
+        .map_err(|error| error.context(format!("collect stdout of {description}")))?;
+    let stderr = stderr_reader
+        .finish_after_exit(READER_GRACE)
+        .map_err(|error| error.context(format!("collect stderr of {description}")))?;
     Ok(Output {
         status,
         stdout,
         stderr,
     })
+}
+
+/// Spawn `command` as the root of a process tree this runner owns.
+///
+/// Unix gets a process group led by the child; Windows gets a Job Object whose
+/// close terminates every process assigned to it. Both wrappers make one
+/// termination request cover every descendant, including build scripts and
+/// linkers that outlive the Cargo process that started them.
+///
+/// The returned tree must be handed to [`supervise`]; spawning without
+/// supervising leaves the child's pipes undrained and unread.
+pub(super) fn spawn_owned(mut command: Command) -> Result<Box<dyn ChildWrapper>> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut wrapped = CommandWrap::from(command);
+    #[cfg(unix)]
+    wrapped.wrap(ProcessGroup::leader());
+    #[cfg(windows)]
+    wrapped.wrap(JobObject);
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = &mut wrapped;
+        return Err(anyhow::anyhow!(
+            "process-tree supervision is unsupported on this platform"
+        ));
+    }
+    #[cfg(any(unix, windows))]
+    {
+        wrapped
+            .spawn()
+            .map_err(|error| anyhow::Error::new(error).context("start the process tree"))
+    }
+}
+
+/// Poll `child` until it exits or the deadline passes.
+fn wait_until(child: &mut dyn ChildWrapper, deadline: Duration) -> Result<Option<ExitStatus>> {
+    let limit = Instant::now() + deadline;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        let now = Instant::now();
+        if now >= limit {
+            return Ok(None);
+        }
+        std::thread::sleep(POLL_INTERVAL.min(limit.saturating_duration_since(now)));
+    }
+}
+
+/// A child's two drained streams, as the deadline path needs them.
+struct Streams<'a> {
+    /// The child's standard output.
+    stdout: &'a mut StreamCapture,
+    /// The child's standard error.
+    stderr: &'a mut StreamCapture,
+}
+
+/// Terminate the timed-out tree, retain its output, and build the error.
+///
+/// The termination request covers the whole group or Job Object, so a compiler
+/// started by the child does not keep running after the deadline. Reaping and
+/// reader collection are bounded: the diagnostic must be reportable even when
+/// a descendant refuses to die.
+fn kill_after_deadline(
+    child: &mut dyn ChildWrapper,
+    description: &str,
+    deadline: Duration,
+    streams: &mut Streams<'_>,
+) -> anyhow::Error {
+    let _kill_requested = child.start_kill();
+    let _reaped = reap_within(child, REAP_GRACE);
+    // Give the readers a bounded chance to finish, so the diagnostic includes
+    // everything already written to the pipes.
+    streams.stdout.detach_after_kill(READER_GRACE);
+    streams.stderr.detach_after_kill(READER_GRACE);
+    deadline_failure(
+        description,
+        deadline,
+        &streams.stdout.evidence(),
+        &streams.stderr.evidence(),
+    )
+}
+
+/// Reap a killed child, giving up after `grace` instead of blocking forever.
+fn reap_within(child: &mut dyn ChildWrapper, grace: Duration) -> Option<ExitStatus> {
+    let limit = Instant::now() + grace;
+    loop {
+        if let Ok(Some(status)) = child.try_wait() {
+            return Some(status);
+        }
+        let now = Instant::now();
+        if now >= limit {
+            return None;
+        }
+        std::thread::sleep(POLL_INTERVAL.min(limit.saturating_duration_since(now)));
+    }
 }
 
 /// Build the error for a child that outlived its deadline.
@@ -127,157 +258,9 @@ fn deadline_failure(
     stderr: &StreamEvidence,
 ) -> anyhow::Error {
     anyhow::anyhow!(
-        "{description} exceeded the {} second deadline; the child was killed.\n{}\n{}",
+        "{description} exceeded the {} second deadline; its process tree was killed.\n{}\n{}",
         deadline.as_secs(),
         stdout.describe("stdout"),
         stderr.describe("stderr"),
     )
-}
-
-/// The most recent bytes of one child stream, bounded for a diagnostic.
-#[derive(Default)]
-struct StreamTail {
-    /// The retained tail, never longer than [`DIAGNOSTIC_TAIL_BYTES`].
-    bytes: VecDeque<u8>,
-    /// Every byte the stream produced, retained or not.
-    bytes_seen: u64,
-}
-
-impl StreamTail {
-    /// Retain the end of `chunk`, dropping bytes that fall out of the window.
-    fn publish(&mut self, chunk: &[u8]) {
-        self.bytes_seen = self
-            .bytes_seen
-            .saturating_add(u64::try_from(chunk.len()).unwrap_or(u64::MAX));
-        self.bytes.extend(chunk.iter().copied());
-        let excess = self.bytes.len().saturating_sub(DIAGNOSTIC_TAIL_BYTES);
-        if excess > 0 {
-            self.bytes.drain(..excess);
-        }
-    }
-}
-
-/// One stream's contribution to a deadline failure.
-struct StreamEvidence {
-    /// The retained tail bytes.
-    bytes: Vec<u8>,
-    /// Every byte the stream produced.
-    bytes_seen: u64,
-}
-
-impl StreamEvidence {
-    /// Render the stream, saying when only its tail was retained.
-    fn describe(&self, label: &str) -> String {
-        let text = String::from_utf8_lossy(&self.bytes);
-        let trimmed = text.trim_end();
-        let body = if trimmed.is_empty() {
-            "(no output)"
-        } else {
-            trimmed
-        };
-        let retained = if self.bytes_seen > u64::try_from(self.bytes.len()).unwrap_or(u64::MAX) {
-            format!(", last {} bytes retained", self.bytes.len())
-        } else {
-            String::new()
-        };
-        format!(
-            "{label} ({} bytes seen{retained}):\n{body}",
-            self.bytes_seen
-        )
-    }
-}
-
-/// One drained child stream, readable while its reader still runs.
-struct StreamCapture {
-    /// The stream's name, for messages.
-    description: String,
-    /// The reader thread, taken when it is joined.
-    handle: Option<JoinHandle<io::Result<Vec<u8>>>>,
-    /// The bounded tail the reader publishes as it drains.
-    tail: Arc<Mutex<StreamTail>>,
-}
-
-impl StreamCapture {
-    /// Snapshot the tail without waiting for the reader to finish.
-    fn evidence(&self) -> StreamEvidence {
-        let tail = lock_tail(&self.tail);
-        StreamEvidence {
-            bytes: tail.bytes.iter().copied().collect(),
-            bytes_seen: tail.bytes_seen,
-        }
-    }
-
-    /// Wait for the reader and return everything it collected.
-    fn join(mut self) -> Result<Vec<u8>> {
-        let reader = self
-            .handle
-            .take()
-            .with_context(|| format!("collect {}", self.description))?;
-        reader
-            .join()
-            .map_err(|_| anyhow::anyhow!("the {} reader panicked", self.description))?
-            .with_context(|| format!("read {}", self.description))
-    }
-
-    /// Give the reader a short grace to reach end of file, then leave it.
-    ///
-    /// A reader that is still running afterwards is detached rather than
-    /// joined: a descendant of the killed child is holding the pipe, and the
-    /// diagnostic must not wait for that descendant.
-    fn finish_after_kill(&mut self, grace: Duration) {
-        let Some(reader) = self.handle.as_ref() else {
-            return;
-        };
-        let limit = Instant::now() + grace;
-        while !reader.is_finished() && Instant::now() < limit {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let is_finished = reader.is_finished();
-        if !is_finished {
-            return;
-        }
-        if let Some(finished) = self.handle.take() {
-            let _joined = finished.join();
-        }
-    }
-}
-
-/// Lock a stream's tail, tolerating a reader thread that panicked.
-fn lock_tail(tail: &Mutex<StreamTail>) -> MutexGuard<'_, StreamTail> {
-    tail.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// Read `stream` to end of file, publishing a bounded tail as bytes arrive.
-fn read_into_tail<R: Read>(stream: &mut R, tail: &Mutex<StreamTail>) -> io::Result<Vec<u8>> {
-    let mut collected = Vec::new();
-    let mut buffer = [0_u8; 8192];
-    loop {
-        let read = stream.read(&mut buffer)?;
-        if read == 0 {
-            return Ok(collected);
-        }
-        let Some(chunk) = buffer.get(..read) else {
-            return Err(io::Error::other(
-                "a stream reader received more bytes than its buffer holds",
-            ));
-        };
-        collected.extend_from_slice(chunk);
-        lock_tail(tail).publish(chunk);
-    }
-}
-
-/// Start a thread that drains `source`, publishing its tail as it goes.
-fn drain<R: Read + Send + 'static>(source: Option<R>, description: &str) -> Result<StreamCapture> {
-    let mut stream = source.with_context(|| format!("capture {description}"))?;
-    let tail = Arc::new(Mutex::new(StreamTail::default()));
-    let published = Arc::clone(&tail);
-    let reader = std::thread::Builder::new()
-        .name(description.to_owned())
-        .spawn(move || read_into_tail(&mut stream, &published))
-        .with_context(|| format!("start the reader for {description}"))?;
-    Ok(StreamCapture {
-        description: description.to_owned(),
-        handle: Some(reader),
-        tail,
-    })
 }

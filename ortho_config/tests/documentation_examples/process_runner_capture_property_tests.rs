@@ -1,12 +1,12 @@
-//! Check capture prefix and truncation invariants over arbitrary byte streams.
+//! Check capture head, tail, and truncation invariants over arbitrary byte streams.
 
 use proptest::prelude::*;
 
-use super::Progress;
+use super::{DIAGNOSTIC_TAIL_BYTES, Progress};
 
 proptest! {
     #[test]
-    fn capture_progress_matches_the_input_prefix_for_every_chunking(
+    fn capture_progress_matches_the_input_ends_for_every_chunking(
         input in prop::collection::vec(any::<u8>(), 0..2048),
         output_limit in 0usize..1024,
         chunk_size in 1usize..128,
@@ -21,6 +21,11 @@ proptest! {
         prop_assert_eq!(
             snapshot.bytes.as_slice(),
             input.get(..captured_length).unwrap_or_default()
+        );
+        let tail_length = input.len().min(DIAGNOSTIC_TAIL_BYTES);
+        prop_assert_eq!(
+            snapshot.tail.as_slice(),
+            input.get(input.len() - tail_length..).unwrap_or_default()
         );
         prop_assert_eq!(snapshot.bytes_seen, input.len() as u64);
         prop_assert_eq!(snapshot.truncated, input.len() > output_limit);

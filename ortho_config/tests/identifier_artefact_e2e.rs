@@ -10,6 +10,8 @@ use serial_test::serial;
 mod cargo_environment;
 #[path = "documentation_examples/identifier_artefact_e2e_support.rs"]
 mod identifier_artefact_e2e_support;
+#[path = "documentation_examples/identifier_artefact_lease_tests.rs"]
+mod identifier_artefact_lease_tests;
 #[path = "documentation_examples/process_runner_build_support.rs"]
 mod process_runner;
 #[path = "documentation_examples/scenario.rs"]
@@ -110,14 +112,15 @@ fn assert_entry_ownership(entries: &[Value]) -> Result<()> {
 fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()> {
     let cargo = fixture_cargo()?;
     clean_fixture(&cargo)?;
-    let first_out_dir = build_fixture(false, &cargo, None)?;
+    let first_build = build_fixture(false, &cargo, None)?;
     ensure!(
-        artefact_path(&first_out_dir)?.is_none(),
+        artefact_path(first_build.out_dir())?.is_none(),
         "build without opt-in must not emit an identifier artefact"
     );
 
     clean_fixture(&cargo)?;
-    let opt_in_out_dir = build_fixture(true, &cargo, None)?;
+    let opt_in_build = build_fixture(true, &cargo, None)?;
+    let opt_in_out_dir = opt_in_build.out_dir().to_path_buf();
     let first = artefact(&opt_in_out_dir)?;
     let document: Value = serde_json::from_str(&first)?;
     ensure!(
@@ -164,10 +167,20 @@ fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()>
         artefact_path(&opt_in_out_dir)?.is_none(),
         "clean must remove the previous opt-in artefact"
     );
-    let rebuilt_out_dir = build_fixture(true, &cargo, None)?;
+    let rebuilt = build_fixture(true, &cargo, None)?;
     ensure!(
-        artefact(&rebuilt_out_dir)? == first,
+        artefact(rebuilt.out_dir())? == first,
         "forced opt-in rebuild must recreate the identifier artefact"
+    );
+    // The stable target exists to keep the dependency build warm; cleaning one
+    // package must not quietly turn every phase back into a cold build of the
+    // whole graph. Cargo reports fresh units in its JSON stream, so this is
+    // observed rather than inferred from the clock.
+    ensure!(
+        rebuilt.counts().reused_dependencies(),
+        "the forced rebuild should reuse the warm dependency build and recompile \
+         only the fixture package: {}",
+        rebuilt.counts().summary(),
     );
     Ok(())
 }

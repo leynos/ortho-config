@@ -261,6 +261,27 @@ of each stream and includes it in the deadline error; the tail is what
 distinguishes compile-admission waiting, package-cache waiting, and a hang from
 one another.
 
+A deadline kill terminates the child's whole process tree, not only the Cargo
+process. On Unix the child leads its own process group and the group is killed;
+on Windows it runs in its own Job Object, whose termination covers every
+descendant. Leaving descendants alive would keep the package-cache lock, the
+compile-admission slot, and the output pipes in use after the test has already
+reported a timeout. Reader collection is bounded in both outcomes as well: when
+a descendant outlives a parent that exited normally it still holds the
+inherited pipe, so a reader gets a two-second grace and is then detached with
+its retained tail reported instead of being joined without a bound. Regressions
+drive real descendants from the test binary itself. Each test spawns its probe
+as an owned process tree, waits for the probe's own readiness marker, and only
+then applies the deadline, so a saturated host's start-up delay is never
+charged to the runner; each also asserts that a surviving descendant still held
+its lock when the runner returned, rather than racing a fixed sleep. One
+descendant holds a lock across a timeout, so the lock becoming acquirable
+proves the kill reached it; one holds the pipe after its parent exits, so the
+bounded collection path is exercised rather than assumed; and a Unix-only one
+places its descendant in a new process group so the group kill cannot reach it,
+proving that a deadline is still reported while a survivor holds the pipe, and
+that the runner neither waits for that survivor nor hides it.
+
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
 `ortho_config::crate_path_trybuild`, `ortho_config::declarative_merge_trybuild`,
@@ -1308,17 +1329,40 @@ filesystem lease under the selected target while reading and updating their
 shared bridge cache. The identifier-artefact test owns a private target nested
 under the configured workspace target, so `cargo clean -p` cannot remove
 workspace test executables. That directory has a fixed name rather than a
-per-run temporary one: every phase of the test starts with
-`cargo clean -p orthohelp_fixture`, so the fixture and its build script are
-rebuilt and report their output directory every time, while the dependency
-build beneath them is reused between runs. A per-run target rebuilt
-`ortho_config`, its macros, Clap and Serde from cold on every invocation, which
-is where the scenario's 956-second envelope went on a shared host without
-producing a source diagnostic. It still uses Cargo's default shared package
-cache. Cargo retains compiler wrappers, job limits, warning enforcement,
-coverage settings, and allow-listed native build inputs. Application secrets
-and arbitrary application variables are excluded. Run-file paths must contain
-normal relative components only.
+per-run temporary one, and only the phases that must force a rebuild start with
+`cargo clean -p orthohelp_fixture`: the first, opt-in and forced-rebuild builds
+do, while the warm-build phase deliberately does not, because its contract is
+that an ordinary warm build leaves the emitted artefact alone. After a clean,
+the fixture and its build script are rebuilt and report their output directory,
+while the dependency build beneath them is reused between runs; the final
+forced rebuild asserts that Cargo reports fresh dependency units and recompiles
+only the fixture package. A per-run target rebuilt `ortho_config`, its macros,
+Clap and Serde from cold on every invocation, so all four phases paid a full
+dependency build. That recurring cost is what the fixed target removes, but it
+does not by itself attribute an earlier deadline exhaustion: the failing run
+discarded the child's output, the test compiles with `--all-features` while the
+fixture builds with its own default features, and both share Cargo's package
+cache, so dependency reuse was already available. What the retained tail now
+distinguishes is a nested build waiting for compile admission from one that has
+hung. Under saturated admission even a single cold dependency build can outlast
+the envelope; the fixed target makes that cold phase pay once rather than once
+per phase. The fixture still uses Cargo's default shared package cache. Cargo
+retains compiler wrappers, job limits, warning enforcement, coverage settings,
+and allow-listed native build inputs. Application secrets and arbitrary
+application variables are excluded. Run-file paths must contain normal relative
+components only.
+
+Because the target is fixed, it is shared state. nextest's `boundary_packaging`
+group and the test's `#[serial]` attribute coordinate tests inside one runner,
+but neither excludes a second test process on the same checkout. The identifier
+test therefore holds an exclusive operating-system file lease (standard
+`File::lock`) inside the private target from discovery until the fixture is
+dropped, so another process's `cargo clean -p orthohelp_fixture` cannot
+interleave with this test's build or artefact read. Discovery itself only reads
+workspace metadata and is safe to run while another process holds the lease. A
+two-process regression drives a second copy of the test binary: it proves the
+second process blocks on a held lease, sees the first process's artefact
+intact, and rebuilds it after the lease is released.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:
@@ -3182,8 +3226,13 @@ The documentation process runner applies a hard overall deadline to each
 subprocess. Build, execution, and discovery budgets are 956, 60, and 30
 seconds, with two seconds reserved for bounded cleanup. A fixed scenario
 deadline is never extended by output. The runner drains both streams while
-retaining at most 1 MiB per stream, reports truncation and available evidence
-on timeout or wait failure, and limits reader completion during cleanup.
+retaining at most 1 MiB per stream for callers, reports truncation and
+available evidence on timeout or wait failure, and limits reader completion
+during cleanup. Callers that parse a child's stdout keep that head window.
+Failure diagnostics additionally hold a 64 KiB tail of each stream: a child
+that stalls prints nothing while it waits, so the last lines it wrote are the
+only evidence of what it was waiting for, and a diagnostic built from the head
+alone would hide exactly that.
 
 These operations do not create a new Cargo target for each example workspace.
 They resolve the caller's configured target directory, including the target

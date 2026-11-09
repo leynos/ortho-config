@@ -114,34 +114,38 @@ pub(super) fn process_is_active(process_id: u32) -> std::io::Result<bool> {
     }
 }
 
+/// Print a head marker, more data than either capture window holds, a tail
+/// marker, and then stall.
+///
+/// The padding exceeds the diagnostic tail as well as the caller's output
+/// limit, so a failure diagnostic that kept only the head and one that kept
+/// only the tail are both distinguishable from one that keeps both.
 #[test]
 #[ignore = "executed as a bounded output timeout subprocess"]
 fn output_then_sleep_probe() {
-    let output = [b'x'; 4096];
-    std::io::stdout()
-        .lock()
-        .write_all(b"STDOUT_TIMEOUT_SENTINEL")
-        .expect("write stdout timeout marker");
-    std::io::stdout()
-        .lock()
-        .write_all(&output)
-        .expect("write stdout probe data");
-    std::io::stdout()
-        .lock()
-        .flush()
-        .expect("flush stdout timeout data");
-    std::io::stderr()
-        .lock()
-        .write_all(b"STDERR_TIMEOUT_SENTINEL")
-        .expect("write stderr timeout marker");
-    std::io::stderr()
-        .lock()
-        .write_all(&output)
-        .expect("write stderr probe data");
-    std::io::stderr()
-        .lock()
-        .flush()
-        .expect("flush stderr timeout data");
+    let padding = vec![b'x'; 96 * 1024];
+    let write = |stream: &mut dyn std::io::Write, head: &[u8], tail: &[u8]| {
+        stream
+            .write_all(head)
+            .expect("write the timeout head marker");
+        stream
+            .write_all(&padding)
+            .expect("write the timeout probe padding");
+        stream
+            .write_all(tail)
+            .expect("write the timeout tail marker");
+        stream.flush().expect("flush the timeout probe output");
+    };
+    write(
+        &mut std::io::stdout().lock(),
+        b"STDOUT_TIMEOUT_SENTINEL",
+        b"STDOUT_TAIL_SENTINEL",
+    );
+    write(
+        &mut std::io::stderr().lock(),
+        b"STDERR_TIMEOUT_SENTINEL",
+        b"STDERR_TAIL_SENTINEL",
+    );
     std::thread::sleep(Duration::from_secs(2));
 }
 

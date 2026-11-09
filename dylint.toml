@@ -1,6 +1,20 @@
 # Configuration for the Whitaker Dylint suite (see `make lint-whitaker`).
 
 [no_std_fs_operations]
+excluded_paths = [
+    # Boundary-probe liveness check: a descendant teaches its parent that it
+    # is alive by holding an exclusive operating-system file lock, which the
+    # kernel releases however the process dies. cap-std exposes no locking
+    # API, so this one module uses std::fs; the only file it touches is the
+    # probe's own lock file in the scratch directory its parent supplied.
+    "boundary::boundary::fixture_cargo::process::probe_support::descendant_lock",
+    # Identifier-artefact whole-test lease: a fixed fixture target is shared
+    # state, so the test must hold an exclusive operating-system file lock for
+    # its whole lifetime to keep another test process from cleaning the target
+    # mid-build. cap-std exposes no locking API; the locked file is the
+    # fixture's own lease file inside its private target.
+    "identifier_artefact_e2e::identifier_artefact_e2e_support::lease",
+]
 excluded_crates = [
     # Configuration discovery library: its contract is to resolve and read
     # configuration from ambient locations (current directory, home, and

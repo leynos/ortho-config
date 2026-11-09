@@ -1,6 +1,15 @@
 //! Bounded, continuously drained stdout and stderr capture for child processes.
+//!
+//! Two windows are kept per stream. The head is the policy's output limit and is
+//! what callers parse and return, so a command's stdout can still be read as
+//! JSON. The tail is a fixed, smaller window retained for failure diagnostics.
+//! A child that stalls prints nothing while it waits, so the last lines before
+//! the stall are the only evidence of what it was waiting for; a diagnostic
+//! built from the head alone shows the start of the build and hides exactly the
+//! part that explains the timeout.
 
 use super::pipe::{Pipe, ReadProgress};
+use std::collections::VecDeque;
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -13,16 +22,26 @@ mod property_tests;
 
 const PIPE_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
+/// Bytes retained from the end of each stream for a failure diagnostic.
+///
+/// This is independent of the policy's output limit, which bounds what callers
+/// consume. Its purpose is narrower: when a child stalls, the compile-admission
+/// queue lines and rustc heartbeats it last printed say what it was waiting on.
+const DIAGNOSTIC_TAIL_BYTES: usize = 64 * 1024;
+
 #[derive(Clone, Debug)]
 pub(crate) struct Snapshot {
     pub(super) bytes: Vec<u8>,
     pub(super) bytes_seen: u64,
     pub(super) truncated: bool,
+    /// The last [`DIAGNOSTIC_TAIL_BYTES`] of the stream.
+    pub(super) tail: Vec<u8>,
 }
 
 #[derive(Default)]
 pub(super) struct Progress {
-    bytes: Vec<u8>,
+    head: Vec<u8>,
+    tail: VecDeque<u8>,
     bytes_seen: u64,
     truncated: bool,
 }
@@ -30,16 +49,22 @@ pub(super) struct Progress {
 impl Progress {
     pub(super) fn append(&mut self, bytes: &[u8], limit: usize) {
         self.bytes_seen = self.bytes_seen.saturating_add(bytes.len() as u64);
-        let remaining = limit.saturating_sub(self.bytes.len());
-        self.bytes.extend(bytes.iter().take(remaining).copied());
+        let remaining = limit.saturating_sub(self.head.len());
+        self.head.extend(bytes.iter().take(remaining).copied());
         self.truncated |= remaining < bytes.len();
+        self.tail.extend(bytes.iter().copied());
+        let excess = self.tail.len().saturating_sub(DIAGNOSTIC_TAIL_BYTES);
+        if excess > 0 {
+            self.tail.drain(..excess);
+        }
     }
 
     pub(super) fn snapshot(&self) -> Snapshot {
         Snapshot {
-            bytes: self.bytes.clone(),
+            bytes: self.head.clone(),
             bytes_seen: self.bytes_seen,
             truncated: self.truncated,
+            tail: self.tail.iter().copied().collect(),
         }
     }
 }

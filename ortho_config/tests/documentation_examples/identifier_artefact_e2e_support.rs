@@ -5,108 +5,52 @@
 //! Cargo still uses the default shared package cache.
 //!
 //! The private target is stable across runs, not a per-run temporary directory.
-//! Every build in this test starts with [`clean_fixture`], so the fixture
-//! package and its build script are always rebuilt and always report their
-//! output directory; what the stable target preserves is the dependency build
-//! beneath them. A per-run target rebuilt `ortho_config`, its macros, Clap and
-//! Serde from cold on every invocation, which is where the time went: on a
-//! shared host with a busy compile-admission queue the fixture build consumed
-//! its whole 956-second envelope without a single source diagnostic. Only
+//! The phases that must force a rebuild start with [`clean_fixture`], so the
+//! fixture package and its build script are rebuilt and report their output
+//! directory; what the stable target preserves is the dependency build beneath
+//! them. The warm phase deliberately does *not* clean: its contract is that a
+//! warm build leaves the emitted artefact alone. A per-run target rebuilt
+//! `ortho_config`, its macros, Clap and Serde from cold on every invocation, so
+//! every phase paid a full dependency build; the fixed target makes only the
+//! first phase pay it. That alone does not attribute an earlier envelope
+//! exhaustion — the failing run discarded the child's output, this target
+//! compiles with `--all-features` while the fixture uses its default features,
+//! and both share Cargo's package cache — but it is the recurring cost the
+//! fixed target removes, and the retained diagnostic tail now names a
+//! compile-admission wait instead of leaving the failure silent. Only
 //! `orthohelp_fixture` itself is cleaned between phases, which is what the
 //! test's warm-build claim is about.
+//!
+//! A stable target is also shared state. nextest's `boundary_packaging` group
+//! and the test's `#[serial]` attribute coordinate tests inside one runner, but
+//! neither excludes a second test process — another `cargo test` run, a
+//! `make test`, or a nextest invocation for another target — from interleaving
+//! its own `cargo clean -p orthohelp_fixture` with this process's build or
+//! artefact read. [`FixtureCargo`] therefore holds an exclusive lease file
+//! inside the target for the whole test, from discovery until the fixture is
+//! dropped; see [`fixture_cargo`].
 
+#[path = "identifier_artefact_cargo_messages.rs"]
+mod cargo_messages;
+#[path = "identifier_artefact_lease.rs"]
+mod lease;
+
+use self::cargo_messages::{BuildCounts, CargoMessages, lock_cargo_messages};
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
-use cap_std::{ambient_authority, fs::Dir};
+use cap_std::{
+    ambient_authority,
+    fs::{Dir, OpenOptions},
+};
 use serde_json::Value;
 use std::io;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
-
-#[derive(Default)]
-struct CargoMessages {
-    package_id: String,
-    line: Vec<u8>,
-    out_dir: Option<PathBuf>,
-    error: Option<String>,
-}
-
-impl CargoMessages {
-    fn observe(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            if !self.observe_byte(*byte) {
-                break;
-            }
-        }
-    }
-
-    fn observe_byte(&mut self, byte: u8) -> bool {
-        if byte == b'\n' {
-            return self.finish_line();
-        }
-        if self.line.len() == MAX_CARGO_RECORD_BYTES {
-            self.error = Some("Cargo JSON record exceeded 128 KiB".to_owned());
-            return false;
-        }
-        self.line.push(byte);
-        true
-    }
-
-    fn finish_line(&mut self) -> bool {
-        match self.parse_line() {
-            Ok(()) => true,
-            Err(error) => {
-                self.error = Some(error.to_string());
-                false
-            }
-        }
-    }
-
-    fn finish(&mut self) -> Result<Option<PathBuf>> {
-        if !self.line.is_empty() {
-            self.parse_line()?;
-        }
-        if let Some(error) = self.error.take() {
-            anyhow::bail!(error);
-        }
-        Ok(self.out_dir.take())
-    }
-
-    fn parse_line(&mut self) -> Result<()> {
-        if self.line.is_empty() {
-            return Ok(());
-        }
-        let record: Value =
-            serde_json::from_slice(&self.line).context("parse Cargo JSON record")?;
-        self.line.clear();
-        if record.get("reason").and_then(Value::as_str) == Some("build-script-executed")
-            && record.get("package_id").and_then(Value::as_str) == Some(self.package_id.as_str())
-        {
-            ensure!(
-                self.out_dir.is_none(),
-                "Cargo reported more than one fixture build-script directory"
-            );
-            self.out_dir = Some(PathBuf::from(
-                record
-                    .get("out_dir")
-                    .and_then(Value::as_str)
-                    .context("fixture build-script message omitted out_dir")?,
-            ));
-        }
-        Ok(())
-    }
-}
-
-fn lock_cargo_messages(messages: &Mutex<CargoMessages>) -> MutexGuard<'_, CargoMessages> {
-    messages
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
 
 /// Names the fixture's private Cargo target.
 ///
@@ -114,12 +58,58 @@ fn lock_cargo_messages(messages: &Mutex<CargoMessages>) -> MutexGuard<'_, CargoM
 /// it, and named so consecutive runs reuse the dependency build.
 const TARGET_DIRECTORY_NAME: &str = "identifier-artefact-target";
 
+/// Names the file to which each build phase appends its Cargo unit counts.
+///
+/// Used by cold-versus-warm evidence runs; unset in ordinary runs.
+const TELEMETRY_VARIABLE: &str = "ORTHO_CONFIG_FIXTURE_TELEMETRY";
+
+/// The fixture package and its private target, before the cross-process lease.
+///
+/// Discovery runs `cargo metadata`, which only reads the workspace and touches
+/// no build output, so it is safe to perform while another test process holds
+/// the lease. Splitting discovery from [`FixtureLocation::lease`] lets a
+/// regression observe that a second process has reached the target and is
+/// blocked on the lease, rather than merely slow to start.
+pub(super) struct FixtureLocation {
+    repository: PathBuf,
+    target_directory: PathBuf,
+    package_id: String,
+}
+
+impl FixtureLocation {
+    /// Take the whole-test lease on the private target and build the fixture.
+    ///
+    /// `lock` blocks until every other leaseholder has released the
+    /// target, so a concurrent test process cannot interleave its
+    /// `cargo clean -p orthohelp_fixture` with this test's build or artefact
+    /// read. [`serial_test`] and nextest's process group cannot provide this:
+    /// they coordinate one runner's tests, and `#[serial]` is a thread lock
+    /// inside one process.
+    ///
+    /// The scenario deadline is captured after the wait, so time spent queued
+    /// behind another test process is not charged to this scenario's envelope.
+    pub(super) fn lease(self) -> Result<FixtureCargo> {
+        let lease = lease::acquire(&self.target_directory)?;
+        Ok(FixtureCargo {
+            repository: self.repository,
+            target_directory: self.target_directory,
+            package_id: self.package_id,
+            deadline: scenario::deadline(),
+            _lease: lease,
+        })
+    }
+}
+
 /// Describes the fixture's private Cargo target and scenario deadline.
+///
+/// Holding this value holds the target's cross-process lease; the field is
+/// never read because the kernel does the work when the handle closes.
 pub(super) struct FixtureCargo {
     repository: PathBuf,
     target_directory: PathBuf,
     package_id: String,
     deadline: Instant,
+    _lease: lease::TargetLease,
 }
 
 impl FixtureCargo {
@@ -134,11 +124,22 @@ impl FixtureCargo {
     }
 }
 
-/// Discover the fixture package and locate its private Cargo target.
+/// Discover the fixture package and take the whole-test lease on its target.
 ///
 /// The target directory is stable across runs; its dependencies stay warm while
-/// each phase's [`clean_fixture`] forces the fixture package itself to rebuild.
+/// each rebuilding phase's [`clean_fixture`] forces the fixture package itself
+/// to rebuild. The returned value owns the lease file handle, so the target
+/// stays reserved until the test drops it or ends.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
+    locate_fixture()?.lease()
+}
+
+/// Discover the fixture package and locate its private Cargo target.
+///
+/// This is the half of [`fixture_cargo`] that is safe to run concurrently with
+/// another process's lease: it only reads workspace metadata and creates the
+/// target directory, which is idempotent.
+pub(super) fn locate_fixture() -> Result<FixtureLocation> {
     let deadline = scenario::deadline();
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -183,20 +184,39 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
     Dir::open_ambient_dir(&target_directory, ambient_authority())?
         .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
         .context("write Cargo cache-directory tag")?;
-    Ok(FixtureCargo {
+    Ok(FixtureLocation {
         repository,
         target_directory,
         package_id: package_id.to_owned(),
-        deadline,
     })
 }
 
-/// Build the fixture with optional artefact emission and find its reported output directory.
+/// What one fixture build produced and what it reused.
+pub(super) struct FixtureBuild {
+    /// The build script's output directory.
+    out_dir: PathBuf,
+    /// Fresh and rebuilt unit counts Cargo reported for this build.
+    counts: BuildCounts,
+}
+
+impl FixtureBuild {
+    /// The build script's output directory, where the artefact is emitted.
+    pub(super) fn out_dir(&self) -> &Path {
+        &self.out_dir
+    }
+
+    /// Which Cargo units were reused and which were recompiled.
+    pub(super) const fn counts(&self) -> BuildCounts {
+        self.counts
+    }
+}
+
+/// Build the fixture with optional artefact emission and report what it reused.
 pub(super) fn build_fixture(
     emit: bool,
     cargo: &FixtureCargo,
     previous_out_dir: Option<&Path>,
-) -> Result<PathBuf> {
+) -> Result<FixtureBuild> {
     let mut command = Command::new("cargo");
     cargo_environment::CargoEnvironment::build().apply(&mut command);
     command
@@ -213,10 +233,9 @@ pub(super) fn build_fixture(
     if emit {
         command.env("ORTHO_CONFIG_EMIT_IDENTIFIERS", "1");
     }
-    let messages = Arc::new(Mutex::new(CargoMessages {
-        package_id: cargo.package_id.clone(),
-        ..CargoMessages::default()
-    }));
+    let messages = Arc::new(Mutex::new(CargoMessages::for_package(
+        cargo.package_id.clone(),
+    )));
     let observed_messages = Arc::clone(&messages);
     let output = process_runner::run_with_observer(
         &mut command,
@@ -233,10 +252,66 @@ pub(super) fn build_fixture(
         "fixture build should succeed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    lock_cargo_messages(&messages)
+    let mut report = lock_cargo_messages(&messages);
+    let out_dir = report
         .finish()?
         .or_else(|| previous_out_dir.map(Path::to_path_buf))
-        .context("Cargo output omitted the fixture build-script directory")
+        .context("Cargo output omitted the fixture build-script directory")?;
+    let counts = report.counts();
+    record_phase(emit, counts, &output.stderr)?;
+    Ok(FixtureBuild { out_dir, counts })
+}
+
+/// Append one phase's build counts to the file named by the telemetry variable.
+///
+/// This exists so a cold-versus-warm evidence run can show, phase by phase,
+/// which Cargo units were reused, when the phase ran, and whether the nested
+/// Cargo waited for compile admission or the package cache. It is inert unless
+/// the variable is set, and it only records: the counts and the messages come
+/// from the build that just ran. Timestamps let a reader derive each phase's
+/// elapsed time by subtracting consecutive entries.
+fn record_phase(emit: bool, counts: BuildCounts, stderr: &[u8]) -> Result<()> {
+    let Some(path) = std::env::var_os(TELEMETRY_VARIABLE) else {
+        return Ok(());
+    };
+    let telemetry = PathBuf::from(path);
+    let name = telemetry.file_name().with_context(|| {
+        format!(
+            "fixture telemetry path {} should name a file",
+            telemetry.display()
+        )
+    })?;
+    let parent = telemetry
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let directory = Dir::open_ambient_dir(parent, ambient_authority())
+        .context("open the fixture telemetry directory")?;
+    let mut file = directory
+        .open_with(name, OpenOptions::new().create(true).append(true))
+        .context("open the fixture telemetry file")?;
+    let stderr_text = String::from_utf8_lossy(stderr);
+    writeln!(
+        file,
+        "at_ms={} emit={emit} {} admission_lines={} package_cache_lines={}",
+        unix_millis(),
+        counts.summary(),
+        count_matching_lines(&stderr_text, "[build-limits]"),
+        count_matching_lines(&stderr_text, "waiting for file lock"),
+    )
+    .context("append the fixture build telemetry")
+}
+
+/// Wall-clock milliseconds, so phases can be ordered and timed.
+fn unix_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis())
+}
+
+/// Count the lines of `text` that contain `needle`.
+fn count_matching_lines(text: &str, needle: &str) -> usize {
+    text.lines().filter(|line| line.contains(needle)).count()
 }
 
 /// Remove only the fixture's build output in its private target directory.
