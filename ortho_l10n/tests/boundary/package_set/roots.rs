@@ -12,7 +12,7 @@
 //! contracts, which care about paths and normalized manifests rather than about
 //! how the archives were produced.
 
-use super::super::fixture_cargo::{BOUNDARY_ROOT, repository_root};
+use super::super::fixture_cargo::{BOUNDARY_ROOT, Budget, repository_root};
 use super::{PACKAGING_INVOCATIONS, package_sources};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
@@ -101,13 +101,17 @@ static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
 /// `docs/developers-guide.md`. Without that entry this function is safe only
 /// under `make boundary`, which runs one process.
 ///
+/// The first caller spends `budget` on the two packaging invocations; later
+/// callers in the same process are no-ops that do not consume it.
+///
 /// # Errors
 ///
-/// Returns an error when either packaging invocation fails or when one of the
-/// expected unpacked roots is missing afterwards.
-pub(crate) fn prepare_packaged_set() -> Result<()> {
+/// Returns an error when either packaging invocation fails, when the
+/// contract's shared allowance is spent before one can start, or when one of
+/// the expected unpacked roots is missing afterwards.
+pub(crate) fn prepare_packaged_set(budget: Budget) -> Result<()> {
     let packaged =
-        PACKAGED.get_or_init(|| build_packaged_set().map_err(|error| format!("{error:#}")));
+        PACKAGED.get_or_init(|| build_packaged_set(budget).map_err(|error| format!("{error:#}")));
     packaged
         .as_deref()
         .map(|_roots| ())
@@ -163,14 +167,14 @@ pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
 }
 
 /// Run both packaging invocations and collect the unpacked roots.
-fn build_packaged_set() -> Result<Vec<PackagedCrate>> {
+fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
     let repository = repository_root()?;
     let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
     Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
         .with_context(|| format!("create packaging target {target}"))?;
 
     for invocation in &PACKAGING_INVOCATIONS {
-        package_sources(&repository, &target, invocation)?;
+        package_sources(&repository, &target, invocation, budget)?;
     }
 
     let package_directory = target.join(PACKAGE_DIRECTORY);

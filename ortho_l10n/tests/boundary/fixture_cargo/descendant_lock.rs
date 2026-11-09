@@ -67,8 +67,14 @@ pub(crate) fn wait_for_lock_release(scratch: &Path) -> Result<()> {
 
 /// Report whether a live process still holds the descendant's lock.
 ///
-/// A `true` result also proves the caller took and released the lock itself, so
-/// it cannot be used while another check depends on the lock being held.
+/// `true` means another process holds it, which is the evidence that the
+/// descendant outlived whatever the caller is asserting about. `false` means
+/// nobody held it *when this call ran*, but the probe achieves that by taking
+/// the lock itself and releasing it again, so it briefly holds the lock it was
+/// asked about. That transient hold is harmless as long as every caller has
+/// already made whatever assertion depended on the lock being held; a caller
+/// that must observe the lock continuously should use
+/// [`wait_for_lock_release`] instead.
 pub(crate) fn lock_is_held(scratch: &Path) -> Result<bool> {
     let file = open_lock_file(scratch)?;
     match file.try_lock() {

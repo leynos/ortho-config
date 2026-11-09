@@ -53,7 +53,7 @@
 //! directory name (`ortho_config_test_helpers` lives in `test_helpers`).
 
 use super::fixture_cargo::{
-    FixtureCargo, cargo_binary, inherited_toolchain, run_with_deadline, toml_string,
+    Budget, FixtureCargo, cargo_binary, inherited_toolchain, run_with_deadline, toml_string,
 };
 use anyhow::{Result, bail, ensure};
 use camino::Utf8Path;
@@ -150,10 +150,14 @@ pub(crate) use roots::{
 };
 
 /// Run one `cargo package` invocation.
+///
+/// The invocation is bounded by [`PACKAGE_DEADLINE`] or by what the contract's
+/// shared [`Budget`] has left, whichever is sooner.
 pub(super) fn package_sources(
     repository: &Utf8Path,
     target: &Utf8Path,
     invocation: &PackageInvocation,
+    budget: Budget,
 ) -> Result<()> {
     // The subcommand comes first: `--manifest-path` is a per-command flag.
     let mut args = vec![String::from("package")];
@@ -183,7 +187,8 @@ pub(super) fn package_sources(
         .envs(inherited_toolchain())
         .env("CARGO_TARGET_DIR", target);
     let description = format!("cargo package for {}", invocation.crates.join(", "));
-    let output = run_with_deadline(command, PACKAGE_DEADLINE, &description)?;
+    let bound = budget.bound(PACKAGE_DEADLINE, &description)?;
+    let output = run_with_deadline(command, bound, &description)?;
     if !output.status.success() {
         bail!(
             "{description} failed with {}\nstderr:\n{}",
@@ -217,14 +222,17 @@ pub(crate) struct ConsumerFixture {
 }
 
 impl ConsumerFixture {
-    /// Create an empty consumer fixture.
+    /// Create an empty consumer fixture under `budget`.
+    ///
+    /// Every nested Cargo call the fixture makes shares that allowance, so the
+    /// contract's calls are bounded as a sequence rather than one at a time.
     ///
     /// # Errors
     ///
     /// Returns an error when the fixture root cannot be created.
-    pub(crate) fn new() -> Result<Self> {
+    pub(crate) fn new(budget: Budget) -> Result<Self> {
         Ok(Self {
-            cargo: FixtureCargo::new()?,
+            cargo: FixtureCargo::new(budget)?,
         })
     }
 

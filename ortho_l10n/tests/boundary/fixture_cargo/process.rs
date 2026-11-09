@@ -32,6 +32,7 @@ mod probe_support;
 mod readers;
 
 use self::readers::{READER_GRACE, StreamCapture, StreamEvidence, drain};
+use super::budget::Bound;
 use anyhow::{Context, Result};
 #[cfg(windows)]
 use process_wrap::std::JobObject;
@@ -89,6 +90,11 @@ static NESTED_CARGO: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 /// them. Nested invocations are additionally serialized within the process;
 /// see [`NESTED_CARGO`].
 ///
+/// The bound comes from [`super::budget`], not from a bare cap, so a contract
+/// that makes several calls cannot spend the test's whole allowance on the
+/// earlier ones and leave a later invocation to be stopped by nextest. When
+/// the shared allowance set the bound, the deadline error says so.
+///
 /// # Errors
 ///
 /// Returns an error when the child cannot be spawned or collected, when it is
@@ -98,12 +104,19 @@ static NESTED_CARGO: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 /// package-cache lock. The error carries the bounded tail of both streams.
 pub(crate) fn run_with_deadline(
     command: Command,
-    deadline: Duration,
+    bound: Bound,
     description: &str,
 ) -> Result<Output> {
     let _serialized = NESTED_CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+    // Only the deadline error carries the note: a spawn failure should name the
+    // command, not repeat why its deadline was shortened.
+    let deadline_description = if bound.limited_by_allowance {
+        format!("{description} (bounded by the boundary contract's shared allowance)")
+    } else {
+        description.to_owned()
+    };
     let spawned = spawn_owned(command).with_context(|| format!("spawn {description}"))?;
-    supervise(spawned, deadline, description)
+    supervise(spawned, bound.deadline, &deadline_description)
 }
 
 /// Supervise a process tree that is already running.
@@ -115,21 +128,29 @@ pub(crate) fn run_with_deadline(
 /// needs setup to complete first spawns through [`spawn_owned`], waits for the
 /// child's own readiness signal, and only then supervises it.
 ///
+/// Every early return is covered: the guard kills the tree when reader setup,
+/// polling, or a panic unwinds before the child was reaped. Without it those
+/// paths drop the handle and leave the tree running, which is the orphan
+/// condition this module exists to prevent.
+///
 /// This does not take the [`NESTED_CARGO`] serialization, so a caller that
 /// bypasses [`run_with_deadline`] must not supervise a Cargo child.
 pub(super) fn supervise(
-    mut child: Box<dyn ChildWrapper>,
+    child: Box<dyn ChildWrapper>,
     deadline: Duration,
     description: &str,
 ) -> Result<Output> {
-    let mut stdout_reader = drain(child.stdout().take(), "stdout", description)?;
-    let mut stderr_reader = drain(child.stderr().take(), "stderr", description)?;
+    let mut tree = TreeGuard::new(child);
+    let mut stdout_reader = drain(tree.child().stdout().take(), "stdout", description)?;
+    let mut stderr_reader = drain(tree.child().stderr().take(), "stderr", description)?;
 
     let outcome =
-        wait_until(child.as_mut(), deadline).with_context(|| format!("wait for {description}"))?;
+        wait_until(tree.child(), deadline).with_context(|| format!("wait for {description}"))?;
     let Some(status) = outcome else {
+        // `kill_after_deadline` owns the kill and the reap on this path.
+        tree.disarm();
         return Err(kill_after_deadline(
-            child.as_mut(),
+            tree.child(),
             description,
             deadline,
             &mut Streams {
@@ -138,6 +159,9 @@ pub(super) fn supervise(
             },
         ));
     };
+    // Signalling after a reaped leader risks targeting a reused group or Job
+    // Object identifier, so the guard lets go as soon as the exit is observed.
+    tree.disarm();
     let stdout = stdout_reader
         .finish_after_exit(READER_GRACE)
         .map_err(|error| error.context(format!("collect stdout of {description}")))?;
@@ -149,6 +173,46 @@ pub(super) fn supervise(
         stdout,
         stderr,
     })
+}
+
+/// Kills the supervised tree if supervision leaves before reaping it.
+///
+/// The deadline path kills explicitly; the guard covers the paths that return
+/// early for another reason, and panics. It is disarmed the moment the child's
+/// exit is observed, because the group or Job Object identifier can be reused
+/// once the leader has been reaped.
+struct TreeGuard {
+    /// The tree this guard is responsible for until disarmed.
+    child: Box<dyn ChildWrapper>,
+    /// Whether dropping the guard should terminate the tree.
+    armed: bool,
+}
+
+impl TreeGuard {
+    /// Take responsibility for `child`, armed.
+    fn new(child: Box<dyn ChildWrapper>) -> Self {
+        Self { child, armed: true }
+    }
+
+    /// The supervised tree.
+    fn child(&mut self) -> &mut dyn ChildWrapper {
+        self.child.as_mut()
+    }
+
+    /// Stop the guard from signalling a child that has already exited.
+    const fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for TreeGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            // The child is still running, so there is nothing to report: the
+            // caller is already returning an error or unwinding.
+            let _kill_requested = self.child.start_kill();
+        }
+    }
 }
 
 /// Spawn `command` as the root of a process tree this runner owns.
@@ -167,19 +231,14 @@ pub(super) fn spawn_owned(mut command: Command) -> Result<Box<dyn ChildWrapper>>
     wrapped.wrap(ProcessGroup::leader());
     #[cfg(windows)]
     wrapped.wrap(JobObject);
+    // There is no portable tree to own on any other platform, and a runtime
+    // refusal would only defer the same fact to a test failure. Rejecting it at
+    // compile time keeps the supported paths free of lint-appeasement reads.
     #[cfg(not(any(unix, windows)))]
-    {
-        let _ = &mut wrapped;
-        return Err(anyhow::anyhow!(
-            "process-tree supervision is unsupported on this platform"
-        ));
-    }
-    #[cfg(any(unix, windows))]
-    {
-        wrapped
-            .spawn()
-            .map_err(|error| anyhow::Error::new(error).context("start the process tree"))
-    }
+    compile_error!("process-tree supervision needs a Unix process group or a Windows Job Object");
+    wrapped
+        .spawn()
+        .map_err(|error| anyhow::Error::new(error).context("start the process tree"))
 }
 
 /// Poll `child` until it exits or the deadline passes.

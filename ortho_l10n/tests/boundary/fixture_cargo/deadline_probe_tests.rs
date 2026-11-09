@@ -240,8 +240,8 @@ fn fail_after_readiness(
 ) -> Result<(TempDir, anyhow::Error)> {
     let scratch =
         TempDir::new().with_context(|| format!("create the {filter} scratch directory"))?;
-    let child = spawn_owned_probe(filter, scratch.path())?;
-    wait_for_ready_in(scratch.path())?;
+    let mut child = spawn_owned_probe(filter, scratch.path())?;
+    wait_for_ready_in(scratch.path(), child.as_mut())?;
     match supervise(child, deadline, operation) {
         Err(error) => Ok((scratch, error)),
         Ok(output) => anyhow::bail!(
@@ -294,8 +294,8 @@ fn assert_survivor_is_reported(
 ) -> Result<()> {
     let scratch =
         TempDir::new().with_context(|| format!("create the {filter} scratch directory"))?;
-    let child = spawn_owned_probe(filter, scratch.path())?;
-    wait_for_ready_in(scratch.path())?;
+    let mut child = spawn_owned_probe(filter, scratch.path())?;
+    wait_for_ready_in(scratch.path(), child.as_mut())?;
     let started = Instant::now();
     let error = match supervise(child, deadline, operation) {
         Err(error) => error,

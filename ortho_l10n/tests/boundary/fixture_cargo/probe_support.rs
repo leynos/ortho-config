@@ -95,9 +95,33 @@ pub(super) fn wait_for_descendant() -> Result<()> {
     wait_for_ready(&scratch_directory()?)
 }
 
-/// Wait until a child using `scratch` reports that it has reached its setup point.
-pub(super) fn wait_for_ready_in(scratch: &Path) -> Result<()> {
-    wait_for_ready(&open_scratch(scratch)?)
+/// Wait until `probe` using `scratch` reports that it has reached its setup point.
+///
+/// The probe is polled as well as the marker. A probe that exits before it
+/// announces readiness has failed for a reason of its own — a renamed probe, a
+/// filter that matches nothing, a panic before the announcement — and waiting
+/// the full [`DESCENDANT_STARTUP`] would hide that behind a bare timeout with
+/// no exit status. Its tree is terminated first, because a descendant that
+/// inherited the pipes can keep them open after the leader exits.
+pub(super) fn wait_for_ready_in(scratch: &Path, probe: &mut dyn ChildWrapper) -> Result<()> {
+    let directory = open_scratch(scratch)?;
+    wait_until(DESCENDANT_STARTUP, "the probe to become ready", || {
+        if directory.exists(READY_FILE_NAME) {
+            return Ok(true);
+        }
+        if let Some(status) = probe.try_wait()? {
+            // The leader has exited, but that is exactly the state in which a
+            // descendant may still hold the group. The group identifier is not
+            // reusable while a member lives, so this cannot signal an unrelated
+            // process.
+            let _kill_requested = probe.start_kill();
+            anyhow::bail!(
+                "the probe exited with {status} before it announced readiness; \
+                 its process tree was killed"
+            );
+        }
+        Ok(false)
+    })
 }
 
 /// Wait until the child with this scratch handle reports readiness.

@@ -17,7 +17,7 @@
 //! [`ControlFailure`] for the two failure modes this module distinguishes.
 
 use super::super::fixture_cargo::{
-    EdgeKind, FixtureCargo, Metadata, absolute_member, repository_root, toml_string,
+    Budget, EdgeKind, FixtureCargo, Metadata, absolute_member, repository_root, toml_string,
 };
 use super::{CONSUMER_PACKAGE, assert_absent_packages};
 use anyhow::{Context, Result};
@@ -128,7 +128,7 @@ enum ControlFailure {
 /// Returns an error when Cargo refuses the resolve, or when the injected edge
 /// resolves and the closure check accepts it.
 pub(crate) fn run_negative_control(injection: Injection) -> Result<String> {
-    let fixture = FixtureCargo::new()?;
+    let fixture = FixtureCargo::new(Budget::new())?;
     fixture.write(Utf8Path::new("src/lib.rs"), "//! Negative control.\n")?;
     fixture.write(
         Utf8Path::new("Cargo.toml"),

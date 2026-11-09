@@ -19,6 +19,7 @@
 //! Running a child under a deadline, and retaining enough of its output to say
 //! what it was waiting for, is a fourth, [`process`].
 
+pub(crate) mod budget;
 pub(crate) mod environment;
 pub(crate) mod manifest;
 pub(crate) mod metadata;
@@ -28,6 +29,7 @@ pub(crate) mod process;
 #[path = "metadata_proptests.rs"]
 mod metadata_proptests;
 
+pub(crate) use budget::Budget;
 pub(crate) use environment::{cargo_binary, inherited_toolchain};
 pub(crate) use manifest::{declared_dependencies, declared_path_dependencies};
 pub(crate) use metadata::{DependencyEdge, EdgeKind, Metadata};
@@ -59,17 +61,24 @@ pub(crate) struct FixtureCargo {
     root: Utf8PathBuf,
     /// Target directory shared by the fixtures of one contract family.
     target: Utf8PathBuf,
+    /// The contract's shared allowance for every nested Cargo call it makes.
+    budget: Budget,
 }
 
 impl FixtureCargo {
     /// Create an empty fixture root inside the repository target tree.
+    ///
+    /// `budget` is the calling contract's shared allowance. Every Cargo call
+    /// this fixture makes is bounded by the smaller of its own cap and what the
+    /// contract has left, so a sequence of calls cannot be stopped by nextest
+    /// before the invocation that hung reports its own deadline.
     ///
     /// # Errors
     ///
     /// Returns an error when the boundary directory cannot be created, when the
     /// temporary root cannot be allocated beneath it, or when `tempfile` reports
     /// that root as a non-UTF-8 path.
-    pub(crate) fn new() -> Result<Self> {
+    pub(crate) fn new(budget: Budget) -> Result<Self> {
         let repository = repository_root()?;
         let boundary = repository.join(BOUNDARY_ROOT);
         Dir::create_ambient_dir_all(&boundary, cap_std::ambient_authority())
@@ -88,6 +97,7 @@ impl FixtureCargo {
             _tempdir: tempdir,
             root,
             target: boundary.join("cargo-target"),
+            budget,
         })
     }
 
@@ -129,8 +139,9 @@ impl FixtureCargo {
     ///
     /// # Errors
     ///
-    /// Returns an error when the Cargo process cannot be spawned or exceeds
-    /// [`CARGO_DEADLINE`].
+    /// Returns an error when the Cargo process cannot be spawned, exceeds
+    /// [`CARGO_DEADLINE`], or starts after the contract's shared allowance is
+    /// spent.
     pub(crate) fn cargo(&self, args: &[&str]) -> Result<Output> {
         let mut command = Command::new(cargo_binary());
         // The subcommand has to come first: `--manifest-path` and `--offline`
@@ -145,11 +156,9 @@ impl FixtureCargo {
             .env_clear()
             .envs(inherited_toolchain())
             .env("CARGO_TARGET_DIR", &self.target);
-        run_with_deadline(
-            command,
-            CARGO_DEADLINE,
-            &format!("cargo {}", args.join(" ")),
-        )
+        let description = format!("cargo {}", args.join(" "));
+        let bound = self.budget.bound(CARGO_DEADLINE, &description)?;
+        run_with_deadline(command, bound, &description)
     }
 
     /// Run `cargo` and require a successful exit status.
