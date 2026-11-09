@@ -1101,9 +1101,9 @@ discovery cannot accidentally scan or log unrelated environment values.
 ## Run test subprocesses under a deadline
 
 Tests that start another process need three things the standard library does
-not provide together: a deadline that does not move, bounded capture of each
-output stream, and a guarantee that no descendant outlives the test. The
-`ortho_config_test_helpers` crate supplies them through
+not provide together: a deadline that does not move, capture of each output
+stream that never blocks the child, and a guarantee that no descendant outlives
+the test. The `ortho_config_test_helpers` crate supplies them through
 `ortho_config_test_helpers::process`.
 
 Call `run_with_deadline` when one command has its own budget: it takes the
