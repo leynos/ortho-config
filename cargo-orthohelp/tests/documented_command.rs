@@ -66,7 +66,9 @@ impl OrthohelpRun {
 }
 
 /// Run `cargo orthohelp <args>` into a fresh output directory.
-fn run_orthohelp(args: &[&str]) -> Result<OrthohelpRun> {
+///
+/// `environment` adds variables for the child CLI only.
+fn run_orthohelp(args: &[&str], environment: &[(&str, &str)]) -> Result<OrthohelpRun> {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("workspace repository")?;
@@ -83,15 +85,32 @@ fn run_orthohelp(args: &[&str]) -> Result<OrthohelpRun> {
         Path::new(env!("CARGO_BIN_EXE_cargo-orthohelp")),
         args,
         out_dir.path(),
+        environment,
     )?;
     Ok(OrthohelpRun { output, out_dir })
+}
+
+/// Count exported bridge-cache metric events for one operation and outcome.
+#[cfg(feature = "metrics")]
+fn cache_event_count(stderr: &str, operation: &str, outcome: &str) -> usize {
+    let operation_label = format!("operation={operation}");
+    let outcome_label = format!("outcome={outcome}");
+    stderr
+        .lines()
+        .filter(|line| line.contains("cargo_orthohelp.bridge_cache.events"))
+        .filter(|line| line.contains(&operation_label))
+        .filter(|line| line.contains(&outcome_label))
+        .count()
 }
 
 /// `cargo orthohelp --package hello_world --format agent-context` writes the
 /// agent context and, as the user's guide promises, streams the same document.
 #[test]
 fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
-    let run = run_orthohelp(&["--package", "hello_world", "--format", "agent-context"])?;
+    let run = run_orthohelp(
+        &["--package", "hello_world", "--format", "agent-context"],
+        &[],
+    )?;
     run.ensure_success("documented agent-context command")?;
     let payload: Value = serde_json::from_str(&run.read_artefact("agent-context.json")?)?;
     ensure!(payload.get("package").and_then(Value::as_str) == Some("hello_world"));
@@ -117,7 +136,7 @@ fn documented_policy_check_reports_the_effective_mode(
     #[case] expected_mode: &str,
     #[case] is_gate_passing: bool,
 ) -> Result<()> {
-    let run = run_orthohelp(&["--check-agent-native", "--package", package])?;
+    let run = run_orthohelp(&["--check-agent-native", "--package", package], &[])?;
     run.ensure_success(&format!("policy check for {package}"))?;
     let report: Value = serde_json::from_str(&run.read_artefact("policy-report.json")?)?;
     let stdout = run.stdout()?;
@@ -145,5 +164,53 @@ fn documented_policy_check_reports_the_effective_mode(
         "{package} reported mode {mode:?}"
     );
     ensure!((mode != Some("off")) == is_gate_passing);
+    Ok(())
+}
+
+/// The recorder `main` installs exports bridge-cache counters to stderr.
+///
+/// The `metrics` facade discards updates until a recorder claims its global
+/// slot, so this test drives the real binary with `--cache` twice and reads the
+/// exported events from its standard error. Removing the install hook from
+/// `main`, changing the `tracing` target, or dropping the bounded labels fails
+/// it, which the in-process unit test cannot detect because that test installs
+/// the recorder itself.
+///
+/// A cold cache exercises a miss, its publication, and then a hit. A cache
+/// warmed by an earlier test is also valid input, so the first run asserts one
+/// lookup of either outcome and ties the publication assertion to the miss.
+#[cfg(feature = "metrics")]
+#[test]
+fn cache_metrics_reach_stderr_through_the_cli_recorder() -> Result<()> {
+    const ENVIRONMENT: [(&str, &str); 1] = [("RUST_LOG", "cargo_orthohelp::metrics=debug")];
+    const ARGS: [&str; 3] = ["--package", "hello_world", "--cache"];
+
+    let first = run_orthohelp(&ARGS, &ENVIRONMENT)?;
+    first.ensure_success("metrics-enabled cached run")?;
+    let first_stderr = String::from_utf8_lossy(&first.output.stderr).into_owned();
+    let hit_count = cache_event_count(&first_stderr, "lookup", "hit");
+    let miss_count = cache_event_count(&first_stderr, "lookup", "miss");
+    ensure!(
+        hit_count + miss_count == 1,
+        "the first run should export exactly one lookup event:\n{first_stderr}"
+    );
+    if miss_count == 1 {
+        ensure!(
+            cache_event_count(&first_stderr, "publish", "updated") == 1,
+            "a cache miss should publish the generated IR:\n{first_stderr}"
+        );
+    }
+
+    let second = run_orthohelp(&ARGS, &ENVIRONMENT)?;
+    second.ensure_success("metrics-enabled warm run")?;
+    let second_stderr = String::from_utf8_lossy(&second.output.stderr).into_owned();
+    ensure!(
+        cache_event_count(&second_stderr, "lookup", "hit") == 1,
+        "the repeat run should hit the IR published by the first:\n{second_stderr}"
+    );
+    ensure!(
+        cache_event_count(&second_stderr, "publish", "updated") == 0,
+        "a cache hit should not republish the IR:\n{second_stderr}"
+    );
     Ok(())
 }

@@ -17,6 +17,8 @@ use crate::{
 /// `cargo orthohelp <args> --out-dir <destination>` through Cargo's
 /// external-subcommand dispatch and return its captured output.
 ///
+/// `environment` adds variables for the child only, so a test can, for
+/// example, raise the CLI's own log filter without changing the test process.
 /// The integration target belongs to cargo-orthohelp, so Cargo has already
 /// built this executable before tests begin. Never rebuild a parent-owned
 /// executable while another test may be running it (notably on Windows). The
@@ -26,6 +28,7 @@ pub(super) fn run_orthohelp(
     executable: &Path,
     args: &[&str],
     destination: &Path,
+    environment: &[(&str, &str)],
 ) -> Result<Output> {
     let deadline = scenario::deadline();
     let state = repository.join("target/documentation-workspaces");
@@ -49,6 +52,7 @@ pub(super) fn run_orthohelp(
         command
             .env("CARGO_NET_OFFLINE", "true")
             .env("PATH", path)
+            .envs(environment.iter().copied())
             .arg("orthohelp")
             .args(args)
             .arg("--out-dir")
