@@ -52,7 +52,13 @@ impl Progress {
         let remaining = limit.saturating_sub(self.head.len());
         self.head.extend(bytes.iter().take(remaining).copied());
         self.truncated |= remaining < bytes.len();
-        self.tail.extend(bytes.iter().copied());
+        // Copy only the part of the chunk that can survive: anything before
+        // the last `DIAGNOSTIC_TAIL_BYTES` of this chunk would be pushed
+        // straight back out by the drain below. A large chunk that arrived in
+        // one read therefore costs one bounded copy rather than a copy of
+        // every byte followed by a drain of almost all of them.
+        let first_retained = bytes.len().saturating_sub(DIAGNOSTIC_TAIL_BYTES);
+        self.tail.extend(bytes.iter().skip(first_retained).copied());
         let excess = self.tail.len().saturating_sub(DIAGNOSTIC_TAIL_BYTES);
         if excess > 0 {
             self.tail.drain(..excess);

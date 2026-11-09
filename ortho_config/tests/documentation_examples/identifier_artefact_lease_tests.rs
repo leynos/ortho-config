@@ -177,15 +177,13 @@ fn a_second_process_cannot_clean_a_leased_artefact() -> Result<()> {
         "the second test process waited only {lease_wait} ms for the lease, so it \
          did not block on one held by this process",
     );
-    let rebuilt = PathBuf::from(report_field(&report, "rebuilt_out_dir")?);
-    // A process that had cleaned under the parent would have produced the same
-    // bytes anyway, so the content check alone is not the safeguard; the
-    // parent's intact read above and the measured lease wait are. This check
-    // proves the rebuild itself is faithful.
-    ensure!(
-        artefact(&rebuilt)? == baseline,
-        "the rebuild after the lease was released did not reproduce the artefact",
-    );
+    // Deliberately no second artefact read here. The helper checked the rebuilt
+    // content while it still held the lease; this process released its own at
+    // `drop(cargo)` and the helper's ended when it exited, so a concurrent test
+    // process may legitimately acquire the lease now and clean the output
+    // directory. Reading it here would race that process and fail a test whose
+    // lease behaved correctly. `parent_artefact=intact` above is the helper's
+    // in-lease evidence that the rebuild reproduced the artefact.
     Ok(())
 }
 

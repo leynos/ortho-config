@@ -80,7 +80,15 @@ impl CargoMessages {
     }
 
     /// Feed one chunk of Cargo's JSON stream.
+    ///
+    /// Once a record has been rejected, later chunks are ignored. Continuing
+    /// would parse an unbounded remainder of the stream only to discard it, and
+    /// could overwrite the first diagnostic with one from a later record, which
+    /// is not the record the reader needs to see.
     pub(super) fn observe(&mut self, bytes: &[u8]) {
+        if self.error.is_some() {
+            return;
+        }
         for byte in bytes {
             if !self.observe_byte(*byte) {
                 break;
@@ -135,12 +143,18 @@ impl CargoMessages {
     }
 
     /// Finish parsing and return the fixture's build-script directory.
+    ///
+    /// A rejection already recorded while the stream was being read is
+    /// reported first. Parsing a trailing partial record ahead of it would let
+    /// a malformed tail replace the diagnostic that explains why the rejected
+    /// record was refused, and the first failure is the one that names the
+    /// cause.
     pub(super) fn finish(&mut self) -> Result<Option<PathBuf>> {
-        if !self.line.is_empty() {
-            self.parse_line()?;
-        }
         if let Some(error) = self.error.take() {
             anyhow::bail!(error);
+        }
+        if !self.line.is_empty() {
+            self.parse_line()?;
         }
         Ok(self.out_dir.take())
     }

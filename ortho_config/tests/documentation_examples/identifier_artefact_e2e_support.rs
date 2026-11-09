@@ -79,22 +79,27 @@ pub(super) struct FixtureLocation {
 impl FixtureLocation {
     /// Take the whole-test lease on the private target and build the fixture.
     ///
-    /// `lock` blocks until every other leaseholder has released the
-    /// target, so a concurrent test process cannot interleave its
+    /// The lease waits until every other leaseholder has released the target,
+    /// so a concurrent test process cannot interleave its
     /// `cargo clean -p orthohelp_fixture` with this test's build or artefact
     /// read. [`serial_test`] and nextest's process group cannot provide this:
     /// they coordinate one runner's tests, and `#[serial]` is a thread lock
     /// inside one process.
     ///
-    /// The scenario deadline is captured after the wait, so time spent queued
-    /// behind another test process is not charged to this scenario's envelope.
+    /// The scenario envelope is captured *before* the wait and bounds it, so
+    /// the wait and the build share the one allowance nextest grants this
+    /// test. Capturing it afterwards instead would leave the total unbounded:
+    /// a target held by another runner could consume the whole nextest
+    /// allowance and the test would be killed without saying which wait it was
+    /// in.
     pub(super) fn lease(self) -> Result<FixtureCargo> {
-        let lease = lease::acquire(&self.target_directory)?;
+        let deadline = scenario::deadline();
+        let lease = lease::acquire(&self.target_directory, deadline)?;
         Ok(FixtureCargo {
             repository: self.repository,
             target_directory: self.target_directory,
             package_id: self.package_id,
-            deadline: scenario::deadline(),
+            deadline,
             _lease: lease,
         })
     }
