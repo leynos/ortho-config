@@ -26,6 +26,7 @@ use serde_json::Value;
 use std::path::Path;
 use std::process::Output;
 use std::sync::{LazyLock, Mutex, PoisonError};
+use std::time::Duration;
 use tempfile::TempDir;
 
 // Each run starts its scenario deadline before it waits for the shared build
@@ -90,8 +91,18 @@ impl OrthohelpRun {
 
 /// Run `cargo orthohelp <args>` into a fresh output directory.
 ///
-/// `environment` adds variables for the child CLI only.
+/// `environment` adds variables for the child CLI only. The documented-run lock
+/// covers the whole run, so a caller that must prepare shared state first takes
+/// the lock itself and calls [`run_documented_command`].
 fn run_orthohelp(args: &[&str], environment: &[(&str, &str)]) -> Result<OrthohelpRun> {
+    let _run_guard = DOCUMENTED_RUN_MUTEX
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    run_documented_command(args, environment)
+}
+
+/// Run one documented command while the caller already holds the lock.
+fn run_documented_command(args: &[&str], environment: &[(&str, &str)]) -> Result<OrthohelpRun> {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("workspace repository")?;
@@ -100,9 +111,6 @@ fn run_orthohelp(args: &[&str], environment: &[(&str, &str)]) -> Result<Orthohel
     let out_dir = tempfile::Builder::new()
         .prefix("documented-command-")
         .tempdir_in(state)?;
-    let _run_guard = DOCUMENTED_RUN_MUTEX
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
     let invocation = orthohelp_workflow::OrthohelpInvocation::new(args, environment);
     let output = orthohelp_workflow::run_orthohelp(
         repository,
@@ -211,6 +219,43 @@ fn documented_policy_check_reports_the_effective_mode(
     Ok(())
 }
 
+/// Delete the bridge-cache entries generated for one application.
+///
+/// The cache directory is named from a hash of the package files, the schema,
+/// and the tool version, so a test cannot name the entry it wants. Every entry
+/// records the application name it was generated for, which identifies the
+/// fixture exactly. Other scenarios share this target and match a different
+/// name, so their entries must survive; a missing cache root simply means the
+/// next run is cold for every package.
+#[cfg(feature = "metrics")]
+fn clear_cached_ir(target: &Path, app_name: &str) -> Result<()> {
+    let cache_root = target.join("orthohelp");
+    let cache = match Dir::open_ambient_dir(&cache_root, ambient_authority()) {
+        Ok(cache) => cache,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).with_context(|| format!("open {}", cache_root.display()));
+        }
+    };
+    for candidate in cache.entries()? {
+        let entry = candidate?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let is_fixture = cache
+            .open_dir(&name)
+            .and_then(|dir| dir.read_to_string("ir.json"))
+            .ok()
+            .and_then(|ir| serde_json::from_str::<Value>(&ir).ok())
+            .is_some_and(|ir| ir.get("app_name").and_then(Value::as_str) == Some(app_name));
+        if is_fixture {
+            cache.remove_dir_all(&name)?;
+        }
+    }
+    Ok(())
+}
+
 /// The recorder `main` installs exports bridge-cache counters to stderr.
 ///
 /// The `metrics` facade discards updates until a recorder claims its global
@@ -220,32 +265,47 @@ fn documented_policy_check_reports_the_effective_mode(
 /// it, which the in-process unit test cannot detect because that test installs
 /// the recorder itself.
 ///
-/// A cold cache exercises a miss, its publication, and then a hit. A cache
-/// warmed by an earlier test is also valid input, so the first run asserts one
-/// lookup of either outcome and ties the publication assertion to the miss.
+/// The test removes the fixture's cached IR before the first run, so that run
+/// is certain to miss and the second to hit. Clearing the entry outright,
+/// rather than tolerating a cache another test warmed, is what makes the
+/// publication path part of the contract instead of an occasional observation.
+///
+/// The clear and both runs share one critical section. Another test in this
+/// binary runs the same fixture without `--cache`, and a run that builds the
+/// bridge publishes its IR whether or not it was asked to read the cache, so a
+/// clear outside the lock could be undone before the first probe.
 #[cfg(feature = "metrics")]
 #[test]
 fn cache_metrics_reach_stderr_through_the_cli_recorder() -> Result<()> {
     const ENVIRONMENT: [(&str, &str); 1] = [("RUST_LOG", "cargo_orthohelp::metrics=debug")];
     const ARGS: [&str; 3] = ["--package", "hello_world", "--cache"];
 
-    let first = run_orthohelp(&ARGS, &ENVIRONMENT)?;
-    first.ensure_success("metrics-enabled cached run")?;
-    let first_stderr = String::from_utf8_lossy(&first.output.stderr).into_owned();
-    let hit_count = cache_event_count(&first_stderr, CacheEvent::new("lookup", "hit"));
-    let miss_count = cache_event_count(&first_stderr, CacheEvent::new("lookup", "miss"));
-    ensure!(
-        hit_count + miss_count == 1,
-        "the first run should export exactly one lookup event:\n{first_stderr}"
-    );
-    if miss_count == 1 {
-        ensure!(
-            cache_event_count(&first_stderr, CacheEvent::new("publish", "updated")) == 1,
-            "a cache miss should publish the generated IR:\n{first_stderr}"
-        );
-    }
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("workspace repository")?;
+    let _run_guard = DOCUMENTED_RUN_MUTEX
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let state = build_state::BuildState::discover(repository, Duration::from_secs(30))?;
+    clear_cached_ir(&state.target, "hello_world")?;
 
-    let second = run_orthohelp(&ARGS, &ENVIRONMENT)?;
+    let first = run_documented_command(&ARGS, &ENVIRONMENT)?;
+    first.ensure_success("metrics-enabled cold run")?;
+    let first_stderr = String::from_utf8_lossy(&first.output.stderr).into_owned();
+    ensure!(
+        cache_event_count(&first_stderr, CacheEvent::new("lookup", "miss")) == 1,
+        "the cold run should export exactly one lookup miss:\n{first_stderr}"
+    );
+    ensure!(
+        cache_event_count(&first_stderr, CacheEvent::new("lookup", "hit")) == 0,
+        "the cold run cannot observe a hit:\n{first_stderr}"
+    );
+    ensure!(
+        cache_event_count(&first_stderr, CacheEvent::new("publish", "updated")) == 1,
+        "a cache miss should publish the generated IR exactly once:\n{first_stderr}"
+    );
+
+    let second = run_documented_command(&ARGS, &ENVIRONMENT)?;
     second.ensure_success("metrics-enabled warm run")?;
     let second_stderr = String::from_utf8_lossy(&second.output.stderr).into_owned();
     ensure!(
