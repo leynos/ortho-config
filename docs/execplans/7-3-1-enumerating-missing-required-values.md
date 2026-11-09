@@ -1,11 +1,10 @@
 # Enumerate missing required configuration values
 
-Status: DRAFT — awaiting explicit approval before implementation.
+Status: APPROVED — implementation in progress (approved 2026-11-09).
 
 This execution plan (ExecPlan) is a living document. Keep the constraints,
 progress, discoveries, decisions, verification, conformance, and outcomes
-current at every milestone. This change delivers the plan only. Publishing or
-merging this plan does not authorize implementation.
+current at every milestone.
 
 ## Purpose / big picture
 
@@ -116,8 +115,29 @@ with a compatibility probe rather than an assumption.
   prover command surface, inventory obligations, D5, and refreshed baseline.
 - [x] (2026-11-09) Rebase both plan commits onto the timeout fix in PR #664;
   retain their patches unchanged and record the temporary parent boundary.
-- [ ] Obtain explicit plan approval.
-- [ ] M1: establish exact schema and source contracts with executable evidence.
+- [x] (2026-11-09) Obtain explicit plan approval.
+- [x] (2026-11-09) M1 audit: derive field-metadata map, supply-route map, and
+  error-classification sites. Settled the schema, requiredness, and route
+  contract in ADR-0020 and the improved-error design.
+- [x] (2026-11-09) M1 aggregate red reproducer recorded against the unchanged
+  loader: two absent required fields produced
+  `Failed to merge CLI with configuration: missing field 'reference'`, naming
+  only the first. Characterization checks passed: a single absent requirement
+  is an `OrthoError::Merge`, and absent `Option`/defaulted fields load. Log:
+  `/tmp/m1-red-ortho-config-7-3-1.out`. The probe file was removed.
+- [x] (2026-11-09) Implemented the schema trait, pure collector, typed error
+  payload, English display, and bounded telemetry classification. The program
+  label travels on `LayerComposition`, and every generated merge entry point
+  calls the labelled constructor. The standalone `RequiredConfigSchema` derive
+  serves nested child types.
+- [x] (2026-11-09) V1 real-loader matrix passes: 14 integration tests cover
+  required leaves, aliases, CLI and environment supply, present-empty `Option`,
+  renamed keys without a CLI route, `skip_cli`, inferred clap defaults, nested
+  parent activation, a present non-object, and the recursive-schema guard.
+  Focused unit tests pass (41), and the declarative token fixtures were updated
+  for the new state field and constructor.
+- [x] M1: establish exact schema and source contracts with executable evidence
+  (ADR-0020, characterization evidence, and the recorded red reproducer).
 - [ ] M2: implement and property-test collection with typed diagnostics.
 - [ ] M3: integrate all supported generated loading paths and recovery tests.
 - [ ] M4: reconcile documentation, gates, and roadmap completion.
@@ -167,6 +187,22 @@ two `error_category` functions in `ortho_config/src/merge_telemetry.rs`
 "other" category). Behavioural scenarios bind through the `rstest_bdd` test
 target in `tests/rstest_bdd_support/behaviour/scenarios.rs`, rather than a
 per-feature runner.
+
+The M1 audit found three facts that shape the implementation.
+
+1. The generated defaults and CLI structs copy no Serde naming attributes, so
+   their layers key values by the Rust identifier. A field with
+   `#[serde(rename = "...")]` therefore has no working CLI route, because the
+   merged layer key does not match its deserialization key. The diagnostic must
+   omit that flag rather than invent one.
+2. Runtime requiredness differs from the documentation IR. The IR treats every
+   collection as non-required, but the loader emits an empty collection only
+   through an explicit default or a merge overlay, so a `Vec<T>` without a
+   default is required by Serde. Runtime decisions follow the loader.
+3. A third exhaustive `error_category` match exists in
+   `ortho_config/src/subcommand/paths_telemetry.rs`. The plan named two
+   classification sites; the compiler locates the third when the variant is
+   added.
 
 ## Decision log
 

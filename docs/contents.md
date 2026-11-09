@@ -95,6 +95,9 @@
 - [ADR-0020: Newtypes for lock evidence](adrs/adr-0020-lock-evidence-newtypes.md):
   review the evidence vocabulary that makes a transposed pid, descriptor,
   device, or inode a compile error, and the rejected newtype crates.
+- [ADR-0020: Enumerate missing required configuration values](adrs/adr-0020-enumerate-missing-required-values.md):
+  review the typed missing-values payload, the opt-in schema composition
+  contract, the requiredness matrix, and the truthful supply-route rules.
 - [ADR-0021: Test seams for the lock diagnostics](adrs/adr-0021-test-seams-for-lock-diagnostics.md):
   review the `ProcFs` and `Clock` traits that make the report's failure
   branches and its settle deadline directly testable, and the rejected

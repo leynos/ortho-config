@@ -168,6 +168,25 @@ and explicit:
 These helpers are intentionally small and composable so call-sites remain easy
 to read without hiding the semantics of error mapping.
 
+#### Missing required values
+
+Missing required configuration values are reported through a typed error rather
+than the deserializer's first failure; the decision, requiredness matrix, and
+coverage limits are recorded in
+[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md).
+
+- `ortho_config/src/required_values/` owns schema declarations, the recursion
+  stack, the pure absence collector, and the route computation. Its public
+  surface exists for generated code and for callers that implement
+  `RequiredConfigSchema` manually.
+- `ortho_config/src/error/` owns the payload types and their presentation. The
+  display path never discovers requirements and never reads process arguments
+  or the environment.
+- Generated `finish` code calls the collector once, after collection overlays
+  and before final deserialization. The raw generic `from_value_merge<T>` keeps
+  its existing behaviour because `T` there is only `DeserializeOwned` and
+  carries no schema.
+
 ### 4.3. Declarative configuration merging
 
 Figment kept the hello_world example readable, yet it forced the

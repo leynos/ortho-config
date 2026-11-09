@@ -1,9 +1,11 @@
 # Proposed design for improved missing value error messages
 
-Status: proposed. This document describes the desired diagnostic shape, not the
-current implementation state. The active public `OrthoError` enum in
-`ortho_config/src/error/types.rs` does not expose an
-`OrthoError::MissingRequiredValues` variant.
+Status: approved for implementation. The schema contract, requiredness matrix,
+and supply-route rules are settled in
+[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md). The active
+public `OrthoError` enum in `ortho_config/src/error/types.rs` does not yet
+expose an `OrthoError::MissingRequiredValues` variant; this document describes
+the target state until the implementation milestones land.
 
 The current implementation routes missing required configuration values through
 existing error channels. Required command-line arguments rejected by `clap`
@@ -66,22 +68,46 @@ This format addresses all the requirements:
 To support this new error message, a new variant should be added to the
 `OrthoError` enum in `ortho_config/src/error/types.rs`. This separates the
 "missing value" case from other gathering errors, allowing for custom
-formatting.
+formatting. The payload is typed rather than a preformatted string, so callers
+can inspect paths without parsing prose:
 
 ```rust
-// in ortho_config/src/error/types.rs
-
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum OrthoError {
-    // … existing variants
-
-    #[error("{0}")]
-    MissingRequiredValues(String), // New variant for the formatted error message
-}
+#[error("{0}")]
+MissingRequiredValues(Box<MissingRequiredValues>),
 ```
+
+`MissingRequiredValues` owns a non-empty ordered list of
+`MissingRequiredValue { path: ConfigPath, routes: Vec<SupplyRoute>,
+expects_object: bool }`.
+The full public surface, including the `RequiredConfigSchema` companion trait
+and the `#[ortho_config(nested)]` marker, is specified in
+[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md).
+
+### 2.1 Settled schema support matrix
+
+Runtime requiredness follows the loader, not the documentation IR:
+
+| Declared shape or attribute                   | Requiredness  |
+| --------------------------------------------- | ------------- |
+| `Option<T>` (one outer layer)                 | Optional      |
+| `#[ortho_config(default = ...)]`              | Optional      |
+| Inferred clap default                         | Optional      |
+| `#[serde(default)]` on the field or container | Optional      |
+| `#[serde(skip)]` / `skip_deserializing`       | Not inspected |
+| Collections without a default                 | Required      |
+| Any other scalar, map, or opaque type         | Required      |
+
+Nested enumeration is opt-in: only a field marked `#[ortho_config(nested)]`
+composes the child's schema. `#[serde(flatten)]` compose at the current level
+only when paired with that marker. An arbitrary custom `Deserialize`
+implementation, a flatten without the marker, an enum payload, and a
+selected-subcommand value extracted through Figment stay outside the coverage
+contract and keep their existing error behaviour.
+
+Supply routes are computed for reported entries only, in CLI, environment, and
+configuration-file order. A route is omitted when its provider cannot consume
+the spelling: a non-identifier canonical key has no CLI flag, and a path
+segment containing a literal dot has no environment variable.
 
 ## 3. Implementation design
 
