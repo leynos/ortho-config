@@ -107,6 +107,9 @@
   review the accepted `output(...)` derive group, the refusal-versus-silence
   distinction, the omission rules for a declared block, and the deferred stream
   framing and numeric exit taxonomy.
+- [ADR-0020: Pre-publication clap coverage gate](adrs/adr-0020-pre-publication-clap-coverage-gate.md):
+  review the test-only workspace gate for `ErrorKind` growth, the build-time
+  identity mechanism it supersedes, and the limits of the guarantee.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
