@@ -29,9 +29,14 @@
 use super::probe_support::descendant_lock::{
     hold_descendant_lock, lock_is_held, wait_for_lock_release,
 };
+// Only the Unix escapee probe builds a bare command, so the helper that does
+// so is imported under the same gate; importing it unconditionally makes the
+// Windows build fail on an unused import.
+#[cfg(unix)]
+use super::probe_support::probe_command;
 use super::probe_support::{
-    RELEASE_FILE_NAME, announce_ready, probe_command, release_holder, scratch_directory,
-    spawn_owned_probe, spawn_probe, wait_for_descendant, wait_for_ready_in, wait_until,
+    RELEASE_FILE_NAME, announce_ready, release_holder, scratch_directory, spawn_owned_probe,
+    spawn_probe, wait_for_descendant, wait_for_ready_in, wait_until,
 };
 use super::supervise;
 use anyhow::{Context, Result, ensure};
