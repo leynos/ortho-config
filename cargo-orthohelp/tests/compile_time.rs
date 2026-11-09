@@ -100,9 +100,8 @@ fn decode_flag_variable(
     value: Option<OsString>,
 ) -> Result<Option<String>, RustflagsEnvironmentError> {
     value
-        .map(|value| {
-            value
-                .into_string()
+        .map(|text| {
+            text.into_string()
                 .map_err(|_| RustflagsEnvironmentError::NotUnicode {
                     name: name.to_owned(),
                 })

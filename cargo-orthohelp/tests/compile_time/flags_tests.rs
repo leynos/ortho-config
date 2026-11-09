@@ -229,7 +229,11 @@ fn target_environment_reaches_encoded_child_flags() -> Result<(), Box<dyn std::e
     const FLAG: &str = "--cfg=orthohelp_target_flags_probe";
     if std::env::var_os(MARKER).is_some() {
         let flags = trybuild_rustflags(Path::new("/workspace/package"))?;
-        assert!(flags.split(RUSTFLAGS_SEPARATOR).any(|flag| flag == FLAG));
+        // A `Result`-returning test reports a wrong value as an error rather
+        // than panicking, so clippy::panic_in_result_fn stays satisfied.
+        if !flags.split(RUSTFLAGS_SEPARATOR).any(|flag| flag == FLAG) {
+            return Err(format!("the child flags lost {FLAG}: {flags}").into());
+        }
         return Ok(());
     }
 
@@ -252,23 +256,27 @@ fn target_environment_reaches_encoded_child_flags() -> Result<(), Box<dyn std::e
         TRYBUILD_CHILD_DEADLINE,
         "target-flags probe child",
     )?;
-    assert!(
-        output.status.success(),
-        "the target-flags probe failed: {}\n--- stdout ---\n{}--- stderr ---\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
+    if !output.status.success() {
+        return Err(format!(
+            "the target-flags probe failed: {}\n--- stdout ---\n{}--- stderr ---\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        )
+        .into());
+    }
     Ok(())
 }
 
 #[test]
 fn absent_flag_variable_is_not_an_error() -> Result<(), Box<dyn std::error::Error>> {
-    assert_eq!(decode_flag_variable("RUSTFLAGS", None)?, None);
-    assert_eq!(
-        decode_flag_variable("RUSTFLAGS", Some(OsString::from("--cfg=ok")))?,
-        Some("--cfg=ok".to_owned())
-    );
+    if decode_flag_variable("RUSTFLAGS", None)?.is_some() {
+        return Err("a missing variable must decode as absent".into());
+    }
+    let decoded = decode_flag_variable("RUSTFLAGS", Some(OsString::from("--cfg=ok")))?;
+    if decoded.as_deref() != Some("--cfg=ok") {
+        return Err(format!("unexpected decode: {decoded:?}").into());
+    }
     Ok(())
 }
 

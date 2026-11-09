@@ -80,12 +80,12 @@ fn run_orthohelp(args: &[&str], environment: &[(&str, &str)]) -> Result<Orthohel
     let _run_guard = DOCUMENTED_RUN_MUTEX
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
+    let invocation = orthohelp_workflow::OrthohelpInvocation::new(args, environment);
     let output = orthohelp_workflow::run_orthohelp(
         repository,
         Path::new(env!("CARGO_BIN_EXE_cargo-orthohelp")),
-        args,
+        invocation,
         out_dir.path(),
-        environment,
     )?;
     Ok(OrthohelpRun { output, out_dir })
 }

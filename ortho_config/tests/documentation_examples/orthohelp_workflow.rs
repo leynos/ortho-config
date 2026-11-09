@@ -13,22 +13,41 @@ use crate::{
     process_runner::{self, Operation, Policy},
 };
 
+/// The arguments and child-only variables of one documented CLI invocation.
+///
+/// Grouping them keeps [`run_orthohelp`]'s parameter list readable and lets a
+/// caller share one value across repeated runs, such as a cold and a warm
+/// cache probe with the same flags.
+#[derive(Clone, Copy)]
+pub(super) struct OrthohelpInvocation<'a> {
+    /// The flags passed after the `orthohelp` subcommand.
+    pub(super) args: &'a [&'a str],
+    /// Variables added to the child only, leaving the test process untouched.
+    pub(super) environment: &'a [(&'a str, &'a str)],
+}
+
+impl<'a> OrthohelpInvocation<'a> {
+    /// Pair the subcommand flags with the variables added to the child.
+    pub(super) const fn new(args: &'a [&'a str], environment: &'a [(&'a str, &'a str)]) -> Self {
+        Self { args, environment }
+    }
+}
+
 /// Snapshot Cargo's supplied CLI executable, then run
 /// `cargo orthohelp <args> --out-dir <destination>` through Cargo's
 /// external-subcommand dispatch and return its captured output.
 ///
-/// `environment` adds variables for the child only, so a test can, for
-/// example, raise the CLI's own log filter without changing the test process.
-/// The integration target belongs to cargo-orthohelp, so Cargo has already
-/// built this executable before tests begin. Never rebuild a parent-owned
-/// executable while another test may be running it (notably on Windows). The
-/// caller judges the exit status and streams.
+/// The invocation's `environment` adds variables for the child only, so a test
+/// can, for example, raise the CLI's own log filter without changing the test
+/// process. The integration target belongs to cargo-orthohelp, so Cargo has
+/// already built this executable before tests begin. Never rebuild a
+/// parent-owned executable while another test may be running it (notably on
+/// Windows). The caller judges the exit status and streams.
 pub(super) fn run_orthohelp(
     repository: &Path,
     executable: &Path,
-    args: &[&str],
+    invocation: OrthohelpInvocation<'_>,
     destination: &Path,
-    environment: &[(&str, &str)],
 ) -> Result<Output> {
     let deadline = scenario::deadline();
     let state = repository.join("target/documentation-workspaces");
@@ -52,9 +71,9 @@ pub(super) fn run_orthohelp(
         command
             .env("CARGO_NET_OFFLINE", "true")
             .env("PATH", path)
-            .envs(environment.iter().copied())
+            .envs(invocation.environment.iter().copied())
             .arg("orthohelp")
-            .args(args)
+            .args(invocation.args)
             .arg("--out-dir")
             .arg(destination);
         process_runner::run_with_policy(
