@@ -1,6 +1,7 @@
 # Ship the en-US clap error matrix (11.2.1)
 
-Status: DRAFT — awaiting explicit approval before implementation.
+Status: BLOCKED at M0 — the build-time identity contract is not implementable;
+awaiting acceptance of a replacement mechanism (2026-11-09).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -74,10 +75,12 @@ permission to weaken a gate. Disk exhaustion requires stopping and reporting.
 
 ## Risks
 
-- High impact, unresolved likelihood: the identity manifest may not describe
-  every Cargo source form that consumers use, or the resolver may not prove
-  that the compiled facade reaches that exact builder. M0 must establish the
-  supported source boundary and fail-closed behaviour before build integration.
+- High impact, **realized** (2026-11-09): the resolver cannot prove that the
+  compiled facade reaches that exact builder, because a dependency's build
+  script cannot observe its dependent's resolution in any consumption form
+  except our own workspace build. M0 stopped here; see "M0 outcome". The
+  identity manifest is reduced from a build-time contract to a pre-publication
+  test gate under the recommended option.
 - High impact, medium likelihood: equal matrix and enum lengths can conceal a
   duplicate plus an omission. Test uniqueness and exact inventory agreement.
 - Medium impact, high likelihood: clap does not supply every context variable
@@ -107,8 +110,10 @@ permission to weaken a gate. Disk exhaustion requires stopping and reporting.
   parent `501ab831`.
 - [x] Validate documentation and workflow contracts; prepare the revised plan
   for publication.
-- [ ] Obtain explicit implementation approval.
-- [ ] M0: establish identity-manifest and facade-edge feasibility.
+- [x] (2026-11-09) Obtain explicit implementation approval.
+- [x] (2026-11-09) M0: identity-manifest and facade-edge feasibility
+      investigated; outcome BLOCKED. See "M0 outcome" below.
+- [ ] Accept a replacement coverage mechanism (tolerance trigger).
 - [ ] M1: ship canonical matrix, strings, and runtime integration.
 - [ ] M2: ship mechanical count gate and fault-detection evidence.
 - [ ] M3: finish consumer documentation and mark roadmap task done.
@@ -125,6 +130,16 @@ consumer-wide constant. The design's 4.6.0 identity is an illustrative example,
 not this lockfile's current resolution; reconcile that wording during M0. The
 current upstream API inventory has 17 variants; M0 will bind that count to the
 identity manifest and verify the compiled facade edge.
+
+M0 (2026-11-09) falsified that binding. A dependency's build script cannot
+observe its dependent's dependency resolution. The only consumption form where
+the walk-up from `CARGO_MANIFEST_DIR` finds the governing lock is our own
+workspace build; an external path consumer and an unpacked packaged consumer
+both resolve to a lock that does not govern the build. The packaged case is
+worse than a miss: Cargo 1.84 and later place a publish-time `Cargo.lock` next
+to the packaged manifest, so the naive rule silently binds a file that
+describes the publish-time resolution, including dev-dependencies the consumer
+never compiles. Details and citations are in "M0 outcome".
 
 The requested nine additions plus four existing entries total thirteen.
 `InvalidSubcommand`, explicitly named by §6.1, is also required: ten new
@@ -155,6 +170,17 @@ rendered tail. Rich structured context preservation remains task 11.2.2.
   not proven and is superseded by the identity-manifest contract below.
 - 2026-11-08: a count is authoritative only when bound to a supported package
   identity and the compiled facade edge; unknown identities fail closed.
+- 2026-11-09: M0 is BLOCKED. The prescribed build-time identity check cannot be
+  discharged for consumers, so no feature code is written under the current
+  mechanism. Evidence, closed routes, options, and upstream impact are recorded
+  in "M0 outcome".
+- 2026-11-09 (proposed, awaiting acceptance): bind the count at the
+  pre-publication test gate rather than in a build script, using the workspace
+  `Cargo.lock`, `cargo metadata --locked --offline`, and a `syn` count of the
+  resolved `clap_builder` source. Not adopted until accepted.
+- 2026-11-09: no `ortho_config/tests/fixtures/clap_error_build_probe/` fixture
+  is added while the mechanism is rejected. The probe recipes live inline in
+  "M0 outcome", and the durable fixture follows the accepted mechanism.
 - 2026-10-14: include `InvalidSubcommand` and all three sentinels, following the
   complete-matrix requirement and the design rather than an incomplete list.
 - 2026-10-14: use finite exhaustive tests for the matrix and property tests for
@@ -170,10 +196,18 @@ The plan incorporates the merged prover tooling from PR #651 and is now based on
 nested Cargo timeouts that blocked validation on main. Draft PR #588 now
 targets that branch. Formatting, lint, typecheck, and full tests passed on the
 rebased candidate. Documentation and workflow-contract checks also passed; the
-revised plan is ready for review. No feature implementation has occurred;
-explicit approval is still required before M0. The primary unresolved
-engineering risk remains proving that the manifest identity matches the enum
-exposed by the compiled Clap facade.
+revised plan is ready for review.
+
+Implementation was approved on 2026-11-09 and M0 ran immediately. M0 did not
+reach a "go": the primary engineering risk, proving that the manifest identity
+matches the enum exposed by the compiled Clap facade, is not merely unresolved
+but unachievable for consumers, for the reasons recorded in "M0 outcome". The
+plan is therefore BLOCKED at E0 and no feature code exists. The retrospective
+on this milestone is that the risk was correctly identified and correctly
+scoped to an explicit feasibility gate: the gate did its job by preventing a
+build script that would have bound the wrong lockfile for every consumer,
+silently and invisibly. The remaining decision is which replacement mechanism
+to accept.
 
 Earlier validation on main hit inherited 240-second packaging and 300-second
 consumer deadlines. On the initial PR #664 parent (`26275a4e`), the ordinary
@@ -478,6 +512,104 @@ this decision. Record reproducible fixture recipes under
 `ortho_config/tests/fixtures/clap_error_build_probe/`; generated projects and
 build products live under `target/`, while the durable recipe remains tracked.
 Production code is still unchanged. Commit only a coherent, gated result.
+
+#### M0 outcome (2026-11-09): BLOCKED
+
+The build-time identity contract holds for our own workspace build and for no
+other consumption form. A dependency's build script cannot observe its
+dependent's dependency resolution, and the Cargo team treats the reverse
+direction as out of scope: "we do not want to allow side-banned communication
+between dependencies and dependents"
+([rust-lang/cargo#3946](https://github.com/rust-lang/cargo/issues/3946),
+2025-08-26). There is no `CARGO_WORKSPACE_DIR`.
+
+Evidence came from a temporary probe build script, since removed, and from
+disposable consumers under `target/m0/`:
+
+| Consumption form           | Governing lock reachable | Observed                                                                                                                                                                                                                                                             |
+| -------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace build            | Yes                      | `CARGO_MANIFEST_DIR=<worktree>/ortho_config`; the walk-up finds `<worktree>/Cargo.lock`, which does govern the build.                                                                                                                                                |
+| External path consumer     | No                       | `CARGO_MANIFEST_DIR` still resolves inside our checkout, so the walk-up binds *our* workspace lock, not the consumer's lock.                                                                                                                                         |
+| Unpacked packaged consumer | No                       | An adjacent publish-time `Cargo.lock` exists (80,043 bytes, 332 packages, including dev-only `trybuild`, `proptest`, `cargo_metadata`, `process-wrap`, and `insta`), while the consumer's governing lock is a different file (32,629 bytes, none of those packages). |
+
+Four routes to the compiled identity were each closed:
+
+- `DEP_*` bridge: none. `clap` and `clap_builder` declare no `links`, and the
+  probe observed no `DEP_` variable of any kind.
+- Target-directory introspection: at build-script time the target directory
+  names no `clap` package. The build-script unit's fingerprint carries
+  `deps: []`; the unit that does list `clap` is written only after our build
+  script runs, and records a numeric package-id hash with no version, source,
+  or checksum.
+- `OUT_DIR` ancestry: this does reach the consumer's target directory, and one
+  level further reaches the consumer's own lock, but the layout is not
+  contractual and breaks under `CARGO_TARGET_DIR`, `--target-dir`, and
+  `build.target-dir`
+  ([rust-lang/cargo#9661](https://github.com/rust-lang/cargo/issues/9661)).
+  Tools that do this describe it as guessing, not resolving.
+- `cargo metadata` from the build script: since Cargo 1.84 a library package
+  ships its own lock, so the call honours that publish-time lock, can require
+  the network, and can resolve versions the consumer never compiles
+  ([rust-lang/cargo#15272](https://github.com/rust-lang/cargo/issues/15272)).
+
+Renamed dependencies, feature selection, target-specific edges, multiple `clap`
+versions, and source overrides were not exercised: the decisive failure occurs
+earlier, because no governing lock is reachable at all, so those sub-cases
+cannot change the verdict.
+
+This satisfies the first tolerance trigger, "the active dependency source
+cannot be identified without guessing", and it defeats a workspace-only
+success, which the tolerance explicitly rejects. No feature code was written.
+
+**Upstream design impact.** Design §6.1.1 requires a build-time check binding
+the count to the resolved `clap_builder` identity and to the compiled `clap`
+facade edge. That requirement rests on an assumption Cargo does not support for
+consumers, so §6.1.1 needs amendment whichever option is accepted. The public
+surface in §6.2, the enum and the constant, is unaffected.
+
+**Options.**
+
+1. *Recommended.* Move the identity binding from build time to the
+   pre-publication test gate. Read the governing workspace `Cargo.lock` for
+   version, source, checksum, and the `clap`-to-`clap_builder` edge; confirm
+   the same resolution with `cargo metadata --locked --offline`, verified here
+   as exit 0 with `clap` 4.6.7, `clap_builder` 4.6.7, the facade edge, and a
+   `manifest_path` into the resolved source; then count `ErrorKind`
+   declarations in that source with `syn`. This retains the total-count gate,
+   the `const_assert_eq!`, fail-closed unknown identities, and the ban on
+   display classification in support code. It drops the build script, the
+   `rustc-env` value, the `OUT_DIR` constant, and the consumer-side rejection,
+   which cannot be sound.
+2. Keep the build script but emit nothing outside a workspace build. Rejected:
+   this is the consumer escape hatch the tolerances forbid, and it leaves the
+   check vacuous for every consumer.
+3. Ask `clap` upstream for a version constant or a `links` key. Out of scope and
+   not available now.
+4. Publish a bridge crate declaring `links`. Rejected as unsound: such a
+   package's own build script is equally blind to its dependent's resolution,
+   so its metadata value would be a hard-coded literal.
+
+Recipes, kept out of the product tree:
+
+```bash
+# Workspace build: add a probe build script, then
+cargo build -p ortho_config
+# and read target/debug/build/ortho_config-*/stderr.
+
+# External path consumer: standalone `[workspace]` package under target/m0/
+# with `ortho_config = { path = "<worktree>/ortho_config" }`, then
+cargo build --offline --manifest-path target/m0/path-consumer/Cargo.toml
+
+# Packaged consumer: package, extract outside the workspace, consume the
+# unpacked archive (a checkout path dependency is not equivalent).
+cargo package -p ortho_config --allow-dirty --no-verify
+tar xzf target/package/ortho_config-0.10.0.crate -C target/m0/unpacked
+cargo build --offline --manifest-path target/m0/pkg-consumer/Cargo.toml
+```
+
+Awaiting explicit acceptance of an option before M1, as the Tolerances and the
+Purpose statement require; approval of this plan did not authorize replacing
+the coverage mechanism.
 
 ### M1: canonical matrix and executable translations
 
