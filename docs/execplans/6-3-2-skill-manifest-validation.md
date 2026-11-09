@@ -152,9 +152,9 @@ explicitly approves it and the prerequisites below are complete.
   all eight tests. A subsequent full run reached the boundary suite: 25 passed,
   seven hit the unchanged 440-second nested-build deadlines, and one was
   ignored. Captured diagnostics show active compilation, including
-  compiler-admission waits. Complete the existing package-build caches and
-  rerun the unchanged gates; do not widen deadlines or treat cache preparation
-  as acceptance evidence.
+  compiler-admission waits. The next step completed the existing package-build
+  caches and reran the unchanged gates without widening deadlines; cache
+  preparation itself was not acceptance evidence.
 - [x] (2026-11-09) Both standalone package-verification commands completed
   successfully with the shared cache and existing target directories. The
   unchanged `make boundary` gate then passed: 32 passed, zero failed, one
@@ -163,9 +163,19 @@ explicitly approves it and the prerequisites below are complete.
   test run passed, including all workspace tests, 32 boundary tests (one
   ignored), and 119 Python tests (16 skipped). Evidence:
   `/tmp/ortho-632-664-test-final.out`.
-- [ ] Restack onto PR #664's updated head, validate, and publish. Its parent
-  advanced during validation; the results above describe the initial `26275a4e`
-  parent, not the updated candidate.
+- [x] (2026-11-09) Restacked the three planning commits onto PR #664's
+  updated head, `501ab83134eaba0f9e97e1daeaa29c793a819c53`, without conflicts.
+  Range-diff confirms all three patches are unchanged. This incorporates
+  fixture-target leases, bounded child-process cleanup, survivor regressions,
+  and the Unix-only probe import fix.
+- [x] (2026-11-09) Validated the updated `501ab831` parent: `make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie` all passed. The full test run included 53 behavioural scenarios,
+  seven identifier-artefact tests (one ignored helper), 35 boundary tests
+  (seven ignored helpers), and 119 Python tests (16 skipped). Evidence:
+  `/tmp/ortho-632-501-<gate>.out`. These runs reused existing build caches;
+  they do not establish a cold-cache timing guarantee. Publication targets
+  `issue-644-nested-cargo-timeouts`; implementation remains approval-gated.
 - [ ] Begin implementation only after explicit approval and EP-M0 passes.
 
 ## Surprises & discoveries
@@ -208,7 +218,7 @@ explicitly approves it and the prerequisites below are complete.
   implementing agent must fetch `main`, verify the merge is reachable there,
   and rebase this branch's own commits onto `origin/main`, then retarget its PR
   to `main`. Use the rebase skill to establish the replay boundary: the
-  inherited parent is `26275a4efe31d3cf84cf8ec3e265782a28a832f3`, not the
+  inherited parent is `501ab83134eaba0f9e97e1daeaa29c793a819c53`, not the
   eventual squash-merge commit. Recheck this boundary if the parent advances;
   preserve recovery refs and avoid replaying the parent's changes. Repeat
   required gates and publish with an explicit force-with-lease.
@@ -280,7 +290,7 @@ domain semantics.
 
 ## Conformance basis
 
-- Current temporary base: `26275a4efe31d3cf84cf8ec3e265782a28a832f3`
+- Current temporary base: `501ab83134eaba0f9e97e1daeaa29c793a819c53`
   (`issue-644-nested-cargo-timeouts`, PR #664), which includes the following PR
   #651 base. Return to `main` after #664 merges as described in the decision
   log; do not infer feature approval from that merge.
@@ -795,7 +805,9 @@ OrthoConfig format mandate.
 
 - 2026-11-09: Restacked on PR #664 to incorporate the nested Cargo timeout
   fix. Recorded the temporary target, exact replay boundary, and implementing
-  agent's return-to-main procedure without changing feature scope.
+  agent's return-to-main procedure without changing feature scope. Refreshed
+  the parent to `501ab831` after its process-ownership improvements landed
+  during validation; the initial-parent results remain historical evidence.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
