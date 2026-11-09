@@ -1376,13 +1376,15 @@ dropped, so another process's `cargo clean -p orthohelp_fixture` cannot
 interleave with this test's build or artefact read. Discovery itself only reads
 workspace metadata and is safe to run while another process holds the lease.
 The wait is bounded by the same scenario envelope the build uses, captured
-before the wait rather than after it: the lease and the build share the one
-per-test allowance nextest grants, so a target held by another runner produces
-a diagnostic naming the lease rather than consuming the allowance and leaving
-nextest to kill the test without saying which wait it was in. A two-process
-regression drives a second copy of the test binary: it proves the second
-process blocks on a held lease, sees the first process's artefact intact, and
-rebuilds it after the lease is released.
+before discovery rather than after the wait: metadata, the wait and every build
+share the one per-test allowance nextest grants. Discovery's own 30-second cap
+is charged to that envelope too, so the two phases cannot add up past nextest's
+ceiling. A target held by another runner therefore produces a diagnostic naming
+the lease rather than consuming the allowance and leaving nextest to kill the
+test without saying which wait it was in. A two-process regression drives a
+second copy of the test binary: it proves the second process blocks on a held
+lease, sees the first process's artefact intact, and rebuilds it after the
+lease is released.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:

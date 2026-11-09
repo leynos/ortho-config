@@ -22,6 +22,7 @@
 use super::identifier_artefact_e2e_support::{
     artefact, build_fixture, clean_fixture, fixture_cargo, locate_fixture,
 };
+use super::scenario;
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 #[cfg(windows)]
@@ -83,12 +84,15 @@ fn lease_helper() -> Result<()> {
         .read_to_string("out_dir.txt")
         .context("read the parent's build-script directory")?;
     let out_dir = PathBuf::from(out_dir_text.trim());
-    let location = locate_fixture()?;
+    // One envelope covers discovery, the lease wait and the rebuild, so time
+    // spent locating the target is not granted to this process twice.
+    let deadline = scenario::deadline();
+    let location = locate_fixture(deadline)?;
     scratch
         .write("located", b"located")
         .context("announce the located target")?;
     let started = Instant::now();
-    let cargo = location.lease()?;
+    let cargo = location.lease(deadline)?;
     let lease_wait = started.elapsed();
     // The parent released the lease only after confirming that this process had
     // not acquired it, so the artefact it built must still be there, unchanged.

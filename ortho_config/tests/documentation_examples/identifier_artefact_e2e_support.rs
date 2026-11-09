@@ -86,14 +86,13 @@ impl FixtureLocation {
     /// they coordinate one runner's tests, and `#[serial]` is a thread lock
     /// inside one process.
     ///
-    /// The scenario envelope is captured *before* the wait and bounds it, so
-    /// the wait and the build share the one allowance nextest grants this
-    /// test. Capturing it afterwards instead would leave the total unbounded:
-    /// a target held by another runner could consume the whole nextest
-    /// allowance and the test would be killed without saying which wait it was
-    /// in.
-    pub(super) fn lease(self) -> Result<FixtureCargo> {
-        let deadline = scenario::deadline();
+    /// `deadline` is the envelope captured before discovery, so metadata, this
+    /// wait and every later build share the one allowance nextest grants the
+    /// test. Starting a second envelope here would leave the total unbounded:
+    /// discovery's 30 second cap and the wait's full remainder could add up
+    /// past nextest's per-test ceiling, and the test would be killed before
+    /// the wait could name itself.
+    pub(super) fn lease(self, deadline: Instant) -> Result<FixtureCargo> {
         let lease = lease::acquire(&self.target_directory, deadline)?;
         Ok(FixtureCargo {
             repository: self.repository,
@@ -136,7 +135,8 @@ impl FixtureCargo {
 /// to rebuild. The returned value owns the lease file handle, so the target
 /// stays reserved until the test drops it or ends.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
-    locate_fixture()?.lease()
+    let deadline = scenario::deadline();
+    locate_fixture(deadline)?.lease(deadline)
 }
 
 /// Discover the fixture package and locate its private Cargo target.
@@ -144,8 +144,12 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
 /// This is the half of [`fixture_cargo`] that is safe to run concurrently with
 /// another process's lease: it only reads workspace metadata and creates the
 /// target directory, which is idempotent.
-pub(super) fn locate_fixture() -> Result<FixtureLocation> {
-    let deadline = scenario::deadline();
+///
+/// `deadline` is the test's whole envelope, and this call is already charged
+/// to it. Discovery is capped at 30 seconds; the lease wait that follows takes
+/// what is left, so the two cannot together outlast nextest's per-test
+/// allowance.
+pub(super) fn locate_fixture(deadline: Instant) -> Result<FixtureLocation> {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("find fixture workspace")?

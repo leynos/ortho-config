@@ -106,6 +106,7 @@ mod tests {
 
     use super::{LEASE_FILE_NAME, acquire};
     use anyhow::{Context, Result, ensure};
+    use std::sync::mpsc;
     use std::time::{Duration, Instant};
     use tempfile::TempDir;
 
@@ -126,6 +127,41 @@ mod tests {
         ensure!(
             format!("{error:#}").contains(LEASE_FILE_NAME),
             "the exhausted wait should name {LEASE_FILE_NAME:?}:\n{error:#}",
+        );
+        Ok(())
+    }
+
+    /// Time spent before the wait is charged to the same envelope.
+    ///
+    /// The fixture runs discovery before it asks for the lease, and both share
+    /// the envelope nextest grants the test. A wait that started its own
+    /// envelope would let discovery's 30 second cap and the wait's full
+    /// remainder add up past the 960 second ceiling, leaving nextest to kill
+    /// the test before either phase could report. The wait runs on its own
+    /// thread so a regression fails the bound below rather than blocking the
+    /// suite for the length of a fresh envelope.
+    #[test]
+    fn an_earlier_phase_is_charged_to_the_wait() -> Result<()> {
+        let target = TempDir::new().context("create the lease target")?;
+        let _held = acquire(target.path(), Instant::now() + Duration::from_secs(5))?;
+        // Discovery's share of the envelope, spent before the wait begins.
+        let deadline = Instant::now() + Duration::from_millis(600);
+        std::thread::sleep(Duration::from_millis(400));
+        let path = target.path().to_path_buf();
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let report = match acquire(&path, deadline) {
+                Ok(_) => "acquired a lease another handle still holds".to_owned(),
+                Err(error) => format!("{error:#}"),
+            };
+            let _receiver_gone = sender.send(report);
+        });
+        let report = receiver
+            .recv_timeout(Duration::from_secs(10))
+            .context("the wait did not end when the shared envelope expired")?;
+        ensure!(
+            report.contains(LEASE_FILE_NAME),
+            "the wait should end at the shared envelope and name {LEASE_FILE_NAME:?}:\n{report}",
         );
         Ok(())
     }

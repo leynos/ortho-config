@@ -187,3 +187,32 @@ def test_shared_documentation_builds_start_after_peer_tests() -> None:
         r"independently_owned_workspaces_support_concurrent_interleavings\b",
         workspace_tests,
     ), "the concurrent-workspace regression must not compete with other build tests"
+
+
+def test_the_identifier_fixture_charges_discovery_to_one_envelope() -> None:
+    """Keep discovery and the lease wait inside the same nextest allowance.
+
+    Discovery is capped at 30 seconds and runs before the lease wait; the
+    wait then takes what the envelope has left. Capturing the envelope a
+    second time after discovery would let the two phases add up past the
+    960 second per-test override, and nextest would stop the test before
+    the wait could name itself. Both halves therefore take the deadline,
+    and exactly one capture remains.
+    """
+    support = (SUPPORT / "identifier_artefact_e2e_support.rs").read_text(
+        encoding="utf-8"
+    )
+    captures = re.findall(r"scenario::deadline\(\)", support)
+    assert len(captures) == 1, (
+        "the identifier fixture must capture its scenario envelope once, "
+        f"found {len(captures)} captures"
+    )
+    assert re.search(r"fn locate_fixture\(deadline: Instant\)", support), (
+        "discovery must be charged to the caller's envelope"
+    )
+    assert re.search(r"fn lease\(self, deadline: Instant\)", support), (
+        "the lease wait must be charged to the caller's envelope"
+    )
+    assert re.search(r"locate_fixture\(deadline\)\?\.lease\(deadline\)", support), (
+        "the fixture must pass one envelope through discovery and the lease"
+    )
