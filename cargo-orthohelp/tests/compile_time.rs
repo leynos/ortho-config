@@ -4,9 +4,17 @@
 //! rejected by the compiler (e.g. ignoring `#[must_use]` return values) do in
 //! fact fail to compile.
 
-use std::{path::Path, process::Command};
+use std::{ffi::OsString, path::Path, process::Command, time::Duration};
 
 const TRYBUILD_CHILD_ENV: &str = "ORTHOHELP_TRYBUILD_CHILD";
+/// Child budget that must expire before nextest's own 960 s tier does.
+///
+/// The tier is eight 120 s warning periods. A child killed by nextest reports
+/// nothing but a timeout, so this budget ends first and lets the parent print
+/// the captured streams. The worst finished trybuild binary reached 572.5 s
+/// and `must_use_compile_tests` was killed at 600.2 s while still cold, so the
+/// budget is set well above both while leaving a minute for reporting.
+const TRYBUILD_CHILD_DEADLINE: Duration = Duration::from_secs(900);
 const RUSTFLAGS_SEPARATOR: char = '\u{1f}';
 const CARGO_CONFIG: &str = include_str!("../../.cargo/config.toml");
 const DEV_FAST_RUSTFLAGS: [&str; 5] = [
@@ -40,27 +48,91 @@ struct RustflagsInputs<'a> {
     build: Option<&'a str>,
 }
 
-fn trybuild_rustflags(package_root: &Path) -> String {
-    let encoded_flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").ok();
-    let rustflags = std::env::var("RUSTFLAGS").ok();
-    // Cargo joins triple-specific flags with matching target tables before
-    // considering the build-wide value.
-    let target_key = format!(
-        "CARGO_TARGET_{}_RUSTFLAGS",
-        target_tuple::TARGET.to_ascii_uppercase().replace('-', "_")
-    );
-    let target_override = std::env::var(target_key).ok();
-    let target_rustflags =
-        matching_target_rustflags(target_override.as_deref(), cfg!(target_os = "linux"));
-    let build_rustflags = std::env::var("CARGO_BUILD_RUSTFLAGS").ok();
-    let flags = selected_rustflags(RustflagsInputs {
-        encoded: encoded_flags.as_deref(),
-        plain: rustflags.as_deref(),
-        target: target_rustflags.as_deref(),
-        build: build_rustflags.as_deref(),
-    });
+/// A compiler-flag variable that exists but cannot be read as text.
+#[derive(Debug, thiserror::Error)]
+enum RustflagsEnvironmentError {
+    #[error("{name} is set but is not valid Unicode; unset it or use a text value")]
+    NotUnicode { name: String },
+}
+
+/// The raw compiler-flag variables present in the process environment.
+///
+/// Keeping this separate from flag selection lets the selection rules be
+/// tested without touching the environment, and keeps absence distinct from an
+/// unreadable value.
+struct RustflagsEnvironment {
+    encoded: Option<String>,
+    plain: Option<String>,
+    target: Option<String>,
+    build: Option<String>,
+}
+
+impl RustflagsEnvironment {
+    fn from_process() -> Result<Self, RustflagsEnvironmentError> {
+        // Cargo joins triple-specific flags with matching target tables before
+        // considering the build-wide value.
+        let target_key = format!(
+            "CARGO_TARGET_{}_RUSTFLAGS",
+            target_tuple::TARGET.to_ascii_uppercase().replace('-', "_")
+        );
+        Ok(Self {
+            encoded: read_flag_variable("CARGO_ENCODED_RUSTFLAGS")?,
+            plain: read_flag_variable("RUSTFLAGS")?,
+            target: read_flag_variable(&target_key)?,
+            build: read_flag_variable("CARGO_BUILD_RUSTFLAGS")?,
+        })
+    }
+}
+
+/// Read one flag variable, reporting an unreadable value instead of dropping
+/// it.
+///
+/// `std::env::var(name).ok()` would fold `NotUnicode` into `NotPresent`, which
+/// silently changes the flags the child build receives. A missing variable is
+/// genuinely absent, so it stays `None`.
+fn read_flag_variable(name: &str) -> Result<Option<String>, RustflagsEnvironmentError> {
+    decode_flag_variable(name, std::env::var_os(name))
+}
+
+/// Convert one flag variable supplied as an OS string.
+fn decode_flag_variable(
+    name: &str,
+    value: Option<OsString>,
+) -> Result<Option<String>, RustflagsEnvironmentError> {
+    value
+        .map(|value| {
+            value
+                .into_string()
+                .map_err(|_| RustflagsEnvironmentError::NotUnicode {
+                    name: name.to_owned(),
+                })
+        })
+        .transpose()
+}
+
+fn trybuild_rustflags(package_root: &Path) -> Result<String, RustflagsEnvironmentError> {
+    let environment = RustflagsEnvironment::from_process()?;
+    let flags = selected_environment_rustflags(&environment, cfg!(target_os = "linux"));
     let is_coverage_build = has_coverage_instrumentation(&flags);
-    compose_trybuild_rustflags(&flags, is_coverage_build, package_root)
+    Ok(compose_trybuild_rustflags(
+        &flags,
+        is_coverage_build,
+        package_root,
+    ))
+}
+
+/// Select the child's compiler flags from the variables the process carries.
+fn selected_environment_rustflags(
+    environment: &RustflagsEnvironment,
+    is_linux: bool,
+) -> Vec<String> {
+    let target_rustflags = matching_target_rustflags(environment.target.as_deref(), is_linux);
+    selected_rustflags(RustflagsInputs {
+        encoded: environment.encoded.as_deref(),
+        plain: environment.plain.as_deref(),
+        target: target_rustflags.as_deref(),
+        build: environment.build.as_deref(),
+    })
 }
 
 fn matching_target_rustflags(target: Option<&str>, is_linux: bool) -> Option<Vec<String>> {
@@ -180,26 +252,38 @@ fn compose_trybuild_rustflags(
 #[path = "compile_time/flags_tests.rs"]
 mod flags_tests;
 
+#[path = "compile_time/flag_composition_property_tests.rs"]
+mod flag_composition_property_tests;
+
 #[test]
 fn must_use_compile_tests() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var_os(TRYBUILD_CHILD_ENV).is_none() {
         // Nextest may start workspace tests outside this package. Running the
         // child from the package directory lets trybuild discover the same
         // source root that rustc uses for diagnostic paths.
-        let status = Command::new(std::env::current_exe()?)
+        let mut command = Command::new(std::env::current_exe()?);
+        command
             .args(["--exact", "must_use_compile_tests", "--nocapture"])
             .env(TRYBUILD_CHILD_ENV, "1")
             .env_remove("CARGO_MANIFEST_DIR")
             .env(
                 "CARGO_ENCODED_RUSTFLAGS",
-                trybuild_rustflags(Path::new(env!("CARGO_MANIFEST_DIR"))),
+                trybuild_rustflags(Path::new(env!("CARGO_MANIFEST_DIR")))?,
             )
-            .current_dir(env!("CARGO_MANIFEST_DIR"))
-            .status()?;
-        if !status.success() {
-            return Err(
-                std::io::Error::other(format!("trybuild child exited with {status}")).into(),
-            );
+            .current_dir(env!("CARGO_MANIFEST_DIR"));
+        let output = test_helpers::process::run_with_deadline(
+            command,
+            TRYBUILD_CHILD_DEADLINE,
+            "trybuild child",
+        )?;
+        if !output.status.success() {
+            return Err(std::io::Error::other(format!(
+                "trybuild child exited with {}\n--- stdout ---\n{}--- stderr ---\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            ))
+            .into());
         }
         return Ok(());
     }

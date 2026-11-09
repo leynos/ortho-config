@@ -224,28 +224,81 @@ fn absent_target_flags_without_a_matching_cfg_allow_build_flags() {
 }
 
 #[test]
-fn target_environment_reaches_encoded_child_flags() {
+fn target_environment_reaches_encoded_child_flags() -> Result<(), Box<dyn std::error::Error>> {
     const MARKER: &str = "ORTHOHELP_TARGET_FLAGS_PROBE";
     const FLAG: &str = "--cfg=orthohelp_target_flags_probe";
     if std::env::var_os(MARKER).is_some() {
-        let flags = trybuild_rustflags(Path::new("/workspace/package"));
+        let flags = trybuild_rustflags(Path::new("/workspace/package"))?;
         assert!(flags.split(RUSTFLAGS_SEPARATOR).any(|flag| flag == FLAG));
-    } else {
-        let key = format!(
-            "CARGO_TARGET_{}_RUSTFLAGS",
-            target_tuple::TARGET.to_ascii_uppercase().replace('-', "_")
-        );
-        let status = Command::new(std::env::current_exe().expect("find test executable"))
-            .args([
-                "--exact",
-                "flags_tests::target_environment_reaches_encoded_child_flags",
-            ])
-            .env(MARKER, "1")
-            .env(key, FLAG)
-            .env_remove("CARGO_ENCODED_RUSTFLAGS")
-            .env_remove("RUSTFLAGS")
-            .status()
-            .expect("run target-flags probe");
-        assert!(status.success(), "the target-flags probe failed: {status}");
+        return Ok(());
     }
+
+    let key = format!(
+        "CARGO_TARGET_{}_RUSTFLAGS",
+        target_tuple::TARGET.to_ascii_uppercase().replace('-', "_")
+    );
+    let mut command = Command::new(std::env::current_exe()?);
+    command
+        .args([
+            "--exact",
+            "flags_tests::target_environment_reaches_encoded_child_flags",
+        ])
+        .env(MARKER, "1")
+        .env(key, FLAG)
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("RUSTFLAGS");
+    let output = test_helpers::process::run_with_deadline(
+        command,
+        TRYBUILD_CHILD_DEADLINE,
+        "target-flags probe child",
+    )?;
+    assert!(
+        output.status.success(),
+        "the target-flags probe failed: {}\n--- stdout ---\n{}--- stderr ---\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    Ok(())
+}
+
+#[test]
+fn absent_flag_variable_is_not_an_error() -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(decode_flag_variable("RUSTFLAGS", None)?, None);
+    assert_eq!(
+        decode_flag_variable("RUSTFLAGS", Some(OsString::from("--cfg=ok")))?,
+        Some("--cfg=ok".to_owned())
+    );
+    Ok(())
+}
+
+#[test]
+fn non_unicode_flag_variable_is_reported_not_dropped() {
+    let error = decode_flag_variable("RUSTFLAGS", Some(non_unicode_value()))
+        .expect_err("an unreadable value must not be treated as absent");
+    assert!(
+        matches!(error, RustflagsEnvironmentError::NotUnicode { ref name } if name == "RUSTFLAGS"),
+        "unexpected error: {error:?}"
+    );
+    assert!(
+        error.to_string().contains("RUSTFLAGS"),
+        "unhelpful message: {error}"
+    );
+}
+
+/// Build an OS string that is not valid Unicode on this platform.
+#[cfg(unix)]
+fn non_unicode_value() -> OsString {
+    use std::os::unix::ffi::OsStringExt;
+
+    OsString::from_vec(b"--cfg=\xff".to_vec())
+}
+
+/// Build an OS string that is not valid Unicode on this platform.
+#[cfg(windows)]
+fn non_unicode_value() -> OsString {
+    use std::os::windows::ffi::OsStringExt;
+
+    // An unpaired high surrogate has no UTF-16 text representation.
+    OsString::from_wide(&[0x002d, 0x0043, 0xd800])
 }
