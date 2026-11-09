@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current at every milestone.
 
-Status: DRAFT
+Status: APPROVED (2026-11-10; implementation authorized)
 
 ## Purpose / big picture
 
@@ -176,7 +176,15 @@ explicitly approves it and the prerequisites below are complete.
   `/tmp/ortho-632-501-<gate>.out`. These runs reused existing build caches;
   they do not establish a cold-cache timing guarantee. Publication targets
   `issue-644-nested-cargo-timeouts`; implementation remains approval-gated.
-- [ ] Begin implementation only after explicit approval and EP-M0 passes.
+- [x] (2026-11-10) Maintainer approved the plan and authorized implementation.
+  EP-M0 rechecked the base at `origin/main` `9e1bf404`: 6.3.1 is complete, but
+  7.1.2 and 7.1.3 are still unimplemented (`PolicyInputs` is empty; the
+  global-option glossary exists only as design §5 prose) and no open pull
+  request carries them. The maintainer chose full delivery over the plan's stop
+  rule, so the shared global-option glossary is delivered here as an additive
+  extension of `policy::vocabulary` rather than as a second vocabulary.
+  Recorded in the Decision log.
+- [ ] EP-M1: specify the normalized input contract and passing contract tests.
 
 ## Surprises & discoveries
 
@@ -210,6 +218,17 @@ explicitly approves it and the prerequisites below are complete.
 
 ## Decision log
 
+- Decision (2026-11-10): Deliver the full 6.3.2 feature on the maintainer's
+  explicit approval, notwithstanding the incomplete 7.1.2 and 7.1.3
+  prerequisites. The canonical human-facing global-option glossary from
+  `docs/agent-native-cli-design.md` §5 is added to `cargo_orthohelp::policy`
+  `::vocabulary` as a shared lookup (concept, canonical name, accepted values,
+  and near-miss names). The `Vocabulary` wire struct is deliberately not
+  extended, so the policy-report and agent-context schemas keep version 1.
+  `skill_validation` consumes that one glossary and `is_canonical_flag`; it
+  does not carry a private copy. Roadmap 7.1.2 and 7.1.3 remain separate items
+  whose remaining work is the bridge-IR lint wiring, not the glossary data.
+  Date/Author: 2026-11-10, approved deviation.
 - Decision (2026-11-09): Temporarily target
   `issue-644-nested-cargo-timeouts` (PR #664). Its serialized nested Cargo
   operations and bounded diagnostic capture address the timeout blocker in the
