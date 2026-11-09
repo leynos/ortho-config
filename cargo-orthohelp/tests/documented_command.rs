@@ -34,6 +34,28 @@ use tempfile::TempDir;
 // deadline queued behind another's cold bridge build.
 static DOCUMENTED_RUN_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
+/// One file the documented commands promise to write.
+///
+/// Naming the artefacts here keeps the file names next to the promises and
+/// stops a typo from reading as a missing output.
+#[derive(Clone, Copy, Debug)]
+enum Artefact {
+    /// The generated `agent-context.json` document.
+    AgentContext,
+    /// The generated `policy-report.json` document.
+    PolicyReport,
+}
+
+impl Artefact {
+    /// The name the command writes the artefact under.
+    const fn file_name(self) -> &'static str {
+        match self {
+            Self::AgentContext => "agent-context.json",
+            Self::PolicyReport => "policy-report.json",
+        }
+    }
+}
+
 /// A finished `cargo orthohelp` run and the directory it wrote into.
 struct OrthohelpRun {
     output: Output,
@@ -47,8 +69,9 @@ impl OrthohelpRun {
         std::str::from_utf8(&self.output.stdout).context("cargo-orthohelp stdout is UTF-8")
     }
 
-    /// Read one file the run wrote into its output directory.
-    fn read_artefact(&self, name: &str) -> Result<String> {
+    /// Read one artefact the run wrote into its output directory.
+    fn read_artefact(&self, artefact: Artefact) -> Result<String> {
+        let name = artefact.file_name();
         Dir::open_ambient_dir(self.out_dir.path(), ambient_authority())?
             .read_to_string(name)
             .with_context(|| format!("read generated {name}"))
@@ -90,11 +113,29 @@ fn run_orthohelp(args: &[&str], environment: &[(&str, &str)]) -> Result<Orthohel
     Ok(OrthohelpRun { output, out_dir })
 }
 
-/// Count exported bridge-cache metric events for one operation and outcome.
+/// One bridge-cache metric event, as its bounded labels name it.
 #[cfg(feature = "metrics")]
-fn cache_event_count(stderr: &str, operation: &str, outcome: &str) -> usize {
-    let operation_label = format!("operation={operation}");
-    let outcome_label = format!("outcome={outcome}");
+#[derive(Clone, Copy, Debug)]
+struct CacheEvent {
+    /// The cache operation the counter describes.
+    operation: &'static str,
+    /// The outcome that counter recorded.
+    outcome: &'static str,
+}
+
+#[cfg(feature = "metrics")]
+impl CacheEvent {
+    /// Name one exported cache event.
+    const fn new(operation: &'static str, outcome: &'static str) -> Self {
+        Self { operation, outcome }
+    }
+}
+
+/// Count exported bridge-cache metric events matching one event.
+#[cfg(feature = "metrics")]
+fn cache_event_count(stderr: &str, event: CacheEvent) -> usize {
+    let operation_label = format!("operation={}", event.operation);
+    let outcome_label = format!("outcome={}", event.outcome);
     stderr
         .lines()
         .filter(|line| line.contains("cargo_orthohelp.bridge_cache.events"))
@@ -112,7 +153,7 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
         &[],
     )?;
     run.ensure_success("documented agent-context command")?;
-    let payload: Value = serde_json::from_str(&run.read_artefact("agent-context.json")?)?;
+    let payload: Value = serde_json::from_str(&run.read_artefact(Artefact::AgentContext)?)?;
     ensure!(payload.get("package").and_then(Value::as_str) == Some("hello_world"));
     ensure!(payload.get("kind").and_then(Value::as_str) == Some("hello_world.agent_context"));
 
@@ -138,7 +179,7 @@ fn documented_policy_check_reports_the_effective_mode(
 ) -> Result<()> {
     let run = run_orthohelp(&["--check-agent-native", "--package", package], &[])?;
     run.ensure_success(&format!("policy check for {package}"))?;
-    let report: Value = serde_json::from_str(&run.read_artefact("policy-report.json")?)?;
+    let report: Value = serde_json::from_str(&run.read_artefact(Artefact::PolicyReport)?)?;
     let stdout = run.stdout()?;
     ensure!(
         stdout.ends_with('\n') && stdout.trim_end().lines().count() == 1,
@@ -154,7 +195,10 @@ fn documented_policy_check_reports_the_effective_mode(
         "stderr should hold a one-line summary"
     );
     ensure!(
-        !run.out_dir.path().join("agent-context.json").exists(),
+        !run.out_dir
+            .path()
+            .join(Artefact::AgentContext.file_name())
+            .exists(),
         "a policy-only run should skip generation"
     );
 
@@ -188,15 +232,15 @@ fn cache_metrics_reach_stderr_through_the_cli_recorder() -> Result<()> {
     let first = run_orthohelp(&ARGS, &ENVIRONMENT)?;
     first.ensure_success("metrics-enabled cached run")?;
     let first_stderr = String::from_utf8_lossy(&first.output.stderr).into_owned();
-    let hit_count = cache_event_count(&first_stderr, "lookup", "hit");
-    let miss_count = cache_event_count(&first_stderr, "lookup", "miss");
+    let hit_count = cache_event_count(&first_stderr, CacheEvent::new("lookup", "hit"));
+    let miss_count = cache_event_count(&first_stderr, CacheEvent::new("lookup", "miss"));
     ensure!(
         hit_count + miss_count == 1,
         "the first run should export exactly one lookup event:\n{first_stderr}"
     );
     if miss_count == 1 {
         ensure!(
-            cache_event_count(&first_stderr, "publish", "updated") == 1,
+            cache_event_count(&first_stderr, CacheEvent::new("publish", "updated")) == 1,
             "a cache miss should publish the generated IR:\n{first_stderr}"
         );
     }
@@ -205,11 +249,11 @@ fn cache_metrics_reach_stderr_through_the_cli_recorder() -> Result<()> {
     second.ensure_success("metrics-enabled warm run")?;
     let second_stderr = String::from_utf8_lossy(&second.output.stderr).into_owned();
     ensure!(
-        cache_event_count(&second_stderr, "lookup", "hit") == 1,
+        cache_event_count(&second_stderr, CacheEvent::new("lookup", "hit")) == 1,
         "the repeat run should hit the IR published by the first:\n{second_stderr}"
     );
     ensure!(
-        cache_event_count(&second_stderr, "publish", "updated") == 0,
+        cache_event_count(&second_stderr, CacheEvent::new("publish", "updated")) == 0,
         "a cache hit should not republish the IR:\n{second_stderr}"
     );
     Ok(())
