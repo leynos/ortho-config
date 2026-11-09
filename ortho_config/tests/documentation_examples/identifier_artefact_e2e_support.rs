@@ -7,16 +7,22 @@
 
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
-use cap_std::{ambient_authority, fs::Dir};
+use cap_std::{
+    ambient_authority,
+    fs::{Dir, File, OpenOptions},
+};
+use fs4::{FileExt, TryLockError};
 use serde_json::Value;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
 const FIXTURE_TARGET_DIRECTORY: &str = "identifier-e2e";
+const FIXTURE_LOCK_FILE: &str = "fixture.lock";
+const LOCK_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
 
 #[derive(Default)]
@@ -105,6 +111,12 @@ pub(super) struct FixtureCargo {
     target_directory: PathBuf,
     package_id: String,
     deadline: Instant,
+    /// Exclusive ownership of the shared target, held for the scenario.
+    ///
+    /// Cargo serialises each command it runs, but the scenario also inspects
+    /// and cleans between commands, so the whole sequence needs the lock. The
+    /// lock is released when this file drops with the fixture.
+    _lock: File,
 }
 
 impl FixtureCargo {
@@ -167,15 +179,46 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         Err(error) => return Err(error).context("create private Cargo target"),
     }
     let target_directory = workspace_target_path.join(FIXTURE_TARGET_DIRECTORY);
-    Dir::open_ambient_dir(&target_directory, ambient_authority())?
+    let fixture_dir = Dir::open_ambient_dir(&target_directory, ambient_authority())?;
+    fixture_dir
         .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
         .context("write Cargo cache-directory tag")?;
+    let lock = lock_fixture_target(&fixture_dir, deadline)?;
     Ok(FixtureCargo {
         repository,
         target_directory,
         package_id: package_id.to_owned(),
         deadline,
+        _lock: lock,
     })
+}
+
+/// Wait for exclusive ownership of the shared fixture target.
+///
+/// Any `cargo test` run on this workspace reuses the same target path, and the
+/// identifier scenario cleans and rebuilds between commands. The lock covers
+/// the whole lifetime of [`FixtureCargo`] so no other run can delete the
+/// artefact between those steps.
+fn lock_fixture_target(directory: &Dir, deadline: Instant) -> Result<File> {
+    let lock = directory
+        .open_with(
+            FIXTURE_LOCK_FILE,
+            OpenOptions::new().read(true).write(true).create(true),
+        )?
+        .into_std();
+    loop {
+        match FileExt::try_lock(&lock) {
+            Ok(()) => return Ok(File::from_std(lock)),
+            Err(TryLockError::Error(error)) => {
+                return Err(error).context("lock shared identifier fixture target");
+            }
+            Err(TryLockError::WouldBlock) => {
+                scenario::remaining(deadline)
+                    .context("identifier fixture target stayed locked by another run")?;
+                std::thread::sleep(LOCK_POLL_INTERVAL);
+            }
+        }
+    }
 }
 
 /// Build the fixture with optional artefact emission and find its reported output directory.
