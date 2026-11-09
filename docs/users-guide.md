@@ -1117,9 +1117,13 @@ budget rather than an opaque panic.
 
 The helpers own execution, cleanup, and capture only. The caller still builds
 the command, chooses its environment, serializes it against other tests, and
-interprets the returned status and output. Capture is bounded at 1 MiB per
-stream while remaining drained, so a chatty child cannot exhaust memory or
-deadlock on a full pipe. Output activity does not extend a deadline.
+interprets the returned status and output. Both streams are drained
+continuously while the child runs, so a chatty child cannot deadlock on a full
+pipe, and the returned `Output` carries everything the child wrote: the shared
+runners keep the complete output because callers report compiler diagnostics in
+full. Memory therefore grows with what the child writes, so a caller that
+starts a child with unbounded output must bound that output itself. Output
+activity does not extend a deadline.
 
 These helpers are test-only: use them from tests and test fixtures, never from
 production code. A test runner that needs its own diagnostics or capture policy
@@ -1595,11 +1599,12 @@ directly.
 ## Collect bridge-cache metrics
 
 The optional `metrics` feature enables a counter for `cargo-orthohelp` bridge
-cache outcomes. Enable it when installing the tool:
+cache outcomes. It is new in v0.11.0, and the published v0.10.0 package does
+not carry it, so install from a source checkout until that release ships:
 
 <!-- tested-example: guide-orthohelp-bridge-cache-metrics -->
 ```console
-cargo install cargo-orthohelp --version 0.10.0 --features metrics
+cargo install --path cargo-orthohelp --features metrics
 ```
 
 The counter is `cargo_orthohelp.bridge_cache.events`. Its bounded `operation`

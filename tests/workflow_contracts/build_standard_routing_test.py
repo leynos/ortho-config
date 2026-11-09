@@ -218,8 +218,8 @@ def test_the_linker_is_scoped_to_the_linux_table_alone() -> None:
 def test_cranelift_is_the_development_backend_only() -> None:
     """Cargo and Make select Cranelift for development; explicit routes opt out.
 
-    The known unwind limitation is recorded in the developers' guide and ADR
-    0017. This contract checks the intended config and Make route while
+    The known unwind limitation is recorded in the developers' guide and
+    ADR-0019. This contract checks the intended config and Make route while
     preserving LLVM for coverage, releases and other explicit workflows.
     """
     document = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))

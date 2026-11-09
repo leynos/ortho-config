@@ -164,14 +164,14 @@ the accepted keys with worked examples.
 
 ## 6. Collect bridge-cache metrics from the CLI
 
-The optional `metrics` feature is unchanged: it still emits
+The `metrics` feature is new in `cargo-orthohelp` v0.11.0; the published
+v0.10.0 package does not carry it. The feature emits
 `cargo_orthohelp.bridge_cache.events` with the bounded `operation` and
 `outcome` labels described in the
-[user's guide](users-guide.md#collect-bridge-cache-metrics). What changed is
-the default collection path. The standalone `cargo-orthohelp` binary now
-installs a `tracing`-backed recorder at startup, so a build with
-`--features metrics` exports each counter update to standard error as a
-structured `tracing` event under the `cargo_orthohelp::metrics` target:
+[user's guide](users-guide.md#collect-bridge-cache-metrics). The standalone
+`cargo-orthohelp` binary installs a `tracing`-backed recorder at startup, so a
+build with `--features metrics` exports each counter update to standard error
+as a structured `tracing` event under the `cargo_orthohelp::metrics` target:
 
 ```console
 RUST_LOG=cargo_orthohelp::metrics=debug cargo orthohelp --package acme
@@ -179,7 +179,7 @@ RUST_LOG=cargo_orthohelp::metrics=debug cargo orthohelp --package acme
 
 A host that installs its own `metrics` recorder before starting the CLI keeps
 it, because the CLI claims the process-wide recorder slot only when it is free.
-No code change is required: the feature remains off by default, and a build
+Nothing is required to upgrade: the feature is off by default, and a build
 without it behaves exactly as before.
 
 ## 7. Run test subprocesses through the shared helpers

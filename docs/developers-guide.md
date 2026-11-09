@@ -1274,6 +1274,14 @@ single test-only inclusion preserves `ortho_l10n`'s explicit ban on the
 workspace test-helper package in its resolved graph and packaged manifest. Do
 not weaken that boundary or copy the process implementation.
 
+The shared runner keeps every captured byte, because its callers report Cargo
+and compiler diagnostics in full; both streams are drained concurrently, so a
+full pipe never blocks the child, and the test process's memory grows with what
+the child writes. A caller that starts a child with unbounded output owns that
+bound. The documentation-example runner keeps its own diagnostics policy, so
+its per-stream capture stays capped at 1 MiB and reports truncation; the two
+policies are deliberate, and neither may be described as the other.
+
 Callers retain ownership of command construction, environment policy, any
 serialization lock, and interpretation of the returned status and output. Use
 the lower-level reader or platform tree modules only when a specialized test
