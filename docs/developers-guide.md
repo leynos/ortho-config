@@ -242,15 +242,30 @@ deadline of the call that is counting. Without it, the consumer contracts and
 the four negative controls queue on the one target directory they share, and a
 healthy child waiting for its turn reads as a hang.
 
-The same override carries the per-test allowance, 960 s (120 s x 8). One
-packaged test runs both `cargo package` invocations, each bounded at 440 s by
-`PACKAGE_DEADLINE`, so the pair fits with 80 s for the root checks around them.
-A consumer contract resolves and then builds, each call bounded at 440 s by
-`CARGO_DEADLINE`, for the same reason. A deadline that did not fit could never
+The same override carries the per-test allowance, 960 s (120 s x 8). A
+per-invocation deadline cannot bound a contract that makes several calls: the
+packaged consumer contract packages the set and then builds and resolves each
+of the three shapes, so eight calls at a 440 s cap apiece could spend 3,520 s
+of a 960 s allowance, and nextest would stop the test before any later call
+reported its own deadline. Every contract therefore shares one 900 s
+`SCENARIO_ALLOWANCE` (`fixture_cargo/budget.rs`), passed explicitly from the
+test to every fixture it creates. Each call is bounded by the smaller of its
+own cap and what the allowance has left; a call that starts with nothing left
+fails naming itself and the allowance, and a call clamped by the allowance says
+so in its deadline error. The 60 s outside the budget cover rendering fixture
+roots, reading manifests, and reporting.
+
+One packaged test runs both `cargo package` invocations, each bounded at 440 s
+by `PACKAGE_DEADLINE`. A consumer contract resolves and then builds, each call
+bounded at 440 s by `CARGO_DEADLINE`. A bound that did not fit could never
 fire: nextest would stop the test first, and the error naming the invocation
 that hung would never be printed. `boundary_packaging_test.py` reads the group,
-the manifest, the override's allowance and both deadlines so neither half can
-drift from the other.
+the manifest, the override's allowance, both caps, the shared allowance and the
+consumer shape count, so neither half can drift from the other. It checks that
+the shared allowance expires inside the nextest allowance, that each cap fits
+inside the shared allowance, and that the complete call sequence is longer than
+the shared allowance, which is what makes the shared budget load-bearing rather
+than a restatement of the caps.
 
 The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
 against the 600 s base allowance. They were reached on a shared host while the
@@ -1355,14 +1370,19 @@ components only.
 Because the target is fixed, it is shared state. nextest's `boundary_packaging`
 group and the test's `#[serial]` attribute coordinate tests inside one runner,
 but neither excludes a second test process on the same checkout. The identifier
-test therefore holds an exclusive operating-system file lease (standard
-`File::lock`) inside the private target from discovery until the fixture is
+test therefore holds an exclusive operating-system file lease (a loop over
+`File::try_lock`) inside the private target from discovery until the fixture is
 dropped, so another process's `cargo clean -p orthohelp_fixture` cannot
 interleave with this test's build or artefact read. Discovery itself only reads
-workspace metadata and is safe to run while another process holds the lease. A
-two-process regression drives a second copy of the test binary: it proves the
-second process blocks on a held lease, sees the first process's artefact
-intact, and rebuilds it after the lease is released.
+workspace metadata and is safe to run while another process holds the lease.
+The wait is bounded by the same scenario envelope the build uses, captured
+before the wait rather than after it: the lease and the build share the one
+per-test allowance nextest grants, so a target held by another runner produces
+a diagnostic naming the lease rather than consuming the allowance and leaving
+nextest to kill the test without saying which wait it was in. A two-process
+regression drives a second copy of the test binary: it proves the second
+process blocks on a held lease, sees the first process's artefact intact, and
+rebuilds it after the lease is released.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:
