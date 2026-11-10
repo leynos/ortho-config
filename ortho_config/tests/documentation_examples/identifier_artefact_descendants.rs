@@ -36,6 +36,10 @@ use std::process::Command;
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
+#[cfg(all(test, unix))]
+#[path = "identifier_artefact_descendants_property_tests.rs"]
+mod property_tests;
+
 /// How long the Unix teardown waits for its recorded descendants to disappear.
 ///
 /// A process that has been sent `SIGKILL` cannot refuse, so this only allows
