@@ -740,15 +740,16 @@ generation in `ortho_config_macros`; and aggregate translation reports in
   optional feature for this adapter and dependency. `cargo-orthohelp`
   translation tooling is an integration point: the bridge adapts an
   application-owned loader and neither creates nor owns it.
-- `ClapErrorCoverage` and the exhaustive error-kind count gate remain proposed.
-  The proposed `ortho_config/build.rs` emits
-  `ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` for the total variant count of the
-  supported resolved `clap_builder` identity and verifies the compiled `clap`
-  facade re-export. Only then is `const_assert_eq!` against the matrix length a
-  mechanical gate. `ClapErrorCoverage` reports translated identifiers the
-  supplied localizer cannot resolve. See
-  [design §6.1.1](cli-localization-design.md#611-proposed-coverage-gate) and
-  §6.2 for the contract.
+- `ClapErrorCoverage` remains proposed. The error-kind coverage gate is a
+  test-only pre-publication check, not a build script: it verifies this
+  workspace's resolved `clap` → `clap_builder` identity against the root
+  `Cargo.lock` and `cargo metadata --locked --offline`, counts the `ErrorKind`
+  variants with `syn`, and compares that count with a reviewed test constant
+  that `const_assert_eq!` also checks against the matrix length. It makes no
+  claim about consumer resolutions. `ClapErrorCoverage` reports translated
+  identifiers the supplied localizer cannot resolve. See
+  [design §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate)
+  and §6.2 for the contract.
 - `MissingTranslationReporter` / `MissingTranslationEvent` and
   `cargo-orthohelp` JSON translation coverage reports remain roadmap work; the
   proposed reporter aggregates events under

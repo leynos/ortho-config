@@ -83,6 +83,9 @@
 - [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
   review the pinned Kani and Verus boundary, the bundled-solver decision, the
   opt-in integration evidence, and the limits of a fixture proof.
+- [ADR-0018: Pre-publication clap coverage gate](adrs/adr-0018-pre-publication-clap-coverage-gate.md):
+  review the test-only workspace gate for `ErrorKind` growth, the build-time
+  identity mechanism it supersedes, and the limits of the guarantee.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -172,6 +175,10 @@
   usage of the Whitaker lint suite
 
 ## Execution plans
+
+- [Ship the en-US clap error matrix](execplans/11-2-1-ship-en-us-translations-for-clap-stable-error-matrix.md):
+  approval-gated plan for roadmap task 11.2.1, exhaustive translation coverage,
+  and the mechanical clap variant-count gate.
 
 - [Import Kani and Verus tooling](execplans/import-prover-tools.md): review
   the proposed pinned prover integration and its feature-adoption boundary.

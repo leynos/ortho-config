@@ -456,60 +456,72 @@ The crate ships en-US translations for every raisable variant in stable clap
 are recorded but **not** translated — clap renders the help or version text
 itself, and the matrix marks them with a `DisplayOnly` sentinel.
 
-For each supported `clap_builder` package identity, the intended matrix has one
-entry for every declared variant, either with a translated Fluent identifier or
-with the `DisplayOnly` sentinel. The matrix shape permits a single
-`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison once the gate's source
-identity contract below is enforced.
+For each supported `clap_builder` package identity, the matrix has one entry
+for every declared variant, either with a translated Fluent identifier or with
+the `DisplayOnly` sentinel. The matrix shape permits a single length comparison
+against the reviewed total described in §6.1.1.
 
-#### 6.1.1 Proposed coverage gate
+#### 6.1.1 Pre-publication coverage gate
 
-`clap::error::ErrorKind` is `#[non_exhaustive]`; the proposed gate is intended
-to detect coverage gaps rather than rely solely on a release-time audit. A
-checked-in or generated count manifest must bind each count to an explicitly
-supported `clap_builder` package identity: package version, registry or source
-identity, and checksum. `ErrorKind` is defined by `clap_builder` and
-re-exported by the `clap` facade. In this workspace, the lockfile identifies
-`clap_builder` `4.6.0` from
+`clap::error::ErrorKind` is `#[non_exhaustive]`, so a clap release can add a
+variant the matrix does not cover. The gate that detects this is a test-only
+pre-publication check in this repository. It is not a build script, and it
+makes no claim about consumer builds. A dependency's build script cannot
+observe its dependent's dependency resolution, so the build-time variant
+originally proposed here cannot be implemented; see
+[ADR-0018](../adrs/adr-0018-pre-publication-clap-coverage-gate.md) for the
+evidence and the rejected alternatives.
+
+The check reads the root workspace `Cargo.lock` and selects the unique locked
+`clap` that `ortho_config` uses as a normal production dependency for the
+configured target and features, recording that package's version, source
+identity, and checksum. It follows the `clap` → `clap_builder` normal
+dependency edge to exactly one `clap_builder` identity and cross-checks both
+package identities and the edge against `cargo metadata --locked --offline` for
+the same target and feature selection. Lock and metadata disagreement, a source
+override, multiple candidates, a missing or unexpected edge, or an unsupported
+identity fails the check before any count is compared.
+
+For the supported registry identity the check locates the source defining
+`ErrorKind` through metadata's `manifest_path` — never by inferring a path from
+registry directory names — parses it with `syn`, and counts every top-level
+variant without assigning meaning to any of them. Attributes and `cfg`
+conditions are audited for the supported source, and a declaration shape whose
+compiled inventory cannot be established exhaustively fails closed.
+
+The count is the total declared variant count for that builder package, not
+only the raisable variants; classification as translated or `DisplayOnly`
+remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit
+test data beside the matrix test. As reviewed on 2026-11-09 the workspace
+resolves `clap_builder` `4.6.7` from
 `registry+https://github.com/rust-lang/crates.io-index` with checksum
-`714a53001bf66416adb0e2ef5ac857140e7dc3a0c48fb28b2f10762fc4b5069f`; this is an
-example supported identity, not proof of the dependency resolved for every
-consumer.
+`ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d`, and that
+`ErrorKind` declares seventeen variants; the test data, not this paragraph,
+remains authoritative.
 
-The implementation must obtain the identity of the `clap_builder` package
-actually used to compile OrthoConfig and verify that it exactly matches a
-supported manifest entry before emitting
-`cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`. It must also verify
-that the compiled `clap` facade exposes `ErrorKind` from that same resolved
-`clap_builder` package. The facade's resolved dependency edge is part of this
-check, not the source identity to which the variant count is bound. The count
-is the total declared variant count for that builder package, not only the
-raisable variants; classification as translated or `DisplayOnly` remains in
-`CLAP_ERROR_IDS`. The implementation must fail closed for unsupported package
-identities, source overrides, or resolutions whose identity cannot be
-established. Its mechanism must be deterministic and account for every
-supported Cargo source.
+The publication test compares the parsed source count with the reviewed total,
+and the matrix test compares the matrix length with it at compile time:
 
-The workspace's `Cargo.lock` does not prove this contract for downstream
-consumers, which resolve dependencies in their own workspaces and may apply
-source overrides. Until the implementation verifies that the count manifest
-entry describes the `clap_builder` source defining the compiled facade's
-`ErrorKind`, the following const assertion is not a mechanical coverage gate.
-Once the identity contract is enforced, a const-evaluated test can compare the
-matrix length with the count:
+```rust
+// In ortho_config's test suite.
+const CLAP_ERROR_KIND_COUNT: usize = 17;
+const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
+```
 
-   ```rust
-   // In ortho_config's test suite.
-   const CLAP_ERROR_KIND_COUNT: usize =
-       env!("ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT").parse().unwrap();
-   const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
-   ```
-
-When a supported Clap source adds a variant, its count manifest entry and the
-matrix must be updated together; the assertion detects a length mismatch. A new
+The two comparisons answer different questions. A new upstream variant changes
+the parsed count, so the publication test fails until the total is reviewed and
+updated. Once the total is updated, a matrix that omits the new variant, or
+duplicates another to preserve its length, fails the const assertion or the
+semantic inventory test. Neither comparison parses source on its own. A new
 matrix entry points at a Fluent identifier for a raisable variant or marks the
 variant `DisplayOnly` for a new display shape. Roadmap §11.2.1 references this
-section rather than restating the proposed mechanism.
+section rather than restating the mechanism.
+
+**Limit of the guarantee.** The gate validates this repository's configured
+publication graph only. A consumer that resolves a different `clap_builder`
+receives no identity assurance from it, keeps the shipped matrix, and relies on
+the §6.3 fallback for an unmapped kind. Consumers are not required to run the
+gate, and no consumer build fails because of it.
 
 ### 6.2 Canonical mapping constant
 
@@ -863,11 +875,12 @@ never the block itself.
 ## 12. Failure modes and risks
 
 - **clap patch releases adding `ErrorKind` variants.** `ErrorKind` is
-  `#[non_exhaustive]` and clap may add variants in a patch release. Once the
-  §6.1.1 identity contract is implemented, its const assertion can catch a
-  matrix/count mismatch in CI; the §6.3 `warn`-level tracing event catches an
-  unmapped kind in production. Until then, the count comparison is not an
-  exhaustive gate.
+  `#[non_exhaustive]` and clap may add variants in a patch release. The §6.1.1
+  pre-publication gate catches the growth in this repository's CI before a
+  release, and the §6.3 `warn`-level tracing event catches an unmapped kind in
+  production. The gate covers the configured publication graph only, so a
+  consumer resolving a different `clap_builder` relies on that fallback rather
+  than on an identity guarantee.
 - **`BootHandle` non-finalization.** A consumer who drops a
   `BootHandle<Boot>` without calling `finalize` loses the merge-phase locale.
   The typestate prevents extraction of a long-lived `Arc<dyn Localizer>` for
