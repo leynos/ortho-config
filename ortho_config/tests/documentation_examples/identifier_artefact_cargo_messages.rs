@@ -23,14 +23,14 @@ use std::sync::{Mutex, MutexGuard};
 /// `cargo metadata` output is small and a `compiler-artifact` record is a few
 /// kilobytes even with every path absolute; 128 KiB is far above either and
 /// far below a buffer that could exhaust memory.
-const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
+pub(super) const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
 
 /// Which Cargo units one build reused and which it recompiled.
 ///
 /// Cargo reports every compiler unit in its JSON stream, fresh or not, so these
 /// counts distinguish "the stable target kept the dependencies warm" from "the
 /// whole dependency graph was rebuilt and the phase merely happened to finish".
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct BuildCounts {
     /// Units Cargo reused from an earlier build.
     fresh: u64,
@@ -41,6 +41,20 @@ pub(crate) struct BuildCounts {
 }
 
 impl BuildCounts {
+    /// State a count triple directly, for tests that name the expected numbers.
+    ///
+    /// Production code only ever obtains counts from Cargo's stream; the
+    /// constructor exists so a regression can exercise the decision without
+    /// driving a real build.
+    #[cfg(test)]
+    pub(super) const fn new(fresh: u64, rebuilt: u64, fixture_rebuilt: u64) -> Self {
+        Self {
+            fresh,
+            rebuilt,
+            fixture_rebuilt,
+        }
+    }
+
     /// Whether only the fixture package was recompiled and dependencies were reused.
     pub(crate) const fn reused_dependencies(self) -> bool {
         self.fresh > 0 && self.fixture_rebuilt > 0 && self.rebuilt == self.fixture_rebuilt
@@ -196,4 +210,184 @@ pub(super) fn lock_cargo_messages(
     messages
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(test)]
+mod tests {
+    //! The reuse decision, the record boundaries and the parser's refusals.
+
+    use super::{BuildCounts, CargoMessages, MAX_CARGO_RECORD_BYTES};
+    use anyhow::{Context, Result, ensure};
+    use rstest::rstest;
+    use serde_json::json;
+    use std::path::Path;
+
+    /// The fixture package, as Cargo prints it in `package_id`.
+    const FIXTURE: &str = "path+file:///fixture#orthohelp_fixture@0.1.0";
+
+    /// Reuse holds only when fresh units exist and nothing but the fixture was
+    /// rebuilt.
+    ///
+    /// Each case removes one of the three conditions while keeping the other
+    /// two, so a decision that dropped any one of them would pass none of the
+    /// failing cases by accident.
+    #[rstest]
+    #[case::dependencies_reused(5, 1, 1, true)]
+    #[case::everything_rebuilt(0, 4, 1, false)]
+    #[case::nothing_rebuilt(5, 0, 0, false)]
+    #[case::another_package_rebuilt(5, 2, 1, false)]
+    #[case::no_units_at_all(0, 0, 0, false)]
+    fn reuse_needs_fresh_units_and_only_the_fixture_rebuilt(
+        #[case] fresh: u64,
+        #[case] rebuilt: u64,
+        #[case] fixture_rebuilt: u64,
+        #[case] expected: bool,
+    ) -> Result<()> {
+        let counts = BuildCounts::new(fresh, rebuilt, fixture_rebuilt);
+        ensure!(
+            counts.reused_dependencies() == expected,
+            "{} should {} report reuse",
+            counts.summary(),
+            if expected { "" } else { "not" },
+        );
+        Ok(())
+    }
+
+    /// Freshness and the owning package decide which counter a unit reaches.
+    #[test]
+    fn compiler_artefacts_are_counted_by_freshness_and_package() -> Result<()> {
+        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
+        for record in [
+            json!({"reason": "compiler-artifact", "fresh": true, "package_id": FIXTURE}),
+            json!({
+                "reason": "compiler-artifact",
+                "fresh": false,
+                "package_id": "path+file:///other#serde@1.0.0",
+            }),
+            json!({"reason": "compiler-artifact", "fresh": false, "package_id": FIXTURE}),
+        ] {
+            messages.observe(format!("{record}\n").as_bytes());
+        }
+        messages.finish()?;
+        ensure!(
+            messages.counts() == BuildCounts::new(1, 2, 1),
+            "the counts should be {}:\n{}",
+            BuildCounts::new(1, 2, 1).summary(),
+            messages.counts().summary(),
+        );
+        Ok(())
+    }
+
+    /// A record split across observations is reassembled before parsing.
+    #[test]
+    fn a_record_split_across_chunks_is_reassembled() -> Result<()> {
+        let out_dir = "/tmp/fixture-out";
+        let record = format!(
+            "{{\"reason\":\"build-script-executed\",\
+             \"package_id\":\"{FIXTURE}\",\"out_dir\":\"{out_dir}\"}}\n"
+        );
+        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
+        for chunk in record.as_bytes().chunks(7) {
+            messages.observe(chunk);
+        }
+        let reported = messages
+            .finish()?
+            .context("the split record should report the build-script directory")?;
+        ensure!(
+            reported == Path::new(out_dir),
+            "the split record reported {} instead of {out_dir}",
+            reported.display(),
+        );
+        Ok(())
+    }
+
+    /// A record without a newline is still parsed when the stream ends.
+    #[test]
+    fn a_trailing_record_without_a_newline_is_parsed_at_finish() -> Result<()> {
+        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
+        messages.observe(b"{\"reason\":\"compiler-artifact\",\"fresh\":true,\"package_id\":\"x\"}");
+        messages.finish()?;
+        ensure!(
+            messages.counts() == BuildCounts::new(1, 0, 0),
+            "the trailing record should have been counted:\n{}",
+            messages.counts().summary(),
+        );
+        Ok(())
+    }
+
+    /// A compiler-artifact record without `fresh` is a hard error.
+    #[test]
+    fn a_record_without_a_fresh_flag_is_rejected() -> Result<()> {
+        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
+        messages.observe(b"{\"reason\":\"compiler-artifact\",\"package_id\":\"x\"}\n");
+        let error = messages
+            .finish()
+            .err()
+            .context("a record without `fresh` should be rejected")?;
+        ensure!(
+            format!("{error:#}").contains("`fresh`"),
+            "the rejection should name the missing field:\n{error:#}",
+        );
+        Ok(())
+    }
+
+    /// An over-long record is refused, and the first refusal is the one kept.
+    #[test]
+    fn an_over_long_record_stops_the_parser_and_keeps_its_error() -> Result<()> {
+        let long = vec![b' '; MAX_CARGO_RECORD_BYTES + 1];
+        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
+        messages.observe(&long);
+        // A later malformed record must not replace the diagnostic that
+        // explains why parsing stopped.
+        messages.observe(b"{not json}\n");
+        let error = messages
+            .finish()
+            .err()
+            .context("an over-long record should be rejected")?;
+        ensure!(
+            format!("{error:#}").contains("128 KiB"),
+            "the rejection should state the bound:\n{error:#}",
+        );
+        Ok(())
+    }
+
+    /// A malformed tail does not displace a rejection already recorded.
+    #[test]
+    fn the_first_rejection_survives_a_malformed_tail() -> Result<()> {
+        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
+        messages.observe(b"{\"reason\":\"compiler-artifact\",\"package_id\":\"x\"}\n");
+        messages.observe(b"{not json}");
+        let error = messages
+            .finish()
+            .err()
+            .context("the first rejection should be reported")?;
+        ensure!(
+            format!("{error:#}").contains("`fresh`"),
+            "the first rejection should be the one reported:\n{error:#}",
+        );
+        Ok(())
+    }
+
+    /// Two build-script directories for the fixture are a hard error.
+    #[test]
+    fn a_second_build_script_directory_is_rejected() -> Result<()> {
+        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
+        for out_dir in ["/tmp/one", "/tmp/two"] {
+            let record = json!({
+                "reason": "build-script-executed",
+                "package_id": FIXTURE,
+                "out_dir": out_dir,
+            });
+            messages.observe(format!("{record}\n").as_bytes());
+        }
+        let error = messages
+            .finish()
+            .err()
+            .context("a duplicate build-script directory should be rejected")?;
+        ensure!(
+            format!("{error:#}").contains("more than one"),
+            "the rejection should explain the duplicate:\n{error:#}",
+        );
+        Ok(())
+    }
 }
