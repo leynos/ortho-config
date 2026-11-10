@@ -63,6 +63,18 @@ const MIN_LEASE_WAIT: Duration = Duration::from_millis(500);
 /// lease is released.
 const HELPER_DEADLINE: Duration = Duration::from_secs(900);
 
+/// The envelope the second process grants itself, inside [`HELPER_DEADLINE`].
+///
+/// Only the helper supervises its nested Cargo invocations: the runner gives
+/// each child its own process group, so the parent's kill reaches the helper
+/// alone. If the parent's bound expired while Cargo was still building, the
+/// kill would remove the one process that bounds Cargo and leave it running
+/// unsupervised. Capping the helper's own envelope well inside the parent's
+/// bound means its supervised Cargo reaches *its* deadline first, is killed and
+/// reaped by the runner that owns it, and the helper reports the failure and
+/// exits before the parent stops waiting.
+const HELPER_WORK_BOUND: Duration = Duration::from_secs(600);
+
 /// How often the parent polls the second process and its marker files.
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
@@ -85,8 +97,10 @@ fn lease_helper() -> Result<()> {
         .context("read the parent's build-script directory")?;
     let out_dir = PathBuf::from(out_dir_text.trim());
     // One envelope covers discovery, the lease wait and the rebuild, so time
-    // spent locating the target is not granted to this process twice.
-    let deadline = scenario::deadline();
+    // spent locating the target is not granted to this process twice. It is
+    // additionally capped so this process's supervised work always ends first;
+    // see [`HELPER_WORK_BOUND`].
+    let deadline = scenario::deadline().min(Instant::now() + HELPER_WORK_BOUND);
     let location = locate_fixture(deadline)?;
     scratch
         .write("located", b"located")

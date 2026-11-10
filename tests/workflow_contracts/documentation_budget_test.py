@@ -246,6 +246,32 @@ def test_the_identifier_fixture_keeps_target_writes_behind_the_lease() -> None:
     )
 
 
+def test_the_identifier_helper_ends_its_own_work_before_the_parent_stops() -> None:
+    """The helper's envelope must expire inside the parent's teardown bound.
+
+    The helper owns the supervision of its nested Cargo invocations, and each
+    of those runs in its own process group. If the parent's bound expired
+    first, killing the helper would leave Cargo with nothing left to bound it,
+    so the helper's own envelope must be the shorter of the two.
+    """
+    source = (SUPPORT / "identifier_artefact_lease_tests.rs").read_text(
+        encoding="utf-8"
+    )
+    bounds = {
+        name: int(seconds)
+        for name, seconds in re.findall(
+            r"const (HELPER_\w+): Duration = Duration::from_secs\((\d+)\);", source
+        )
+    }
+    assert {"HELPER_WORK_BOUND", "HELPER_DEADLINE"} <= set(bounds), bounds
+    assert bounds["HELPER_WORK_BOUND"] < bounds["HELPER_DEADLINE"], (
+        "the helper must finish its supervised work before the parent stops waiting"
+    )
+    assert "scenario::deadline().min(Instant::now() + HELPER_WORK_BOUND)" in source, (
+        "the helper must cap its envelope with HELPER_WORK_BOUND"
+    )
+
+
 def _function_body(source: str, name: str) -> str:
     """Return the body of the first ``fn name`` in ``source``."""
     match = re.search(rf"fn {name}\b[^{{]*\{{(?P<body>.*?)\n\}}", source, re.DOTALL)

@@ -411,6 +411,17 @@ the wait cannot together outlast the per-test allowance. Starting a second
 envelope at the wait would leave the total unbounded and let nextest kill the
 test before the wait could name itself.
 
+The second process in the lease regression keeps its own envelope rather than
+sharing the parent's, because it is a separate test process with its own clock.
+It caps that envelope at 600 seconds, well inside the 900 seconds the parent
+waits before tearing it down. Only the helper supervises its nested Cargo
+calls, and each of those runs in its own process group, so a parent that killed
+the helper while a build was still running would leave Cargo and its compilers
+with nothing left to bound them. The helper's deadline therefore expires first:
+its supervised Cargo is killed and reaped by the runner that owns it, and the
+helper reports the failure and exits before the parent stops waiting. A
+workflow contract keeps that ordering from silently inverting.
+
 ### Diagnostic tail beside the retained head
 
 Each output stream still retains at most 1 MiB for callers that parse it, and
