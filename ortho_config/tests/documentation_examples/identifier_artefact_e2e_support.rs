@@ -32,23 +32,28 @@
 
 #[path = "identifier_artefact_cargo_messages.rs"]
 mod cargo_messages;
+#[path = "identifier_artefact_cargo_messages_property_tests.rs"]
+#[cfg(test)]
+mod cargo_messages_property_tests;
+#[path = "identifier_artefact_fixture_tests.rs"]
+#[cfg(test)]
+mod fixture_tests;
 #[path = "identifier_artefact_lease.rs"]
 mod lease;
+#[path = "identifier_artefact_telemetry.rs"]
+mod telemetry;
 
 use self::cargo_messages::{BuildCounts, CargoMessages, lock_cargo_messages};
+use self::telemetry::{PhaseRecord, TelemetrySink};
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
-use cap_std::{
-    ambient_authority,
-    fs::{Dir, OpenOptions},
-};
+use cap_std::{ambient_authority, fs::Dir};
 use serde_json::Value;
 use std::io;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
 
@@ -58,18 +63,14 @@ const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This 
 /// it, and named so consecutive runs reuse the dependency build.
 const TARGET_DIRECTORY_NAME: &str = "identifier-artefact-target";
 
-/// Names the file to which each build phase appends its Cargo unit counts.
-///
-/// Used by cold-versus-warm evidence runs; unset in ordinary runs.
-const TELEMETRY_VARIABLE: &str = "ORTHO_CONFIG_FIXTURE_TELEMETRY";
-
 /// The fixture package and its private target, before the cross-process lease.
 ///
-/// Discovery runs `cargo metadata`, which only reads the workspace and touches
-/// no build output, so it is safe to perform while another test process holds
-/// the lease. Splitting discovery from [`FixtureLocation::lease`] lets a
+/// Discovery runs `cargo metadata`, which only reads the workspace and creates
+/// nothing, so it is safe to perform while another test process holds the
+/// lease. Splitting discovery from [`FixtureLocation::lease`] lets a
 /// regression observe that a second process has reached the target and is
-/// blocked on the lease, rather than merely slow to start.
+/// blocked on the lease, rather than merely slow to start, and keeps every
+/// write to the target behind the lease.
 pub(super) struct FixtureLocation {
     repository: PathBuf,
     target_directory: PathBuf,
@@ -92,16 +93,39 @@ impl FixtureLocation {
     /// discovery's 30 second cap and the wait's full remainder could add up
     /// past nextest's per-test ceiling, and the test would be killed before
     /// the wait could name itself.
-    pub(super) fn lease(self, deadline: Instant) -> Result<FixtureCargo> {
+    ///
+    /// `telemetry` is supplied by the caller rather than read from the
+    /// environment here, so the fixture build has one explicit sink and a
+    /// regression can drive the record format without mutating the process
+    /// environment.
+    pub(super) fn lease(
+        self,
+        deadline: Instant,
+        telemetry: Option<TelemetrySink>,
+    ) -> Result<FixtureCargo> {
         let lease = lease::acquire(&self.target_directory, deadline)?;
+        prepare_target(&self.target_directory)?;
         Ok(FixtureCargo {
             repository: self.repository,
             target_directory: self.target_directory,
             package_id: self.package_id,
             deadline,
+            telemetry,
             _lease: lease,
         })
     }
+}
+
+/// Mark the private target as Cargo cache output.
+///
+/// This is the one write discovery must not perform. The lease creates the
+/// target and this call tags it, both after the lease is held, so a second
+/// process cannot prepare the same directory beside this one.
+fn prepare_target(target: &Path) -> Result<()> {
+    Dir::open_ambient_dir(target, ambient_authority())
+        .context("open the private Cargo target")?
+        .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
+        .context("write Cargo cache-directory tag")
 }
 
 /// Describes the fixture's private Cargo target and scenario deadline.
@@ -113,10 +137,16 @@ pub(super) struct FixtureCargo {
     target_directory: PathBuf,
     package_id: String,
     deadline: Instant,
+    telemetry: Option<TelemetrySink>,
     _lease: lease::TargetLease,
 }
 
 impl FixtureCargo {
+    /// The phase telemetry sink, when the evidence run asked for one.
+    const fn telemetry(&self) -> Option<&TelemetrySink> {
+        self.telemetry.as_ref()
+    }
+
     fn bounded_policy(
         &self,
         policy: process_runner::Policy,
@@ -136,14 +166,17 @@ impl FixtureCargo {
 /// stays reserved until the test drops it or ends.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
     let deadline = scenario::deadline();
-    locate_fixture(deadline)?.lease(deadline)
+    let telemetry = TelemetrySink::from_environment()?;
+    locate_fixture(deadline)?.lease(deadline, telemetry)
 }
 
 /// Discover the fixture package and locate its private Cargo target.
 ///
 /// This is the half of [`fixture_cargo`] that is safe to run concurrently with
-/// another process's lease: it only reads workspace metadata and creates the
-/// target directory, which is idempotent.
+/// another process's lease: it only reads workspace metadata and returns the
+/// path the lease will create. Nothing is created or written here, so a second
+/// process can run discovery while the first holds the lease without either
+/// touching the target.
 ///
 /// `deadline` is the test's whole envelope, and this call is already charged
 /// to it. Discovery is capped at 30 seconds; the lease wait that follows takes
@@ -173,6 +206,14 @@ pub(super) fn locate_fixture(deadline: Instant) -> Result<FixtureLocation> {
     );
     let metadata: Value =
         serde_json::from_slice(&output.stdout).context("parse Cargo fixture metadata")?;
+    location_from_metadata(repository, &metadata)
+}
+
+/// Build the fixture location from parsed metadata, reading only.
+///
+/// Kept separate from the command so a regression can hand it a fresh target
+/// path and observe that discovery creates neither the directory nor its tag.
+fn location_from_metadata(repository: PathBuf, metadata: &Value) -> Result<FixtureLocation> {
     let workspace_target = metadata
         .get("target_directory")
         .and_then(Value::as_str)
@@ -187,17 +228,19 @@ pub(super) fn locate_fixture(deadline: Instant) -> Result<FixtureLocation> {
         .and_then(|package| package.get("id"))
         .and_then(Value::as_str)
         .context("Cargo metadata omitted orthohelp_fixture's package id")?;
-    let target_directory = Path::new(workspace_target).join(TARGET_DIRECTORY_NAME);
-    Dir::create_ambient_dir_all(&target_directory, ambient_authority())
-        .context("create private Cargo target")?;
-    Dir::open_ambient_dir(&target_directory, ambient_authority())?
-        .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
-        .context("write Cargo cache-directory tag")?;
     Ok(FixtureLocation {
         repository,
-        target_directory,
+        target_directory: private_target(Path::new(workspace_target)),
         package_id: package_id.to_owned(),
     })
+}
+
+/// The fixture's private target, nested under the workspace target.
+///
+/// A pure path computation: the directory is created by the lease, not here,
+/// so discovery can run beside another leaseholder without writing.
+pub(super) fn private_target(workspace_target: &Path) -> PathBuf {
+    workspace_target.join(TARGET_DIRECTORY_NAME)
 }
 
 /// What one fixture build produced and what it reused.
@@ -267,60 +310,14 @@ pub(super) fn build_fixture(
         .or_else(|| previous_out_dir.map(Path::to_path_buf))
         .context("Cargo output omitted the fixture build-script directory")?;
     let counts = report.counts();
-    record_phase(emit, counts, &output.stderr)?;
+    if let Some(telemetry) = cargo.telemetry() {
+        telemetry.record(PhaseRecord {
+            emit,
+            counts,
+            stderr: &output.stderr,
+        })?;
+    }
     Ok(FixtureBuild { out_dir, counts })
-}
-
-/// Append one phase's build counts to the file named by the telemetry variable.
-///
-/// This exists so a cold-versus-warm evidence run can show, phase by phase,
-/// which Cargo units were reused, when the phase ran, and whether the nested
-/// Cargo waited for compile admission or the package cache. It is inert unless
-/// the variable is set, and it only records: the counts and the messages come
-/// from the build that just ran. Timestamps let a reader derive each phase's
-/// elapsed time by subtracting consecutive entries.
-fn record_phase(emit: bool, counts: BuildCounts, stderr: &[u8]) -> Result<()> {
-    let Some(path) = std::env::var_os(TELEMETRY_VARIABLE) else {
-        return Ok(());
-    };
-    let telemetry = PathBuf::from(path);
-    let name = telemetry.file_name().with_context(|| {
-        format!(
-            "fixture telemetry path {} should name a file",
-            telemetry.display()
-        )
-    })?;
-    let parent = telemetry
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let directory = Dir::open_ambient_dir(parent, ambient_authority())
-        .context("open the fixture telemetry directory")?;
-    let mut file = directory
-        .open_with(name, OpenOptions::new().create(true).append(true))
-        .context("open the fixture telemetry file")?;
-    let stderr_text = String::from_utf8_lossy(stderr);
-    writeln!(
-        file,
-        "at_ms={} emit={emit} {} admission_lines={} package_cache_lines={}",
-        unix_millis(),
-        counts.summary(),
-        count_matching_lines(&stderr_text, "[build-limits]"),
-        count_matching_lines(&stderr_text, "waiting for file lock"),
-    )
-    .context("append the fixture build telemetry")
-}
-
-/// Wall-clock milliseconds, so phases can be ordered and timed.
-fn unix_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_millis())
-}
-
-/// Count the lines of `text` that contain `needle`.
-fn count_matching_lines(text: &str, needle: &str) -> usize {
-    text.lines().filter(|line| line.contains(needle)).count()
 }
 
 /// Remove only the fixture's build output in its private target directory.

@@ -44,7 +44,7 @@ pub(super) struct TargetLease {
     _file: File,
 }
 
-/// Open, creating if needed, and exclusively lock the target's lease file.
+/// Create the target if needed and exclusively lock its lease file.
 ///
 /// Waits until every other leaseholder has released the target, so a
 /// concurrent test process cannot interleave its `cargo clean -p` with this
@@ -53,11 +53,16 @@ pub(super) struct TargetLease {
 /// produces this diagnostic rather than nextest terminating the test with
 /// nothing to say which wait it was in.
 ///
+/// The directory is created here rather than during discovery, so the first
+/// write to the target happens only once the lease is the only writer.
+///
 /// # Errors
 ///
 /// Returns an error when the target cannot be opened or locked, or when
 /// `deadline` passes while another process still holds the lease.
 pub(super) fn acquire(target: &Path, deadline: Instant) -> Result<TargetLease> {
+    Dir::create_ambient_dir_all(target, ambient_authority())
+        .context("create the identifier-artefact target for its lease")?;
     let directory = Dir::open_ambient_dir(target, ambient_authority())
         .context("open the identifier-artefact target for its lease")?;
     // `truncate(false)` matters: the lease is the lock on the file, and

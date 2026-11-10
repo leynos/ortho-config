@@ -92,7 +92,7 @@ fn lease_helper() -> Result<()> {
         .write("located", b"located")
         .context("announce the located target")?;
     let started = Instant::now();
-    let cargo = location.lease(deadline)?;
+    let cargo = location.lease(deadline, None)?;
     let lease_wait = started.elapsed();
     // The parent released the lease only after confirming that this process had
     // not acquired it, so the artefact it built must still be there, unchanged.
