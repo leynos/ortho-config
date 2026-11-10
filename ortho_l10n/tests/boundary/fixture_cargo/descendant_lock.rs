@@ -37,15 +37,26 @@ pub(crate) struct HeldLock {
 /// it. That is what lets the parent distinguish a live descendant from a killed
 /// one without polling for heartbeats.
 pub(crate) fn hold_descendant_lock() -> Result<HeldLock> {
+    let held = hold_lock_quietly()?;
+    scratch_directory()?
+        .write(READY_FILE_NAME, b"locked")
+        .context("announce the descendant lock")?;
+    Ok(held)
+}
+
+/// Take the descendant's exclusive lock without announcing readiness.
+///
+/// Readiness is announced by [`hold_descendant_lock`], so a probe that uses
+/// this keeps its parent waiting. That is the state a readiness timeout has to
+/// survive: a tree that is alive and holding the lock, with no marker to end
+/// the wait.
+pub(crate) fn hold_lock_quietly() -> Result<HeldLock> {
     let scratch = scratch_directory()?;
     let file = scratch
         .create(LOCK_FILE_NAME)
         .context("create the descendant lock file")?
         .into_std();
     file.lock().context("take the descendant lock")?;
-    scratch
-        .write(READY_FILE_NAME, b"locked")
-        .context("announce the descendant lock")?;
     Ok(HeldLock { _file: file })
 }
 

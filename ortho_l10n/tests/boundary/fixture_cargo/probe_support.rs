@@ -103,9 +103,29 @@ pub(super) fn wait_for_descendant() -> Result<()> {
 /// the full [`DESCENDANT_STARTUP`] would hide that behind a bare timeout with
 /// no exit status. Its tree is terminated first, because a descendant that
 /// inherited the pipes can keep them open after the leader exits.
+///
+/// The readiness timeout is terminated too. The caller drops the handle when
+/// this returns an error, and a drop alone signals nothing, so an abandoned
+/// tree would keep the lock and the inherited pipes for as long as its own
+/// release wait allows. A `try_wait` error is treated as "still running" for
+/// the same reason: killing a process that has already exited costs nothing,
+/// while leaving a live descendant behind costs the whole release wait.
 pub(super) fn wait_for_ready_in(scratch: &Path, probe: &mut dyn ChildWrapper) -> Result<()> {
+    wait_for_ready_within(DESCENDANT_STARTUP, scratch, probe)
+}
+
+/// Wait up to `limit` for `probe` to report readiness, killing it if it does not.
+///
+/// Split from [`wait_for_ready_in`] so a regression can reach the timeout
+/// branch without spending [`DESCENDANT_STARTUP`] on a host where the probe is
+/// healthy. The behaviour, including the kill, is the same either way.
+pub(super) fn wait_for_ready_within(
+    limit: Duration,
+    scratch: &Path,
+    probe: &mut dyn ChildWrapper,
+) -> Result<()> {
     let directory = open_scratch(scratch)?;
-    wait_until(DESCENDANT_STARTUP, "the probe to become ready", || {
+    let ready = wait_until(limit, "the probe to become ready", || {
         if directory.exists(READY_FILE_NAME) {
             return Ok(true);
         }
@@ -121,7 +141,12 @@ pub(super) fn wait_for_ready_in(scratch: &Path, probe: &mut dyn ChildWrapper) ->
             );
         }
         Ok(false)
-    })
+    });
+    let has_exited = matches!(probe.try_wait(), Ok(Some(_)));
+    if ready.is_err() && !has_exited {
+        let _kill_requested = probe.start_kill();
+    }
+    ready
 }
 
 /// Wait until the child with this scratch handle reports readiness.

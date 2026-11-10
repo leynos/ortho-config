@@ -73,6 +73,9 @@ BUDGET: typ.Final[pathlib.Path] = (
 CONSUMER: typ.Final[pathlib.Path] = (
     REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "consumer" / "mod.rs"
 )
+PROCESS: typ.Final[pathlib.Path] = (
+    REPOSITORY_ROOT / CRATE / "tests" / "boundary" / "fixture_cargo" / "process.rs"
+)
 
 
 def _overrides() -> list[dict[str, object]]:
@@ -195,6 +198,37 @@ def _consumer_shapes() -> int:
             CONSUMER,
         )[1]
     )
+
+
+def test_the_unsupported_platform_is_rejected_at_compile_time() -> None:
+    """A target with neither process group nor Job Object cannot supervise.
+
+    Scenario: the runner is built for a platform that offers neither tree
+    primitive. Invariant: the build is refused at compile time, and both
+    supported platforms keep their own wrapper. ``trybuild`` cannot express
+    this on any host this suite runs on — it builds for the host target, so a
+    compile-fail fixture would be vacuous or need a target Cargo does not
+    offer — and reading the rejection is the equivalent check that runs on
+    every leg. A change that removed the rejection, or widened it to a
+    supported platform, fails here.
+    """
+    source = PROCESS.read_text(encoding="utf-8")
+    _single_match(
+        r"#\[cfg\(not\(any\(unix, windows\)\)\)\]\s*compile_error!\(",
+        source,
+        "unsupported-platform compile_error",
+        PROCESS,
+    )
+    for platform, wrapper in (
+        ("unix", "ProcessGroup::leader()"),
+        ("windows", "JobObject"),
+    ):
+        _single_match(
+            rf"#\[cfg\({platform}\)\]\s*wrapped\.wrap\({re.escape(wrapper)}\)",
+            source,
+            f"{platform} process-tree wrapper",
+            PROCESS,
+        )
 
 
 def _boundary_allowance() -> float:

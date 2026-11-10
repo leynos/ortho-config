@@ -30,6 +30,12 @@ mod deadline_probe_tests;
 mod probe_support;
 #[path = "readers.rs"]
 mod readers;
+#[cfg(test)]
+#[path = "serialization_probe_tests.rs"]
+mod serialization_probe_tests;
+#[cfg(test)]
+#[path = "tail_probe_tests.rs"]
+mod tail_probe_tests;
 
 use self::readers::{READER_GRACE, StreamCapture, StreamEvidence, drain};
 use super::budget::Bound;

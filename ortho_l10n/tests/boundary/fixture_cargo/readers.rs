@@ -218,3 +218,40 @@ pub(super) fn drain<R: Read + Send + 'static>(
         tail,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    //! The retained window over arbitrary streams and chunk boundaries.
+
+    use super::{DIAGNOSTIC_TAIL_BYTES, StreamTail};
+    use proptest::prelude::*;
+
+    proptest! {
+        /// The retained bytes are the end of the stream, however it arrived.
+        ///
+        /// Inputs run to twice the window and chunks to just past it, so the
+        /// cases include a stream shorter than the tail, one exactly at it,
+        /// one that evicts, and a single read larger than the window. A tail
+        /// that kept the head, or that stopped after the first full window,
+        /// would disagree with the model below.
+        #[test]
+        fn the_retained_tail_is_the_end_of_the_stream(
+            input in prop::collection::vec(
+                any::<u8>(),
+                0..(2 * DIAGNOSTIC_TAIL_BYTES + 2),
+            ),
+            chunk_size in 1usize..(DIAGNOSTIC_TAIL_BYTES + 2),
+        ) {
+            let mut tail = StreamTail::default();
+            for chunk in input.chunks(chunk_size) {
+                tail.publish(chunk);
+            }
+
+            let retained = input.len().min(DIAGNOSTIC_TAIL_BYTES);
+            let expected = input.get(input.len() - retained..).unwrap_or_default();
+            let published: Vec<u8> = tail.bytes.iter().copied().collect();
+            prop_assert_eq!(published.as_slice(), expected);
+            prop_assert_eq!(tail.bytes_seen, input.len() as u64);
+        }
+    }
+}

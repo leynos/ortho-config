@@ -27,7 +27,7 @@
 //! entirely, because that is the one state in which the pipe never closes.
 
 use super::probe_support::descendant_lock::{
-    hold_descendant_lock, lock_is_held, wait_for_lock_release,
+    hold_descendant_lock, hold_lock_quietly, lock_is_held, wait_for_lock_release,
 };
 // Only the Unix escapee probe builds a bare command, so the helper that does
 // so is imported under the same gate; importing it unconditionally makes the
@@ -35,8 +35,9 @@ use super::probe_support::descendant_lock::{
 #[cfg(unix)]
 use super::probe_support::probe_command;
 use super::probe_support::{
-    RELEASE_FILE_NAME, announce_ready, release_holder, scratch_directory, spawn_owned_probe,
-    spawn_probe, wait_for_descendant, wait_for_ready_in, wait_until,
+    DESCENDANT_STARTUP, RELEASE_FILE_NAME, announce_ready, release_holder, scratch_directory,
+    spawn_owned_probe, spawn_probe, wait_for_descendant, wait_for_ready_in, wait_for_ready_within,
+    wait_until,
 };
 use super::supervise;
 use anyhow::{Context, Result, ensure};
@@ -153,6 +154,20 @@ fn pipe_holder() -> Result<()> {
     })
 }
 
+/// Hold the lock and never announce readiness.
+///
+/// The parent's readiness wait therefore ends only by its own bound, and the
+/// tree it gives up on must be killed rather than abandoned. The sleep is long
+/// enough that an abandoned tree is still holding the lock well after the
+/// teardown bound the regression waits for.
+#[test]
+#[ignore = "driven as a child process by a_failed_readiness_wait_kills_the_probe_tree"]
+fn unready_probe() -> Result<()> {
+    let _lock = hold_lock_quietly()?;
+    std::thread::sleep(PROBE_LIFETIME * 4);
+    Ok(())
+}
+
 /// Start a descendant that leaves the process group the runner will kill.
 ///
 /// This models the worst case for tree termination: a process the child started
@@ -224,6 +239,32 @@ fn deadline_kills_the_whole_process_tree() -> Result<()> {
     );
     // The lock is held until every process in the tree is gone, so acquiring it
     // proves the descendant died with its parent.
+    wait_for_lock_release(scratch.path())
+}
+
+/// A readiness timeout must kill the tree it gives up on.
+///
+/// The caller drops the handle when the wait fails, and a drop signals nothing,
+/// so without the kill the abandoned probe keeps the lock for the rest of its
+/// own sleep. The wait is shortened here so the regression does not spend
+/// [`DESCENDANT_STARTUP`] proving a failure that is expected anyway.
+#[test]
+fn a_failed_readiness_wait_kills_the_probe_tree() -> Result<()> {
+    let scratch = TempDir::new().context("create the unready probe scratch directory")?;
+    let mut child = spawn_owned_probe("unready_probe", scratch.path())?;
+    // Non-vacuity: the wait below has to start from a tree that already holds
+    // the lock, or a kill followed by a free lock would prove nothing. The lock
+    // file is created before it is locked, so an open failure only means the
+    // probe has not started yet.
+    wait_until(DESCENDANT_STARTUP, "the probe to take its lock", || {
+        Ok(matches!(lock_is_held(scratch.path()), Ok(true)))
+    })?;
+    let outcome = wait_for_ready_within(Duration::from_millis(500), scratch.path(), child.as_mut());
+    ensure!(
+        outcome.is_err(),
+        "a probe that never announces readiness must time out",
+    );
+    drop(child);
     wait_for_lock_release(scratch.path())
 }
 
