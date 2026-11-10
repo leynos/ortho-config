@@ -11,12 +11,13 @@
 //! the directory itself.
 
 use super::{
-    CACHEDIR_TAG, FixtureLocation, TARGET_DIRECTORY_NAME, location_from_metadata, private_target,
+    CACHEDIR_TAG, FixtureLocation, TARGET_DIRECTORY_NAME, discovery_command, locate_fixture_with,
+    location_from_metadata, private_target,
 };
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
@@ -28,6 +29,13 @@ const LEASE_WAIT: Duration = Duration::from_secs(30);
 
 /// The lease file the target must contain once it has been prepared.
 const LEASE_FILE_NAME: &str = ".identifier-artefact.lease";
+
+/// How long full discovery may take.
+///
+/// Discovery runs `cargo metadata`, which queues on Cargo's package-cache lock
+/// behind other work on a shared host, so the bound is generous; it exists to
+/// fail with a diagnostic rather than to accommodate a busy machine.
+const DISCOVERY_WAIT: Duration = Duration::from_secs(120);
 
 /// Parsing metadata names the private target without creating anything.
 ///
@@ -61,6 +69,50 @@ fn parsing_metadata_for_a_fresh_target_creates_nothing() -> Result<()> {
     ensure!(
         !parent.exists("workspace-target"),
         "discovery created {} before any lease was held",
+        workspace_target.display(),
+    );
+    Ok(())
+}
+
+/// Full discovery against a fresh target creates neither the target nor a file.
+///
+/// The regression above stops at the metadata reading, so a write made while
+/// preparing or running the discovery command would not be visible to it. This
+/// one runs the whole path — the command, its closed environment, the status
+/// check, the JSON parse and the package lookup — with `CARGO_TARGET_DIR`
+/// pointing under a fresh temporary directory. The private target must be
+/// derived from that path without being created; Cargo's `metadata` does not
+/// create a target directory, so anything present afterwards was discovery's.
+#[test]
+fn full_discovery_for_a_fresh_target_creates_nothing() -> Result<()> {
+    let scratch = TempDir::new().context("create the discovery parent")?;
+    let workspace_target = scratch.path().join("workspace-target");
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("find fixture workspace")?
+        .to_path_buf();
+    let mut command = discovery_command(&repository);
+    // Set after the allow-list is applied, so the injected target wins over
+    // whatever target directory this test process inherited.
+    command.env("CARGO_TARGET_DIR", &workspace_target);
+
+    let location = locate_fixture_with(Instant::now() + DISCOVERY_WAIT, repository, &mut command)?;
+
+    ensure!(
+        location.target_directory == private_target(&workspace_target),
+        "discovery should place the private target under the injected target, not {}",
+        location.target_directory.display(),
+    );
+    ensure!(
+        location.package_id.contains("orthohelp_fixture"),
+        "discovery should keep the fixture package id, not {}",
+        location.package_id,
+    );
+    let parent = Dir::open_ambient_dir(scratch.path(), ambient_authority())
+        .context("open the injected target parent")?;
+    ensure!(
+        !parent.exists("workspace-target"),
+        "full discovery created {} before any lease was held",
         workspace_target.display(),
     );
     Ok(())

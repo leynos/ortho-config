@@ -221,15 +221,46 @@ pub(super) fn locate_fixture(deadline: Instant) -> Result<FixtureLocation> {
         .parent()
         .context("find fixture workspace")?
         .to_path_buf();
+    let mut command = discovery_command(&repository);
+    locate_fixture_with(deadline, repository, &mut command)
+}
+
+/// The arguments every discovery resolve uses.
+///
+/// `--no-deps` keeps the resolve to this workspace, so discovery cannot be
+/// slowed by, or fail on, a dependency's metadata. Discovery needs only the
+/// workspace's target directory and the fixture package's identifier.
+const DISCOVERY_ARGS: [&str; 4] = ["metadata", "--offline", "--no-deps", "--format-version=1"];
+
+/// Build the discovery command with its closed environment.
+///
+/// The command is built here rather than inside [`locate_fixture_with`] so the
+/// read-only regression can hand the same process and environment a fresh
+/// target directory: discovery's process and environment are the boundary that
+/// regression needs to substitute, and keeping them in one place means the
+/// regression cannot pass with an argument list the real path does not use.
+fn discovery_command(repository: &Path) -> Command {
     let mut command = Command::new("cargo");
     cargo_environment::CargoEnvironment::metadata().apply(&mut command);
+    command.args(DISCOVERY_ARGS).current_dir(repository);
     command
-        .args(["metadata", "--offline", "--no-deps", "--format-version=1"])
-        .current_dir(&repository);
+}
+
+/// Run an already-built discovery command and read the fixture's location.
+///
+/// Separated from [`locate_fixture`] so the command and its environment are a
+/// parameter. This is still the whole discovery path — the child runs, its
+/// status is checked, and its JSON is parsed — not just the metadata reading
+/// that [`location_from_metadata`] performs.
+fn locate_fixture_with(
+    deadline: Instant,
+    repository: PathBuf,
+    command: &mut Command,
+) -> Result<FixtureLocation> {
     let remaining =
         scenario::remaining(deadline).context("discover Cargo target for identifier artefact")?;
     let output = process_runner::run_with_policy(
-        &mut command,
+        command,
         process_runner::Operation("discover Cargo target for identifier artefact"),
         process_runner::Policy::discovery().bounded_by(remaining),
     )?;
