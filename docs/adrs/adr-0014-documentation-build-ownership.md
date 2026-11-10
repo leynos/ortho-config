@@ -416,7 +416,7 @@ compilers are still writing.
 Each nested Cargo invocation therefore inherits a duplicate of the lease handle
 as its standard input. Cargo is the direct child and holds that handle open for
 as long as it lives, so the operating system keeps the lease held after the
-helper's own handle closes. On Unix the duplicate shares the open file
+helper's own handle closes. On Unix, the duplicate shares the open file
 description that `flock` locks, so the lock is released only when Cargo closes
 it. On Windows, where `LockFileEx` locks belong to the locking process rather
 than the file object, the lease file is opened with an empty share mode
