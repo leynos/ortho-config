@@ -237,6 +237,9 @@ mod tests {
     #[case::nothing_rebuilt(5, 0, 0, false)]
     #[case::another_package_rebuilt(5, 2, 1, false)]
     #[case::no_units_at_all(0, 0, 0, false)]
+    // Isolates the `fresh > 0` conjunct: the other two conditions hold, so a
+    // decision that dropped only this one would pass every case above.
+    #[case::no_fresh_units(0, 1, 1, false)]
     fn reuse_needs_fresh_units_and_only_the_fixture_rebuilt(
         #[case] fresh: u64,
         #[case] rebuilt: u64,
