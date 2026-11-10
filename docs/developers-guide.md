@@ -238,9 +238,14 @@ tests as threads, so the group cannot help there. The fixture's
 `run_with_deadline` therefore holds a process-wide mutex across each nested
 Cargo invocation. It is acquired before the child is spawned, so time a sibling
 spends holding the shared target directory's build lock is never charged to the
-deadline of the call that is counting. Without it, the consumer contracts and
-the four negative controls queue on the one target directory they share, and a
-healthy child waiting for its turn reads as a hang.
+deadline of the call that is counting. The wait for the mutex is itself bounded
+by the contract's shared allowance, and the child's bound is computed only
+after the wait ends, so a sibling that held the mutex for a long time shortens
+the child's bound instead of being ignored. A call whose allowance is spent
+while it waits fails with a diagnostic naming the wait, rather than blocking
+until the sibling finishes. Without it, the consumer contracts and the four
+negative controls queue on the one target directory they share, and a healthy
+child waiting for its turn reads as a hang.
 
 The same override carries the per-test allowance, 960 s (120 s x 8). A
 per-invocation deadline cannot bound a contract that makes several calls: the
@@ -1385,6 +1390,23 @@ test without saying which wait it was in. A two-process regression drives a
 second copy of the test binary: it proves the second process blocks on a held
 lease, sees the first process's artefact intact, and rebuilds it after the
 lease is released.
+
+`ORTHO_CONFIG_FIXTURE_TELEMETRY` names a file to which each fixture build phase
+appends one record. The sink is inert unless the variable is set, so an
+ordinary test run writes nothing. The path must name a file: a path with no
+file name, such as `/`, is refused at the boundary, and the file name must be
+UTF-8. The parent directory must already exist, because it is opened as a
+capability; a relative name resolves against the process working directory.
+Records are appended, one line per build phase, in the form
+`at_ms=<unix milliseconds> emit=<true|false>` followed by the counts
+`fresh=<n>, rebuilt=<n>, rebuilt_fixture=<n>`, then `admission_lines=<n>` and
+`package_cache_lines=<n>`. `admission_lines` counts the build's stderr lines
+containing `[build-limits]`; `package_cache_lines` counts lines containing
+`waiting for file lock`. A clock failure is reported to the caller rather than
+recorded as zero, so a phase is never stamped `at_ms=0` without saying so. The
+environment is read once at the test boundary and the sink is passed explicitly
+to the build, so the record format and the clock can be driven directly by a
+regression.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:

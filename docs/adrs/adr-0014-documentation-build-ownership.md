@@ -506,10 +506,12 @@ one boundary contract and passed explicitly from the test, rather than kept in
 a thread-local that unrelated contracts would accumulate. Each call is bounded
 by the smaller of its own cap and what the allowance has left; a call that
 starts with nothing left is refused, naming itself and the allowance. The
-allowance sits inside the 960-second per-test boundary override, and the
-remaining 60 seconds cover rendering fixture roots, reading manifests, and
-reporting. Both runners remain test-only; neither is a general application
-subprocess API.
+in-process serialization wait is bounded by the same allowance, and each
+child's bound is computed after the wait, so queueing behind a sibling is
+charged to the allowance rather than hidden from it. The allowance sits inside
+the 960-second per-test boundary override, and the remaining 60 seconds cover
+rendering fixture roots, reading manifests, and reporting. Both runners remain
+test-only; neither is a general application subprocess API.
 
 ## References
 
