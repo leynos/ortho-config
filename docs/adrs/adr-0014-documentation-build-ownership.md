@@ -403,7 +403,7 @@ run while another process holds the lease. The lease is acquired after
 discovery and before the first build, and it is held until the fixture is
 dropped.
 
-### Lease inherited by the builds it protects
+### Lease inherited by the build it protects
 
 The lease alone would leave an ordering hole. The runner gives every nested
 child its own process group (Unix) or Job Object (Windows), which is what lets
@@ -414,20 +414,25 @@ replacement process could then acquire the target and clean it while those
 compilers are still writing.
 
 Each nested Cargo invocation therefore inherits a duplicate of the lease handle
-as its standard input. Every descendant of that invocation inherits the same
-handle again, so the operating system keeps the lease held for as long as any
-of them can still write to the target. On Unix the duplicate shares the open
-file description that `flock` locks, so the lock is released only when the last
-descendant closes it. On Windows, where `LockFileEx` locks belong to the
-locking process rather than the file object, the lease file is opened with an
-empty share mode instead: an inherited duplicate keeps a later open refused for
-the descendant's lifetime. The lease file is empty, so a nested Cargo sees an
-empty standard input rather than a terminal it could block on.
+as its standard input. Cargo is the direct child and holds that handle open for
+as long as it lives, so the operating system keeps the lease held after the
+helper's own handle closes. On Unix the duplicate shares the open file
+description that `flock` locks, so the lock is released only when Cargo closes
+it. On Windows, where `LockFileEx` locks belong to the locking process rather
+than the file object, the lease file is opened with an empty share mode
+instead: the inherited duplicate keeps a later open refused for Cargo's
+lifetime. The lease file is empty, so Cargo sees an empty standard input rather
+than a terminal it could block on.
 
-This is deliberately not `PR_SET_PDEATHSIG`: that signal is Linux-only, fires
-when the *immediate* parent dies rather than when the helper does, and is not
-inherited by the rustc grandchildren. The inherited handle is portable and
-covers the whole tree.
+The handle does not reach Cargo's own children. Cargo gives build scripts and
+rustc a null standard input, so the lease stops at Cargo. Those descendants are
+covered by the parent's termination of the recorded tree, not by the lease: the
+lease covers the window in which Cargo is still running and the helper is not,
+and the snapshot covers the compilers that outlive Cargo.
+
+This is deliberately not `PR_SET_PDEATHSIG`: that signal is Linux-only and
+fires when the *immediate* parent dies, which is Cargo rather than the helper.
+The inherited handle is portable and reaches Cargo wherever it is in the tree.
 
 ### Descendants of an interrupted helper
 

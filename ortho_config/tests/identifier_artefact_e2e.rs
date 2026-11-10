@@ -10,6 +10,8 @@ use serial_test::serial;
 mod cargo_environment;
 #[path = "documentation_examples/identifier_artefact_e2e_support.rs"]
 mod identifier_artefact_e2e_support;
+#[path = "documentation_examples/identifier_artefact_lease_cargo_build_tests.rs"]
+mod identifier_artefact_lease_cargo_build_tests;
 #[path = "documentation_examples/identifier_artefact_lease_inheritance_tests.rs"]
 mod identifier_artefact_lease_inheritance_tests;
 #[path = "documentation_examples/identifier_artefact_lease_support.rs"]

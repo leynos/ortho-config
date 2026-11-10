@@ -8,12 +8,13 @@
 //! abruptly leaves Cargo and its compilers running with nothing supervising
 //! them.
 //!
-//! The lease itself stays held by those processes because each nested build
-//! inherits a duplicate of the lease handle; see the lease module. This module
-//! supplies the other half: a snapshot of the helper's descendants, taken while
-//! the parent links still exist, and a bounded termination of the recorded
-//! processes. The regression in the lease tests proves both halves: an
-//! orphaned writer keeps the lease refused, and terminating it makes the
+//! The lease itself stays held by Cargo because each nested build inherits a
+//! duplicate of the lease handle; see the lease module. Cargo passes a null
+//! standard input to its own children, so the lease does not reach them, and
+//! this module supplies the other half: a snapshot of the helper's descendants,
+//! taken while the parent links still exist, and a bounded termination of the
+//! recorded processes. The regressions in the lease tests prove both halves: an
+//! orphaned descendant keeps the lease refused, and terminating it makes the
 //! target acquirable again.
 //!
 //! Windows needs no snapshot, so every item here is Unix-only. The runner's

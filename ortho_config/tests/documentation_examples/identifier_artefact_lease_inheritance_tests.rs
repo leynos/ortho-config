@@ -13,10 +13,11 @@
 //!   that releasing the holder's own handle does not release the lease while a
 //!   descendant's inherited duplicate is open, and that the descendant can
 //!   still write to the target during that window.
-//! - [`the_runner_deadline_kill_releases_an_inherited_lease`] shows that the
-//!   runner's own deadline still terminates the child it owns, which closes the
-//!   inherited duplicate and frees the target. Handing the child a lease must
-//!   not make the build unkillable.
+//! - [`the_runner_deadline_kill_releases_an_inherited_lease`] shows that a
+//!   child the runner started with the inherited handle keeps the target
+//!   refused while it lives, and that the runner's own deadline still
+//!   terminates it, which closes the duplicate and frees the target. Handing
+//!   the child a lease must not make the build unkillable.
 //!
 //! Both use the same writer, [`nested_writer_probe`], which appends to a
 //! heartbeat file inside the target until it is killed. The heartbeat is the
@@ -159,28 +160,55 @@ fn the_runner_deadline_kill_releases_an_inherited_lease() -> Result<()> {
 
     let lease = acquire(target.path(), Instant::now() + LEASE_ENVELOPE)?;
     let mut command = child_test_command(WRITER_PROBE, scratch.path())?;
-    command.stdin(lease.inherited_handle()?);
-    let error = process_runner::run_with_policy(
-        &mut command,
-        process_runner::Operation("hold the leased target past the runner deadline"),
-        process_runner::Policy::build().bounded_by(RUNNER_DEADLINE),
-    )
-    .err()
-    .context("the runner should stop a writer that never exits")?;
+    let stdin = lease.inherited_handle()?;
+    // This process releases its own handle before the runner starts, so the
+    // refusal below can only come from the duplicate the child inherits.
+    drop(lease);
+    let runner = std::thread::spawn(move || {
+        process_runner::run_with_policy_with_stdin(
+            &mut command,
+            process_runner::Operation("hold the leased target past the runner deadline"),
+            process_runner::Policy::build().bounded_by(RUNNER_DEADLINE),
+            stdin,
+        )
+    });
+    wait_for_heartbeat_length(&target_directory, 2, HELPER_STARTUP)?;
+    let _refusal = acquire(target.path(), Instant::now() + REFUSAL_WINDOW)
+        .err()
+        .context(
+            "a replacement acquired the target while the runner's child held the inherited lease",
+        )?;
+    let error = runner
+        .join()
+        .map_err(|_panic| anyhow::Error::msg("the deadline-kill thread panicked"))?
+        .err()
+        .context("the runner should stop a writer that never exits")?;
     ensure!(
         process_runner::deadline_exceeded(&error),
         "the runner should report a deadline kill rather than another failure:\n{error:#}",
-    );
-    ensure!(
-        heartbeat_length(&target_directory) > 0,
-        "the writer should have reached the target before the runner killed it",
     );
 
     // The runner reaped the child it owned, so its inherited duplicate closed.
     // If the lease were still held here, the build would have been made
     // unkillable by inheriting it.
-    drop(lease);
     let _replacement = acquire(target.path(), Instant::now() + REPLACEMENT_WINDOW)
         .context("the runner's deadline kill should have closed the inherited lease handle")?;
+    Ok(())
+}
+
+/// Wait until the target heartbeat has reached `minimum` bytes.
+///
+/// This regression starts its writer through the runner rather than through
+/// [`Helper`], so it has no helper to watch for an early exit; the heartbeat is
+/// the proof that the child is alive and writing before the refusal is tried.
+fn wait_for_heartbeat_length(target: &Dir, minimum: u64, limit: Duration) -> Result<()> {
+    let deadline = Instant::now() + limit;
+    while heartbeat_length(target) < minimum {
+        ensure!(
+            Instant::now() < deadline,
+            "timed out waiting for the runner's child to write to the leased target",
+        );
+        std::thread::sleep(HEARTBEAT_INTERVAL);
+    }
     Ok(())
 }

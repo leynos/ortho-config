@@ -66,9 +66,11 @@ pub(crate) fn build_fixture(
         cargo.package_id.clone(),
     )));
     let observed_messages = Arc::clone(&messages);
-    // Every compiler Cargo starts inherits the lease handle this process hands
-    // the nested build, so a replacement cannot clean the target mid-build or
-    // after this process is interrupted while Cargo is still running.
+    // The nested Cargo holds the lease handle this process hands it, so a
+    // replacement cannot clean the target mid-build or after this process is
+    // interrupted while Cargo is still running. Cargo's own children receive a
+    // null standard input, so the handle stops at Cargo; the parent's tree
+    // termination removes the compilers beneath it.
     let output = process_runner::run_with_hooks(
         &mut command,
         process_runner::Operation("build identifier artefact fixture"),

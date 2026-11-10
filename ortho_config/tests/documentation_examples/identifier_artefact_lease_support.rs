@@ -59,6 +59,18 @@ pub(super) const POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// How long the parent waits for a killed second process to disappear.
 pub(super) const TEARDOWN: Duration = Duration::from_secs(5);
 
+/// How long a replacement keeps trying while an orphan still holds the lease.
+///
+/// Long enough for the acquisition loop to poll several times, so a refusal is
+/// the lease being held rather than a single unlucky attempt. Only the Unix
+/// teardown observes an orphan: on Windows the helper's Job Object has already
+/// terminated the tree it left behind.
+#[cfg(unix)]
+pub(super) const REFUSAL_WINDOW: Duration = Duration::from_millis(500);
+
+/// How long a replacement may take once the orphan has been terminated.
+pub(super) const REPLACEMENT_WINDOW: Duration = Duration::from_secs(10);
+
 /// The file a nested writer appends to inside the leased target.
 ///
 /// Its length is the heartbeat. Each beat is a single one-byte write to an
@@ -292,6 +304,16 @@ pub(super) fn required_scratch_path() -> Result<PathBuf> {
     let path = std::env::var_os(SCRATCH_VARIABLE)
         .with_context(|| format!("{SCRATCH_VARIABLE} should name the scratch directory"))?;
     Ok(PathBuf::from(path))
+}
+
+/// Read the target path the helper announced before leasing it.
+pub(super) fn announced_target(scratch: &Dir) -> Result<PathBuf> {
+    Ok(PathBuf::from(
+        scratch
+            .read_to_string("target.txt")
+            .context("read the leased target path")?
+            .trim(),
+    ))
 }
 
 /// Open the scratch directory named by the parent.

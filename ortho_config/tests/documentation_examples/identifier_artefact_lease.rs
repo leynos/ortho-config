@@ -15,14 +15,16 @@
 //!
 //! The lease is more than a mutex between test processes. Every nested Cargo
 //! invocation inherits a duplicate of the holder's handle as its standard
-//! input, so the operating system keeps the lease held for as long as any
-//! descendant of that invocation is still able to write to the target. A
-//! replacement process therefore cannot acquire the target between a helper's
-//! death and the death of the compilers beneath it. On Unix the duplicate
-//! shares the open file description that `flock` locks. On Windows, where
-//! `LockFileEx` locks belong to the locking process rather than to the file
-//! object, the lease file is opened with an empty share mode, so an inherited
-//! duplicate keeps a later open refused.
+//! input, so the operating system keeps the lease held for as long as Cargo
+//! itself lives. A replacement process therefore cannot acquire the target
+//! between a helper's death and the death of the build it started. Cargo gives
+//! its own children — build scripts and rustc — a null standard input, so the
+//! handle stops at Cargo; those descendants are removed by the parent's
+//! termination of the recorded tree (see the descendants module). On Unix the
+//! duplicate shares the open file description that `flock` locks. On Windows,
+//! where `LockFileEx` locks belong to the locking process rather than to the
+//! file object, the lease file is opened with an empty share mode, so an
+//! inherited duplicate keeps a later open refused.
 
 use anyhow::{Context, Result, ensure};
 #[cfg(not(windows))]
@@ -61,11 +63,13 @@ pub(crate) struct TargetLease {
 impl TargetLease {
     /// A duplicate of the lease handle for a nested child to inherit.
     ///
-    /// Passing this as the child's standard input hands every descendant of
-    /// that child the same open file description (Unix) or file object
-    /// (Windows). The lease then remains held until the last of those
-    /// processes exits, which is what stops a replacement leaseholder from
-    /// cleaning the target while an orphaned compiler can still write to it.
+    /// Passing this as the child's standard input hands the direct child the
+    /// same open file description (Unix) or file object (Windows). The lease
+    /// then remains held until that process exits, which is what stops a
+    /// replacement leaseholder from cleaning the target while Cargo is still
+    /// running after its helper died. Cargo does not pass the handle on: the
+    /// build scripts and rustc it starts receive a null standard input, and
+    /// the parent's tree termination removes them.
     ///
     /// # Errors
     ///
@@ -231,15 +235,27 @@ mod tests {
         Ok(())
     }
 
+    /// The envelope this test grants the wait.
+    const SPENT_ENVELOPE: Duration = Duration::from_millis(1200);
+    /// The share of it an earlier phase spends before the wait begins.
+    const DISCOVERY_SHARE: Duration = Duration::from_millis(1000);
+    /// The finish bound that separates a shared deadline from a fresh envelope.
+    const SHARED_DEADLINE_BOUND: Duration = Duration::from_millis(1800);
+
     /// A wait ends at a deadline that an earlier phase already partly spent.
     ///
     /// `acquire` takes the deadline as a parameter, so this cannot observe a
     /// second envelope being started inside it; that regression is caught by
     /// the Python contract `test_the_identifier_fixture_charges_discovery_to_one_envelope`,
     /// which inspects the implementation. What this test can show is the
-    /// property the parameter exists for: an envelope already 400 ms spent
-    /// against a 600 ms deadline ends the wait at the deadline, not at a full
-    /// fresh one. The finishing instant is reported back from the worker so
+    /// property the parameter exists for. The envelope starts when `started` is
+    /// recorded and 1000 ms of its 1200 ms are spent before the wait begins, so
+    /// a wait that honours the shared deadline ends at about 1200 ms. A wait
+    /// that instead started a fresh envelope of the same length would end at
+    /// about 2200 ms, because it can only begin once the 1000 ms share is gone.
+    /// The bound sits between those two finishes with 600 ms of margin on the
+    /// correct side and 400 ms on the other, so a loaded host does not decide
+    /// the result. The finishing instant is reported back from the worker so
     /// the assertion measures when the wait ended rather than merely that it
     /// ended before the receive timeout.
     #[test]
@@ -248,8 +264,8 @@ mod tests {
         let _held = acquire(target.path(), Instant::now() + Duration::from_secs(5))?;
         // Discovery's share of the envelope, spent before the wait begins.
         let started = Instant::now();
-        let deadline = started + Duration::from_millis(600);
-        std::thread::sleep(Duration::from_millis(400));
+        let deadline = started + SPENT_ENVELOPE;
+        std::thread::sleep(DISCOVERY_SHARE);
         let path = target.path().to_path_buf();
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
@@ -266,13 +282,12 @@ mod tests {
             report.contains(LEASE_FILE_NAME),
             "the wait should end at the shared envelope and name {LEASE_FILE_NAME:?}:\n{report}",
         );
-        // Generous against a loaded host, and still far below the 600 ms the
-        // deadline allows: a wait that started its own envelope would sit on
-        // the held lease for its full span rather than the 200 ms remainder.
+        let finish = finished.duration_since(started);
         ensure!(
-            finished.duration_since(started) < Duration::from_secs(2),
-            "the wait outlasted the shared envelope by {:?}",
-            finished.duration_since(started),
+            finish < SHARED_DEADLINE_BOUND,
+            "the wait outlasted the shared envelope by {finish:?}: a wait that started its \
+             own envelope would only begin after {DISCOVERY_SHARE:?} and end near {:?}",
+            DISCOVERY_SHARE + SPENT_ENVELOPE,
         );
         Ok(())
     }

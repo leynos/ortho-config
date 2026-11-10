@@ -32,10 +32,11 @@
 //!
 //! The lease has to outlive an interrupted build as well as its holder. Each
 //! nested Cargo invocation inherits a duplicate of the lease handle as its
-//! standard input, so the lock stays held while any compiler beneath that
-//! invocation can still write to the target. A helper that dies abruptly
-//! therefore cannot hand the target to a replacement process while its own
-//! Cargo tree is still running; see [`fixture_cargo`] and the lease module.
+//! standard input, so the lock stays held while Cargo itself is still running.
+//! A helper that dies abruptly therefore cannot hand the target to a
+//! replacement process before Cargo exits; Cargo's own children are removed by
+//! the parent's termination of the recorded tree. See [`fixture_cargo`] and the
+//! lease module.
 
 #[path = "identifier_artefact_cargo_messages.rs"]
 mod cargo_messages;
@@ -173,9 +174,9 @@ impl FixtureCargo {
 
     /// A duplicate of the lease handle for a nested Cargo child to inherit.
     ///
-    /// The child's descendants keep the target leased while they live, so an
-    /// interrupted helper cannot release the target to a replacement process
-    /// before its compilers have stopped writing.
+    /// Cargo keeps the target leased for as long as it lives, so an interrupted
+    /// helper cannot release the target to a replacement process before the
+    /// build it started has stopped.
     pub(super) fn inherited_lease(&self) -> Result<Stdio> {
         self.lease.inherited_handle()
     }

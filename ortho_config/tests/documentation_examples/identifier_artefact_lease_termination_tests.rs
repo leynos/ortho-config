@@ -9,11 +9,14 @@
 //! refused to a replacement while the orphan can still write to it, and become
 //! acquirable once the orphan is terminated.
 //!
-//! The writer is [`nested_writer_probe`], not a Cargo build, because a build
-//! may finish before it is interrupted and the regression must be decisive.
-//! What is being tested is the runner's ownership and the lease's lifetime:
-//! both are the same for the probe as for Cargo, since both are started by
-//! `process_runner` and inherit the same lease handle.
+//! [`nested_build_helper`] drives [`nested_writer_probe`] directly, because a
+//! synthetic writer can be made to outlive its supervisor deterministically.
+//! The real-build regression lives in
+//! [`identifier_artefact_lease_cargo_build_tests`], which drives an actual
+//! `cargo build` and proves the same ordering through the process tree the
+//! fixture starts. Cargo gives its own children — build scripts and rustc — a
+//! null standard input, so the lease reaches Cargo and stops there; those
+//! descendants are removed by the tree termination, not by the lease.
 //!
 //! On Unix the helper leads its own process group and its nested writer is in
 //! another, so [`Descendants`] records and terminates the tree that survives
@@ -27,9 +30,12 @@ use super::identifier_artefact_e2e_support::acquire;
 use super::identifier_artefact_e2e_support::locate_fixture;
 #[cfg(unix)]
 use super::identifier_artefact_e2e_support::{Descendants, snapshot_descendants};
+#[cfg(unix)]
+use super::identifier_artefact_lease_support::REFUSAL_WINDOW;
 use super::identifier_artefact_lease_support::{
-    HEARTBEAT_FILE, HELPER_STARTUP, HELPER_WORK_BOUND, Helper, child_test_command, heartbeat_after,
-    heartbeat_length, required_scratch, required_scratch_path, wait_for_heartbeat, wait_for_marker,
+    HEARTBEAT_FILE, HELPER_STARTUP, HELPER_WORK_BOUND, Helper, REPLACEMENT_WINDOW,
+    announced_target, child_test_command, heartbeat_after, heartbeat_length, required_scratch,
+    required_scratch_path, wait_for_heartbeat, wait_for_marker,
 };
 use super::{process_runner, scenario};
 use anyhow::{Context, Result, ensure};
@@ -53,13 +59,6 @@ const WRITER_PROBE: &str = "identifier_artefact_lease_inheritance_tests::nested_
 /// Object has already terminated the writer.
 #[cfg(unix)]
 const ORPHAN_WINDOW: Duration = Duration::from_millis(400);
-
-/// How long a replacement keeps trying while the orphan holds the lease.
-#[cfg(unix)]
-const REFUSAL_WINDOW: Duration = Duration::from_millis(500);
-
-/// How long a replacement may take once the orphan has been terminated.
-const REPLACEMENT_WINDOW: Duration = Duration::from_secs(10);
 
 /// How long the heartbeat is watched for further growth once the orphan ends.
 const FROZEN_WINDOW: Duration = Duration::from_millis(400);
@@ -119,12 +118,7 @@ fn a_nested_writer_cannot_outlive_a_killed_helper() -> Result<()> {
         "lease_held",
         HELPER_STARTUP,
     )?;
-    let target = PathBuf::from(
-        scratch_directory
-            .read_to_string("target.txt")
-            .context("read the leased target path")?
-            .trim(),
-    );
+    let target = announced_target(&scratch_directory)?;
     let target_directory =
         Dir::open_ambient_dir(&target, ambient_authority()).context("open the leased target")?;
     wait_for_heartbeat(&mut helper, &target_directory, 2, HELPER_STARTUP)?;
