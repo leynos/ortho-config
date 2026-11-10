@@ -315,18 +315,36 @@ mod tests {
         Ok(())
     }
 
-    /// A compiler-artifact record without `fresh` is a hard error.
-    #[test]
-    fn a_record_without_a_fresh_flag_is_rejected() -> Result<()> {
+    /// A compiler-artifact record that omits `fresh`.
+    const WITHOUT_FRESH: &[u8] = b"{\"reason\":\"compiler-artifact\",\"package_id\":\"x\"}\n";
+
+    /// Feed `records` to a fresh observer and render the rejection it reports.
+    ///
+    /// The rejection regressions differ in what they observe and in the message
+    /// they require, but not in how they reach the error, so that path lives
+    /// here once.
+    fn rejection_of(records: &[&[u8]]) -> Result<String> {
         let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
-        messages.observe(b"{\"reason\":\"compiler-artifact\",\"package_id\":\"x\"}\n");
+        for record in records {
+            messages.observe(record);
+        }
         let error = messages
             .finish()
             .err()
-            .context("a record without `fresh` should be rejected")?;
+            .context("the stream should be rejected")?;
+        Ok(format!("{error:#}"))
+    }
+
+    /// A record without `fresh` is a hard error, and a malformed record that
+    /// follows it does not displace that rejection.
+    #[rstest]
+    #[case::the_missing_field(&[WITHOUT_FRESH])]
+    #[case::a_malformed_tail(&[WITHOUT_FRESH, b"{not json}"])]
+    fn a_record_without_a_fresh_flag_is_rejected(#[case] records: &[&[u8]]) -> Result<()> {
+        let error = rejection_of(records)?;
         ensure!(
-            format!("{error:#}").contains("`fresh`"),
-            "the rejection should name the missing field:\n{error:#}",
+            error.contains("`fresh`"),
+            "the rejection should name the missing field:\n{error}",
         );
         Ok(())
     }
@@ -335,35 +353,12 @@ mod tests {
     #[test]
     fn an_over_long_record_stops_the_parser_and_keeps_its_error() -> Result<()> {
         let long = vec![b' '; MAX_CARGO_RECORD_BYTES + 1];
-        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
-        messages.observe(&long);
         // A later malformed record must not replace the diagnostic that
         // explains why parsing stopped.
-        messages.observe(b"{not json}\n");
-        let error = messages
-            .finish()
-            .err()
-            .context("an over-long record should be rejected")?;
+        let error = rejection_of(&[&long, b"{not json}\n"])?;
         ensure!(
-            format!("{error:#}").contains("128 KiB"),
-            "the rejection should state the bound:\n{error:#}",
-        );
-        Ok(())
-    }
-
-    /// A malformed tail does not displace a rejection already recorded.
-    #[test]
-    fn the_first_rejection_survives_a_malformed_tail() -> Result<()> {
-        let mut messages = CargoMessages::for_package(FIXTURE.to_owned());
-        messages.observe(b"{\"reason\":\"compiler-artifact\",\"package_id\":\"x\"}\n");
-        messages.observe(b"{not json}");
-        let error = messages
-            .finish()
-            .err()
-            .context("the first rejection should be reported")?;
-        ensure!(
-            format!("{error:#}").contains("`fresh`"),
-            "the first rejection should be the one reported:\n{error:#}",
+            error.contains("128 KiB"),
+            "the rejection should state the bound:\n{error}",
         );
         Ok(())
     }

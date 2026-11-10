@@ -62,31 +62,42 @@ fn render(records: &[Record]) -> Vec<u8> {
 }
 
 /// Feed `stream` to `messages` in the sizes given, then one byte at a time.
-///
-/// Running out of generated sizes falls back to single bytes rather than
-/// dumping the remainder, so every generated case exercises a boundary that
-/// does not line up with the records. The later sizes are unused once the
-/// stream ends, which is why the list may be longer than the stream.
 fn feed_in_chunks(messages: &mut CargoMessages, stream: &[u8], sizes: &[usize]) {
-    let mut offset = 0;
-    for size in sizes {
-        let remaining = stream.len().saturating_sub(offset);
-        if remaining == 0 {
-            return;
-        }
-        let end = offset + (*size).min(remaining);
-        if let Some(chunk) = stream.get(offset..end) {
-            messages.observe(chunk);
-        }
-        offset = end;
+    for chunk in chunks(stream, sizes) {
+        messages.observe(chunk);
     }
-    while offset < stream.len() {
-        let end = offset + 1;
-        if let Some(byte) = stream.get(offset..end) {
-            messages.observe(byte);
-        }
-        offset = end;
-    }
+}
+
+/// The byte ranges `sizes` describe over a stream of `stream_len` bytes.
+///
+/// Each size extends the previous end, clamped to the stream, so a size that
+/// runs past the end names the remainder rather than a range outside it. Any
+/// stream left after the generated sizes is split into single bytes, so every
+/// generated case exercises a boundary that does not line up with the records.
+/// The later sizes are unused once the stream ends, which is why the list may be
+/// longer than the stream.
+fn chunk_bounds(stream_len: usize, sizes: &[usize]) -> Vec<(usize, usize)> {
+    let (mut bounds, offset) = sizes.iter().fold(
+        (Vec::new(), 0usize),
+        |(mut bounds, offset): (Vec<(usize, usize)>, usize), size| {
+            let end = (offset + size).min(stream_len);
+            bounds.push((offset, end));
+            (bounds, end)
+        },
+    );
+    bounds.extend((offset..stream_len).map(|index| (index, index + 1)));
+    bounds
+}
+
+/// The chunks of `stream` those ranges name, in order.
+///
+/// `get` rather than an index expression keeps a malformed range from
+/// panicking; an empty range yields an empty chunk, which the parser ignores.
+fn chunks<'a>(stream: &'a [u8], sizes: &[usize]) -> Vec<&'a [u8]> {
+    chunk_bounds(stream.len(), sizes)
+        .into_iter()
+        .filter_map(|(start, end)| stream.get(start..end))
+        .collect()
 }
 
 /// The counts and directory a correct parser must produce, if any.
