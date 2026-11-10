@@ -14,6 +14,7 @@
 //! Windows the helper's Job Object owns that tree, and killing the helper is
 //! enough.
 
+#[cfg(unix)]
 use super::identifier_artefact_e2e_support::snapshot_descendants;
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
@@ -168,9 +169,12 @@ impl Drop for Helper {
             return;
         }
         // Record the descendants while their parent links still exist, then
-        // remove the helper and everything it left behind.
+        // remove the helper and everything it left behind. Windows needs no
+        // snapshot: the helper's Job Object owns that tree.
+        #[cfg(unix)]
         let descendants = snapshot_descendants(self.child.id()).unwrap_or_default();
         let _kill = self.child.start_kill();
+        #[cfg(unix)]
         let _terminated = descendants.terminate();
         let deadline = Instant::now() + TEARDOWN;
         while Instant::now() < deadline

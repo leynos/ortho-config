@@ -42,6 +42,9 @@ mod cargo_messages;
 #[path = "identifier_artefact_cargo_messages_property_tests.rs"]
 #[cfg(test)]
 mod cargo_messages_property_tests;
+// The descendant snapshot exists only where the parent has to remove a tree
+// the helper left behind; Windows relies on the helper's Job Object.
+#[cfg(unix)]
 #[path = "identifier_artefact_descendants.rs"]
 mod descendants;
 #[path = "identifier_artefact_fixture_build.rs"]
@@ -54,6 +57,7 @@ mod lease;
 #[path = "identifier_artefact_telemetry.rs"]
 mod telemetry;
 
+#[cfg(unix)]
 pub(super) use self::descendants::{Descendants, snapshot_descendants};
 pub(super) use self::fixture_build::{artefact, artefact_path, build_fixture, clean_fixture};
 pub(super) use self::lease::{TargetLease, acquire};

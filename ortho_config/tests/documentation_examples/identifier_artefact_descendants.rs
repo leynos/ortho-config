@@ -16,14 +16,12 @@
 //! orphaned writer keeps the lease refused, and terminating it makes the
 //! target acquirable again.
 //!
-//! Windows needs no snapshot. The runner's Job Object is created with
-//! `KILL_ON_JOB_CLOSE` and belongs to the helper, so killing the helper makes
-//! the kernel terminate the whole tree. The snapshot is empty there, and
-//! [`Descendants::terminate`] has nothing left to do.
+//! Windows needs no snapshot, so every item here is Unix-only. The runner's
+//! Job Object is created with `KILL_ON_JOB_CLOSE` and belongs to the helper,
+//! so killing the helper makes the kernel terminate the whole tree.
 
-use anyhow::Result;
 #[cfg(unix)]
-use anyhow::{Context, ensure};
+use anyhow::{Context, Result, ensure};
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
@@ -52,16 +50,16 @@ const POLL_INTERVAL: Duration = Duration::from_millis(10);
 ///
 /// Taken before the helper is killed, because a killed process's children are
 /// re-parented and can no longer be found by following parent links.
+#[cfg(unix)]
 #[derive(Debug, Default)]
 pub(crate) struct Descendants {
     /// The recorded descendant process IDs, excluding the helper itself.
-    #[cfg(unix)]
     pids: Vec<u32>,
 }
 
+#[cfg(unix)]
 impl Descendants {
     /// Whether the snapshot recorded no descendants.
-    #[cfg(unix)]
     pub(crate) const fn is_empty(&self) -> bool {
         self.pids.is_empty()
     }
@@ -78,7 +76,6 @@ impl Descendants {
     /// Returns an error when a recorded descendant is still running at the
     /// end of the bound. The lease still protects the target in that case;
     /// this reports the leftover rather than claiming a clean teardown.
-    #[cfg(unix)]
     pub(crate) fn terminate(&self) -> Result<()> {
         let deadline = Instant::now() + TERMINATION_BOUND;
         // A refused signal is the reason a descendant survived, so it belongs
@@ -103,15 +100,6 @@ impl Descendants {
             );
             std::thread::sleep(POLL_INTERVAL);
         }
-    }
-
-    /// Terminate every recorded descendant.
-    ///
-    /// Windows records none: the helper's Job Object terminates its own tree
-    /// when the helper dies, before this could run.
-    #[cfg(not(unix))]
-    pub(crate) const fn terminate(&self) -> Result<()> {
-        Ok(())
     }
 }
 
@@ -257,19 +245,6 @@ fn process_state(raw: i32) -> Option<String> {
 #[cfg(unix)]
 fn is_dead_state(state: Option<String>) -> bool {
     state.is_some_and(|text| text.starts_with('Z') || text.starts_with('X'))
-}
-
-/// Record the descendants of `root`.
-///
-/// Windows records none: the helper's Job Object terminates its own tree when
-/// the helper dies, so the parent has nothing left to remove.
-///
-/// # Errors
-///
-/// This implementation cannot fail.
-#[cfg(not(unix))]
-pub(crate) const fn snapshot_descendants(_root: u32) -> Result<Descendants> {
-    Ok(Descendants {})
 }
 
 #[cfg(all(test, unix))]
