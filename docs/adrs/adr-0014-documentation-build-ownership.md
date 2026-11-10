@@ -395,12 +395,63 @@ artefact read.
 The fixture holds an exclusive operating-system file lease over the private
 target for the whole test. The lease file is `.identifier-artefact.lease`
 inside that target, so it shares the target's lifetime and its `CACHEDIR.TAG`
-marking. A blocked holder re-checks the lock every 50 ms until the previous
+marking. A waiting process re-checks the lock every 50 ms until the current
 holder releases it, and the wait is bounded by the scenario deadline; an
-exhausted wait fails with a message naming the lease file. The lease is held
-from target discovery until the fixture is dropped. Discovery itself only reads
-workspace metadata and touches no build output, so it may run while another
-process holds the lease; the lease is taken before the first build.
+exhausted wait fails with a message naming the lease file. Discovery runs
+first. It only reads workspace metadata and touches no build output, so it may
+run while another process holds the lease. The lease is acquired after
+discovery and before the first build, and it is held until the fixture is
+dropped.
+
+### Lease inherited by the builds it protects
+
+The lease alone would leave an ordering hole. The runner gives every nested
+child its own process group (Unix) or Job Object (Windows), which is what lets
+it kill a whole build at its deadline. It also means that killing the *helper*
+reaches the helper alone: Cargo and its compilers keep running with nothing
+supervising them, and the helper's own lease handle closes with it. A
+replacement process could then acquire the target and clean it while those
+compilers are still writing.
+
+Each nested Cargo invocation therefore inherits a duplicate of the lease handle
+as its standard input. Every descendant of that invocation inherits the same
+handle again, so the operating system keeps the lease held for as long as any
+of them can still write to the target. On Unix the duplicate shares the open
+file description that `flock` locks, so the lock is released only when the last
+descendant closes it. On Windows, where `LockFileEx` locks belong to the
+locking process rather than the file object, the lease file is opened with an
+empty share mode instead: an inherited duplicate keeps a later open refused for
+the descendant's lifetime. The lease file is empty, so a nested Cargo sees an
+empty standard input rather than a terminal it could block on.
+
+This is deliberately not `PR_SET_PDEATHSIG`: that signal is Linux-only, fires
+when the *immediate* parent dies rather than when the helper does, and is not
+inherited by the rustc grandchildren. The inherited handle is portable and
+covers the whole tree.
+
+### Descendants of an interrupted helper
+
+Keeping the lease through an orphaned build makes the target safe, but not
+available: a test interrupted that way would leave the target refused until the
+orphans exit on their own. A regression therefore records the helper's
+descendants while their parent links still exist, kills the helper alone, and
+proves both halves: the orphan can still write to the target and a replacement
+is refused, and terminating the recorded descendants releases the lease and
+freezes the heartbeat.
+
+The snapshot walks the process table from the helper's process ID, because a
+killed process's children are re-parented and can no longer be found by
+following links afterwards. Termination sends `SIGKILL` to each recorded
+process, and to its process group when it leads one, so a compiler started
+after the snapshot cannot survive it. The wait is bounded and reports any
+survivors rather than claiming a clean teardown. A process that has been killed
+but not yet reaped is a zombie, which `kill(pid, 0)` still reports as present;
+the wait reads the process-table state and treats a stopped process as
+terminated, so a slow reaper does not turn a successful kill into a failure.
+
+Windows takes no snapshot. The runner's Job Object is created with
+`KILL_ON_JOB_CLOSE` and belongs to the helper, so the kernel terminates the
+whole tree when the helper dies.
 
 ### One scenario envelope
 
@@ -420,7 +471,10 @@ the helper while a build was still running would leave Cargo and its compilers
 with nothing left to bound them. The helper's deadline therefore expires first:
 its supervised Cargo is killed and reaped by the runner that owns it, and the
 helper reports the failure and exits before the parent stops waiting. A
-workflow contract keeps that ordering from silently inverting.
+workflow contract keeps that ordering from silently inverting. Should it invert
+anyway — the parent kills the helper before its own deadline — the inherited
+lease keeps the target refused, and the parent's descendant snapshot terminates
+the orphaned build before it re-acquires the target.
 
 ### Diagnostic tail beside the retained head
 

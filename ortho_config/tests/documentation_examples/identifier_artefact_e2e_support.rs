@@ -29,12 +29,23 @@
 //! artefact read. [`FixtureCargo`] therefore holds an exclusive lease file
 //! inside the target for the whole test, from discovery until the fixture is
 //! dropped; see [`fixture_cargo`].
+//!
+//! The lease has to outlive an interrupted build as well as its holder. Each
+//! nested Cargo invocation inherits a duplicate of the lease handle as its
+//! standard input, so the lock stays held while any compiler beneath that
+//! invocation can still write to the target. A helper that dies abruptly
+//! therefore cannot hand the target to a replacement process while its own
+//! Cargo tree is still running; see [`fixture_cargo`] and the lease module.
 
 #[path = "identifier_artefact_cargo_messages.rs"]
 mod cargo_messages;
 #[path = "identifier_artefact_cargo_messages_property_tests.rs"]
 #[cfg(test)]
 mod cargo_messages_property_tests;
+#[path = "identifier_artefact_descendants.rs"]
+mod descendants;
+#[path = "identifier_artefact_fixture_build.rs"]
+mod fixture_build;
 #[path = "identifier_artefact_fixture_tests.rs"]
 #[cfg(test)]
 mod fixture_tests;
@@ -43,16 +54,17 @@ mod lease;
 #[path = "identifier_artefact_telemetry.rs"]
 mod telemetry;
 
-use self::cargo_messages::{BuildCounts, CargoMessages, lock_cargo_messages};
-use self::telemetry::{PhaseRecord, TelemetrySink};
+pub(super) use self::descendants::{Descendants, snapshot_descendants};
+pub(super) use self::fixture_build::{artefact, artefact_path, build_fixture, clean_fixture};
+pub(super) use self::lease::{TargetLease, acquire};
+
+use self::telemetry::TelemetrySink;
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use serde_json::Value;
-use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::process::{Command, Stdio};
 use std::time::Instant;
 
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
@@ -78,6 +90,14 @@ pub(super) struct FixtureLocation {
 }
 
 impl FixtureLocation {
+    /// The private target this location will lease.
+    ///
+    /// Reading the path creates nothing; a regression uses it to observe a
+    /// helper's target without being the process that leases it.
+    pub(super) fn target_directory(&self) -> &Path {
+        &self.target_directory
+    }
+
     /// Take the whole-test lease on the private target and build the fixture.
     ///
     /// The lease waits until every other leaseholder has released the target,
@@ -103,7 +123,7 @@ impl FixtureLocation {
         deadline: Instant,
         telemetry: Option<TelemetrySink>,
     ) -> Result<FixtureCargo> {
-        let lease = lease::acquire(&self.target_directory, deadline)?;
+        let lease = acquire(&self.target_directory, deadline)?;
         prepare_target(&self.target_directory)?;
         Ok(FixtureCargo {
             repository: self.repository,
@@ -111,7 +131,7 @@ impl FixtureLocation {
             package_id: self.package_id,
             deadline,
             telemetry,
-            _lease: lease,
+            lease,
         })
     }
 }
@@ -138,13 +158,22 @@ pub(super) struct FixtureCargo {
     package_id: String,
     deadline: Instant,
     telemetry: Option<TelemetrySink>,
-    _lease: lease::TargetLease,
+    lease: TargetLease,
 }
 
 impl FixtureCargo {
     /// The phase telemetry sink, when the evidence run asked for one.
     const fn telemetry(&self) -> Option<&TelemetrySink> {
         self.telemetry.as_ref()
+    }
+
+    /// A duplicate of the lease handle for a nested Cargo child to inherit.
+    ///
+    /// The child's descendants keep the target leased while they live, so an
+    /// interrupted helper cannot release the target to a replacement process
+    /// before its compilers have stopped writing.
+    pub(super) fn inherited_lease(&self) -> Result<Stdio> {
+        self.lease.inherited_handle()
     }
 
     fn bounded_policy(
@@ -241,139 +270,4 @@ fn location_from_metadata(repository: PathBuf, metadata: &Value) -> Result<Fixtu
 /// so discovery can run beside another leaseholder without writing.
 pub(super) fn private_target(workspace_target: &Path) -> PathBuf {
     workspace_target.join(TARGET_DIRECTORY_NAME)
-}
-
-/// What one fixture build produced and what it reused.
-pub(super) struct FixtureBuild {
-    /// The build script's output directory.
-    out_dir: PathBuf,
-    /// Fresh and rebuilt unit counts Cargo reported for this build.
-    counts: BuildCounts,
-}
-
-impl FixtureBuild {
-    /// The build script's output directory, where the artefact is emitted.
-    pub(super) fn out_dir(&self) -> &Path {
-        &self.out_dir
-    }
-
-    /// Which Cargo units were reused and which were recompiled.
-    pub(super) const fn counts(&self) -> BuildCounts {
-        self.counts
-    }
-}
-
-/// Build the fixture with optional artefact emission and report what it reused.
-pub(super) fn build_fixture(
-    emit: bool,
-    cargo: &FixtureCargo,
-    previous_out_dir: Option<&Path>,
-) -> Result<FixtureBuild> {
-    let mut command = Command::new("cargo");
-    cargo_environment::CargoEnvironment::build().apply(&mut command);
-    command
-        .args([
-            "build",
-            "-p",
-            "orthohelp_fixture",
-            "--message-format=json-render-diagnostics",
-        ])
-        .arg("--target-dir")
-        .arg(&cargo.target_directory)
-        .current_dir(&cargo.repository)
-        .env_remove("ORTHO_CONFIG_EMIT_IDENTIFIERS");
-    if emit {
-        command.env("ORTHO_CONFIG_EMIT_IDENTIFIERS", "1");
-    }
-    let messages = Arc::new(Mutex::new(CargoMessages::for_package(
-        cargo.package_id.clone(),
-    )));
-    let observed_messages = Arc::clone(&messages);
-    let output = process_runner::run_with_observer(
-        &mut command,
-        process_runner::Operation("build identifier artefact fixture"),
-        cargo.bounded_policy(
-            process_runner::Policy::build(),
-            "build identifier artefact fixture",
-        )?,
-        move |chunk| lock_cargo_messages(&observed_messages).observe(chunk),
-    )
-    .map_err(|error| retain_runner_error(error, "build identifier artefact fixture"))?;
-    ensure!(
-        output.status.success(),
-        "fixture build should succeed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let mut report = lock_cargo_messages(&messages);
-    let out_dir = report
-        .finish()?
-        .or_else(|| previous_out_dir.map(Path::to_path_buf))
-        .context("Cargo output omitted the fixture build-script directory")?;
-    let counts = report.counts();
-    if let Some(telemetry) = cargo.telemetry() {
-        telemetry.record(PhaseRecord {
-            emit,
-            counts,
-            stderr: &output.stderr,
-        })?;
-    }
-    Ok(FixtureBuild { out_dir, counts })
-}
-
-/// Remove only the fixture's build output in its private target directory.
-pub(super) fn clean_fixture(cargo: &FixtureCargo) -> Result<()> {
-    let mut command = Command::new("cargo");
-    cargo_environment::CargoEnvironment::build().apply(&mut command);
-    let output = process_runner::run_with_policy(
-        command
-            .args(["clean", "-p", "orthohelp_fixture", "--target-dir"])
-            .arg(&cargo.target_directory)
-            .current_dir(&cargo.repository),
-        process_runner::Operation("clean identifier artefact fixture outputs"),
-        cargo.bounded_policy(
-            process_runner::Policy::build(),
-            "clean identifier artefact fixture outputs",
-        )?,
-    )
-    .map_err(|error| retain_runner_error(error, "clean identifier artefact fixture outputs"))?;
-    ensure!(
-        output.status.success(),
-        "fixture package clean should succeed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Ok(())
-}
-
-/// Return the artefact path, if the fixture build emitted one.
-pub(super) fn artefact_path(out_dir: &Path) -> Result<Option<PathBuf>> {
-    let directory = match Dir::open_ambient_dir(out_dir, ambient_authority()) {
-        Ok(directory) => directory,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error).context("open fixture build-script output directory");
-        }
-    };
-    let relative_path = Path::new("ortho-config/cli-identifiers.json");
-    Ok(directory
-        .exists(relative_path)
-        .then(|| out_dir.join(relative_path)))
-}
-
-/// Read the emitted identifier artefact, failing when it is absent.
-pub(super) fn artefact(out_dir: &Path) -> Result<String> {
-    let directory = Dir::open_ambient_dir(out_dir, ambient_authority())
-        .context("open fixture build-script output directory")?;
-    directory
-        .read_to_string("ortho-config/cli-identifiers.json")
-        .context("read identifier artefact")
-}
-
-fn retain_runner_error(error: anyhow::Error, operation: &str) -> anyhow::Error {
-    if process_runner::deadline_exceeded(&error) {
-        error.context(format!("{operation} exceeded its overall deadline"))
-    } else if process_runner::cleanup_incomplete(&error) {
-        error.context(format!("{operation} cleanup was not confirmed"))
-    } else {
-        error.context(format!("{operation} subprocess failed"))
-    }
 }

@@ -12,14 +12,26 @@
 //! the capability policy; every other filesystem access in the target keeps
 //! using `cap_std` handles. The file it opens is created inside the fixture's
 //! own private target, never an ambient path chosen by this module.
+//!
+//! The lease is more than a mutex between test processes. Every nested Cargo
+//! invocation inherits a duplicate of the holder's handle as its standard
+//! input, so the operating system keeps the lease held for as long as any
+//! descendant of that invocation is still able to write to the target. A
+//! replacement process therefore cannot acquire the target between a helper's
+//! death and the death of the compilers beneath it. On Unix the duplicate
+//! shares the open file description that `flock` locks. On Windows, where
+//! `LockFileEx` locks belong to the locking process rather than to the file
+//! object, the lease file is opened with an empty share mode, so an inherited
+//! duplicate keeps a later open refused.
 
 use anyhow::{Context, Result, ensure};
-use cap_std::{
-    ambient_authority,
-    fs::{Dir, OpenOptions},
-};
+#[cfg(not(windows))]
+use cap_std::fs::OpenOptions;
+use cap_std::{ambient_authority, fs::Dir};
 use std::fs::{File, TryLockError};
+use std::io;
 use std::path::Path;
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 /// Names the lease file that serializes whole tests over the private target.
@@ -38,10 +50,33 @@ const LEASE_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// A lease held for as long as the test owns the fixture.
 ///
 /// The lock lives exactly as long as this value: dropping it releases the
-/// lease, which is why the fixture carries it for the whole test.
-pub(super) struct TargetLease {
+/// lease, unless a nested child still holds a duplicate obtained from
+/// [`TargetLease::inherited_handle`]. The fixture therefore carries it for the
+/// whole test.
+pub(crate) struct TargetLease {
     /// The locked file. Never read; kept so the kernel lock outlives the call.
-    _file: File,
+    file: File,
+}
+
+impl TargetLease {
+    /// A duplicate of the lease handle for a nested child to inherit.
+    ///
+    /// Passing this as the child's standard input hands every descendant of
+    /// that child the same open file description (Unix) or file object
+    /// (Windows). The lease then remains held until the last of those
+    /// processes exits, which is what stops a replacement leaseholder from
+    /// cleaning the target while an orphaned compiler can still write to it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the operating system cannot duplicate the handle.
+    pub(crate) fn inherited_handle(&self) -> Result<Stdio> {
+        let duplicate = self
+            .file
+            .try_clone()
+            .context("duplicate the identifier-artefact lease handle")?;
+        Ok(Stdio::from(duplicate))
+    }
 }
 
 /// Create the target if needed and exclusively lock its lease file.
@@ -60,49 +95,109 @@ pub(super) struct TargetLease {
 ///
 /// Returns an error when the target cannot be opened or locked, or when
 /// `deadline` passes while another process still holds the lease.
-pub(super) fn acquire(target: &Path, deadline: Instant) -> Result<TargetLease> {
+pub(crate) fn acquire(target: &Path, deadline: Instant) -> Result<TargetLease> {
     Dir::create_ambient_dir_all(target, ambient_authority())
         .context("create the identifier-artefact target for its lease")?;
     let directory = Dir::open_ambient_dir(target, ambient_authority())
         .context("open the identifier-artefact target for its lease")?;
+    let path = target.join(LEASE_FILE_NAME);
+    acquire_within(&directory, &path, target, deadline)
+}
+
+/// Take the lease on the file at `path`, giving up at `deadline`.
+///
+/// The open is inside the wait, not before it: on Windows the lease is an
+/// exclusive open, so a holder, or a descendant that inherited its handle,
+/// refuses the open itself rather than only the lock. Retrying the whole
+/// open-and-lock step also means the diagnostic below covers both ways a
+/// holder can keep this process out.
+///
+/// The successful [`File`] is moved into the returned [`TargetLease`], so the
+/// kernel lock is released exactly when the test finishes rather than when
+/// this function's local binding goes out of scope.
+fn acquire_within(
+    directory: &Dir,
+    path: &Path,
+    target: &Path,
+    deadline: Instant,
+) -> Result<TargetLease> {
+    loop {
+        match open_lease(directory, path) {
+            Ok(file) => match file.try_lock() {
+                Ok(()) => return Ok(TargetLease { file }),
+                Err(TryLockError::WouldBlock) => {}
+                Err(TryLockError::Error(error)) => {
+                    return Err(error).context("lease the identifier-artefact target");
+                }
+            },
+            Err(error) if is_held_elsewhere(&error) => {}
+            Err(error) => {
+                return Err(error).context("open the identifier-artefact target lease");
+            }
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        ensure!(
+            !remaining.is_zero(),
+            "another test process held the identifier-artefact lease {} for the \
+             whole scenario envelope; its `cargo clean -p orthohelp_fixture` could \
+             remove this build's artefact, so this test stopped instead of building \
+             beside it",
+            target.join(LEASE_FILE_NAME).display(),
+        );
+        std::thread::sleep(LEASE_POLL_INTERVAL.min(remaining));
+    }
+}
+
+/// Open the lease file without taking its lock.
+///
+/// Unix opens it through the target's capability handle and relies on `flock`.
+/// Windows has to deny sharing at open time: an inherited duplicate of the
+/// holder's handle then keeps every later open refused for as long as the
+/// descendant holding it lives, which `LockFileEx` alone cannot do because its
+/// locks belong to the locking process.
+#[cfg(not(windows))]
+fn open_lease(directory: &Dir, _path: &Path) -> io::Result<File> {
     // `truncate(false)` matters: the lease is the lock on the file, and
     // clearing it would be a spurious write racing with another opener.
-    let file = directory
+    directory
         .open_with(
             LEASE_FILE_NAME,
             OpenOptions::new().create(true).write(true).truncate(false),
         )
-        .context("open the identifier-artefact target lease")?
-        .into_std();
-    acquire_within(file, target, deadline)
+        .map(|file| file.into_std())
 }
 
-/// Take the lease on `file`, giving up at `deadline`.
+/// Open the lease file with no sharing permitted.
+#[cfg(windows)]
+fn open_lease(_directory: &Dir, path: &Path) -> io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    // `share_mode(0)` denies read, write and delete to every other open,
+    // including one from this process, and an inherited duplicate keeps the
+    // file object open after the holder exits.
+    std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .share_mode(0)
+        .open(path)
+}
+
+/// Whether an open failed because another handle forbids sharing.
 ///
-/// `file` is moved into the returned [`TargetLease`] on success, so the kernel
-/// lock is released exactly when the test finishes rather than when this
-/// function's local binding goes out of scope.
-fn acquire_within(file: File, target: &Path, deadline: Instant) -> Result<TargetLease> {
-    loop {
-        match file.try_lock() {
-            Ok(()) => return Ok(TargetLease { _file: file }),
-            Err(TryLockError::WouldBlock) => {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                ensure!(
-                    !remaining.is_zero(),
-                    "another test process held the identifier-artefact lease {} for the \
-                     whole scenario envelope; its `cargo clean -p orthohelp_fixture` could \
-                     remove this build's artefact, so this test stopped instead of building \
-                     beside it",
-                    target.join(LEASE_FILE_NAME).display(),
-                );
-                std::thread::sleep(LEASE_POLL_INTERVAL.min(remaining));
-            }
-            Err(TryLockError::Error(error)) => {
-                return Err(error).context("lease the identifier-artefact target");
-            }
-        }
-    }
+/// Windows reports a refused exclusive open as `ERROR_SHARING_VIOLATION`.
+/// Unix never refuses the open; the lock refuses the lease instead.
+#[cfg(windows)]
+fn is_held_elsewhere(error: &io::Error) -> bool {
+    /// `ERROR_SHARING_VIOLATION` from `Win32::Foundation`.
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    error.raw_os_error() == Some(ERROR_SHARING_VIOLATION)
+}
+
+/// Whether an open failed because another handle forbids sharing.
+#[cfg(not(windows))]
+const fn is_held_elsewhere(_error: &io::Error) -> bool {
+    false
 }
 
 #[cfg(test)]
@@ -136,21 +231,24 @@ mod tests {
         Ok(())
     }
 
-    /// Time spent before the wait is charged to the same envelope.
+    /// A wait ends at a deadline that an earlier phase already partly spent.
     ///
-    /// The fixture runs discovery before it asks for the lease, and both share
-    /// the envelope nextest grants the test. A wait that started its own
-    /// envelope would let discovery's 30 second cap and the wait's full
-    /// remainder add up past the 960 second ceiling, leaving nextest to kill
-    /// the test before either phase could report. The wait runs on its own
-    /// thread so a regression fails the bound below rather than blocking the
-    /// suite for the length of a fresh envelope.
+    /// `acquire` takes the deadline as a parameter, so this cannot observe a
+    /// second envelope being started inside it; that regression is caught by
+    /// the Python contract `test_the_identifier_fixture_charges_discovery_to_one_envelope`,
+    /// which inspects the implementation. What this test can show is the
+    /// property the parameter exists for: an envelope already 400 ms spent
+    /// against a 600 ms deadline ends the wait at the deadline, not at a full
+    /// fresh one. The finishing instant is reported back from the worker so
+    /// the assertion measures when the wait ended rather than merely that it
+    /// ended before the receive timeout.
     #[test]
-    fn an_earlier_phase_is_charged_to_the_wait() -> Result<()> {
+    fn a_wait_ends_at_a_deadline_already_partly_spent() -> Result<()> {
         let target = TempDir::new().context("create the lease target")?;
         let _held = acquire(target.path(), Instant::now() + Duration::from_secs(5))?;
         // Discovery's share of the envelope, spent before the wait begins.
-        let deadline = Instant::now() + Duration::from_millis(600);
+        let started = Instant::now();
+        let deadline = started + Duration::from_millis(600);
         std::thread::sleep(Duration::from_millis(400));
         let path = target.path().to_path_buf();
         let (sender, receiver) = mpsc::channel();
@@ -159,14 +257,22 @@ mod tests {
                 Ok(_) => "acquired a lease another handle still holds".to_owned(),
                 Err(error) => format!("{error:#}"),
             };
-            let _receiver_gone = sender.send(report);
+            let _receiver_gone = sender.send((report, Instant::now()));
         });
-        let report = receiver
+        let (report, finished) = receiver
             .recv_timeout(Duration::from_secs(10))
             .context("the wait did not end when the shared envelope expired")?;
         ensure!(
             report.contains(LEASE_FILE_NAME),
             "the wait should end at the shared envelope and name {LEASE_FILE_NAME:?}:\n{report}",
+        );
+        // Generous against a loaded host, and still far below the 600 ms the
+        // deadline allows: a wait that started its own envelope would sit on
+        // the held lease for its full span rather than the 200 ms remainder.
+        ensure!(
+            finished.duration_since(started) < Duration::from_secs(2),
+            "the wait outlasted the shared envelope by {:?}",
+            finished.duration_since(started),
         );
         Ok(())
     }

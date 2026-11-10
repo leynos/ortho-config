@@ -22,29 +22,20 @@
 use super::identifier_artefact_e2e_support::{
     artefact, build_fixture, clean_fixture, fixture_cargo, locate_fixture,
 };
+use super::identifier_artefact_lease_support::{
+    HELPER_DEADLINE, HELPER_STARTUP, HELPER_WORK_BOUND, Helper, report_field, required_scratch,
+    wait_for_marker,
+};
 use super::scenario;
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-#[cfg(windows)]
-use process_wrap::std::JobObject;
-#[cfg(unix)]
-use process_wrap::std::ProcessGroup;
-use process_wrap::std::{ChildWrapper, CommandWrap};
 use serial_test::serial;
-use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
-/// Environment variable naming the scratch directory shared with the child.
-const SCRATCH_VARIABLE: &str = "IDENTIFIER_LEASE_SCRATCH";
-
-/// How long the second process may take to discover and announce the target.
-///
-/// Discovery runs `cargo metadata`, which can queue behind a busy package-cache
-/// lock on a shared host, so this is deliberately much longer than the work
-/// itself.
-const HELPER_STARTUP: Duration = Duration::from_secs(120);
+/// The qualified name of the ignored child test this module drives.
+const LEASE_HELPER: &str = "identifier_artefact_lease_tests::lease_helper";
 
 /// How long the parent keeps its lease after the second process is ready.
 ///
@@ -58,28 +49,6 @@ const LEASE_HOLD: Duration = Duration::from_secs(2);
 /// near zero means the regression would have passed vacuously. Scheduling noise
 /// is allowed for, but not enough to hide a missing lock.
 const MIN_LEASE_WAIT: Duration = Duration::from_millis(500);
-
-/// How long the second process may take to clean, rebuild, and report once the
-/// lease is released.
-const HELPER_DEADLINE: Duration = Duration::from_secs(900);
-
-/// The envelope the second process grants itself, inside [`HELPER_DEADLINE`].
-///
-/// Only the helper supervises its nested Cargo invocations: the runner gives
-/// each child its own process group, so the parent's kill reaches the helper
-/// alone. If the parent's bound expired while Cargo was still building, the
-/// kill would remove the one process that bounds Cargo and leave it running
-/// unsupervised. Capping the helper's own envelope well inside the parent's
-/// bound means its supervised Cargo reaches *its* deadline first, is killed and
-/// reaped by the runner that owns it, and the helper reports the failure and
-/// exits before the parent stops waiting.
-const HELPER_WORK_BOUND: Duration = Duration::from_secs(600);
-
-/// How often the parent polls the second process and its marker files.
-const POLL_INTERVAL: Duration = Duration::from_millis(10);
-
-/// How long the parent waits for a killed second process to disappear.
-const TEARDOWN: Duration = Duration::from_secs(5);
 
 /// The child half: wait for the lease, prove the artefact survived, rebuild it.
 ///
@@ -156,7 +125,7 @@ fn a_second_process_cannot_clean_a_leased_artefact() -> Result<()> {
         .write("out_dir.txt", out_dir.display().to_string())
         .context("write the build-script directory")?;
 
-    let mut helper = Helper::spawn(scratch.path())?;
+    let mut helper = Helper::spawn_for(LEASE_HELPER, scratch.path())?;
     wait_for_marker(&mut helper, &scratch_directory, "located", HELPER_STARTUP)?;
     // The marker says the second process has located the target; from here it
     // should block on the lease this process holds.
@@ -203,119 +172,4 @@ fn a_second_process_cannot_clean_a_leased_artefact() -> Result<()> {
     // lease behaved correctly. `parent_artefact=intact` above is the helper's
     // in-lease evidence that the rebuild reproduced the artefact.
     Ok(())
-}
-
-/// The second process, owned so a failure cannot leave it running.
-struct Helper {
-    child: Box<dyn ChildWrapper>,
-    /// Set once the child has been reaped, so teardown does not signal a
-    /// process group whose leader's identifier the kernel may have reused.
-    status: Option<ExitStatus>,
-}
-
-impl Helper {
-    /// Start the second process as the root of a tree this test can kill.
-    fn spawn(scratch: &Path) -> Result<Self> {
-        let executable = std::env::current_exe().context("the test binary should have a path")?;
-        let mut command = Command::new(executable);
-        command
-            .args([
-                "--ignored",
-                "--exact",
-                "--quiet",
-                "--nocapture",
-                "--test-threads=1",
-                "identifier_artefact_lease_tests::lease_helper",
-            ])
-            .env(SCRATCH_VARIABLE, scratch);
-        let mut wrapped = CommandWrap::from(command);
-        #[cfg(unix)]
-        wrapped.wrap(ProcessGroup::leader());
-        #[cfg(windows)]
-        wrapped.wrap(JobObject);
-        let child = wrapped.spawn().context("start the second test process")?;
-        Ok(Self {
-            child,
-            status: None,
-        })
-    }
-
-    /// Reap the child if it has exited, remembering the result.
-    fn try_status(&mut self) -> Result<Option<ExitStatus>> {
-        if self.status.is_none() {
-            self.status = self.child.try_wait()?;
-        }
-        Ok(self.status)
-    }
-
-    /// Wait for the child, refusing to wait unboundedly for a wedged one.
-    fn await_exit(&mut self, limit: Duration) -> Result<ExitStatus> {
-        let deadline = Instant::now() + limit;
-        loop {
-            if let Some(status) = self.try_status()? {
-                return Ok(status);
-            }
-            ensure!(
-                Instant::now() < deadline,
-                "the second test process did not exit within {limit:?}",
-            );
-            std::thread::sleep(POLL_INTERVAL);
-        }
-    }
-}
-
-impl Drop for Helper {
-    fn drop(&mut self) {
-        if self.status.is_some() {
-            return;
-        }
-        let _kill = self.child.start_kill();
-        let deadline = Instant::now() + TEARDOWN;
-        while Instant::now() < deadline && self.child.try_wait().is_ok_and(|s| s.is_none()) {
-            std::thread::sleep(POLL_INTERVAL);
-        }
-    }
-}
-
-/// Wait for the second process to write `marker`, failing if it exits first.
-fn wait_for_marker(
-    helper: &mut Helper,
-    scratch: &Dir,
-    marker: &str,
-    limit: Duration,
-) -> Result<()> {
-    let deadline = Instant::now() + limit;
-    loop {
-        ensure!(
-            helper.try_status()?.is_none(),
-            "the second test process exited before writing the `{marker}` marker",
-        );
-        if scratch.exists(marker) {
-            return Ok(());
-        }
-        ensure!(
-            Instant::now() < deadline,
-            "timed out waiting for the second test process to write `{marker}`",
-        );
-        std::thread::sleep(POLL_INTERVAL);
-    }
-}
-
-/// Read one `name=value` line from the second process's report.
-fn report_field<'a>(report: &'a str, name: &str) -> Result<&'a str> {
-    report
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix(name)
-                .and_then(|rest| rest.strip_prefix('='))
-        })
-        .with_context(|| format!("the second test process's report omitted `{name}`"))
-}
-
-/// Open the scratch directory named by the parent.
-fn required_scratch() -> Result<Dir> {
-    let path = std::env::var_os(SCRATCH_VARIABLE)
-        .with_context(|| format!("{SCRATCH_VARIABLE} should name the scratch directory"))?;
-    Dir::open_ambient_dir(Path::new(&path), ambient_authority())
-        .with_context(|| format!("open the scratch directory {}", Path::new(&path).display()))
 }
