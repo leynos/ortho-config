@@ -359,6 +359,88 @@ controlled run provides usable cold-build evidence.
 - Existing nextest serialization groups remain until their shared-state
   assumptions are independently disproven.
 
+## Addendum (2026-11-10)
+
+The accepted outcome above is unchanged. This addendum records decisions taken
+after it and is authoritative where the two differ.
+
+### Identifier-artefact private target
+
+The identifier-artefact fixture now names its private target
+`identifier-artefact-target` and nests it beneath the workspace target that
+`cargo metadata` reports. This replaces per-run target ownership with reuse:
+the first phase pays the dependency build, and later phases reuse it. Only the
+phases that must force a rebuild start with `cargo clean -p orthohelp_fixture`,
+which rebuilds the fixture package and its build script while the dependency
+graph beneath them stays warm. The fixture still uses Cargo's default shared
+package cache.
+
+Reuse is asserted rather than inferred from elapsed time. Cargo's JSON message
+stream reports every compiler unit as fresh or rebuilt, and the forced-rebuild
+phase must report fresh dependency units while recompiling only the fixture
+package. A phase that rebuilt the whole graph therefore fails the contract
+instead of merely looking slow.
+
+The target is marked with a `CACHEDIR.TAG` carrying Cargo's cache-directory
+signature, so tools that honour the tag treat it as a cache. Because it is
+nested under the workspace target, a workspace `cargo clean` still removes it.
+
+A stable target is shared state. nextest's test group and `#[serial]`
+coordinate tests inside one runner; neither excludes a second test process from
+running its own `cargo clean -p orthohelp_fixture` inside this test's build or
+artefact read.
+
+### Whole-test lease over the target
+
+The fixture holds an exclusive operating-system file lease over the private
+target for the whole test. The lease file is `.identifier-artefact.lease`
+inside that target, so it shares the target's lifetime and its `CACHEDIR.TAG`
+marking. A blocked holder re-checks the lock every 50 ms until the previous
+holder releases it, and the wait is bounded by the scenario deadline; an
+exhausted wait fails with a message naming the lease file. The lease is held
+from target discovery until the fixture is dropped. Discovery itself only reads
+workspace metadata and touches no build output, so it may run while another
+process holds the lease; the lease is taken before the first build.
+
+### One scenario envelope
+
+The scenario deadline is captured once, before the lease wait, and the lease
+wait, every nested Cargo call, and the artefact read that follows share that
+one envelope. Discovery's 30-second cap is charged to it too, so discovery and
+the wait cannot together outlast the per-test allowance. Starting a second
+envelope at the wait would leave the total unbounded and let nextest kill the
+test before the wait could name itself.
+
+### Diagnostic tail beside the retained head
+
+Each output stream still retains at most 1 MiB for callers that parse it, and
+now also retains a separate 64 KiB tail (`DIAGNOSTIC_TAIL_BYTES`) of the most
+recent bytes. The head cannot explain a stalled child: compile-admission queue
+lines and rustc heartbeats are printed repeatedly, and the last one names the
+wait that was in force. A timeout therefore reports both ends, with the bytes
+seen and whether the head was truncated, so an admission wait, a package-cache
+wait, and a hang are distinguishable.
+
+### Boundary-runner supervision
+
+Process supervision is no longer confined to documentation-test subprocesses.
+The `ortho_l10n` boundary runner (`fixture_cargo`) applies the same model to
+its nested Cargo children: on Unix the child leads its own process group and
+the group is killed at the deadline, and on Windows it runs in its own Job
+Object, whose termination covers every descendant. Reader collection is bounded
+in both outcomes, so a descendant that holds an inherited pipe cannot block the
+diagnostic, and each stream retains a 64 KiB diagnostic tail.
+
+A `SCENARIO_ALLOWANCE` of 900 seconds is shared by every nested Cargo call in
+one boundary contract and passed explicitly from the test, rather than kept in
+a thread-local that unrelated contracts would accumulate. Each call is bounded
+by the smaller of its own cap and what the allowance has left; a call that
+starts with nothing left is refused, naming itself and the allowance. The
+allowance sits inside the 960-second per-test boundary override, and the
+remaining 60 seconds cover rendering fixture roots, reading manifests, and
+reporting. Both runners remain test-only; neither is a general application
+subprocess API.
+
 ## References
 
 - [Executable documentation-test design][design-infrastructure]
