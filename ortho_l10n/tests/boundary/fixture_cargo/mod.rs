@@ -140,8 +140,9 @@ impl FixtureCargo {
     /// # Errors
     ///
     /// Returns an error when the Cargo process cannot be spawned, exceeds
-    /// [`CARGO_DEADLINE`], or starts after the contract's shared allowance is
-    /// spent.
+    /// [`CARGO_DEADLINE`], starts after the contract's shared allowance is
+    /// spent, or spends the rest of that allowance waiting for a sibling nested
+    /// invocation to finish.
     pub(crate) fn cargo(&self, args: &[&str]) -> Result<Output> {
         let mut command = Command::new(cargo_binary());
         // The subcommand has to come first: `--manifest-path` and `--offline`
@@ -157,8 +158,7 @@ impl FixtureCargo {
             .envs(inherited_toolchain())
             .env("CARGO_TARGET_DIR", &self.target);
         let description = format!("cargo {}", args.join(" "));
-        let bound = self.budget.bound(CARGO_DEADLINE, &description)?;
-        run_with_deadline(command, bound, &description)
+        run_with_deadline(command, self.budget, CARGO_DEADLINE, &description)
     }
 
     /// Run `cargo` and require a successful exit status.

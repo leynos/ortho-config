@@ -187,8 +187,7 @@ pub(super) fn package_sources(
         .envs(inherited_toolchain())
         .env("CARGO_TARGET_DIR", target);
     let description = format!("cargo package for {}", invocation.crates.join(", "));
-    let bound = budget.bound(PACKAGE_DEADLINE, &description)?;
-    let output = run_with_deadline(command, bound, &description)?;
+    let output = run_with_deadline(command, budget, PACKAGE_DEADLINE, &description)?;
     if !output.status.success() {
         bail!(
             "{description} failed with {}\nstderr:\n{}",

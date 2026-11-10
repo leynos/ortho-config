@@ -293,8 +293,7 @@ fn workspace_metadata() -> Result<Metadata> {
         .env_clear()
         .envs(inherited_toolchain());
     let description = "workspace cargo metadata";
-    let bound = Budget::new().bound(CARGO_DEADLINE, description)?;
-    let output = run_with_deadline(command, bound, description)?;
+    let output = run_with_deadline(command, Budget::new(), CARGO_DEADLINE, description)?;
     ensure!(
         output.status.success(),
         "workspace cargo metadata failed with {}\nstderr:\n{}",

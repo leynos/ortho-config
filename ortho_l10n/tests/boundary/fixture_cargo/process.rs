@@ -20,7 +20,10 @@
 //!
 //! Finally, it serializes nested invocations within the test process. `cargo
 //! test` runs a binary's tests as threads, which is the one runner where
-//! nextest's `boundary_packaging` group cannot help.
+//! nextest's `boundary_packaging` group cannot help. That wait is itself
+//! bounded by the contract's shared allowance, and the child's bound is
+//! computed only after the wait has ended, so queueing behind a sibling cannot
+//! spend an allowance the child is then measured against.
 
 #[cfg(test)]
 #[path = "deadline_probe_tests.rs"]
@@ -38,7 +41,7 @@ mod serialization_probe_tests;
 mod tail_probe_tests;
 
 use self::readers::{READER_GRACE, StreamCapture, StreamEvidence, drain};
-use super::budget::Bound;
+use super::budget::Budget;
 use anyhow::{Context, Result};
 #[cfg(windows)]
 use process_wrap::std::JobObject;
@@ -46,7 +49,7 @@ use process_wrap::std::JobObject;
 use process_wrap::std::ProcessGroup;
 use process_wrap::std::{ChildWrapper, CommandWrap};
 use std::process::{Command, ExitStatus, Output, Stdio};
-use std::sync::{LazyLock, Mutex, PoisonError};
+use std::sync::{LazyLock, Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
 
 /// How long the runner waits for a killed tree to be reaped.
@@ -73,7 +76,10 @@ const POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// already serializes this binary through its `boundary_packaging` group; this
 /// gives `cargo test` and `make boundary` the same guarantee. It is acquired
 /// before the child is spawned, so time spent waiting for a sibling is never
-/// counted against the child's own deadline.
+/// counted against the child's own deadline. The wait is bounded by the
+/// contract's shared allowance, and the child's bound is computed after the
+/// wait, so a sibling that held the lock for a long time shortens the child's
+/// bound instead of being silently ignored.
 static NESTED_CARGO: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
 /// Run `command` to completion or the deadline, whichever comes first.
@@ -96,24 +102,30 @@ static NESTED_CARGO: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 /// them. Nested invocations are additionally serialized within the process;
 /// see [`NESTED_CARGO`].
 ///
-/// The bound comes from [`super::budget`], not from a bare cap, so a contract
-/// that makes several calls cannot spend the test's whole allowance on the
-/// earlier ones and leave a later invocation to be stopped by nextest. When
-/// the shared allowance set the bound, the deadline error says so.
+/// `budget` is the contract's shared allowance and `cap` this invocation's own
+/// limit. The serialization wait is bounded by the allowance, and the bound is
+/// computed only once the wait has ended. Doing it the other way round let a
+/// child start after its allowance had already been spent waiting, or run past
+/// it: the duration was fixed before the queue, then applied afterwards.
+///
+/// When the shared allowance set the bound, the deadline error says so.
 ///
 /// # Errors
 ///
-/// Returns an error when the child cannot be spawned or collected, when it is
-/// still running at the deadline, or when its output remains open after it has
-/// exited. A timed-out child's whole tree is killed before the error is
-/// returned, so the test process is not left with an orphan holding the
-/// package-cache lock. The error carries the bounded tail of both streams.
+/// Returns an error when the allowance is exhausted before the child can start,
+/// when the child cannot be spawned or collected, when it is still running at
+/// the deadline, or when its output remains open after it has exited. A
+/// timed-out child's whole tree is killed before the error is returned, so the
+/// test process is not left with an orphan holding the package-cache lock. The
+/// error carries the bounded tail of both streams.
 pub(crate) fn run_with_deadline(
     command: Command,
-    bound: Bound,
+    budget: Budget,
+    cap: Duration,
     description: &str,
 ) -> Result<Output> {
-    let _serialized = NESTED_CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+    let _serialized = serialize(budget, description)?;
+    let bound = budget.bound(cap, description)?;
     // Only the deadline error carries the note: a spawn failure should name the
     // command, not repeat why its deadline was shortened.
     let deadline_description = if bound.limited_by_allowance {
@@ -123,6 +135,35 @@ pub(crate) fn run_with_deadline(
     };
     let spawned = spawn_owned(command).with_context(|| format!("spawn {description}"))?;
     supervise(spawned, bound.deadline, &deadline_description)
+}
+
+/// Wait for the nested-Cargo serialization, bounded by `budget`.
+///
+/// A sibling may hold the serialization for its own full cap, so a plain
+/// `lock()` would let one contract's build hide inside another's allowance and
+/// leave the runner reporting nothing when nextest stopped the test. Ending the
+/// wait with the allowance names the invocation that never got to run, and
+/// leaves [`run_with_deadline`] free to charge the wait to what the child is
+/// then given.
+fn serialize(budget: Budget, description: &str) -> Result<MutexGuard<'static, ()>> {
+    loop {
+        match NESTED_CARGO.try_lock() {
+            Ok(guard) => return Ok(guard),
+            // A sibling that panicked while holding the lock left Cargo's
+            // output and cache untouched; refusing to run because of that
+            // would turn one contract's failure into every later one's.
+            Err(TryLockError::Poisoned(poisoned)) => return Ok(poisoned.into_inner()),
+            Err(TryLockError::WouldBlock) => {}
+        }
+        let left = budget.remaining();
+        if left == Duration::ZERO {
+            // Reported as an error value rather than through `ensure!`, so the
+            // diagnostic keeps its own type instead of being re-wrapped from
+            // its display text.
+            return Err(Budget::expired_while_waiting(description));
+        }
+        std::thread::sleep(POLL_INTERVAL.min(left));
+    }
 }
 
 /// Supervise a process tree that is already running.

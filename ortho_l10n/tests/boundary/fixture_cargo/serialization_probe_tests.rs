@@ -16,17 +16,30 @@
 //! killed and the call returns an error. Both failures are distinguished from
 //! the successful case by a wide margin, so the regression does not race the
 //! scheduler.
+//!
+//! Two further regressions hold the serialization themselves, so the wait they
+//! measure lasts exactly as long as they choose rather than depending on a
+//! sibling contract's build:
+//!
+//! - [`an_allowance_spent_while_waiting_is_reported`] gives the waiting call an
+//!   allowance shorter than the hold. The call must refuse at the allowance,
+//!   name the wait, and never spawn its child.
+//! - [`a_wait_for_a_sibling_is_charged_to_the_allowance`] holds the lock for
+//!   part of a longer allowance, then releases it. The child's bound must be
+//!   what is left, not the allowance the call started with: a bound computed
+//!   before the wait would let the child finish a sleep longer than the
+//!   remainder.
 
 use super::super::budget::Budget;
 use super::probe_support::{probe_command_with, scratch_directory, wait_until};
-use super::run_with_deadline;
+use super::{NESTED_CARGO, POLL_INTERVAL, run_with_deadline};
 use anyhow::{Context, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::path::Path;
 use std::process::{Command, Output};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, MutexGuard, TryLockError, mpsc};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
 /// Names the probe variant the child should run.
@@ -66,6 +79,45 @@ const SECOND_DEADLINE: Duration = Duration::from_secs(3);
 /// failure still reports at once instead of waiting this out.
 const FIRST_START_WAIT: Duration = Duration::from_secs(600);
 
+/// How long a regression waits to take the serialization for itself.
+///
+/// A sibling contract may legitimately hold it for its own 440-second cap.
+/// Waiting for that is the point of the regression below, not a failure, so
+/// this bound only stops a wedged binary from hanging the suite.
+const SERIALIZATION_ACQUIRE: Duration = Duration::from_secs(600);
+
+/// The allowance given to the call whose wait is the thing under test.
+///
+/// Shorter than the hold below, so the allowance expires during the wait rather
+/// than after it.
+const WAIT_ALLOWANCE: Duration = Duration::from_secs(1);
+
+/// The cap of the waiting call. It must not be what stops the call: the
+/// allowance has to be exhausted first, which is what the regression checks.
+const WAIT_CAP: Duration = Duration::from_secs(30);
+
+/// How long the regression waits for the refused call to return.
+const REFUSAL_LIMIT: Duration = Duration::from_secs(30);
+
+/// The allowance shared between the hold and the child it pays for.
+const SHARED_ALLOWANCE: Duration = Duration::from_secs(12);
+
+/// How long the second regression holds the serialization.
+///
+/// Long enough that the remaining allowance is shorter than the child's own
+/// sleep, and short enough that it leaves a positive remainder to spawn with.
+const SHARED_HOLD: Duration = Duration::from_secs(5);
+
+/// The child's own sleep, longer than the allowance that remains after the hold.
+const SHARED_SLEEP: Duration = Duration::from_secs(9);
+
+/// The cap of the charged call, far longer than the allowance, so a bound taken
+/// before the wait would have let the child finish its sleep.
+const SHARED_CAP: Duration = Duration::from_secs(60);
+
+/// How long the charged call may take once it owns the serialization.
+const CHARGED_LIMIT: Duration = Duration::from_secs(60);
+
 /// Write a marker and sleep, then write the exit marker.
 ///
 /// Ignored so an ordinary run never waits for it; the regression selects it by
@@ -100,10 +152,12 @@ fn concurrent_runs_are_serialized() -> Result<()> {
     let first_finished = Arc::new(AtomicBool::new(false));
     let finished_flag = Arc::clone(&first_finished);
     let first_run = std::thread::spawn(move || -> Result<Output> {
-        let outcome = (|| {
-            let bound = Budget::new().bound(FIRST_DEADLINE, "first serialization probe")?;
-            run_with_deadline(first, bound, "first serialization probe")
-        })();
+        let outcome = run_with_deadline(
+            first,
+            Budget::new(),
+            FIRST_DEADLINE,
+            "first serialization probe",
+        );
         // Set on every path, so the parent never waits out the bound for a run
         // that has already returned.
         finished_flag.store(true, Ordering::SeqCst);
@@ -121,7 +175,8 @@ fn concurrent_runs_are_serialized() -> Result<()> {
     );
     let second_output = run_with_deadline(
         second,
-        Budget::new().bound(SECOND_DEADLINE, "second serialization probe")?,
+        Budget::new(),
+        SECOND_DEADLINE,
         "second serialization probe",
     )
     .context(
@@ -154,6 +209,126 @@ fn concurrent_runs_are_serialized() -> Result<()> {
         SECOND_SLEEP.as_millis(),
     );
     Ok(())
+}
+
+/// A wait that outlives the allowance must be reported, not hidden.
+///
+/// The regression takes the serialization itself, so the call below cannot
+/// acquire it, and gives that call an allowance far shorter than the hold. The
+/// call must return at its allowance while the lock is still held: a runner
+/// that waited without a bound would block here until the test dropped the
+/// lock, and a runner that ignored the wait when bounding the child would spawn
+/// one after the allowance had already been spent.
+#[test]
+fn an_allowance_spent_while_waiting_is_reported() -> Result<()> {
+    let scratch = TempDir::new().context("create the wait-allowance scratch directory")?;
+    let directory = Dir::open_ambient_dir(scratch.path(), ambient_authority())
+        .context("open the wait-allowance scratch directory")?;
+    let held = hold_serialization()?;
+    // Created before the thread starts, so the allowance is spent from a known
+    // instant rather than from whenever the thread is scheduled.
+    let budget = Budget::expiring_in(WAIT_ALLOWANCE);
+    let command = probe_command("waiter", Duration::ZERO, scratch.path())?;
+    let (returned, outcome) = mpsc::channel();
+    let waiter = std::thread::spawn(move || {
+        let result =
+            run_with_deadline(command, budget, WAIT_CAP, "the waiting serialization probe");
+        let _sent = returned.send(());
+        result
+    });
+
+    let reported = outcome
+        .recv_timeout(REFUSAL_LIMIT)
+        .context("the runner should refuse at the allowance while it waits for the serialization");
+    // The lock is released only after the refusal is observed, so the call
+    // cannot have acquired it and spawned a child before returning.
+    drop(held);
+    reported?;
+    let error = waiter
+        .join()
+        .map_err(|_panic| anyhow!("the waiting probe's thread panicked"))?
+        .err()
+        .context("a call that spent its allowance waiting should fail")?;
+    ensure!(
+        error
+            .to_string()
+            .contains("waited for a sibling nested Cargo invocation"),
+        "the error should name the wait that spent the allowance:\n{error:#}",
+    );
+    ensure!(
+        !directory.exists("waiter.start"),
+        "the runner spawned a child after the allowance had been spent waiting",
+    );
+    Ok(())
+}
+
+/// The child's bound must be what is left after the serialization wait.
+///
+/// The regression holds the serialization for part of the shared allowance,
+/// then releases it. The child sleeps longer than the remainder, so it must be
+/// killed at what is left. A bound computed before the wait would have been the
+/// whole allowance, which comfortably covers the child's sleep, and the call
+/// would succeed instead.
+#[test]
+fn a_wait_for_a_sibling_is_charged_to_the_allowance() -> Result<()> {
+    let scratch = TempDir::new().context("create the charged-wait scratch directory")?;
+    let directory = Dir::open_ambient_dir(scratch.path(), ambient_authority())
+        .context("open the charged-wait scratch directory")?;
+    let held = hold_serialization()?;
+    let budget = Budget::expiring_in(SHARED_ALLOWANCE);
+    let command = probe_command("charged", SHARED_SLEEP, scratch.path())?;
+    let (finished, outcome) = mpsc::channel();
+    let runner = std::thread::spawn(move || {
+        let result = run_with_deadline(command, budget, SHARED_CAP, "the allowance-charged probe");
+        let _sent = finished.send(());
+        result
+    });
+
+    // Spend part of the allowance while the child's thread is queued behind the
+    // lock, then let it through. Spawning the command above happens inside the
+    // thread, so the wait and the child's bound are paid from one allowance.
+    std::thread::sleep(SHARED_HOLD);
+    drop(held);
+    outcome
+        .recv_timeout(CHARGED_LIMIT)
+        .context("the runner should finish once it owns the serialization")?;
+    let error = runner
+        .join()
+        .map_err(|_panic| anyhow!("the charged probe's thread panicked"))?
+        .err()
+        .context(
+            "the remaining allowance should have bounded the child; a bound taken before the \
+             wait would have covered the child's whole sleep",
+        )?;
+    ensure!(
+        error.to_string().contains("allowance"),
+        "the error should report the shared allowance rather than a bare cap:\n{error:#}",
+    );
+    ensure!(
+        !directory.exists("charged.exit"),
+        "the child finished its sleep, so its bound was not the remaining allowance",
+    );
+    Ok(())
+}
+
+/// Take the in-process serialization for the duration of one regression.
+///
+/// A sibling contract may hold it legitimately, so acquisition is bounded and
+/// reported rather than blocking the whole binary behind a wedged lock.
+fn hold_serialization() -> Result<MutexGuard<'static, ()>> {
+    let limit = Instant::now() + SERIALIZATION_ACQUIRE;
+    loop {
+        match NESTED_CARGO.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(TryLockError::Poisoned(poisoned)) => return Ok(poisoned.into_inner()),
+            Err(TryLockError::WouldBlock) => {}
+        }
+        ensure!(
+            Instant::now() < limit,
+            "timed out taking the nested-Cargo serialization for a regression",
+        );
+        std::thread::sleep(POLL_INTERVAL);
+    }
 }
 
 /// Build the probe command for one variant and sleep.

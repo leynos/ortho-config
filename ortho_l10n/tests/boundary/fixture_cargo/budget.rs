@@ -44,10 +44,33 @@ impl Budget {
 
     /// Start an allowance of `allowance`, for regressions that cannot wait.
     #[cfg(test)]
-    fn expiring_in(allowance: Duration) -> Self {
+    pub(crate) fn expiring_in(allowance: Duration) -> Self {
         Self {
             deadline: Instant::now() + allowance,
         }
+    }
+
+    /// What is left of the contract's shared allowance.
+    ///
+    /// [`super::process::run_with_deadline`] uses this to bound its wait for a
+    /// sibling nested invocation. The wait must not outlive the allowance: a
+    /// contract that queued behind a sibling for longer than it was granted
+    /// has nothing left for its own child.
+    pub(crate) fn remaining(&self) -> Duration {
+        self.deadline.saturating_duration_since(Instant::now())
+    }
+
+    /// Report an invocation whose wait for a sibling outlived the allowance.
+    ///
+    /// This is a distinct failure from a call that starts with nothing left:
+    /// here the invocation did wait, and the diagnostic says so rather than
+    /// suggesting it simply arrived too late.
+    pub(crate) fn expired_while_waiting(description: &str) -> anyhow::Error {
+        anyhow::anyhow!(
+            "the boundary contract's {} second allowance was exhausted while {description} \
+             waited for a sibling nested Cargo invocation to finish",
+            SCENARIO_ALLOWANCE.as_secs(),
+        )
     }
 
     /// Bound one nested invocation by its own cap or the allowance, whichever is sooner.
