@@ -164,7 +164,7 @@ fn open_lease(directory: &Dir, _path: &Path) -> io::Result<File> {
             LEASE_FILE_NAME,
             OpenOptions::new().create(true).write(true).truncate(false),
         )
-        .map(|file| file.into_std())
+        .map(cap_std::fs::File::into_std)
 }
 
 /// Open the lease file with no sharing permitted.

@@ -55,6 +55,12 @@ struct RunContext {
 }
 
 pub(crate) struct RunHooks<Observer, Poll, Kill> {
+    /// The standard input the child inherits, or the silent default.
+    ///
+    /// Only the identifier-artefact fixture supplies one: the target lease must
+    /// outlive an interrupted build, and an inherited handle is what keeps the
+    /// lock held by the compilers that survive the helper.
+    pub(crate) stdin: Option<Stdio>,
     pub(crate) observer: Observer,
     pub(crate) poll: Poll,
     pub(crate) kill: Kill,
@@ -111,6 +117,7 @@ where
         operation,
         policy,
         RunHooks {
+            stdin: None,
             observer,
             poll: poll_child,
             kill: kill_child,
@@ -128,31 +135,15 @@ pub(crate) fn kill_child(child: &mut dyn ChildWrapper) -> io::Result<()> {
     child.start_kill()
 }
 
-pub(crate) fn run_with_hooks<Observer, Poll, Kill>(
-    command: &mut Command,
-    operation: Operation<'_>,
-    policy: Policy,
-    hooks: RunHooks<Observer, Poll, Kill>,
-) -> Result<Output>
-where
-    Observer: FnMut(&[u8]) + Send + 'static,
-    Poll: FnMut(&mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>>,
-    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
-{
-    run_with_hooks_stdin(command, operation, policy, None, hooks)
-}
-
-/// Run a command with explicit hooks and an optional inherited standard input.
+/// Run a command with explicit hooks.
 ///
-/// The silent default is installed when `stdin` is [`None`]; a caller that
-/// needs the child to inherit a handle supplies it here. Only the
-/// identifier-artefact fixture does, because the lease must outlive an
-/// interrupted build.
-pub(crate) fn run_with_hooks_stdin<Observer, Poll, Kill>(
+/// The child's standard input comes from the hooks: the silent default unless
+/// the caller supplied a handle to inherit. Only the identifier-artefact
+/// fixture does, because the target lease must outlive an interrupted build.
+pub(crate) fn run_with_hooks<Observer, Poll, Kill>(
     command: &mut Command,
     Operation(operation_name): Operation<'_>,
     policy: Policy,
-    stdin: Option<Stdio>,
     hooks: RunHooks<Observer, Poll, Kill>,
 ) -> Result<Output>
 where
@@ -161,6 +152,7 @@ where
     Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
 {
     let RunHooks {
+        stdin,
         observer,
         poll,
         mut kill,

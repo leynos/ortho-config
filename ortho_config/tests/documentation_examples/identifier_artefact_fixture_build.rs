@@ -69,15 +69,19 @@ pub(crate) fn build_fixture(
     // Every compiler Cargo starts inherits the lease handle this process hands
     // the nested build, so a replacement cannot clean the target mid-build or
     // after this process is interrupted while Cargo is still running.
-    let output = process_runner::run_with_observer_with_stdin(
+    let output = process_runner::run_with_hooks(
         &mut command,
         process_runner::Operation("build identifier artefact fixture"),
         cargo.bounded_policy(
             process_runner::Policy::build(),
             "build identifier artefact fixture",
         )?,
-        cargo.inherited_lease()?,
-        move |chunk| lock_cargo_messages(&observed_messages).observe(chunk),
+        process_runner::RunHooks {
+            stdin: Some(cargo.inherited_lease()?),
+            observer: move |chunk: &[u8]| lock_cargo_messages(&observed_messages).observe(chunk),
+            poll: process_runner::poll_child,
+            kill: process_runner::kill_child,
+        },
     )
     .map_err(|error| retain_runner_error(error, "build identifier artefact fixture"))?;
     ensure!(

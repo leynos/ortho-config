@@ -81,9 +81,16 @@ impl Descendants {
     #[cfg(unix)]
     pub(crate) fn terminate(&self) -> Result<()> {
         let deadline = Instant::now() + TERMINATION_BOUND;
+        // A refused signal is the reason a descendant survived, so it belongs
+        // in the diagnostic. A signal to a process that has already exited
+        // answers `ESRCH` and needs no mention: the survivor list is empty then.
+        let mut signal_failures = Vec::new();
         loop {
+            signal_failures.clear();
             for pid in &self.pids {
-                terminate_descendant(*pid);
+                if let Some(error) = terminate_descendant(*pid) {
+                    signal_failures.push((*pid, error));
+                }
             }
             let survivors = self
                 .pids
@@ -97,7 +104,8 @@ impl Descendants {
             ensure!(
                 Instant::now() < deadline,
                 "nested build descendants survived termination for {TERMINATION_BOUND:?}: \
-                 {survivors:?}",
+                 {survivors:?}{}",
+                describe_signal_failures(&signal_failures),
             );
             std::thread::sleep(POLL_INTERVAL);
         }
@@ -158,18 +166,36 @@ fn parent_child(line: &str) -> Option<(u32, u32)> {
 }
 
 /// Kill `raw` and, when it leads one, its whole process group.
+///
+/// Returns the signal error so the caller can explain a survivor. `ESRCH` for
+/// a descendant that has already exited is expected and is not reported on its
+/// own: the caller only renders these failures beside a pid that is still
+/// alive.
 #[cfg(unix)]
-fn terminate_descendant(raw: u32) {
-    let Ok(raw) = i32::try_from(raw) else {
-        return;
+fn terminate_descendant(raw: u32) -> Option<Errno> {
+    let Ok(raw_pid) = i32::try_from(raw) else {
+        return None;
     };
-    let pid = Pid::from_raw(raw);
+    let pid = Pid::from_raw(raw_pid);
     let signal = match getpgid(Some(pid)) {
         Ok(group) if group == pid => killpg(pid, Signal::SIGKILL),
         _ => kill(pid, Signal::SIGKILL),
     };
-    // `ESRCH` is the expected result for a descendant that has already exited.
-    let _signal = signal;
+    signal.err()
+}
+
+/// Render the signals a recorded descendant refused, for the survivor message.
+#[cfg(unix)]
+fn describe_signal_failures(failures: &[(u32, Errno)]) -> String {
+    let rendered = failures
+        .iter()
+        .map(|(pid, error)| format!("{pid}: {error}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if rendered.is_empty() {
+        return String::new();
+    }
+    format!(" (signal failures: {rendered})")
 }
 
 /// Whether `raw` is still running.
@@ -180,11 +206,11 @@ fn terminate_descendant(raw: u32) {
 /// bounded wait from reporting a descendant that has already stopped.
 #[cfg(unix)]
 fn is_alive(raw: u32) -> bool {
-    let Ok(raw) = i32::try_from(raw) else {
+    let Ok(raw_pid) = i32::try_from(raw) else {
         return false;
     };
-    match kill(Pid::from_raw(raw), None) {
-        Ok(()) => !is_dead_state(process_state(raw)),
+    match kill(Pid::from_raw(raw_pid), None) {
+        Ok(()) => !is_dead_state(process_state(raw_pid)),
         Err(Errno::ESRCH) => false,
         // A process this one may not signal is still running.
         Err(_) => true,

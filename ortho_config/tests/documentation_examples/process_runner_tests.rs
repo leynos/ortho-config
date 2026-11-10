@@ -80,6 +80,7 @@ fn wait_failure_remains_primary_when_tree_cleanup_also_fails() -> Result<()> {
         Operation("injected wait failure"),
         short_policy(),
         RunHooks {
+            stdin: None,
             observer: |_: &[u8]| {},
             poll: |child: &mut dyn ChildWrapper| {
                 if fail_first_wait {
@@ -214,6 +215,7 @@ fn incomplete_runner_cleanup_reports_cancelled_readers() -> Result<()> {
             1024 * 1024,
         ),
         RunHooks {
+            stdin: None,
             observer: |_: &[u8]| {},
             poll: |child: &mut dyn ChildWrapper| child.try_wait(),
             kill: |_child: &mut dyn ChildWrapper| Ok(()),
