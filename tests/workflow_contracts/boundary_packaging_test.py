@@ -206,15 +206,21 @@ def test_the_unsupported_platform_is_rejected_at_compile_time() -> None:
     Scenario: the runner is built for a platform that offers neither tree
     primitive. Invariant: the build is refused at compile time, and both
     supported platforms keep their own wrapper. ``trybuild`` cannot express
-    this on any host this suite runs on — it builds for the host target, so a
-    compile-fail fixture would be vacuous or need a target Cargo does not
-    offer — and reading the rejection is the equivalent check that runs on
-    every leg. A change that removed the rejection, or widened it to a
-    supported platform, fails here.
+    this on any host this suite runs on: it builds for the host target, and
+    ``rust-toolchain.toml`` installs only ``x86_64-unknown-linux-gnu`` and
+    ``x86_64-pc-windows-msvc``, both of which are supported. A fixture that
+    re-declared the guard would compile the fixture rather than this module,
+    and a fixture that included the module would need a target whose standard
+    library is not installed. Reading the rejection, its exact diagnostic and
+    its position inside ``spawn_owned`` is the equivalent check that runs on
+    every leg. A change that removed the rejection, widened it to a supported
+    platform, or moved it away from the spawn it protects fails here.
     """
     source = PROCESS.read_text(encoding="utf-8")
-    _single_match(
-        r"#\[cfg\(not\(any\(unix, windows\)\)\)\]\s*compile_error!\(",
+    guard = _single_match(
+        r"#\[cfg\(not\(any\(unix, windows\)\)\)\]\s*compile_error!"
+        r"\(\"process-tree supervision needs a Unix process group or a "
+        r"Windows Job Object\"\);",
         source,
         "unsupported-platform compile_error",
         PROCESS,
@@ -229,6 +235,17 @@ def test_the_unsupported_platform_is_rejected_at_compile_time() -> None:
             f"{platform} process-tree wrapper",
             PROCESS,
         )
+    # The rejection is only load-bearing where the tree is created. A guard
+    # that drifted outside `spawn_owned`, or below its spawn call, would read
+    # as present here while the unsupported build reached the wrapper.
+    spawn_at = source.find("fn spawn_owned")
+    assert spawn_at >= 0, f"no spawn_owned in {PROCESS}"
+    assert spawn_at < guard.start(), (
+        f"the unsupported-platform guard must sit inside spawn_owned in {PROCESS}"
+    )
+    assert guard.start() < source.find(".spawn()", spawn_at), (
+        f"the guard must precede the spawn call it protects in {PROCESS}"
+    )
 
 
 def _boundary_allowance() -> float:
