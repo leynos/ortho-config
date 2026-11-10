@@ -237,7 +237,7 @@ def test_the_identifier_fixture_keeps_target_writes_behind_the_lease() -> None:
         "discovery must not mark the private target before the lease"
     )
     lease = _function_body(support, "lease")
-    acquire_at = lease.find("lease::acquire(")
+    acquire_at = lease.find("acquire(")
     prepare_at = lease.find("prepare_target(")
     assert acquire_at >= 0, "the lease must take the cross-process lock"
     assert prepare_at >= 0, "the lease must prepare the target it created"
@@ -254,22 +254,25 @@ def test_the_identifier_helper_ends_its_own_work_before_the_parent_stops() -> No
     first, killing the helper would leave Cargo with nothing left to bound it,
     so the helper's own envelope must be the shorter of the two.
     """
-    source = (SUPPORT / "identifier_artefact_lease_tests.rs").read_text(
+    support = (SUPPORT / "identifier_artefact_lease_support.rs").read_text(
         encoding="utf-8"
     )
+    termination = (
+        SUPPORT / "identifier_artefact_lease_termination_tests.rs"
+    ).read_text(encoding="utf-8")
     bounds = {
         name: int(seconds)
         for name, seconds in re.findall(
-            r"const (HELPER_\w+): Duration = Duration::from_secs\((\d+)\);", source
+            r"const (HELPER_\w+): Duration = Duration::from_secs\((\d+)\);", support
         )
     }
     assert {"HELPER_WORK_BOUND", "HELPER_DEADLINE"} <= set(bounds), bounds
     assert bounds["HELPER_WORK_BOUND"] < bounds["HELPER_DEADLINE"], (
         "the helper must finish its supervised work before the parent stops waiting"
     )
-    assert "scenario::deadline().min(Instant::now() + HELPER_WORK_BOUND)" in source, (
-        "the helper must cap its envelope with HELPER_WORK_BOUND"
-    )
+    assert (
+        "scenario::deadline().min(Instant::now() + HELPER_WORK_BOUND)" in termination
+    ), "the helper must cap its envelope with HELPER_WORK_BOUND"
 
 
 def _function_body(source: str, name: str) -> str:
