@@ -18,12 +18,14 @@
 //! scheduler.
 
 use super::super::budget::Budget;
-use super::probe_support::{DESCENDANT_STARTUP, probe_command_with, scratch_directory, wait_until};
+use super::probe_support::{probe_command_with, scratch_directory, wait_until};
 use super::run_with_deadline;
 use anyhow::{Context, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::path::Path;
 use std::process::{Command, Output};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
@@ -53,6 +55,16 @@ const FIRST_DEADLINE: Duration = Duration::from_secs(10);
 /// child before it could do any work; a run that starts the clock after the
 /// lock is granted lets the child finish its own sleep and exit normally.
 const SECOND_DEADLINE: Duration = Duration::from_secs(3);
+
+/// How long the first probe may take to report that it has started.
+///
+/// The probe queues behind the process-wide serialization every nested Cargo
+/// call in this binary shares, and a sibling contract's `cargo package` may
+/// hold that for its own 440-second bound. A bound sized only for process
+/// startup would report a sibling's legitimate build as this regression's
+/// failure. The first run's own completion is watched as well, so a real
+/// failure still reports at once instead of waiting this out.
+const FIRST_START_WAIT: Duration = Duration::from_secs(600);
 
 /// Write a marker and sleep, then write the exit marker.
 ///
@@ -85,16 +97,28 @@ fn concurrent_runs_are_serialized() -> Result<()> {
     let first = probe_command("first", FIRST_SLEEP, scratch.path())?;
     let second = probe_command("second", SECOND_SLEEP, scratch.path())?;
 
+    let first_finished = Arc::new(AtomicBool::new(false));
+    let finished_flag = Arc::clone(&first_finished);
     let first_run = std::thread::spawn(move || -> Result<Output> {
-        let bound = Budget::new().bound(FIRST_DEADLINE, "first serialization probe")?;
-        run_with_deadline(first, bound, "first serialization probe")
+        let outcome = (|| {
+            let bound = Budget::new().bound(FIRST_DEADLINE, "first serialization probe")?;
+            run_with_deadline(first, bound, "first serialization probe")
+        })();
+        // Set on every path, so the parent never waits out the bound for a run
+        // that has already returned.
+        finished_flag.store(true, Ordering::SeqCst);
+        outcome
     });
     // Start the second run only once the first child is running, so a missing
     // lock would let the two overlap inside the observation window rather than
     // depending on which thread happened to reach the runner first.
-    wait_until(DESCENDANT_STARTUP, "the first probe to start", || {
-        Ok(directory.exists("first.start"))
+    wait_until(FIRST_START_WAIT, "the first probe to start", || {
+        Ok(directory.exists("first.start") || first_finished.load(Ordering::SeqCst))
     })?;
+    ensure!(
+        directory.exists("first.start"),
+        "the first serialization probe returned without reporting that it started",
+    );
     let second_output = run_with_deadline(
         second,
         Budget::new().bound(SECOND_DEADLINE, "second serialization probe")?,
