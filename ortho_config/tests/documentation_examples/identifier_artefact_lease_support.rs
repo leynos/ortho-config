@@ -181,6 +181,40 @@ impl Drop for Helper {
     }
 }
 
+/// The two diagnostics a bounded wait can produce.
+#[derive(Clone, Copy)]
+struct WaitDiagnostics<'a> {
+    /// Reported when the helper exits before the condition holds.
+    exited: &'a str,
+    /// Reported when the condition is still false at the limit.
+    timed_out: &'a str,
+}
+
+/// Poll `is_ready` while the helper is alive, giving up at `limit`.
+///
+/// Each caller names its own observed condition in `diagnostics`, so a
+/// failure still says which wait it was in rather than only that one timed
+/// out.
+fn wait_until<Ready>(
+    helper: &mut Helper,
+    limit: Duration,
+    diagnostics: WaitDiagnostics<'_>,
+    is_ready: Ready,
+) -> Result<()>
+where
+    Ready: Fn() -> bool,
+{
+    let deadline = Instant::now() + limit;
+    loop {
+        ensure!(helper.try_status()?.is_none(), "{}", diagnostics.exited);
+        if is_ready() {
+            return Ok(());
+        }
+        ensure!(Instant::now() < deadline, "{}", diagnostics.timed_out);
+        std::thread::sleep(POLL_INTERVAL);
+    }
+}
+
 /// Wait for the second process to write `marker`, failing if it exits first.
 pub(super) fn wait_for_marker(
     helper: &mut Helper,
@@ -188,21 +222,17 @@ pub(super) fn wait_for_marker(
     marker: &str,
     limit: Duration,
 ) -> Result<()> {
-    let deadline = Instant::now() + limit;
-    loop {
-        ensure!(
-            helper.try_status()?.is_none(),
-            "the second test process exited before writing the `{marker}` marker",
-        );
-        if scratch.exists(marker) {
-            return Ok(());
-        }
-        ensure!(
-            Instant::now() < deadline,
-            "timed out waiting for the second test process to write `{marker}`",
-        );
-        std::thread::sleep(POLL_INTERVAL);
-    }
+    wait_until(
+        helper,
+        limit,
+        WaitDiagnostics {
+            exited: &format!("the second test process exited before writing the `{marker}` marker"),
+            timed_out: &format!(
+                "timed out waiting for the second test process to write `{marker}`"
+            ),
+        },
+        || scratch.exists(marker),
+    )
 }
 
 /// The heartbeat's current length in the leased target, or zero when absent.
@@ -222,22 +252,18 @@ pub(super) fn wait_for_heartbeat(
     minimum: u64,
     limit: Duration,
 ) -> Result<()> {
-    let deadline = Instant::now() + limit;
-    loop {
-        ensure!(
-            helper.try_status()?.is_none(),
-            "the second test process exited before its nested writer reached \
-             {minimum} heartbeat bytes in the leased target",
-        );
-        if heartbeat_length(target) >= minimum {
-            return Ok(());
-        }
-        ensure!(
-            Instant::now() < deadline,
-            "timed out waiting for the nested writer's heartbeat in the leased target",
-        );
-        std::thread::sleep(POLL_INTERVAL);
-    }
+    wait_until(
+        helper,
+        limit,
+        WaitDiagnostics {
+            exited: &format!(
+                "the second test process exited before its nested writer reached \
+                 {minimum} heartbeat bytes in the leased target"
+            ),
+            timed_out: "timed out waiting for the nested writer's heartbeat in the leased target",
+        },
+        || heartbeat_length(target) >= minimum,
+    )
 }
 
 /// The heartbeat length after `span`, so a caller can compare the two samples.

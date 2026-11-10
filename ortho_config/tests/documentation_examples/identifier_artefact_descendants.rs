@@ -31,7 +31,7 @@ use nix::sys::signal::{Signal, kill, killpg};
 #[cfg(unix)]
 use nix::unistd::{Pid, getpgid};
 #[cfg(unix)]
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 #[cfg(unix)]
 use std::process::Command;
 #[cfg(unix)]
@@ -84,14 +84,8 @@ impl Descendants {
         // A refused signal is the reason a descendant survived, so it belongs
         // in the diagnostic. A signal to a process that has already exited
         // answers `ESRCH` and needs no mention: the survivor list is empty then.
-        let mut signal_failures = Vec::new();
         loop {
-            signal_failures.clear();
-            for pid in &self.pids {
-                if let Some(error) = terminate_descendant(*pid) {
-                    signal_failures.push((*pid, error));
-                }
-            }
+            let signal_failures = signal_descendants(&self.pids);
             let survivors = self
                 .pids
                 .iter()
@@ -128,6 +122,15 @@ impl Descendants {
 /// Returns an error when the process table cannot be read.
 #[cfg(unix)]
 pub(crate) fn snapshot_descendants(root: u32) -> Result<Descendants> {
+    let children = process_children()?;
+    Ok(Descendants {
+        pids: descendants_from(&children, root),
+    })
+}
+
+/// Read the process table as a parent-to-children adjacency map.
+#[cfg(unix)]
+fn process_children() -> Result<HashMap<u32, Vec<u32>>> {
     let output = Command::new("ps")
         .args(["-e", "-o", "pid=,ppid="])
         .output()
@@ -137,23 +140,31 @@ pub(crate) fn snapshot_descendants(root: u32) -> Result<Descendants> {
         "reading the process table failed: {}",
         String::from_utf8_lossy(&output.stderr),
     );
-    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
-        if let Some((parent, child)) = parent_child(line) {
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(parent_child)
+        .fold(HashMap::new(), |mut children, (parent, child)| {
             children.entry(parent).or_default().push(child);
-        }
-    }
-    let mut pids = Vec::new();
+            children
+        }))
+}
+
+/// Every pid reachable from `root` through the parent-to-children map.
+#[cfg(unix)]
+fn descendants_from(children: &HashMap<u32, Vec<u32>>, root: u32) -> Vec<u32> {
+    let mut seen = HashSet::new();
     let mut frontier = vec![root];
+    let mut pids = Vec::new();
     while let Some(parent) = frontier.pop() {
-        for child in children.get(&parent).into_iter().flatten() {
-            if !pids.contains(child) {
-                pids.push(*child);
-                frontier.push(*child);
-            }
+        let nested = children.get(&parent).into_iter().flatten().copied();
+        // `insert` reports whether the pid was new, so this filter both tests
+        // and records it; a repeated child link cannot enqueue a pid twice.
+        for child in nested.filter(|child| seen.insert(*child)) {
+            pids.push(child);
+            frontier.push(child);
         }
     }
-    Ok(Descendants { pids })
+    pids
 }
 
 /// Parse one `pid ppid` row of the process table.
@@ -182,6 +193,14 @@ fn terminate_descendant(raw: u32) -> Option<Errno> {
         _ => kill(pid, Signal::SIGKILL),
     };
     signal.err()
+}
+
+/// Signal every recorded descendant, collecting the failures by pid.
+#[cfg(unix)]
+fn signal_descendants(pids: &[u32]) -> Vec<(u32, Errno)> {
+    pids.iter()
+        .filter_map(|pid| terminate_descendant(*pid).map(|error| (*pid, error)))
+        .collect()
 }
 
 /// Render the signals a recorded descendant refused, for the survivor message.
