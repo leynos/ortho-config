@@ -838,6 +838,8 @@ name, so Cargo builds that binary from `src/main.rs`:
 ```toml
 [package]
 name = "cargo-demo"
+version = "0.1.0"
+edition = "2024"
 
 [dependencies]
 ortho_config = "0.10.0"
@@ -845,6 +847,11 @@ clap = { version = "4.5", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 ```
+
+Install the example with `cargo install --path .`. Cargo places `cargo-demo` in
+its install root (`~/.cargo/bin` by default), which must be on `PATH` for
+`cargo demo` to find it. The package name, `bin_name`, and the `Demo` variant
+must agree: `cargo demo` looks for `cargo-demo` and passes `demo` as `argv[1]`.
 
 The complete program derives the wrapper, parses the arguments, and dispatches
 to the existing options struct:
@@ -916,12 +923,19 @@ change OrthoConfig's merge precedence: defaults, then files, then the optional
 selected profile, then environment variables, then explicit command-line
 arguments. Do not call `OrthoConfig::load()` after parsing to discard Cargo's
 injected token; that reparses the same process arguments and does not remove
-the required subcommand.
+the required subcommand. The template stops at parsing. To load and merge
+configuration for the selected command, derive `OrthoConfig` for `DemoArgs` and
+call `load_and_merge()` on the parsed value, as
+[Give each subcommand its own settings](#give-each-subcommand-its-own-settings)
+describes; the parsed `DemoArgs` then supplies the command-line layer of that
+merge.
 
 The example installs a `tracing` subscriber before parsing so the debug event
-at the dispatch boundary is visible without `RUST_LOG`, which Cargo dispatch
-does not forward. The event records `verbose=true` or `verbose=false`, proving
-that the option reached the struct. Production applications own their
+at the dispatch boundary is visible without `RUST_LOG`. Cargo normally passes
+its environment to the external binary; the documentation test runner clears
+the child environment for determinism, so the example must not depend on
+inherited variables. The event records `verbose=true` or `verbose=false`,
+proving that the option reached the struct. Production applications own their
 subscriber configuration;
 [Add production diagnostics](#add-production-diagnostics) shows the
 application-side set-up.

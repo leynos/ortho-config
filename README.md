@@ -167,6 +167,8 @@ Name the installed binary `cargo-demo` and add the derive wrapper:
 ```toml
 [package]
 name = "cargo-demo"
+version = "0.1.0"
+edition = "2024"
 
 [dependencies]
 ortho_config = "0.10.0"
@@ -223,10 +225,19 @@ names the installed binary, so help renders `Usage: cargo-demo <COMMAND>` and
 `cargo demo --verbose` and `cargo-demo demo --verbose`; a flat
 `cargo-demo --verbose` fails because the subcommand is required. Matching
 `Cli.command` yields `DemoArgs`, which the rest of the application consumes.
+
+Install the example with `cargo install --path .`. Cargo places `cargo-demo` in
+its install root (`~/.cargo/bin` by default), which must be on `PATH` for
+`cargo demo` to find it. The package name, `bin_name`, and the `Demo` variant
+must agree: `cargo demo` looks for `cargo-demo` and passes `demo` as `argv[1]`.
+
 This is entry-point structure only: it does not change `OrthoConfig`'s merge
-precedence or add a second configuration-loading pathway. The
-[user's guide][cargo-external-subcommands] explains the help strings, tracing,
-and the hand-built `clap::Command` helper.
+precedence or add a second configuration-loading pathway. To load and merge
+configuration for the selected command, derive `OrthoConfig` for the options
+struct and call `load_and_merge()` on the parsed value;
+[Give each subcommand its own settings][guide-subcommands] shows the pattern.
+The [user's guide][cargo-external-subcommands] explains the help strings,
+tracing, and the hand-built `clap::Command` helper.
 
 ______________________________________________________________________
 

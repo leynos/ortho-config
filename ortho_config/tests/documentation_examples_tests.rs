@@ -128,13 +128,24 @@ fn cargo_derive_dependency_recipes_are_complete() -> Result<()> {
         ensure!(recipe.language == "toml", "{id} should be TOML");
         let manifest: toml::Value =
             toml::from_str(&recipe.body).with_context(|| format!("parse {id}"))?;
+        let package = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .with_context(|| format!("{id} should declare a package"))?;
         ensure!(
-            manifest
-                .get("package")
-                .and_then(|package| package.get("name"))
-                .and_then(toml::Value::as_str)
-                == Some("cargo-demo"),
+            package.get("name").and_then(toml::Value::as_str) == Some("cargo-demo"),
             "{id} should name the installed binary cargo-demo"
+        );
+        ensure!(
+            package
+                .get("version")
+                .and_then(toml::Value::as_str)
+                .is_some(),
+            "{id} should declare a package version"
+        );
+        ensure!(
+            package.get("edition").and_then(toml::Value::as_str) == Some("2024"),
+            "{id} should select the 2024 edition so the published program compiles"
         );
         let dependencies = manifest
             .get("dependencies")
