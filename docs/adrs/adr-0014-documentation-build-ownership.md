@@ -425,10 +425,15 @@ lifetime. The lease file is empty, so Cargo sees an empty standard input rather
 than a terminal it could block on.
 
 The handle does not reach Cargo's own children. Cargo gives build scripts and
-rustc a null standard input, so the lease stops at Cargo. Those descendants are
-covered by the parent's termination of the recorded tree, not by the lease: the
-lease covers the window in which Cargo is still running and the helper is not,
-and the snapshot covers the compilers that outlive Cargo.
+rustc a null standard input, so the lease stops at Cargo. The lease therefore
+covers only the interval in which Cargo lives; it says nothing about a compiler
+or build script that is still writing after Cargo has exited. Removing those
+descendants needs a supervising parent that records the tree before the helper
+dies and terminates it afterwards, which is what `Helper::drop` and the parent
+regression do. Terminating that tree, rather than the lease, is what stops the
+writes. Where no such supervisor exists, ownership must instead be held until
+every writer has stopped, because the lease on its own cannot express that
+condition.
 
 This is deliberately not `PR_SET_PDEATHSIG`: that signal is Linux-only and
 fires when the *immediate* parent dies, which is Cargo rather than the helper.
