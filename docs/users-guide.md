@@ -844,14 +844,17 @@ edition = "2024"
 [dependencies]
 ortho_config = "0.10.0"
 clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 ```
 
-Install the example with `cargo install --path .`. Cargo places `cargo-demo` in
-its install root (`~/.cargo/bin` by default), which must be on `PATH` for
-`cargo demo` to find it. The package name, `bin_name`, and the `Demo` variant
-must agree: `cargo demo` looks for `cargo-demo` and passes `demo` as `argv[1]`.
+Install the example with `cargo install --path .`. Cargo installs binaries into
+the `bin` directory of its install root, which is `~/.cargo/bin` by default and
+`$CARGO_INSTALL_ROOT/bin` when that variable is set. That directory must be on
+`PATH` for `cargo demo` to find `cargo-demo`. The package name, `bin_name`, and
+the `Demo` variant must agree: `cargo demo` looks for `cargo-demo` and passes
+`demo` as `argv[1]`.
 
 The complete program derives the wrapper, parses the arguments, and dispatches
 to the existing options struct:
@@ -923,12 +926,7 @@ change OrthoConfig's merge precedence: defaults, then files, then the optional
 selected profile, then environment variables, then explicit command-line
 arguments. Do not call `OrthoConfig::load()` after parsing to discard Cargo's
 injected token; that reparses the same process arguments and does not remove
-the required subcommand. The template stops at parsing. To load and merge
-configuration for the selected command, derive `OrthoConfig` for `DemoArgs` and
-call `load_and_merge()` on the parsed value, as
-[Give each subcommand its own settings](#give-each-subcommand-its-own-settings)
-describes; the parsed `DemoArgs` then supplies the command-line layer of that
-merge.
+the required subcommand.
 
 The example installs a `tracing` subscriber before parsing so the debug event
 at the dispatch boundary is visible without `RUST_LOG`. Cargo normally passes
@@ -939,6 +937,83 @@ proving that the option reached the struct. Production applications own their
 subscriber configuration;
 [Add production diagnostics](#add-production-diagnostics) shows the
 application-side set-up.
+
+### Load configuration for the selected command
+
+The template above stops at parsing. To merge configuration as well, extend
+`DemoArgs` so it satisfies `SubcmdConfigMerge`: derive `Parser` (which subsumes
+`Args` and supplies the `CommandFactory` implementation the merge needs),
+`Deserialize`, `Serialize`, `Default`, and `OrthoConfig`. The complete
+adaptation keeps the same wrapper and adds the merge call:
+
+<!-- tested-example: guide-cargo-derive-merge -->
+```rust
+use clap::error::ErrorKind;
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use ortho_config::{OrthoConfig, OrthoResult, SubcmdConfigMerge};
+use serde::{Deserialize, Serialize};
+
+#[derive(Parser)]
+#[command(name = "cargo", bin_name = "cargo-demo")]
+struct Cli {
+    #[command(subcommand)]
+    command: CargoSubcommand,
+}
+
+#[derive(Subcommand)]
+enum CargoSubcommand {
+    Demo(DemoArgs),
+}
+
+#[derive(Debug, Default, Parser, Deserialize, Serialize, OrthoConfig)]
+#[command(name = "demo")]
+#[ortho_config(prefix = "CARGO_DEMO_")]
+struct DemoArgs {
+    /// Print additional diagnostics.
+    #[arg(long, default_value_t = false)]
+    #[ortho_config(cli_default_as_absent)]
+    verbose: bool,
+}
+
+fn main() -> OrthoResult<()> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .without_time()
+        .with_ansi(false)
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .init();
+
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    match cli.command {
+        CargoSubcommand::Demo(args) => {
+            let inner = matches.subcommand_matches("demo").unwrap_or_else(|| {
+                Cli::command()
+                    .error(ErrorKind::MissingSubcommand, "demo is required")
+                    .exit()
+            });
+            let config = args.load_and_merge_with_matches(inner)?;
+            tracing::debug!(verbose = config.verbose, "Cargo subcommand merged");
+        }
+    }
+    Ok(())
+}
+```
+
+`load_and_merge_with_matches` takes the inner `ArgMatches`, so it can tell an
+explicit `--verbose` from clap's default. That distinction matters for a flag:
+plain `load_and_merge()` serializes every field, so an omitted `--verbose`
+contributes `false` and would override a file or environment value. Marking the
+field `#[ortho_config(cli_default_as_absent)]` and merging with the matches
+excludes the default unless the user supplied the flag.
+[Let files override clap defaults](#let-files-override-clap-defaults) covers
+the attribute in more detail.
+
+Subcommand settings live under the `cmds` namespace, so this example reads
+`CARGO_DEMO_CMDS_DEMO_VERBOSE` from the environment and `[cmds.demo] verbose`
+from a configuration file. The parsed `DemoArgs` supplies the command-line
+layer of that merge.
 
 ### Binary-level obligations
 

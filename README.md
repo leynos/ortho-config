@@ -173,6 +173,7 @@ edition = "2024"
 [dependencies]
 ortho_config = "0.10.0"
 clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 ```
@@ -226,18 +227,21 @@ names the installed binary, so help renders `Usage: cargo-demo <COMMAND>` and
 `cargo-demo --verbose` fails because the subcommand is required. Matching
 `Cli.command` yields `DemoArgs`, which the rest of the application consumes.
 
-Install the example with `cargo install --path .`. Cargo places `cargo-demo` in
-its install root (`~/.cargo/bin` by default), which must be on `PATH` for
-`cargo demo` to find it. The package name, `bin_name`, and the `Demo` variant
-must agree: `cargo demo` looks for `cargo-demo` and passes `demo` as `argv[1]`.
+Install the example with `cargo install --path .`. Cargo installs binaries into
+the `bin` directory of its install root, which is `~/.cargo/bin` by default and
+`$CARGO_INSTALL_ROOT/bin` when that variable is set. That directory must be on
+`PATH` for `cargo demo` to find `cargo-demo`. The package name, `bin_name`, and
+the `Demo` variant must agree: `cargo demo` looks for `cargo-demo` and passes
+`demo` as `argv[1]`.
 
 This is entry-point structure only: it does not change `OrthoConfig`'s merge
 precedence or add a second configuration-loading pathway. To load and merge
-configuration for the selected command, derive `OrthoConfig` for the options
-struct and call `load_and_merge()` on the parsed value;
-[Give each subcommand its own settings][guide-subcommands] shows the pattern.
-The [user's guide][cargo-external-subcommands] explains the help strings,
-tracing, and the hand-built `clap::Command` helper.
+configuration for the selected command, extend the options struct with `Parser`,
+`Deserialize`, `Serialize`, `Default`, and `OrthoConfig` derives, then call
+`load_and_merge_with_matches` on the parsed value with the inner `ArgMatches`;
+[Load configuration for the selected command][guide-cargo-merge] shows the
+complete adaptation. The [user's guide][cargo-external-subcommands] explains
+the help strings, tracing, and the hand-built `clap::Command` helper.
 
 ______________________________________________________________________
 
@@ -310,6 +314,7 @@ less of a chore? Contributions are welcome. Start with the
 [developers-guide]: https://github.com/leynos/ortho-config/blob/main/docs/developers-guide.md
 [dw]: https://deepwiki.com/badge.svg
 [guide-boolean]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md#switch-a-boolean-off-from-the-command-line
+[guide-cargo-merge]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md#load-configuration-for-the-selected-command
 [guide-docs]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md#generate-help-from-the-same-metadata
 [guide-profiles]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md#switch-between-named-profiles
 [guide-subcommands]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md#give-each-subcommand-its-own-settings

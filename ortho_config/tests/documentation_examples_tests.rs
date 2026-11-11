@@ -26,6 +26,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-behaviour-metadata",
     "guide-boolean-override",
     "guide-cargo-derive-dependencies",
+    "guide-cargo-derive-merge",
     "guide-cargo-derive-subcommand",
     "guide-cargo-error-hints",
     "guide-cargo-external-subcommand",
@@ -151,7 +152,13 @@ fn cargo_derive_dependency_recipes_are_complete() -> Result<()> {
             .get("dependencies")
             .and_then(toml::Value::as_table)
             .with_context(|| format!("{id} should declare dependencies"))?;
-        for dependency in ["ortho_config", "clap", "tracing", "tracing-subscriber"] {
+        for dependency in [
+            "ortho_config",
+            "clap",
+            "serde",
+            "tracing",
+            "tracing-subscriber",
+        ] {
             ensure!(
                 dependencies.contains_key(dependency),
                 "{id} should declare {dependency}"

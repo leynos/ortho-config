@@ -130,6 +130,13 @@ extending the contract.
   merge; corrected the `RUST_LOG` explanation; added the missing `edition` and
   `version` to both recipes; and asserted the visible commands and options in
   both help forms.
+- [x] (2026-11-11) M4: reconciled the follow-up assessment. Corrected the
+  install-root wording to the root's `bin` directory, added `serde` to both
+  recipes, and published `guide-cargo-derive-merge`, a tested complete
+  adaptation that derives `Parser`, `Deserialize`, `Serialize`, `Default`, and
+  `OrthoConfig` and merges with the inner `ArgMatches`. The new `rstest` case
+  proves an omitted `--verbose` leaves an environment value intact and an
+  explicit flag still wins.
 
 ## Surprises & discoveries
 
@@ -281,6 +288,23 @@ and help-content assertions. A static contract now requires each recipe's
 version and edition. An independent scratch build of the corrected recipe and
 program produced `Usage: cargo-demo <COMMAND>` with a `demo` command, and inner
 help listed `--verbose` with its description.
+
+The follow-up assessment accepted the `RUST_LOG` and help-assertion repairs and
+found two remaining gaps. The install guidance called `~/.cargo/bin` the
+install root, when it is the root's `bin` directory; both documents now say so
+and name `$CARGO_INSTALL_ROOT/bin`. The merge guidance named only
+`OrthoConfig`, but `SubcmdConfigMerge` also requires `CommandFactory`,
+`Serialize`, and `Default`, and a plain `load_and_merge()` would let clap's
+`false` default for an omitted `--verbose` override a file or environment
+value. The guide now publishes `guide-cargo-derive-merge`, a tested complete
+adaptation that derives `Parser` (which subsumes `Args` and supplies
+`CommandFactory`), `Deserialize`, `Serialize`, `Default`, and `OrthoConfig`,
+marks the flag `cli_default_as_absent`, and merges with the inner `ArgMatches`.
+Both recipes gained `serde`, and the static contract requires it. The new
+`rstest` case proves three behaviours: no environment and no flag yields
+`false`; an environment value of `true` survives an omitted flag; and an
+explicit `--verbose` beats an environment value of `false`. Cargo dispatch is
+exercised in the same case.
 
 ## Context and orientation
 
