@@ -431,9 +431,10 @@ or build script that is still writing after Cargo has exited. Removing those
 descendants needs a supervising parent that records the tree before the helper
 dies and terminates it afterwards, which is what `Helper::drop` and the parent
 regression do. Terminating that tree, rather than the lease, is what stops the
-writes. Where no such supervisor exists, ownership must instead be held until
-every writer has stopped, because the lease on its own cannot express that
-condition.
+writes. Ownership must still be held until every writer has stopped, including
+while a supervisor is terminating the tree. The lease on its own cannot express
+that condition, and the parent regression and `Helper::drop` do not retain a
+lease during that termination.
 
 This is deliberately not `PR_SET_PDEATHSIG`: that signal is Linux-only and
 fires when the *immediate* parent dies, which is Cargo rather than the helper.
