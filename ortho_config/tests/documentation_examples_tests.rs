@@ -25,6 +25,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-alias-install",
     "guide-behaviour-metadata",
     "guide-boolean-override",
+    "guide-cargo-derive-dependencies",
+    "guide-cargo-derive-subcommand",
     "guide-cargo-error-hints",
     "guide-cargo-external-subcommand",
     "guide-check-command",
@@ -83,6 +85,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "migration-l10n-runtime",
     "migration-profile-precedence",
     "readme-binstall",
+    "readme-cargo-derive-dependencies",
+    "readme-cargo-derive-subcommand",
     "readme-install",
     "readme-main",
     "readme-run",
@@ -110,6 +114,49 @@ fn published_crate_packages_the_repository_readme() -> Result<()> {
         !repository.exists("ortho_config/README.md"),
         "remove ortho_config/README.md; the crate packages the repository README"
     );
+    Ok(())
+}
+
+/// Both Cargo subcommand recipes name the crates and binary the template uses.
+#[test]
+fn cargo_derive_dependency_recipes_are_complete() -> Result<()> {
+    for id in [
+        "readme-cargo-derive-dependencies",
+        "guide-cargo-derive-dependencies",
+    ] {
+        let recipe = documented_example(id)?;
+        ensure!(recipe.language == "toml", "{id} should be TOML");
+        let manifest: toml::Value =
+            toml::from_str(&recipe.body).with_context(|| format!("parse {id}"))?;
+        ensure!(
+            manifest
+                .get("package")
+                .and_then(|package| package.get("name"))
+                .and_then(toml::Value::as_str)
+                == Some("cargo-demo"),
+            "{id} should name the installed binary cargo-demo"
+        );
+        let dependencies = manifest
+            .get("dependencies")
+            .and_then(toml::Value::as_table)
+            .with_context(|| format!("{id} should declare dependencies"))?;
+        for dependency in ["ortho_config", "clap", "tracing", "tracing-subscriber"] {
+            ensure!(
+                dependencies.contains_key(dependency),
+                "{id} should declare {dependency}"
+            );
+        }
+        let clap_features = dependencies
+            .get("clap")
+            .and_then(|clap| clap.get("features"))
+            .and_then(toml::Value::as_array)
+            .is_some_and(|features| {
+                features
+                    .iter()
+                    .any(|feature| feature.as_str() == Some("derive"))
+            });
+        ensure!(clap_features, "{id} should enable clap's derive feature");
+    }
     Ok(())
 }
 

@@ -155,6 +155,81 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+## Cargo subcommands
+
+Cargo runs `cargo <name> [OPTIONS]` by finding a `cargo-<name>` executable and
+passing `<name>` as the first argument after the executable path. A parser that
+models only `cargo-demo [OPTIONS]` rejects that token.
+
+Name the installed binary `cargo-demo` and add the derive wrapper:
+
+<!-- tested-example: readme-cargo-derive-dependencies -->
+```toml
+[package]
+name = "cargo-demo"
+
+[dependencies]
+ortho_config = "0.10.0"
+clap = { version = "4.5", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+```
+
+<!-- tested-example: readme-cargo-derive-subcommand -->
+```rust
+use clap::{Args, Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "cargo", bin_name = "cargo-demo")]
+struct Cli {
+    #[command(subcommand)]
+    command: CargoSubcommand,
+}
+
+#[derive(Subcommand)]
+enum CargoSubcommand {
+    Demo(DemoArgs),
+}
+
+#[derive(Args)]
+struct DemoArgs {
+    /// Print additional diagnostics.
+    #[arg(long)]
+    verbose: bool,
+}
+
+fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .without_time()
+        .with_ansi(false)
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .init();
+
+    let cli = Cli::parse();
+    match cli.command {
+        CargoSubcommand::Demo(args) => {
+            tracing::debug!(verbose = args.verbose, "Cargo subcommand accepted");
+            // Hand `args` to the rest of the application.
+        }
+    }
+}
+```
+
+`name = "cargo"` describes the synthetic parent, and `bin_name = "cargo-demo"`
+names the installed binary, so help renders `Usage: cargo-demo <COMMAND>` and
+`Usage: cargo-demo demo [OPTIONS]`. The wrapper accepts both
+`cargo demo --verbose` and `cargo-demo demo --verbose`; a flat
+`cargo-demo --verbose` fails because the subcommand is required. Matching
+`Cli.command` yields `DemoArgs`, which the rest of the application consumes.
+This is entry-point structure only: it does not change `OrthoConfig`'s merge
+precedence or add a second configuration-loading pathway. The
+[user's guide][cargo-external-subcommands] explains the help strings, tracing,
+and the hand-built `clap::Command` helper.
+
+______________________________________________________________________
+
 ## Now and next
 
 **Now:** the configuration foundation is in place, from layered loading and

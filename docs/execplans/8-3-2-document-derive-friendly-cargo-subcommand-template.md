@@ -1,6 +1,7 @@
 # Document the derive-friendly Cargo subcommand template
 
-Status: DRAFT — awaiting explicit approval before implementation.
+Status: COMPLETE — implemented and reconciled on 2026-11-11; final gate
+evidence is recorded in Outcomes & retrospective.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -115,9 +116,15 @@ extending the contract.
   PR #662 after a no-op fast-forward merge that never reached `main`. Passed
   the full gate set, committed this revision, and published it with an explicit
   force-with-lease.
-- [ ] Receive explicit implementation approval.
-- [ ] M1: publish and exercise both derive examples.
-- [ ] M2: reconcile documentation and mark 8.3.2 done after final gates.
+- [x] (2026-11-11) Receive explicit implementation approval; status set to
+  APPROVED.
+- [x] (2026-11-11) M1: published both derive templates, their dependency
+  recipes, and the exact-fence `rstest` cases. The red stage failed for the
+  missing identifiers, the green stage executed both cases, and the
+  renamed-variant negative control rejected `demo`.
+- [x] (2026-11-11) M2: recorded the naming distinction in design §4.17 and the
+  ADR-0004 clarification, marked roadmap 8.3.2 complete, and passed the full
+  gate set on the final candidate.
 
 ## Surprises & discoveries
 
@@ -135,6 +142,20 @@ PR #651, merged on 2026-11-06 as `ddba3578`, imports consumer-side Kani and
 Verus tooling. It supplies pins, command wrappers, positive and negative
 fixtures, and an opt-in Continuous Integration (CI) lane. It does not prove a
 configuration property or require this documentation task to add a proof.
+
+The derive template renders `Usage: cargo-demo <COMMAND>` and
+`Usage: cargo-demo demo [OPTIONS]`, confirming that `bin_name` controls the
+parent usage while `name = "cargo"` does not override it. A disposable copy
+with the variant renamed to `Other` still compiled; Cargo dispatch `cargo demo`
+then failed with exit code 2 and `unrecognized subcommand 'demo'`, while
+`cargo-demo other` succeeded and recorded `verbose=false`. The negative control
+therefore depends on the variant name rather than on exit status alone.
+
+The generated documentation manifest had `tracing-subscriber` but not
+`tracing`, so the published `tracing::debug!` call needed `tracing = "0.1"`
+added as a direct dependency. The recipe fences were registered and checked
+statically because TOML cannot execute; the Rust fences remain the executable
+acceptance evidence.
 
 ## Decision log
 
@@ -156,6 +177,15 @@ configuration property or require this documentation task to add a proof.
   runner implementation and its tests. Keep P0 as a live preflight check of the
   accepted target, environment, and deadline contracts. This refresh does not
   approve feature implementation.
+- 2026-11-11: Add `tracing = "0.1"` directly to the generated documentation
+  manifest. The example calls `tracing::debug!`, and `tracing-subscriber` alone
+  only supplies a transitive dependency.
+- 2026-11-11: Publish the dependency recipe as registered TOML fences and give
+  them a static contract test for the package name, crates, and clap's `derive`
+  feature. The Rust fences remain the executable evidence.
+- 2026-11-11: Record the derive/helper usage-spelling distinction in design
+  §4.17 and clarify in ADR-0004 that the 2026-08-09 amendment governs the
+  hand-built helper only.
 
 ## Outcomes & retrospective
 
@@ -209,8 +239,29 @@ deterministic gates passed on this revision, with logs under `/tmp` named for
 the `issue-644-nested-cargo-timeouts` branch. The revision is therefore
 validated and published on the plan branch.
 
-At implementation completion, reconcile upstream documents and acceptance
-evidence before marking the plan COMPLETE.
+Implementation (2026-11-11) published `readme-cargo-derive-subcommand` and
+`guide-cargo-derive-subcommand` with matching dependency recipes, added the
+exact-fence `rstest` cases in
+`ortho_config/tests/documentation_examples/cargo_derive.rs`, and added
+`tracing = "0.1"` to the generated documentation manifest. The red run failed
+for the missing identifiers; the green run executed both cases in 24.16
+seconds. The disposable renamed-variant copy compiled, and Cargo dispatch then
+rejected `demo` with exit code 2 while `cargo-demo other` succeeded, so the
+negative control is recorded. Design §4.17 and ADR-0004 now distinguish the
+derive template's `cargo-demo` usage spelling from the helper's `cargo`
+spelling, and roadmap 8.3.2 is complete.
+
+Final gate evidence on the implementation candidate: `make check-fmt`,
+`make test`, `make typecheck`, `make lint`, `make markdownlint`, and
+`make nixie` all passed. Logs are `/tmp/check-fmt-ortho-config-8-3-2-final.out`,
+`/tmp/test-ortho-config-8-3-2-final.out`,
+`/tmp/typecheck-ortho-config-8-3-2-final.out`,
+`/tmp/lint-ortho-config-8-3-2-final.out`,
+`/tmp/markdownlint-ortho-config-8-3-2-final.out`, and
+`/tmp/nixie-ortho-config-8-3-2-final.out`. The first lint run found four
+`clippy::shadow-reuse` bindings in the new test module; renaming them cleared
+the gate. Focused logs are `/tmp/test-red-ortho-config-8-3-2.out` and
+`/tmp/test-derive-ortho-config-8-3-2.out`.
 
 ## Context and orientation
 
@@ -242,12 +293,15 @@ Cargo and general example tests use the shared
 
 ## Conformance basis
 
-The current repository baseline is `ddba3578fae04227e426ea3a61aa2b24aa043232`
-(PR #651). The original October planning baseline was
-`dc979878b5728bbb23866df9c05c2570bdb5629e`. There is no separate
-terms-of-reference document for this task. The normative sources are roadmap
-8.3.2, design §4.17, ADR-004 including its 2026-08-09 amendment, and the user's
-explicit requirements. Recheck their revisions when implementation begins.
+The current repository baseline is `eaf4c028`, from
+[PR #664](https://github.com/leynos/ortho-config/pull/664), which adopted
+[issue #644](https://github.com/leynos/ortho-config/issues/644) and replaced
+[PR #662](https://github.com/leynos/ortho-config/pull/662). The original
+October planning baseline was `dc979878b5728bbb23866df9c05c2570bdb5629e`. There
+is no separate terms-of-reference document for this task. The normative sources
+are roadmap 8.3.2, design §4.17, ADR-004 including its 2026-08-09 amendment,
+and the user's explicit requirements. Recheck their revisions when
+implementation begins.
 
 R1 is the complete derive wrapper in both public guides. R2 is Cargo's injected
 argument and both invocation forms. R3 is the unchanged configuration-loading

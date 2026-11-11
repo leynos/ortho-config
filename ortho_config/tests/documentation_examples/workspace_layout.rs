@@ -65,6 +65,7 @@ pub(super) fn render_manifest(dependency_name: &str, paths: &ManifestPaths<'_>) 
             "clap = {{ version = \"4.5\", features = [\"derive\"] }}\n",
             "serde = {{ version = \"1.0\", features = [\"derive\"] }}\n",
             "serde_json = \"1\"\n",
+            "tracing = \"0.1\"\n",
             "tracing-subscriber = {{ version = \"0.3\", features = [\"env-filter\"] }}\n",
         ),
         dependency_name, paths.ortho_config, paths.ortho_l10n, paths.cargo_orthohelp,

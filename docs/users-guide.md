@@ -824,9 +824,107 @@ The wrapper is CLI entry-point structure, not configuration loading. It does
 not change OrthoConfig's merge precedence and it does not add a second
 configuration-loading pathway.
 
-Derive-based callers do not need the helper. Wrap the `Args` struct in a
-single-variant `#[command(subcommand)]` enum, as `cargo-orthohelp` does in
+### Derive-based template
+
+Derive-based callers do not need the helper. The template below wraps the
+existing `clap::Args` options struct in a single-variant
+`#[command(subcommand)]` enum, as `cargo-orthohelp` does in
 `cargo-orthohelp/src/cli/mod.rs`.
+
+Name the installed binary `cargo-demo`; the dependency recipe sets the package
+name, so Cargo builds that binary from `src/main.rs`:
+
+<!-- tested-example: guide-cargo-derive-dependencies -->
+```toml
+[package]
+name = "cargo-demo"
+
+[dependencies]
+ortho_config = "0.10.0"
+clap = { version = "4.5", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+```
+
+The complete program derives the wrapper, parses the arguments, and dispatches
+to the existing options struct:
+
+<!-- tested-example: guide-cargo-derive-subcommand -->
+```rust
+use clap::{Args, Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "cargo", bin_name = "cargo-demo")]
+struct Cli {
+    #[command(subcommand)]
+    command: CargoSubcommand,
+}
+
+#[derive(Subcommand)]
+enum CargoSubcommand {
+    Demo(DemoArgs),
+}
+
+#[derive(Args)]
+struct DemoArgs {
+    /// Print additional diagnostics.
+    #[arg(long)]
+    verbose: bool,
+}
+
+fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .without_time()
+        .with_ansi(false)
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .init();
+
+    let cli = Cli::parse();
+    match cli.command {
+        CargoSubcommand::Demo(args) => {
+            tracing::debug!(verbose = args.verbose, "Cargo subcommand accepted");
+            // Hand `args` to the rest of the application.
+        }
+    }
+}
+```
+
+Cargo runs `cargo demo --verbose` by executing `cargo-demo` with `demo` as
+`argv[1]`, so argv is `["cargo-demo", "demo", "--verbose"]`. Direct invocation
+must supply the same token: `cargo-demo demo --verbose`. A flat
+`cargo-demo --verbose` fails because it omits the required subcommand.
+`argv[0]` is the executable path, and the subcommand token is the first
+positional argument.
+
+The annotation separates two names. `name = "cargo"` describes the synthetic
+parent command, while `bin_name = "cargo-demo"` names the installed binary that
+help displays. Help therefore renders `Usage: cargo-demo <COMMAND>` at the top
+level and `Usage: cargo-demo demo [OPTIONS]` for the inner command. The
+hand-built helper uses the Cargo dispatch spelling instead:
+`Usage: cargo <COMMAND>` and `Usage: cargo demo [OPTIONS]`. Both accept Cargo's
+injected token; only the usage spelling differs.
+
+Parsing produces
+`Cli { command: CargoSubcommand::Demo(DemoArgs { verbose }) }`. Match
+`Cli.command`, as the example does, and pass `DemoArgs` to the rest of the
+application.
+
+The wrapper is entry-point structure, not configuration loading. It does not
+change OrthoConfig's merge precedence: defaults, then files, then the optional
+selected profile, then environment variables, then explicit command-line
+arguments. Do not call `OrthoConfig::load()` after parsing to discard Cargo's
+injected token; that reparses the same process arguments and does not remove
+the required subcommand.
+
+The example installs a `tracing` subscriber before parsing so the debug event
+at the dispatch boundary is visible without `RUST_LOG`, which Cargo dispatch
+does not forward. The event records `verbose=true` or `verbose=false`, proving
+that the option reached the struct. Production applications own their
+subscriber configuration;
+[Add production diagnostics](#add-production-diagnostics) shows the
+application-side set-up.
 
 ### Binary-level obligations
 

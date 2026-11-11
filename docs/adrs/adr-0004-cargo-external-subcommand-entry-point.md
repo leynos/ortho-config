@@ -57,3 +57,18 @@ prints `cargo-<name> <version>`. The inner command's `bin_name` is reset so
 both the help and parse paths derive the same `cargo <name>` shape. This choice
 deviates from the literal `bin_name("cargo-<name>")` wording in the roadmap and
 the original design sketch.
+
+## Clarification (2026-11-11)
+
+The 2026-08-09 amendment governs the hand-built helper from roadmap 8.3.1 only.
+Roadmap 8.3.2 retains the derive template in design §4.17, whose
+`bin_name = "cargo-<name>"` names the installed binary. Both shapes accept
+Cargo's injected token; their usage strings differ:
+
+- the helper renders `Usage: cargo <COMMAND>` and
+  `Usage: cargo <name> [OPTIONS]`; and
+- the derive template renders `Usage: cargo-<name> <COMMAND>` and
+  `Usage: cargo-<name> <name> [OPTIONS]`.
+
+The [user's guide](../users-guide.md#derive-based-template) documents both
+templates.
