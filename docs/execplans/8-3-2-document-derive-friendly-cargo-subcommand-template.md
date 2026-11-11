@@ -17,9 +17,9 @@ invocation forms. Running `cargo demo --verbose` and
 intentionally supplies `demo` as the first positional argument after the
 executable name; a flat options parser cannot consume that token.
 
-This task delivers roadmap 8.3.2. The current change publishes only this plan
-and its documentation-index entry. Approval of the plan is required before
-editing examples, tests, runtime code, or roadmap completion state.
+This task delivers roadmap 8.3.2. The plan and its documentation-index entry
+were published first in draft PR #590; implementation was approved on
+2026-11-11 and followed the milestones recorded under Progress.
 
 ## Constraints
 
@@ -191,10 +191,11 @@ acceptance evidence.
 
 The reviewed plan and index were published in draft PR
 [#590](https://github.com/leynos/ortho-config/pull/590), initially at commit
-`527822d6`. The requested branch tracks its matching `origin` branch. No
-implementation is approved or delivered. The historical runner repair
-requirement is discharged by upstream source changes; P0 now checks that the
-execution environment respects the current runner contract.
+`527822d6`. The requested branch tracks its matching `origin` branch. At that
+plan-only checkpoint no implementation was approved or delivered. The
+historical runner repair requirement is discharged by upstream source changes;
+P0 now checks that the execution environment respects the current runner
+contract.
 
 Historical October planning validation passed: `make fmt`, `make check-fmt`,
 `make markdownlint` including spelling, `make nixie`, and `git diff --check`.
