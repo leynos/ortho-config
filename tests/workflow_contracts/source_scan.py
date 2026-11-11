@@ -15,6 +15,7 @@ carry a trybuild call is another.
 from __future__ import annotations
 
 import os
+import stat
 import tomllib
 import typing as typ
 from pathlib import Path
@@ -189,6 +190,40 @@ def scan(
         return read(*args, **kwargs)
     except OSError as error:
         raise ScanError(f"{path} could not be read: {error}") from error
+
+
+def is_directory(path: Path) -> typ.Callable[[], bool]:
+    """Defer a directory check so a failure to tell lands inside a guard.
+
+    ``Path.is_dir`` is not usable directly for the reason :func:`exists`
+    gives: since 3.14 it answers ``False`` for any ``OSError``, so a
+    directory this process cannot search reads as a file and the test targets
+    beneath it leave the inventory unasked for. Only an absent path is an
+    answer; every other failure is a :class:`ScanError` naming ``path``.
+
+    Parameters
+    ----------
+    path : Path
+        The path to check when the returned callable is called.
+
+    Returns
+    -------
+    callable
+        A zero-argument callable answering whether that path is a directory.
+    """
+
+    def directory() -> bool:
+        """Answer whether ``path`` is a directory, raising when it cannot tell."""
+        try:
+            mode = path.stat().st_mode
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            message = f"{path} could not be read: {error}"
+            raise ScanError(message) from error
+        return stat.S_ISDIR(mode)
+
+    return directory
 
 
 def listing(directory: Path) -> typ.Callable[[], list[Path]]:
