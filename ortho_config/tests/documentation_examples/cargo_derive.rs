@@ -33,6 +33,26 @@ fn documented_derive_cargo_subcommand(#[case] example: &str) -> Result<()> {
     assert_rejected_forms(&mut workspace)
 }
 
+/// Each published example builds from its published dependency recipe.
+///
+/// The generated documentation manifest is not used here, so a recipe that
+/// omits a required dependency or package setting fails the build.
+#[rstest]
+#[case("readme-cargo-derive-dependencies", "readme-cargo-derive-subcommand")]
+#[case("guide-cargo-derive-dependencies", "guide-cargo-derive-subcommand")]
+#[case("guide-cargo-derive-dependencies", "guide-cargo-derive-merge")]
+#[serial_test::serial(documentation_build)]
+fn published_recipe_builds_its_example(#[case] recipe: &str, #[case] example: &str) -> Result<()> {
+    let mut workspace = ExampleWorkspace::from_recipe(documented_example(recipe)?)?;
+    workspace.add_main(documented_example(example)?)?;
+    workspace.build()?;
+
+    assert_verbose(
+        workspace.run(ExampleId(BINARY), ["demo", "--verbose"])?,
+        true,
+    )
+}
+
 /// The complete adaptation merges environment values beneath the CLI layer.
 ///
 /// An omitted `--verbose` must not contribute clap's `false` default, so the

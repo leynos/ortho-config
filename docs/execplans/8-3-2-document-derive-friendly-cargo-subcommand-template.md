@@ -137,6 +137,12 @@ extending the contract.
   `OrthoConfig` and merges with the inner `ArgMatches`. The new `rstest` case
   proves an omitted `--verbose` leaves an environment value intact and an
   explicit flag still wins.
+- [x] (2026-11-11) M5: reconciled the formal review's pre-merge checks. Added
+  `published_recipe_builds_its_example`, which builds each published example
+  from its published dependency recipe with only `ortho_config`'s path
+  substituted, and proved it non-vacuous by removing `serde` from the guide
+  recipe and observing the expected compile failure. Corrected the Context
+  statement that still described the 8.3.2 acceptance bullets as remaining.
 
 ## Surprises & discoveries
 
@@ -306,10 +312,20 @@ Both recipes gained `serde`, and the static contract requires it. The new
 explicit `--verbose` beats an environment value of `false`. Cargo dispatch is
 exercised in the same case.
 
+The formal review's pre-merge checks then asked that each published example be
+built from its published dependency recipe rather than the generated
+documentation manifest. `published_recipe_builds_its_example` now renders each
+recipe as a package manifest, substituting only `ortho_config`'s path, and
+builds the matching example as `src/main.rs`. Removing `serde` from the guide
+recipe made the case fail with `E0432`, `E0433`, and `E0277`, so the check is
+not vacuous. The same review noted that the Context section still described the
+8.3.2 acceptance bullets as remaining; it now records them as completed.
+
 ## Context and orientation
 
 `docs/roadmap.md` §8.3 records the completed hand-built helper and the four
-remaining acceptance bullets for 8.3.2. `docs/design.md` §4.17 and
+8.3.2 acceptance bullets, all of which this implementation completes.
+`docs/design.md` §4.17 and
 `docs/adrs/adr-0004-cargo-external-subcommand-entry-point.md` define the
 entry-point boundary. `ortho_config/src/cargo/mod.rs` owns the hand-built
 helper. `cargo-orthohelp/src/cli/mod.rs` contains the existing `Cli`,
