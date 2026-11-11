@@ -231,17 +231,76 @@ each test in its own process, so without the group six of them run
 `cargo package` and unpack `target/localization-boundary/packaging-target` side
 by side. Cargo's package-cache lock does not cover that: it does not hold
 readers out while a package root is removed and unpacked, so one process can
-replace a root another is reading. `make boundary` and `make test` start one
-process for the binary and need nothing extra, which is why the group exists
-only for nextest.
+replace a root another is reading.
 
-That group also fixes the per-test allowance arithmetic. One packaged test runs
-both `cargo package` invocations, each bounded at 240 s by `PACKAGE_DEADLINE`,
-so the pair has to fit inside the 600 s base allowance with room for the root
-checks around them. A deadline that did not fit could never fire: nextest would
-stop the test first, and the error naming the invocation that hung would never
-be printed. `boundary_packaging_test.py` reads the group, the manifest and the
-deadline so neither half can drift from the other.
+`cargo test` and `make boundary` start one process for the binary but run its
+tests as threads, so the group cannot help there. The fixture's
+`run_with_deadline` therefore holds a process-wide mutex across each nested
+Cargo invocation. It is acquired before the child is spawned, so time a sibling
+spends holding the shared target directory's build lock is never charged to the
+deadline of the call that is counting. The wait for the mutex is itself bounded
+by the contract's shared allowance, and the child's bound is computed only
+after the wait ends, so a sibling that held the mutex for a long time shortens
+the child's bound instead of being ignored. A call whose allowance is spent
+while it waits fails with a diagnostic naming the wait, rather than blocking
+until the sibling finishes. Without it, the consumer contracts and the four
+negative controls queue on the one target directory they share, and a healthy
+child waiting for its turn reads as a hang.
+
+The same override carries the per-test allowance, 960 s (120 s x 8). A
+per-invocation deadline cannot bound a contract that makes several calls: the
+packaged consumer contract packages the set and then builds and resolves each
+of the three shapes, so eight calls at a 440 s cap apiece could spend 3,520 s
+of a 960 s allowance, and nextest would stop the test before any later call
+reported its own deadline. Every contract therefore shares one 900 s
+`SCENARIO_ALLOWANCE` (`fixture_cargo/budget.rs`), passed explicitly from the
+test to every fixture it creates. Each call is bounded by the smaller of its
+own cap and what the allowance has left; a call that starts with nothing left
+fails naming itself and the allowance, and a call clamped by the allowance says
+so in its deadline error. The 60 s outside the budget cover rendering fixture
+roots, reading manifests, and reporting.
+
+One packaged test runs both `cargo package` invocations, each bounded at 440 s
+by `PACKAGE_DEADLINE`. A consumer contract resolves and then builds, each call
+bounded at 440 s by `CARGO_DEADLINE`. A bound that did not fit could never
+fire: nextest would stop the test first, and the error naming the invocation
+that hung would never be printed. `boundary_packaging_test.py` reads the group,
+the manifest, the override's allowance, both caps, the shared allowance and the
+consumer shape count, so neither half can drift from the other. It checks that
+the shared allowance expires inside the nextest allowance, that each cap fits
+inside the shared allowance, and that the complete call sequence is longer than
+the shared allowance, which is what makes the shared budget load-bearing rather
+than a restatement of the caps.
+
+The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
+against the 600 s base allowance. They were reached on a shared host while the
+children queued behind 340 compile-admission requests, and the timeout error
+discarded the child's output, including the lines that named the queue, so the
+failure could not be attributed. `run_with_deadline` now retains a bounded tail
+of each stream and includes it in the deadline error; the tail is what
+distinguishes compile-admission waiting, package-cache waiting, and a hang from
+one another.
+
+A deadline kill terminates the child's whole process tree, not only the Cargo
+process. On Unix the child leads its own process group and the group is killed;
+on Windows it runs in its own Job Object, whose termination covers every
+descendant. Leaving descendants alive would keep the package-cache lock, the
+compile-admission slot, and the output pipes in use after the test has already
+reported a timeout. Reader collection is bounded in both outcomes as well: when
+a descendant outlives a parent that exited normally it still holds the
+inherited pipe, so a reader gets a two-second grace and is then detached with
+its retained tail reported instead of being joined without a bound. Regressions
+drive real descendants from the test binary itself. Each test spawns its probe
+as an owned process tree, waits for the probe's own readiness marker, and only
+then applies the deadline, so a saturated host's start-up delay is never
+charged to the runner; each also asserts that a surviving descendant still held
+its lock when the runner returned, rather than racing a fixed sleep. One
+descendant holds a lock across a timeout, so the lock becoming acquirable
+proves the kill reached it; one holds the pipe after its parent exits, so the
+bounded collection path is exercised rather than assumed; and a Unix-only one
+places its descendant in a new process group so the group kill cannot reach it,
+proving that a deadline is still reported while a survivor holds the pipe, and
+that the runner neither waits for that survivor nor hides it.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -1289,11 +1348,65 @@ build-and-snapshot ownership across processes. The BDD scenarios use a separate
 filesystem lease under the selected target while reading and updating their
 shared bridge cache. The identifier-artefact test owns a private target nested
 under the configured workspace target, so `cargo clean -p` cannot remove
-workspace test executables. It still uses Cargo's default shared package cache.
-Cargo retains compiler wrappers, job limits, warning enforcement, coverage
-settings, and allow-listed native build inputs. Application secrets and
-arbitrary application variables are excluded. Run-file paths must contain
-normal relative components only.
+workspace test executables. That directory has a fixed name rather than a
+per-run temporary one, and only the phases that must force a rebuild start with
+`cargo clean -p orthohelp_fixture`: the first, opt-in and forced-rebuild builds
+do, while the warm-build phase deliberately does not, because its contract is
+that an ordinary warm build leaves the emitted artefact alone. After a clean,
+the fixture and its build script are rebuilt and report their output directory,
+while the dependency build beneath them is reused between runs; the final
+forced rebuild asserts that Cargo reports fresh dependency units and recompiles
+only the fixture package. A per-run target rebuilt `ortho_config`, its macros,
+Clap and Serde from cold on every invocation, so all four phases paid a full
+dependency build. That recurring cost is what the fixed target removes, but it
+does not by itself attribute an earlier deadline exhaustion: the failing run
+discarded the child's output, the test compiles with `--all-features` while the
+fixture builds with its own default features, and both share Cargo's package
+cache, so dependency reuse was already available. What the retained tail now
+distinguishes is a nested build waiting for compile admission from one that has
+hung. Under saturated admission even a single cold dependency build can outlast
+the envelope; the fixed target makes that cold phase pay once rather than once
+per phase. The fixture still uses Cargo's default shared package cache. Cargo
+retains compiler wrappers, job limits, warning enforcement, coverage settings,
+and allow-listed native build inputs. Application secrets and arbitrary
+application variables are excluded. Run-file paths must contain normal relative
+components only.
+
+Because the target is fixed, it is shared state. nextest's `boundary_packaging`
+group and the test's `#[serial]` attribute coordinate tests inside one runner,
+but neither excludes a second test process on the same checkout. The identifier
+test therefore holds an exclusive operating-system file lease (a loop over
+`File::try_lock`) inside the private target from discovery until the fixture is
+dropped, so another process's `cargo clean -p orthohelp_fixture` cannot
+interleave with this test's build or artefact read. Discovery itself only reads
+workspace metadata and is safe to run while another process holds the lease.
+The wait is bounded by the same scenario envelope the build uses, captured
+before discovery rather than after the wait: metadata, the wait and every build
+share the one per-test allowance nextest grants. Discovery's own 30-second cap
+is charged to that envelope too, so the two phases cannot add up past nextest's
+ceiling. A target held by another runner therefore produces a diagnostic naming
+the lease rather than consuming the allowance and leaving nextest to kill the
+test without saying which wait it was in. A two-process regression drives a
+second copy of the test binary: it proves the second process blocks on a held
+lease, sees the first process's artefact intact, and rebuilds it after the
+lease is released.
+
+`ORTHO_CONFIG_FIXTURE_TELEMETRY` names a file to which each fixture build phase
+appends one record. The sink is inert unless the variable is set, so an
+ordinary test run writes nothing. The path must name a file: a path with no
+file name, such as `/`, is refused at the boundary, and the file name must be
+UTF-8. The parent directory must already exist, because it is opened as a
+capability; a relative name resolves against the process working directory.
+Records are appended, one line per build phase, in the form
+`at_ms=<unix milliseconds> emit=<true|false>` followed by the counts
+`fresh=<n>, rebuilt=<n>, rebuilt_fixture=<n>`, then `admission_lines=<n>` and
+`package_cache_lines=<n>`. `admission_lines` counts the build's stderr lines
+containing `[build-limits]`; `package_cache_lines` counts lines containing
+`waiting for file lock`. A clock failure is reported to the caller rather than
+recorded as zero, so a phase is never stamped `at_ms=0` without saying so. The
+environment is read once at the test boundary and the sink is passed explicitly
+to the build, so the record format and the clock can be driven directly by a
+regression.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:
@@ -3007,12 +3120,12 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                           |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD and documentation scenarios |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                          |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                         |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD, documentation and boundary packaging scenarios |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                                              |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                                              |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                                             |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -3157,8 +3270,13 @@ The documentation process runner applies a hard overall deadline to each
 subprocess. Build, execution, and discovery budgets are 956, 60, and 30
 seconds, with two seconds reserved for bounded cleanup. A fixed scenario
 deadline is never extended by output. The runner drains both streams while
-retaining at most 1 MiB per stream, reports truncation and available evidence
-on timeout or wait failure, and limits reader completion during cleanup.
+retaining at most 1 MiB per stream for callers, reports truncation and
+available evidence on timeout or wait failure, and limits reader completion
+during cleanup. Callers that parse a child's stdout keep that head window.
+Failure diagnostics additionally hold a 64 KiB tail of each stream: a child
+that stalls prints nothing while it waits, so the last lines it wrote are the
+only evidence of what it was waiting for, and a diagnostic built from the head
+alone would hide exactly that.
 
 These operations do not create a new Cargo target for each example workspace.
 They resolve the caller's configured target directory, including the target

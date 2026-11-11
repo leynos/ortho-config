@@ -1575,6 +1575,7 @@ dependencies = [
  "cap-std",
  "fluent-bundle",
  "fluent-syntax",
+ "process-wrap",
  "proptest",
  "rstest",
  "serde",
@@ -1584,7 +1585,6 @@ dependencies = [
  "toml 1.1.8+spec-1.1.0",
  "tracing",
  "unic-langid",
- "wait-timeout",
 ]
 
 [[package]]
@@ -1880,6 +1880,7 @@ checksum = "f95f6259ebd0640685b7cd26d635861f39208df0f89b2b61ff5cf76310fa54f6"
 dependencies = [
  "indexmap",
  "nix",
+ "windows",
 ]
 
 [[package]]

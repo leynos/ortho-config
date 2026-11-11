@@ -34,10 +34,25 @@ use std::time::Duration;
 /// Longest a single nested Cargo invocation may run.
 ///
 /// The contracts resolve small consumer roots against the shared package cache;
-/// the slowest observed run is tens of seconds, not minutes. The bound exists so
-/// a child blocked on the package-cache lock is attributed to its own contract
-/// instead of consuming the whole test allowance silently.
-pub(crate) const CARGO_DEADLINE: Duration = Duration::from_secs(300);
+/// the slowest warm run is tens of seconds. The bound exists so a child blocked
+/// on compile admission or the package-cache lock is attributed to its own
+/// contract instead of consuming the whole test allowance silently.
+///
+/// The figure is sized from the nextest allowance rather than chosen for
+/// comfort. A consumer contract resolves and then builds in one test, so the
+/// pair has to fit inside the allowance with room for the fixture work around
+/// them. The boundary override grants 960 s, and two 440 s bounds leave 80 s.
+/// A bound that did not fit could never fire: nextest would stop the test
+/// first, and the error naming the invocation that hung would be lost.
+///
+/// It was 300 s. On a shared host whose compile-admission queue reached 340
+/// waiting requests, two consumer contracts spent their whole bound waiting for
+/// a slot without printing a compiler diagnostic; the tail of the child's
+/// output, which names the queue, is now part of the deadline error. The
+/// in-process serialization in [`super::run_with_deadline`] removes the sibling
+/// build-directory lock waits; the larger bound covers the admission queue that
+/// remains.
+pub(crate) const CARGO_DEADLINE: Duration = Duration::from_secs(440);
 
 /// Toolchain and platform variables a nested Cargo invocation may inherit.
 ///

@@ -53,7 +53,7 @@
 //! directory name (`ortho_config_test_helpers` lives in `test_helpers`).
 
 use super::fixture_cargo::{
-    FixtureCargo, cargo_binary, inherited_toolchain, run_with_deadline, toml_string,
+    Budget, FixtureCargo, cargo_binary, inherited_toolchain, run_with_deadline, toml_string,
 };
 use anyhow::{Result, bail, ensure};
 use camino::Utf8Path;
@@ -65,18 +65,22 @@ use std::time::Duration;
 /// Each invocation is bounded on its own, and every entry in
 /// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
 /// inside nextest's per-test allowance with room for the root checks around
-/// them: 2 x 240 s is 480 s of the 600 s base allowance, leaving 120 s. The
-/// figure is derived from the allowance rather than chosen for comfort,
-/// because a bound that does not fit never fires: nextest stops the test
-/// first, and the error naming the invocation that hung is never printed.
+/// them: 2 x 440 s is 880 s of the 960 s the `boundary_packaging` override
+/// grants, leaving 80 s. The figure is derived from the allowance rather than
+/// chosen for comfort, because a bound that does not fit never fires: nextest
+/// stops the test first, and the error naming the invocation that hung is
+/// never printed.
 ///
 /// The second invocation reuses the first's target directory and is much
-/// shorter. For scale, the pair took 244 s on this host with the packaging
-/// target removed, which is an upper bound rather than a build time: it
-/// includes waiting for compile-admission slots, which the child inherits. So
-/// 240 s per invocation is generous against the whole pair rather than tight
-/// against either half.
-const PACKAGE_DEADLINE: Duration = Duration::from_secs(240);
+/// shorter. The pair took 244 s on this host with the packaging target removed,
+/// which is an upper bound rather than a build time: it includes waiting for
+/// compile-admission slots, which the child inherits. The bounds were 240 s
+/// when six packaged contracts timed out on a shared host with 340 compile
+/// requests queued behind them; the failure named the deadline but discarded
+/// the queue lines the child had printed, so the wait could not be told apart
+/// from a hang. The tail is now reported with the error, and the bound leaves
+/// room for the admission queue that a shared host produces.
+const PACKAGE_DEADLINE: Duration = Duration::from_secs(440);
 
 /// The `cargo package` invocations that together produce all three roots.
 ///
@@ -146,10 +150,14 @@ pub(crate) use roots::{
 };
 
 /// Run one `cargo package` invocation.
+///
+/// The invocation is bounded by [`PACKAGE_DEADLINE`] or by what the contract's
+/// shared [`Budget`] has left, whichever is sooner.
 pub(super) fn package_sources(
     repository: &Utf8Path,
     target: &Utf8Path,
     invocation: &PackageInvocation,
+    budget: Budget,
 ) -> Result<()> {
     // The subcommand comes first: `--manifest-path` is a per-command flag.
     let mut args = vec![String::from("package")];
@@ -179,7 +187,7 @@ pub(super) fn package_sources(
         .envs(inherited_toolchain())
         .env("CARGO_TARGET_DIR", target);
     let description = format!("cargo package for {}", invocation.crates.join(", "));
-    let output = run_with_deadline(command, PACKAGE_DEADLINE, &description)?;
+    let output = run_with_deadline(command, budget, PACKAGE_DEADLINE, &description)?;
     if !output.status.success() {
         bail!(
             "{description} failed with {}\nstderr:\n{}",
@@ -213,14 +221,17 @@ pub(crate) struct ConsumerFixture {
 }
 
 impl ConsumerFixture {
-    /// Create an empty consumer fixture.
+    /// Create an empty consumer fixture under `budget`.
+    ///
+    /// Every nested Cargo call the fixture makes shares that allowance, so the
+    /// contract's calls are bounded as a sequence rather than one at a time.
     ///
     /// # Errors
     ///
     /// Returns an error when the fixture root cannot be created.
-    pub(crate) fn new() -> Result<Self> {
+    pub(crate) fn new(budget: Budget) -> Result<Self> {
         Ok(Self {
-            cargo: FixtureCargo::new()?,
+            cargo: FixtureCargo::new(budget)?,
         })
     }
 

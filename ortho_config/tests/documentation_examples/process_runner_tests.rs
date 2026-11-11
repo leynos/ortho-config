@@ -6,6 +6,8 @@ mod capture_tests;
 mod deadline_tests;
 #[path = "process_runner_test_probes.rs"]
 mod probes;
+#[path = "process_runner_tail_tests.rs"]
+mod tail_tests;
 #[cfg(target_os = "linux")]
 use super::tree::read_proc_stat;
 #[cfg(target_os = "linux")]
@@ -70,35 +72,6 @@ fn bounded_build_policy_keeps_its_other_limits() {
 }
 
 #[test]
-fn timeout_diagnostic_keeps_bounded_output_and_truncation_evidence() -> Result<()> {
-    let mut command = probe_command("probes::output_then_sleep_probe")?;
-    let error = run_with_policy(
-        &mut command,
-        Operation("capture timeout probe"),
-        execution_policy(Duration::from_millis(150), Duration::from_millis(700), 64),
-    )
-    .expect_err("the sleeping output probe should time out");
-    let diagnostic = format!("{error:#}");
-
-    ensure!(deadline_exceeded(&error), "timeout lost its typed cause");
-    ensure!(
-        !cleanup_incomplete(&error),
-        "cleanup was unexpectedly incomplete"
-    );
-    ensure!(
-        diagnostic.contains("capture timeout probe: subprocess timed out"),
-        "timeout diagnostic missing: {diagnostic}"
-    );
-    ensure_timeout_stream(&diagnostic, "stdout", "STDOUT_TIMEOUT_SENTINEL")?;
-    ensure_timeout_stream(&diagnostic, "stderr", "STDERR_TIMEOUT_SENTINEL")?;
-    ensure!(
-        diagnostic.contains("correlated admission telemetry=unavailable"),
-        "admission telemetry availability missing: {diagnostic}"
-    );
-    Ok(())
-}
-
-#[test]
 fn wait_failure_remains_primary_when_tree_cleanup_also_fails() -> Result<()> {
     let mut command = probe_command("probes::sleep_probe")?;
     let mut fail_first_wait = true;
@@ -107,6 +80,7 @@ fn wait_failure_remains_primary_when_tree_cleanup_also_fails() -> Result<()> {
         Operation("injected wait failure"),
         short_policy(),
         RunHooks {
+            stdin: None,
             observer: |_: &[u8]| {},
             poll: |child: &mut dyn ChildWrapper| {
                 if fail_first_wait {
@@ -241,6 +215,7 @@ fn incomplete_runner_cleanup_reports_cancelled_readers() -> Result<()> {
             1024 * 1024,
         ),
         RunHooks {
+            stdin: None,
             observer: |_: &[u8]| {},
             poll: |child: &mut dyn ChildWrapper| child.try_wait(),
             kill: |_child: &mut dyn ChildWrapper| Ok(()),
@@ -355,22 +330,6 @@ const fn short_policy() -> Policy {
         Duration::from_millis(700),
         1024 * 1024,
     )
-}
-
-fn ensure_timeout_stream(diagnostic: &str, stream: &str, sentinel: &str) -> Result<()> {
-    ensure!(
-        diagnostic.contains(&format!("{stream}: bytes_seen=")),
-        "{stream} byte-count evidence missing: {diagnostic}"
-    );
-    ensure!(
-        diagnostic.contains("bytes_captured=64, truncated=true"),
-        "{stream} truncation evidence missing: {diagnostic}"
-    );
-    ensure!(
-        diagnostic.contains(sentinel),
-        "{stream} output sentinel missing: {diagnostic}"
-    );
-    Ok(())
 }
 
 fn probe_command(test_name: &str) -> Result<Command> {

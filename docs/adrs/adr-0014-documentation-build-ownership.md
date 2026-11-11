@@ -359,6 +359,160 @@ controlled run provides usable cold-build evidence.
 - Existing nextest serialization groups remain until their shared-state
   assumptions are independently disproven.
 
+## Addendum (2026-11-10)
+
+The accepted outcome above is unchanged. This addendum records decisions taken
+after it and is authoritative where the two differ.
+
+### Identifier-artefact private target
+
+The identifier-artefact fixture now names its private target
+`identifier-artefact-target` and nests it beneath the workspace target that
+`cargo metadata` reports. This replaces per-run target ownership with reuse:
+the first phase pays the dependency build, and later phases reuse it. Only the
+phases that must force a rebuild start with `cargo clean -p orthohelp_fixture`,
+which rebuilds the fixture package and its build script while the dependency
+graph beneath them stays warm. The fixture still uses Cargo's default shared
+package cache.
+
+Reuse is asserted rather than inferred from elapsed time. Cargo's JSON message
+stream reports every compiler unit as fresh or rebuilt, and the forced-rebuild
+phase must report fresh dependency units while recompiling only the fixture
+package. A phase that rebuilt the whole graph therefore fails the contract
+instead of merely looking slow.
+
+The target is marked with a `CACHEDIR.TAG` carrying Cargo's cache-directory
+signature, so tools that honour the tag treat it as a cache. Because it is
+nested under the workspace target, a workspace `cargo clean` still removes it.
+
+A stable target is shared state. nextest's test group and `#[serial]`
+coordinate tests inside one runner; neither excludes a second test process from
+running its own `cargo clean -p orthohelp_fixture` inside this test's build or
+artefact read.
+
+### Whole-test lease over the target
+
+The fixture holds an exclusive operating-system file lease over the private
+target for the whole test. The lease file is `.identifier-artefact.lease`
+inside that target, so it shares the target's lifetime and its `CACHEDIR.TAG`
+marking. A waiting process re-checks the lock every 50 ms until the current
+holder releases it, and the wait is bounded by the scenario deadline; an
+exhausted wait fails with a message naming the lease file. Discovery runs
+first. It only reads workspace metadata and touches no build output, so it may
+run while another process holds the lease. The lease is acquired after
+discovery and before the first build, and it is held until the fixture is
+dropped.
+
+### Lease inherited by the build it protects
+
+The lease alone would leave an ordering hole. The runner gives every nested
+child its own process group (Unix) or Job Object (Windows), which is what lets
+it kill a whole build at its deadline. It also means that killing the *helper*
+reaches the helper alone: Cargo and its compilers keep running with nothing
+supervising them, and the helper's own lease handle closes with it. A
+replacement process could then acquire the target and clean it while those
+compilers are still writing.
+
+Each nested Cargo invocation therefore inherits a duplicate of the lease handle
+as its standard input. Cargo is the direct child and holds that handle open for
+as long as it lives, so the operating system keeps the lease held after the
+helper's own handle closes. On Unix, the duplicate shares the open file
+description that `flock` locks, so the lock is released only when Cargo closes
+it. On Windows, where `LockFileEx` locks belong to the locking process rather
+than the file object, the lease file is opened with an empty share mode
+instead: the inherited duplicate keeps a later open refused for Cargo's
+lifetime. The lease file is empty, so Cargo sees an empty standard input rather
+than a terminal it could block on.
+
+The handle does not reach Cargo's own children. Cargo gives build scripts and
+rustc a null standard input, so the lease stops at Cargo. Those descendants are
+covered by the parent's termination of the recorded tree, not by the lease: the
+lease covers the window in which Cargo is still running and the helper is not,
+and the snapshot covers the compilers that outlive Cargo.
+
+This is deliberately not `PR_SET_PDEATHSIG`: that signal is Linux-only and
+fires when the *immediate* parent dies, which is Cargo rather than the helper.
+The inherited handle is portable and reaches Cargo wherever it is in the tree.
+
+### Descendants of an interrupted helper
+
+Keeping the lease through an orphaned build makes the target safe, but not
+available: a test interrupted that way would leave the target refused until the
+orphans exit on their own. A regression therefore records the helper's
+descendants while their parent links still exist, kills the helper alone, and
+proves both halves: the orphan can still write to the target and a replacement
+is refused, and terminating the recorded descendants releases the lease and
+freezes the heartbeat.
+
+The snapshot walks the process table from the helper's process ID, because a
+killed process's children are re-parented and can no longer be found by
+following links afterwards. Termination sends `SIGKILL` to each recorded
+process, and to its process group when it leads one, so a compiler started
+after the snapshot cannot survive it. The wait is bounded and reports any
+survivors rather than claiming a clean teardown. A process that has been killed
+but not yet reaped is a zombie, which `kill(pid, 0)` still reports as present;
+the wait reads the process-table state and treats a stopped process as
+terminated, so a slow reaper does not turn a successful kill into a failure.
+
+Windows takes no snapshot. The runner's Job Object is created with
+`KILL_ON_JOB_CLOSE` and belongs to the helper, so the kernel terminates the
+whole tree when the helper dies.
+
+### One scenario envelope
+
+The scenario deadline is captured once, before the lease wait, and the lease
+wait, every nested Cargo call, and the artefact read that follows share that
+one envelope. Discovery's 30-second cap is charged to it too, so discovery and
+the wait cannot together outlast the per-test allowance. Starting a second
+envelope at the wait would leave the total unbounded and let nextest kill the
+test before the wait could name itself.
+
+The second process in the lease regression keeps its own envelope rather than
+sharing the parent's, because it is a separate test process with its own clock.
+It caps that envelope at 600 seconds, well inside the 900 seconds the parent
+waits before tearing it down. Only the helper supervises its nested Cargo
+calls, and each of those runs in its own process group, so a parent that killed
+the helper while a build was still running would leave Cargo and its compilers
+with nothing left to bound them. The helper's deadline therefore expires first:
+its supervised Cargo is killed and reaped by the runner that owns it, and the
+helper reports the failure and exits before the parent stops waiting. A
+workflow contract keeps that ordering from silently inverting. Should it invert
+anyway — the parent kills the helper before its own deadline — the inherited
+lease keeps the target refused, and the parent's descendant snapshot terminates
+the orphaned build before it re-acquires the target.
+
+### Diagnostic tail beside the retained head
+
+Each output stream still retains at most 1 MiB for callers that parse it, and
+now also retains a separate 64 KiB tail (`DIAGNOSTIC_TAIL_BYTES`) of the most
+recent bytes. The head cannot explain a stalled child: compile-admission queue
+lines and rustc heartbeats are printed repeatedly, and the last one names the
+wait that was in force. A timeout therefore reports both ends, with the bytes
+seen and whether the head was truncated, so an admission wait, a package-cache
+wait, and a hang are distinguishable.
+
+### Boundary-runner supervision
+
+Process supervision is no longer confined to documentation-test subprocesses.
+The `ortho_l10n` boundary runner (`fixture_cargo`) applies the same model to
+its nested Cargo children: on Unix the child leads its own process group and
+the group is killed at the deadline, and on Windows it runs in its own Job
+Object, whose termination covers every descendant. Reader collection is bounded
+in both outcomes, so a descendant that holds an inherited pipe cannot block the
+diagnostic, and each stream retains a 64 KiB diagnostic tail.
+
+A `SCENARIO_ALLOWANCE` of 900 seconds is shared by every nested Cargo call in
+one boundary contract and passed explicitly from the test, rather than kept in
+a thread-local that unrelated contracts would accumulate. Each call is bounded
+by the smaller of its own cap and what the allowance has left; a call that
+starts with nothing left is refused, naming itself and the allowance. The
+in-process serialization wait is bounded by the same allowance, and each
+child's bound is computed after the wait, so queueing behind a sibling is
+charged to the allowance rather than hidden from it. The allowance sits inside
+the 960-second per-test boundary override, and the remaining 60 seconds cover
+rendering fixture roots, reading manifests, and reporting. Both runners remain
+test-only; neither is a general application subprocess API.
+
 ## References
 
 - [Executable documentation-test design][design-infrastructure]
