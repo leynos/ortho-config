@@ -33,9 +33,9 @@ use super::identifier_artefact_e2e_support::{Descendants, snapshot_descendants};
 #[cfg(unix)]
 use super::identifier_artefact_lease_support::REFUSAL_WINDOW;
 use super::identifier_artefact_lease_support::{
-    HEARTBEAT_FILE, HELPER_STARTUP, HELPER_WORK_BOUND, Helper, REPLACEMENT_WINDOW,
-    announced_target, child_test_command, heartbeat_after, heartbeat_length, required_scratch,
-    required_scratch_path, wait_for_heartbeat, wait_for_marker,
+    HEARTBEAT_FILE, HELPER_LEASE_WAIT, HELPER_STARTUP, HELPER_WORK_BOUND, Helper,
+    REPLACEMENT_WINDOW, announced_target, child_test_command, heartbeat_after, heartbeat_length,
+    required_scratch, required_scratch_path, wait_for_heartbeat, wait_for_marker,
 };
 use super::{process_runner, scenario};
 use anyhow::{Context, Result, ensure};
@@ -82,7 +82,9 @@ fn nested_build_helper() -> Result<()> {
     scratch
         .write("target.txt", target.display().to_string())
         .context("announce the leased target")?;
-    let cargo = location.lease(deadline, None)?;
+    // Capped below the parent's marker window so a contended target fails here
+    // with the lease's own diagnostic instead of being killed mid-wait.
+    let cargo = location.lease_within(deadline, HELPER_LEASE_WAIT, None)?;
     // A heartbeat from an earlier run would satisfy the parent's first wait
     // before this run's writer exists, so clear it while the lease is held.
     let target_directory =
