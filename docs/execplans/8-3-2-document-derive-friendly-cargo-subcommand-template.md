@@ -524,9 +524,10 @@ Its acceptance is V1–V4, the negative control, and all required gates. Review
 scope against R1–R4 and the accepted entry-point design before committing. The
 repository should remain usable with no runtime API or workspace dependency
 changes; the generated example manifest includes its documented tracing crate.
-Remaining work is final design/developer cross-references and completion
-recording. Recovery is a focused revert of the milestone commit if needed; no
-compatibility layer or persisted-data migration is needed.
+Remaining work after M1 was final design/developer cross-references and
+completion recording, which M2 delivered. Recovery is a focused revert of the
+milestone commit if needed; no compatibility layer or persisted-data migration
+is needed.
 
 M2 delivers coherent design and maintenance guidance plus completed roadmap
 status. Its acceptance is a repeated focused documentation suite, all required
