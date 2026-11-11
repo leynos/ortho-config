@@ -238,12 +238,14 @@ def test_the_unsupported_platform_is_rejected_at_compile_time() -> None:
     # The rejection is only load-bearing where the tree is created. A guard
     # that drifted outside `spawn_owned`, or below its spawn call, would read
     # as present here while the unsupported build reached the wrapper.
-    spawn_at = source.find("fn spawn_owned")
+    spawn_at = source.find("fn spawn_owned(")
     assert spawn_at >= 0, f"no spawn_owned in {PROCESS}"
     assert spawn_at < guard.start(), (
         f"the unsupported-platform guard must sit inside spawn_owned in {PROCESS}"
     )
-    assert guard.start() < source.find(".spawn()", spawn_at), (
+    spawn_call = source.find(".spawn()", spawn_at)
+    assert spawn_call >= 0, f"no .spawn() call after spawn_owned in {PROCESS}"
+    assert guard.start() < spawn_call, (
         f"the guard must precede the spawn call it protects in {PROCESS}"
     )
 
