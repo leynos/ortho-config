@@ -83,6 +83,8 @@ fn assert_help_forms(workspace: &mut ExampleWorkspace) -> Result<()> {
         root_stdout,
         contains_substring("Usage: cargo-demo <COMMAND>")
     );
+    assert_that!(root_stdout, contains_substring("Commands:"));
+    assert_that!(root_stdout, contains_substring("\n  demo"));
 
     let direct = workspace.run(ExampleId(BINARY), ["demo", "--help"])?;
     assert_that!(
@@ -95,6 +97,7 @@ fn assert_help_forms(workspace: &mut ExampleWorkspace) -> Result<()> {
         direct_stdout,
         contains_substring("Usage: cargo-demo demo [OPTIONS]")
     );
+    assert_inner_help(&direct_stdout);
 
     let dispatched = workspace.run_cargo_subcommand("demo", ["--help"])?;
     assert_that!(
@@ -108,7 +111,14 @@ fn assert_help_forms(workspace: &mut ExampleWorkspace) -> Result<()> {
         dispatched_stdout,
         contains_substring("Usage: cargo-demo demo [OPTIONS]")
     );
+    assert_inner_help(&dispatched_stdout);
     Ok(())
+}
+
+/// Inner help names the documented option and its description.
+fn assert_inner_help(help: &str) {
+    assert_that!(help, contains_substring("--verbose"));
+    assert_that!(help, contains_substring("Print additional diagnostics"));
 }
 
 /// Flat and malformed invocations fail before any application logic runs.

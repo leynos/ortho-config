@@ -125,6 +125,11 @@ extending the contract.
 - [x] (2026-11-11) M2: recorded the naming distinction in design §4.17 and the
   ADR-0004 clarification, marked roadmap 8.3.2 complete, and passed the full
   gate set on the final candidate.
+- [x] (2026-11-11) M3: reconciled the hosted completeness assessment. Added
+  installation, `PATH`, and name-agreement guidance; linked the per-command
+  merge; corrected the `RUST_LOG` explanation; added the missing `edition` and
+  `version` to both recipes; and asserted the visible commands and options in
+  both help forms.
 
 ## Surprises & discoveries
 
@@ -263,6 +268,19 @@ Final gate evidence on the implementation candidate: `make check-fmt`,
 `clippy::shadow-reuse` bindings in the new test module; renaming them cleared
 the gate. Focused logs are `/tmp/test-red-ortho-config-8-3-2.out` and
 `/tmp/test-derive-ortho-config-8-3-2.out`.
+
+The hosted completeness assessment on `06e28c17` identified four in-scope gaps:
+the guide incorrectly said Cargo does not forward `RUST_LOG`; neither template
+gave an installation or `PATH` instruction; the guide did not link the
+per-command merge; and the help tests did not assert the visible command or
+option. Repairing them also exposed that both published recipes omitted
+`edition`, so the program would not compile from the recipe alone. The repairs
+add `version` and `edition` to both recipes, installation and name-agreement
+guidance, the per-command merge link, the corrected environment explanation,
+and help-content assertions. A static contract now requires each recipe's
+version and edition. An independent scratch build of the corrected recipe and
+program produced `Usage: cargo-demo <COMMAND>` with a `demo` command, and inner
+help listed `--verbose` with its description.
 
 ## Context and orientation
 
