@@ -11,7 +11,7 @@ use rstest::rstest;
 use std::process::Output;
 
 use crate::documentation_examples::documented_example;
-use crate::workspace::{DependencyAlias, ExampleId, ExampleWorkspace};
+use crate::workspace::{DependencyAlias, EnvironmentVariable, ExampleId, ExampleWorkspace};
 
 /// The installed binary name that gives Cargo its `cargo-demo` dispatch
 /// target.
@@ -31,6 +31,46 @@ fn documented_derive_cargo_subcommand(#[case] example: &str) -> Result<()> {
     assert_cargo_dispatch(&mut workspace)?;
     assert_help_forms(&mut workspace)?;
     assert_rejected_forms(&mut workspace)
+}
+
+/// The complete adaptation merges environment values beneath the CLI layer.
+///
+/// An omitted `--verbose` must not contribute clap's `false` default, so the
+/// environment value survives; an explicit flag still wins over it.
+#[rstest]
+#[serial_test::serial(documentation_build)]
+fn documented_derive_cargo_subcommand_merges_configuration() -> Result<()> {
+    let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    workspace.add_binary_as(BINARY, documented_example("guide-cargo-derive-merge")?)?;
+    workspace.build()?;
+
+    assert_verbose(workspace.run(ExampleId(BINARY), ["demo"])?, false)?;
+    assert_verbose(
+        workspace.run_with_environment(
+            ExampleId(BINARY),
+            ["demo"],
+            [EnvironmentVariable {
+                name: "CARGO_DEMO_CMDS_DEMO_VERBOSE",
+                value: "true",
+            }],
+        )?,
+        true,
+    )?;
+    assert_verbose(
+        workspace.run_with_environment(
+            ExampleId(BINARY),
+            ["demo", "--verbose"],
+            [EnvironmentVariable {
+                name: "CARGO_DEMO_CMDS_DEMO_VERBOSE",
+                value: "false",
+            }],
+        )?,
+        true,
+    )?;
+    assert_verbose(
+        workspace.run_cargo_subcommand("demo", std::iter::empty::<&str>())?,
+        false,
+    )
 }
 
 /// `cargo-demo demo [--verbose]` reaches the options struct in both forms.
