@@ -6,8 +6,12 @@ mod api_guide;
 #[path = "documentation_examples/boolean_override.rs"]
 mod boolean_override;
 
+#[path = "documentation_examples/cargo_derive.rs"]
+mod cargo_derive;
+
 #[path = "documentation_examples/cargo_flows.rs"]
 mod cargo_flows;
+
 mod documentation_examples;
 
 #[path = "documentation_examples/env_alias_chain.rs"]
@@ -24,6 +28,7 @@ mod migration_flows;
 
 #[path = "documentation_examples/process_runner_test_support.rs"]
 mod process_runner;
+
 #[path = "documentation_examples/process_runner_execution_policy.rs"]
 mod process_runner_execution_policy;
 
