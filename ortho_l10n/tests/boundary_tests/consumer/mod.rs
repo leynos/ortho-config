@@ -11,21 +11,17 @@
 //! check while proving nothing about the code a consumer writes.
 
 use crate::boundary::consumer::{Dependency, DependencySource};
-use crate::boundary::fixture_cargo::Metadata;
+use crate::boundary::fixture_cargo::{Budget, Metadata};
 use crate::boundary::package_set::{
-    ConsumerFixture, assert_packaged_set_complete, prepare_packaged_set_until, unpacked_directory,
+    ConsumerFixture, assert_packaged_set_complete, prepare_packaged_set, unpacked_directory,
 };
 use anyhow::{Context, Result, ensure};
-use std::time::{Duration, Instant};
-
-/// The aggregate wall-clock limit for packaging and testing all packaged
-/// consumer shapes in this scenario.
-pub(crate) const PACKAGED_CONSUMER_SEQUENCE_DEADLINE: Duration = Duration::from_secs(2_100);
 
 /// Build and test a runtime consumer resolved from workspace path dependencies.
 #[test]
 fn workspace_runtime_consumer_builds_and_tests() -> Result<()> {
-    let fixture = consumer_fixture(Dependency::Runtime, &DependencySource::Workspace)?;
+    let budget = Budget::new();
+    let fixture = consumer_fixture(Dependency::Runtime, &DependencySource::Workspace, budget)?;
     fixture.test()?;
     assert_runtime_only_edges(&fixture.resolve_metadata()?)?;
     Ok(())
@@ -38,7 +34,12 @@ fn workspace_runtime_consumer_builds_and_tests() -> Result<()> {
 /// facade's re-export rather than through a direct runtime dependency.
 #[test]
 fn workspace_facade_consumer_builds_and_tests() -> Result<()> {
-    let fixture = consumer_fixture(Dependency::Configuration, &DependencySource::Workspace)?;
+    let budget = Budget::new();
+    let fixture = consumer_fixture(
+        Dependency::Configuration,
+        &DependencySource::Workspace,
+        budget,
+    )?;
     fixture.test()?;
     let metadata = fixture.resolve_metadata()?;
     ensure!(
@@ -56,7 +57,8 @@ fn workspace_facade_consumer_builds_and_tests() -> Result<()> {
 /// identity evidence.
 #[test]
 fn workspace_mixed_consumer_builds_and_tests() -> Result<()> {
-    let fixture = consumer_fixture(Dependency::Mixed, &DependencySource::Workspace)?;
+    let budget = Budget::new();
+    let fixture = consumer_fixture(Dependency::Mixed, &DependencySource::Workspace, budget)?;
     fixture.test()?;
     assert_both_crates_resolve(&fixture.resolve_metadata()?)?;
     Ok(())
@@ -70,8 +72,11 @@ fn workspace_mixed_consumer_builds_and_tests() -> Result<()> {
 /// exactly this graph.
 #[test]
 fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
-    let sequence_deadline = Instant::now() + PACKAGED_CONSUMER_SEQUENCE_DEADLINE;
-    prepare_packaged_set_until(sequence_deadline)?;
+    // One budget for the whole sequence. The two packaging calls and the six
+    // consumer calls cannot each reach a 440 s cap inside one 960 s test, so
+    // the shared allowance is what keeps a late call reportable.
+    let budget = Budget::new();
+    prepare_packaged_set(budget)?;
     assert_packaged_set_complete()?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
@@ -82,22 +87,22 @@ fn every_packaged_consumer_shape_builds_and_tests() -> Result<()> {
             dependency.describe(),
             source.describe(),
         );
-        let fixture = consumer_fixture(dependency, &source).with_context(|| shape.clone())?;
-        fixture
-            .test_until(sequence_deadline)
-            .with_context(|| shape.clone())?;
-        let metadata = fixture
-            .resolve_metadata_until(sequence_deadline)
-            .with_context(|| shape.clone())?;
-        assert_paths_for(dependency, &metadata).with_context(|| shape)?;
+        let fixture =
+            consumer_fixture(dependency, &source, budget).with_context(|| shape.clone())?;
+        fixture.test().with_context(|| shape.clone())?;
+        assert_paths_for(dependency, &fixture.resolve_metadata()?).with_context(|| shape)?;
     }
     Ok(())
 }
 
 /// Render, write, and return a consumer fixture for `dependency`.
-fn consumer_fixture(dependency: Dependency, source: &DependencySource) -> Result<ConsumerFixture> {
+fn consumer_fixture(
+    dependency: Dependency,
+    source: &DependencySource,
+    budget: Budget,
+) -> Result<ConsumerFixture> {
     let consumer = crate::boundary::consumer::Consumer::render(dependency, source)?;
-    ConsumerFixture::new()?.write_consumer(&consumer)
+    ConsumerFixture::new(budget)?.write_consumer(&consumer)
 }
 
 /// The runtime-only consumer must have exactly the standalone edge set.

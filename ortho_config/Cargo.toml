@@ -71,7 +71,11 @@ ortho_config_macros = { path = "../ortho_config_macros", version = "0.10.0" }
 proptest = "1.11.0"
 tracing-subscriber = "0.3"
 metrics-util = { version = "0.20", features = ["debugging"] }
-process-wrap = { version = "9.0.1", default-features = false, features = ["std"] }
+# The identifier-artefact lease regression starts a second copy of its own test
+# binary and must be able to kill that process *and the Cargo tree beneath it*
+# if it wedges, so it needs the same platform tree wrappers as the boundary
+# runner.
+process-wrap = { version = "9.0.1", default-features = false, features = ["std", "process-group", "job-object"] }
 fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
 serde_json = "1"
 

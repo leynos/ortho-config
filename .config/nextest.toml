@@ -187,17 +187,27 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # root is removed and unpacked, so one process can replace a root another is
 # reading. Serialize the binary.
 #
-# Several boundary tests run multiple nested Cargo commands, which can wait on
-# the shared package-cache lock held by other worktrees. The packaged-consumer
-# scenario has two packaging invocations and six fixture Cargo commands; their
-# independent deadlines do not fit in one test allowance. That scenario gives
-# every child the same 2,100 s sequence deadline. Give the serialized binary a
-# 2,200 s per-test ceiling, leaving 100 s for error reporting and teardown; the
-# 2,300 s global timeout still bounds the whole test run.
+# The allowance is 960 s, eight warning periods of 120 s, the same tier as the
+# trybuild and documentation scenarios. Two packaging invocations share one
+# test, and each is bounded at 440 s
+# (`ortho_l10n/tests/boundary/package_set`), so the pair fits with 80 s for the
+# root checks around them. A bound that did not fit would never fire: nextest
+# would stop the test first, and the error naming the invocation that hung
+# would never be printed.
 #
-# `make boundary` and `make test` do not need this entry: each starts one
-# process for the binary, which initializes the cache once and reuses it.
+# The earlier 240 s bounds sat inside the 600 s base allowance, and six packaged
+# contracts still timed out on a shared host while their children queued behind
+# 340 compile requests. The bound fired before the invocation it named could
+# finish, and the tail of the child's output - the lines naming the admission
+# queue - was discarded, so the failure could not be attributed. The fixture now
+# reports that tail with the deadline error and serializes nested Cargo calls
+# within a process; this allowance is what those bounds are sized against.
+#
+# `cargo test` and `make boundary` run one process for the binary but its tests
+# as threads, so the fixture, not this entry, provides the in-process half of
+# the serialization. See "Nextest test-group serialization" in
+# docs/developers-guide.md.
 [[profile.default.overrides]]
 filter = 'binary(boundary)'
 test-group = 'boundary_packaging'
-slow-timeout = { period = "220s", terminate-after = 10 }
+slow-timeout = { period = "120s", terminate-after = 8 }

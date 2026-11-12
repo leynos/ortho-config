@@ -5,10 +5,13 @@
 
 #[path = "process_runner_cleanup.rs"]
 mod cleanup;
+
 #[path = "process_runner_diagnostics.rs"]
 mod diagnostics;
+
 #[path = "process_runner_policy.rs"]
 mod process_policy;
+
 #[path = "process_runner_wait.rs"]
 pub(crate) mod wait;
 
@@ -44,6 +47,12 @@ struct RunContext {
 }
 
 pub(crate) struct RunHooks<Observer, Poll, Kill> {
+    /// The standard input the child inherits, or the silent default.
+    ///
+    /// Only the identifier-artefact fixture supplies one: the target lease must
+    /// outlive an interrupted build, and an inherited handle is what keeps the
+    /// lock held by the compilers that survive the helper.
+    pub(crate) stdin: Option<Stdio>,
     pub(crate) observer: Observer,
     pub(crate) poll: Poll,
     pub(crate) kill: Kill,
@@ -100,6 +109,7 @@ where
         operation,
         policy,
         RunHooks {
+            stdin: None,
             observer,
             poll: poll_child,
             kill: kill_child,
@@ -107,14 +117,21 @@ where
     )
 }
 
-fn poll_child(child: &mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>> {
+/// Poll a wrapped child without reaping it.
+pub(crate) fn poll_child(child: &mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>> {
     child.try_wait()
 }
 
-fn kill_child(child: &mut dyn ChildWrapper) -> io::Result<()> {
+/// Terminate a wrapped child and everything it owns.
+pub(crate) fn kill_child(child: &mut dyn ChildWrapper) -> io::Result<()> {
     child.start_kill()
 }
 
+/// Run a command with explicit hooks.
+///
+/// The child's standard input comes from the hooks: the silent default unless
+/// the caller supplied a handle to inherit. Only the identifier-artefact
+/// fixture does, because the target lease must outlive an interrupted build.
 pub(crate) fn run_with_hooks<Observer, Poll, Kill>(
     command: &mut Command,
     Operation(operation_name): Operation<'_>,
@@ -127,6 +144,7 @@ where
     Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
 {
     let RunHooks {
+        stdin,
         observer,
         poll,
         mut kill,
@@ -138,8 +156,8 @@ where
     let workspace = workspace_identity(command, std::env::current_dir);
     let environment = environment_evidence(command);
 
-    let child =
-        spawn_captured(command).with_context(|| format!("{operation_name}: start subprocess"))?;
+    let child = spawn_captured(command, stdin)
+        .with_context(|| format!("{operation_name}: start subprocess"))?;
     let process_id = child.id();
     let context = RunContext {
         operation: operation_name.to_owned(),
@@ -229,13 +247,16 @@ where
     }
 }
 
-fn spawn_captured(command: &mut Command) -> Result<Box<dyn ChildWrapper>> {
+fn spawn_captured(command: &mut Command, stdin: Option<Stdio>) -> Result<Box<dyn ChildWrapper>> {
     // Transfer the configured command before installing subprocess ownership.
     let mut owned_command = std::mem::replace(command, Command::new(""));
-    owned_command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // A caller-supplied stdin is a deliberate part of the operation, not an
+    // oversight: the identifier-artefact build hands its nested Cargo a
+    // duplicate of the target lease so the lock outlives an orphaned compiler.
+    // Every other caller gets the silent default, because a subprocess that
+    // reads an inherited terminal would block the test.
+    owned_command.stdin(stdin.unwrap_or_else(Stdio::null));
+    owned_command.stdout(Stdio::piped()).stderr(Stdio::piped());
     spawn_owned(owned_command)
 }
 

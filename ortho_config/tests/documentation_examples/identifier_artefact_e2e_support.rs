@@ -1,125 +1,186 @@
 //! Cargo helpers owned by the identifier-artefact integration test.
 //!
-//! The fixture reuses a private target nested under Cargo's configured target
-//! directory, so package cleans cannot delete workspace test binaries and
-//! repeated runs can reuse dependency artefacts. Cargo still uses the default
-//! shared package cache.
+//! The fixture uses a private target nested under Cargo's configured target
+//! directory so its clean operations cannot delete workspace test binaries.
+//! Cargo still uses the default shared package cache.
+//!
+//! The private target is stable across runs, not a per-run temporary directory.
+//! The phases that must force a rebuild start with [`clean_fixture`], so the
+//! fixture package and its build script are rebuilt and report their output
+//! directory; what the stable target preserves is the dependency build beneath
+//! them. The warm phase deliberately does *not* clean: its contract is that a
+//! warm build leaves the emitted artefact alone. A per-run target rebuilt
+//! `ortho_config`, its macros, Clap and Serde from cold on every invocation, so
+//! every phase paid a full dependency build; the fixed target makes only the
+//! first phase pay it. That alone does not attribute an earlier envelope
+//! exhaustion — the failing run discarded the child's output, this target
+//! compiles with `--all-features` while the fixture uses its default features,
+//! and both share Cargo's package cache — but it is the recurring cost the
+//! fixed target removes, and the retained diagnostic tail now names a
+//! compile-admission wait instead of leaving the failure silent. Only
+//! `orthohelp_fixture` itself is cleaned between phases, which is what the
+//! test's warm-build claim is about.
+//!
+//! A stable target is also shared state. nextest's `boundary_packaging` group
+//! and the test's `#[serial]` attribute coordinate tests inside one runner, but
+//! neither excludes a second test process — another `cargo test` run, a
+//! `make test`, or a nextest invocation for another target — from interleaving
+//! its own `cargo clean -p orthohelp_fixture` with this process's build or
+//! artefact read. [`FixtureCargo`] therefore holds an exclusive lease file
+//! inside the target for the whole test, from discovery until the fixture is
+//! dropped; see [`fixture_cargo`].
+//!
+//! The lease has to outlive an interrupted build as well as its holder. Each
+//! nested Cargo invocation inherits a duplicate of the lease handle as its
+//! standard input, so the lock stays held while Cargo itself is still running.
+//! A helper that dies abruptly therefore cannot hand the target to a
+//! replacement process before Cargo exits; Cargo's own children are removed by
+//! the parent's termination of the recorded tree. See [`fixture_cargo`] and the
+//! lease module.
 
+#[path = "identifier_artefact_cargo_messages.rs"]
+mod cargo_messages;
+#[path = "identifier_artefact_cargo_messages_property_tests.rs"]
+#[cfg(test)]
+mod cargo_messages_property_tests;
+// The descendant snapshot exists only where the parent has to remove a tree
+// the helper left behind; Windows relies on the helper's Job Object.
+#[cfg(unix)]
+#[path = "identifier_artefact_descendants.rs"]
+mod descendants;
+#[path = "identifier_artefact_fixture_build.rs"]
+mod fixture_build;
+#[path = "identifier_artefact_fixture_tests.rs"]
+#[cfg(test)]
+mod fixture_tests;
+#[path = "identifier_artefact_lease.rs"]
+mod lease;
+#[path = "identifier_artefact_telemetry.rs"]
+mod telemetry;
+
+#[cfg(unix)]
+pub(super) use self::descendants::{Descendants, snapshot_descendants};
+pub(super) use self::fixture_build::{artefact, artefact_path, build_fixture, clean_fixture};
+pub(super) use self::lease::{TargetLease, acquire};
+
+use self::telemetry::TelemetrySink;
 use super::{cargo_environment, process_runner, scenario};
 use anyhow::{Context, Result, ensure};
-use cap_std::{
-    ambient_authority,
-    fs::{Dir, File, OpenOptions},
-};
-use fs4::{FileExt, TryLockError};
+use cap_std::{ambient_authority, fs::Dir};
 use serde_json::Value;
-use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::process::{Command, Stdio};
+use std::time::Instant;
 
-const MAX_CARGO_RECORD_BYTES: usize = 128 * 1024;
-const FIXTURE_TARGET_DIRECTORY: &str = "identifier-e2e";
-const FIXTURE_LOCK_FILE: &str = "fixture.lock";
-const LOCK_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
 
-#[derive(Default)]
-struct CargoMessages {
+/// Names the fixture's private Cargo target.
+///
+/// Nested under the workspace target so `cargo clean` of the workspace removes
+/// it, and named so consecutive runs reuse the dependency build.
+const TARGET_DIRECTORY_NAME: &str = "identifier-artefact-target";
+
+/// The fixture package and its private target, before the cross-process lease.
+///
+/// Discovery runs `cargo metadata`, which only reads the workspace and creates
+/// nothing, so it is safe to perform while another test process holds the
+/// lease. Splitting discovery from [`FixtureLocation::lease`] lets a
+/// regression observe that a second process has reached the target and is
+/// blocked on the lease, rather than merely slow to start, and keeps every
+/// write to the target behind the lease.
+pub(super) struct FixtureLocation {
+    repository: PathBuf,
+    target_directory: PathBuf,
     package_id: String,
-    line: Vec<u8>,
-    out_dir: Option<PathBuf>,
-    error: Option<String>,
 }
 
-impl CargoMessages {
-    fn observe(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            if !self.observe_byte(*byte) {
-                break;
-            }
-        }
+impl FixtureLocation {
+    /// The private target this location will lease.
+    ///
+    /// Reading the path creates nothing; a regression uses it to observe a
+    /// helper's target without being the process that leases it.
+    pub(super) fn target_directory(&self) -> &Path {
+        &self.target_directory
     }
 
-    fn observe_byte(&mut self, byte: u8) -> bool {
-        if byte == b'\n' {
-            return self.finish_line();
-        }
-        if self.line.len() == MAX_CARGO_RECORD_BYTES {
-            self.error = Some("Cargo JSON record exceeded 128 KiB".to_owned());
-            return false;
-        }
-        self.line.push(byte);
-        true
-    }
-
-    fn finish_line(&mut self) -> bool {
-        match self.parse_line() {
-            Ok(()) => true,
-            Err(error) => {
-                self.error = Some(error.to_string());
-                false
-            }
-        }
-    }
-
-    fn finish(&mut self) -> Result<Option<PathBuf>> {
-        if !self.line.is_empty() {
-            self.parse_line()?;
-        }
-        if let Some(error) = self.error.take() {
-            anyhow::bail!(error);
-        }
-        Ok(self.out_dir.take())
-    }
-
-    fn parse_line(&mut self) -> Result<()> {
-        if self.line.is_empty() {
-            return Ok(());
-        }
-        let record: Value =
-            serde_json::from_slice(&self.line).context("parse Cargo JSON record")?;
-        self.line.clear();
-        if record.get("reason").and_then(Value::as_str) == Some("build-script-executed")
-            && record.get("package_id").and_then(Value::as_str) == Some(self.package_id.as_str())
-        {
-            ensure!(
-                self.out_dir.is_none(),
-                "Cargo reported more than one fixture build-script directory"
-            );
-            self.out_dir = Some(PathBuf::from(
-                record
-                    .get("out_dir")
-                    .and_then(Value::as_str)
-                    .context("fixture build-script message omitted out_dir")?,
-            ));
-        }
-        Ok(())
+    /// Take the whole-test lease on the private target and build the fixture.
+    ///
+    /// The lease waits until every other leaseholder has released the target,
+    /// so a concurrent test process cannot interleave its
+    /// `cargo clean -p orthohelp_fixture` with this test's build or artefact
+    /// read. [`serial_test`] and nextest's process group cannot provide this:
+    /// they coordinate one runner's tests, and `#[serial]` is a thread lock
+    /// inside one process.
+    ///
+    /// `deadline` is the envelope captured before discovery, so metadata, this
+    /// wait and every later build share the one allowance nextest grants the
+    /// test. Starting a second envelope here would leave the total unbounded:
+    /// discovery's 30 second cap and the wait's full remainder could add up
+    /// past nextest's per-test ceiling, and the test would be killed before
+    /// the wait could name itself.
+    ///
+    /// `telemetry` is supplied by the caller rather than read from the
+    /// environment here, so the fixture build has one explicit sink and a
+    /// regression can drive the record format without mutating the process
+    /// environment.
+    pub(super) fn lease(
+        self,
+        deadline: Instant,
+        telemetry: Option<TelemetrySink>,
+    ) -> Result<FixtureCargo> {
+        let lease = acquire(&self.target_directory, deadline)?;
+        prepare_target(&self.target_directory)?;
+        Ok(FixtureCargo {
+            repository: self.repository,
+            target_directory: self.target_directory,
+            package_id: self.package_id,
+            deadline,
+            telemetry,
+            lease,
+        })
     }
 }
 
-fn lock_cargo_messages(messages: &Mutex<CargoMessages>) -> MutexGuard<'_, CargoMessages> {
-    messages
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+/// Mark the private target as Cargo cache output.
+///
+/// This is the one write discovery must not perform. The lease creates the
+/// target and this call tags it, both after the lease is held, so a second
+/// process cannot prepare the same directory beside this one.
+fn prepare_target(target: &Path) -> Result<()> {
+    Dir::open_ambient_dir(target, ambient_authority())
+        .context("open the private Cargo target")?
+        .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
+        .context("write Cargo cache-directory tag")
 }
 
-/// Owns the fixture's private Cargo target for this test run.
+/// Describes the fixture's private Cargo target and scenario deadline.
+///
+/// Holding this value holds the target's cross-process lease; the field is
+/// never read because the kernel does the work when the handle closes.
 pub(super) struct FixtureCargo {
     repository: PathBuf,
     target_directory: PathBuf,
     package_id: String,
     deadline: Instant,
-    /// Exclusive ownership of the shared target, held for the scenario.
-    ///
-    /// Cargo serialises each command it runs, but the scenario also inspects
-    /// and cleans between commands, so the whole sequence needs the lock. The
-    /// lock is released when this file drops with the fixture.
-    _lock: File,
+    telemetry: Option<TelemetrySink>,
+    lease: TargetLease,
 }
 
 impl FixtureCargo {
+    /// The phase telemetry sink, when the evidence run asked for one.
+    const fn telemetry(&self) -> Option<&TelemetrySink> {
+        self.telemetry.as_ref()
+    }
+
+    /// A duplicate of the lease handle for a nested Cargo child to inherit.
+    ///
+    /// Cargo keeps the target leased for as long as it lives, so an interrupted
+    /// helper cannot release the target to a replacement process before the
+    /// build it started has stopped.
+    pub(super) fn inherited_lease(&self) -> Result<Stdio> {
+        self.lease.inherited_handle()
+    }
+
     fn bounded_policy(
         &self,
         policy: process_runner::Policy,
@@ -131,22 +192,75 @@ impl FixtureCargo {
     }
 }
 
-/// Discover the fixture package and select its persistent private target.
+/// Discover the fixture package and take the whole-test lease on its target.
+///
+/// The target directory is stable across runs; its dependencies stay warm while
+/// each rebuilding phase's [`clean_fixture`] forces the fixture package itself
+/// to rebuild. The returned value owns the lease file handle, so the target
+/// stays reserved until the test drops it or ends.
 pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
     let deadline = scenario::deadline();
+    let telemetry = TelemetrySink::from_environment()?;
+    locate_fixture(deadline)?.lease(deadline, telemetry)
+}
+
+/// Discover the fixture package and locate its private Cargo target.
+///
+/// This is the half of [`fixture_cargo`] that is safe to run concurrently with
+/// another process's lease: it only reads workspace metadata and returns the
+/// path the lease will create. Nothing is created or written here, so a second
+/// process can run discovery while the first holds the lease without either
+/// touching the target.
+///
+/// `deadline` is the test's whole envelope, and this call is already charged
+/// to it. Discovery is capped at 30 seconds; the lease wait that follows takes
+/// what is left, so the two cannot together outlast nextest's per-test
+/// allowance.
+pub(super) fn locate_fixture(deadline: Instant) -> Result<FixtureLocation> {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("find fixture workspace")?
         .to_path_buf();
+    let mut command = discovery_command(&repository);
+    locate_fixture_with(deadline, repository, &mut command)
+}
+
+/// The arguments every discovery resolve uses.
+///
+/// `--no-deps` keeps the resolve to this workspace, so discovery cannot be
+/// slowed by, or fail on, a dependency's metadata. Discovery needs only the
+/// workspace's target directory and the fixture package's identifier.
+const DISCOVERY_ARGS: [&str; 4] = ["metadata", "--offline", "--no-deps", "--format-version=1"];
+
+/// Build the discovery command with its closed environment.
+///
+/// The command is built here rather than inside [`locate_fixture_with`] so the
+/// read-only regression can hand the same process and environment a fresh
+/// target directory: discovery's process and environment are the boundary that
+/// regression needs to substitute, and keeping them in one place means the
+/// regression cannot pass with an argument list the real path does not use.
+fn discovery_command(repository: &Path) -> Command {
     let mut command = Command::new("cargo");
     cargo_environment::CargoEnvironment::metadata().apply(&mut command);
+    command.args(DISCOVERY_ARGS).current_dir(repository);
     command
-        .args(["metadata", "--offline", "--no-deps", "--format-version=1"])
-        .current_dir(&repository);
+}
+
+/// Run an already-built discovery command and read the fixture's location.
+///
+/// Separated from [`locate_fixture`] so the command and its environment are a
+/// parameter. This is still the whole discovery path — the child runs, its
+/// status is checked, and its JSON is parsed — not just the metadata reading
+/// that [`location_from_metadata`] performs.
+fn locate_fixture_with(
+    deadline: Instant,
+    repository: PathBuf,
+    command: &mut Command,
+) -> Result<FixtureLocation> {
     let remaining =
         scenario::remaining(deadline).context("discover Cargo target for identifier artefact")?;
     let output = process_runner::run_with_policy(
-        &mut command,
+        command,
         process_runner::Operation("discover Cargo target for identifier artefact"),
         process_runner::Policy::discovery().bounded_by(remaining),
     )?;
@@ -157,6 +271,14 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
     );
     let metadata: Value =
         serde_json::from_slice(&output.stdout).context("parse Cargo fixture metadata")?;
+    location_from_metadata(repository, &metadata)
+}
+
+/// Build the fixture location from parsed metadata, reading only.
+///
+/// Kept separate from the command so a regression can hand it a fresh target
+/// path and observe that discovery creates neither the directory nor its tag.
+fn location_from_metadata(repository: PathBuf, metadata: &Value) -> Result<FixtureLocation> {
     let workspace_target = metadata
         .get("target_directory")
         .and_then(Value::as_str)
@@ -171,190 +293,17 @@ pub(super) fn fixture_cargo() -> Result<FixtureCargo> {
         .and_then(|package| package.get("id"))
         .and_then(Value::as_str)
         .context("Cargo metadata omitted orthohelp_fixture's package id")?;
-    let workspace_target_path = PathBuf::from(workspace_target);
-    let workspace_target_dir = Dir::open_ambient_dir(&workspace_target_path, ambient_authority())?;
-    match workspace_target_dir.create_dir(FIXTURE_TARGET_DIRECTORY) {
-        Ok(()) => {}
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-        Err(error) => return Err(error).context("create private Cargo target"),
-    }
-    let target_directory = workspace_target_path.join(FIXTURE_TARGET_DIRECTORY);
-    let fixture_dir = Dir::open_ambient_dir(&target_directory, ambient_authority())?;
-    fixture_dir
-        .write("CACHEDIR.TAG", CACHEDIR_TAG.as_bytes())
-        .context("write Cargo cache-directory tag")?;
-    let lock = lock_fixture_target(&fixture_dir, deadline)?;
-    Ok(FixtureCargo {
+    Ok(FixtureLocation {
         repository,
-        target_directory,
+        target_directory: private_target(Path::new(workspace_target)),
         package_id: package_id.to_owned(),
-        deadline,
-        _lock: lock,
     })
 }
 
-/// Wait for exclusive ownership of the shared fixture target.
+/// The fixture's private target, nested under the workspace target.
 ///
-/// Any `cargo test` run on this workspace reuses the same target path, and the
-/// identifier scenario cleans and rebuilds between commands. The lock covers
-/// the whole lifetime of [`FixtureCargo`] so no other run can delete the
-/// artefact between those steps.
-fn lock_fixture_target(directory: &Dir, deadline: Instant) -> Result<File> {
-    let lock = directory
-        .open_with(
-            FIXTURE_LOCK_FILE,
-            OpenOptions::new().read(true).write(true).create(true),
-        )?
-        .into_std();
-    loop {
-        match FileExt::try_lock(&lock) {
-            Ok(()) => return Ok(File::from_std(lock)),
-            Err(TryLockError::Error(error)) => {
-                return Err(error).context("lock shared identifier fixture target");
-            }
-            Err(TryLockError::WouldBlock) => {
-                scenario::remaining(deadline)
-                    .context("identifier fixture target stayed locked by another run")?;
-                std::thread::sleep(LOCK_POLL_INTERVAL);
-            }
-        }
-    }
-}
-
-/// Build the fixture with optional artefact emission and find its reported output directory.
-pub(super) fn build_fixture(
-    emit: bool,
-    cargo: &FixtureCargo,
-    previous_out_dir: Option<&Path>,
-) -> Result<PathBuf> {
-    let mut command = Command::new("cargo");
-    cargo_environment::CargoEnvironment::build().apply(&mut command);
-    command
-        .args([
-            "build",
-            "-p",
-            "orthohelp_fixture",
-            "--message-format=json-render-diagnostics",
-        ])
-        .arg("--target-dir")
-        .arg(&cargo.target_directory)
-        .current_dir(&cargo.repository)
-        .env_remove("ORTHO_CONFIG_EMIT_IDENTIFIERS");
-    if emit {
-        command.env("ORTHO_CONFIG_EMIT_IDENTIFIERS", "1");
-    }
-    let messages = Arc::new(Mutex::new(CargoMessages {
-        package_id: cargo.package_id.clone(),
-        ..CargoMessages::default()
-    }));
-    let observed_messages = Arc::clone(&messages);
-    let output = process_runner::run_with_observer(
-        &mut command,
-        process_runner::Operation("build identifier artefact fixture"),
-        cargo.bounded_policy(
-            process_runner::Policy::build(),
-            "build identifier artefact fixture",
-        )?,
-        move |chunk| lock_cargo_messages(&observed_messages).observe(chunk),
-    )
-    .map_err(|error| retain_runner_error(error, "build identifier artefact fixture"))?;
-    ensure!(
-        output.status.success(),
-        "fixture build should succeed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    lock_cargo_messages(&messages)
-        .finish()?
-        .or_else(|| previous_out_dir.map(Path::to_path_buf))
-        .context("Cargo output omitted the fixture build-script directory")
-}
-
-/// Remove only the fixture's build output in its private target directory.
-pub(super) fn clean_fixture(cargo: &FixtureCargo) -> Result<()> {
-    let mut command = Command::new("cargo");
-    cargo_environment::CargoEnvironment::build().apply(&mut command);
-    let output = process_runner::run_with_policy(
-        command
-            .args(["clean", "-p", "orthohelp_fixture", "--target-dir"])
-            .arg(&cargo.target_directory)
-            .current_dir(&cargo.repository),
-        process_runner::Operation("clean identifier artefact fixture outputs"),
-        cargo.bounded_policy(
-            process_runner::Policy::build(),
-            "clean identifier artefact fixture outputs",
-        )?,
-    )
-    .map_err(|error| retain_runner_error(error, "clean identifier artefact fixture outputs"))?;
-    ensure!(
-        output.status.success(),
-        "fixture package clean should succeed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Ok(())
-}
-
-/// Return the artefact path, if the fixture build emitted one.
-pub(super) fn artefact_path(out_dir: &Path) -> Result<Option<PathBuf>> {
-    let directory = match Dir::open_ambient_dir(out_dir, ambient_authority()) {
-        Ok(directory) => directory,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error).with_context(|| {
-                format!(
-                    "open fixture build-script output directory {}",
-                    out_dir.display()
-                )
-            });
-        }
-    };
-    let relative_path = Path::new("ortho-config/cli-identifiers.json");
-    let exists = directory
-        .try_exists(relative_path)
-        .with_context(|| format!("inspect identifier artefact under {}", out_dir.display()))?;
-    Ok(exists.then(|| out_dir.join(relative_path)))
-}
-
-/// Read the emitted identifier artefact, failing when it is absent.
-pub(super) fn artefact(out_dir: &Path) -> Result<String> {
-    let directory = Dir::open_ambient_dir(out_dir, ambient_authority())
-        .context("open fixture build-script output directory")?;
-    directory
-        .read_to_string("ortho-config/cli-identifiers.json")
-        .context("read identifier artefact")
-}
-
-fn retain_runner_error(error: anyhow::Error, operation: &str) -> anyhow::Error {
-    if process_runner::deadline_exceeded(&error) {
-        error.context(format!("{operation} exceeded its overall deadline"))
-    } else if process_runner::cleanup_incomplete(&error) {
-        error.context(format!("{operation} cleanup was not confirmed"))
-    } else {
-        error.context(format!("{operation} subprocess failed"))
-    }
-}
-
-#[test]
-fn artefact_path_reports_non_not_found_lookup_errors() {
-    let output = tempfile::tempdir().expect("create a temporary output directory");
-    Dir::open_ambient_dir(output.path(), ambient_authority())
-        .expect("open the temporary output directory")
-        .write("ortho-config", "not a directory")
-        .expect("write a file at the artefact directory path");
-
-    let error = artefact_path(output.path())
-        .expect_err("a non-directory artefact parent must not read as absence");
-    let io_error = error
-        .downcast_ref::<io::Error>()
-        .expect("the cause is the filesystem error");
-    assert_ne!(
-        io_error.kind(),
-        io::ErrorKind::NotFound,
-        "the invalid parent must report its filesystem error"
-    );
-    assert!(
-        error
-            .to_string()
-            .contains(&output.path().display().to_string()),
-        "the error names the output directory: {error}"
-    );
+/// A pure path computation: the directory is created by the lease, not here,
+/// so discovery can run beside another leaseholder without writing.
+pub(super) fn private_target(workspace_target: &Path) -> PathBuf {
+    workspace_target.join(TARGET_DIRECTORY_NAME)
 }

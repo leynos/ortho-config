@@ -17,8 +17,8 @@ use crate::boundary::consumer::{
 };
 use crate::boundary::fixture_cargo::environment::CARGO_DEADLINE;
 use crate::boundary::fixture_cargo::{
-    FixtureCargo, Metadata, cargo_binary, describe_edges, inherited_toolchain, repository_root,
-    run_with_deadline,
+    Budget, FixtureCargo, Metadata, cargo_binary, describe_edges, inherited_toolchain,
+    repository_root, run_with_deadline,
 };
 use crate::boundary::package_set::{ConsumerFixture, prepare_packaged_set, unpacked_directory};
 use anyhow::{Context, Result, ensure};
@@ -35,7 +35,8 @@ use std::process::Command;
 #[test]
 fn workspace_runtime_consumer_has_no_facade_closure() -> Result<()> {
     let consumer = Consumer::render(Dependency::Runtime, &DependencySource::Workspace)?;
-    let fixture = ConsumerFixture::new()?.write_consumer(&consumer)?;
+    let budget = Budget::new();
+    let fixture = ConsumerFixture::new(budget)?.write_consumer(&consumer)?;
     let metadata = fixture.resolve_metadata()?;
 
     assert_no_forbidden_packages(&metadata)?;
@@ -55,12 +56,13 @@ fn workspace_runtime_consumer_has_no_facade_closure() -> Result<()> {
 /// one cannot.
 #[test]
 fn packaged_runtime_consumer_has_no_facade_closure() -> Result<()> {
-    prepare_packaged_set()?;
+    let budget = Budget::new();
+    prepare_packaged_set(budget)?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
     };
     let consumer = Consumer::render(Dependency::Runtime, &source)?;
-    let fixture = ConsumerFixture::new()?.write_consumer(&consumer)?;
+    let fixture = ConsumerFixture::new(budget)?.write_consumer(&consumer)?;
     let metadata = fixture.resolve_metadata()?;
 
     assert_no_forbidden_packages(&metadata)?;
@@ -105,7 +107,7 @@ fn assert_patched_packages_come_from_paths(metadata: &Metadata) -> Result<()> {
 #[test]
 fn no_forbidden_package_appears_in_a_workspace_runtime_consumer() -> Result<()> {
     let consumer = Consumer::render(Dependency::Runtime, &DependencySource::Workspace)?;
-    let metadata = ConsumerFixture::new()?
+    let metadata = ConsumerFixture::new(Budget::new())?
         .write_consumer(&consumer)?
         .resolve_metadata()?;
     let resolved = metadata.package_names();
@@ -122,12 +124,13 @@ fn no_forbidden_package_appears_in_a_workspace_runtime_consumer() -> Result<()> 
 /// Each negative control must fail, and fail *for its injected edge*.
 ///
 /// One case per injection rather than a loop, so a failure names the injection
-/// that produced it instead of stopping at the first one in enum order, and
-/// nextest can schedule the four nested Cargo runs independently. Each case
-/// spawns a `cargo metadata` of its own; each is deadline-bounded by the
+/// that produced it instead of stopping at the first one in enum order. Each
+/// case spawns a `cargo metadata` of its own; each is deadline-bounded by the
 /// fixture's own [`CARGO_DEADLINE`], and they share one fixture target
-/// directory, so running them concurrently costs one warm resolve rather than
-/// four cold ones.
+/// directory. The shared target is why [`run_with_deadline`] serializes nested
+/// Cargo invocations within the process: under `cargo test` these cases are
+/// threads racing for one build-directory lock, and a sibling's lock wait must
+/// not be charged to the case that is counting.
 ///
 /// [`run_negative_control`] does the whole assertion: it requires Cargo to
 /// *resolve* the injected edge and then requires the closure check to reject
@@ -181,7 +184,7 @@ fn negative_controls_reject_every_injected_edge(
 /// naming the injected crate.
 #[test]
 fn an_unrelated_failure_does_not_satisfy_a_control() -> Result<()> {
-    let fixture = FixtureCargo::new()?;
+    let fixture = FixtureCargo::new(Budget::new())?;
     fixture.write(Utf8Path::new("Cargo.toml"), "[package]\n")?;
     let output = fixture.cargo(&["metadata", "--format-version=1"])?;
     ensure!(
@@ -289,7 +292,8 @@ fn workspace_metadata() -> Result<Metadata> {
         .arg(repository.join("Cargo.toml").as_std_path())
         .env_clear()
         .envs(inherited_toolchain());
-    let output = run_with_deadline(command, CARGO_DEADLINE, "workspace cargo metadata")?;
+    let description = "workspace cargo metadata";
+    let output = run_with_deadline(command, Budget::new(), CARGO_DEADLINE, description)?;
     ensure!(
         output.status.success(),
         "workspace cargo metadata failed with {}\nstderr:\n{}",
@@ -311,7 +315,7 @@ fn the_rendered_consumer_is_the_package_the_closure_reads() -> Result<()> {
         "the renderer names the consumer {RENDERED_PACKAGE}, the closure reads {CONSUMER_PACKAGE}",
     );
     let consumer = Consumer::render(Dependency::Runtime, &DependencySource::Workspace)?;
-    let metadata = ConsumerFixture::new()?
+    let metadata = ConsumerFixture::new(Budget::new())?
         .write_consumer(&consumer)?
         .resolve_metadata()?;
     let edges = metadata.edges(CONSUMER_PACKAGE)?;

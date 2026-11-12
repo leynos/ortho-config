@@ -59,6 +59,11 @@ pub(super) fn format_failure_diagnostic(
     Ok(diagnostic)
 }
 
+/// Render one stream's evidence, showing both ends when it was truncated.
+///
+/// The head explains how the child started; the tail explains what it was doing
+/// when it stopped producing output. A deadline failure needs the latter, and a
+/// stream longer than the output limit would otherwise hide it completely.
 fn append_stream_evidence(
     diagnostic: &mut String,
     stream: &str,
@@ -67,17 +72,28 @@ fn append_stream_evidence(
     let selected_capture = captures
         .iter()
         .find_map(|(name, capture)| (*name == stream).then_some(capture));
-    match selected_capture {
-        Some(snapshot) => write!(
-            diagnostic,
-            "\n{stream}: bytes_seen={}, bytes_captured={}, truncated={}\n{}",
-            snapshot.bytes_seen,
-            snapshot.bytes.len(),
-            snapshot.truncated,
-            String::from_utf8_lossy(&snapshot.bytes),
-        ),
-        None => write!(diagnostic, "\n{stream}: capture unavailable"),
+    let Some(snapshot) = selected_capture else {
+        return write!(diagnostic, "\n{stream}: capture unavailable");
+    };
+    write!(
+        diagnostic,
+        "\n{stream}: bytes_seen={}, bytes_captured={}, truncated={}, tail_captured={}",
+        snapshot.bytes_seen,
+        snapshot.bytes.len(),
+        snapshot.truncated,
+        snapshot.tail.len(),
+    )?;
+    if !snapshot.truncated {
+        return write!(diagnostic, "\n{}", String::from_utf8_lossy(&snapshot.bytes));
     }
+    write!(
+        diagnostic,
+        "\n--- first {} bytes ---\n{}\n--- last {} bytes ---\n{}",
+        snapshot.bytes.len(),
+        String::from_utf8_lossy(&snapshot.bytes),
+        snapshot.tail.len(),
+        String::from_utf8_lossy(&snapshot.tail),
+    )
 }
 
 fn append_cleanup_evidence(diagnostic: &mut String, evidence: &[String]) {

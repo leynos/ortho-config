@@ -187,3 +187,96 @@ def test_shared_documentation_builds_start_after_peer_tests() -> None:
         r"independently_owned_workspaces_support_concurrent_interleavings\b",
         workspace_tests,
     ), "the concurrent-workspace regression must not compete with other build tests"
+
+
+def test_the_identifier_fixture_charges_discovery_to_one_envelope() -> None:
+    """Keep discovery and the lease wait inside the same nextest allowance.
+
+    Discovery is capped at 30 seconds and runs before the lease wait; the
+    wait then takes what the envelope has left. Capturing the envelope a
+    second time after discovery would let the two phases add up past the
+    960 second per-test override, and nextest would stop the test before
+    the wait could name itself. Both halves therefore take the deadline,
+    and exactly one capture remains.
+    """
+    support = (SUPPORT / "identifier_artefact_e2e_support.rs").read_text(
+        encoding="utf-8"
+    )
+    captures = re.findall(r"scenario::deadline\(\)", support)
+    assert len(captures) == 1, (
+        "the identifier fixture must capture its scenario envelope once, "
+        f"found {len(captures)} captures"
+    )
+    assert re.search(r"fn locate_fixture\(deadline: Instant\)", support), (
+        "discovery must be charged to the caller's envelope"
+    )
+    assert re.search(
+        r"fn lease\(\s*self,\s*deadline: Instant,\s*telemetry: Option<TelemetrySink>,?\s*\)",
+        support,
+    ), "the lease wait must be charged to the caller's envelope"
+    assert re.search(
+        r"locate_fixture\(deadline\)\?\.lease\(deadline, telemetry\)", support
+    ), "the fixture must pass one envelope through discovery and the lease"
+
+
+def test_the_identifier_fixture_keeps_target_writes_behind_the_lease() -> None:
+    """Discovery reads metadata; only the lease may create or mark the target.
+
+    Two processes reach the fixture at once. Discovery runs before the lease,
+    so a catalogue write there would race the current holder. The lease creates
+    the directory and writes its ``CACHEDIR.TAG`` only once the lock is held.
+    """
+    support = (SUPPORT / "identifier_artefact_e2e_support.rs").read_text(
+        encoding="utf-8"
+    )
+    discovery = _function_body(support, "location_from_metadata")
+    assert "create_ambient_dir_all" not in discovery, (
+        "discovery must not create the private target before the lease"
+    )
+    assert "CACHEDIR.TAG" not in discovery, (
+        "discovery must not mark the private target before the lease"
+    )
+    lease = _function_body(support, "lease")
+    acquire_at = lease.find("acquire(")
+    prepare_at = lease.find("prepare_target(")
+    assert acquire_at >= 0, "the lease must take the cross-process lock"
+    assert prepare_at >= 0, "the lease must prepare the target it created"
+    assert acquire_at < prepare_at, (
+        "the target must be marked only after the lease excludes other writers"
+    )
+
+
+def test_the_identifier_helper_ends_its_own_work_before_the_parent_stops() -> None:
+    """The helper's envelope must expire inside the parent's teardown bound.
+
+    The helper owns the supervision of its nested Cargo invocations, and each
+    of those runs in its own process group. If the parent's bound expired
+    first, killing the helper would leave Cargo with nothing left to bound it,
+    so the helper's own envelope must be the shorter of the two.
+    """
+    support = (SUPPORT / "identifier_artefact_lease_support.rs").read_text(
+        encoding="utf-8"
+    )
+    termination = (
+        SUPPORT / "identifier_artefact_lease_termination_tests.rs"
+    ).read_text(encoding="utf-8")
+    bounds = {
+        name: int(seconds)
+        for name, seconds in re.findall(
+            r"const (HELPER_\w+): Duration = Duration::from_secs\((\d+)\);", support
+        )
+    }
+    assert {"HELPER_WORK_BOUND", "HELPER_DEADLINE"} <= set(bounds), bounds
+    assert bounds["HELPER_WORK_BOUND"] < bounds["HELPER_DEADLINE"], (
+        "the helper must finish its supervised work before the parent stops waiting"
+    )
+    assert (
+        "scenario::deadline().min(Instant::now() + HELPER_WORK_BOUND)" in termination
+    ), "the helper must cap its envelope with HELPER_WORK_BOUND"
+
+
+def _function_body(source: str, name: str) -> str:
+    """Return the body of the first ``fn name`` in ``source``."""
+    match = re.search(rf"fn {name}\b[^{{]*\{{(?P<body>.*?)\n\}}", source, re.DOTALL)
+    assert match is not None, f"{name} must be defined in the fixture support"
+    return match.group("body")

@@ -231,9 +231,7 @@ each test in its own process, so without the group six of them run
 `cargo package` and unpack `target/localization-boundary/packaging-target` side
 by side. Cargo's package-cache lock does not cover that: it does not hold
 readers out while a package root is removed and unpacked, so one process can
-replace a root another is reading. `make boundary` and `make test` start one
-process for the binary and need nothing extra, which is why the group exists
-only for nextest.
+replace a root another is reading.
 
 The package-set cache is process-local to the packaged boundary contracts. It
 shares successful roots and retains failures from unbounded packaging attempts,
@@ -1268,11 +1266,12 @@ The shared process-tree owners and cancellable pipe readers live in
 `test_helpers/src/process/`. Crates whose package boundaries permit the helper
 dependency use `ortho_config_test_helpers::process`: call `run_with_deadline`
 for one bounded command and `run_with_deadline_until` when an enclosing test
-sequence supplies a deadline. The `ortho_l10n` boundary test includes this
-module by source path and declares its platform dependencies directly. That
-single test-only inclusion preserves `ortho_l10n`'s explicit ban on the
-workspace test-helper package in its resolved graph and packaged manifest. Do
-not weaken that boundary or copy the process implementation.
+sequence supplies a deadline. The `ortho_l10n` boundary fixture keeps its own
+implementation in `tests/boundary/fixture_cargo/process.rs`: its calls are
+already bounded by a scenario-wide budget and a process-wide serialization lock
+that the shared runner does not model, and `ortho_l10n` bans the workspace
+test-helper package in its resolved graph and packaged manifest. Do not weaken
+that boundary or copy the process implementation elsewhere.
 
 The shared runner keeps every captured byte, because its callers report Cargo
 and compiler diagnostics in full; both streams are drained concurrently, so a
@@ -3797,7 +3796,7 @@ tier two did not exist at all.
 
 | Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
 | ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s for trybuild, BDD and documentation scenarios; 2,200 s for boundary packaging |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD, documentation and boundary packaging scenarios |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 2,300 s (38 m 20 s)                                                                                         |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 3,300 s (55 m)                                                                                              |
 | Job `timeout-minutes`    | the whole job                      | job level                                  | 190 m in `ci.yml`, 140 m in `coverage-main.yml`                                                             |
@@ -4024,11 +4023,16 @@ The documentation process runner applies a hard overall deadline to each
 subprocess. Build, execution, and discovery budgets are 956, 60, and 30
 seconds, with two seconds reserved for bounded cleanup. A fixed scenario
 deadline is never extended by output. The runner drains both streams while
-retaining at most 1 MiB per stream, reports truncation and available evidence
-on timeout or wait failure, and limits reader completion during cleanup. Its
-platform-specific process-tree ownership and cancellable readers are shared
-through `ortho_config_test_helpers::process`; the documentation runner keeps
-its operation policies, diagnostics, and capture limits locally.
+retaining at most 1 MiB per stream for callers, reports truncation and
+available evidence on timeout or wait failure, and limits reader completion
+during cleanup. Callers that parse a child's stdout keep that head window.
+Failure diagnostics additionally hold a 64 KiB tail of each stream: a child
+that stalls prints nothing while it waits, so the last lines it wrote are the
+only evidence of what it was waiting for, and a diagnostic built from the head
+alone would hide exactly that. Its platform-specific process-tree ownership and
+cancellable readers are shared through `ortho_config_test_helpers::process`;
+the documentation runner keeps its operation policies, diagnostics, and capture
+limits locally.
 
 These operations do not create a new Cargo target for each example workspace.
 They resolve the caller's configured target directory, including the target
