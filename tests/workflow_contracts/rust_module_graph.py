@@ -46,13 +46,12 @@ grow a second copy of these rules.
 
 from __future__ import annotations
 
-import posixpath
 import re
 import stat
 import typing as typ
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from source_scan import ScanError, listing, scan
+from source_scan import ScanError, listing, scan, stat_mode
 from rust_source_mask import code_mask
 
 __all__ = ["ScanError", "module_directory", "sources_reached"]
@@ -74,17 +73,6 @@ _INLINE_MODULE = re.compile(r"\bmod[ \t]+(?P<name>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\
 _ROOT_NAMES: typ.Final[frozenset[str]] = frozenset({"lib.rs", "main.rs", "mod.rs"})
 
 
-def _mode(path: Path) -> int | None:
-    """Return ``path``'s mode, or ``None`` when it is not there."""
-    try:
-        return path.stat().st_mode
-    except FileNotFoundError:
-        return None
-    except OSError as error:
-        message = f"{path} could not be read: {error}"
-        raise ScanError(message) from error
-
-
 def _is_file(path: Path) -> bool:
     """Report whether ``path`` is a regular file.
 
@@ -100,13 +88,13 @@ def _is_file(path: Path) -> bool:
     >>> _is_file(Path("/nonexistent.rs"))
     False
     """
-    mode = _mode(path)
+    mode = stat_mode(path)
     return mode is not None and stat.S_ISREG(mode)
 
 
 def _is_directory(path: Path) -> bool:
     """Report whether ``path`` is a directory."""
-    mode = _mode(path)
+    mode = stat_mode(path)
     return mode is not None and stat.S_ISDIR(mode)
 
 
@@ -187,6 +175,31 @@ class Declaration(typ.NamedTuple):
     inline_path: tuple[str, ...]
 
 
+def _attribute_target(base: Path, attribute: str) -> Path:
+    """Apply a ``#[path]`` value to ``base``, collapsing ``..`` components.
+
+    Rust writes ``#[path]`` with ``/`` on every platform, and this repository's
+    values climb out of the declaring directory. ``posixpath`` rules applied to
+    ``str(base / attribute)`` left the ``..`` in place on Windows, where
+    ``Path`` renders ``\\``, so one file reached by two routes got two source
+    keys. Walking the value's own parts collapses them identically everywhere.
+
+    Examples
+    --------
+    >>> _attribute_target(
+    ...     Path("/repo/tests/inner"), "../shared/helpers.rs"
+    ... ).parts[-3:]
+    ('tests', 'shared', 'helpers.rs')
+    """
+    target = base
+    for part in PurePosixPath(attribute).parts:
+        if part == "..":
+            target = target.parent
+        elif part != ".":
+            target = target / part
+    return target
+
+
 def _resolve(directory: Path, source: Path, declaration: Declaration) -> list[Path]:
     """Return the files a ``mod`` declaration could name.
 
@@ -213,14 +226,14 @@ def _resolve(directory: Path, source: Path, declaration: Declaration) -> list[Pa
     """
     if declaration.attribute is not None:
         # The Reference resolves an inline module's `#[path]` against the
-        # module directory plus the inline names; `normpath` collapses the
-        # `..` the repository's `#[path]` values use.
+        # module directory plus the inline names; `_attribute_target` collapses
+        # the `..` the repository's `#[path]` values use.
         base = (
             directory.joinpath(*declaration.inline_path)
             if declaration.inline_path
             else source.parent
         )
-        named = Path(posixpath.normpath(str(base / declaration.attribute)))
+        named = _attribute_target(base, declaration.attribute)
         return [named] if _is_file(named) else []
     resolved = directory.joinpath(*declaration.inline_path)
     direct = [

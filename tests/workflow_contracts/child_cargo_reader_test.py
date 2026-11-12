@@ -110,6 +110,41 @@ def test_a_path_module_keeps_its_own_siblings(
     )
 
 
+def test_a_parent_climbing_path_attribute_yields_the_plain_source_key(
+    crate_tests: typ.Callable[[], pathlib.Path],
+) -> None:
+    """A ``#[path]`` containing ``..`` names the same key as a direct reach.
+
+    This repository's ``#[path]`` values climb out of their declaring
+    directory, and Rust writes them with ``/`` on every platform. Normalising
+    the joined path with POSIX rules leaves the ``..`` in place on Windows,
+    where the joined string uses ``\\`` and POSIX rules do not treat it as a
+    separator, so one file reached by two routes would appear under two keys.
+    The helper's marker is attributed once per key, which is what makes the
+    duplicate a misreading rather than a cosmetic difference.
+
+    Wrong answer: a reached set holding ``inner/../shared/helper.rs`` beside
+    the plain ``shared/helper.rs``, or only the former.
+    """
+    tests = crate_tests()
+    (tests / "inner").mkdir()
+    (tests / "shared").mkdir()
+    (tests / "shared" / "helper.rs").write_text(CARRIES, encoding="utf-8")
+    (tests / "inner" / "climbing.rs").write_text(
+        '#[path = "../shared/helper.rs"]\nmod helper;\n', encoding="utf-8"
+    )
+    root = tests / "root.rs"
+    root.write_text('#[path = "inner/climbing.rs"]\nmod climbing;\n', encoding="utf-8")
+    reached = set(sources_reached(root))
+    assert reached == {root, tests / "inner" / "climbing.rs", tests / "shared" / "helper.rs"}, (
+        "the parent-climbing #[path] did not yield the plain source key: "
+        f"{sorted(reached)}"
+    )
+    assert not [source for source in reached if ".." in source.parts], (
+        f"a resolved source key still carries a parent component: {sorted(reached)}"
+    )
+
+
 def test_a_nested_inline_module_is_searched(
     crate_tests: typ.Callable[[], pathlib.Path],
 ) -> None:
@@ -230,7 +265,10 @@ def test_a_shared_helper_is_attributed_to_every_binary_reaching_it(
     (tests / "shared" / "mod.rs").write_text(CARRIES, encoding="utf-8")
     for binary in ("first_user", "second_user"):
         (tests / f"{binary}.rs").write_text("mod shared;\n", encoding="utf-8")
-    assert carries_child_cargo(tests / "first_user.rs") is True
+    assert carries_child_cargo(tests / "first_user.rs") is True, (
+        "the helper's marker reached the second binary but not the first, so "
+        "the attributed set is asymmetric rather than shared"
+    )
     assert carries_child_cargo(tests / "second_user.rs") is True, (
         "the helper's marker was attributed to one binary but not the other"
     )
