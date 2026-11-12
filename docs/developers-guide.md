@@ -2777,7 +2777,7 @@ the shared `leynos/shared-actions/.github/actions/install-whitaker` action,
 pinned to a full commit hash (SHA, the Secure Hash Algorithm identifier of a
 Git commit), in a step named `Install Whitaker` that is guarded to
 `matrix.platform == 'linux'`. The action owns the install: it takes a
-digest-verified, prebuilt `whitaker-installer` (0.2.11 by default), passes
+digest-verified, prebuilt `whitaker-installer` (0.2.12 by default), passes
 `--no-source-fallback`, preinstalls the prebuilt `dylint-link`, authenticates
 with `github.token`, and caches the installer itself. The repository therefore
 carries no resolve, cache or install script for it. Whitaker's lint suite is a
