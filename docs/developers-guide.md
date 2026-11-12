@@ -1319,14 +1319,67 @@ cache. Documentation workspaces keep their source, manifest, run files, and
 executable snapshots in private directories; a sidecar `fs4` lock protects
 build-and-snapshot ownership across processes. The BDD scenarios use a separate
 filesystem lease under the selected target while reading and updating their
-shared bridge cache. The identifier-artefact test reuses a private target
-nested under the configured workspace target. It cleans only the fixture
-package at the start of a run, preserving compiled dependencies while keeping
-`cargo clean -p` away from workspace test executables. It still uses Cargo's
-default shared package cache. Cargo retains compiler wrappers, job limits,
-warning enforcement, coverage settings, and allow-listed native build inputs.
-Application secrets and arbitrary application variables are excluded. Run-file
-paths must contain normal relative components only.
+shared bridge cache. The identifier-artefact test owns a private target nested
+under the configured workspace target, so `cargo clean -p` cannot remove
+workspace test executables. That directory has a fixed name rather than a
+per-run temporary one, and only the phases that must force a rebuild start with
+`cargo clean -p orthohelp_fixture`: the first, opt-in and forced-rebuild builds
+do, while the warm-build phase deliberately does not, because its contract is
+that an ordinary warm build leaves the emitted artefact alone. After a clean,
+the fixture and its build script are rebuilt and report their output directory,
+while the dependency build beneath them is reused between runs; the final
+forced rebuild asserts that Cargo reports fresh dependency units and recompiles
+only the fixture package. A per-run target rebuilt `ortho_config`, its macros,
+Clap and Serde from cold on every invocation, so all four phases paid a full
+dependency build. That recurring cost is what the fixed target removes, but it
+does not by itself attribute an earlier deadline exhaustion: the failing run
+discarded the child's output, the test compiles with `--all-features` while the
+fixture builds with its own default features, and both share Cargo's package
+cache, so dependency reuse was already available. What the retained tail now
+distinguishes is a nested build waiting for compile admission from one that has
+hung. Under saturated admission even a single cold dependency build can outlast
+the envelope; the fixed target makes that cold phase pay once rather than once
+per phase. The fixture still uses Cargo's default shared package cache. Cargo
+retains compiler wrappers, job limits, warning enforcement, coverage settings,
+and allow-listed native build inputs. Application secrets and arbitrary
+application variables are excluded. Run-file paths must contain normal relative
+components only.
+
+Because the target is fixed, it is shared state. nextest's `boundary_packaging`
+group and the test's `#[serial]` attribute coordinate tests inside one runner,
+but neither excludes a second test process on the same checkout. The identifier
+test therefore holds an exclusive operating-system file lease (a loop over
+`File::try_lock`) inside the private target from discovery until the fixture is
+dropped, so another process's `cargo clean -p orthohelp_fixture` cannot
+interleave with this test's build or artefact read. Discovery itself only reads
+workspace metadata and is safe to run while another process holds the lease.
+The wait is bounded by the same scenario envelope the build uses, captured
+before discovery rather than after the wait: metadata, the wait and every build
+share the one per-test allowance nextest grants. Discovery's own 30-second cap
+is charged to that envelope too, so the two phases cannot add up past nextest's
+ceiling. A target held by another runner therefore produces a diagnostic naming
+the lease rather than consuming the allowance and leaving nextest to kill the
+test without saying which wait it was in. A two-process regression drives a
+second copy of the test binary: it proves the second process blocks on a held
+lease, sees the first process's artefact intact, and rebuilds it after the
+lease is released.
+
+`ORTHO_CONFIG_FIXTURE_TELEMETRY` names a file to which each fixture build phase
+appends one record. The sink is inert unless the variable is set, so an
+ordinary test run writes nothing. The path must name a file: a path with no
+file name, such as `/`, is refused at the boundary, and the file name must be
+UTF-8. The parent directory must already exist because it is opened as a
+capability; a relative name resolves against the process working directory.
+Records are appended, one line per build phase, in the form
+`at_ms=<unix milliseconds> emit=<true|false>` followed by the counts
+`fresh=<n>, rebuilt=<n>, rebuilt_fixture=<n>`, then `admission_lines=<n>` and
+`package_cache_lines=<n>`. `admission_lines` counts the build's stderr lines
+containing `[build-limits]`; `package_cache_lines` counts lines containing
+`waiting for file lock`. A clock failure is reported to the caller rather than
+recorded as zero, so a phase is never stamped `at_ms=0` without saying so. The
+environment is read once at the test boundary and the sink is passed explicitly
+to the build, so the record format and the clock can be driven directly by a
+regression.
 
 The contracts are split across integration-test targets by concern, following
 the layout used in Netsuke:

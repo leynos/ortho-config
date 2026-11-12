@@ -23,8 +23,8 @@ use super::identifier_artefact_e2e_support::{
     artefact, build_fixture, clean_fixture, fixture_cargo, locate_fixture,
 };
 use super::identifier_artefact_lease_support::{
-    HELPER_DEADLINE, HELPER_STARTUP, HELPER_WORK_BOUND, Helper, report_field, required_scratch,
-    wait_for_marker,
+    HELPER_DEADLINE, HELPER_LEASE_WAIT, HELPER_STARTUP, HELPER_WORK_BOUND, Helper, report_field,
+    required_scratch, wait_for_marker,
 };
 use super::scenario;
 use anyhow::{Context, Result, ensure};
@@ -75,7 +75,9 @@ fn lease_helper() -> Result<()> {
         .write("located", b"located")
         .context("announce the located target")?;
     let started = Instant::now();
-    let cargo = location.lease(deadline, None)?;
+    // The wait is capped below the parent's marker window so a contended target
+    // is reported by this process rather than by the parent's kill.
+    let cargo = location.lease_within(deadline, HELPER_LEASE_WAIT, None)?;
     let lease_wait = started.elapsed();
     // The parent released the lease only after confirming that this process had
     // not acquired it, so the artefact it built must still be there, unchanged.

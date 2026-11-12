@@ -70,7 +70,7 @@ use cap_std::{ambient_authority, fs::Dir};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const CACHEDIR_TAG: &str = "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n# For information about cache directory tags see https://bford.info/cachedir/\n";
 
@@ -128,7 +128,39 @@ impl FixtureLocation {
         deadline: Instant,
         telemetry: Option<TelemetrySink>,
     ) -> Result<FixtureCargo> {
-        let lease = acquire(&self.target_directory, deadline)?;
+        self.lease_until(deadline, deadline, telemetry)
+    }
+
+    /// Lease the target, waiting no longer than `wait` for it.
+    ///
+    /// A helper's parent waits only [`HELPER_STARTUP`] for the helper to report
+    /// that it holds the lease, so a helper that spends the whole scenario
+    /// allowance queueing for a target another process holds is killed before
+    /// it can say why. Capping only the wait keeps the build envelope intact:
+    /// once the lease is held, `deadline` still governs every nested build.
+    ///
+    /// [`HELPER_STARTUP`]: super::identifier_artefact_lease_support::HELPER_STARTUP
+    pub(super) fn lease_within(
+        self,
+        deadline: Instant,
+        wait: Duration,
+        telemetry: Option<TelemetrySink>,
+    ) -> Result<FixtureCargo> {
+        self.lease_until(deadline.min(Instant::now() + wait), deadline, telemetry)
+    }
+
+    /// Acquire with the wait bound and carry the build envelope separately.
+    ///
+    /// Keeping the two instants distinct is the point: [`acquire`] names the
+    /// wait in its timeout diagnostic, while the returned fixture's
+    /// `deadline` bounds every later build.
+    fn lease_until(
+        self,
+        wait_until: Instant,
+        deadline: Instant,
+        telemetry: Option<TelemetrySink>,
+    ) -> Result<FixtureCargo> {
+        let lease = acquire(&self.target_directory, wait_until)?;
         prepare_target(&self.target_directory)?;
         Ok(FixtureCargo {
             repository: self.repository,
