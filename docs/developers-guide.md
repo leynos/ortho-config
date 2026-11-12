@@ -222,25 +222,31 @@ processes, so filesystem leases also protect cache ownership across them.
 The membership is not a hand-maintained list, and
 `tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from
 becoming one. That contract reads which test binaries drive a child `cargo` out
-of the Rust sources, compares the set with what the group's filter selects, and
-fails on a difference in either direction. `cli_dispatch` and
+of the Rust sources, compares that set with the entries that grant a raised
+allowance in either direction, and requires every binary the group serializes
+to be a member of the set. `cli_dispatch` and
 `agent_context_renderer_end_to_end` were absent from the list here and from
 every raised allowance in the configuration: both spawned a child `cargo` on
 the 600 s base tier, and no other assertion could see the omission, because
 every other reading begins from the same list that omitted them.
 
-That is a wider class than the group. A binary can drive a child `cargo` and
-not touch the shared caches the group serializes, so membership of the raised
-allowances and membership of the group are separate questions: the contract
-requires every *group* member to be a class member, because the raised
-allowance is written for the class and a serialized non-member would fall
-through to the base tier, while the class itself may be raised without being
-serialized. `cli_dispatch` is the case in point: its child cargo was measured
-at 0.04 s on a warm tree, so it takes the raised allowance the class's nested
-build can reach rather than a place in a group whose members hold their
-envelope for up to 956 s. `documentation_budget_test.py` separately pins a
-named subset to an `orthohelp_cache` filter, so narrowing this group past those
-names fails that assertion rather than this one.
+Membership of the raised allowances and membership of the group are separate
+questions, and the contract keeps them apart: it requires every *group* member
+to be a class member, because the raised allowance is written for the class and
+a serialized non-member would fall through to the base tier, while the class
+itself may be raised without being serialized. A binary can drive a child
+`cargo` without touching the shared caches the group protects, so the class can
+be the wider of the two. It is not wider today: the two sets coincide, and the
+contract does not require that they keep doing so.
+
+`cli_dispatch` is a member of both. Its `.config/nextest.toml` entry places it
+in `orthohelp_cache` and gives it the class's raised allowance, so neither
+follows from the other. Its child cargo was measured at 0.04 s on a warm tree,
+which is why the allowance is sized for the nested build the class can reach
+rather than for the cheapest path this binary takes.
+`documentation_budget_test.py` separately pins a named subset to an
+`orthohelp_cache` filter, so narrowing this group past those names fails that
+assertion rather than this one.
 
 The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
 same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
