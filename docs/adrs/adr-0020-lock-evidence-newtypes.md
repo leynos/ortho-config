@@ -126,13 +126,24 @@ what to report.
 
 `artefact_lock_report_tests.rs` pins both settle outcomes against a *separate*
 holder process: one test releases the lock part-way through the window and
-asserts the settle returns `Ok` only after outlasting the release, and one
-leaves it held and asserts the settle reports the live owner and its open
-descriptor. The holder has to be a separate process. `flock` belongs to the
-open file description, and the suites in this binary fork helper processes,
-each fork duplicating the whole descriptor table; an in-process guard would
-therefore stay held under this process's name until the child's `exec`, and the
-tests would fail intermittently for the reason they exist to diagnose.
+asserts the settle returns `Ok` once the release is observed, and one leaves it
+held and asserts the settle reports the live owner and its open descriptor. The
+holder has to be a separate process. `flock` belongs to the open file
+description, and the suites in this binary fork helper processes, each fork
+duplicating the whole descriptor table; an in-process guard would therefore
+stay held under this process's name until the child's `exec`, and the tests
+would fail intermittently for the reason they exist to diagnose.
+
+The release is ordered by what the settle *observed*, not by a timer. An
+earlier draft released from a sleeping thread and required the settle to
+outlast the sleep, which did not establish the probe order it claimed: a
+releaser scheduled first could finish before the first probe, so a correct
+settle would return early and fail. `ensure_settles_free_observed` reports each
+probe before acting on it, and the test releases from the first observed
+`Held`, so the sequence is a fact about the code — held, released, free —
+rather than a race the assertion hopes to win. The same recording catches what
+the timer could not: a settle that returned `Ok` on its first held probe fails
+on the observed sequence `[false]`.
 
 ## Alternatives rejected
 

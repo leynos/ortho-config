@@ -676,6 +676,16 @@ descriptor table, where every peer suite's `fork` reaches it and keeps it alive
 under this process's name until the child's `exec`; a test written that way
 fails intermittently for the very reason it exists to diagnose. Holding in a
 helper's own table keeps both the hold and the release independent of any peer.
+Separating the holder from this process's table does not, by itself, order the
+release against the probes. `ensure_settles_free_observed` reports each probe
+to a callback before acting on it, and the held-to-free test releases from the
+first `Held` it sees rather than from a thread that sleeps. Releasing on a
+timer left a race — a releaser scheduled first could finish before the first
+probe, so a correct settle returned early and failed an elapsed-time check that
+never established the order it claimed. Releasing from the observed probe makes
+the sequence held, released, free, and the recorded sequence is also the
+negative control: a settle that accepted its first `Held` shows `[false]` and
+fails.
 
 `artefact_lock_evidence.rs` holds the pure half — the glibc `dev_t` split, the
 `/proc/locks` parser, and the vocabulary they speak — tested on every platform,
