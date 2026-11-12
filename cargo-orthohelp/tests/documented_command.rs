@@ -143,16 +143,36 @@ impl CacheEvent {
     }
 }
 
-/// Count exported bridge-cache metric events matching one event.
+/// The exported bridge-cache event lines within one diagnostic stream.
+#[cfg(feature = "metrics")]
+fn cache_event_lines(stderr: &str) -> impl Iterator<Item = &str> {
+    stderr
+        .lines()
+        .filter(|line| line.contains("cargo_orthohelp.bridge_cache.events"))
+}
+
+/// Count exported bridge-cache metric events matching one operation and
+/// outcome.
 #[cfg(feature = "metrics")]
 fn cache_event_count(stderr: &str, event: CacheEvent) -> usize {
     let operation_label = format!("operation={}", event.operation);
     let outcome_label = format!("outcome={}", event.outcome);
-    stderr
-        .lines()
-        .filter(|line| line.contains("cargo_orthohelp.bridge_cache.events"))
+    cache_event_lines(stderr)
         .filter(|line| line.contains(&operation_label))
         .filter(|line| line.contains(&outcome_label))
+        .count()
+}
+
+/// Count exported bridge-cache events for one operation, whatever its outcome.
+///
+/// An outcome-blind count is what lets a test assert an operation did not
+/// happen at all: a per-outcome count still passes when the operation reports
+/// an outcome the test never named.
+#[cfg(feature = "metrics")]
+fn cache_operation_count(stderr: &str, operation: &str) -> usize {
+    let operation_label = format!("operation={operation}");
+    cache_event_lines(stderr)
+        .filter(|line| line.contains(&operation_label))
         .count()
 }
 
@@ -284,10 +304,10 @@ fn is_fixture_ir(cache: &Dir, name: &OsStr, app_name: &str) -> bool {
     let Ok(directory) = cache.open_dir(name) else {
         return false;
     };
-    let Ok(ir) = directory.read_to_string("ir.json") else {
+    let Ok(ir_text) = directory.read_to_string("ir.json") else {
         return false;
     };
-    let Ok(ir) = serde_json::from_str::<Value>(&ir) else {
+    let Ok(ir) = serde_json::from_str::<Value>(&ir_text) else {
         return false;
     };
     ir.get("app_name").and_then(Value::as_str) == Some(app_name)
@@ -350,8 +370,8 @@ fn cache_metrics_reach_stderr_through_the_cli_recorder() -> Result<()> {
         "the repeat run should hit the IR published by the first:\n{second_stderr}"
     );
     ensure!(
-        cache_event_count(&second_stderr, CacheEvent::new("publish", "updated")) == 0,
-        "a cache hit should not republish the IR:\n{second_stderr}"
+        cache_operation_count(&second_stderr, "publish") == 0,
+        "a cache hit must not publish the IR under any outcome:\n{second_stderr}"
     );
     Ok(())
 }

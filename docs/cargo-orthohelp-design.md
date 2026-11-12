@@ -974,16 +974,21 @@ application subprocess API.
 Test-only commands that start a process run through the shared
 `ortho_config_test_helpers::process` module, which owns the deadline, the
 drained per-stream capture, and descendant cleanup on every supported platform.
-It is the single test-side process-tree implementation: a crate that cannot
-depend on the helper package includes the module by source path instead of
-copying it. That shared capture retains the complete output of each stream
-because callers report compiler diagnostics in full; it drains continuously so
-a full pipe cannot deadlock a child, and memory grows with the output a child
-produces. The documentation-test runner owns its own diagnostics policy
-instead, so it caps each stream at 1 MiB and reports truncation. Production
-bridge code keeps its own ownership rules, because a bridge build holds the
-target-directory lock and a fail-closed recovery marker that test supervision
-has no part in.
+A crate that cannot depend on the helper package includes the module by source
+path instead of copying it. The `ortho_l10n` boundary fixture is the one
+deliberate exception: it keeps its own implementation in
+`tests/boundary/fixture_cargo/process.rs`, because its calls are already
+bounded by a scenario-wide budget and a process-wide serialization lock that
+the shared runner does not model, and the package bans the workspace
+test-helper package in its resolved graph and packaged manifest. No other
+package may add a test-side process-tree implementation. That shared capture
+retains the complete output of each stream because callers report compiler
+diagnostics in full; it drains continuously so a full pipe cannot deadlock a
+child, and memory grows with the output a child produces. The
+documentation-test runner owns its own diagnostics policy instead, so it caps
+each stream at 1 MiB and reports truncation. Production bridge code keeps its
+own ownership rules, because a bridge build holds the target-directory lock and
+a fail-closed recovery marker that test supervision has no part in.
 
 The bridge build retains Cargo's configured compiler and documentation
 wrappers, wrapper settings, job limits, warning flags, and coverage
