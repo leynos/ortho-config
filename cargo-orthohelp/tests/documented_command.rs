@@ -125,12 +125,33 @@ fn run_documented_command(args: &[&str], environment: &[(&str, &str)]) -> Result
     Ok(OrthohelpRun { output, out_dir })
 }
 
+/// One bridge-cache operation, as its bounded metric label names it.
+#[cfg(feature = "metrics")]
+#[derive(Clone, Copy, Debug)]
+enum CacheOperation {
+    /// Reading the cached IR before a build.
+    Lookup,
+    /// Writing generated IR back to the cache.
+    Publish,
+}
+
+#[cfg(feature = "metrics")]
+impl CacheOperation {
+    /// The label this operation is exported under.
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Lookup => "lookup",
+            Self::Publish => "publish",
+        }
+    }
+}
+
 /// One bridge-cache metric event, as its bounded labels name it.
 #[cfg(feature = "metrics")]
 #[derive(Clone, Copy, Debug)]
 struct CacheEvent {
     /// The cache operation the counter describes.
-    operation: &'static str,
+    operation: CacheOperation,
     /// The outcome that counter recorded.
     outcome: &'static str,
 }
@@ -138,7 +159,7 @@ struct CacheEvent {
 #[cfg(feature = "metrics")]
 impl CacheEvent {
     /// Name one exported cache event.
-    const fn new(operation: &'static str, outcome: &'static str) -> Self {
+    const fn new(operation: CacheOperation, outcome: &'static str) -> Self {
         Self { operation, outcome }
     }
 }
@@ -155,7 +176,7 @@ fn cache_event_lines(stderr: &str) -> impl Iterator<Item = &str> {
 /// outcome.
 #[cfg(feature = "metrics")]
 fn cache_event_count(stderr: &str, event: CacheEvent) -> usize {
-    let operation_label = format!("operation={}", event.operation);
+    let operation_label = format!("operation={}", event.operation.label());
     let outcome_label = format!("outcome={}", event.outcome);
     cache_event_lines(stderr)
         .filter(|line| line.contains(&operation_label))
@@ -169,8 +190,8 @@ fn cache_event_count(stderr: &str, event: CacheEvent) -> usize {
 /// happen at all: a per-outcome count still passes when the operation reports
 /// an outcome the test never named.
 #[cfg(feature = "metrics")]
-fn cache_operation_count(stderr: &str, operation: &str) -> usize {
-    let operation_label = format!("operation={operation}");
+fn cache_operation_count(stderr: &str, operation: CacheOperation) -> usize {
+    let operation_label = format!("operation={}", operation.label());
     cache_event_lines(stderr)
         .filter(|line| line.contains(&operation_label))
         .count()
@@ -350,15 +371,24 @@ fn cache_metrics_reach_stderr_through_the_cli_recorder() -> Result<()> {
     first.ensure_success("metrics-enabled cold run")?;
     let first_stderr = String::from_utf8_lossy(&first.output.stderr).into_owned();
     ensure!(
-        cache_event_count(&first_stderr, CacheEvent::new("lookup", "miss")) == 1,
+        cache_event_count(
+            &first_stderr,
+            CacheEvent::new(CacheOperation::Lookup, "miss")
+        ) == 1,
         "the cold run should export exactly one lookup miss:\n{first_stderr}"
     );
     ensure!(
-        cache_event_count(&first_stderr, CacheEvent::new("lookup", "hit")) == 0,
+        cache_event_count(
+            &first_stderr,
+            CacheEvent::new(CacheOperation::Lookup, "hit")
+        ) == 0,
         "the cold run cannot observe a hit:\n{first_stderr}"
     );
     ensure!(
-        cache_event_count(&first_stderr, CacheEvent::new("publish", "updated")) == 1,
+        cache_event_count(
+            &first_stderr,
+            CacheEvent::new(CacheOperation::Publish, "updated")
+        ) == 1,
         "a cache miss should publish the generated IR exactly once:\n{first_stderr}"
     );
 
@@ -366,11 +396,14 @@ fn cache_metrics_reach_stderr_through_the_cli_recorder() -> Result<()> {
     second.ensure_success("metrics-enabled warm run")?;
     let second_stderr = String::from_utf8_lossy(&second.output.stderr).into_owned();
     ensure!(
-        cache_event_count(&second_stderr, CacheEvent::new("lookup", "hit")) == 1,
+        cache_event_count(
+            &second_stderr,
+            CacheEvent::new(CacheOperation::Lookup, "hit")
+        ) == 1,
         "the repeat run should hit the IR published by the first:\n{second_stderr}"
     );
     ensure!(
-        cache_operation_count(&second_stderr, "publish") == 0,
+        cache_operation_count(&second_stderr, CacheOperation::Publish) == 0,
         "a cache hit must not publish the IR under any outcome:\n{second_stderr}"
     );
     Ok(())
