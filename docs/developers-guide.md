@@ -2678,7 +2678,7 @@ Two Rust lanes are outside this, each for its own reason:
 
 `rust-build-release` and `mutation-cargo` are exempt from the one-SHA
 assertion. Every other reference into the shared-actions tree sits at
-`5a99aed78ce6` today, where the repin that brought in install-whitaker 0.2.11
+`0eabb6bc0714` today, where the repin that brought in install-whitaker 0.2.12
 left them; those two stay at `7d751eded578`. The exemption remains an allowance
 for them to diverge without the contract reporting a partial repin, as they did
 after the CodeScene coverage adoption's repin: neither serves a lane this
@@ -2787,10 +2787,11 @@ what stays fixed.
 The concordat QG-002 rule accepts a revision of that action only if it is a
 shared-actions commit, from the revision that first carried the install rules
 onwards, that either leaves the action directory content-identical to an
-approved root or is itself approved as a new root (concordat #331 approved
-`5a99aed7`, which defaults whitaker-installer to 0.2.11), so the pin moves with
-the other shared-actions references (the one-SHA contract in
-`sccache_wiring_test.py`, which exempts `.github/actions/rust-build-release` and
+approved root or is itself approved as a new root (concordat #331 approved the
+revision that defaults whitaker-installer to 0.2.11; the pin now sits at one
+that defaults to 0.2.12), so the pin moves with the other shared-actions
+references (the one-SHA contract in `sccache_wiring_test.py`, which exempts
+`.github/actions/rust-build-release` and
 `.github/workflows/mutation-cargo.yml`; those two may sit at their own full
 commit hashes, and the Whitaker pin follows the rule for every non-exempt
 reference). The workflow contract `whitaker_install_test.py` asserts exactly one
