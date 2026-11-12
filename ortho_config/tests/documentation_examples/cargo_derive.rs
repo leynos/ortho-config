@@ -33,18 +33,33 @@ fn documented_derive_cargo_subcommand(#[case] example: &str) -> Result<()> {
     assert_rejected_forms(&mut workspace)
 }
 
+/// A documented example paired with the dependency recipe it is published with.
+struct PublishedExample {
+    recipe: &'static str,
+    example: &'static str,
+}
+
 /// Each published example builds from its published dependency recipe.
 ///
 /// The generated documentation manifest is not used here, so a recipe that
 /// omits a required dependency or package setting fails the build.
 #[rstest]
-#[case("readme-cargo-derive-dependencies", "readme-cargo-derive-subcommand")]
-#[case("guide-cargo-derive-dependencies", "guide-cargo-derive-subcommand")]
-#[case("guide-cargo-derive-dependencies", "guide-cargo-derive-merge")]
+#[case(PublishedExample {
+    recipe: "readme-cargo-derive-dependencies",
+    example: "readme-cargo-derive-subcommand",
+})]
+#[case(PublishedExample {
+    recipe: "guide-cargo-derive-dependencies",
+    example: "guide-cargo-derive-subcommand",
+})]
+#[case(PublishedExample {
+    recipe: "guide-cargo-derive-dependencies",
+    example: "guide-cargo-derive-merge",
+})]
 #[serial_test::serial(documentation_build)]
-fn published_recipe_builds_its_example(#[case] recipe: &str, #[case] example: &str) -> Result<()> {
-    let mut workspace = ExampleWorkspace::from_recipe(documented_example(recipe)?)?;
-    workspace.add_main(documented_example(example)?)?;
+fn published_recipe_builds_its_example(#[case] pair: PublishedExample) -> Result<()> {
+    let mut workspace = ExampleWorkspace::from_recipe(documented_example(pair.recipe)?)?;
+    workspace.add_main(documented_example(pair.example)?)?;
     workspace.build()?;
 
     assert_verbose(
