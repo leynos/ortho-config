@@ -206,8 +206,14 @@ def _main(arguments: list[str] | None = None) -> int:
     )
     options = parser.parse_args(values)
     repository = pathlib.Path(options.repository).resolve()
-    old_sha = _revision(repository, options.older_revision)
-    new_sha = _revision(repository, options.newer_revision)
+    try:
+        old_sha = _revision(repository, options.older_revision)
+        new_sha = _revision(repository, options.newer_revision)
+    except subprocess.CalledProcessError as failure:
+        # A name that resolves to no commit is a usage error, not a reading
+        # that differs: reporting it as an unequal comparison would let a
+        # mistyped revision read as evidence about the readers.
+        parser.error(f"{failure.cmd[-1]!r} does not name a commit in {repository}")
 
     with tempfile.TemporaryDirectory(prefix="child-cargo-reader-equivalence-") as temporary:
         temporary_root = pathlib.Path(temporary)
