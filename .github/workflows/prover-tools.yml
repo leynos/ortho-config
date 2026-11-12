@@ -57,7 +57,7 @@ jobs:
       # exported RUSTC_WRAPPER would hand that driver to sccache, which cannot
       # cache it. Disable sccache rather than wrap a compiler it does not know.
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           install-mold: 'true'
           use-sccache: 'false'
