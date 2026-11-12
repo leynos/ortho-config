@@ -128,8 +128,14 @@ def test_a_gated_entry_whose_filter_excludes_the_name_does_not_mark_it() -> None
         "the gated entry's readable filter excludes this name, so the platform "
         "decision cannot change whether it claims it"
     )
-    assert resolved.path == "profile.default.overrides[1]"
-    assert resolved.is_above_base
+    assert resolved.path == "profile.default.overrides[1]", (
+        f"the raised entry is the one that supplies this name, but the figure "
+        f"was attributed to {resolved.path}"
+    )
+    assert resolved.is_above_base, (
+        f"a name the gated entry cannot claim was left on the base allowance: "
+        f"{resolved!r}"
+    )
 
 
 def test_an_ungated_platform_entry_marks_every_name() -> None:
@@ -148,9 +154,18 @@ def test_an_ungated_platform_entry_marks_every_name() -> None:
         'slow-timeout = { period = "60s", terminate-after = 10 }\n'
     )
     resolved = _resolve(BASE_60 + bare + RAISED_120, "a")["a"]
-    assert resolved.path == "profile.default.overrides[1]"
-    assert resolved.is_above_base
-    assert resolved.is_unresolved
+    assert resolved.path == "profile.default.overrides[1]", (
+        f"the raised entry is the one that supplies this name, but the figure "
+        f"was attributed to {resolved.path}"
+    )
+    assert resolved.is_above_base, (
+        f"an expression-less entry must not displace the raised entry below it: "
+        f"{resolved!r}"
+    )
+    assert resolved.is_unresolved, (
+        "the expression-less entry names no binary this reader can evaluate, so "
+        f"the figure is not known to be certain: {resolved!r}"
+    )
 
 
 def test_a_refused_expression_shadows_and_does_not_supply() -> None:
@@ -235,9 +250,24 @@ def test_only_the_entry_that_matches_supplies_the_figure(name: str) -> None:
     """
     resolved = _resolve(BASE_60 + RAISED_120, name)[name]
     if name == "a":
-        assert resolved.path == "profile.default.overrides[0]"
-        assert resolved.is_above_base
+        assert resolved.path == "profile.default.overrides[0]", (
+            f"the raised entry selects {name!r}, but the figure was attributed "
+            f"to {resolved.path}"
+        )
+        assert resolved.is_above_base, (
+            f"the raised entry selects {name!r}, but it was left on the base "
+            f"allowance: {resolved!r}"
+        )
     else:
-        assert resolved.path == "profile.default"
-        assert not resolved.is_above_base
-    assert not resolved.is_unresolved
+        assert resolved.path == "profile.default", (
+            f"no override selects {name!r}, so the profile's own entry should "
+            f"supply it, not {resolved.path}"
+        )
+        assert not resolved.is_above_base, (
+            f"no override selects {name!r}, so a raised allowance attributed to "
+            f"it was not granted by any entry: {resolved!r}"
+        )
+    assert not resolved.is_unresolved, (
+        f"every entry in this file is readable, so {name!r} has a decided "
+        f"figure: {resolved!r}"
+    )
