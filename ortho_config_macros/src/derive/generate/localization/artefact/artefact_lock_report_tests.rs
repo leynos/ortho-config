@@ -212,25 +212,28 @@ fn settles_report_a_probe_error_instead_of_a_free_answer() -> Result<()> {
 /// a guard held here would stay held in the child until its `exec`. A test that
 /// provoked the retry with an in-process guard would therefore be measuring the
 /// scheduler — the same interference issue #606 records. A helper holds the
-/// lock in its own descriptor table, where no peer's fork can reach it, so both
-/// the hold and the release are deterministic.
+/// lock in its own descriptor table, where no peer's fork can reach it.
 ///
-/// The elapsed-time check is what makes this non-vacuous. The helper guarantees
-/// the first probe reads `Held`, so an implementation that returned `Ok` on it
-/// would still satisfy the outcome alone; requiring the call to outlast the
-/// release delay proves a `Held` was observed and waited out.
+/// The release is ordered by *what the settle observed*, never by a timer. An
+/// earlier draft slept in a releaser thread and asserted the settle outlasted
+/// the sleep, which did not hold the probe order it claimed to: a releaser
+/// scheduled first, against a delayed test thread, could finish before the
+/// first probe, and a correct settle would then return early and fail. Worse,
+/// elapsed time cannot distinguish "waited out a hold" from "happened to be
+/// slow", so the sleep proved the retry only by coincidence.
+///
+/// Here the first `Held` the settle reports is what triggers the release, and
+/// the settle resolves before the release request is even written. The order
+/// is then a fact about the code: probe one held, the release followed, probe
+/// two was free. The hook runs with the probe's handle still open, so the
+/// request cannot land before the hold it answers.
 #[cfg(target_os = "linux")]
 #[test]
 fn settling_waits_out_a_release_from_another_process() -> Result<()> {
     use super::fragment_tests::TempRoot;
     use super::lock_support::{request_release, spawn_helper, wait_for, wait_for_holder};
     use anyhow::ensure;
-    use std::thread;
-    use std::time::{Duration, Instant};
-
-    /// Long enough that the first probe cannot plausibly follow the release,
-    /// and short enough to leave most of `SETTLE_BUDGET` as headroom.
-    const RELEASE_DELAY: Duration = Duration::from_millis(100);
+    use std::cell::RefCell;
 
     let root = TempRoot::new()?;
     let holder = spawn_helper(root.path(), "hold-until-asked")?;
@@ -238,31 +241,35 @@ fn settling_waits_out_a_release_from_another_process() -> Result<()> {
     // first probe below cannot race the acquisition.
     wait_for_holder(root.path())?;
 
-    let release_root = root.path().to_path_buf();
-    let releaser = thread::spawn(move || {
-        thread::sleep(RELEASE_DELAY);
-        request_release(&release_root)
-    });
-
-    let started = Instant::now();
-    let outcome = super::lock_diagnostics::ensure_settles_free(
+    // Scoped rather than spawned: the closure borrows the record, and a
+    // release issued from another thread could still overtake probe one.
+    let probes = RefCell::new(Vec::new());
+    let outcome = super::lock_diagnostics::ensure_settles_free_observed(
         root.path(),
         "a release part-way through the window must settle",
+        &|probe| {
+            let is_free = matches!(probe, super::artefact_lock::LockProbe::Free);
+            let mut seen = probes.borrow_mut();
+            seen.push(is_free);
+            if !is_free && seen.len() == 1 {
+                request_release(root.path())
+                    .expect("the first held probe must be able to ask for the release");
+            }
+        },
     );
-    let waited = started.elapsed();
-    releaser
-        .join()
-        .map_err(|_| anyhow::anyhow!("the releasing thread panicked"))?
-        .context("request the holder's release")?;
+
     // Joined before the outcome is reported, so a failure does not leave the
     // helper waiting on its own timeout.
     wait_for(holder, "holding helper")?;
     outcome?;
 
+    let seen = probes.into_inner();
     ensure!(
-        waited >= RELEASE_DELAY,
-        "the settle must have outlasted the release, but it returned after \
-         {waited:?}; a first-probe success would satisfy the outcome check alone",
+        seen == [false, true],
+        "the settle must observe a held lock and then a free one, but it saw \
+         {seen:?} (false is held, true is free); a settle that returned `Ok` on \
+         the first held probe, or that read a free lock first, cannot produce \
+         this",
     );
     Ok(())
 }

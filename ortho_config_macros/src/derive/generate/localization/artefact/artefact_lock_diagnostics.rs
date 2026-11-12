@@ -129,16 +129,41 @@ pub(super) fn ensure_released(root: &Path, expectation: &str) -> Result<()> {
 /// held at the end of the window, and the probe's own I/O error when a probe
 /// cannot be taken.
 pub(super) fn ensure_settles_free(root: &Path, expectation: &str) -> Result<()> {
+    ensure_settles_free_observed(root, expectation, &|_| {})
+}
+
+/// Asserts the lock settles, reporting every probe to `observe` first.
+///
+/// [`ensure_settles_free`] with one addition: `observe` is handed each probe
+/// while the probe's own handle still holds the lock, so a test can act on
+/// what the settle saw rather than infer it afterwards. That is what makes a
+/// held-to-free test deterministic — releasing *from* the first observed
+/// `Held` guarantees the settle saw a hold, where a releaser on its own timer
+/// only makes that likely. A test that does nothing costs the settle nothing;
+/// the hook runs on a path that is about to sleep anyway.
+///
+/// # Errors
+///
+/// The same failure [`ensure_settles_free`] describes, and the probe's own I/O
+/// error when a probe cannot be taken.
+pub(super) fn ensure_settles_free_observed(
+    root: &Path,
+    expectation: &str,
+    observe: &dyn Fn(&LockProbe),
+) -> Result<()> {
     let deadline = Instant::now() + SETTLE_BUDGET;
     let mut probe = probe_lock(root).with_context(|| expectation.to_owned())?;
-    while let LockProbe::Held { metadata } = probe {
+    loop {
+        observe(&probe);
+        let LockProbe::Held { metadata } = probe else {
+            return Ok(());
+        };
         if Instant::now() >= deadline {
             return Err(report_hold(root, expectation, &metadata));
         }
         thread::sleep(SETTLE_INTERVAL);
         probe = probe_lock(root).with_context(|| expectation.to_owned())?;
     }
-    Ok(())
 }
 
 /// Builds the failure a still-held lock produces.
