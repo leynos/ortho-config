@@ -72,9 +72,10 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: ordering holds for a wide range of both and would not notice either
 #: drifting away from the sample it was sized against.
 #:
-#: The largest allowance is 2,200 s for the serialized boundary binary. The
-#: packaged-consumer scenario has one shared 2,100 s deadline across its
-#: packaging and fixture Cargo commands.
+#: The largest allowance is 960 s, which the serialized boundary binary shares
+#: with the trybuild, `rstest_bdd`, and documentation scenarios. The
+#: packaged-consumer scenario runs inside one shared 900 s `SCENARIO_ALLOWANCE`,
+#: with each packaging and fixture Cargo command capped at 440 s.
 #: Trybuild, `rstest_bdd`, and documentation scenarios each allow 960 s, or
 #: eight warning periods of 120 s. The trybuild allowance was 600 s until that
 #: class outgrew it --
@@ -82,7 +83,7 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: at 572.5 s of 600 s on run 36068184976, and `must_use_compile_tests`
 #: was killed at 600.224 s on run 36070786646. The BDD allowance is
 #: measured independently in `documentation_budget_test.py`.
-REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 2_200.0
+REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 960.0
 #: The whole-run budget, raised from 1,800 s when the dated-nightly pin
 #: cold-missed sccache. Sized from the run that was cancelled rather than
 #: from the warm sample that predates the pin: the Windows leg ran

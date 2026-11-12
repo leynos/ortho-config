@@ -233,21 +233,79 @@ by side. Cargo's package-cache lock does not cover that: it does not hold
 readers out while a package root is removed and unpacked, so one process can
 replace a root another is reading.
 
+`cargo test` and `make boundary` start one process for the binary but run its
+tests as threads, so the group cannot help there. The fixture's
+`run_with_deadline` therefore holds a process-wide mutex across each nested
+Cargo invocation. It is acquired before the child is spawned, so time a sibling
+spends holding the shared target directory's build lock is never charged to the
+deadline of the call that is counting. The wait for the mutex is itself bounded
+by the contract's shared allowance, and the child's bound is computed only
+after the wait ends, so a sibling that held the mutex for a long time shortens
+the child's bound instead of being ignored. A call whose allowance is spent
+while it waits fails with a diagnostic naming the wait, rather than blocking
+until the sibling finishes. Without it, the consumer contracts and the four
+negative controls queue on the one target directory they share, and a healthy
+child waiting for its turn reads as a hang.
+
+The same override carries the per-test allowance, 960 s (120 s x 8). A
+per-invocation deadline cannot bound a contract that makes several calls: the
+packaged consumer contract packages the set and then builds and resolves each
+of the three shapes, so eight calls at a 440 s cap apiece could spend 3,520 s
+of a 960 s allowance, and nextest would stop the test before any later call
+reported its own deadline. Every contract therefore shares one 900 s
+`SCENARIO_ALLOWANCE` (`fixture_cargo/budget.rs`), passed explicitly from the
+test to every fixture it creates. Each call is bounded by the smaller of its
+own cap and what the allowance has left; a call that starts with nothing left
+fails naming itself and the allowance, and a call clamped by the allowance says
+so in its deadline error. The 60 s outside the budget cover rendering fixture
+roots, reading manifests, and reporting.
+
+One packaged test runs both `cargo package` invocations, each bounded at 440 s
+by `PACKAGE_DEADLINE`. A consumer contract resolves and then builds, each call
+bounded at 440 s by `CARGO_DEADLINE`. A bound that did not fit could never
+fire: nextest would stop the test first, and the error naming the invocation
+that hung would never be printed. `boundary_packaging_test.py` reads the group,
+the manifest, the override's allowance, both caps, the shared allowance and the
+consumer shape count, so neither half can drift from the other. It checks that
+the shared allowance expires inside the nextest allowance, that each cap fits
+inside the shared allowance, and that the complete call sequence is longer than
+the shared allowance, which is what makes the shared budget load-bearing rather
+than a restatement of the caps.
+
 The package-set cache is process-local to the packaged boundary contracts. It
 shares successful roots and retains failures from unbounded packaging attempts,
 but does not cache a failure caused by a caller's sequence deadline. A later
 caller with time remaining can retry.
 
-The group also gives its nested Cargo commands room to wait for the shared
-package-cache lock. The packaged-consumer scenario runs two `cargo package`
-invocations, each bounded at 520 s by `PACKAGE_DEADLINE`, then tests and
-resolves metadata for three consumer shapes, each command bounded at 420 s by
-`CARGO_DEADLINE`. Those independent ceilings total 3,560 s before unpacking and
-root checks, so the scenario shares one 2,100 s deadline across the entire
-sequence. The binary's 2,200 s per-test allowance leaves 100 s for error
-reporting and teardown; the 2,300 s whole-run limit still bounds the suite.
-`boundary_packaging_test.py` reads the group, manifest, command counts and
-deadlines, so their constraints cannot drift apart.
+The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
+against the 600 s base allowance. They were reached on a shared host while the
+children queued behind 340 compile-admission requests, and the timeout error
+discarded the child's output, including the lines that named the queue, so the
+failure could not be attributed. `run_with_deadline` now retains a bounded tail
+of each stream and includes it in the deadline error; the tail is what
+distinguishes compile-admission waiting, package-cache waiting, and a hang from
+one another.
+
+A deadline kill terminates the child's whole process tree, not only the Cargo
+process. On Unix the child leads its own process group and the group is killed;
+on Windows it runs in its own Job Object, whose termination covers every
+descendant. Leaving descendants alive would keep the package-cache lock, the
+compile-admission slot, and the output pipes in use after the test has already
+reported a timeout. Reader collection is bounded in both outcomes as well: when
+a descendant outlives a parent that exited normally it still holds the
+inherited pipe, so a reader gets a two-second grace and is then detached with
+its retained tail reported instead of being joined without a bound. Regressions
+drive real descendants from the test binary itself. Each test spawns its probe
+as an owned process tree, waits for the probe's own readiness marker, and only
+then applies the deadline, so a saturated host's start-up delay is never
+charged to the runner; each also asserts that a surviving descendant still held
+its lock when the runner returned, rather than racing a fixed sleep. One
+descendant holds a lock across a timeout, so the lock becoming acquirable
+proves the kill reached it; one holds the pipe after its parent exits, so the
+bounded collection path is exercised rather than assumed; and a Unix-only one
+places its descendant in a new process group so the group kill cannot reach it,
+proving that a deadline is still reported while a survivor holds the pipe, and
+that the runner neither waits for that survivor nor hides it.
 
 On Windows only, one further override gives each of four binaries every nextest
 slot (`threads-required = "num-test-threads"`), so each runs alone:
@@ -3982,12 +4040,12 @@ the contract rather than silently left on the base allowance:
 and `boolean_cli_trybuild` arrived that way from branches, and the contract is
 what caught each.
 
-The largest per-test allowance is 2,200 s for boundary packaging, lower than
-the 2,300 s whole-run budget, which the ordering contract asserts. That
-comparison does not by itself guarantee a test using its full allowance
-finishes before the run deadline, since a test that starts late spends part of
-the budget waiting to be scheduled; it establishes that the allowance cannot
-exhaust the run on its own.
+The largest per-test allowance is 960 s, taken by the trybuild, `rstest_bdd`,
+documentation and boundary scenarios, and lower than the 2,300 s whole-run
+budget, which the ordering contract asserts. That comparison does not by itself
+guarantee a test using its full allowance finishes before the run deadline,
+since a test that starts late spends part of the budget waiting to be
+scheduled; it establishes that the allowance cannot exhaust the run on its own.
 
 The whole-run budget has to fit inside the watchdog with nextest's termination
 procedure and a cold build counted, which is 2,300 s plus 70 s plus 600 s, or

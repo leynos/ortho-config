@@ -353,11 +353,13 @@ changed compiler cache keys and invalidated the warm sample used to set the
 whole-run budget. The current limits supersede the whole-run, watchdog and job
 ceilings above:
 
-- `.config/nextest.toml` sets a 2,300-second whole-run limit and a
-  2,200-second per-test limit for the boundary binary. The packaged-consumer
-  scenario shares a 2,100-second deadline across its commands; each packaging
-  invocation has a 520-second limit and each nested Cargo command has a
-  420-second limit.
+- `.config/nextest.toml` sets a 2,300-second whole-run limit and, for the
+  boundary binary, the 960-second override it shares with the trybuild,
+  `rstest_bdd` and documentation scenarios. The packaged-consumer scenario runs
+  inside one shared 900-second allowance, with each packaging invocation and
+  each nested Cargo command capped at 440 seconds. The 2,200-second per-test
+  limit, 2,100-second scenario deadline, and 520- and 420-second caps recorded
+  here originally were superseded before this branch merged.
 - The coverage workflows set `RUN_RUST_CARGO_WAIT_TIMEOUT` to 3,300 seconds.
   The CI coverage job has a 190-minute ceiling, and the coverage publisher has
   a 140-minute ceiling.
@@ -571,15 +573,17 @@ diagnostic, and each stream retains a 64 KiB diagnostic tail.
 
 A `SCENARIO_ALLOWANCE` of 900 seconds is shared by every nested Cargo call in
 one boundary contract and passed explicitly from the test, rather than kept in
-a thread-local that unrelated contracts would accumulate. Each call is bounded
-by the smaller of its own cap and what the allowance has left; a call that
-starts with nothing left is refused, naming itself and the allowance. The
-in-process serialization wait is bounded by the same allowance, and each
-child's bound is computed after the wait, so queueing behind a sibling is
-charged to the allowance rather than hidden from it. The allowance sits inside
-the 960-second per-test boundary override, and the remaining 60 seconds cover
-rendering fixture roots, reading manifests, and reporting. Both runners remain
-test-only; neither is a general application subprocess API.
+a thread-local that unrelated contracts would accumulate. Each packaging
+invocation and each nested fixture Cargo call is capped at 440 seconds
+(`PACKAGE_DEADLINE` and `CARGO_DEADLINE`). Each call is bounded by the smaller
+of its own cap and what the allowance has left; a call that starts with nothing
+left is refused, naming itself and the allowance. The in-process serialization
+wait is bounded by the same allowance, and each child's bound is computed after
+the wait, so queueing behind a sibling is charged to the allowance rather than
+hidden from it. The allowance sits inside the 960-second per-test boundary
+override, and the remaining 60 seconds cover rendering fixture roots, reading
+manifests, and reporting. Both runners remain test-only; neither is a general
+application subprocess API.
 
 ## References
 
