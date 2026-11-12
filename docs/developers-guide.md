@@ -1395,7 +1395,7 @@ lease is released.
 appends one record. The sink is inert unless the variable is set, so an
 ordinary test run writes nothing. The path must name a file: a path with no
 file name, such as `/`, is refused at the boundary, and the file name must be
-UTF-8. The parent directory must already exist, because it is opened as a
+UTF-8. The parent directory must already exist because it is opened as a
 capability; a relative name resolves against the process working directory.
 Records are appended, one line per build phase, in the form
 `at_ms=<unix milliseconds> emit=<true|false>` followed by the counts

@@ -41,6 +41,17 @@ pub(super) const HELPER_STARTUP: Duration = Duration::from_secs(120);
 /// lease is released.
 pub(super) const HELPER_DEADLINE: Duration = Duration::from_secs(900);
 
+/// How long a helper waits for the target lease before reporting failure.
+///
+/// A helper's parent waits only [`HELPER_STARTUP`] for the helper to announce
+/// that it holds the lease, so a helper that spent the scenario allowance
+/// queueing for a target another process held would be killed before it could
+/// say why. Staying well inside that window leaves time for the helper's own
+/// lease diagnostic to reach the parent's output. The cap applies to the wait
+/// alone: the build envelope the helper then carries stays at
+/// [`HELPER_WORK_BOUND`].
+pub(super) const HELPER_LEASE_WAIT: Duration = Duration::from_secs(60);
+
 /// The envelope the second process grants itself, inside [`HELPER_DEADLINE`].
 ///
 /// Only the helper supervises its nested Cargo invocations: the runner gives

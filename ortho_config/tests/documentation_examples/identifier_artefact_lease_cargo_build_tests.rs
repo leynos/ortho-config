@@ -25,8 +25,8 @@ use super::identifier_artefact_e2e_support::{Descendants, snapshot_descendants};
 #[cfg(unix)]
 use super::identifier_artefact_lease_support::REFUSAL_WINDOW;
 use super::identifier_artefact_lease_support::{
-    HELPER_STARTUP, HELPER_WORK_BOUND, Helper, REPLACEMENT_WINDOW, announced_target,
-    required_scratch, required_scratch_path, wait_for_marker,
+    HELPER_LEASE_WAIT, HELPER_STARTUP, HELPER_WORK_BOUND, Helper, REPLACEMENT_WINDOW,
+    announced_target, required_scratch, required_scratch_path, wait_for_marker,
 };
 use super::{cargo_environment, process_runner, scenario};
 #[cfg(unix)]
@@ -96,7 +96,9 @@ fn nested_cargo_helper() -> Result<()> {
     scratch
         .write("target.txt", target.display().to_string())
         .context("announce the leased target")?;
-    let cargo = location.lease(deadline, None)?;
+    // Capped below the parent's marker window so a contended target fails here
+    // with the lease's own diagnostic instead of being killed mid-wait.
+    let cargo = location.lease_within(deadline, HELPER_LEASE_WAIT, None)?;
     write_probe_project(&scratch)?;
     scratch
         .write("lease_held", b"held")
