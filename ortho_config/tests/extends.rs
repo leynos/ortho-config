@@ -12,6 +12,13 @@ mod extends_fixture;
 mod profile_chain_assertions;
 use profile_chain_assertions::ensure_eq;
 
+// Replacement semantics live beside these cases rather than inside them: this
+// file is held to the repository's 400-line cap, and the replace-strategy
+// table is a self-contained slice that does not share state with the
+// precedence, cycle, and validation cases.
+#[path = "extends/replace_strategy.rs"]
+mod replace_strategy;
+
 use extends_fixture::ConfigFixture;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -365,54 +372,4 @@ fn extends_validation_errors(
         expected_msg,
         error_desc,
     )
-}
-
-/// Config struct with explicit replace strategy for the tags field.
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-struct ReplaceTagsCfg {
-    #[serde(default)]
-    #[ortho_config(merge_strategy = "replace")]
-    tags: Vec<String>,
-}
-
-#[derive(Debug)]
-struct ReplaceStrategyCase {
-    files: Vec<(&'static str, &'static str)>,
-    expected_tags: Vec<&'static str>,
-}
-
-/// Verifies that `merge_strategy = "replace"` works correctly with extends.
-#[rstest]
-#[case::single_level(ReplaceStrategyCase {
-    files: vec![
-        ("parent.toml", "tags = [\"parent\"]"),
-        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
-    ],
-    expected_tags: vec!["child"],
-})]
-#[case::multi_level_chain(ReplaceStrategyCase {
-    files: vec![
-        ("grandparent.toml", "tags = [\"grandparent\"]"),
-        ("parent.toml", "extends = \"grandparent.toml\"\ntags = [\"parent\"]"),
-        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
-    ],
-    expected_tags: vec!["child"],
-})]
-#[case::empty_array(ReplaceStrategyCase {
-    files: vec![
-        ("parent.toml", "tags = [\"parent\"]"),
-        (".config.toml", "extends = \"parent.toml\"\ntags = []"),
-    ],
-    expected_tags: vec![],
-})]
-fn extends_with_replace_strategy_behaviour(#[case] case: ReplaceStrategyCase) -> Result<()> {
-    let fixture = ConfigFixture::new()?;
-    for (filename, content) in case.files {
-        fixture.create_file(filename, content)?;
-    }
-    let cfg: ReplaceTagsCfg = fixture
-        .load(["prog"], MapEnv::new())
-        .map_err(|err| anyhow!(err))?;
-    let expected: Vec<String> = case.expected_tags.into_iter().map(String::from).collect();
-    ensure_eq(&cfg.tags, &expected, "tags")
 }
