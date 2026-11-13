@@ -1,5 +1,9 @@
 //! Deadline-bounded subprocess execution shared by workspace tests.
 
+#[path = "runner_deadline.rs"]
+mod deadline;
+
+use self::deadline::{CommandDeadline, effective_deadline};
 use super::{capture, spawn_guard, tree};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
@@ -15,19 +19,6 @@ const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 /// Preserve all command output for callers that report Cargo diagnostics.
 const OUTPUT_LIMIT: usize = usize::MAX;
-
-/// The operation deadline and labels used in timeout diagnostics.
-#[derive(Clone, Copy)]
-struct CommandDeadline<'a> {
-    /// Monotonic instant by which the command must exit.
-    at: Instant,
-    /// Configured operation budget, for the diagnostic message.
-    duration: Duration,
-    /// Whether the budget came from the command or its enclosing sequence.
-    scope: &'a str,
-    /// Human-readable command description for error messages.
-    description: &'a str,
-}
 
 /// Run a subprocess under its own deadline.
 ///
@@ -74,11 +65,6 @@ pub fn run_with_deadline_until(
     )
 }
 
-/// The scope label for a budget the command itself owns.
-const COMMAND_SCOPE: &str = "command";
-/// The scope label for the remainder of an enclosing sequence's budget.
-const SEQUENCE_SCOPE: &str = "shared sequence (remaining budget)";
-
 /// Select the effective command budget and run one serialized child process.
 fn run_with_optional_sequence_deadline(
     command: Command,
@@ -99,37 +85,6 @@ fn run_with_optional_sequence_deadline(
     );
 
     run_command(command, deadline)
-}
-
-/// Resolve the deadline a command runs under, measured from *now*.
-///
-/// The earlier of the command's own budget and the enclosing sequence's
-/// remainder wins. The instant is derived from the caller's `now` rather than
-/// from the moment the child has spawned: spawning and starting the readers
-/// take real time, and charging that to nobody would let a sequence deadline
-/// with a fraction of a second left hand the child its whole command budget
-/// afterwards. `None` means the sum overflowed the clock.
-fn effective_deadline(
-    command_deadline: Duration,
-    sequence_deadline: Option<Instant>,
-    now: Instant,
-    description: &str,
-) -> Option<CommandDeadline<'_>> {
-    let command_at = now.checked_add(command_deadline)?;
-    match sequence_deadline {
-        Some(sequence) if sequence < command_at => Some(CommandDeadline {
-            at: sequence,
-            duration: sequence.saturating_duration_since(now),
-            scope: SEQUENCE_SCOPE,
-            description,
-        }),
-        _ => Some(CommandDeadline {
-            at: command_at,
-            duration: command_deadline,
-            scope: COMMAND_SCOPE,
-            description,
-        }),
-    }
 }
 
 /// Spawn one owned process tree, capture its streams, and enforce its deadline.

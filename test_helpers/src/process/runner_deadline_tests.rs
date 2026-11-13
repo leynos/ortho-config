@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use super::{COMMAND_SCOPE, SEQUENCE_SCOPE, effective_deadline};
+use super::deadline::{COMMAND_SCOPE, SEQUENCE_SCOPE, effective_deadline};
 
 /// A command budget long enough that the sequence deadline is the tight one.
 const GENEROUS: Duration = Duration::from_secs(30);
