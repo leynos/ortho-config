@@ -67,7 +67,9 @@ fn spawn_time_is_charged_to_the_sequence_deadline() {
     assert_eq!(delayed.at, prompt.at, "the absolute instant does not move");
     assert_eq!(
         delayed.duration,
-        SEQUENCE_BUDGET - SLOW_SPAWN,
+        SEQUENCE_BUDGET
+            .checked_sub(SLOW_SPAWN)
+            .expect("the spawn is shorter than the sequence budget"),
         "the spawn is part of the budget, not free time before it",
     );
 }

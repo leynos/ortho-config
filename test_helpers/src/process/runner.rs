@@ -109,12 +109,12 @@ fn run_with_optional_sequence_deadline(
 /// take real time, and charging that to nobody would let a sequence deadline
 /// with a fraction of a second left hand the child its whole command budget
 /// afterwards. `None` means the sum overflowed the clock.
-fn effective_deadline<'a>(
+fn effective_deadline(
     command_deadline: Duration,
     sequence_deadline: Option<Instant>,
     now: Instant,
-    description: &'a str,
-) -> Option<CommandDeadline<'a>> {
+    description: &str,
+) -> Option<CommandDeadline<'_>> {
     let command_at = now.checked_add(command_deadline)?;
     match sequence_deadline {
         Some(sequence) if sequence < command_at => Some(CommandDeadline {
