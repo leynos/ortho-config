@@ -19,6 +19,11 @@ mod orthohelp_workflow;
 #[path = "../../ortho_config/tests/documentation_examples/process_runner_state_support.rs"]
 mod process_runner;
 
+/// Bridge-cache metric contracts, which need the binary's `metrics` recorder.
+#[cfg(feature = "metrics")]
+#[path = "documented_command/cache_metrics.rs"]
+mod cache_metrics;
+
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use rstest::rstest;
@@ -34,6 +39,28 @@ use tempfile::TempDir;
 // deadline queued behind another's cold bridge build.
 static DOCUMENTED_RUN_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
+/// One file the documented commands promise to write.
+///
+/// Naming the artefacts here keeps the file names next to the promises and
+/// stops a typo from reading as a missing output.
+#[derive(Clone, Copy, Debug)]
+enum Artefact {
+    /// The generated `agent-context.json` document.
+    AgentContext,
+    /// The generated `policy-report.json` document.
+    PolicyReport,
+}
+
+impl Artefact {
+    /// The name the command writes the artefact under.
+    const fn file_name(self) -> &'static str {
+        match self {
+            Self::AgentContext => "agent-context.json",
+            Self::PolicyReport => "policy-report.json",
+        }
+    }
+}
+
 /// A finished `cargo orthohelp` run and the directory it wrote into.
 struct OrthohelpRun {
     output: Output,
@@ -47,8 +74,9 @@ impl OrthohelpRun {
         std::str::from_utf8(&self.output.stdout).context("cargo-orthohelp stdout is UTF-8")
     }
 
-    /// Read one file the run wrote into its output directory.
-    fn read_artefact(&self, name: &str) -> Result<String> {
+    /// Read one artefact the run wrote into its output directory.
+    fn read_artefact(&self, artefact: Artefact) -> Result<String> {
+        let name = artefact.file_name();
         Dir::open_ambient_dir(self.out_dir.path(), ambient_authority())?
             .read_to_string(name)
             .with_context(|| format!("read generated {name}"))
@@ -66,7 +94,19 @@ impl OrthohelpRun {
 }
 
 /// Run `cargo orthohelp <args>` into a fresh output directory.
-fn run_orthohelp(args: &[&str]) -> Result<OrthohelpRun> {
+///
+/// `environment` adds variables for the child CLI only. The documented-run lock
+/// covers the whole run, so a caller that must prepare shared state first takes
+/// the lock itself and calls [`run_documented_command`].
+fn run_orthohelp(args: &[&str], environment: &[(&str, &str)]) -> Result<OrthohelpRun> {
+    let _run_guard = DOCUMENTED_RUN_MUTEX
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    run_documented_command(args, environment)
+}
+
+/// Run one documented command while the caller already holds the lock.
+fn run_documented_command(args: &[&str], environment: &[(&str, &str)]) -> Result<OrthohelpRun> {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .context("workspace repository")?;
@@ -75,13 +115,11 @@ fn run_orthohelp(args: &[&str]) -> Result<OrthohelpRun> {
     let out_dir = tempfile::Builder::new()
         .prefix("documented-command-")
         .tempdir_in(state)?;
-    let _run_guard = DOCUMENTED_RUN_MUTEX
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let invocation = orthohelp_workflow::OrthohelpInvocation::new(args, environment);
     let output = orthohelp_workflow::run_orthohelp(
         repository,
         Path::new(env!("CARGO_BIN_EXE_cargo-orthohelp")),
-        args,
+        invocation,
         out_dir.path(),
     )?;
     Ok(OrthohelpRun { output, out_dir })
@@ -91,9 +129,12 @@ fn run_orthohelp(args: &[&str]) -> Result<OrthohelpRun> {
 /// agent context and, as the user's guide promises, streams the same document.
 #[test]
 fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
-    let run = run_orthohelp(&["--package", "hello_world", "--format", "agent-context"])?;
+    let run = run_orthohelp(
+        &["--package", "hello_world", "--format", "agent-context"],
+        &[],
+    )?;
     run.ensure_success("documented agent-context command")?;
-    let payload: Value = serde_json::from_str(&run.read_artefact("agent-context.json")?)?;
+    let payload: Value = serde_json::from_str(&run.read_artefact(Artefact::AgentContext)?)?;
     ensure!(payload.get("package").and_then(Value::as_str) == Some("hello_world"));
     ensure!(payload.get("kind").and_then(Value::as_str) == Some("hello_world.agent_context"));
 
@@ -117,9 +158,9 @@ fn documented_policy_check_reports_the_effective_mode(
     #[case] expected_mode: &str,
     #[case] is_gate_passing: bool,
 ) -> Result<()> {
-    let run = run_orthohelp(&["--check-agent-native", "--package", package])?;
+    let run = run_orthohelp(&["--check-agent-native", "--package", package], &[])?;
     run.ensure_success(&format!("policy check for {package}"))?;
-    let report: Value = serde_json::from_str(&run.read_artefact("policy-report.json")?)?;
+    let report: Value = serde_json::from_str(&run.read_artefact(Artefact::PolicyReport)?)?;
     let stdout = run.stdout()?;
     ensure!(
         stdout.ends_with('\n') && stdout.trim_end().lines().count() == 1,
@@ -135,7 +176,10 @@ fn documented_policy_check_reports_the_effective_mode(
         "stderr should hold a one-line summary"
     );
     ensure!(
-        !run.out_dir.path().join("agent-context.json").exists(),
+        !run.out_dir
+            .path()
+            .join(Artefact::AgentContext.file_name())
+            .exists(),
         "a policy-only run should skip generation"
     );
 

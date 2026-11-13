@@ -17,6 +17,7 @@ use super::{
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use serde_json::json;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
@@ -144,6 +145,41 @@ fn the_lease_creates_and_marks_the_private_target() -> Result<()> {
     ensure!(
         directory.exists(LEASE_FILE_NAME),
         "the target should hold the lease file it was created with",
+    );
+    Ok(())
+}
+
+/// A lookup failure other than absence is reported, not read as "no artefact".
+///
+/// `Dir::exists` folds every error into `false`, so a fixture whose output
+/// directory is unreadable would look like a build that chose not to emit. The
+/// regression puts a regular file where the artefact's parent directory
+/// belongs, which fails the lookup with a kind other than `NotFound` on every
+/// supported platform.
+#[test]
+fn artefact_path_reports_non_not_found_lookup_errors() -> Result<()> {
+    let output = TempDir::new().context("create a temporary output directory")?;
+    Dir::open_ambient_dir(output.path(), ambient_authority())
+        .context("open the temporary output directory")?
+        .write("ortho-config", "not a directory")
+        .context("write a file at the artefact directory path")?;
+
+    let error = super::artefact_path(output.path())
+        .err()
+        .context("a non-directory artefact parent must not read as absence")?;
+    let io_error = error
+        .downcast_ref::<io::Error>()
+        .context("the cause is the filesystem error")?;
+    ensure!(
+        io_error.kind() != io::ErrorKind::NotFound,
+        "the invalid parent must report its filesystem error, got {:?}",
+        io_error.kind()
+    );
+    ensure!(
+        error
+            .to_string()
+            .contains(&output.path().display().to_string()),
+        "the error names the output directory: {error}"
     );
     Ok(())
 }

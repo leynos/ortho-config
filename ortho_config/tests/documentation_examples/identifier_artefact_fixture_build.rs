@@ -134,18 +134,29 @@ pub(crate) fn clean_fixture(cargo: &FixtureCargo) -> Result<()> {
 }
 
 /// Return the artefact path, if the fixture build emitted one.
+///
+/// Only a missing output directory means the build emitted nothing. Any other
+/// lookup failure is reported, because `Dir::exists` would fold it into the
+/// same `false` and a broken fixture would read as a build that chose not to
+/// emit.
 pub(crate) fn artefact_path(out_dir: &Path) -> Result<Option<PathBuf>> {
     let directory = match Dir::open_ambient_dir(out_dir, ambient_authority()) {
         Ok(directory) => directory,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
-            return Err(error).context("open fixture build-script output directory");
+            return Err(error).with_context(|| {
+                format!(
+                    "open fixture build-script output directory {}",
+                    out_dir.display()
+                )
+            });
         }
     };
     let relative_path = Path::new("ortho-config/cli-identifiers.json");
-    Ok(directory
-        .exists(relative_path)
-        .then(|| out_dir.join(relative_path)))
+    let exists = directory
+        .try_exists(relative_path)
+        .with_context(|| format!("inspect identifier artefact under {}", out_dir.display()))?;
+    Ok(exists.then(|| out_dir.join(relative_path)))
 }
 
 /// Read the emitted identifier artefact, failing when it is absent.

@@ -1,0 +1,37 @@
+error: unused return value of `ortho_config_test_helpers::process::spawn_guard::SpawnGuard::root_child_seen` that must be used
+  --> tests/ui/process_api/spawn_guard_queries_must_use.rs:12:5
+   |
+12 |     guard.root_child_seen();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> tests/ui/process_api/spawn_guard_queries_must_use.rs:6:9
+   |
+ 6 | #![deny(unused_must_use)]
+   |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+   |
+12 |     let _ = guard.root_child_seen();
+   |     +++++++
+
+error: unused return value of `ortho_config_test_helpers::process::spawn_guard::SpawnGuard::kill_attempted` that must be used
+  --> tests/ui/process_api/spawn_guard_queries_must_use.rs:13:5
+   |
+13 |     guard.kill_attempted();
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+13 |     let _ = guard.kill_attempted();
+   |     +++++++
+
+error: unused return value of `ortho_config_test_helpers::process::spawn_guard::SpawnGuard::kill_error` that must be used
+  --> tests/ui/process_api/spawn_guard_queries_must_use.rs:14:5
+   |
+14 |     guard.kill_error();
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+help: use `let _ = ...` to ignore the resulting value
+   |
+14 |     let _ = guard.kill_error();
+   |     +++++++

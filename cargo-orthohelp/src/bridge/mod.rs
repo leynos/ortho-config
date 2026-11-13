@@ -4,14 +4,13 @@ use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, OpenOptions};
 use std::fmt::Write as FmtWrite;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::process::Command;
 use std::time::Instant;
 
 use crate::bridge_observability as observability;
 use crate::cache::CacheKey;
 use crate::error::OrthohelpError;
-use crate::fs_helpers::open_optional_dir;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
 #[path = "../bridge_build.rs"]
 mod bridge_build;
@@ -19,12 +18,16 @@ mod bridge_build;
 mod bridge_build_environment;
 #[path = "../bridge_execution.rs"]
 mod execution;
+mod ir_cache;
 mod telemetry;
+#[cfg(feature = "metrics")]
+mod telemetry_metrics;
 #[path = "../bridge_workspace.rs"]
 mod workspace;
 
 use bridge_build_environment::BuildEnvironment;
 use execution::run_bridge;
+use ir_cache::{PublishOutcome, PublishStage, read_cached_ir, write_ir_cache};
 use workspace::BridgeWorkspace;
 
 /// Stable IR cache identity and Cargo-owned compiler state.
@@ -104,14 +107,29 @@ fn load_or_build_ir_inner(
             Ok(Some(cached)) => {
                 observability::completed("bridge_cache_lookup", "hit", lookup_started);
                 telemetry::ir_cache_hit();
+                #[cfg(feature = "metrics")]
+                telemetry_metrics::record_cache_event(
+                    telemetry_metrics::CacheOperation::Lookup,
+                    telemetry_metrics::CacheOutcome::Hit,
+                );
                 return Ok(cached);
             }
             Ok(None) => {
                 observability::completed("bridge_cache_lookup", "miss", lookup_started);
                 telemetry::ir_cache_miss();
+                #[cfg(feature = "metrics")]
+                telemetry_metrics::record_cache_event(
+                    telemetry_metrics::CacheOperation::Lookup,
+                    telemetry_metrics::CacheOutcome::Miss,
+                );
             }
             Err(error) => {
                 observability::failed("bridge_cache_lookup", "read_failed", lookup_started);
+                #[cfg(feature = "metrics")]
+                telemetry_metrics::record_cache_event(
+                    telemetry_metrics::CacheOperation::Lookup,
+                    telemetry_metrics::CacheOutcome::ReadFailed,
+                );
                 return Err(error);
             }
         }
@@ -134,36 +152,71 @@ fn load_or_build_ir_inner(
         &private_paths.binary_name,
     )?;
     let ir_json = run_bridge(&executable)?;
-    write_ir_cache(paths, &ir_json)?;
+    publish_ir_cache(paths, &ir_json)?;
 
     Ok(ir_json)
 }
 
-/// Reads the cached IR JSON from the bridge directory, returning `None` when
-/// no cache file exists.
-fn read_cached_ir(paths: &BridgeCache) -> Result<Option<String>, OrthohelpError> {
-    let Some(dir) = open_optional_dir(paths.cache_dir.as_path())? else {
-        return Ok(None);
-    };
-    let mut file = match dir.open("ir.json") {
-        Ok(file) => file,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(OrthohelpError::Io {
-                path: paths.ir_path.clone(),
-                source: err,
-            });
+/// Publish generated IR and record the outcome at the orchestration boundary.
+///
+/// The cache unit reports what it did; naming the outcome in tracing and
+/// metrics belongs here, where the bridge workflow owns its observability
+/// policy.
+fn publish_ir_cache(paths: &BridgeCache, ir_json: &str) -> Result<(), OrthohelpError> {
+    let started = Instant::now();
+    match write_ir_cache(paths, ir_json) {
+        Ok(outcome) => {
+            record_publish_success(outcome, ir_json.len(), started);
+            Ok(())
         }
-    };
+        Err(error) => {
+            record_publish_failure(error.stage(), started);
+            Err(error.into_source())
+        }
+    }
+}
 
-    let mut buffer = String::new();
-    file.read_to_string(&mut buffer)
-        .map_err(|err| OrthohelpError::Io {
-            path: paths.ir_path.clone(),
-            source: err,
-        })?;
+/// Observability event name shared by every publish outcome.
+const PUBLISH_EVENT: &str = "bridge_ir_cache_publish";
 
-    Ok(Some(buffer))
+/// Record a successful publish without adding unbounded labels.
+fn record_publish_success(outcome: PublishOutcome, written: usize, started: Instant) {
+    match outcome {
+        PublishOutcome::Unchanged => {
+            observability::completed(PUBLISH_EVENT, "unchanged", started);
+            telemetry::ir_cache_unchanged();
+            #[cfg(feature = "metrics")]
+            record_publish_metric(telemetry_metrics::CacheOutcome::Unchanged);
+        }
+        PublishOutcome::Updated => {
+            observability::completed(PUBLISH_EVENT, "updated", started);
+            telemetry::ir_cache_write(written);
+            #[cfg(feature = "metrics")]
+            record_publish_metric(telemetry_metrics::CacheOutcome::Updated);
+        }
+    }
+}
+
+/// Record a failed publish without exposing paths, keys, or error text.
+fn record_publish_failure(stage: PublishStage, started: Instant) {
+    match stage {
+        PublishStage::Read => {
+            observability::failed(PUBLISH_EVENT, "read_failed", started);
+            #[cfg(feature = "metrics")]
+            record_publish_metric(telemetry_metrics::CacheOutcome::ReadFailed);
+        }
+        PublishStage::Write => {
+            observability::failed(PUBLISH_EVENT, "write_failed", started);
+            #[cfg(feature = "metrics")]
+            record_publish_metric(telemetry_metrics::CacheOutcome::WriteFailed);
+        }
+    }
+}
+
+/// Count one publish outcome under the metric's `Publish` operation.
+#[cfg(feature = "metrics")]
+fn record_publish_metric(outcome: telemetry_metrics::CacheOutcome) {
+    telemetry_metrics::record_cache_event(telemetry_metrics::CacheOperation::Publish, outcome);
 }
 
 /// Creates the bridge crate directory tree (bridge root and `src/`) if absent.
@@ -296,55 +349,6 @@ fn build_bridge_command(paths: &BridgePaths, environment: &BuildEnvironment) -> 
     command
 }
 
-/// Writes `json` to the cached IR file, skipping the write when the file
-/// already contains identical content.
-///
-/// Idempotent writes preserve the file's modification time, keeping
-/// mtime-based or content-based cache-validity checks stable across repeated
-/// invocations even when path-normalization differences cause `read_cached_ir`
-/// to return `None` spuriously.
-fn write_ir_cache(paths: &BridgeCache, json: &str) -> Result<(), OrthohelpError> {
-    let started = Instant::now();
-    // Skip writing if the existing cache file already holds identical content.
-    // This preserves the file's mtime, making cache-validity checks robust
-    // against spurious cache misses (e.g. Windows path-normalization
-    // differences that cause read_cached_ir to return Ok(None) even when the
-    // file exists) and prevents unnecessary I/O on repeated invocations.
-    //
-    // A missing cache is the ordinary first-build case and falls through to
-    // the write. Any other failure to read an existing file is propagated:
-    // treating it as a cache miss would overwrite a file whose contents were
-    // never inspected, hiding the very fault the read reported.
-    match read_cached_ir(paths)? {
-        Some(existing) if existing == json => {
-            observability::completed("bridge_ir_cache_publish", "unchanged", started);
-            telemetry::ir_cache_unchanged(paths);
-            return Ok(());
-        }
-        Some(_) | None => {}
-    }
-    let mut file =
-        tempfile::NamedTempFile::new_in(paths.cache_dir.as_std_path()).map_err(|source| {
-            OrthohelpError::Io {
-                path: paths.cache_dir.clone(),
-                source,
-            }
-        })?;
-    telemetry::ir_cache_write(paths, json.len());
-    file.write_all(json.as_bytes())
-        .map_err(|io_err| OrthohelpError::Io {
-            path: paths.ir_path.clone(),
-            source: io_err,
-        })?;
-    file.persist(paths.ir_path.as_std_path())
-        .map_err(|error| OrthohelpError::Io {
-            path: paths.ir_path.clone(),
-            source: error.error,
-        })?;
-    observability::completed("bridge_ir_cache_publish", "updated", started);
-    Ok(())
-}
-
 /// Opens the bridge root directory using cap-std ambient authority.
 fn open_bridge_dir(paths: &BridgePaths) -> Result<Dir, OrthohelpError> {
     Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()).map_err(|io_err| {
@@ -385,3 +389,7 @@ fn open_bridge_file(
 #[cfg(test)]
 #[path = "../tests.rs"]
 mod tests;
+
+#[cfg(all(test, feature = "metrics"))]
+#[path = "telemetry_metrics_tests.rs"]
+mod telemetry_metrics_tests;

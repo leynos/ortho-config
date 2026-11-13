@@ -94,12 +94,16 @@ def test_build_test_job_installs_mold() -> None:
     )
 
 
-def test_beta_clippy_job_installs_mold_on_linux() -> None:
-    """The advisory Clippy job has no RUSTFLAGS, so the configuration applies."""
+def test_beta_clippy_job_installs_no_mold() -> None:
+    """The advisory Clippy job assigns RUSTFLAGS, so the configuration cannot select mold.
+
+    `make lint-clippy` expands `GATE_RUSTFLAGS`, and an assigned `RUSTFLAGS`
+    displaces the `.cargo/config.toml` `rustflags` tables. Installing the
+    linker would therefore cost a download that no compilation uses.
+    """
     steps = _workflow("ci.yml")["jobs"]["clippy-beta"]["steps"]
-    install = [s for s in steps if "mold" in str(s.get("run", ""))]
-    assert len(install) == 1, "clippy-beta must install mold exactly once"
-    assert "linux" in str(install[0].get("if")), "the install must be Linux-only"
+    install = [step for step in steps if "mold" in str(step)]
+    assert not install, "clippy-beta must not install a linker its RUSTFLAGS never select"
 
 
 def test_mutation_lane_installs_mold() -> None:

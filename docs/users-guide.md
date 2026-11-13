@@ -59,6 +59,13 @@ the derive. Optional `json5`, `yaml`, and `metrics` features are covered later.
 OrthoConfig re-exports its derive macros, so a separate `ortho_config_macros`
 dependency is not needed.
 
+Depending on the published crate needs no special toolchain; the supported
+minimum Rust version is 1.89.0. Building OrthoConfig from a source checkout has
+extra prerequisites: the checkout pins a dated nightly toolchain, and Linux
+builds also need the `mold` linker. The
+[developers' guide](developers-guide.md#development-build-standard) explains
+how to install and verify them.
+
 ## Build the first layered CLI
 
 Start with one struct. The `prefix` is used for environment variables and for
@@ -1103,6 +1110,38 @@ the log becoming a record of where the application looked or what it read. See
 [Add production diagnostics](#add-production-diagnostics) for how to install a
 subscriber.
 
+## Run test subprocesses under a deadline
+
+Tests that start another process need three things the standard library does
+not provide together: a deadline that does not move, capture of each output
+stream that never blocks the child, and a guarantee that no descendant outlives
+the test. The `ortho_config_test_helpers` crate supplies them through
+`ortho_config_test_helpers::process`.
+
+Call `run_with_deadline` when one command has its own budget: it takes the
+`Command`, a `Duration`, and a human-readable description, and returns the
+captured `Output`. Call `run_with_deadline_until` instead when an enclosing
+test sequence owns a shared deadline; the earlier of the two limits applies,
+and time already spent, including waiting for a caller-owned lock, is charged
+to the sequence budget. Both report a failure that names the description, the
+duration, and the scope whose budget expired, so a timeout reads as a failed
+budget rather than an opaque panic.
+
+The helpers own execution, cleanup, and capture only. The caller still builds
+the command, chooses its environment, serializes it against other tests, and
+interprets the returned status and output. Both streams are drained
+continuously while the child runs, so a chatty child cannot deadlock on a full
+pipe, and the returned `Output` carries everything the child wrote: the shared
+runners keep the complete output because callers report compiler diagnostics in
+full. Memory therefore grows with what the child writes, so a caller that
+starts a child with unbounded output must bound that output itself. Output
+activity does not extend a deadline.
+
+These helpers are test-only: use them from tests and test fixtures, never from
+production code. A test runner that needs its own diagnostics or capture policy
+uses the lower-level module for its platform rather than a second process-tree
+implementation.
+
 ## Resolve discovery and merging without process state
 
 The previous section isolates file discovery. Tests and embedding applications
@@ -1577,6 +1616,36 @@ available from the selected library or binary target. The default format is
 `ir`. `--format agent-context` writes `agent-context.json` and also emits the
 same compact JSON document to standard output, so a pipeline can consume it
 directly.
+
+## Collect bridge-cache metrics
+
+The optional `metrics` feature enables a counter for `cargo-orthohelp` bridge
+cache outcomes. It is new in v0.11.0, and the published v0.10.0 package does
+not carry it, so install from a source checkout until that release ships:
+
+<!-- tested-example: guide-orthohelp-bridge-cache-metrics -->
+```console
+cargo install --path cargo-orthohelp --features metrics
+```
+
+The counter is `cargo_orthohelp.bridge_cache.events`. Its bounded `operation`
+label is `lookup` or `publish`; its `outcome` label is `hit`, `miss`,
+`read_failed`, `unchanged`, `updated`, or `write_failed`.
+
+With the feature enabled, the standalone CLI installs a `tracing`-backed
+recorder at startup, so each counter update is written to standard error as a
+structured `tracing` event under the `cargo_orthohelp::metrics` target. Set
+`RUST_LOG=cargo_orthohelp::metrics=debug` to collect them with the rest of the
+tool's diagnostics. A process that installs its own `metrics` recorder before
+the CLI starts keeps it, because the CLI claims the process-wide recorder slot
+only when it is free, so an embedding application can export to its own sink.
+Without any recorder the metrics facade drops events, which is the behaviour a
+plain `cargo orthohelp` run without the feature keeps.
+
+The feature is additive and disabled by default; no migration is needed to keep
+using existing commands. For the upgrade summary, see the
+[bridge-cache metrics entry](v0-11-0-migration-guide.md#6-collect-bridge-cache-metrics-from-the-cli)
+in the v0.11.0 migration guide.
 
 ## Generate every format at once
 

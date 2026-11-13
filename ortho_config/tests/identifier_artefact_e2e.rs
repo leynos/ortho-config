@@ -119,6 +119,8 @@ fn assert_entry_ownership(entries: &[Value]) -> Result<()> {
 #[serial]
 fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()> {
     let cargo = fixture_cargo()?;
+    // Keep the target's dependency cache warm between runs while ensuring a
+    // previous opt-in build cannot make this first opt-out build pass by luck.
     clean_fixture(&cargo)?;
     let first_build = build_fixture(false, &cargo, None)?;
     ensure!(

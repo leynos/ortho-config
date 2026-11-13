@@ -1151,12 +1151,19 @@ Each documentation scenario has a single monotonic 956-second deadline within
 its 960-second nextest per-test allowance. Build, execution, discovery, and
 cleanup have respective 956-, 60-, 30-, and 2-second policies; each operation
 is capped by the remaining scenario time. Output activity does not extend a
-deadline. Each stream retains at most 1 MiB and continues draining, and also
-keeps a separate 64 KiB diagnostic tail, because a stalled child's last
-compile-admission or heartbeat line explains the wait that the leading bytes do
-not. Owned process-tree cleanup is bounded. The helpers are scoped to
-documentation tests, the `ortho_l10n` boundary runner, and the production
-bridge; they are not general application subprocess APIs. See
+deadline. The documentation-example runner retains at most 1 MiB per stream and
+continues draining, and also keeps a separate 64 KiB diagnostic tail, because a
+stalled child's last compile-admission or heartbeat line explains the wait that
+the leading bytes do not. Owned process-tree cleanup is bounded.
+
+The shared capture and process-tree implementation lives in
+`test_helpers/src/process/`, and the documentation runner applies its own 1 MiB
+policy to it. The shared runner used by the CLI compile-time contracts keeps
+the complete output of each stream, because its callers report compiler
+diagnostics in full. The two capture policies are deliberate and neither may be
+described as the other. Both are test-only; the production bridge keeps the
+separate build ownership and helper described above, and neither is a general
+application subprocess API. See
 [ADR-014](adrs/adr-0014-documentation-build-ownership.md).
 
 ### 4.20. Formal verification tooling boundary

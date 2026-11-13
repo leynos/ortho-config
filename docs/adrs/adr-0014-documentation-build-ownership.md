@@ -297,6 +297,10 @@ helper may not terminate unrelated processes or restart shared cache services.
 
 ## Timeout policy and validation status
 
+The values and recommendation in this section record the policy at the ADR's
+acceptance date. The 2026-10-26 addendum below supersedes its current-state
+limits and validation conclusion while preserving the original observations.
+
 The 600-second nextest per-test ceiling remains the default. The BDD target and
 the serialized documentation-scenario group have 960-second overrides. The
 1,800-second whole-run ceiling, 2,700-second Cargo watchdog, and workflow job
@@ -340,6 +344,66 @@ attempted cold build exceeded its operation deadline while sccache was
 unavailable and admission slots were held, and a later fresh-target run did not
 report cache hit or miss state. Keep the build budget unchanged until a
 controlled run provides usable cold-build evidence.
+
+## Addendum (2026-10-26): Updated test and workflow budgets
+
+The adoption of the dated nightly in
+[ADR-0018](adr-0018-adopt-a-dated-nightly-and-the-development-build-standard.md)
+changed compiler cache keys and invalidated the warm sample used to set the
+whole-run budget. The current limits supersede the whole-run, watchdog and job
+ceilings above:
+
+- `.config/nextest.toml` sets a 2,300-second whole-run limit and, for the
+  boundary binary, the 960-second override it shares with the trybuild,
+  `rstest_bdd` and documentation scenarios. The packaged-consumer scenario runs
+  inside one shared 900-second allowance, with each packaging invocation and
+  each nested Cargo command capped at 440 seconds. The 2,200-second per-test
+  limit, 2,100-second scenario deadline, and 520- and 420-second caps recorded
+  here originally were superseded before this branch merged.
+- The coverage workflows set `RUN_RUST_CARGO_WAIT_TIMEOUT` to 3,300 seconds.
+  The CI coverage job has a 190-minute ceiling, and the coverage publisher has
+  a 140-minute ceiling.
+- Documentation scenarios retain their 956-second operation envelope within
+  the 960-second nextest allowance.
+
+The 2,300-second whole-run limit covers the bound from the cancelled Windows
+run: the younger remaining test had started at 1,652.8 seconds and had used
+157.3 seconds when cancellation was reported at about 1,810.1 seconds. Its
+600-second allowance therefore ended at 2,252.8 seconds. The new limit leaves
+47.2 seconds above that bound. The three later warm runs do not establish a
+cold-cache bound because they inherited cache entries from the cancelled run.
+The cold nested-build path still cannot reach `sccache` while the documentation
+runner clears the environment without restoring `RUSTC_WRAPPER`;
+[issue #614](https://github.com/leynos/ortho-config/issues/614) tracks that
+separate repair. Detailed timings and evidence limits are in the developers'
+guide's [cold-run budget account][cold-run-budget].
+
+## Addendum (2026-10-26): Bridge-cache metrics
+
+The bridge's intermediate-representation (IR) cache gained an optional metrics
+surface without changing its ownership. Persistence stays in the private
+`bridge/ir_cache.rs` unit, which returns a closed publish outcome and a
+stage-tagged publish error and records nothing itself; the bridge orchestration
+boundary names the outcome in tracing and, with the `metrics` feature enabled,
+in the counter `cargo_orthohelp.bridge_cache.events`. Both labels, `operation`
+and `outcome`, come from closed enums, so no path, cache key, or error string
+can become a label.
+
+The `metrics` facade discards updates until the process installs a recorder, so
+the standalone `cargo-orthohelp` binary now installs a `tracing`-backed
+recorder before any bridge work. A host that installs its own recorder first
+keeps it. The design is recorded in the [cargo-orthohelp design][bridge-design].
+
+## Addendum (2026-11-06): Persistent test-private fixture target
+
+The identifier-artefact fixture keeps a persistent target directory,
+`identifier-e2e`, under Cargo's configured workspace target, tagged with
+`CACHEDIR.TAG`, instead of creating one per run. Each run cleans only the
+`orthohelp_fixture` package within that directory before checking opt-out
+behaviour, so later runs reuse compiled dependencies. The guarantees above
+still hold: the outer workspace's test executables are never deleted, and the
+fixture still uses Cargo's default shared package cache. The original paragraph
+is retained as the record of the decision the fixture was introduced under.
 
 ## Consequences
 
@@ -509,21 +573,24 @@ diagnostic, and each stream retains a 64 KiB diagnostic tail.
 
 A `SCENARIO_ALLOWANCE` of 900 seconds is shared by every nested Cargo call in
 one boundary contract and passed explicitly from the test, rather than kept in
-a thread-local that unrelated contracts would accumulate. Each call is bounded
-by the smaller of its own cap and what the allowance has left; a call that
-starts with nothing left is refused, naming itself and the allowance. The
-in-process serialization wait is bounded by the same allowance, and each
-child's bound is computed after the wait, so queueing behind a sibling is
-charged to the allowance rather than hidden from it. The allowance sits inside
-the 960-second per-test boundary override, and the remaining 60 seconds cover
-rendering fixture roots, reading manifests, and reporting. Both runners remain
-test-only; neither is a general application subprocess API.
+a thread-local that unrelated contracts would accumulate. Each packaging
+invocation and each nested fixture Cargo call is capped at 440 seconds
+(`PACKAGE_DEADLINE` and `CARGO_DEADLINE`). Each call is bounded by the smaller
+of its own cap and what the allowance has left; a call that starts with nothing
+left is refused, naming itself and the allowance. The in-process serialization
+wait is bounded by the same allowance, and each child's bound is computed after
+the wait, so queueing behind a sibling is charged to the allowance rather than
+hidden from it. The allowance sits inside the 960-second per-test boundary
+override, and the remaining 60 seconds cover rendering fixture roots, reading
+manifests, and reporting. Both runners remain test-only; neither is a general
+application subprocess API.
 
 ## References
 
 - [Executable documentation-test design][design-infrastructure]
 - [Documentation-example implementation guidance][developer-guidance]
 - [Test timeout ordering][timeout-guidance]
+- [Cold-run budget account][cold-run-budget]
 - [Descriptor locking with `fs4`][file-lock]
 
 [design-infrastructure]:
@@ -531,4 +598,7 @@ test-only; neither is a general application subprocess API.
 [developer-guidance]: ../developers-guide.md#public-documentation-examples
 [timeout-guidance]:
   ../developers-guide.md#test-timeouts-the-tiers-this-repository-sets
+[cold-run-budget]:
+  ../developers-guide.md#the-whole-run-budget-was-resized-from-a-cold-run
+[bridge-design]: ../cargo-orthohelp-design.md#633-bridge-build-ownership-and-recovery
 [file-lock]: https://docs.rs/fs4/1.1.0/fs4/trait.FileExt.html

@@ -27,6 +27,8 @@ omitted when undeclared.
 | **Required if used** | `AgentCommand` literals    | Supply `renderer: RendererContract::default()`.                              |
 | **Optional**         | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.         |
 | **Optional**         | Agent-native policy checks | Read the projected `renderer` block from agent context.                      |
+| **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.     |
+| **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.          |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -159,3 +161,44 @@ defaults, and the omission-versus-null rule live in
 [ADR-0016](adrs/adr-0016-dual-renderer-metadata-surface.md), and the
 [user's guide](users-guide.md#declare-how-a-command-renders-its-output) shows
 the accepted keys with worked examples.
+
+## 6. Collect bridge-cache metrics from the CLI
+
+The `metrics` feature is new in `cargo-orthohelp` v0.11.0; the published
+v0.10.0 package does not carry it. The feature emits
+`cargo_orthohelp.bridge_cache.events` with the bounded `operation` and
+`outcome` labels described in the
+[user's guide](users-guide.md#collect-bridge-cache-metrics). The standalone
+`cargo-orthohelp` binary installs a `tracing`-backed recorder at startup, so a
+build with `--features metrics` exports each counter update to standard error
+as a structured `tracing` event under the `cargo_orthohelp::metrics` target:
+
+```console
+RUST_LOG=cargo_orthohelp::metrics=debug cargo orthohelp --cache --package acme
+```
+
+Pass `--cache` to make repeated runs reuse the cached IR and emit the lookup
+hit or miss event; without `--cache` or `--no-build`, an invocation consults no
+cache and records no lookup.
+
+A host that installs its own `metrics` recorder before starting the CLI keeps
+it, because the CLI claims the process-wide recorder slot only when it is free.
+Nothing is required to upgrade: the feature is off by default, and a build
+without it behaves exactly as before.
+
+## 7. Run test subprocesses through the shared helpers
+
+The `ortho_config_test_helpers` crate publishes its bounded subprocess support
+as `ortho_config_test_helpers::process`. A test that starts another process
+calls `run_with_deadline` for a single budgeted command, or
+`run_with_deadline_until` when an enclosing sequence owns the deadline. The
+helpers own execution, capture, and descendant cleanup; the test keeps
+responsibility for the command, its environment, serialization, and the
+interpretation of the result.
+
+Adoption is optional for downstream consumers and required inside this
+repository, where the helpers are the only permitted process-tree
+implementation in tests. See the
+[user's guide](users-guide.md#run-test-subprocesses-under-a-deadline) for the
+contract and the [developer's guide](developers-guide.md) for why the
+repository routes Cargo, host-tool, and documented-binary commands through it.

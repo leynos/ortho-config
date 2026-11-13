@@ -117,6 +117,7 @@ class KaniLayout(NamedTuple):
     cargo_home: Path
     cargo_bin: Path
     conflict_bin: Path
+    build_tools_bin: Path
     capture: Path
     cargo_log: Path
     kani_log: Path
@@ -132,6 +133,7 @@ def kani_environment(
     and the package's `shlex.split` boundary are exercised.
     """
     home = tmp_path / "home dir o'brien"
+    build_tools_prefix = tmp_path / "build tools prefix o'brien"
     cargo_home = (
         tmp_path / "cargo home o'brien" if explicit_cargo_home else home / ".cargo"
     )
@@ -139,6 +141,7 @@ def kani_environment(
         cargo_home=cargo_home,
         cargo_bin=cargo_home / "bin",
         conflict_bin=tmp_path / "tools prefix" / "bin",
+        build_tools_bin=build_tools_prefix / "bin",
         capture=tmp_path / "prover-tools-calls.jsonl",
         cargo_log=tmp_path / "cargo-invocations.jsonl",
         kani_log=tmp_path / "kani-invocations.jsonl",
@@ -147,6 +150,7 @@ def kani_environment(
     env = os.environ.copy()
     env.update(
         {
+            "BUILD_TOOLS_PREFIX": str(build_tools_prefix),
             "CARGO_HOME": str(cargo_home),
             "HOME": str(home),
             "PATH": os.pathsep.join((str(layout.conflict_bin), "/usr/bin", "/bin")),
@@ -202,8 +206,12 @@ def assert_kani_check_call(
     command_value = check_arguments[check_arguments.index("--kani-command") + 1]
     assert shlex.split(command_value) == [str(layout.cargo_bin / "cargo-kani")]
     assert str(REPOSITORY_ROOT) in check_arguments
+    # The pinned build tools lead PATH so `-fuse-ld=mold` outranks a
+    # distribution linker, and the chosen Cargo home leads that so the
+    # conflicting `cargo` can never win.
     assert records[0]["path"].split(os.pathsep) == [
         str(layout.cargo_bin),
+        str(layout.build_tools_bin),
         str(layout.conflict_bin),
         "/usr/bin",
         "/bin",

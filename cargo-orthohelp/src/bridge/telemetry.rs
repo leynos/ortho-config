@@ -15,8 +15,6 @@
 //! child output that `bridge_build` already owns, so it has no fact to
 //! contribute here.
 
-use super::BridgeCache;
-
 /// Report that a cache lookup reused the cached bridge IR.
 pub(super) fn ir_cache_hit() {
     tracing::debug!(
@@ -37,25 +35,24 @@ pub(super) fn ir_cache_miss() {
 
 /// Report that the cached IR already matches, so the write was skipped.
 ///
-/// Each emission lives in its own function so `write_ir_cache` holds at most
-/// one `tracing` call: when a dependent crate enables `tracing`'s `log`
-/// bridge, Cargo's feature unification expands every event into a branch
-/// ladder that counts against the workspace's cognitive-complexity ceiling.
-pub(super) fn ir_cache_unchanged(paths: &BridgeCache) {
+/// Each emission lives in its own function so the publish boundary holds at
+/// most one `tracing` call per outcome: when a dependent crate enables
+/// `tracing`'s `log` bridge, Cargo's feature unification expands every event
+/// into a branch ladder that counts against the workspace's
+/// cognitive-complexity ceiling.
+pub(super) fn ir_cache_unchanged() {
     tracing::debug!(
         operation = "bridge_ir_cache_publish",
         outcome = "unchanged",
-        path = %paths.ir_path,
         "skipping ir.json write: cached content is identical"
     );
 }
 
 /// Report that the IR cache is about to be written, with its size.
-pub(super) fn ir_cache_write(paths: &BridgeCache, bytes: usize) {
+pub(super) fn ir_cache_write(bytes: usize) {
     tracing::debug!(
         operation = "bridge_ir_cache_publish",
         outcome = "updated",
-        path = %paths.ir_path,
         bytes,
         "writing ir.json cache"
     );

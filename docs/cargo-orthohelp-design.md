@@ -819,21 +819,26 @@ help_info_uri = "https://example.com/help/MyApp"
 ### 6.3 Caching
 
 Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint,
-macro version, tool version, and the workspace `Cargo.lock` hash (when present).
-`--cache` reuses it when valid; `--no-build` trusts the existing IR.
+the root type, the tool version, the IR schema version, and the workspace
+`Cargo.lock` hash (when present). A macro-version change is not a direct input;
+it can affect the key only indirectly, through the `Cargo.lock` hash. The
+directory name is `v1-` followed by 32 lowercase hexadecimal digits from the
+leading 16 bytes of the SHA-256 digest. The prefix versions the key encoding;
+changing it creates a fresh cache namespace. `--cache` reuses an entry when
+valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
 cache.
 
-Digests are SHA-256 and are rendered as 64 lowercase hexadecimal digits by the
-crate-internal `cargo-orthohelp/src/hex.rs` helper. `sha2` 0.11 returns
+Digests are SHA-256 and the crate-internal `cargo-orthohelp/src/hex.rs` helper
+renders full digests as 64 lowercase hexadecimal digits. `sha2` 0.11 returns
 `hybrid_array::Array<u8, _>` from `finalize`, and that type does not implement
 `core::fmt::LowerHex`, so the previous `{:x}` formatting no longer compiles.
-The helper keeps the rendered form byte-for-byte identical to the earlier
-output, so existing cache directories remain addressable. See the
-digest-rendering section of [developers' guide](developers-guide.md) for the
-helper's re-use policy.
+The helper keeps full-digest rendering byte-for-byte identical to the earlier
+output. `CacheKey::hash` uses a 16-byte prefix and adds the `v1-` directory
+format tag described above. See the digest-rendering section of
+[developers' guide](developers-guide.md) for the helper's re-use policy.
 
 ### 6.3.1 Agent-context pipeline additions
 
@@ -968,6 +973,25 @@ the Rust-example and CLI documentation test targets; compilation and artefact
 extraction stay with the Rust-example helper. Neither helper is a general
 application subprocess API.
 
+Test-only commands that start a process run through the shared
+`ortho_config_test_helpers::process` module, which owns the deadline, the
+drained per-stream capture, and descendant cleanup on every supported platform.
+A crate that cannot depend on the helper package includes the module by source
+path instead of copying it. The `ortho_l10n` boundary fixture is the one
+deliberate exception: it keeps its own implementation in
+`tests/boundary/fixture_cargo/process.rs`, because its calls are already
+bounded by a scenario-wide budget and a process-wide serialization lock that
+the shared runner does not model, and the package bans the workspace
+test-helper package in its resolved graph and packaged manifest. No other
+package may add a test-side process-tree implementation. That shared capture
+retains the complete output of each stream because callers report compiler
+diagnostics in full; it drains continuously so a full pipe cannot deadlock a
+child, and memory grows with the output a child produces. The
+documentation-test runner owns its own diagnostics policy instead, so it caps
+each stream at 1 MiB and reports truncation. Production bridge code keeps its
+own ownership rules, because a bridge build holds the target-directory lock and
+a fail-closed recovery marker that test supervision has no part in.
+
 The bridge build retains Cargo's configured compiler and documentation
 wrappers, wrapper settings, job limits, warning flags, and coverage
 instrumentation. Metadata discovery maps `cargo llvm-cov show-env`'s
@@ -984,16 +1008,33 @@ has no presentation sink; `run_cargo` forwards the retained diagnostics to
 stderr after draining the JSON stream and emits a truncation notice when
 needed. IR cache publication remains atomic and skips replacement when the
 existing cache already contains identical content, preserving the established
-path and idempotent-write behaviour.
+path and idempotent-write behaviour. The private `bridge/ir_cache.rs` module
+owns cache-file reads and publication; only bridge orchestration and its
+crate-local tests call it, and it is not a general-purpose filesystem or cache
+abstraction. The unit reports what it did through a closed publish outcome and
+a stage-tagged publish error rather than recording anything itself, so
+persistence and observability are tested at their own boundaries. The
+orchestration boundary in `bridge/mod.rs` names the outcome in tracing, with
+the operation, the outcome, and the write size where applicable, and never
+exposes cache paths.
 
 The bridge cache lookup, target lock, Cargo build, executable snapshot, bridge
 execution, and IR publication emit named tracing spans or events. Outcome
 events use a closed operation and outcome vocabulary and include elapsed time;
-they omit paths, cache keys, error strings, and child output. The one-shot CLI
-installs a tracing subscriber but no metrics recorder, so this path reports
-per-invocation evidence through tracing rather than emitting metrics that the
-default invocation would silently discard. This boundary is recorded in
+they omit paths, cache keys, error strings, and child output. This tracing
+boundary is recorded in
 [ADR-014](adrs/adr-0014-documentation-build-ownership.md#decision-outcome).
+
+With the optional `metrics` feature enabled, bridge cache outcomes also
+increment `cargo_orthohelp.bridge_cache.events`. Its only labels are `operation`
+(`lookup` or `publish`) and `outcome` (`hit`, `miss`, `read_failed`,
+`unchanged`, `updated`, or `write_failed`). The standalone binary installs a
+`tracing`-backed recorder before any bridge work, so the CLI's counters reach
+the operator's existing diagnostics pipeline; a host that installs its own
+recorder first keeps it, because the CLI claims the process-wide slot only when
+it is free. Metric contract tests capture every lookup and publish outcome with
+a thread-local recorder, reject extra label keys or values, and drive one real
+emission through the installed CLI recorder to prove the export path.
 
 An interrupted build whose writer lifetime cannot be confirmed leaves a
 fail-closed ownership marker. A later invocation must not treat that marker as
