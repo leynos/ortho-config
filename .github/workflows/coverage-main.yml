@@ -96,7 +96,7 @@ jobs:
         # on Linux, and the nested trybuild builds the coverage suite runs link
         # with it. `mold-version` is held equal to tools/mold/VERSION by
         # tests/workflow_contracts/build_tools_provisioning_test.py.
-        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/setup-rust@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           install-mold: 'true'
           mold-version: '2.41.0'
@@ -121,7 +121,7 @@ jobs:
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job); it writes the authoritative baseline that
         # pull-request runs compare against.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/generate-coverage@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -137,7 +137,7 @@ jobs:
           with-ratchet: 'true'
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/generate-coverage@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -172,7 +172,7 @@ jobs:
         if: >-
           steps.codescene-token.outputs.available == 'true'
           && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           format: lcov
           # Named rather than left to the action's default, because this
