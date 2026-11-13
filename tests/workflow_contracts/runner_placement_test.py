@@ -250,6 +250,8 @@ PLATFORM_CONDITIONS: typ.Final[dict[str, str]] = {
     "Disk sample (after coverage without serde_saphyr)": (
         "${{ always() && matrix.platform == 'linux' }}"
     ),
+    "Verify the Windows coverage target root": "${{ matrix.platform == 'windows' }}",
+    "Verify the Linux coverage target root": LINUX_ONLY,
     "Merge coverage results": LINUX_ONLY,
     "Validate PowerShell wrapper": "${{ matrix.platform == 'windows' }}",
 }

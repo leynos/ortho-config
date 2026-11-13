@@ -3226,6 +3226,27 @@ from the measured invocation, so a change that restores the long root, shortens
 the margin, or moves the assignment fails the contract rather than the Windows
 job.
 
+#### Verifying the root the passes received
+
+The choosers publish through `GITHUB_ENV`, which records intent. The two
+`Verify the … coverage target root` steps read it back after the second
+coverage action and require the directory the passes built in, so a chooser
+that is shadowed by an `env` block, reordered, or left with an empty value
+fails the leg that owns it instead of surfacing later as a refused command
+line. Each step recomputes its expected root from the chooser's own expression
+— the Windows step re-derives the drive root from `RUNNER_TEMP`, the Linux step
+rebuilds `$RUNNER_TEMP/llvm-cov-target` — so there is no second copy of the
+path to drift.
+
+The Linux step is plain Bash, and `coverage_target_root_behaviour_test.py`
+exercises its acceptance and rejection paths on every host. The Windows step
+derives its root from the drive containing `RUNNER_TEMP`, which on a POSIX host
+is `/`; the suite observes both its rejection paths there and leaves acceptance
+to the hosted Windows leg, which runs the step with the real directory present.
+The check observes the environment and the directory, not the length of any
+command line: a root chosen correctly but still too long passes the check and
+fails at the compiler, which is what the projection arithmetic above guards.
+
 ### Opting out with `BUILD_STANDARD`
 
 `BUILD_STANDARD=0` turns the standard off for one invocation: the recipes then
