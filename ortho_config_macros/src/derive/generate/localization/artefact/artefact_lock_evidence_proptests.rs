@@ -45,11 +45,22 @@ fn pack_device(major: u64, minor: u64) -> u64 {
 
 /// A device whose halves are drawn from their full field widths.
 ///
+/// The ranges are the widths glibc actually packs, not an arbitrary sample. The
+/// major spans 32 bits (`12` low at bit 8, `20` high at bit 44) and the minor
+/// spans 32 bits (`8` low at bit 0, `24` high at bit 20), so `0..=u32::MAX` is
+/// the whole space either half can occupy.
+///
 /// The range matters: the high fields are exactly what a two-mask split drops,
 /// so a generator that stayed below 32 bits would leave the defect these
-/// properties exist to catch unexercised.
+/// properties exist to catch unexercised. An earlier version capped the halves
+/// at `2^20` and `2^24`, which never set a major bit above 20 or a minor bit
+/// above 24, leaving precisely those high fields unexercised.
+///
+/// The halves are drawn as `u64` directly rather than as a `u32` widened
+/// afterwards: a `u32` generator cannot express the boundary above 32 bits, and
+/// widening an already-clamped value would hide the same gap.
 fn any_device() -> impl Strategy<Value = (u64, u64)> {
-    (0_u64..=0x000f_ffff, 0_u64..=0x00ff_ffff)
+    (0_u64..=u64::from(u32::MAX), 0_u64..=u64::from(u32::MAX))
 }
 
 proptest! {
@@ -102,14 +113,14 @@ proptest! {
         );
         prop_assert!(
             !record.matches(LockFileIdentity::of(
-                DeviceNumber::new(major.wrapping_add(1) & 0x000f_ffff, minor),
+                DeviceNumber::new(major.wrapping_add(1) & u64::from(u32::MAX), minor),
                 Inode::new(inode),
             )),
             "a different major must not match",
         );
         prop_assert!(
             !record.matches(LockFileIdentity::of(
-                DeviceNumber::new(major, minor.wrapping_add(1) & 0x00ff_ffff),
+                DeviceNumber::new(major, minor.wrapping_add(1) & u64::from(u32::MAX)),
                 Inode::new(inode),
             )),
             "a different minor must not match",
