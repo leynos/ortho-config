@@ -20,9 +20,7 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-import os
 import pathlib
-import sys
 import tomllib
 from tomllib import TOMLDecodeError
 
@@ -41,6 +39,7 @@ from trybuild_tier import (
     non_trybuild_binaries,
     trybuild_binaries,
 )
+from unreadable_support import DENIED_ACCESS_IS_UNOBSERVABLE, denied
 
 
 @pytest.fixture(scope="module")
@@ -233,18 +232,6 @@ def test_over_selection_is_refused() -> None:
     )
 
 
-#: A directory whose mode denies a listing only denies one to a non-root
-#: user, so a refusal cannot be observed when the suite runs as root. Nor
-#: can it be observed on Windows, where `os.chmod` changes only the
-#: read-only flag: no mode makes a directory unopenable there, so the
-#: refusal the two tests below assert would simply be absent. The Make
-#: target is documented and runnable anywhere, even though CI invokes it
-#: on the Ubuntu leg only.
-DENIED_LISTING_IS_UNOBSERVABLE = (hasattr(os, "geteuid") and os.geteuid() == 0) or (
-    sys.platform == "win32"
-)
-
-
 def _nested_trybuild_tree(tmp_path: pathlib.Path) -> pathlib.Path:
     """Build a workspace whose trybuild call sits behind a nested ``mod.rs``.
 
@@ -415,7 +402,7 @@ def test_a_table_without_a_usable_name_is_skipped_and_the_rest_kept(
 
 
 @pytest.mark.skipif(
-    DENIED_LISTING_IS_UNOBSERVABLE,
+    DENIED_ACCESS_IS_UNOBSERVABLE,
     reason="a directory mode denies a listing on neither Windows nor as root",
 )
 def test_an_unreadable_nested_directory_is_refused_not_skipped(
@@ -431,18 +418,14 @@ def test_an_unreadable_nested_directory_is_refused_not_skipped(
     """
     root = _nested_trybuild_tree(tmp_path)
     hidden = root / "ortho_config" / "tests" / "nested" / "inner"
-    os.chmod(hidden, 0o000)
-    try:
-        with pytest.raises(ScanError) as raised:
-            trybuild_binaries(root)
-    finally:
-        os.chmod(hidden, 0o755)
+    with denied(hidden), pytest.raises(ScanError) as raised:
+        trybuild_binaries(root)
     assert str(hidden) in str(raised.value), raised.value
     assert isinstance(raised.value.__cause__, OSError), raised.value.__cause__
 
 
 @pytest.mark.skipif(
-    DENIED_LISTING_IS_UNOBSERVABLE,
+    DENIED_ACCESS_IS_UNOBSERVABLE,
     reason="a directory mode denies a listing on neither Windows nor as root",
 )
 def test_an_unreadable_crate_root_is_refused_not_read_as_empty(
@@ -456,17 +439,13 @@ def test_an_unreadable_crate_root_is_refused_not_read_as_empty(
     """
     root = _nested_trybuild_tree(tmp_path)
     hidden = root / "ortho_config" / "tests"
-    os.chmod(hidden, 0o000)
-    try:
-        with pytest.raises(ScanError) as raised:
-            trybuild_binaries(root)
-    finally:
-        os.chmod(hidden, 0o755)
+    with denied(hidden), pytest.raises(ScanError) as raised:
+        trybuild_binaries(root)
     assert str(hidden) in str(raised.value), raised.value
 
 
 @pytest.mark.skipif(
-    DENIED_LISTING_IS_UNOBSERVABLE,
+    DENIED_ACCESS_IS_UNOBSERVABLE,
     reason="a directory mode denies a search on neither Windows nor as root",
 )
 def test_a_declared_target_behind_an_unsearchable_directory_is_refused(
@@ -503,11 +482,7 @@ def test_a_declared_target_behind_an_unsearchable_directory_is_refused(
     # Deny the search that resolves ``spec/outside.rs``, not the listing
     # of the crate. The manifest stays readable, so the inventory is
     # reached and the target is found; only its source cannot be checked.
-    os.chmod(source.parent, 0o000)
-    try:
-        with pytest.raises(ScanError) as raised:
-            trybuild_binaries(tmp_path)
-    finally:
-        os.chmod(source.parent, 0o755)
+    with denied(source.parent), pytest.raises(ScanError) as raised:
+        trybuild_binaries(tmp_path)
     assert str(source) in str(raised.value), raised.value
     assert isinstance(raised.value.__cause__, OSError), raised.value.__cause__

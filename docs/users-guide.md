@@ -1097,6 +1097,18 @@ fn main() {
 `ProcessEnv` remains the default, so production applications do not need to
 change. `EnvSource` deliberately supports lookup by name but not enumeration;
 discovery cannot accidentally scan or log unrelated environment values.
+`EnvSource` is **discovery-only**: it answers the configuration-path selector
+and the platform base-directory lookups, and does not replace the `APP_*`
+configuration-value merge layer, which is supplied separately as a
+`SharedScanEnvSource`.
+
+Discovery emits decision and outcome telemetry as it runs, but the events carry
+no environment values, raw paths, file contents, or configuration values. Each
+field is a bounded label such as `operation`, `outcome`, `source`, or
+`required`, so an operator can see which location won or was skipped without
+the log becoming a record of where the application looked or what it read. See
+[Add production diagnostics](#add-production-diagnostics) for how to install a
+subscriber.
 
 ## Run test subprocesses under a deadline
 
@@ -1266,6 +1278,10 @@ follows the same declarative rules as the process-backed provider:
 Providers that use `map()` or `filter_map()` cannot be injected, because
 arbitrary closures cannot be replayed against a `ScanEnvSource`; the
 source-aware path rejects them rather than silently changing the key mapping.
+Injection into `CsvEnv` uses `ScanEnvSource`, the merge-layer path completed
+under [#412](https://github.com/leynos/ortho-config/issues/412); supplying the
+merge layer through `EnvSource` remains out of scope, because that path
+requires enumeration, which `EnvSource` deliberately does not offer.
 
 ### Inject sources into a subcommand
 
@@ -1508,6 +1524,11 @@ The feature emits bounded counters for discovery, merging, and subcommand path
 resolution, such as `ortho_config.discovery.attempts` and
 `ortho_config.merge.outcomes`. OrthoConfig never installs a recorder, and
 enabling the feature does nothing visible until the application installs one.
+The facade is intended for library consumers as well as applications: a binary
+that already owns a recorder picks the counters up by enabling the feature,
+with no further wiring. The labels are closed vocabularies, never paths,
+variable values, application names, or error strings, so the emitted
+time-series stay bounded however the application is configured.
 
 ## Use an aliased dependency
 

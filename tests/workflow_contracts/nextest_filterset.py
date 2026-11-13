@@ -7,13 +7,13 @@ of nextest's own filter language, and it is kept apart from
 each stays legible and neither outgrows the 400-line limit ``AGENTS.md``
 sets.
 
-Only the shape the trybuild override uses is read: a ``|``-joined list of
-``binary(...)`` predicates. A conjunction, a difference, or a negation
-narrows the selection in a way that rating the ``binary`` terms alone
-would report as wider than it is, so such an expression is refused rather
-than misread. Refusing is the safe direction throughout: an expression
-read as matching nothing would report the whole class as uncovered, and
-one read as matching everything would report a broken filter as sound.
+Only disjunctions of ``binary(...)`` and exact ``binary_id(package::target)``
+predicates are read. A conjunction, a difference, or a negation narrows the
+selection in a way that rating its terms alone would report as wider than it
+is, so such an expression is refused rather than misread. Refusing is the safe
+direction throughout: an expression read as matching nothing would report the
+whole class as uncovered, and one read as matching everything would report a
+broken filter as sound.
 """
 
 from __future__ import annotations
@@ -24,13 +24,11 @@ import typing as typ
 
 
 class UnreadableMatcherError(Exception):
-    """Raised when a ``binary(...)`` argument is not a matcher this reads.
+    """Raised when a filter term is outside the matchers this reads.
 
-    Every matcher in the nextest reference is read here, but a form added
-    later would not be. Refusing is the safe direction: a matcher read as
-    matching nothing would report the whole trybuild class as uncovered,
-    and one read as matching everything would report a broken filter as
-    sound. Neither is a guess worth making silently.
+    This reader deliberately supports fewer forms than nextest's full
+    filter language. Refusing an unfamiliar form is safer than reading it as
+    matching nothing or everything and silently certifying a broken filter.
     """
 
 
@@ -72,6 +70,8 @@ def _matches_one(matcher: str, name: str) -> bool:
     >>> _matches_one("/^compile_/", "compile_fail")
     True
     """
+    if not matcher:
+        raise UnreadableMatcherError("an empty binary matcher is not supported")
     match matcher[:1], matcher:
         case ("=", _):
             return matcher[1:] == name
@@ -81,7 +81,12 @@ def _matches_one(matcher: str, name: str) -> bool:
             pattern = matcher[1:-1] if matcher.endswith("/") else None
             if pattern is None:
                 raise UnreadableMatcherError(f"unterminated regex matcher {matcher!r}")
-            return re.search(pattern, name) is not None
+            try:
+                return re.search(pattern, name) is not None
+            except re.error as error:
+                raise UnreadableMatcherError(
+                    f"invalid regex matcher {matcher!r}: {error}"
+                ) from error
         case ("#", _):
             pattern = matcher[1:]
         case _:
@@ -96,26 +101,59 @@ def _matches_one(matcher: str, name: str) -> bool:
     return fnmatch.fnmatchcase(name, pattern)
 
 
-BINARY_TERM = re.compile(r"binary\(([^)]*)\)")
+def _matches_binary_id(matcher: str, name: str) -> bool:
+    """Compare an exact ``package::target`` ID with its target name.
 
-#: What may sit between ``binary(...)`` terms for the disjunction to be
-#: read as one. Anything else — `&`, `-`, `not(...)`, or a `test(...)`
-#: term — changes the selection by narrowing it, so it is refused rather
-#: than dropped on the floor.
-BINARY_DISJUNCTION = re.compile(r"^[\s|]*$")
+    The caller supplies workspace-wide target names rather than package IDs,
+    so the package component is validated but cannot narrow the candidate set.
+    This deliberate over-approximation can flag an unrelated target with the
+    same name; it cannot hide a target that the ID selects.
+
+    Examples
+    --------
+    >>> _matches_binary_id("ortho_config::compile_fail", "compile_fail")
+    True
+    >>> _matches_binary_id("ortho_config::compile_fail", "cli_dispatch")
+    False
+    """
+    parts = matcher.split("::")
+    if len(parts) != 2 or not all(
+        re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", part) for part in parts
+    ):
+        raise UnreadableMatcherError(
+            f"binary_id matcher {matcher!r} is not an exact package::target ID"
+        )
+    _, target = parts
+    return target == name
 
 
-def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) -> dict[str, bool]:
-    """Return which candidates a disjunction of ``binary`` terms selects.
+def _matches_term(kind: str, matcher: str, name: str) -> bool:
+    """Apply one supported filter term to a candidate target name.
 
-    Only a ``|``-joined list of ``binary(...)`` predicates is read. That
-    is the shape the trybuild override uses, and it is the only shape in
-    which the `binary` terms decide the answer on their own: a
-    conjunction, a difference, or a negation narrows the selection in a
-    way this reader does not evaluate — `binary(compile_fail) &
-    test(other)` selects nothing when `other` matches no test, while
-    rating the `binary` term alone would report `compile_fail` as
-    covered. Such an expression is refused rather than misread.
+    Examples
+    --------
+    >>> _matches_term("binary_id", "ortho_config::compile_fail", "compile_fail")
+    True
+    >>> _matches_term("binary", "cli*", "cli_dispatch")
+    True
+    """
+    if kind == "binary":
+        return _matches_one(matcher, name)
+    return _matches_binary_id(matcher, name)
+
+
+FILTER_TERM = re.compile(r"(?P<kind>binary_id|binary)\((?P<matcher>[^)]*)\)")
+
+
+def binaries_selected_by(
+    filter_expression: str, candidates: typ.Iterable[str]
+) -> dict[str, bool]:
+    """Return which candidates a disjunction of supported terms selects.
+
+    Only a ``|``-joined list of ``binary`` or exact ``binary_id`` predicates
+    is read. A conjunction, difference, negation, or other term narrows the
+    selection in a way this reader does not evaluate, so the whole expression
+    is refused rather than treating one term as the result.
 
     Parameters
     ----------
@@ -132,36 +170,89 @@ def binaries_selected_by(filter_expression: str, candidates: typ.Iterable[str]) 
     Raises
     ------
     UnreadableMatcherError
-        If the expression is not a ``binary`` disjunction, names no
-        ``binary(...)`` predicate, or passes a ``binary(...)`` argument
-        using a matcher this contract cannot evaluate.
+        If the expression is not a disjunction of supported terms, names no
+        supported predicate, or uses a matcher this reader cannot evaluate.
 
     Examples
     --------
     >>> binaries_selected_by('binary(*trybuild)', ["a_trybuild", "other"])
     {'a_trybuild': True, 'other': False}
+    >>> binaries_selected_by('binary_id(pkg::compile_fail)', ["compile_fail", "other"])
+    {'compile_fail': True, 'other': False}
     """
-    terms = BINARY_TERM.findall(filter_expression)
-    if not terms:
-        message = (
-            f"the trybuild override's filter names no binary(...) predicate: "
-            f"{filter_expression!r}"
-        )
-        raise UnreadableMatcherError(message)
-    # Removing the terms leaves the glue between them. Checking it here,
-    # rather than scanning the whole expression, is what keeps an
-    # operator inside a matcher — a regex or glob such as `binary(/a-b/)`
-    # — from being refused as a stray operator.
-    remainder = BINARY_TERM.sub("", filter_expression)
-    if BINARY_DISJUNCTION.match(remainder) is None:
-        message = (
-            f"the trybuild override's filter combines its binary(...) terms "
-            f"with something other than `|`, which this contract does not "
-            f"evaluate; reading the terms alone would report a narrower "
-            f"expression as a wider one: {filter_expression!r}"
-        )
-        raise UnreadableMatcherError(message)
+    terms = _supported_terms(filter_expression)
     return {
-        name: any(_matches_one(term.strip(), name) for term in terms)
+        name: any(_matches_term(kind, matcher, name) for kind, matcher in terms)
         for name in candidates
     }
+
+
+def _supported_terms(filter_expression: str) -> list[tuple[str, str]]:
+    """Return the trimmed terms of a single disjunction, refusing anything else.
+
+    Each matcher is validated here rather than per candidate, so an
+    unevaluable matcher fails once instead of once per binary name.
+
+    Examples
+    --------
+    >>> _supported_terms("binary(a) | binary_id(pkg::b)")
+    [('binary', 'a'), ('binary_id', 'pkg::b')]
+    """
+    matches = list(FILTER_TERM.finditer(filter_expression))
+    _refuse_unsupported_terms(filter_expression, matches)
+    terms = [(match.group("kind"), match.group("matcher").strip()) for match in matches]
+    for kind, matcher in terms:
+        _matches_term(kind, matcher, "")
+    return terms
+
+
+def _refuse_unsupported_terms(
+    filter_expression: str, matches: list[re.Match[str]]
+) -> None:
+    """Raise unless the expression is only supported terms joined by ``|``.
+
+    Examples
+    --------
+    >>> _refuse_unsupported_terms("binary(a)", [])
+    Traceback (most recent call last):
+    ...
+    nextest_filterset.UnreadableMatcherError: the filter has no supported term: 'binary(a)'
+    """
+    if not matches:
+        raise UnreadableMatcherError(
+            f"the filter has no supported term: {filter_expression!r}"
+        )
+    if _is_single_disjunction(filter_expression, matches):
+        return
+    raise UnreadableMatcherError(
+        f"the filter combines its supported terms with something other "
+        f"than a single `|`, which this reader does not evaluate; "
+        f"reading the terms alone could report a narrower expression as "
+        f"wider than it is: "
+        f"{filter_expression!r}"
+    )
+
+
+def _is_single_disjunction(
+    filter_expression: str, matches: list[re.Match[str]]
+) -> bool:
+    """Report whether the matched terms are separated by a single ``|`` each.
+
+    ``matches`` must be non-empty; the caller refuses an expression with no
+    supported term before asking this.
+
+    Examples
+    --------
+    >>> _is_single_disjunction("binary(a) | binary(b)", list(FILTER_TERM.finditer("binary(a) | binary(b)")))
+    True
+    >>> _is_single_disjunction("binary(a) & binary(b)", list(FILTER_TERM.finditer("binary(a) & binary(b)")))
+    False
+    """
+    separators = [
+        filter_expression[left.end() : right.start()].strip()
+        for left, right in zip(matches, matches[1:])
+    ]
+    leading = filter_expression[: matches[0].start()].strip()
+    trailing = filter_expression[matches[-1].end() :].strip()
+    has_outside = bool(leading) or bool(trailing)
+    return not has_outside and all(separator == "|" for separator in separators)
