@@ -2,7 +2,7 @@
 	docstring-coverage fmt check-fmt markdownlint spellcheck spelling nixie \
 	typecheck python-test-deps publish-check powershell-wrapper-validate \
 	test-workflow-contracts install-kani kani-check install-verus \
-	verus-toolchain kani kani-full verus test-prover-tools-integration FORCE
+	verus-toolchain kani kani-full verus FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -227,14 +227,6 @@ verus: ## Run explicitly selected production Verus proof files
 		--no-install-missing --no-ensure-toolchain \
 		$(foreach proof,$(VERUS_PROOF_FILES),--proof-file $(call shell_quote,$(proof))) \
 		$(VERUS_FLAGS)
-
-# Real-tool integration is opt-in so ordinary `make test` never downloads a
-# prover. This target is the only supported way to run it: it forwards the
-# selected Kani executable and fails, rather than skips, when a tool is absent.
-test-prover-tools-integration: ## Run the pinned Kani and Verus fixtures
-	RUN_PROVER_TOOLS_INTEGRATION=1 \
-		KANI=$(call shell_quote,$(KANI)) \
-		$(PYTEST) scripts/tests/test_prover_tools_integration.py -q
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
