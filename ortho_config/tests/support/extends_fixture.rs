@@ -1,4 +1,14 @@
 //! Capability-scoped fixtures for the configuration inheritance tests.
+//!
+//! [`ConfigFixture`] owns a temporary configuration tree and writes to it
+//! through a [`cap_std`] directory capability rather than process-wide paths.
+//! Tests select their configuration file with a required `--config-path` so
+//! unrelated host configuration cannot change the outcome.
+//!
+//! Loading keeps discovery and merge independent: the fixture injects a
+//! discovery source that supplies `CONFIG_PATH`, while each test passes the
+//! merge environment it wants to exercise. That separation lets a test prove
+//! where a value came from instead of relying on the ambient environment.
 
 use anyhow::{Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
