@@ -87,17 +87,13 @@ explicit Verus input. `KANI`, `KANI_FLAGS`, `KANI_INSTALL_FLAGS`,
 `VERUS_FLAGS`, and `VERUS_INSTALL_FLAGS` are available for local overrides.
 
 An empty production inventory fails with a `FORMAL-EMPTY` diagnostic instead of
-reporting a successful proof run. Integration fixtures establish that the
-tooling accepts true claims and rejects false ones; they are not proofs of
-OrthoConfig behaviour. The ordinary `make all`, `make test`, and `make lint`
-targets do not install or run either prover.
+reporting a successful proof run. The ordinary `make all`, `make test`, and
+`make lint` targets do not install or run either prover.
 
-`make test-prover-tools-integration` runs the real pinned verifiers against
-`tests/fixtures/prover_tools/` and writes
-`target/prover-tools-fixtures/prover-evidence.json`. It sets
-`RUN_PROVER_TOOLS_INTEGRATION=1`, so the test module skips under ordinary
-`make test` and fails rather than skips here when a tool is missing. The target
-itself installs nothing; run `make install-kani` and `make install-verus` first.
+The tool's own behaviour (accepting true claims, rejecting false ones, exit
+status preservation) is tested in rust-prover-tools, and the shared
+`install-prover-tools` action in shared-actions installs and checks the pinned
+releases, so this repository keeps no real-tool integration fixtures or CI lane.
 `make install-verus` may download the Rust toolchain the Verus release
 requires, so that step needs network access and changes the local rustup
 installation.
@@ -122,9 +118,7 @@ Makefile. Each entry must name, in the pull request that adds it:
 - every assumption, precondition, or modelled abstraction;
 - the expected check count and the negative control that must be rejected.
 
-No production entries exist yet. The fixtures under
-`tests/fixtures/prover_tools/` illustrate the required shape without
-registering production claims.
+No production entries exist yet.
 
 ## Clap default inference
 
