@@ -85,16 +85,33 @@ def check_product_is_complete(impl: LegsImpl, axes: dict[str, list[str]]) -> Non
     ), f"matrix legs differ from the Cartesian product: {cells!r} != {expected!r}"
 
 
-def check_include_follows_survivors(
+def augmented(axes: dict[str, list[str]], extra: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return GitHub's documented ``include`` result, written the slow way.
+
+    An entry is added to every product cell whose axis values it repeats, and
+    becomes a cell of its own when no cell repeats them. Cells created this way
+    never receive later entries, which is why the appended ones are collected
+    apart from the product.
+    """
+    cells = product_of(axes)
+    appended: list[dict[str, str]] = []
+    for entry in extra:
+        matching = [cell for cell in cells if all(cell.get(k) == v for k, v in entry.items() if k in axes)]
+        if not matching:
+            appended.append(dict(entry))
+            continue
+        for cell in matching:
+            cell.update(entry)
+    return cells + appended
+
+
+def check_include_augments_the_matching_cells(
     impl: LegsImpl, axes: dict[str, list[str]], extra: list[dict[str, str]]
 ) -> None:
-    """Includes are appended after the product, in order, unchanged."""
+    """An include adds its keys to the cells it fits, and is a cell itself when it fits none."""
     cells = cells_of(impl, job_with({**axes, "include": list(extra)}))
-    assert cells[len(cells) - len(extra) :] == extra, (
-        "matrix includes should follow the product unchanged"
-    )
-    assert len(cells) == len(product_of(axes)) + len(extra), (
-        "matrix includes should append one leg each"
+    assert cells == augmented(axes, extra), (
+        f"matrix includes should augment matching cells: {cells!r} != {augmented(axes, extra)!r}"
     )
 
 
@@ -194,7 +211,9 @@ def check_conditions_agree_with_an_oracle(
     for key, value, equal in tests:
         clauses.append(f"matrix.{key} {'==' if equal else '!='} '{value}'")
         actual = cell.get(key)
-        expected = expected and (actual is None or (actual == value) == equal)
+        # An unknown key holds under either operator, the conservative reading.
+        holds = actual is None or (actual.casefold() == value.casefold()) == equal
+        expected = expected and holds
     step = {"if": "${{ " + " && ".join(clauses) + " }}"}
     assert workflow_legs.step_runs_on(step, cell) is expected, (
         f"matrix condition result differs from its oracle for {cell!r} and {tests!r}"
@@ -212,6 +231,9 @@ def check_unevaluable_conditions_run(cell: dict[str, str], key: str, value: str)
     assert workflow_legs.step_runs_on({"if": "${{ always() }}"}, cell), (
         "an unevaluable function should conservatively leave the step enabled"
     )
+    assert workflow_legs.step_runs_on(
+        {"if": f"${{{{ always() && matrix.{key} == 'not-{value}' }}}}"}, cell
+    ), "a conjunction with an unevaluable clause should leave the step enabled whole"
 
 
 # -- the real interpreter under Hypothesis -------------------------------------------
@@ -226,9 +248,11 @@ def test_the_product_is_complete(axes: dict[str, list[str]]) -> None:
 
 @SETTINGS
 @given(axes_strategy(), st.lists(st.dictionaries(_KEY, _VALUE, min_size=1, max_size=3), max_size=3))
-def test_includes_follow_the_product(axes: dict[str, list[str]], extra: list[dict[str, str]]) -> None:
-    """Includes are appended unchanged after the product."""
-    check_include_follows_survivors(workflow_legs.legs, axes, extra)
+def test_includes_augment_matching_cells(
+    axes: dict[str, list[str]], extra: list[dict[str, str]]
+) -> None:
+    """An include adds to the cells it fits and appends only when it fits none."""
+    check_include_augments_the_matching_cells(workflow_legs.legs, axes, extra)
 
 
 @SETTINGS
@@ -288,6 +312,17 @@ def test_unevaluable_conditions_never_excuse_a_step(
     check_unevaluable_conditions_run(cell, key, value)
 
 
+@pytest.mark.parametrize(("actual", "value"), [("Linux", "linux"), ("linux", "Linux")])
+def test_condition_comparisons_ignore_case(actual: str, value: str) -> None:
+    """GitHub compares strings without regard to case, for ``!=`` as well as ``==``."""
+    assert workflow_legs.step_runs_on(
+        {"if": f"${{{{ matrix.platform == '{value}' }}}}"}, {"platform": actual}
+    ), "a difference in case should not defeat an equality test"
+    assert not workflow_legs.step_runs_on(
+        {"if": f"${{{{ matrix.platform != '{value}' }}}}"}, {"platform": actual}
+    ), "a difference in case should not satisfy an inequality test"
+
+
 def test_make_goals_join_a_backslash_continued_command() -> None:
     """A physical line break escaped by a backslash does not end the goals."""
     assert workflow_shell.make_goals("make lint \\\n  test") == [["lint", "test"]], (
@@ -343,6 +378,31 @@ def _rejects(check: Callable[..., None], *strategies: st.SearchStrategy[typ.Any]
 def test_the_product_property_rejects_a_dropped_axis() -> None:
     """Control: an interpreter that loses an axis fails completeness."""
     _rejects(lambda axes: check_product_is_complete(_drops_the_last_axis, axes), axes_strategy())
+
+
+def test_the_include_property_rejects_a_verbatim_append(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Control: appending includes unchanged, the pre-augmentation reading, fails."""
+
+    def verbatim(matrix: dict[str, object]) -> list[dict[str, str]]:
+        """Stand in for the reading that never augments."""
+        exclusions = workflow_legs._entries(matrix.get("exclude"))
+        product = [
+            cell
+            for cell in workflow_legs._product_cells(matrix)
+            if not workflow_legs._is_excluded(cell, exclusions)
+        ]
+        return product + workflow_legs._entries(matrix.get("include"))
+
+    monkeypatch.setattr(workflow_legs, "_matrix_cells", verbatim)
+    _rejects(
+        lambda axes, extra: check_include_augments_the_matching_cells(
+            workflow_legs.legs, axes, extra
+        ),
+        axes_strategy(),
+        st.lists(st.dictionaries(_KEY, _VALUE, min_size=1, max_size=3), max_size=3),
+    )
 
 
 def test_the_exclusion_property_rejects_an_ignored_exclude() -> None:

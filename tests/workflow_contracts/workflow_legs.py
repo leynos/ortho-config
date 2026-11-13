@@ -16,7 +16,9 @@ Three readings do the work:
   unknown runner as "not Linux" would pass a job it never understood.
 - ``reaches_the_suite`` says whether a step runs tests, either directly or by
   asking Make, whose dry run is the only honest answer to "does this goal reach
-  the preflight".
+  the preflight". The Make variables that change the answer come from the job
+  and step ``env`` and from the invocation's own ``NAME=value`` words, in that
+  order of precedence.
 
 Every reading over-approximates reachability. A step whose condition it cannot
 evaluate is treated as running, because the safe error is demanding an
@@ -33,7 +35,7 @@ import re
 import typing as typ
 
 from build_standard_make import MakeDryRunError, PREFLIGHT_SCRIPT, dry_run
-from workflow_shell import make_goals
+from workflow_shell import make_invocations
 
 #: Make variables a workflow may set per step or per job to change a route.
 MAKE_SWITCHES: typ.Final[tuple[str, ...]] = ("BUILD_STANDARD",)
@@ -47,8 +49,9 @@ _MATRIX_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(r"matrix\.([A-Za-z0-9
 _QUOTED_LITERAL: typ.Final[re.Pattern[str]] = re.compile(r"'([^']+)'")
 #: References that can choose a runner but cannot be known from the workflow text.
 _UNRESOLVABLE: typ.Final[re.Pattern[str]] = re.compile(r"\b(?:inputs|vars|env|needs|steps|secrets)\.")
-_MATRIX_COMPARISON: typ.Final[re.Pattern[str]] = re.compile(
-    r"matrix\.([A-Za-z0-9_-]+)\s*(==|!=)\s*'([^']*)'"
+#: One whole clause of a condition: nothing may surround it but whitespace.
+_MATRIX_TERM: typ.Final[re.Pattern[str]] = re.compile(
+    r"\s*matrix\.([A-Za-z0-9_-]+)\s*(==|!=)\s*'([^']*)'\s*"
 )
 type MakeRunner = typ.Callable[[str, list[str]], list[str]]
 
@@ -89,7 +92,9 @@ def legs(workflow: str, job_id: str, job: dict[str, object]) -> list[Leg]:
     """Expand *job*'s matrix into its legs.
 
     The cells are the Cartesian product of the list-valued axes, minus any cell
-    an ``exclude`` entry matches, plus one cell per ``include`` entry.
+    an ``exclude`` entry matches. Each ``include`` entry is then added to every
+    surviving cell whose axis values it does not change; an entry that matches
+    no surviving cell becomes a cell of its own.
 
     Parameters
     ----------
@@ -112,19 +117,51 @@ def legs(workflow: str, job_id: str, job: dict[str, object]) -> list[Leg]:
 
 
 def _matrix_cells(matrix: dict[str, object]) -> list[dict[str, str]]:
-    """Return a matrix's cells: the surviving product cells, then the includes."""
+    """Return a matrix's cells, applying GitHub's ``include`` augmentation.
+
+    An ``include`` entry augments: its key/value pairs are added to every
+    surviving product cell whose axis values the entry keeps, and the entry
+    becomes a cell of its own only when no survivor matches. Two consequences
+    the reader must keep straight:
+
+    - A key that is not an axis adds a value; a key that is an axis may only
+      repeat the value the cell already has, because the product is never
+      overwritten. That is why an entry naming a value outside the axis
+      produces a new cell rather than changing an existing one.
+    - A cell this function creates is not eligible for later augmentation, so
+      two entries naming the same new axis value stay two cells.
+    """
+    axes = _axes(matrix)
     exclusions = _entries(matrix.get("exclude"))
     product = [cell for cell in _product_cells(matrix) if not _is_excluded(cell, exclusions)]
-    return product + _entries(matrix.get("include"))
+    added: list[dict[str, str]] = []
+    for entry in _entries(matrix.get("include")):
+        matching = [cell for cell in product if _augments(cell, entry, axes)]
+        if not matching:
+            added.append(dict(entry))
+            continue
+        for cell in matching:
+            cell.update(entry)
+    return product + added
 
 
-def _product_cells(matrix: dict[str, object]) -> list[dict[str, str]]:
-    """Return the Cartesian product of a matrix's list-valued axes (none: no cells)."""
-    axes = {
+def _augments(cell: dict[str, str], entry: dict[str, str], axes: dict[str, object]) -> bool:
+    """Report whether *entry* can be added to *cell* without changing an axis value."""
+    return all(cell.get(key) == value for key, value in entry.items() if key in axes)
+
+
+def _axes(matrix: dict[str, object]) -> dict[str, object]:
+    """Return a matrix's axes: the list-valued keys other than include and exclude."""
+    return {
         key: value
         for key, value in matrix.items()
         if key not in {"include", "exclude"} and isinstance(value, list)
     }
+
+
+def _product_cells(matrix: dict[str, object]) -> list[dict[str, str]]:
+    """Return the Cartesian product of a matrix's list-valued axes (none: no cells)."""
+    axes = _axes(matrix)
     if not axes:
         return []
     return [
@@ -240,9 +277,13 @@ def runs_on_linux(leg: Leg) -> bool:
 def step_runs_on(step: dict[str, object], cell: dict[str, str]) -> bool:
     """Report whether a step's ``if`` lets it run on the leg with matrix *cell*.
 
-    Only comparisons against ``matrix.<key>`` are evaluated, joined by ``&&``.
-    Anything else (``always()``, ``runner.environment``, an ``||``) is treated as
-    true, the safe reading for a contract that demands installers.
+    Only a conjunction of ``matrix.<key> ==|!= '<value>'`` tests is evaluated.
+    Any other condition (``always()``, ``runner.environment``, an ``||``, a
+    comparison against something besides a matrix key) is treated as true: the
+    safe reading for a contract that demands installers. Reading a condition
+    partially would be worse than not reading it, because the comparison
+    extracted from ``always() && matrix.platform == 'linux'`` would excuse a
+    step whose guard also depends on an event this reader cannot see.
 
     Examples
     --------
@@ -250,23 +291,49 @@ def step_runs_on(step: dict[str, object], cell: dict[str, str]) -> bool:
     False
     >>> step_runs_on({"if": "${{ always() && matrix.platform != 'linux' }}"}, {"platform": "windows"})
     True
+    >>> step_runs_on({"if": "${{ always() && matrix.platform == 'linux' }}"}, {"platform": "windows"})
+    True
     >>> step_runs_on({}, {"platform": "linux"})
     True
     """
-    condition = str(step.get("if", ""))
-    if not condition or "||" in condition:
+    terms = _condition_terms(str(step.get("if", "")))
+    if terms is None:
         return True
-    return all(
-        _comparison_holds(cell.get(key), operator, value)
-        for key, operator, value in _MATRIX_COMPARISON.findall(condition)
-    )
+    return all(_comparison_holds(cell.get(key), operator, value) for key, operator, value in terms)
+
+
+def _condition_terms(condition: str) -> list[tuple[str, str, str]] | None:
+    """Return a condition's matrix tests, or ``None`` when it is not all of them.
+
+    ``None`` means "cannot be evaluated", which :func:`step_runs_on` reads as
+    running. An absent or blank condition is not a comparison that holds; it is
+    a step with no guard, and it always runs.
+    """
+    text = condition.strip()
+    if text.startswith("${{") and text.endswith("}}"):
+        text = text[3:-2]
+    if not text.strip():
+        return None
+    terms: list[tuple[str, str, str]] = []
+    for clause in text.split("&&"):
+        match = _MATRIX_TERM.fullmatch(clause)
+        if match is None:
+            return None
+        key, operator, value = match.groups()
+        terms.append((key, operator, value))
+    return terms
 
 
 def _comparison_holds(actual: str | None, operator: str, value: str) -> bool:
-    """Evaluate one ``matrix.<key> ==|!= 'value'`` test; an unknown key holds."""
+    """Evaluate one ``matrix.<key> ==|!= 'value'`` test; an unknown key holds.
+
+    GitHub compares strings without regard to case, so ``'Linux'`` and
+    ``'linux'`` are the same value here too.
+    """
     if actual is None:
         return True
-    return (operator == "==") == (actual == value)
+    matches = actual.casefold() == value.casefold()
+    return (operator == "==") == matches
 
 
 def _make_dry_run(target: str, switches: list[str]) -> list[str]:
@@ -313,12 +380,23 @@ def reaches_the_suite(
     if _DIRECT_SUITE.search(run):
         return True
     env = {**_env(leg.job), **_env(step)}
-    switches = [f"{name}={env[name]}" for name in MAKE_SWITCHES if name in env]
     return any(
-        PREFLIGHT_SCRIPT in make_runner(goal, switches)
-        for goals in make_goals(run)
-        for goal in goals
+        PREFLIGHT_SCRIPT in make_runner(goal, _switches(env, invocation.assignments))
+        for invocation in make_invocations(run)
+        for goal in invocation.goals
     )
+
+
+def _switches(env: dict[str, str], assignments: dict[str, str]) -> list[str]:
+    """Return the Make variables that change a route, in Make's precedence order.
+
+    A command-line assignment outranks the environment and the Makefile, so it
+    is applied last: ``make test BUILD_STANDARD=0`` turns the standard off for
+    that invocation even where the job exports it as 1.
+    """
+    values = {name: env[name] for name in MAKE_SWITCHES if name in env}
+    values |= {name: value for name, value in assignments.items() if name in MAKE_SWITCHES}
+    return [f"{name}={values[name]}" for name in MAKE_SWITCHES if name in values]
 
 
 def _env(mapping: dict[str, object]) -> dict[str, str]:

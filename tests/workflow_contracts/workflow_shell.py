@@ -70,7 +70,16 @@ class _ShellLineScanner:
         return int(self.source[following] == "\n")
 
     def _consume_comment(self) -> bool:
-        """Finish a word-start comment, retaining it for ``shlex`` to discard."""
+        """Drop a word-start comment and end the line there.
+
+        The comment is removed here rather than left for ``shlex`` to discard:
+        Python 3.14's ``shlex`` treats ``#`` as a comment character even inside
+        an unquoted word, so a URL fragment such as
+        ``https://example.invalid/#fragment`` would swallow the Make invocation
+        that followed it when comments were enabled downstream. Only a ``#``
+        that starts a word, outside quotes, is a comment to the shell; every
+        other occurrence is data this scanner keeps.
+        """
         if self.quote is not None:
             return False
         if self.source[self.index] != "#":
@@ -78,8 +87,6 @@ class _ShellLineScanner:
         if not self.at_word_start:
             return False
         end = self.source.find("\n", self.index)
-        comment = self.source[self.index :] if end == -1 else self.source[self.index : end]
-        self.current.extend(comment)
         if end == -1:
             self.index = len(self.source)
         else:
@@ -131,9 +138,14 @@ def _tokens(line: str) -> list[str]:
     GitHub resolves expressions such as ``MSRV=${{ matrix.toolchain }}``
     before invoking the shell. Replacing each expression keeps its embedded
     spaces from looking like extra goals to this conservative reader.
+
+    Comment processing is off because :func:`_ShellLineScanner` has already
+    removed the shell's real comments. Leaving it on would let ``shlex`` treat
+    a ``#`` inside a word, such as a URL fragment, as the start of a comment
+    and discard the rest of the line.
     """
     try:
-        return shlex.split(_EXPRESSION.sub("EXPR", line), comments=True)
+        return shlex.split(_EXPRESSION.sub("EXPR", line), comments=False)
     except ValueError:
         return []
 
@@ -144,9 +156,27 @@ def _redirected_target(word: str) -> bool | None:
     return None if redirection is None else not redirection.group("target")
 
 
-def _goals_after(tokens: list[str], index: int) -> list[str]:
-    """Return Make goals until the next command boundary, omitting options."""
+@dataclasses.dataclass(frozen=True)
+class MakeInvocation:
+    """One Make invocation: the goals it asks for and the variables it sets.
+
+    Attributes
+    ----------
+    goals : list of str
+        The Make goals, in the order written, options and assignments omitted.
+    assignments : dict
+        The command-line ``NAME=value`` variables, which outrank both the
+        environment and the Makefile itself.
+    """
+
+    goals: list[str]
+    assignments: dict[str, str]
+
+
+def _invocation_after(tokens: list[str], index: int) -> MakeInvocation:
+    """Return the goals and assignments following a ``make`` word."""
     goals: list[str] = []
+    assignments: dict[str, str] = {}
     skip_target = False
     for word in tokens[index + 1 :]:
         if word == _SHELL_CONTROL_MARKER:
@@ -158,9 +188,38 @@ def _goals_after(tokens: list[str], index: int) -> list[str]:
         if target_follows is not None:
             skip_target = target_follows
             continue
-        if not word.startswith("-") and "=" not in word:
+        if word.startswith("-"):
+            continue
+        name, separator, value = word.partition("=")
+        if not separator:
             goals.append(word)
-    return goals
+        elif name:
+            assignments[name] = value
+    return MakeInvocation(goals, assignments)
+
+
+def make_invocations(run: str) -> list[MakeInvocation]:
+    """Return the Make invocations in a GitHub Actions script, in order.
+
+    Parameters
+    ----------
+    run : str
+        The GitHub Actions ``run`` script to inspect.
+
+    Returns
+    -------
+    list of MakeInvocation
+        One per ``make`` word, with the goals and command-line assignments that
+        follow it up to the next shell command boundary.
+    """
+    source = _EXPRESSION.sub("EXPR", run)
+    tokenised = (_tokens(line) for line in _logical_lines(source))
+    return [
+        _invocation_after(tokens, index)
+        for tokens in tokenised
+        for index, token in enumerate(tokens)
+        if token == "make"
+    ]
 
 
 def make_goals(run: str) -> list[list[str]]:
@@ -176,11 +235,4 @@ def make_goals(run: str) -> list[list[str]]:
     list[list[str]]
         The goals for each Make invocation, in script order.
     """
-    source = _EXPRESSION.sub("EXPR", run)
-    tokenised = (_tokens(line) for line in _logical_lines(source))
-    return [
-        _goals_after(tokens, index)
-        for tokens in tokenised
-        for index, token in enumerate(tokens)
-        if token == "make"
-    ]
+    return [invocation.goals for invocation in make_invocations(run)]
