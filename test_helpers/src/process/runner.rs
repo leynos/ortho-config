@@ -50,9 +50,10 @@ pub fn run_with_deadline(
 /// Run a subprocess under its command deadline and an enclosing sequence
 /// deadline.
 ///
-/// The earlier remaining deadline applies. Time spent before this function is
-/// called, including waiting for a caller-owned lock, is already charged to
-/// `sequence_deadline`.
+/// The earlier remaining deadline applies, and it is fixed before the child is
+/// spawned. Time spent before this function is called, including waiting for a
+/// caller-owned lock, is already charged to `sequence_deadline`, and so is the
+/// spawn and reader setup inside it.
 ///
 /// # Errors
 ///
@@ -73,6 +74,11 @@ pub fn run_with_deadline_until(
     )
 }
 
+/// The scope label for a budget the command itself owns.
+const COMMAND_SCOPE: &str = "command";
+/// The scope label for the remainder of an enclosing sequence's budget.
+const SEQUENCE_SCOPE: &str = "shared sequence (remaining budget)";
+
 /// Select the effective command budget and run one serialized child process.
 fn run_with_optional_sequence_deadline(
     command: Command,
@@ -80,30 +86,55 @@ fn run_with_optional_sequence_deadline(
     sequence_deadline: Option<Instant>,
     description: &str,
 ) -> Result<Output> {
-    let (deadline, timeout_scope) =
-        sequence_deadline.map_or((command_deadline, "command"), |sequence| {
-            let remaining = sequence.saturating_duration_since(Instant::now());
-            if remaining < command_deadline {
-                (remaining, "shared sequence (remaining budget)")
-            } else {
-                (command_deadline, "command")
-            }
-        });
+    let deadline = effective_deadline(
+        command_deadline,
+        sequence_deadline,
+        Instant::now(),
+        description,
+    )
+    .ok_or_else(|| anyhow!("{description} deadline is out of range"))?;
     ensure!(
-        !deadline.is_zero(),
+        !deadline.duration.is_zero(),
         "{description} could not start before its enclosing sequence deadline"
     );
 
-    run_command(command, deadline, timeout_scope, description)
+    run_command(command, deadline)
+}
+
+/// Resolve the deadline a command runs under, measured from *now*.
+///
+/// The earlier of the command's own budget and the enclosing sequence's
+/// remainder wins. The instant is derived from the caller's `now` rather than
+/// from the moment the child has spawned: spawning and starting the readers
+/// take real time, and charging that to nobody would let a sequence deadline
+/// with a fraction of a second left hand the child its whole command budget
+/// afterwards. `None` means the sum overflowed the clock.
+fn effective_deadline<'a>(
+    command_deadline: Duration,
+    sequence_deadline: Option<Instant>,
+    now: Instant,
+    description: &'a str,
+) -> Option<CommandDeadline<'a>> {
+    let command_at = now.checked_add(command_deadline)?;
+    match sequence_deadline {
+        Some(sequence) if sequence < command_at => Some(CommandDeadline {
+            at: sequence,
+            duration: sequence.saturating_duration_since(now),
+            scope: SEQUENCE_SCOPE,
+            description,
+        }),
+        _ => Some(CommandDeadline {
+            at: command_at,
+            duration: command_deadline,
+            scope: COMMAND_SCOPE,
+            description,
+        }),
+    }
 }
 
 /// Spawn one owned process tree, capture its streams, and enforce its deadline.
-fn run_command(
-    mut command: Command,
-    deadline: Duration,
-    timeout_scope: &str,
-    description: &str,
-) -> Result<Output> {
+fn run_command(mut command: Command, deadline: CommandDeadline<'_>) -> Result<Output> {
+    let description = deadline.description;
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -115,23 +146,7 @@ fn run_command(
         return Err(finish_failure(primary, child.as_mut(), &mut readers));
     }
 
-    let Some(operation_deadline) = Instant::now().checked_add(deadline) else {
-        return Err(finish_failure(
-            anyhow!("{description} deadline is out of range"),
-            child.as_mut(),
-            &mut readers,
-        ));
-    };
-    let status = match wait_for_process(
-        child.as_mut(),
-        &mut readers,
-        CommandDeadline {
-            at: operation_deadline,
-            duration: deadline,
-            scope: timeout_scope,
-            description,
-        },
-    ) {
+    let status = match wait_for_process(child.as_mut(), &mut readers, deadline) {
         Ok(status) => status,
         Err(error) => return Err(finish_failure(error, child.as_mut(), &mut readers)),
     };
@@ -398,3 +413,7 @@ fn cleanup_deadline() -> Result<Instant> {
 fn sleep_until(deadline: Instant) {
     thread::sleep(POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())));
 }
+
+#[cfg(test)]
+#[path = "runner_deadline_tests.rs"]
+mod deadline_tests;
