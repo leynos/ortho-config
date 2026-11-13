@@ -5,12 +5,14 @@
 //! contents of the files it opens. Every event here therefore records a
 //! *decision* rather than the datum the decision was made from.
 //!
-//! That is enforced by construction: each field is a `&'static str` drawn from
-//! a closed set declared in this module, a `bool`, or an `Option` of one of
-//! those for a field that is meaningful only in some runs. No caller can pass a
-//! path or a variable value through these functions, and the same property
-//! keeps the metric labels bounded — a cardinality bug here would otherwise
-//! show up as an unbounded time-series in a consumer's monitoring system.
+//! That is kept true by design rather than by the type alone: each field is a
+//! `&'static str` naming one of the closed sets declared in this module, or a
+//! `bool`, and every helper is `pub(super)`. A `&'static str` would also accept
+//! a handwritten literal, so the vocabulary is a convention the call sites
+//! follow; the telemetry test suite separately asserts that no captured field
+//! carries a value derived from discovery input. The same property keeps the
+//! metric labels bounded — a cardinality bug here would otherwise show up as an
+//! unbounded time-series in a consumer's monitoring system.
 //!
 //! An optional field is absent from an event in two senses, and both are
 //! preserved here. A `None` records no *value*: `tracing` implements `Value`
@@ -65,6 +67,10 @@ pub(super) const HOME_FROM_USERPROFILE: &str = "userprofile";
 pub(super) const HOME_FROM_FALLBACK: &str = "fallback";
 /// No home directory could be determined, so no home candidates were added.
 pub(super) const HOME_NONE: &str = "none";
+
+/// The current working directory was unavailable, so the project-root
+/// fallback contributed nothing.
+pub(super) const PROJECT_ROOT_CWD_UNAVAILABLE: &str = "cwd_unavailable";
 
 /// A path the builder was told is required.
 pub(super) const CANDIDATE_REQUIRED_EXPLICIT: &str = "required_explicit";
@@ -307,7 +313,7 @@ const fn failure_outcome(required: bool) -> &'static str {
 pub(super) fn project_root_cwd_unavailable() {
     tracing::debug!(
         event = "discovery.project_root",
-        state = "cwd_unavailable",
+        state = PROJECT_ROOT_CWD_UNAVAILABLE,
         "working directory unavailable; no default project root added"
     );
 }

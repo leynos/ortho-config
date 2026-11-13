@@ -1929,8 +1929,9 @@ library.
 ### Discovery telemetry
 
 Configuration discovery emits its events from two co-located modules, both of
-which are written so that a leak is a compile-time impossibility rather than a
-review responsibility:
+which are written so that leaking an input is not the easy path: the helpers
+are module-private and take closed-vocabulary labels, and the suite below
+asserts that no captured field carries an injected value:
 
 - `discovery/telemetry.rs` owns the closed label vocabulary, the three counter
   families, and six event callsites whose field lists are fixed;
@@ -1973,15 +1974,24 @@ the `tracing` event fields above.
 
 Rules for extending this set:
 
+- **Extend only through the closed-vocabulary constants in `telemetry.rs`.**
+  A new event or field starts as a `pub(super) const` in that module, next to
+  the set it belongs to, and the emission helper takes it as a `&'static str`.
+  That type accepts any string literal, so the vocabulary is a convention the
+  call sites follow, not something the signature enforces. The helpers are
+  `pub(super)`, so no downstream crate can reach them, and there is
+  deliberately no helper that accepts caller-formatted text.
 - **Every field is a `&'static str` from a constant declared in
   `telemetry.rs`, or a `bool`.** Discovery's inputs and outputs — variable
   values, resolved paths, file contents — are exactly what must not reach a
-  log, and callers cannot pass one through a function that accepts only the
-  closed vocabulary. The same property keeps the `metrics` labels bounded; an
-  unbounded label here becomes an unbounded time-series in a consumer's
-  monitoring system. Declare the constant in `telemetry.rs` even when its only
-  callsite is in `telemetry_events.rs`: one module owning the whole vocabulary
-  is what makes the closed set readable in one place.
+  log. The module-private helpers, plus the discipline of passing the declared
+  constants, keep them out of it; the type alone would not, because a
+  handwritten literal also satisfies `&'static str`. The same property keeps the
+  `metrics` labels bounded; an unbounded label here becomes an unbounded
+  time-series in a consumer's monitoring system. Declare the constant in
+  `telemetry.rs` even when its only callsite is in `telemetry_events.rs`: one
+  module owning the whole vocabulary is what makes the closed set readable in
+  one place.
 - **Add an event spelling, not a parameter.** A new combination of optional
   fields is a new function in `telemetry_events.rs` plus a new arm in its
   dispatcher, never a wider signature on an existing emitter.
@@ -2486,6 +2496,11 @@ variables for tests.
   not scan. Callers can use one `Arc<MapEnv>` by coercing cloned `Arc`s to
   `SharedEnvSource` and `SharedScanEnvSource`;
   [#412](https://github.com/leynos/ortho-config/issues/412) completed this path.
+- **`EnvSource` injection into `CsvEnv` remains out of scope.** The merge
+  layer accepts only the scanning capability; `EnvSource` is discovery-only.
+  Adding an `EnvSource`-shaped constructor to `CsvEnv` would either require
+  enumeration on that trait — voiding the guarantee above — or silently read
+  the process environment behind an injected-looking API.
 - **Injected merge providers are declarative.** Injected `CsvEnv` loading
   replays only the declarative prefix, case, split, and CSV options. Calling
   `CsvEnv::with_source` after `map()` or `filter_map()` is rejected because
