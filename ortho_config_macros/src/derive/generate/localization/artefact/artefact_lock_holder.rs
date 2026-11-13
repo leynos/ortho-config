@@ -18,12 +18,21 @@
 //! Every function here is `#[cfg(target_os = "linux")]`: there is no portable
 //! equivalent of `/proc`, and the caller already reports that the holder is
 //! unavailable on other platforms.
+//!
+//! The imports are gated item by item, not as a group, because a group would
+//! still be compiled on another target where every user of it has been
+//! removed. `describe_process` is the pointed case: it is defined only under
+//! `cfg(target_os = "linux")`, so an ungated `use` of it does not merely go
+//! unused — it fails to resolve at all.
 
+#[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::path::Path;
 
 #[cfg(target_os = "linux")]
 use super::lock_evidence::{Descriptor, DeviceNumber, Inode, LockFileIdentity, ProcessId};
+#[cfg(target_os = "linux")]
 use super::lock_process::describe_process;
 
 /// Appends one description per process still holding a descriptor on the lock.
