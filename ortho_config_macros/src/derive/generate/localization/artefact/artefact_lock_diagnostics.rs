@@ -34,10 +34,8 @@ use anyhow::{Context, Result, anyhow};
 use super::artefact_lock::{LockProbe, lock_path, probe_lock};
 #[cfg(target_os = "linux")]
 use super::lock_evidence::{
-    Descriptor, DeviceNumber, Inode, LockFileIdentity, LockRecord, ProcessId, parse_lock_record,
+    DeviceNumber, Inode, LockFileIdentity, LockRecord, ProcessId, parse_lock_record,
 };
-#[cfg(target_os = "linux")]
-use super::lock_process::describe_process;
 use super::lock_support::SHORT_WAIT_THRESHOLD;
 
 /// Where the kernel publishes its lock table on Linux.
@@ -205,7 +203,7 @@ fn holder_lines(root: &Path, metadata: &fs::Metadata) -> Vec<String> {
     ];
     let identity = LockFileIdentity::of(device, inode);
     let owners = append_record_lines(&mut lines, identity);
-    append_owner_lines(&mut lines, &owners, identity);
+    super::lock_holder::append_owner_lines(&mut lines, &owners, identity);
     lines
 }
 
@@ -292,94 +290,4 @@ fn read_records() -> Result<Vec<LockRecord>, String> {
     fs::read_to_string(PROC_LOCKS)
         .map(|table| table.lines().filter_map(parse_lock_record).collect())
         .map_err(|error| format!("{PROC_LOCKS}: unreadable ({error})"))
-}
-
-/// Appends one description per process still holding a descriptor on the lock.
-#[cfg(target_os = "linux")]
-fn append_owner_lines(lines: &mut Vec<String>, owners: &[ProcessId], identity: LockFileIdentity) {
-    let own_pid = ProcessId::new(std::process::id());
-    let mut skipped = 0_usize;
-    for &pid in owners {
-        match inspect_holder(pid, identity) {
-            Ok(descriptors) => append_owner(lines, pid, &descriptors, own_pid),
-            Err(reason) => {
-                skipped = skipped.saturating_add(1);
-                lines.push(format!("holder pid {pid}: {reason}"));
-            }
-        }
-    }
-    if skipped > 0 {
-        lines.push(format!(
-            "holder scan: skipped {skipped} process(es) whose descriptors could not be read"
-        ));
-    }
-}
-
-/// Describes one process and every descriptor it holds on the lock file.
-///
-/// An owner with no matching descriptor is reported rather than dropped: the
-/// lock then survives inside an open file description the process inherited,
-/// which is the one case where the recorded pid is not the process to blame.
-#[cfg(target_os = "linux")]
-fn append_owner(
-    lines: &mut Vec<String>,
-    pid: ProcessId,
-    descriptors: &[Descriptor],
-    own_pid: ProcessId,
-) {
-    let described = describe_process(pid, own_pid);
-    if descriptors.is_empty() {
-        lines.push(format!(
-            "holder: {described} has no descriptor on the lock file, so the lock survives in a description inherited from the recorded acquirer"
-        ));
-        return;
-    }
-    for descriptor in descriptors {
-        lines.push(format!(
-            "holder: {described} holds the lock file open as fd {descriptor}"
-        ));
-    }
-}
-
-/// Lists the descriptors in `pid` that refer to the locked file.
-///
-/// `/proc/<pid>/fd` is unreadable once the process exits, and unreadable to
-/// another user; both are ordinary in a racing system, so they are returned as
-/// a reason the caller records and counts instead of a hard failure.
-#[cfg(target_os = "linux")]
-fn inspect_holder(pid: ProcessId, identity: LockFileIdentity) -> Result<Vec<Descriptor>, String> {
-    let directory = format!("/proc/{pid}/fd");
-    let entries =
-        fs::read_dir(&directory).map_err(|error| format!("{directory}: unreadable ({error})"))?;
-    let mut descriptors = Vec::new();
-    for candidate in entries {
-        let Ok(entry) = candidate else { continue };
-        let Ok(name) = entry.file_name().into_string() else {
-            continue;
-        };
-        let Ok(descriptor) = name.parse().map(Descriptor::new) else {
-            continue;
-        };
-        if refers_to(&entry.path(), identity) {
-            descriptors.push(descriptor);
-        }
-    }
-    Ok(descriptors)
-}
-
-/// Reports whether one open descriptor refers to the locked file.
-///
-/// The entries under `/proc/<pid>/fd` are symlinks, and [`fs::metadata`]
-/// follows them, so this reads the metadata of the open file rather than of the
-/// link that points at it.
-#[cfg(target_os = "linux")]
-fn refers_to(path: &Path, identity: LockFileIdentity) -> bool {
-    use std::os::unix::fs::MetadataExt;
-
-    fs::metadata(path).is_ok_and(|metadata| {
-        identity.holds(
-            DeviceNumber::from_raw(metadata.dev()),
-            Inode::new(metadata.ino()),
-        )
-    })
 }

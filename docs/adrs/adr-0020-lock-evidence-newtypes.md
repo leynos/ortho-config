@@ -118,11 +118,30 @@ field reaches. Those cases are what a naive two-mask split passes and then
 fails against a real filesystem.
 
 The diagnostics split across `artefact_lock_diagnostics.rs` (what a hold means),
-`artefact_lock_evidence.rs` (the evidence vocabulary and parser), and
-`artefact_lock_process.rs` (reading `/proc/<pid>/stat`). The split is what
-keeps each file within the 400-line module cap, and it puts the reading of a
-process name beside neither the parsing of lock records nor the deciding of
-what to report.
+`artefact_lock_evidence.rs` (the evidence vocabulary and parser),
+`artefact_lock_holder.rs` (the descriptor scan), and `artefact_lock_process.rs`
+(reading `/proc/<pid>/stat`). The split is what keeps each file within the
+400-line module cap, and it puts the reading of a process name beside neither
+the parsing of lock records nor the deciding of what to report.
+
+The cap counts declarations, not just code. Registering the descriptor scan in
+`artefact/mod.rs` pushed that file from exactly 400 lines to 406, and the
+`module_max_lines` lint reports the overage against the *declaration* of the
+module rather than against anything the change added. The prune moved to
+`artefact_prune.rs` to pay for it: it answers a self-contained question, and it
+already held the only test-injection point in the prune. `artefact` re-imports
+the three names `publish` and `prune_tests` use, so neither had to learn a new
+path.
+
+The descriptor scan is separated for a second reason beyond the cap. A scan
+that fails and a scan that finds nothing are different evidence, and only the
+second supports saying the lock survives in an inherited description. The scan
+returns a `DescriptorScan` that keeps `Complete` and `Incomplete` apart, so a
+read failure cannot be mistaken for an empty descriptor table and become a
+claim against an innocent process. An unreadable entry inside an otherwise
+readable directory is treated as an incomplete scan for the same reason:
+dropping it would produce the same false claim. This is a correction to an
+earlier draft that folded both failures into "no descriptor".
 
 `artefact_lock_report_tests.rs` pins both settle outcomes against a *separate*
 holder process: one test releases the lock part-way through the window and

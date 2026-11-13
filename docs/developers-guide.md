@@ -708,6 +708,28 @@ owner and say whether it is this process or a child of it. It is kept apart
 from the diagnostics so each file stays within the length cap, and because
 describing a process is a different concern from deciding what a hold means.
 
+`artefact_lock_holder.rs` is the third half: the descriptor scan itself. It is
+split out for the same length reason, and for one of its own. A failed read and
+an empty read lead to opposite conclusions — "this process holds nothing" is
+evidence that the lock survives in an inherited description, while "this
+process could not be read" is evidence of nothing — so the scan returns a
+`DescriptorScan` that keeps `Complete` and `Incomplete` apart instead of
+collapsing a failure into an empty list. Only a completed scan may make the
+inheritance claim; an incomplete one names the fault and says the report cannot
+say whether that process holds the file. An entry whose identity cannot be read
+is treated the same way, because dropping it would silently turn a live holder
+into an inheritance claim. `only_a_complete_scan_may_report_inheritance` pins
+that with a `Complete`, a `Complete`-and-holding, and an `Incomplete` case.
+
+Registering that third module pushed `artefact/mod.rs` past the 400-line cap,
+which the `module_max_lines` lint reports as a formatting failure on an
+untouched file. The prune moved out to `artefact_prune.rs` in response: it owns
+the one question "which files does this render keep", and it already carried
+the only test-injection point in the prune, so the failure a regression test
+provokes has a single place to be defined and cannot drift from the code that
+reads it. `artefact` re-imports the three names its `publish` caller and
+`prune_tests` reach for, so neither had to learn the new file name.
+
 The evidence vocabulary is built from newtypes — `ProcessId`, `Inode`,
 `Descriptor`, `DeviceNumber`, and `LockFileIdentity` — rather than bare
 integers. Every one of these is the same width as at least one other, and the
