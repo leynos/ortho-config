@@ -59,6 +59,7 @@ from build_standard_make import (
     make_executable,
     shell_tokens,
 )
+from makefile_support import unexported_variables
 
 CARGO_CONFIGURATION = load_cargo_configuration()
 
@@ -140,6 +141,21 @@ def test_shell_helpers_ignore_comments_and_tolerate_malformed_quotes() -> None:
 def test_make_executable_is_resolved() -> None:
     """Subprocess contracts invoke the Make binary resolved from PATH."""
     assert pathlib.Path(make_executable()).is_absolute()
+
+
+def test_the_makefile_unexports_cargo_encoded_rustflags() -> None:
+    """An inherited ``CARGO_ENCODED_RUSTFLAGS`` must not outrank the routes here.
+
+    Cargo prefers that variable over ``RUSTFLAGS``, including when it is empty,
+    so a value inherited from an enclosing Cargo run would quietly displace the
+    release, MSRV and Whitaker routes that assign ``RUSTFLAGS`` on purpose. A
+    dry run cannot show an ``unexport``, so the directive is read from the file.
+    """
+    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "CARGO_ENCODED_RUSTFLAGS" in unexported_variables(makefile), (
+        "the Makefile must `unexport CARGO_ENCODED_RUSTFLAGS`; Cargo ranks it above RUSTFLAGS"
+    )
 
 
 def test_workflow_files_include_both_yaml_extensions(tmp_path: pathlib.Path) -> None:

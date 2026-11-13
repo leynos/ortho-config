@@ -31,6 +31,15 @@ BUILD_JOBS ?=
 # nightly (the advisory `clippy-beta` job): the parallel frontend is
 # nightly-only, so a stable or beta compiler refuses it outright.
 BUILD_STANDARD ?= 1
+# Cargo reads `CARGO_ENCODED_RUSTFLAGS` in preference to `RUSTFLAGS`, and an
+# empty value wins as well. A value inherited from an enclosing Cargo run would
+# therefore displace every route below, including the release and MSRV recipes
+# that assign `RUSTFLAGS` on purpose and the gates that restate the standard.
+# `unexport` keeps the variable out of the recipes' environment, so the routes
+# this file states are the routes that run.
+# tests/workflow_contracts/build_standard_routing_test.py holds this directive
+# in place.
+unexport CARGO_ENCODED_RUSTFLAGS
 STANDARD_THREADS_FLAG ?= -Zthreads=8
 STANDARD_BACKEND_FLAG ?= -Zcodegen-backend=cranelift
 STANDARD_DEV_FAST_CFG ?= --cfg=ortho_config_dev_fast \
