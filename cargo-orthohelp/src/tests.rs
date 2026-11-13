@@ -167,10 +167,11 @@ fn bridge_manifest_disables_the_default_binary_target() {
 
 /// An unreadable cache entry fails the publish instead of being overwritten.
 ///
-/// The cache path is a directory rather than a file, so opening it as
-/// `ir.json` fails with a kind that is neither `NotFound` nor platform
-/// specific. A publish step that treated every read failure as a cache miss
-/// would report success after destroying evidence of the fault.
+/// The cache path is a directory rather than a regular file. Opening it may
+/// succeed without yielding a readable body, and reading it fails on Unix, so
+/// the entry is rejected at the read stage either way. A publish step that
+/// treated every such failure as a cache miss would report success after
+/// destroying evidence of the fault.
 #[test]
 fn write_ir_cache_propagates_a_non_missing_read_failure() {
     let tmp = tempdir().expect("temp dir");
@@ -249,6 +250,44 @@ fn link_input_paths_fit_in_the_windows_path_limit() {
          {WINDOWS_MAX_PATH}-character Windows limit: {link_input}",
         link_input.as_str().len()
     );
+}
+
+/// A large mismatched cache entry is replaced without being read.
+///
+/// The pre-existing file is several megabytes, while the new payload is a few
+/// bytes short. Their lengths differ, so `cached_ir_matches` returns after the
+/// metadata check and never touches the body. No allocation instrumentation is
+/// available in this suite, so the bound is demonstrated structurally: the
+/// oversized entry is replaced and the write succeeds, which is only
+/// guaranteed while the comparison stays length-limited.
+#[test]
+fn write_ir_cache_replaces_a_large_mismatched_entry() {
+    const SMALL: &str = r#"{"ir_version":"1.0.0"}"#;
+    const LARGE_BYTES: usize = 4 * 1024 * 1024;
+
+    let tmp = tempdir().expect("temp dir");
+    let bridge_dir = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).expect("UTF-8 path");
+    let paths = BridgeCache {
+        cache_dir: bridge_dir.clone(),
+        target_dir: bridge_dir.join("target"),
+        ir_path: bridge_dir.join("ir.json"),
+    };
+    let large_entry = "x".repeat(LARGE_BYTES);
+    std::fs::write(&paths.ir_path, &large_entry).expect("pre-populate a large cache entry");
+    assert_ne!(
+        large_entry.len(),
+        SMALL.len(),
+        "the fixture must exercise the metadata-length mismatch branch"
+    );
+
+    assert_eq!(
+        write_ir_cache(&paths, SMALL).expect("replace the large cache entry"),
+        PublishOutcome::Updated,
+        "a mismatched cache entry must be replaced rather than reused"
+    );
+    let written = std::fs::read_to_string(&paths.ir_path).expect("read replaced cache entry");
+
+    assert_eq!(written, SMALL, "the cache entry must hold the new payload");
 }
 
 #[test]
