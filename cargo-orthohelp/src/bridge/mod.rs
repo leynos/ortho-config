@@ -390,6 +390,10 @@ fn open_bridge_file(
 #[path = "../tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "ir_cache_proptests.rs"]
+mod ir_cache_proptests;
+
 #[cfg(all(test, feature = "metrics"))]
 #[path = "telemetry_metrics_tests.rs"]
 mod telemetry_metrics_tests;
