@@ -1,20 +1,26 @@
 """Reading Rust sources and manifests, refusing a read that fails.
 
-Every filesystem read behind the trybuild contract goes through here, so
-that a source which cannot be read is refused rather than passed over. The
-distinction matters: a source that is skipped silently is a binary that
-leaves the trybuild class unasked for, and the coverage assertion in
-:mod:`trybuild_tier` is only as strong as this reading.
+Every filesystem read behind the workflow contracts that classify Rust test
+binaries goes through here, so that a source which cannot be read is refused
+rather than passed over. The distinction matters: a source that is skipped
+silently is a binary that leaves its class unasked for, and the coverage
+assertions in :mod:`trybuild_tier` and :mod:`child_cargo_tier` are only as
+strong as this reading.
 
-Split from :mod:`trybuild_tier` so that module stays within the
-repository's 400-line code file ceiling. The functions here are a pure
-move: the reading primitives are one concern, and computing which binaries
-carry a trybuild call is another.
+The module began as a split from :mod:`trybuild_tier`, to keep that module
+within the repository's 400-line ceiling, and the reading primitives it
+holds are one concern rather than a trybuild-specific one. That is why the
+child-cargo contract reads through it too: :mod:`rust_module_graph` takes
+the listing and scan primitives to follow ``mod`` declarations, and
+:mod:`child_cargo_tier` takes the same reads to decide which sources start a
+child ``cargo``. A primitive added here serves every classifier, so it must
+stay free of any one class's membership rules.
 """
 
 from __future__ import annotations
 
 import os
+import stat
 import tomllib
 import typing as typ
 from pathlib import Path
@@ -78,6 +84,52 @@ def sources_under(directory: Path) -> typ.Iterator[Path]:
         yield from (Path(at, name) for name in filenames if name.endswith(".rs"))
 
 
+def stat_mode(path: Path) -> int | None:
+    """Return ``path``'s mode bits, or ``None`` when it is not there.
+
+    Only ``FileNotFoundError`` is an answer. Every other failure propagates as
+    a :class:`ScanError` naming ``path``, for the reason :func:`exists` gives:
+    since 3.14 the ``Path`` predicates answer ``False`` for any ``OSError``, so
+    a probe that swallowed the failure would read an unreadable source as an
+    absent one. Callers compare the mode with ``stat.S_ISREG`` or
+    ``stat.S_ISDIR`` instead of calling those predicates, which is what keeps
+    the distinction between absent and unreadable available to them.
+
+    This is the one place the probe is written, so :func:`exists`,
+    :func:`is_directory` and the module-graph reader cannot drift apart on
+    which failures they answer and which they refuse.
+
+    Parameters
+    ----------
+    path : Path
+        The path to read the mode bits of.
+
+    Returns
+    -------
+    int or None
+        The mode bits, or ``None`` for a path that is not there.
+
+    Raises
+    ------
+    ScanError
+        If the read fails for any reason other than absence.
+
+    Examples
+    --------
+    >>> stat_mode(Path(__file__)) is not None
+    True
+    >>> stat_mode(Path("/nonexistent")) is None
+    True
+    """
+    try:
+        return path.stat().st_mode
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        message = f"{path} could not be read: {error}"
+        raise ScanError(message) from error
+
+
 def exists(path: Path) -> typ.Callable[[], bool]:
     """Defer a presence check so a failure to tell lands inside a guard.
 
@@ -109,11 +161,7 @@ def exists(path: Path) -> typ.Callable[[], bool]:
 
     def present() -> bool:
         """Answer whether ``path`` is there, raising on a check that cannot tell."""
-        try:
-            path.stat()
-        except FileNotFoundError:
-            return False
-        return True
+        return stat_mode(path) is not None
 
     return present
 
@@ -189,6 +237,34 @@ def scan(
         return read(*args, **kwargs)
     except OSError as error:
         raise ScanError(f"{path} could not be read: {error}") from error
+
+
+def is_directory(path: Path) -> typ.Callable[[], bool]:
+    """Defer a directory check so a failure to tell lands inside a guard.
+
+    ``Path.is_dir`` is not usable directly for the reason :func:`exists`
+    gives: since 3.14 it answers ``False`` for any ``OSError``, so a
+    directory this process cannot search reads as a file and the test targets
+    beneath it leave the inventory unasked for. Only an absent path is an
+    answer; every other failure is a :class:`ScanError` naming ``path``.
+
+    Parameters
+    ----------
+    path : Path
+        The path to check when the returned callable is called.
+
+    Returns
+    -------
+    callable
+        A zero-argument callable answering whether that path is a directory.
+    """
+
+    def directory() -> bool:
+        """Answer whether ``path`` is a directory, raising when it cannot tell."""
+        mode = stat_mode(path)
+        return mode is not None and stat.S_ISDIR(mode)
+
+    return directory
 
 
 def listing(directory: Path) -> typ.Callable[[], list[Path]]:

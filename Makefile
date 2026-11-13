@@ -54,6 +54,7 @@ PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
 GIT ?= git
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/discard_build_trees.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
+	scripts/verify_child_cargo_reader_equivalence.py \
 	scripts/verify_release_archives.py scripts/tests -q
 # Pinned rather than tracking the default branch: the publish step depends
 # on the pre-flight skip, which v0.3.1 is the first release to carry

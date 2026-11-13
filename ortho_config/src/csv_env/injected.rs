@@ -74,14 +74,14 @@ impl CsvEnv {
     /// The slice comes from `key`, preserving the original bytes for the later
     /// case transforms while avoiding an allocation when no prefix is set.
     fn strip_prefix<'a>(&self, key: &'a str) -> Option<&'a str> {
-        self.options.prefix.as_deref().map_or_else(
-            || Some(key),
-            |prefix| {
-                UncasedStr::new(key)
-                    .starts_with(prefix)
-                    .then(|| key.get(prefix.len()..))
-                    .flatten()
-            },
-        )
+        // `map_or` rather than `map_or_else`: the absent-prefix answer is a
+        // borrowed slice, so computing it eagerly costs nothing, and newer
+        // Clippy betas reject the lazy form as an unnecessary closure.
+        self.options.prefix.as_deref().map_or(Some(key), |prefix| {
+            UncasedStr::new(key)
+                .starts_with(prefix)
+                .then(|| key.get(prefix.len()..))
+                .flatten()
+        })
     }
 }

@@ -202,16 +202,48 @@ the use local to the module that needs it.
 
 ### Nextest test-group serialization
 
-`.config/nextest.toml` places nine documentation and cache users in the
+`.config/nextest.toml` places eleven documentation and cache users in the
 single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
 `nested_subcommand_end_to_end`, `documented_command`,
 `documentation_examples_rust_tests`, `agent_context_contract`,
-`policy_report_contract`, `golden_tests` and `identifier_artefact_e2e`. These
-binaries can clear the shared BDD cache or build documented examples against
-Cargo's shared target. A named process-local `Mutex` serializes scenarios
-within one test process, including direct `cargo test`. It cannot coordinate
-independent test processes, so filesystem leases also protect cache ownership
-across them.
+`policy_report_contract`, `golden_tests`, `identifier_artefact_e2e`,
+`cli_dispatch` and `agent_context_renderer_end_to_end`. These binaries can
+clear the shared BDD cache or build documented examples against Cargo's shared
+target. A named process-local `Mutex` serializes scenarios within one test
+process, including direct `cargo test`. It cannot coordinate independent test
+processes, so filesystem leases also protect cache ownership across them.
+
+The membership is not a hand-maintained list, and
+`tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from
+becoming one. That contract reads which test binaries drive a child `cargo` out
+of the Rust sources, compares that set with the entries that grant a raised
+allowance in either direction, and requires every binary a test-group filter
+serializes to be a member of the set, among the binaries it audits. That
+universe is `ortho_config` and `cargo-orthohelp`; a group selecting only
+binaries outside it belongs to a different contract, so nothing here is claimed
+about those. `cli_dispatch` and `agent_context_renderer_end_to_end` were absent
+from the list here and from every raised allowance in the configuration: both
+spawned a child `cargo` on the 600 s base tier, and no other assertion could
+see the omission, because every other reading begins from the same list that
+omitted them.
+
+Membership of the raised allowances and membership of the group are separate
+questions, and the contract keeps them apart: it requires every *group* member
+it audits to be a class member, because the raised allowance is written for the
+class and a serialized non-member would fall through to the base tier, while
+the class itself may be raised without being serialized. A binary can drive a
+child `cargo` without touching the shared caches the group protects, so the
+class can be the wider of the two. It is not wider today: the two sets
+coincide, and the contract does not require that they keep doing so.
+
+`cli_dispatch` is a member of both. Its `.config/nextest.toml` entry places it
+in `orthohelp_cache` and gives it the class's raised allowance, so neither
+follows from the other. Its child cargo was measured at 0.04 s on a warm tree,
+which is why the allowance is sized for the nested build the class can reach
+rather than for the cheapest path this binary takes.
+`documentation_budget_test.py` separately pins a named subset to an
+`orthohelp_cache` filter, so narrowing this group past those names fails that
+assertion rather than this one.
 
 The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
 same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
@@ -3141,7 +3173,7 @@ tier two did not exist at all.
 
 | Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
 | ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for trybuild, BDD, documentation and boundary packaging scenarios |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for the trybuild, child-cargo, BDD and boundary packaging classes |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                                                                              |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                                                                              |
 | Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`                                                             |
@@ -3364,6 +3396,35 @@ live in `nextest_budgets.py`, `nextest_document.py`, `nextest_durations.py`,
 `nextest_errors.py`, `timeout_budgets.py` and `coverage_lanes.py`, and are
 driven with controlled values in `timeout_reading_test.py`.
 
+Which binaries a raised allowance covers is a question about the Rust sources,
+so that contract reads them rather than a list. `child_cargo_tier.py` decides
+which test binaries drive a child `cargo` of their own, `rust_module_graph.py`
+answers which files a binary compiles, and `child_cargo_tier_test.py` compares
+the class with what `.config/nextest.toml` selects. `trybuild_tier.py` asks a
+different question of the same sources — membership of the trybuild class is a
+dependency fact rather than a call-site one — and reads them through
+`source_scan` instead.
+
+Membership here is decided by reaching files, not by grepping the `tests/`
+tree, and the difference is not academic. A grep for `Command::new("cargo")`
+also matches `clap::Command::new` and a probe that re-runs the test binary, and
+it matches every binary that merely mentions a helper without declaring it, so
+it is wrong in both directions at once.
+`#[path = "test_utils.rs"] mod other_name;` is legal and this repository uses
+it, so a rule keyed on the declared name would link a binary to a file it never
+compiles. Both readings are therefore taken from what each crate root actually
+compiles.
+
+A marker that has gone dead is the failure this reading is most exposed to,
+because the class simply comes back smaller and every downstream comparison
+agrees with it. `child_cargo_tier.marker_binaries` therefore reports each label
+separately and the contract requires every one of the three to select a binary
+somewhere in the audited crates — workspace-wide, not per crate, since
+`cargo_orthohelp_exe` is a `cargo-orthohelp`-only export and no honest
+`ortho_config` source could supply it. A bare `prepare_cargo_command` marker
+did go dead when the helper it named was renamed, and the replacement carries
+the old name in its pattern so the same rename cannot recur silently.
+
 Run them with `make test-workflow-contracts`. The target provisions `pytest`,
 `pyyaml` and `hypothesis` through `uv run --with` rather than from the
 project's own dependencies, so the contracts need no virtual environment of
@@ -3545,6 +3606,52 @@ The `binstall-packaging` job also declares no ceiling. It invokes no coverage
 step, so it is outside this contract, and bounding it is separate work.
 
 [shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
+
+### Reading the child-cargo class, and checking the reader
+
+The class is derived from the Rust sources, which makes the reading itself
+something that can be wrong. `scripts/verify_child_cargo_reader_equivalence.py`
+compares what one revision's readers find against another's, so a change in the
+reading can be told apart from a change in the sources it reads:
+
+```sh
+python3 -I scripts/verify_child_cargo_reader_equivalence.py <older> <newer>
+```
+
+Both revisions are named rather than defaulting to `HEAD`, because a comparison
+whose input moved is not a comparison. It exits `0` when the class, the
+per-marker attribution, the root inventory and every source text agree; `1`
+when any of them differs, printing the member or path that disagreed; and `2`
+when a revision names no commit, because a mistyped name is a usage error
+rather than a reading that changed. The `Makefile` lists the script in
+`PYTEST_FLAGS`, so `make test` runs its doctests, and
+`scripts/tests/test_verify_child_cargo_reader_equivalence.py` drives it over
+synthetic repositories: two revisions that agree, a widened class, a source
+tree that changed, a root present in only one revision, and an unknown revision.
+
+The readings it shares with the contract are split by the question each
+answers. A contract that needs one should import it rather than write a second
+copy, because a second copy is what lets two classifications disagree about the
+same file:
+
+- `child_cargo_source_markers.py` holds the three call sites that count as
+  starting a child `cargo`.
+- `rust_module_graph.py` follows `mod` declarations, `#[path]` attributes and
+  inline modules to decide which files one binary compiles.
+- `rust_source_mask.py` blanks comments and literals while keeping offsets, so
+  a brace in prose or in a string cannot change that walk.
+- `nextest_override_reader.py` returns one profile's override entries in
+  declaration order, leaving a platform gate visible to its caller.
+- `nextest_filterset.py` reads the `binary(...)` and `binary_id(...)` terms a
+  filter may consist of, refusing a shape it cannot read.
+- `nextest_precedence.py` resolves the effective `slow-timeout` for a binary,
+  including entries that shadow one another and a tier no entry decides.
+- `source_scan.py` is the read layer beneath all of them, refusing a source it
+  cannot read rather than reporting it absent.
+
+A refusal is only observable where a mode actually denies a read, so the tests
+that exercise one skip on Windows and as root; `unreadable_support.py` holds
+that guard and the helper that denies the access.
 
 ## Runner placement
 
