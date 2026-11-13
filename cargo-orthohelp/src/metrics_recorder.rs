@@ -127,3 +127,7 @@ fn render_labels(key: &Key) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+#[cfg(test)]
+#[path = "metrics_recorder_tests.rs"]
+mod tests;
