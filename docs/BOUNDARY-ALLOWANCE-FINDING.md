@@ -69,9 +69,13 @@ decides, rather than a property of the code under test.
 
 ## Why it matters beyond a flake
 
-1. It is not intermittent in the usual sense: it fails deterministically when
-   the host is busy and passes when it is idle. That makes it a reliable signal
-   of host load and an unreliable signal of correctness.
+1. It is not intermittent in the usual sense. Every recorded run failed, and
+   the failures track host load rather than code changes; the observed elapsed
+   times sit just past the 900s allowance rather than varying at random. That
+   makes it a plausible signal of host load and an unreliable signal of
+   correctness. The complementary claim — that the suite **passes** on an idle
+   host — is a hypothesis, not a recorded result: no idle-host run appears in
+   this document, and validating it is outstanding work.
 2. `make test` runs `cargo test` without `--no-fail-fast`. The first failing
    binary aborts the rest, so later targets go uncertified. On run 1 that hid
    roughly 43 binaries.
@@ -92,8 +96,11 @@ cannot silently de-certify every later target.
 
 ## Reproduction
 
+The control revision is pinned. `origin/main` advances, and a moving reference
+would silently test a different tree from the one recorded above.
+
 ```sh
-git worktree add /tmp/baseline origin/main --detach
+git worktree add /tmp/baseline 9be62487 --detach
 cd /tmp/baseline
 cargo test -p ortho_l10n --test boundary
 # test result: FAILED. 32 passed; 12 failed; 10 ignored; ... 909.0s

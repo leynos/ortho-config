@@ -139,6 +139,9 @@
   historical reference.
 - [Behavioural tests](behavioural-tests.md): understand the current behavioural
   test organization and expectations.
+- [Boundary allowance finding](BOUNDARY-ALLOWANCE-FINDING.md): review the
+  recorded evidence that the localization boundary contract fails on wall-clock
+  deadlines rather than on the dependency closure it asserts.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md):
   identify common complexity smells and refactoring responses.
 - [Documentation style guide](documentation-style-guide.md): follow the house
