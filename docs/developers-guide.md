@@ -687,6 +687,15 @@ the sequence held, released, free, and the recorded sequence is also the
 negative control: a settle that accepted its first `Held` shows `[false]` and
 fails.
 
+The number of held probes is deliberately not fixed. `probe_lock` drops its own
+acquisition before returning, so the callback is not a lock-holding window; it
+establishes only that this probe observed the state it reports. The helper
+polls for the release every `POLL_INTERVAL` while the settle re-probes every
+`SETTLE_INTERVAL`, so a correct settle often sees two held probes before the
+holder answers. The test therefore asserts the shape — one or more `Held`
+followed by a `Free` — rather than a probe count, because a count would fail
+whenever the helper was merely slow.
+
 `artefact_lock_evidence.rs` holds the pure half — the glibc `dev_t` split, the
 `/proc/locks` parser, and the vocabulary they speak — tested on every platform,
 because a mis-split device or a skipped line both read as "nothing holds this

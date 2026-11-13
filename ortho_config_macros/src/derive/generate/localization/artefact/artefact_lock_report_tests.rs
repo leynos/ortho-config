@@ -222,11 +222,18 @@ fn settles_report_a_probe_error_instead_of_a_free_answer() -> Result<()> {
 /// elapsed time cannot distinguish "waited out a hold" from "happened to be
 /// slow", so the sleep proved the retry only by coincidence.
 ///
-/// Here the first `Held` the settle reports is what triggers the release, and
-/// the settle resolves before the release request is even written. The order
-/// is then a fact about the code: probe one held, the release followed, probe
-/// two was free. The hook runs with the probe's handle still open, so the
-/// request cannot land before the hold it answers.
+/// Here the first `Held` the settle reports is what triggers the release, so
+/// the release cannot precede the observation that asked for it. The order is
+/// then a fact about the code: some number of held probes, the release
+/// requested after the first of them, then a free one.
+///
+/// The number of held probes is *not* fixed. The helper polls for the request
+/// every `POLL_INTERVAL` (25 ms) while the settle re-probes every
+/// `SETTLE_INTERVAL` (10 ms), so a correct settle routinely sees one or two
+/// held probes before the holder answers. Requiring exactly two would make
+/// this test fail whenever the helper was merely slow, which is the scheduler
+/// again rather than the lock. What is asserted instead is the *shape*:
+/// at least one `Held`, a free probe after it, and no free probe before it.
 #[cfg(target_os = "linux")]
 #[test]
 fn settling_waits_out_a_release_from_another_process() -> Result<()> {
@@ -264,12 +271,19 @@ fn settling_waits_out_a_release_from_another_process() -> Result<()> {
     outcome?;
 
     let seen = probes.into_inner();
+    let held = seen.iter().take_while(|is_free| !**is_free).count();
     ensure!(
-        seen == [false, true],
-        "the settle must observe a held lock and then a free one, but it saw \
-         {seen:?} (false is held, true is free); a settle that returned `Ok` on \
-         the first held probe, or that read a free lock first, cannot produce \
-         this",
+        held > 0,
+        "the settle must observe a held lock before the release it asked for, \
+         but it read a free lock first: {seen:?} (false is held, true is free); \
+         a settle that never saw the hold cannot have waited it out",
+    );
+    ensure!(
+        seen.get(held) == Some(&true),
+        "the settle must observe a free lock once the holder answered, but it \
+         saw {seen:?} (false is held, true is free); a settle that returned `Ok` \
+         before the release, or that reported a free probe followed by a held \
+         one, cannot produce this",
     );
     Ok(())
 }

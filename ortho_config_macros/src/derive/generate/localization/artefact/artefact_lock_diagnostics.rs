@@ -135,12 +135,20 @@ pub(super) fn ensure_settles_free(root: &Path, expectation: &str) -> Result<()> 
 /// Asserts the lock settles, reporting every probe to `observe` first.
 ///
 /// [`ensure_settles_free`] with one addition: `observe` is handed each probe
-/// while the probe's own handle still holds the lock, so a test can act on
-/// what the settle saw rather than infer it afterwards. That is what makes a
-/// held-to-free test deterministic — releasing *from* the first observed
-/// `Held` guarantees the settle saw a hold, where a releaser on its own timer
-/// only makes that likely. A test that does nothing costs the settle nothing;
-/// the hook runs on a path that is about to sleep anyway.
+/// as the settle sees it, so a test can act on what the settle saw rather than
+/// infer it afterwards. That is what makes a held-to-free test deterministic —
+/// releasing *from* an observed `Held` guarantees the settle saw a hold, where
+/// a releaser on its own timer only makes that likely. A test that does
+/// nothing costs the settle nothing; the hook runs on a path that is about to
+/// sleep anyway.
+///
+/// The hook is not a lock-holding window. [`probe_lock`] drops its own
+/// acquisition before it returns, so the lock is already released by the time
+/// `observe` runs; what the hook establishes is only that this probe observed
+/// the state it reports. A release requested from the hook therefore lands
+/// after that observation, but nothing prevents the holder from answering it
+/// later than the next [`SETTLE_INTERVAL`] — so a hook must tolerate repeated
+/// `Held` probes rather than require the release on the very next one.
 ///
 /// # Errors
 ///

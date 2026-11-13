@@ -140,10 +140,20 @@ outlast the sleep, which did not establish the probe order it claimed: a
 releaser scheduled first could finish before the first probe, so a correct
 settle would return early and fail. `ensure_settles_free_observed` reports each
 probe before acting on it, and the test releases from the first observed
-`Held`, so the sequence is a fact about the code — held, released, free —
-rather than a race the assertion hopes to win. The same recording catches what
-the timer could not: a settle that returned `Ok` on its first held probe fails
-on the observed sequence `[false]`.
+`Held`, so the order is a fact about the code — held, released, free — rather
+than a race the assertion hopes to win. The same recording catches what the
+timer could not: a settle that returned `Ok` on its first held probe fails
+because it never records a held probe at all.
+
+The probe *count* is not fixed, and asserting one would reintroduce the same
+defect in a smaller place. `probe_lock` drops its acquisition before returning,
+so the callback is not a window in which the lock is still held; it establishes
+only that this probe saw what it reports. The helper polls for the release on
+its own interval, which is longer than the settle's re-probe interval, so a
+correct settle sees one or more held probes and then a free one. The test
+asserts that shape rather than a number, so it fails on early success or on a
+free probe preceding the hold, and does not fail merely because the helper was
+slow to answer.
 
 ## Alternatives rejected
 
