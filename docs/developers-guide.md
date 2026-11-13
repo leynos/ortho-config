@@ -3586,6 +3586,52 @@ step, so it is outside this contract, and bounding it is separate work.
 
 [shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
 
+### Reading the child-cargo class, and checking the reader
+
+The class is derived from the Rust sources, which makes the reading itself
+something that can be wrong. `scripts/verify_child_cargo_reader_equivalence.py`
+compares what one revision's readers find against another's, so a change in the
+reading can be told apart from a change in the sources it reads:
+
+```sh
+python3 -I scripts/verify_child_cargo_reader_equivalence.py <older> <newer>
+```
+
+Both revisions are named rather than defaulting to `HEAD`, because a comparison
+whose input moved is not a comparison. It exits `0` when the class, the
+per-marker attribution, the root inventory and every source text agree; `1`
+when any of them differs, printing the member or path that disagreed; and `2`
+when a revision names no commit, because a mistyped name is a usage error
+rather than a reading that changed. The `Makefile` lists the script in
+`PYTEST_FLAGS`, so `make test` runs its doctests, and
+`scripts/tests/test_verify_child_cargo_reader_equivalence.py` drives it over
+synthetic repositories: two revisions that agree, a widened class, a source
+tree that changed, a root present in only one revision, and an unknown revision.
+
+The readings it shares with the contract are split by the question each
+answers. A contract that needs one should import it rather than write a second
+copy, because a second copy is what lets two classifications disagree about the
+same file:
+
+- `child_cargo_source_markers.py` holds the three call sites that count as
+  starting a child `cargo`.
+- `rust_module_graph.py` follows `mod` declarations, `#[path]` attributes and
+  inline modules to decide which files one binary compiles.
+- `rust_source_mask.py` blanks comments and literals while keeping offsets, so
+  a brace in prose or in a string cannot change that walk.
+- `nextest_override_reader.py` returns one profile's override entries in
+  declaration order, leaving a platform gate visible to its caller.
+- `nextest_filterset.py` reads the `binary(...)` and `binary_id(...)` terms a
+  filter may consist of, refusing a shape it cannot read.
+- `nextest_precedence.py` resolves the effective `slow-timeout` for a binary,
+  including entries that shadow one another and a tier no entry decides.
+- `source_scan.py` is the read layer beneath all of them, refusing a source it
+  cannot read rather than reporting it absent.
+
+A refusal is only observable where a mode actually denies a read, so the tests
+that exercise one skip on Windows and as root; `unreadable_support.py` holds
+that guard and the helper that denies the access.
+
 ## Runner placement
 
 The Linux leg of `ci.yml`'s `build-test` runs on Ubicloud's

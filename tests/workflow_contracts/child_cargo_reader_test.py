@@ -25,7 +25,8 @@ from child_cargo_tier import (
     carries_child_cargo,
     child_cargo_binaries,
 )
-from rust_module_graph import sources_reached
+from rust_module_graph import ScanError, sources_reached
+from unreadable_support import DENIED_ACCESS_IS_UNOBSERVABLE, denied
 
 #: A source that starts a child ``cargo``, and one that does not. The pair is
 #: what makes each assertion below a reading test rather than a smoke test:
@@ -247,6 +248,61 @@ def test_a_missing_declaration_is_an_absence_not_a_failure(
     assert len(reached) == 1, (
         f"a declaration naming no existing file contributed {sorted(reached)}; "
         f"only the root should be reached"
+    )
+
+
+def test_an_ambiguous_declaration_is_refused(
+    crate_tests: typ.Callable[[], pathlib.Path],
+) -> None:
+    """``mod child;`` may not resolve to both ``child.rs`` and ``child/mod.rs``.
+
+    Rust forbids both files existing, so a tree holding them is malformed. A
+    reader that picked one -- the first, or the one its search order happened
+    to reach -- would compile a binary from a source Rust refuses to compile,
+    and the marker in the other file would be attributed or dropped by a coin
+    toss. Refusing names the declaring file and both candidates, which is what
+    a maintainer needs to see which declaration is at fault.
+    """
+    tests = crate_tests()
+    (tests / "child.rs").write_text(PLAIN, encoding="utf-8")
+    (tests / "child").mkdir()
+    (tests / "child" / "mod.rs").write_text(PLAIN, encoding="utf-8")
+    root = tests / "ambiguous.rs"
+    root.write_text("mod child;\n", encoding="utf-8")
+    with pytest.raises(ScanError) as raised:
+        sources_reached(root)
+    message = str(raised.value)
+    assert str(root) in message, (
+        f"the refusal did not name the declaring file: {message}"
+    )
+    assert "child.rs" in message and "mod.rs" in message, (
+        f"the refusal did not name both candidates, so it cannot be acted on: {message}"
+    )
+
+
+@pytest.mark.skipif(
+    DENIED_ACCESS_IS_UNOBSERVABLE,
+    reason="a mode denies a read on neither Windows nor as root",
+)
+def test_an_unreadable_declared_source_is_refused(
+    crate_tests: typ.Callable[[], pathlib.Path],
+) -> None:
+    """A declared source that cannot be opened is a fault, not an absence.
+
+    The declaration resolves to a file that is there, so a reader that treated
+    the failed read as "nothing to contribute" would report the binary as
+    carrying no marker and leave the class a member short -- the under-read
+    the contract exists to catch, and one no readable fixture can show.
+    """
+    tests = crate_tests()
+    declared = tests / "child.rs"
+    declared.write_text(CARRIES, encoding="utf-8")
+    root = tests / "unreadable.rs"
+    root.write_text("mod child;\n", encoding="utf-8")
+    with denied(declared), pytest.raises(ScanError) as raised:
+        sources_reached(root)
+    assert str(declared) in str(raised.value), (
+        f"the refusal did not name the source it could not read: {raised.value}"
     )
 
 
