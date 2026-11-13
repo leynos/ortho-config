@@ -819,11 +819,13 @@ help_info_uri = "https://example.com/help/MyApp"
 ### 6.3 Caching
 
 Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint,
-macro version, tool version, and the workspace `Cargo.lock` hash (when
-present). The directory name is `v1-` followed by 32 lowercase hexadecimal
-digits from the leading 16 bytes of the SHA-256 digest. The prefix versions the
-key encoding; changing it creates a fresh cache namespace. `--cache` reuses an
-entry when valid; `--no-build` trusts the existing IR.
+the root type, the tool version, the IR schema version, and the workspace
+`Cargo.lock` hash (when present). A macro-version change is not a direct input;
+it can affect the key only indirectly, through the `Cargo.lock` hash. The
+directory name is `v1-` followed by 32 lowercase hexadecimal digits from the
+leading 16 bytes of the SHA-256 digest. The prefix versions the key encoding;
+changing it creates a fresh cache namespace. `--cache` reuses an entry when
+valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the

@@ -174,8 +174,12 @@ build with `--features metrics` exports each counter update to standard error
 as a structured `tracing` event under the `cargo_orthohelp::metrics` target:
 
 ```console
-RUST_LOG=cargo_orthohelp::metrics=debug cargo orthohelp --package acme
+RUST_LOG=cargo_orthohelp::metrics=debug cargo orthohelp --cache --package acme
 ```
+
+Pass `--cache` to make repeated runs reuse the cached IR and emit the lookup
+hit or miss event; without `--cache` or `--no-build`, an invocation consults no
+cache and records no lookup.
 
 A host that installs its own `metrics` recorder before starting the CLI keeps
 it, because the CLI claims the process-wide recorder slot only when it is free.

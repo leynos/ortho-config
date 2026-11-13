@@ -2134,21 +2134,24 @@ returns through an emitter. The modules are grouped by the fact they report:
 - `bridge_build_telemetry.rs` — the build's recovery markers and generated
   output cleanup.
 - `bridge_observability.rs` — the completed/failed pairs for the Cargo build,
-  executable snapshot, bridge execution, and cache operations, including the
-  child's standard error on a failed build.
+  executable snapshot, bridge execution, and cache operations. Each pair
+  carries a closed operation and outcome vocabulary plus elapsed time, and
+  omits paths, cache keys, error strings, and child output.
 - `output/mod.rs` — the atomic JSON write: the start, the completion with its
   byte count, the stdout path, and one failure event per fallible step
   (prepare, open, write, flush, sync, rename, and parent-directory sync).
 - `output/agent_context.rs` — the agent-context document's own
   start/completion/failure trio.
 
-These carry real paths, artefact names, byte counts, and error renderings, so
-they are not held to discovery's closed-vocabulary rule. Treat that as a
-boundary, not a licence: the bridge's `failed` event includes the child's
-standard error because a bridge build failure is otherwise opaque to the user,
-and that text is the only way to diagnose one. Do not extend the same treatment
-to `discovery`, whose inputs are configuration values and are exactly what the
-closed vocabulary exists to keep out.
+The output events carry real paths, artefact names, byte counts, and error
+renderings, so they are not held to discovery's closed-vocabulary rule. The
+bridge lifecycle outcome events are the exception, and the distinction is a
+boundary rather than a licence: those events carry a closed operation and
+outcome vocabulary plus elapsed time, never child output. A failed bridge build
+reports its diagnostics through the returned error rather than through the
+event. Do not extend the same treatment to `discovery`, whose inputs are
+configuration values and are exactly what the closed vocabulary exists to keep
+out.
 
 The IR cache is a persistence unit with no observability of its own.
 `bridge/ir_cache.rs` returns a closed `PublishOutcome` (`Unchanged` or
@@ -3050,6 +3053,12 @@ still be green. `build_standard_routing_test.py` therefore holds the Make
 variables equal to the configuration file for each host it names; change one
 without the other and that contract fails.
 
+Cargo ranks `CARGO_ENCODED_RUSTFLAGS` above `RUSTFLAGS`, and an empty value
+still wins. A value inherited from an enclosing Cargo run would therefore
+displace every route above, however carefully it was written, so the Makefile
+un-exports it. A dry run cannot show an `unexport`, so the same contract reads
+the directive from the file.
+
 ### Routing matrix
 
 Which flags reach Cargo depends on the route, and three things must not be
@@ -3270,24 +3279,28 @@ identifiers are distinct, so each appears by name in `pytest --collect-only`.
 - `build_standard_make.py`, `workflow_legs.py` and `workflow_shell.py` are
   support code: the first evaluates the Makefile and reads the Cargo
   configuration, the second derives a job's legs and the steps that reach the
-  suite, and the third reads only enough shell syntax to identify Make goals in
-  workflow `run` steps. `workflow_shell.py` belongs to this interpreter and is
-  not a general-purpose shell parser.
+  suite, and the third reads only enough shell syntax to identify Make goals
+  and command-line `NAME=value` variables in workflow `run` steps.
+  `workflow_shell.py` belongs to this interpreter and is not a general-purpose
+  shell parser. A Make variable can arrive from the job `env`, the step `env`,
+  or the invocation itself; the command line wins, as it does in Make.
 - `workflow_legs_properties_test.py` holds Hypothesis property tests of the
   `workflow_legs` interpreter: matrix product completeness, `include` entries
-  appended unchanged, an `exclude` entry removing exactly its matches,
+  augmenting the cells whose axis values they keep (and becoming cells of their
+  own when they match none), an `exclude` entry removing exactly its matches,
   degenerate matrices giving one empty leg, the string, list and mapping forms
   of `runs-on`, `matrix.<key>` substitution including the fork fallback,
   unreadable runners raising, and step `if` conditions agreeing with an
   independent oracle. They are derandomized, bounded and use no example
   database, so they are deterministic and fast. Each property is also run
   against a deliberately wrong interpreter (a dropped axis, an ignored
-  `exclude`, an always-true condition, an unsubstituted reference) and must
-  reject it. They exist because the repository's workflows use one spelling of
-  everything, so the real workflows cannot tell a working interpreter from a
-  broken one, and the provisioning contract depends on it. Hypothesis is
-  already declared for `make test-workflow-contracts`
-  (`--with 'hypothesis>=6,<7'` in the Makefile target).
+  `exclude`, includes appended verbatim, a swapped comparison operator, an
+  always-true condition, an unsubstituted reference) and must reject it. They
+  exist because the repository's workflows use one spelling of everything, so
+  the real workflows cannot tell a working interpreter from a broken one, and
+  the provisioning contract depends on it. Hypothesis is already declared for
+  `make test-workflow-contracts` (`--with 'hypothesis>=6,<7'` in the Makefile
+  target).
 
 These contracts judge this repository's own invocations. Estate-wide policy is
 audited by Concordat (`concordat artefact rule run rust-build-defaults`,
@@ -3650,9 +3663,17 @@ The flags below select Cranelift the way the standard would carry it:
 CRANELIFT_FLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold"
 ```
 
-1. Run the probe above in a scratch crate outside the repository, with
-   `RUSTFLAGS="$CRANELIFT_FLAGS" cargo test`. The component is installed by
-   `rust-toolchain.toml` and checked by `make check-build-tools`.
+1. Read the pinned channel from `rust-toolchain.toml` before leaving the
+   checkout, because a scratch crate outside the repository does not inherit
+   that file and the flags above need the pinned nightly:
+
+   ```bash
+   CHANNEL=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+   ```
+
+   Run the probe above in the scratch crate with
+   `RUSTFLAGS="$CRANELIFT_FLAGS" cargo "+$CHANNEL" test`. The component is
+   installed by `rust-toolchain.toml` and checked by `make check-build-tools`.
 2. Run the suite with the same `RUSTFLAGS` and
    `cargo nextest run --workspace --all-features --no-fail-fast`, serializing
    the trybuild binaries.
