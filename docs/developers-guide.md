@@ -223,21 +223,24 @@ The membership is not a hand-maintained list, and
 `tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from
 becoming one. That contract reads which test binaries drive a child `cargo` out
 of the Rust sources, compares that set with the entries that grant a raised
-allowance in either direction, and requires every binary the group serializes
-to be a member of the set. `cli_dispatch` and
-`agent_context_renderer_end_to_end` were absent from the list here and from
-every raised allowance in the configuration: both spawned a child `cargo` on
-the 600 s base tier, and no other assertion could see the omission, because
-every other reading begins from the same list that omitted them.
+allowance in either direction, and requires every binary a test-group filter
+serializes to be a member of the set, among the binaries it audits. That
+universe is `ortho_config` and `cargo-orthohelp`; a group selecting only
+binaries outside it belongs to a different contract, so nothing here is claimed
+about those. `cli_dispatch` and `agent_context_renderer_end_to_end` were absent
+from the list here and from every raised allowance in the configuration: both
+spawned a child `cargo` on the 600 s base tier, and no other assertion could see
+the omission, because every other reading begins from the same list that
+omitted them.
 
 Membership of the raised allowances and membership of the group are separate
 questions, and the contract keeps them apart: it requires every *group* member
-to be a class member, because the raised allowance is written for the class and
-a serialized non-member would fall through to the base tier, while the class
-itself may be raised without being serialized. A binary can drive a child
-`cargo` without touching the shared caches the group protects, so the class can
-be the wider of the two. It is not wider today: the two sets coincide, and the
-contract does not require that they keep doing so.
+it audits to be a class member, because the raised allowance is written for the
+class and a serialized non-member would fall through to the base tier, while
+the class itself may be raised without being serialized. A binary can drive a
+child `cargo` without touching the shared caches the group protects, so the
+class can be the wider of the two. It is not wider today: the two sets coincide,
+and the contract does not require that they keep doing so.
 
 `cli_dispatch` is a member of both. Its `.config/nextest.toml` entry places it
 in `orthohelp_cache` and gives it the class's raised allowance, so neither

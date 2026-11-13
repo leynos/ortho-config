@@ -319,14 +319,16 @@ def test_a_shared_helper_is_attributed_to_every_binary_reaching_it(
     tests = crate_tests()
     (tests / "shared").mkdir()
     (tests / "shared" / "mod.rs").write_text(CARRIES, encoding="utf-8")
-    for binary in ("first_user", "second_user"):
+    binaries = ("first_user", "second_user")
+    for binary in binaries:
         (tests / f"{binary}.rs").write_text("mod shared;\n", encoding="utf-8")
-    assert carries_child_cargo(tests / "first_user.rs") is True, (
-        "the helper's marker reached the second binary but not the first, so "
-        "the attributed set is asymmetric rather than shared"
-    )
-    assert carries_child_cargo(tests / "second_user.rs") is True, (
-        "the helper's marker was attributed to one binary but not the other"
+    # Both readings are taken before either is judged, so a failure reports
+    # what each binary actually got rather than claiming a result for the
+    # binary whose assertion had not run yet.
+    reached = {binary: carries_child_cargo(tests / f"{binary}.rs") for binary in binaries}
+    assert reached == {binary: True for binary in binaries}, (
+        "the helper's marker was not attributed to every binary reaching it, "
+        f"so the set is asymmetric rather than shared: {reached}"
     )
 
 
