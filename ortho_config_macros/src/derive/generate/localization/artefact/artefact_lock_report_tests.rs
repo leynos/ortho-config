@@ -119,17 +119,34 @@ fn reports_the_process_and_descriptor_that_still_hold_the_lock() -> Result<()> {
             "the report must contain {expected_text:?}, but it did not: {rendered}",
         );
     }
+    // The pid is asserted as a *value*, not as the "this process" label, and
+    // it is anchored to the `holder:` line rather than to the report as a
+    // whole. The `/proc/locks` record line names a pid too, so a bare
+    // `contains("pid N")` would be satisfied by the evidence line even when
+    // `describe_process` printed the wrong one; only the `holder:` prefix ties
+    // the number to the sentence that describes the holder.
+    ensure!(
+        rendered.contains(&format!("holder: pid {} ", std::process::id())),
+        "the holder line must name this process's pid {} because the guard \
+         lives here, but it named another: {rendered}",
+        std::process::id(),
+    );
     ensure!(
         !expected.is_empty(),
         "the held guard must own at least one descriptor on the lock file, or this \
          case asserts nothing about the report: {rendered}",
     );
+    // Matched as a whole word, not as a prefix. `contains("as fd 3")` also
+    // matches "as fd 30", so a report naming the wrong descriptor would pass
+    // whenever the real one happened to be a prefix of it.
     ensure!(
-        expected
-            .iter()
-            .any(|descriptor| rendered.contains(&format!("as fd {descriptor}"))),
+        expected.iter().any(|descriptor| {
+            rendered
+                .split(|character: char| !character.is_ascii_digit())
+                .any(|number| number == descriptor.to_string())
+        }),
         "the report must name one of the descriptors procfs shows on this file \
-         {expected:?}, but it named none: {rendered}",
+         {expected:?}, but it named none of them: {rendered}",
     );
     Ok(())
 }
@@ -304,6 +321,9 @@ fn settling_refuses_a_lock_that_outlives_the_window() -> Result<()> {
     let root = TempRoot::new()?;
     let holder = spawn_helper(root.path(), "hold-until-asked")?;
     wait_for_holder(root.path())?;
+    // Read before the report exists: the pid the report must name is the
+    // helper's, and no later call can change what the kernel gave it.
+    let holder_pid = holder.id();
 
     let error = super::lock_diagnostics::ensure_settles_free(root.path(), "a leak must not settle")
         .expect_err("a lock held for the whole window must be reported, not accepted");
@@ -321,6 +341,27 @@ fn settling_refuses_a_lock_that_outlives_the_window() -> Result<()> {
     ensure!(
         rendered.contains("is still held"),
         "the report must say the lock was still held: {rendered}",
+    );
+    // The foreign holder's identity is asserted too, not just the sentence
+    // shape. This is the case issue #606 is about — a real other process
+    // holding the lock — so a report that named this process, or one of its
+    // own children by mistake, has to fail here rather than read as a
+    // plausible hold.
+    //
+    // Anchored to the `holder:` line for the reason the in-process case
+    // records: the `/proc/locks` record line also names a pid, so an
+    // unanchored match would pass even when the holder line named the wrong
+    // process. The relation phrase sits on that same line, so the two
+    // together pin one sentence: the number and the label must agree.
+    ensure!(
+        rendered.contains(&format!("holder: pid {holder_pid} ")),
+        "the holder line must name the helper's pid {holder_pid}, because that \
+         is the process holding the lock, but it named another: {rendered}",
+    );
+    ensure!(
+        rendered.contains("child of this process"),
+        "the report must say how the holder relates to the reporter, and the \
+         helper is its child: {rendered}",
     );
     ensure!(
         rendered.contains("holds the lock file open as fd"),

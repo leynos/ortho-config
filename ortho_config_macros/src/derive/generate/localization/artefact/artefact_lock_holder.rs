@@ -107,6 +107,14 @@ fn append_owner(lines: &mut Vec<String>, pid: ProcessId, scan: DescriptorScan, o
 /// an incomplete scan rather than a hard failure. An entry whose identity
 /// cannot be read is treated the same way: the descriptor list would otherwise
 /// silently drop a live holder and read as inheritance.
+///
+/// A name that will not parse as a descriptor is skipped rather than treated
+/// as a fault. Every entry in this directory is a decimal descriptor number
+/// written by the kernel, so a non-numeric name is not a descriptor this scan
+/// could have examined and omitted — there is nothing there to hold the lock.
+/// An *error* enumerated from the directory is the opposite case: an entry
+/// that exists and was not read, which is a partial scan and is reported as
+/// one.
 #[cfg(target_os = "linux")]
 fn inspect_holder(pid: ProcessId, identity: LockFileIdentity) -> Result<Vec<Descriptor>, String> {
     let directory = format!("/proc/{pid}/fd");
@@ -114,7 +122,8 @@ fn inspect_holder(pid: ProcessId, identity: LockFileIdentity) -> Result<Vec<Desc
         fs::read_dir(&directory).map_err(|error| format!("{directory}: unreadable ({error})"))?;
     let mut descriptors = Vec::new();
     for candidate in entries {
-        let Ok(entry) = candidate else { continue };
+        let entry = candidate
+            .map_err(|error| format!("{directory}: an entry could not be read ({error})"))?;
         let Ok(name) = entry.file_name().into_string() else {
             continue;
         };
@@ -203,5 +212,47 @@ mod tests {
                 "an incomplete scan must name the fault it hit: {rendered}",
             );
         }
+    }
+
+    /// Verifies a process with no `/proc` entry reports an incomplete scan.
+    ///
+    /// Unlike the table above, nothing here is injected: this is a real pid
+    /// the kernel cannot describe, so the whole path from `append_owner_lines`
+    /// — enumeration, failure, counting, and the summary line that says the
+    /// evidence is partial — is exercised against procfs itself. A pid of
+    /// `u32::MAX` is above `pid_max` on every supported kernel, so the scan
+    /// cannot accidentally observe a live process.
+    #[test]
+    fn a_scan_that_cannot_be_read_reports_the_report_as_incomplete() {
+        use super::append_owner_lines;
+        use crate::derive::generate::localization::artefact::lock_evidence::{
+            DeviceNumber, Inode, LockFileIdentity,
+        };
+
+        let missing = ProcessId::new(u32::MAX);
+        let identity = LockFileIdentity::of(DeviceNumber::from_raw(0), Inode::new(0));
+        let mut lines = Vec::new();
+        append_owner_lines(&mut lines, &[missing], identity);
+        let rendered = lines.join("\n");
+
+        assert!(
+            rendered.contains(&format!("/proc/{missing}/fd")),
+            "the report must name the directory it could not read: {rendered}",
+        );
+        assert!(
+            rendered.contains("the scan is incomplete"),
+            "an unreadable process must be reported as an incomplete scan: \
+             {rendered}",
+        );
+        assert!(
+            rendered.contains("1 process(es) could not be read"),
+            "the summary must count the process the scan could not read: \
+             {rendered}",
+        );
+        assert!(
+            !rendered.contains("inherited from the recorded acquirer"),
+            "an unreadable process must not be accused of inheriting the lock: \
+             {rendered}",
+        );
     }
 }
