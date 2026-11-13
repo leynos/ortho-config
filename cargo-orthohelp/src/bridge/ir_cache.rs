@@ -80,20 +80,85 @@ pub(super) fn read_cached_ir(paths: &BridgeCache) -> Result<Option<String>, Orth
     Ok(Some(buffer))
 }
 
+/// Reports whether the cached IR is byte-for-byte identical to `json`.
+///
+/// The comparison is bounded by `json`'s length: the cache file's size is
+/// checked first, and the body is then read through a `take` limit of
+/// `json.len() + 1` bytes. A cache entry whose length differs can therefore
+/// never be read into memory, which keeps an attacker-influenced `ir.json`
+/// from forcing an allocation proportional to its own size on the normal
+/// publish path.
+///
+/// The limit is one byte beyond the expected payload so that a file which
+/// grows between the metadata check and the read still fails the comparison
+/// instead of being silently truncated into a false match.
+///
+/// Read failures are propagated rather than treated as misses, so unreadable
+/// cache state cannot be overwritten without inspection. An entry that is not
+/// a regular file is rejected for the same reason: a directory has no body to
+/// compare, and reading any other special file could block instead of
+/// returning, so neither can be reported as a harmless content mismatch.
+fn cached_ir_matches(paths: &BridgeCache, json: &str) -> Result<bool, OrthohelpError> {
+    let Some(dir) = open_optional_dir(paths.cache_dir.as_path())? else {
+        return Ok(false);
+    };
+    let file = match dir.open("ir.json") {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => {
+            return Err(OrthohelpError::Io {
+                path: paths.ir_path.clone(),
+                source: err,
+            });
+        }
+    };
+
+    let expected_len = json.len() as u64;
+    let metadata = file.metadata().map_err(|err| OrthohelpError::Io {
+        path: paths.ir_path.clone(),
+        source: err,
+    })?;
+    if !metadata.is_file() {
+        return Err(OrthohelpError::Io {
+            path: paths.ir_path.clone(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "cache entry is not a regular file",
+            ),
+        });
+    }
+    if metadata.len() != expected_len {
+        return Ok(false);
+    }
+
+    let mut buffer = Vec::with_capacity(json.len().saturating_add(1));
+    file.take(expected_len.saturating_add(1))
+        .read_to_end(&mut buffer)
+        .map_err(|err| OrthohelpError::Io {
+            path: paths.ir_path.clone(),
+            source: err,
+        })?;
+
+    Ok(buffer == json.as_bytes())
+}
+
 /// Writes `json` to the cache, preserving the file when its contents match.
 ///
 /// Idempotent writes preserve modification time across path-normalization
-/// cache misses. Read failures are propagated rather than treated as misses,
-/// so unreadable cache state cannot be overwritten without inspection.
+/// cache misses. The existing entry is compared only after a metadata length
+/// check and a read capped at the new payload's length plus one byte, so a
+/// large mismatched cache file is never loaded. Read failures are propagated
+/// rather than treated as misses, so unreadable cache state cannot be
+/// overwritten without inspection.
 pub(super) fn write_ir_cache(
     paths: &BridgeCache,
     json: &str,
 ) -> Result<PublishOutcome, PublishError> {
-    let existing = read_cached_ir(paths).map_err(|source| PublishError {
+    let matches = cached_ir_matches(paths, json).map_err(|source| PublishError {
         stage: PublishStage::Read,
         source,
     })?;
-    if existing.as_deref() == Some(json) {
+    if matches {
         return Ok(PublishOutcome::Unchanged);
     }
 
