@@ -2425,6 +2425,39 @@ library API rather than part of `--check-agent-native`; see the
 [cargo-orthohelp API guide](cargo-orthohelp-api-guide.md#structured-output-rule)
 for a runnable example that calls both checkers.
 
+## Rely on process exit status
+
+`cargo-orthohelp` reports normal completion with three process statuses. They
+describe existing behaviour; no diagnostic field carries them.
+
+_Table 6: Normal-completion process statuses._
+
+| Status | Class     | Meaning                                                                                                                                                                        |
+| ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0      | `success` | The requested work finished, including `--help` and `--version`.                                                                                                               |
+| 1      | `failure` | A runtime failure: loading metadata, building or running the bridge, parsing IR, serializing or writing a document, reading or writing files, or a deny-mode policy violation. |
+| 2      | `usage`   | Clap rejected the arguments or the dispatch shape.                                                                                                                             |
+
+A policy denial shares status `1` with every other runtime failure, so the
+number alone cannot identify it. The report is written and streamed before the
+process exits, and a positive `summary.deny` count is the authoritative signal:
+
+<!-- tested-example: guide-policy-deny -->
+```console
+cargo orthohelp --check-agent-native --policy-mode deny --package my-cli --out-dir out
+jq -e '.summary.deny == 0' out/policy-report.json
+```
+
+The first command exits `1` when the check reports a denial; the `jq` assertion
+then fails the continuous-integration step on the count rather than on an
+ambiguous status. Signals, forced termination, and a launcher that never starts
+the process are outside this contract.
+
+These three statuses describe `cargo-orthohelp` itself, not the target command.
+A command's declared `exit_class` names remain documentation about that
+command: mapping them to numbers is later roadmap work (7.2.5), and declaring
+how JSON mode frames its streams is roadmap 7.2.4.
+
 ## Upgrade from an earlier release
 
 Each release with compatibility notes has a migration guide that separates

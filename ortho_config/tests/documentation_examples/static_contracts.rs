@@ -110,7 +110,7 @@ fn identifier_artefact_command_names_the_emission_variable() -> Result<()> {
     Ok(())
 }
 
-/// The policy check command and CI recipe are the flags that
+/// The policy check command, CI recipe, and denial recipe are the flags that
 /// `cargo-orthohelp/tests/documented_command.rs` runs against the policy
 /// fixtures.
 #[test]
@@ -123,6 +123,17 @@ fn policy_check_commands_match_the_executed_flow() -> Result<()> {
     ensure!(
         gate.body == format!("{command}jq -e '.mode != \"off\"' out/policy-report.json\n"),
         "policy CI recipe drifted"
+    );
+    let denial = documented_example("guide-policy-deny")?;
+    ensure!(denial.language == "console");
+    ensure!(
+        denial.body
+            == concat!(
+                "cargo orthohelp --check-agent-native --policy-mode deny ",
+                "--package my-cli --out-dir out\n",
+                "jq -e '.summary.deny == 0' out/policy-report.json\n",
+            ),
+        "policy denial recipe drifted"
     );
     Ok(())
 }

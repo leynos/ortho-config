@@ -58,6 +58,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-policy-check",
     "guide-policy-ci",
     "guide-policy-config",
+    "guide-policy-deny",
     "guide-profile-metadata",
     "guide-profiles",
     "guide-profiles-file",

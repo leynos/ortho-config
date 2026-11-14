@@ -160,6 +160,11 @@ _Table 2: Accepted structured-output attribute keys and vocabulary._
   unrecognized token instead of discarding an author's declaration.
 - `ExitClass` carries no numeric code. Mapping classes to process statuses is
   roadmap 7.2.5 work, and inventing a number here would pre-empt it.
+- Roadmap 7.2.3 delivers the declarations and one consumer, the
+  `agent-native.output.json-missing` rule, but not a JSON stream contract
+  (7.2.4) or numeric exit-code taxonomy metadata (7.2.5). This ADR therefore
+  remains the record of the declaration surface; a later ADR can extend it
+  without renegotiating the absent-means-undeclared rule.
 
 ### Module ownership
 

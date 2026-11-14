@@ -1,4 +1,10 @@
 //! Integration tests for Cargo external-subcommand dispatch.
+//!
+//! Besides the dispatch diagnostics themselves, these tests pin the three
+//! normal-completion process statuses documented for the CLI: `0` for a
+//! successful run including help, `1` for an ordinary runtime failure, and `2`
+//! for Clap's argument or dispatch rejection. Expected failures also assert
+//! the exact number, because "not success" would accept a crash or a signal.
 
 mod fixtures;
 
@@ -6,6 +12,15 @@ use insta::assert_snapshot;
 use rstest::rstest;
 use std::error::Error;
 use std::process::{Command, Output};
+
+/// Process status for a completed run, including `--help` and `--version`.
+const EXIT_SUCCESS: i32 = 0;
+
+/// Process status for an ordinary runtime failure.
+const EXIT_FAILURE: i32 = 1;
+
+/// Process status for Clap's argument and dispatch rejection.
+const EXIT_USAGE: i32 = 2;
 
 fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
@@ -81,8 +96,9 @@ fn help_output_matches_snapshots(
         run_direct(args).expect("direct orthohelp invocation should run")
     };
 
-    assert!(
-        output.status.success(),
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_SUCCESS),
         "{success_message}: {}",
         stderr(&output)
     );
@@ -116,7 +132,11 @@ fn command_failure_cases(
 ) {
     let output = run_direct(args).expect("direct orthohelp invocation should run");
 
-    assert!(!output.status.success(), "{failure_message}");
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_USAGE),
+        "{failure_message}: expected Clap's usage status"
+    );
     let stderr = stderr(&output);
     assert!(
         stderr.contains(expected_error),
@@ -134,13 +154,42 @@ fn command_failure_cases(
 fn direct_invocation_without_subcommand_includes_cargo_hint() {
     let output = run_direct(&["--format", "ir"]).expect("direct orthohelp invocation should run");
 
-    assert!(!output.status.success(), "direct invocation should fail");
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_USAGE),
+        "direct invocation should be rejected as a usage error"
+    );
     let stderr = stderr(&output);
     assert!(
         stderr.contains(
             "note: invoke this tool via `cargo orthohelp` or as `cargo-orthohelp orthohelp [OPTIONS]`"
         ),
         "unexpected error output:\n{stderr}"
+    );
+}
+
+/// A runtime failure keeps status 1, distinct from Clap's usage status.
+///
+/// An unknown package is rejected while selecting the package, after Clap has
+/// accepted the arguments, so it exercises the ordinary failure class rather
+/// than the usage class. This is the assertion that would fail if the tool
+/// collapsed every failure onto one non-zero number.
+#[test]
+fn missing_package_reports_failure_status() {
+    let output = run_direct(&["orthohelp", "--package", "definitely-not-in-this-workspace"])
+        .expect("direct orthohelp invocation should run");
+
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_FAILURE),
+        "a runtime failure should exit {EXIT_FAILURE}, stderr:\n{}",
+        stderr(&output)
+    );
+    let diagnostics = stderr(&output);
+    assert!(
+        diagnostics.contains("PackageNotFound")
+            && diagnostics.contains("definitely-not-in-this-workspace"),
+        "the failure should name the missing package, stderr:\n{diagnostics}"
     );
 }
 
@@ -165,7 +214,11 @@ fn cargo_dispatch_failure_cases(
 ) {
     let output = run_cargo_dispatch(args).expect("Cargo-dispatched orthohelp should run");
 
-    assert!(!output.status.success(), "{failure_message}");
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_USAGE),
+        "{failure_message}: expected Clap's usage status"
+    );
     let stderr = stderr(&output);
     assert!(
         stderr.contains(expected_error),

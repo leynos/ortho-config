@@ -1598,6 +1598,45 @@ proceeds to generation. That generation writes `agent-context.json` for
 policy checking is enabled. A deny-mode finding fails after the report is
 retained and emitted, before any generator artefacts are created.
 
+### Policy rule API testing
+
+The behaviour and structured-output rules are library APIs over a compiled
+agent context, so they are tested at three levels rather than through
+`--check-agent-native`.
+
+- Finite tables. `cargo-orthohelp/src/policy/rules/output_tests.rs` enumerates
+  every (JSON support, stdout purpose, enforcement mode) combination and
+  derives the expected verdict from the written specification, not from the
+  production predicate. Additional cases vary `stderr_diagnostics` and
+  `exit_classes` to show unrelated declarations cannot change the verdict. Keep
+  that expected column independent when adding cases.
+- Sampled properties. `output_proptests.rs` generates command vectors of length
+  0–64 and checks additivity, permutation invariance for distinct paths, stable
+  ties for equal paths, and an unchanged input context.
+- Executable specification. `tests/features/structured_output.feature`, with
+  steps in `tests/rstest_bdd_support/output_policy.rs`, builds a context in
+  process, calls `check_output`, and asserts stable machine fields. Each
+  scenario declares one command in one mode, which keeps the
+  `OutputPolicyState` fixture free of cross-scenario sharing.
+
+Red–green evidence matters as much as coverage here. Before implementing the
+predicate, confirm the table fails for the missing capability, and demonstrate
+at least one negative control — omit undeclared JSON support, or duplicate a
+finding — so the suite is known not to be vacuous.
+
+Process-level contracts live beside these unit suites and must pin the exact
+status, not merely success or failure. `tests/cli_dispatch.rs` pins `0`, `1`,
+and `2` for help, runtime failure, and Clap rejection; `policy_report_contract`
+pins `0` for a completed report and `1` for denial; `documented_command.rs`
+pins the same numbers against the commands the users' guide prints, including
+that a denied check still writes and streams its report.
+
+These obligations are finite or sampled. No unbounded invariant is claimed for
+the metadata transport or the one predicate, so the repository selects no Kani
+or Verus proof here; the production-proof inventory in this guide records the
+proofs that do exist. Revisit that selection only if a new unbounded semantic
+invariant appears, and revise the ExecPlan before writing a proof.
+
 ### Integration test targets
 
 `ortho_config` also carries plain `rstest` integration suites that are distinct

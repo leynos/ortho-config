@@ -248,13 +248,13 @@ unsafe mutation surfaces before release.
   - [x] Model localized versus non-localized fields so protocol identifiers do
     not drift with human language.
 
-- [ ] 7.2.3. Add metadata for structured output and exit classes.
+- [x] 7.2.3. Add metadata for structured output and exit classes.
   - Requires 7.2.1.
   - See agent-native-cli-design.md §6.2 and §6.2.2.
-  - [ ] Model `--json` support, stdout contracts, stderr diagnostics, and exit
+  - [x] Model `--json` support, stdout contracts, stderr diagnostics, and exit
     classifications.
-  - [ ] Lint data-returning commands that cannot emit structured output.
-  - [ ] Document stable exit classes for `cargo-orthohelp`.
+  - [x] Lint data-returning commands that cannot emit structured output.
+  - [x] Document stable exit classes for `cargo-orthohelp`.
 
 - [ ] 7.2.4. Add a JSON mode stream contract.
   - Requires 7.2.3.

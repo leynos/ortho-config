@@ -795,6 +795,25 @@ including `<out>/agent-context.json` for `agent-context` and `all`. A deny-mode
 finding is reported before the command fails, so generator artefacts are not
 created. Other formats do not emit JSON to stdout.
 
+#### 6.1.1 Process exit classes
+
+Normal completion uses three process statuses. The CLI integration tests pin
+each number rather than asserting only success or failure, so a collapse of two
+classes into one fails a named test.
+
+| Status | Class     | Source                                                                                                                 |
+| ------ | --------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 0      | `success` | The requested work finished, including `--help` and `--version`.                                                       |
+| 1      | `failure` | A propagated `OrthohelpError`: metadata, bridge build or execution, IR parsing, serialization, I/O, and policy denial. |
+| 2      | `usage`   | Clap's argument and dispatch rejection, whose code `exit_for_clap_error` preserves.                                    |
+
+A policy denial shares status 1 with generic failures, so `summary.deny` in the
+retained and streamed report is the authoritative continuous-integration
+signal; the report is written before the error is returned. Signals, forced
+termination, and launcher failures are outside the contract. These are process
+facts rather than new diagnostic fields: numeric exit-code metadata for target
+commands remains roadmap 7.2.5, and JSON stream framing remains 7.2.4.
+
 `Cargo.toml` defaults:
 
 ```toml
@@ -1284,7 +1303,8 @@ Generation time:
 - Missing `en-US` when other cultures exist and `--ensure-en-us` is enabled
   triggers a copy and warning.
 
-Exit non-zero on hard errors and list artefacts on success.
+Exit non-zero on hard errors and list artefacts on success; §6.1.1 fixes the
+three normal-completion statuses.
 
 ## 10. Testing strategy
 

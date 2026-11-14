@@ -33,6 +33,13 @@ use std::process::Output;
 use std::sync::{LazyLock, Mutex, PoisonError};
 use tempfile::TempDir;
 
+/// The process status a documented successful command must exit with.
+const EXIT_SUCCESS: i32 = 0;
+
+/// The process status a documented runtime failure must exit with, which policy
+/// denial shares with every other failure.
+const EXIT_FAILURE: i32 = 1;
+
 // Each run starts its scenario deadline before it waits for the shared build
 // lock. nextest's `orthohelp_cache` group serializes the binary only under
 // nextest, so a direct `cargo test` would otherwise let one case spend its
@@ -85,8 +92,9 @@ impl OrthohelpRun {
     /// Fail with the run's standard error unless the command succeeded.
     fn ensure_success(&self, flow: &str) -> Result<()> {
         ensure!(
-            self.output.status.success(),
-            "{flow} failed:\n{}",
+            self.output.status.code() == Some(EXIT_SUCCESS),
+            "{flow} should exit {EXIT_SUCCESS}, got {:?}:\n{}",
+            self.output.status,
             String::from_utf8_lossy(&self.output.stderr)
         );
         Ok(())
@@ -189,5 +197,69 @@ fn documented_policy_check_reports_the_effective_mode(
         "{package} reported mode {mode:?}"
     );
     ensure!((mode != Some("off")) == is_gate_passing);
+    Ok(())
+}
+
+/// A documented deny-mode check still writes and streams its report, then
+/// exits 1.
+///
+/// Denial shares the failure status with every other runtime error, so the
+/// report's positive deny count is what identifies policy rejection. This test
+/// pins both halves of that contract: the artefact and stdout survive the
+/// failure, and the status is the documented one rather than merely non-zero.
+#[test]
+fn documented_policy_denial_keeps_the_report_and_exits_one() -> Result<()> {
+    let run = run_orthohelp(
+        &[
+            "--check-agent-native",
+            "--policy-mode",
+            "deny",
+            "--package",
+            "orthohelp_policy_deny_fixture",
+        ],
+        &[],
+    )?;
+
+    ensure!(
+        run.output.status.code() == Some(EXIT_FAILURE),
+        "a deny-mode violation should exit {EXIT_FAILURE}, got {:?}:\n{}",
+        run.output.status,
+        String::from_utf8_lossy(&run.output.stderr)
+    );
+
+    let report: Value = serde_json::from_str(&run.read_artefact(Artefact::PolicyReport)?)?;
+    ensure!(
+        report.get("mode").and_then(Value::as_str) == Some("deny"),
+        "the retained report should record deny mode, got {report}"
+    );
+    let deny_count = report
+        .get("summary")
+        .and_then(|summary| summary.get("deny"))
+        .and_then(Value::as_u64);
+    ensure!(
+        deny_count == Some(1),
+        "the retained report should count one deny finding, got {deny_count:?}"
+    );
+
+    let stdout = run.stdout()?;
+    ensure!(
+        stdout.ends_with('\n') && stdout.trim_end().lines().count() == 1,
+        "a failed check should still stream one compact JSON document, got {stdout:?}"
+    );
+    ensure!(
+        serde_json::from_str::<Value>(stdout)? == report,
+        "stdout should carry policy-report.json even when the check fails"
+    );
+    ensure!(
+        String::from_utf8_lossy(&run.output.stderr).contains("PolicyViolation"),
+        "the failure should identify the policy violation"
+    );
+    ensure!(
+        !run.out_dir
+            .path()
+            .join(Artefact::AgentContext.file_name())
+            .exists(),
+        "a denied policy-only run should still skip generation"
+    );
     Ok(())
 }

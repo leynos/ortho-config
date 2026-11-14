@@ -2,7 +2,9 @@
 //!
 //! These tests invoke the compiled binary, validate captured stdout
 //! independently from unit-level report construction and snapshots, and check
-//! that the retained artefact contains the same report.
+//! that the retained artefact contains the same report. Each case also pins
+//! the documented process status: `0` when the check completes, deny findings
+//! included, and `1` for a deny-mode violation.
 
 mod fixtures;
 
@@ -23,12 +25,19 @@ const WARN_CODE: &str = "redundant_exception";
 const DENY_RULE_ID: &str = "agent-native.config.malformed-exception";
 const DENY_CODE: &str = "malformed_exception";
 
+/// Process status for a run that finished and wrote its report, deny or not.
+const EXIT_SUCCESS: i32 = 0;
+
+/// Process status shared by every runtime failure, including policy denial.
+const EXIT_FAILURE: i32 = 1;
+
 #[derive(Debug, Clone, Copy)]
 struct PolicyCase {
     mode: &'static str,
     package: &'static str,
     format: Option<&'static str>,
-    should_succeed: bool,
+    /// The documented process status this invocation must produce.
+    expected_status: i32,
     finding: Option<Finding>,
     summary: SummaryCounts,
 }
@@ -53,7 +62,7 @@ struct SummaryCounts {
     mode: "warn",
     package: "orthohelp_fixture",
     format: None,
-    should_succeed: true,
+    expected_status: EXIT_SUCCESS,
     finding: None,
     summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
 })]
@@ -61,7 +70,7 @@ struct SummaryCounts {
     mode: "warn",
     package: "orthohelp_policy_warn_fixture",
     format: None,
-    should_succeed: true,
+    expected_status: EXIT_SUCCESS,
     finding: Some(Finding { rule_id: WARN_RULE_ID, code: WARN_CODE, severity: "warn" }),
     summary: SummaryCounts { off: 0, warn: 1, deny: 0, total: 1 },
 })]
@@ -69,7 +78,7 @@ struct SummaryCounts {
     mode: "deny",
     package: "orthohelp_fixture",
     format: None,
-    should_succeed: true,
+    expected_status: EXIT_SUCCESS,
     finding: None,
     summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
 })]
@@ -77,7 +86,7 @@ struct SummaryCounts {
     mode: "deny",
     package: "orthohelp_policy_deny_fixture",
     format: None,
-    should_succeed: false,
+    expected_status: EXIT_FAILURE,
     finding: Some(Finding { rule_id: DENY_RULE_ID, code: DENY_CODE, severity: "deny" }),
     summary: SummaryCounts { off: 0, warn: 0, deny: 1, total: 1 },
 })]
@@ -85,7 +94,7 @@ struct SummaryCounts {
     mode: "off",
     package: "orthohelp_policy_off_fixture",
     format: None,
-    should_succeed: true,
+    expected_status: EXIT_SUCCESS,
     finding: None,
     summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
 })]
@@ -93,7 +102,7 @@ struct SummaryCounts {
     mode: "warn",
     package: "orthohelp_fixture",
     format: Some("agent-context"),
-    should_succeed: true,
+    expected_status: EXIT_SUCCESS,
     finding: None,
     summary: SummaryCounts { off: 0, warn: 0, deny: 0, total: 0 },
 })]
@@ -148,9 +157,11 @@ fn run_policy_check(out_dir: &TempDir, case: PolicyCase) -> TestResult<Output> {
 }
 
 fn assert_exit_status(output: &Output, case: PolicyCase) -> TestResult {
-    if output.status.success() != case.should_succeed {
+    if output.status.code() != Some(case.expected_status) {
         return Err(format!(
-            "unexpected process status {:?}: {}",
+            "expected documented process status {} for {} mode, got {:?}: {}",
+            case.expected_status,
+            case.mode,
             output.status,
             String::from_utf8_lossy(&output.stderr)
         )
@@ -161,6 +172,8 @@ fn assert_exit_status(output: &Output, case: PolicyCase) -> TestResult {
         .is_some_and(|finding| finding.severity == "deny")
         && !String::from_utf8_lossy(&output.stderr).contains("PolicyViolation")
     {
+        // Denial shares status 1 with every other runtime failure, so the
+        // diagnostic and the report's deny count are the discriminators.
         return Err("deny finding should produce a policy validation failure".into());
     }
     Ok(())

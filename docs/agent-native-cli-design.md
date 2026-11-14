@@ -541,6 +541,19 @@ declaration is explicit; nothing is inferred from a verb, a flag, or an
 observed stream. The response schema and the `JsonModeContract`-style stream
 choices below remain roadmap 7.2.4 work and will extend the same block.
 
+Roadmap 7.2.3 also ships the declaration's first consumer, the
+`agent-native.output.json-missing` policy rule
+(`cargo_orthohelp::policy::rules::output::check_output`), which reports a
+command that declares `stdout = "data"` without `supports_json = true`. Like
+the behaviour rules it is a library API over a compiled agent context, because
+the bridge-free `--check-agent-native` stage has no command metadata to read.
+What 7.2.3 does not provide is equally deliberate: no JSON stream contract
+(7.2.4), no numeric code-to-class mapping or "every documented error class has
+a code" lint (7.2.5), and no verification that a declared JSON mode exists at
+runtime. `cargo-orthohelp`'s own process statuses — `0` success, `1` failure,
+`2` usage, with `summary.deny` distinguishing policy rejection — are documented
+current behaviour, not emitted metadata.
+
 `cargo-orthohelp` should dogfood this by returning structured success summaries
 for generated artefacts when `--json` is provided.
 
@@ -605,6 +618,13 @@ describe:
 
 Strict policy should lint that every documented error class has an exit code,
 and that JSON diagnostics report the class and code consistently.
+
+Roadmap 7.2.3 deliberately stops at the declaration: `exit_classes` carries a
+`name` and a `meaning` and no number, and the only process statuses documented
+today belong to `cargo-orthohelp` itself (§6.2). The mapping above, the "every
+documented error class has an exit code" lint, and the
+diagnostic/code-consistency lint are 7.2.5 work. Adopting a shape before that
+decision would fix a taxonomy the roadmap has not accepted.
 
 ### 6.3 Errors that enumerate choices
 

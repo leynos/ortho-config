@@ -2,10 +2,11 @@
 
 ## Status
 
-APPROVED — the user approved this plan on 2026-11-14 and directed
-implementation to proceed. The M1–M3 milestones below are authorized. The
-temporary #664 prerequisite merged on 2026-11-11 as `eaf4c028`, and the branch
-was rebased onto `origin/main` at `959dbd7e` before implementation began.
+COMPLETE — approved on 2026-11-14 and implemented in M1–M3. The temporary #664
+prerequisite merged on 2026-11-11 as `eaf4c028`, and the branch was rebased onto
+`origin/main` at `959dbd7e` before implementation began. All three milestones
+have recorded certificates; the only remaining activity is publication and
+review of the branch.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -245,6 +246,14 @@ all possible public values are validated.
   passed, 43 ignored, pytest 128 passed), markdownlint with spelling, nixie,
   and 21 `cargo-orthohelp` doctests.
 - [x] M2: structured-output lint and executable consumer examples.
+- [x] (2026-11-15) M3 process contract: exact `0`/`1`/`2` assertions in
+  `cli_dispatch.rs`, `policy_report_contract.rs` and `documented_command.rs`,
+  including a missing-package failure case and a documented deny run that keeps
+  and streams its report. Sensitivity proven by two restored mutations.
+- [x] (2026-11-15) M3 documentation: the users'-guide exit-status section with
+  the registered `guide-policy-deny` recipe, design §6.1.1 and §9, the
+  developers'-guide policy-API testing section, the agent-native design's
+  delivered/deferred boundary, ADR-0020's delivery note, and roadmap 7.2.3.
 - [ ] M3: exit documentation, process regression evidence and completion.
 
 ## Surprises & discoveries
@@ -329,6 +338,22 @@ distinguishable; the stable sort nevertheless keeps the stated contract.
 `check_output` returns `PolicySeverity` directly because its one rule has no
 quick-fix category to project, and its message distinguishes an explicit
 refusal from an undeclared capability while sharing both remedies.
+
+2026-11-15, verification decision: the process tests assert the exact status
+with `status.code()` rather than `success()`, because "not success" also
+accepts a signal or a crash. The policy-denial discriminator is the report's
+positive `summary.deny`, not the number, so `documented_command` asserts that
+the report survives the failure. A runtime failure is probed through an unknown
+package, which fails after Clap has accepted the arguments; because Rust's
+`Termination for Result` prints the error's `Debug` form, the assertion matches
+`PackageNotFound` rather than the `Display` text.
+
+2026-11-15, documentation decision: the users'-guide status table is numbered
+Table 6, and its deny recipe is registered as `guide-policy-deny`, pinned in
+`static_contracts` and executed by the documented deny test. Design §6.1.1
+carries the internal contract so §6.3.2 can point at it; the agent-native
+design records 7.2.4 and 7.2.5 as deferred rather than restating a taxonomy it
+has not accepted.
 
 ## Context and orientation
 
@@ -698,24 +723,58 @@ the remote head before reporting publication.
 
 ## Outcomes & retrospective
 
-Planning only. No feature implementation or proof has run. Pandalump and
-Wafflecat accepted the layering with explicit default/fallback and stdout
-purpose refinements. Telefono and Dinolump required complete grammar and real
-Rustdoc execution; those revisions are included. Doggylump and Buzzy Bee
-confirmed exit and stream guarantees and required an explicit
-no-root-type/no-library policy fixture. That fixture is now part of E3; the
-rule needs no new instrumentation. Follow-up architecture and contract reviews
-confirmed that their findings are resolved.
+Delivered in three milestones on `7-2-3-structured-output-and-exit-metadata`.
 
-Planning gates passed on 2026-11-08: `make fmt`, `make check-fmt`,
-`make markdownlint` (including spelling), and `make nixie`. Evidence is in
-`/tmp/fmt-ortho-723-plan.out`, `/tmp/check-fmt-ortho-723-plan.out`,
-`/tmp/markdownlint-ortho-723-plan.out`, and `/tmp/nixie-ortho-723-plan.out`.
-Generated spelling configuration is unchanged. Runtime lint/test gates have not
-been run for this documentation-only change. Publication evidence belongs in
-the draft PR; implementation remains unapproved. At implementation completion,
-replace this paragraph with the discharged evidence, remaining limitations, and
-reconciled decisions.
+- M1 (`5f839cfe`, `47f41718`, repaired by `b63ec8ad` and `163d280a`) carried an
+  optional `output` block from the derive through documentation IR, the
+  tool-side schema mirror, the bridge, and agent context. Absence stays absent,
+  `supports_json: false` stays distinct from undeclared, and a present empty
+  block round-trips as `{}`. ADR-0020 records the surface; the design and
+  users' guide describe it.
+- M2 (`946013b2`, documented in `4d698172`) added
+  `policy::rules::output::check_output`. The complete 3 × 6 × 3 table, the
+  unrelated-field invariance table, sampled properties, four BDD scenarios, and
+  an executable Rustdoc example all pass; the certificate at `4d698172` covered
+  all seven gates and 21 doctests.
+- M3 pinned the process statuses in `cli_dispatch.rs`,
+  `policy_report_contract.rs`, and `documented_command.rs`, and documented
+  0/1/2 in the users' guide, design §6.1.1, the agent-native design, and
+  ADR-0020. Roadmap 7.2.3 and its three bullets are checked.
+
+Proof inventory: not applicable. No Kani, Verus, CrossHair, LemmaScript, or
+comparable proof is introduced or affected. The one predicate is finite and is
+covered by a complete table plus sampled properties; the verification decision
+above records why no unbounded theorem is warranted.
+
+Sensitivity evidence. Two isolated mutations were applied to production files
+after the new assertions passed, then restored byte-for-byte (verified with
+`cmp`):
+
+- `exit_for_clap_error` was changed to exit 1 instead of Clap's status. Three
+  usage assertions failed with `left: Some(1), right: Some(2)`, while the two
+  `error.exit()` cases stayed green; the assertions bind to the preserved code
+  rather than to any non-zero status.
+- `write_json_stdout` was made to append an extra line. All six
+  `policy_report_contract` cases failed the one-document assertion.
+
+Both files were restored and the affected targets re-ran green (28 and 24
+tests). Logs: `/tmp/mutation-clap-status-723-m3.out`,
+`/tmp/mutation-extra-stdout-723-m3.out`, and
+`/tmp/post-mutation-restore-723-m3.out`.
+
+Remaining limitations, deliberately retained:
+
+- The output rule is a library API over a compiled agent context. Wiring it
+  into `--check-agent-native` would need the bridge build Decision D11
+  excludes, so that expansion requires a separate accepted decision.
+- No JSON stream contract (roadmap 7.2.4) and no numeric exit-code taxonomy
+  metadata or code/class lints (7.2.5). `exit_classes` carries names and
+  meanings only.
+- A declaration is not a certificate: nothing verifies that a declared JSON
+  mode exists in the target command's runtime.
+
+Planning gates passed on 2026-11-08; their logs used the `-plan` suffix.
+Implementation gate logs use the `-m2` and `-m3` suffixes.
 
 ## Research references
 
