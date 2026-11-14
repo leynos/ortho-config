@@ -79,21 +79,21 @@ pub(super) fn append_owner_lines(
 /// would send a maintainer after an innocent process, which is the failure this
 /// module exists to prevent.
 ///
-/// An incomplete scan still carries the descriptors it matched before it
-/// failed. Those were really observed, so they are evidence of their own; a
-/// scan that hit an unreadable entry after matching a descriptor must still
-/// name that descriptor, because the alternative is a report that discards
-/// live evidence and can no longer explain the hold it was built for.
+/// An incomplete scan still carries the descriptors it matched. Those were
+/// really observed, so they are evidence of their own; a scan that hit an
+/// unreadable entry must still name every descriptor it matched — whichever
+/// side of the fault they sorted on — because the alternative is a report that
+/// discards live evidence and can no longer explain the hold it was built for.
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
 pub(super) enum DescriptorScan {
     /// The scan completed and found these descriptors on the lock file.
     Complete(Vec<Descriptor>),
-    /// The scan could not be completed, for this reason, after matching these.
+    /// The scan could not be completed, for this reason, but matched these.
     Incomplete {
-        /// Descriptors matched before the scan failed. Possibly empty.
+        /// Descriptors matched anywhere in the table. Possibly empty.
         matched: Vec<Descriptor>,
-        /// Why the scan could not finish.
+        /// Why the scan could not finish. Names every entry it could not read.
         reason: String,
     },
 }
@@ -149,7 +149,7 @@ pub(super) fn append_owner(lines: &mut Vec<String>, owner: OwnerScan<'_>) {
         DescriptorScan::Incomplete { matched, reason } => {
             append_descriptor_lines(lines, &described, matched);
             lines.push(format!(
-                "holder: {described}'s remaining descriptors could not be read ({reason}), so the scan is incomplete and this report cannot say whether one of them holds the lock file"
+                "holder: {described}'s descriptor table could not be read in full ({reason}), so the scan is incomplete and this report cannot say whether one of the unread entries holds the lock file"
             ));
         }
     }
@@ -170,6 +170,10 @@ fn append_descriptor_lines(lines: &mut Vec<String>, described: &str, descriptors
 /// The matched descriptors are reported even when the scan failed. They were
 /// observed, so they are evidence; returning only the failure would discard a
 /// live holder's descriptor and leave a report that cannot explain the hold.
+///
+/// The failure text names *every* entry that could not be read, not the first
+/// one, because the scan does not stop at a fault. See
+/// [`inspect_descriptors`] for why stopping would lose matches.
 #[cfg(target_os = "linux")]
 type DescriptorScanResult = Result<Vec<Descriptor>, (Vec<Descriptor>, String)>;
 
@@ -189,6 +193,10 @@ type DescriptorScanResult = Result<Vec<Descriptor>, (Vec<Descriptor>, String)>;
 /// failure is still a failure — it says the scan is incomplete and makes no
 /// claim about absence — but it is no longer a reason to forget what was seen.
 ///
+/// The scan also continues past the fault rather than returning at it, because
+/// keeping only the matches enumerated *before* the fault still loses the lock
+/// when the fault has the lower descriptor number. See [`inspect_descriptors`].
+///
 /// A name that will not parse as a descriptor is skipped rather than treated
 /// as a fault. Every entry in this directory is a decimal descriptor number
 /// written by the kernel, so a non-numeric name is not a descriptor this scan
@@ -196,6 +204,13 @@ type DescriptorScanResult = Result<Vec<Descriptor>, (Vec<Descriptor>, String)>;
 /// An *error* enumerated from the directory is the opposite case: an entry
 /// that exists and was not read, which is a partial scan and is reported as
 /// one.
+///
+/// A fault does not end the scan. Stopping at the first unreadable entry would
+/// still lose every match that sorted after it, which is the same intermittent
+/// failure one step later: an unrelated descriptor closing at a lower number
+/// than the lock's would end the scan before it ever reached the lock, and the
+/// report would omit the very line that explains the hold. Every entry is read,
+/// every fault is recorded, and the caller is told the scan was incomplete.
 #[cfg(target_os = "linux")]
 fn inspect_holder(
     pid: ProcessId,
@@ -224,6 +239,16 @@ fn inspect_holder(
 /// on it would mark every process incompletely scanned and drown the real
 /// faults. It is still counted in the report's summary, because a name the scan
 /// did not understand is a gap in its coverage even when it is not an error.
+///
+/// The scan reads every entry even after one fails. Returning at the first
+/// fault would keep only the matches enumerated before it, and the listing is
+/// sorted, so "before it" means "at a lower descriptor number". An unrelated
+/// descriptor closed by another thread at a lower number than the lock's —
+/// the ordinary event this diagnostic exists to survive — would end the scan
+/// before the lock was ever reached, and the report would again lack the
+/// descriptor line it exists to print. Every fault is instead collected into
+/// one reason, so the report names all the entries it could not read while
+/// still carrying every match it found.
 #[cfg(target_os = "linux")]
 pub(super) fn inspect_descriptors(
     pid: ProcessId,
@@ -234,6 +259,7 @@ pub(super) fn inspect_descriptors(
         .descriptor_entries(pid)
         .map_err(|reason| (Vec::new(), reason))?;
     let mut descriptors = Vec::new();
+    let mut faults = Vec::new();
     for &descriptor in entries.descriptors() {
         match procfs.descriptor_identity(pid, descriptor) {
             Ok(seen) if seen == identity => descriptors.push(descriptor),
@@ -241,9 +267,13 @@ pub(super) fn inspect_descriptors(
             Err(reason) => {
                 // The name the read failed on is part of the evidence: without
                 // it the report says only that something could not be read.
-                return Err((descriptors, format!("fd {descriptor}: {reason}")));
+                faults.push(format!("fd {descriptor}: {reason}"));
             }
         }
     }
-    Ok(descriptors)
+    if faults.is_empty() {
+        Ok(descriptors)
+    } else {
+        Err((descriptors, faults.join("; ")))
+    }
 }

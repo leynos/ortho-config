@@ -725,22 +725,34 @@ process; `reports_the_process_and_descriptor_that_still_hold_the_lock` and the
 `only_a_complete_scan_may_report_inheritance` table pin that wording, with a
 `Complete`, a `Complete`-and-holding, and an `Incomplete` case.
 
-An incomplete scan still carries the descriptors it matched before it failed.
-Those were really observed, so they are evidence, and discarding them is how
-the report became intermittently useless: `/proc/<pid>/fd` holds every
-descriptor in the process, so another thread closing an unrelated descriptor
-between enumeration and the metadata read fails an entry that has nothing to do
-with the lock. That is ordinary during parallel test execution. A scan that
-emptied its match list on such a failure would report the lock unexplained
-while the guard was still open, and would fail the test that requires a
-descriptor line — for a reason unrelated to the lock. The scan is also sorted,
-so a failure always leaves the same match list rather than whichever entries
-`read_dir` happened to yield first. A partial scan therefore reports its
-matches *and* says the scan is incomplete, and makes no claim about absence.
-`a_partial_scan_still_returns_the_descriptors_it_matched` drives the real scan
-over a temporary directory, matching one entry and failing on the next, because
-an earlier version of that test built the incomplete result by hand and passed
-against a mutant that discarded matches.
+An incomplete scan still carries every descriptor it matched. Those were really
+observed, so they are evidence, and discarding them is how the report became
+intermittently useless: `/proc/<pid>/fd` holds every descriptor in the process,
+so another thread closing an unrelated descriptor between enumeration and the
+metadata read fails an entry that has nothing to do with the lock. That is
+ordinary during parallel test execution. A scan that emptied its match list on
+such a failure would report the lock unexplained while the guard was still
+open, and would fail the test that requires a descriptor line — for a reason
+unrelated to the lock. A partial scan therefore reports its matches *and* says
+the scan is incomplete, and makes no claim about absence.
+
+A fault does not end the scan either. Keeping only the matches enumerated
+*before* the fault is the same failure one step later, because the listing is
+sorted: an unrelated descriptor closed by another thread takes the lowest free
+number, so it sorts *before* the lock's and a scan that returned at the first
+fault would never reach the lock at all. Every entry is read, every fault is
+collected into one reason naming each entry it could not read, and every match
+is kept. The sorting also means a failure leaves the same match list rather
+than whichever entries `read_dir` happened to yield first.
+
+`a_partial_scan_still_returns_the_descriptors_it_matched` pins the match-before
+-fault order, `a_fault_before_a_match_does_not_hide_the_match` pins the
+fault-before-match order, and `every_unreadable_entry_is_named` pins that both
+faults reach the report. All three drive `inspect_descriptors` through
+`FakeProcFs` rather than the filesystem, so the loop under test is the real one
+and the fault is *stated* rather than arranged; an earlier version built the
+`Incomplete` result by hand and passed against a mutant that discarded matches,
+which is the vacuity the seam exists to prevent.
 
 An entry whose identity cannot be read is treated as a failed scan for the same
 reason. The scan's tests live in `artefact_lock_holder_tests.rs`: the cap

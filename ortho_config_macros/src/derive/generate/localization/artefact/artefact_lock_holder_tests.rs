@@ -137,6 +137,76 @@ mod holder_tests {
         Ok(())
     }
 
+    /// Verifies a fault *before* a match does not hide the match.
+    ///
+    /// The case above orders the live descriptor first, so a scan that kept
+    /// what it had matched and then stopped still passes it. That is the
+    /// weaker of the two orders, and the listing is sorted, so it is not the
+    /// order that happens in practice: an unrelated descriptor closed by
+    /// another thread takes the *lowest* free number, which sorts before the
+    /// lock's. A scan that returned at the first fault would then never reach
+    /// the lock and would omit the descriptor line the report exists to print.
+    ///
+    /// The failure here is on `2`, below the match on `7`, so the match is only
+    /// found by carrying on past the fault.
+    #[test]
+    fn a_fault_before_a_match_does_not_hide_the_match() -> Result<()> {
+        let pid = ProcessId::new(1);
+        let procfs = FakeProcFs::default()
+            .with_descriptors(pid, vec![Descriptor::new(2), Descriptor::new(7)])
+            .with_identity_failure(pid, Descriptor::new(2), "the entry vanished")
+            .with_identity(pid, Descriptor::new(7), identity());
+
+        let outcome = inspect_descriptors(pid, identity(), &procfs);
+        let Err((matched, reason)) = outcome else {
+            anyhow::bail!("a scan with an unreadable entry must not report success");
+        };
+
+        ensure!(
+            matched == vec![Descriptor::new(7)],
+            "a match sorted after the fault must still be found; stopping at \
+             the fault is the regression this test exists for; got {matched:?}",
+        );
+        ensure!(
+            reason.contains('2'),
+            "the failure must name the entry it could not read: {reason}",
+        );
+        Ok(())
+    }
+
+    /// Verifies every fault is named, not just the first.
+    ///
+    /// The scan reads on after a fault, so more than one entry can fail. The
+    /// report has one `reason` field, so the scan has to compose them; a scan
+    /// that carried on but kept only the first fault would report a directory
+    /// as one bad entry when two were unreadable, and a maintainer checking
+    /// the first would find it excused and stop.
+    #[test]
+    fn every_unreadable_entry_is_named() -> Result<()> {
+        let pid = ProcessId::new(1);
+        let procfs = FakeProcFs::default()
+            .with_descriptors(pid, vec![Descriptor::new(2), Descriptor::new(5)])
+            .with_identity_failure(pid, Descriptor::new(2), "the entry vanished")
+            .with_identity_failure(pid, Descriptor::new(5), "permission denied");
+
+        let outcome = inspect_descriptors(pid, identity(), &procfs);
+        let Err((_, reason)) = outcome else {
+            anyhow::bail!("a scan with unreadable entries must not report success");
+        };
+
+        for descriptor in ["fd 2", "fd 5"] {
+            ensure!(
+                reason.contains(descriptor),
+                "both unreadable entries must be named, missing {descriptor}: {reason}",
+            );
+        }
+        ensure!(
+            reason.contains("the entry vanished") && reason.contains("permission denied"),
+            "each entry's own fault must survive composition: {reason}",
+        );
+        Ok(())
+    }
+
     /// Verifies a partial scan reports the evidence it kept without claiming absence.
     ///
     /// The scan-level test above pins that the matches survive; this one pins

@@ -148,16 +148,23 @@ possibilities instead of asserting the one that accuses a process. That is a
 correction to an earlier draft of this same section, which made the scan's
 silence into a conclusion the observation cannot support.
 
-An incomplete scan keeps the descriptors it matched before the failure rather
-than discarding them. An unreadable entry inside an otherwise readable
-directory is ordinary — `/proc/<pid>/fd` holds every descriptor in the process,
-and another thread closing an unrelated one between enumeration and the
-metadata read fails an entry that has nothing to do with the lock. Discarding
-the matches there would report the lock unexplained while the guard was still
-open, which is exactly the intermittent failure this work exists to make
-diagnosable; the entry is still reported as making the scan incomplete, so no
-claim of absence is made. The scan is sorted so a failure leaves the same match
-list rather than depending on `read_dir` order.
+An incomplete scan keeps every descriptor it matched rather than discarding
+them, and it reads on past the fault rather than returning at it. An unreadable
+entry inside an otherwise readable directory is ordinary — `/proc/<pid>/fd`
+holds every descriptor in the process, and another thread closing an unrelated
+one between enumeration and the metadata read fails an entry that has nothing
+to do with the lock. Discarding the matches there would report the lock
+unexplained while the guard was still open, which is exactly the intermittent
+failure this work exists to make diagnosable; the entry is still reported as
+making the scan incomplete, so no claim of absence is made.
+
+Continuing past the fault is part of the same correction, not a refinement of
+it. The scan is sorted, and a descriptor another thread has just closed takes
+the lowest free number, so the failure it causes sorts *before* the lock's
+descriptor. A scan that kept its matches and then returned at the first fault
+would therefore still omit the lock, which is the original defect one step
+later. Every entry is read, every match is kept, and the scan's single reason
+names each entry it could not read.
 
 `artefact_lock_report_tests.rs` pins both settle outcomes against a *separate*
 holder process: one test releases the lock part-way through the window and
