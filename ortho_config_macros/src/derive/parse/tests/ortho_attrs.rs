@@ -160,7 +160,7 @@ pub(super) fn assert_crate_path(
 fn parses_skip_cli_flag() -> Result<()> {
     assert_field_flag(
         "skip_cli",
-        |attrs| attrs.skip_cli,
+        |attrs| attrs.cli.is_skipped(),
         "skip_cli flag was not set",
     )
 }

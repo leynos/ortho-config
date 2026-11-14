@@ -96,6 +96,24 @@ All notable changes to this project will be documented in this file.
   No diagnostic field carries them; a positive `summary.deny` count
   distinguishes a policy denial from any other failure.
 
+### Added (missing required values)
+
+- **Enumerated missing-value diagnostics (roadmap 7.3.1).** A load that reaches
+  the merged value with required keys absent now returns
+  `OrthoError::MissingRequiredValues` with every absent key in declaration
+  order, instead of stopping at the first field Serde notices. Each entry lists
+  the command-line flags, environment variables, and file keys the real loader
+  accepts for that key, so a caller can recover from one diagnostic. Renamed
+  keys, `skip_cli` fields, and nested leaves advertise only the routes that can
+  actually populate them, and an object-shaped requirement is rendered as a
+  file table. The payload carries key paths and routes, never configuration
+  values, so rendering it cannot leak a secret. Child types opt into nested
+  composition with `#[ortho_config(nested)]` plus `skip_cli`, or derive
+  `RequiredConfigSchema` directly. The library never exits; callers decide how
+  to present the report. See
+  [ADR-0020](docs/adrs/adr-0020-enumerate-missing-required-values.md) and
+  [the user's guide](docs/users-guide.md#recover-from-missing-required-values).
+
 ### Changed (source compatibility)
 
 - **Breaking for struct-literal construction:** documentation IR

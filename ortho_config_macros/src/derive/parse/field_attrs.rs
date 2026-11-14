@@ -10,8 +10,9 @@ use syn::Token;
 use super::literals::{lit_char, lit_str};
 use super::localization::reject_localized_default;
 use super::{
-    FieldAttrs, MergeStrategy, apply_field_doc_attr, clap_default_value, clap_field_is_subcommand,
-    discard_unknown, parse_ortho_config, reject_subcommand_ortho_config_attrs,
+    CliFieldMode, FieldAttrs, MergeStrategy, apply_field_doc_attr, clap_default_value,
+    clap_field_is_subcommand, discard_unknown, parse_ortho_config,
+    reject_subcommand_ortho_config_attrs,
 };
 
 /// Parses field-level `#[ortho_config(...)]` attributes.
@@ -31,10 +32,14 @@ use super::{
 /// from field-level attributes.
 pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs {
-        is_subcommand: clap_field_is_subcommand(field)?,
+        cli: if clap_field_is_subcommand(field)? {
+            CliFieldMode::SubcommandSelector
+        } else {
+            CliFieldMode::Option
+        },
         ..FieldAttrs::default()
     };
-    if out.is_subcommand {
+    if out.cli.is_subcommand() {
         reject_subcommand_ortho_config_attrs(field)?;
         return Ok(out);
     }
@@ -92,8 +97,11 @@ fn apply_field_attr(
         "default" => set_default(meta, out),
         "merge_strategy" => set_merge_strategy(meta, out),
         // A bare flag: there is no value to parse, so it cannot fail.
-        "skip_cli" => Ok(()).inspect(|()| out.skip_cli = true),
+        "skip_cli" => Ok(()).inspect(|()| out.cli = CliFieldMode::Skipped),
         "cli_default_as_absent" => set_cli_default_as_absent(meta, out),
+        // `nested` is likewise bare; the child's schema is composed because of
+        // this flag, so it must be recorded rather than discarded.
+        "nested" => Ok(()).inspect(|()| out.nested = true),
         _ => return apply_field_doc_attr(meta, out),
     };
     recognised.map(|()| true)

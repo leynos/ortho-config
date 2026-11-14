@@ -52,13 +52,14 @@ fn option_field_rejects_invalid_value() {
 }
 
 /// A required field with no value in any supplied source surfaces as an
-/// `OrthoError::Merge` rather than a CLI parsing error.
+/// enumerated missing-value diagnostic rather than a CLI parsing or merge
+/// error.
 #[rstest]
-fn missing_required_field_surfaces_merge_error() -> Result<()> {
+fn missing_required_field_surfaces_missing_value_error() -> Result<()> {
     let source = Arc::new(MapEnv::new());
     assert_ortho_error(
         RequiredConfig::load_from_iter_with_sources(["prog"], source.clone(), source),
-        "merge",
-        |err| matches!(err, OrthoError::Merge { .. }),
+        "missing required values",
+        |err| matches!(err, OrthoError::MissingRequiredValues(_)),
     )
 }

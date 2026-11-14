@@ -468,6 +468,35 @@ MAML parameter prose belongs to
 consumes its ordered paragraphs; XML structure and escaping remain in
 `render.rs`. Other output formats retain their own formatting contracts.
 
+### Required-value schema ownership
+
+`ortho_config_macros/src/derive/generate/required_schema.rs` owns the emitted
+`RequiredConfigSchema` implementation for both the `OrthoConfig` derive and the
+standalone `RequiredConfigSchema` derive. The generator records only what the
+derive already knows: deserialization keys, aliases, the requiredness the
+attribute grammar decides, and CLI hints for leaves the generated parser can
+actually populate. It never reads a configuration value, the environment, or
+the process arguments at macro time.
+
+Nested child types opt in with `#[ortho_config(nested)]` and must also carry
+`skip_cli`, because the CLI builder cannot parse an object type. The generated
+schema strips one `Option` and any `Box` wrappers before composing the child,
+so an optional parent deactivates its subtree while a required parent still
+activates its required descendants.
+
+`ortho_config/src/required_values/` owns the runtime side: `schema.rs` defines
+the model, `collect.rs` is the pure collector, and `mod.rs` exposes
+`ensure_no_missing_required_values` plus the program-label helper. The
+collector walks the merged JSON value, not the deserialized configuration, so
+it can report every requirement in schema declaration order before Serde stops
+at the first missing field. Display lives in
+`ortho_config/src/error/missing.rs` and must not discover requirements or
+consult process state.
+
+New supply routes belong in `SupplyRoute` only when a generated loader accepts
+them for the requirement in question. A route advertised for a key the parser
+cannot populate would send an agent down a path that never succeeds.
+
 ## CLI long-flag validation ownership
 
 `LongFlagCandidate` in

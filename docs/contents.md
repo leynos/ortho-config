@@ -252,8 +252,8 @@
   - [Structured output and exit metadata](execplans/7-2-3-structured-output-and-exit-metadata.md):
     review the proposed metadata, lint and exit-contract work for roadmap 7.2.3.
   - [Enumerate missing required values](execplans/7-3-1-enumerating-missing-required-values.md):
-    review the approval-gated plan for typed missing-value diagnostics, schema
-    coverage, and the proof-adoption test in roadmap 7.3.1.
+    review the plan and implementation record for typed missing-value
+    diagnostics, schema coverage, and the proof-adoption test in roadmap 7.3.1.
   - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
     item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for

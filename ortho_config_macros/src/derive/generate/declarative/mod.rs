@@ -76,6 +76,9 @@ pub(crate) fn generate_declarative_state_struct(
         #[derive(Default)]
         struct #state_ident {
             value: #krate::serde_json::Value,
+            // Set by `merge_from_layers_with_program`; `Default` leaves it
+            // unset so an independent caller still gets a type-name label.
+            program_label: ::std::option::Option<::std::string::String>,
             #( #append_state_fields, )*
             #( #map_replace_fields, )*
         }
@@ -128,6 +131,7 @@ pub(crate) fn generate_declarative_merge_impl(
         merge_layer_tokens(config_ident, krate, &map_merge_logic, &append_merge_logic);
     let finish_body = finish_tokens(
         state_ident,
+        config_ident,
         krate,
         &FinishCollectionTokens {
             append_destructured: &append_destructured,
@@ -214,15 +218,20 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
         }
     };
 
-    let merge_body = quote! {
-        let mut state = #state_ident::default();
-        #ctx_init
-        for layer in layers {
-            #ctx_per_layer
-            #krate::DeclarativeMerge::merge_layer(&mut state, layer)?;
+    let build_body = |label: TokenStream| {
+        quote! {
+            let mut state = #state_ident::default();
+            state.program_label = #label;
+            #ctx_init
+            for layer in layers {
+                #ctx_per_layer
+                #krate::DeclarativeMerge::merge_layer(&mut state, layer)?;
+            }
+            #post_merge
         }
-        #post_merge
     };
+    let plain_body = build_body(quote! { ::std::option::Option::None });
+    let labelled_body = build_body(quote! { program.map(::std::string::String::from) });
 
     quote! {
         impl #config_ident {
@@ -262,7 +271,24 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
             where
                 I: IntoIterator<Item = #krate::MergeLayer<'a>>,
             {
-                #merge_body
+                #plain_body
+            }
+
+            /// Merge the configuration struct from declarative layers,
+            /// labelling a missing-required-value report with `program`.
+            ///
+            /// Generated loading entry points call this with the program name
+            /// they resolved from their arguments. A caller that merges layers
+            /// directly can keep using [`Self::merge_from_layers`], whose
+            /// report falls back to the configuration type name.
+            pub fn merge_from_layers_with_program<'a, I>(
+                layers: I,
+                program: ::std::option::Option<&str>,
+            ) -> #krate::OrthoResult<Self>
+            where
+                I: IntoIterator<Item = #krate::MergeLayer<'a>>,
+            {
+                #labelled_body
             }
         }
     }

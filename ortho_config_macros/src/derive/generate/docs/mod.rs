@@ -4,11 +4,17 @@
 //! `DocMetadata` IR used by `cargo-orthohelp`.
 
 mod behaviour;
+
 mod discovery;
+
 mod fields;
+
 mod output;
+
 mod renderer;
+
 pub(crate) mod sections;
+
 mod types;
 
 pub(crate) use types::AppName;
@@ -116,7 +122,7 @@ fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
         .fields
         .iter()
         .zip(args.field_attrs)
-        .filter(|(_, attrs)| attrs.is_subcommand)
+        .filter(|(_, attrs)| attrs.cli.is_subcommand())
         .map(|(field, _)| field)
         .collect::<Vec<_>>();
 

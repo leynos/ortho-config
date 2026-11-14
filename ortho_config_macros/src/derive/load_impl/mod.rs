@@ -212,7 +212,7 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     if *profiles {
         load_impl_profiles::build_profile_compose_layers_impl(args, &file_discovery, &env_section)
     } else {
-        let parse_setup = build_cli_parse_tokens();
+        let parse_setup = build_cli_parse_tokens(krate);
         let defaults = build_legacy_defaults(krate, defaults_ident, default_struct_init);
         let file_layers = build_legacy_file_layers(&file_discovery);
         let environment_layer = build_legacy_environment_layer(krate, &env_section);
@@ -233,6 +233,7 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
             #cli_push
 
             #krate::declarative::LayerComposition::new(composer.layers(), errors)
+                .with_program_label(program_label)
         }
     }
 }

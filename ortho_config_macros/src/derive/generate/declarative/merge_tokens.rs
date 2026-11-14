@@ -68,6 +68,7 @@ pub(super) fn merge_layer_tokens(
 /// `null` is rejected by the non-object guard in `merge_layer`.
 pub(super) fn finish_tokens(
     state_ident: &syn::Ident,
+    config_ident: &syn::Ident,
     krate: &TokenStream,
     collections: &FinishCollectionTokens<'_>,
 ) -> TokenStream {
@@ -78,6 +79,7 @@ pub(super) fn finish_tokens(
     quote! {
         let #state_ident {
             mut value,
+            program_label,
             #( #append_destructured, )*
             #( #map_destructured, )*
         } = self;
@@ -93,6 +95,17 @@ pub(super) fn finish_tokens(
         if value.is_null() {
             value = #krate::serde_json::Value::Object(#krate::serde_json::Map::new());
         }
+        // Every declared requirement must be present before deserialization,
+        // so one error can name them all instead of Serde stopping at the
+        // first. A caller that merges layers directly has no program label,
+        // and the type name is a truthful fallback.
+        let program = program_label
+            .as_deref()
+            .unwrap_or(stringify!(#config_ident));
+        #krate::ensure_no_missing_required_values::<#config_ident>(
+            &value,
+            program,
+        )?;
         #krate::declarative::from_value_merge(value)
     }
 }

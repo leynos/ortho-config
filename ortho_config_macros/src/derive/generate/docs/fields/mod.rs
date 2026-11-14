@@ -75,7 +75,7 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
 
     let mut output = Vec::with_capacity(args.fields.len());
     for (field, attrs) in args.fields.iter().zip(args.field_attrs) {
-        if attrs.is_subcommand {
+        if attrs.cli.is_subcommand() {
             continue;
         }
         output.push(builder.build_field(field, attrs)?);
@@ -206,7 +206,7 @@ impl<'a> FieldMetaBuilder<'a> {
     /// option spelling, multiplicity, and value-taking behaviour come from the
     /// already-resolved CLI metadata and Rust field type.
     fn build_cli_tokens(&self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
-        if context.attrs.skip_cli {
+        if context.attrs.cli.is_skipped() {
             return Ok(quote! { None });
         }
         let meta = self.cli_lookup.get(context.field_name).ok_or_else(|| {

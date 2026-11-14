@@ -1117,6 +1117,74 @@ without inventing an error for an empty collection. The result extension traits
 `OrthoResultExt`, `OrthoMergeExt`, and `ResultIntoFigment` keep conversions
 explicit at integration boundaries.
 
+### Recover from missing required values
+
+A field is required when it is not an `Option`, has no explicit or inferred
+default, and carries no Serde default at the field or container level. When
+required values are absent, the loader returns
+`OrthoError::MissingRequiredValues` with every missing value in declaration
+order, rather than reporting only the first one that Serde notices:
+
+<!-- tested-example: guide-missing-values-output -->
+```plaintext
+Missing required configuration for `acme`
+
+The following value(s) are missing:
+  - `reference`
+  - `database.host`
+
+Please provide them using one of the following methods, in order of precedence:
+  1. Command-Line Argument:
+     --reference <value>
+  2. Environment Variable:
+     ACME_REFERENCE=<value>
+     ACME_DATABASE__HOST=<value>
+  3. Configuration File:
+     reference = "<value>"
+     [database]
+     host = "<value>"
+```
+
+Each entry lists only the routes the real loader accepts. A field renamed with
+`#[serde(rename = ...)]`, a field marked `skip_cli`, and a leaf inside a nested
+object have no command-line route, so no flag is advertised for them. A nested
+object with no required descendants is reported as the object itself and
+rendered as a file table. Supplying a value through any advertised route clears
+that entry and leaves the rest of the report intact, so a caller can correct
+the configuration one step at a time.
+
+The payload carries key paths and routes, never configuration values, so
+rendering the error cannot leak a secret. Match the variant when an application
+wants to present the report itself:
+
+<!-- tested-example: guide-missing-values -->
+```rust
+use ortho_config::{OrthoConfig, OrthoError};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_")]
+struct Config {
+    reference: String,
+}
+
+fn main() {
+    match Config::load_from_iter(["acme"]) {
+        Ok(config) => println!("reference={}", config.reference),
+        Err(error) => match error.as_ref() {
+            OrthoError::MissingRequiredValues(report) => {
+                eprintln!("{report}");
+                std::process::exit(2);
+            }
+            other => eprintln!("configuration error: {other}"),
+        },
+    }
+}
+```
+
+The library never exits on its own. A consumer decides whether a missing value
+is fatal, retryable, or recoverable from a prompt.
+
 ## Localize help and parse failures together
 
 Localization is most reliable when the command metadata is translated before

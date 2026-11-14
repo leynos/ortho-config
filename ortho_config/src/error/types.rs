@@ -6,6 +6,7 @@ use thiserror::Error;
 use crate::profile::{AvailableProfileNames, ProfileSource};
 
 use super::aggregate::AggregatedErrors;
+use super::missing::MissingRequiredValues;
 
 /// Errors that can occur while loading configuration.
 #[derive(Debug, Error)]
@@ -101,4 +102,12 @@ pub enum OrthoError {
     /// Multiple errors occurred while loading configuration.
     #[error("multiple configuration errors:\n{0}")]
     Aggregate(Box<AggregatedErrors>),
+
+    /// One or more required configuration values are absent after every layer
+    /// has been merged.
+    ///
+    /// The payload is boxed because it carries an ordered list of paths and
+    /// routes, and an `OrthoError` is expected to stay small on the error path.
+    #[error("{0}")]
+    MissingRequiredValues(Box<MissingRequiredValues>),
 }

@@ -63,7 +63,8 @@ pub(crate) fn build_profile_compose_layers_impl(
 
         let selection_vec: Vec<#krate::SelectedProfile> = selected.into_iter().collect();
         (
-            #krate::declarative::LayerComposition::new(composer.layers(), errors),
+            #krate::declarative::LayerComposition::new(composer.layers(), errors)
+                .with_program_label(program_label),
             selection_vec,
         )
     }
@@ -80,6 +81,7 @@ fn build_profile_parse_setup(krate: &proc_macro2::TokenStream) -> proc_macro2::T
 
         let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
         let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
+        let program_label = #krate::program_label_from_args(&args);
         let matches = match Self::command().try_get_matches_from(args) {
             Ok(matches) => Some(matches),
             Err(err) => {

@@ -633,12 +633,13 @@ should name the valid set. This applies to enum values, output formats,
 delivery schemes, locale identifiers, package names, binary targets, profile
 names, and policy modes.
 
-Roadmap item 5.1.1 reconciled the missing-required-values design with the
-actual error enum. The current public surface does not expose
-`OrthoError::MissingRequiredValues`; missing required values still route
-through the existing command-line parsing, merge, gathering/deserialization, or
-aggregate error channels. The improved aggregate diagnostic remains phase 7.3.1
-implementation work.
+Roadmap item 7.3.1 realized the missing-required-values design. A load that
+reaches the merged value with required keys absent now returns
+`OrthoError::MissingRequiredValues`, whose payload enumerates every absent key
+in declaration order and lists the command-line flags, environment variables,
+and file keys the real loader accepts for each one. Invalid values remain
+deserialization errors, and the library itself never exits, so a caller decides
+how to present and act on the diagnostic.
 
 ### 6.4 Mutation boundaries and retries
 

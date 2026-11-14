@@ -8,6 +8,7 @@ pub(crate) mod declarative;
 pub(crate) mod docs;
 pub(crate) mod localization;
 pub(crate) mod ortho_impl;
+pub(crate) mod required_schema;
 pub(crate) mod structs;
 
 use syn::Ident;

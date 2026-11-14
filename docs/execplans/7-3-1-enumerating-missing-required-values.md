@@ -136,10 +136,91 @@ with a compatibility probe rather than an assumption.
   parent activation, a present non-object, and the recursive-schema guard.
   Focused unit tests pass (41), and the declarative token fixtures were updated
   for the new state field and constructor.
+- [x] (2026-11-09) V2 property tests pass: `proptest` cases over 0–64
+  requirement paths compare the collector against an independently computed
+  model for membership, declaration order, repair, and nested activation.
+  Seeded omission, inversion, and reordering controls each fail their assertion.
+  `cargo test -p ortho_config --lib required_values` reported 26 passing tests.
+- [x] (2026-11-09) V3 macro-expansion and compile evidence passes: 12 token
+  tests cover crate renaming, caller-declared generic bounds, nested
+  composition, wrapper stripping, Serde naming, requiredness, skipped and
+  unmarked-flatten fields, and CLI hints. The new trybuild pass fixture proves
+  the standalone derive compiles from a renamed downstream crate; all three
+  `crate_path_trybuild` fixtures passed.
+- [x] (2026-11-09) V4 display and consumer-policy evidence passes: 10 tests pin
+  the English rendering with an `insta` snapshot, exact multiline output, path
+  quoting, and route-section numbering, while `googletest` matchers classify
+  membership. Five child-process tests show a consumer exiting non-zero with
+  the diagnostic on standard error and exiting zero once any advertised route
+  supplies the values. No localized presentation path is exposed for this
+  error, so only the English rendering is pinned.
+- [x] (2026-11-09) V5 behavioural evidence passes: four `rstest-bdd` scenarios
+  cover one-diagnostic recovery through the command line and through a
+  file-plus-environment mix, the absence of reports for optional and supplied
+  values, and an invalid nested value remaining a deserialization error. The
+  `rstest_bdd` target reported 96 passing tests. The previous `Merge`
+  expectation in `clap_integration/error_cases.rs` and the missing-field
+  message assertion in `declarative_merge_empty_layers.rs` were updated to the
+  enumerated diagnostic.
+- [x] (2026-11-09) First full-gate attempt exposed eight deterministic Clippy
+  failures in `ortho_config_macros`, none of which the test builds reported:
+  `single_match_else` and `option_if_let_else` in the schema generator,
+  `struct_excessive_bools` on `FieldAttrs`, `too_many_lines` on the derive
+  entry point, `too_many_arguments` on the schema builder,
+  `self_named_module_files`, and two `needless_pass_by_value` helpers in the
+  schema tests. Repaired by mapping the prefix with `map_or_else`, folding
+  `skip_cli` and `is_subcommand` into a `CliFieldMode` state machine, extracting
+  `expand_ortho_config` and `expand_required_config_schema`, taking
+  `RequiredSchemaSource` in one argument, moving the generator to
+  `required_schema/mod.rs`, and borrowing in the test helpers. A focused
+  `cargo clippy -p ortho_config_macros --all-targets --all-features --
+  -D warnings`
+  run then passed. Red log: `/tmp/lint-ortho-config-7-3-1.out`; green log:
+  `/tmp/clippy-macros-ortho-config-7-3-1.out`.
+- [x] (2026-11-09) M4 documentation reconciliation: the improved-error design
+  now reports the implemented state and the realised value-based collector;
+  `docs/design.md` carries the ownership split; the users' guide, developers'
+  guide, agent-native CLI design, contents index, and changelog are updated;
+  roadmap 7.3.1 and its three subtasks are checked. `mapsplice replace` was
+  previewed for the roadmap edit and rejected because it renumbered every phase
+  from 1, so the four checkbox lines were changed directly.
+- [x] (2026-11-09) Second full-gate attempt reported 32 `ortho_config` Clippy
+  diagnostics in the new modules, none visible to the test builds. Repaired by
+  moving the payload to `error/missing/mod.rs`, making rebuilt accessors
+  `const`/`#[must_use]`, replacing a panicking slice index with `split_last`,
+  introducing the `Collector` recursion state to shed the extra arguments,
+  borrowing the schema error, splitting the route assertions to reduce
+  cognitive complexity, and adding failure messages to the `assert_is_empty`
+  sites (that lint only fires on the single-argument form). Later passes
+  surfaced `missing_docs_in_private_items`, `print_stdout`/`print_stderr` in
+  the child probe, `similar_names`, `use_self`, and `err_expect`; each was
+  repaired at source without suppressing a lint. A focused
+  `cargo clippy -p ortho_config --all-targets --all-features -- -D warnings`
+  run now passes. Red log: `/tmp/lint-ortho-config-7-3-1.out`; green log:
+  `/tmp/clippy-focus-ortho-config-7-3-1.out`.
+- [x] (2026-11-09) The first Whitaker pass after that repair reported four
+  `conditional_max_n_branches` sites and two test modules without inner
+  documentation. Repaired by extracting `accepts_cli_hint`, `cli_hint_for`, and
+  `has_no_route_lines` predicates and adding `//!` module docs. A further pass
+  reported one `no_unwrap_or_else_panic` in the display fixture; the fixture
+  now returns a `Result` and its callers thread `?`, since `expect_used` is
+  also denied outside `#[test]` bodies. Scoped
+  `whitaker --all -p ortho_config_macros` and `-p ortho_config` runs now pass;
+  `make docstring-coverage` reports 100%. Red evidence:
+  `/tmp/lint-ortho-config-7-3-1.out` for the macros site, and the quoted scoped
+  `ortho_config` diagnostics above (that log was overwritten by the green
+  re-run). Green logs: `/tmp/whitaker-macros-ortho-config-7-3-1.out` and
+  `/tmp/whitaker-ortho-config-7-3-1.out`.
+- [x] (2026-11-09) Gate 4 (`make test`) exposed an unmarked fence the
+  documentation-example harness rejects: the new `plaintext` rendering under
+  "Recover from missing required values" had no `tested-example` marker. Added
+  `guide-missing-values-output`, registered it in `EXPECTED_EXAMPLE_IDS`, and
+  re-ran both documentation-example targets green. Log:
+  `/tmp/doc-examples-ortho-config-7-3-1.out`.
 - [x] M1: establish exact schema and source contracts with executable evidence
   (ADR-0020, characterization evidence, and the recorded red reproducer).
-- [ ] M2: implement and property-test collection with typed diagnostics.
-- [ ] M3: integrate all supported generated loading paths and recovery tests.
+- [x] M2: implement and property-test collection with typed diagnostics.
+- [x] M3: integrate all supported generated loading paths and recovery tests.
 - [ ] M4: reconcile documentation, gates, and roadmap completion.
 
 ## Surprises & discoveries
@@ -152,10 +233,11 @@ declarative merging, then generated `finish_tokens` in
 Integrate at that final value boundary after collection overlays, rather than
 adding a parallel Figment pipeline.
 
-`OrthoError::MissingRequiredValues` does not exist. The current regression in
-`ortho_config/tests/clap_integration/error_cases.rs` expects `Merge` for an
-absent field. Discovery's `missing_required_error` concerns missing files,
-which is a different condition and must retain its existing meaning.
+At the M1 audit, `OrthoError::MissingRequiredValues` did not exist. The
+regression in `ortho_config/tests/clap_integration/error_cases.rs` then expected
+`Merge` for an absent field; M3 updated it to the enumerated diagnostic.
+Discovery's `missing_required_error` concerns missing files, which is a
+different condition and retains its existing meaning.
 
 `derive/generate/docs/fields/resolution.rs::resolve_required` accepts a
 `doc.required` override and treats collections as non-required. It is useful

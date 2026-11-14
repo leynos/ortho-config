@@ -3,9 +3,11 @@
 use quote::quote;
 
 /// Generate CLI parsing that retains clap's value-source metadata for layering.
-pub(super) fn build_cli_parse_tokens() -> proc_macro2::TokenStream {
+pub(super) fn build_cli_parse_tokens(krate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     quote! {
-        let (cli, matches) = match Self::command().try_get_matches_from_mut(iter) {
+        let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
+        let program_label = #krate::program_label_from_args(&args);
+        let (cli, matches) = match Self::command().try_get_matches_from_mut(args) {
             Ok(matches) => match Self::from_arg_matches(&matches) {
                 Ok(cli) => (Some(cli), Some(matches)),
                 Err(error) => {

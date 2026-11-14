@@ -9,7 +9,9 @@
 #[cfg(all(feature = "yaml", not(feature = "serde_json")))]
 compile_error!("The `serde_json` feature must be enabled when `yaml` support is active.");
 
-pub use ortho_config_macros::{OrthoConfig, OrthoConfigSubcommandDocs, SelectedSubcommandMerge};
+pub use ortho_config_macros::{
+    OrthoConfig, OrthoConfigSubcommandDocs, RequiredConfigSchema, SelectedSubcommandMerge,
+};
 
 /// Re-export used by derive-generated code (`ortho_config::figment::...`).
 ///
@@ -57,6 +59,7 @@ mod merge;
 mod merge_telemetry;
 mod post_merge;
 pub mod profile;
+mod required_values;
 mod result_ext;
 pub mod subcommand;
 #[cfg(feature = "serde_json")]
@@ -136,7 +139,10 @@ pub use env_source::{
     EnvSource, MapEnv, ProcessEnv, ScanEnvSource, SharedEnvSource, SharedScanEnvSource,
     process_env_source, process_scan_env_source,
 };
-pub use error::{OrthoError, is_display_request};
+pub use error::{
+    ConfigPath, MissingRequiredValue, MissingRequiredValues, OrthoError, SupplyRoute,
+    is_display_request,
+};
 pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};
 pub use localizer::{
     ArgLocalizationIds, FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder,
@@ -168,6 +174,11 @@ pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_wit
 pub use ortho_l10n::{LanguageIdentifier, langid};
 pub use post_merge::{PostMergeContext, PostMergeHook};
 pub use profile::{ProfileLoadOutcome, ProfileName, ProfileSource, SelectedProfile};
+pub use required_values::{
+    Activation, CliFlagHint, RequiredConfigSchema, RequiredSchemaError, RequiredSchemaStack,
+    RouteHints, SchemaChildren, SchemaField, ensure_no_missing_required_values,
+    program_label_from_args,
+};
 use std::sync::Arc;
 
 #[doc(hidden)]

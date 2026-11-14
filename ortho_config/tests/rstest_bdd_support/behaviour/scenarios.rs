@@ -1,6 +1,7 @@
 //! Binds the `ortho_config` behavioural feature files to the step registry.
 
 use super::steps::cargo_steps::{CargoContext, cargo_context};
+use super::steps::missing_required_steps::{MissingRequiredContext, missing_required_context};
 use crate::rstest_bdd_support::scenario_state::{
     CliDefaultContext, CollectionContext, ComposerContext, DocsContext, ErrorContext,
     ExtendsContext, FlattenContext, LocalizerContext, MergeErrorContext, NestedDocsContext,
@@ -82,4 +83,8 @@ scenarios!(
 scenarios!(
     "tests/features/profiles.feature",
     fixtures = [profiles_context: ProfilesContext]
+);
+scenarios!(
+    "tests/features/missing_required_values.feature",
+    fixtures = [missing_required_context: MissingRequiredContext]
 );

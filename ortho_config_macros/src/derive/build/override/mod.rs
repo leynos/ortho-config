@@ -121,7 +121,7 @@ pub(crate) fn collect_collection_strategies(
 ) -> syn::Result<CollectionStrategies> {
     let mut strategies = CollectionStrategies::default();
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if !attrs.is_subcommand {
+        if !attrs.cli.is_subcommand() {
             collect_field_strategy(field, attrs, &mut strategies)?;
         }
     }
