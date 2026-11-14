@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import os
 import pathlib
 import shlex
@@ -19,6 +20,25 @@ MERGER_TIMEOUT_SECONDS = 180
 
 #: Grace period before a timed-out process tree is forcefully stopped.
 PROCESS_TERMINATION_GRACE_SECONDS = 5
+
+#: Bun environment values needed for home, cache, temporary files and proxies.
+BUN_ENVIRONMENT_ALLOWLIST = (
+    "HOME",
+    "TMPDIR",
+    "BUN_INSTALL",
+    "XDG_CACHE_HOME",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
+)
+
+#: Windows environment values needed to launch native executables.
+WINDOWS_ENVIRONMENT_ALLOWLIST = ("SYSTEMROOT", "USERPROFILE")
 
 #: Distinct valid LCOV records expected to survive a real merge.
 VALID_REPORTS: dict[str, str] = {
@@ -82,6 +102,27 @@ def _kill_and_reap_direct_process(process: subprocess.Popen[str]) -> None:
             stream.close()
 
 
+def _child_environment(
+    path: str, parent_environment: collections.abc.Mapping[str, str]
+) -> dict[str, str]:
+    """Build the minimal environment needed by Bun and its shell harness."""
+    environment = {
+        name: parent_environment[name]
+        for name in BUN_ENVIRONMENT_ALLOWLIST
+        if name in parent_environment
+    }
+    if os.name == "nt":
+        environment.update(
+            {
+                name: parent_environment[name]
+                for name in WINDOWS_ENVIRONMENT_ALLOWLIST
+                if name in parent_environment
+            }
+        )
+    environment["PATH"] = path
+    return environment
+
+
 def _finish_process_cleanup(process: subprocess.Popen[str]) -> None:
     """Finish waiting after survivors have received a forceful stop."""
     try:
@@ -118,8 +159,7 @@ def _run_bash(
     if bash_executable is None:
         pytest.skip("bash is required to execute extracted workflow scripts")
 
-    environment = os.environ.copy()
-    environment["PATH"] = path
+    environment = _child_environment(path, os.environ)
     process = subprocess.Popen(
         [bash_executable],
         cwd=working_directory,
@@ -137,6 +177,36 @@ def _run_bash(
         raise
     return subprocess.CompletedProcess(
         process.args, process.returncode, stdout, stderr
+    )
+
+
+def test_child_environment_excludes_unlisted_parent_values() -> None:
+    """Only Bun, proxy and platform variables enter the child environment."""
+    parent_environment = {
+        "HOME": "/runner/home",
+        "TMPDIR": "/runner/tmp",
+        "BUN_INSTALL": "/runner/bun",
+        "XDG_CACHE_HOME": "/runner/cache",
+        "HTTPS_PROXY": "https://proxy.example",
+        "CS_ACCESS_TOKEN": "secret-value",
+        "UNRELATED_VARIABLE": "unused-value",
+        "SYSTEMROOT": "C:\\Windows",
+        "USERPROFILE": "C:\\Users\\runner",
+    }
+    child_path = "/runner/bin"
+
+    actual_environment = _child_environment(child_path, parent_environment)
+    expected_environment = {
+        name: value
+        for name, value in parent_environment.items()
+        if name in BUN_ENVIRONMENT_ALLOWLIST
+        or (os.name == "nt" and name in WINDOWS_ENVIRONMENT_ALLOWLIST)
+    }
+    expected_environment["PATH"] = child_path
+
+    assert actual_environment == expected_environment, (
+        f"expected child environment {expected_environment!r}; "
+        f"got {actual_environment!r}"
     )
 
 
