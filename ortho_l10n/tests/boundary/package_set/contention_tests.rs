@@ -42,9 +42,11 @@ const THIS_RUN: &str = "lease-contention-this-run";
 ///
 /// Five times the poll interval, so a waiter that is polling has made several
 /// attempts inside this window rather than being observed on its first. The
-/// window bounds an observation of *not returning*, so a descheduled waiter
-/// still satisfies it; only a waiter that took the lease, or gave up on it,
-/// can fail it.
+/// window bounds an observation of *not returning*: a descheduled waiter
+/// satisfies it, and so does a waiter that entered `prepare` and has not yet
+/// reached its first attempt. Only a waiter that took the lease, or gave up on
+/// it, fails it - and the mutation evidence in the plan is what shows the
+/// window discriminates the loop rather than mere non-return.
 const PROVEN_IN_WAIT: Duration = Duration::from_millis(250);
 
 /// Name the [`Prepared`] variant that came back, for a failure message.
@@ -61,8 +63,12 @@ fn describe(prepared: &Prepared) -> &'static str {
 /// Wait in a second thread for the packaging lease.
 ///
 /// The thread reports two events and nothing else: that it reached the call,
-/// and what the call answered. The first is what separates "still waiting" from
-/// "never got going" in the asserting thread, which cannot see either directly.
+/// and what the call answered. The first separates "still waiting" from "never
+/// started" in the asserting thread, which cannot see either directly. It is
+/// sent immediately before `prepare`, so it proves the call was entered rather
+/// than that the lease was attempted; that residual gap is closed by the
+/// mutation evidence in the plan, where refusing contention on first sight
+/// fails these cases, rather than by the timing alone.
 ///
 /// Both sends are best-effort. If the case has already failed and dropped its
 /// receivers there is nobody left to report to, and a panic there would replace
