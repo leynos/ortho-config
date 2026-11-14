@@ -1,6 +1,6 @@
 # Enumerate missing required configuration values
 
-Status: APPROVED — implementation in progress (approved 2026-11-09).
+Status: APPROVED — implementation complete (approved 2026-11-09).
 
 This execution plan (ExecPlan) is a living document. Keep the constraints,
 progress, discoveries, decisions, verification, conformance, and outcomes
@@ -221,11 +221,20 @@ with a compatibility probe rather than an assumption.
   `guide-missing-values-output`, registered it in `EXPECTED_EXAMPLE_IDS`, and
   re-ran both documentation-example targets green. Log:
   `/tmp/doc-examples-ortho-config-7-3-1.out`.
+- [x] (2026-11-14) Final candidate `1fbf28cf` passed all six gates sequentially
+  after the return to `main`: `make check-fmt` (2 s), `make lint` (157 s),
+  `make typecheck` (36 s), `make test` (1748 s; 113 targets reported
+  `test result: ok`, none failed), `make markdownlint` (22 s, including
+  spelling), and `make nixie` (1 s). Logs:
+  `/tmp/<gate>-ortho-config-7-3-1.out`. The preceding candidate `ea184c20`
+  failed only the spelling stage, on one British verb form and one hyphenated
+  compound; both corrections landed in `1fbf28cf`, and the whole suite re-ran
+  green.
 - [x] M1: establish exact schema and source contracts with executable evidence
   (ADR-0020, characterization evidence, and the recorded red reproducer).
 - [x] M2: implement and property-test collection with typed diagnostics.
 - [x] M3: integrate all supported generated loading paths and recovery tests.
-- [ ] M4: reconcile documentation, gates, and roadmap completion.
+- [x] M4: reconcile documentation, gates, and roadmap completion.
 
 ## Surprises & discoveries
 
@@ -323,6 +332,12 @@ says nothing about schema fidelity or source resolution. `proptest` satisfies
 the repository's invariant rule, which permits it or Kani. No harness, proof,
 or inventory entry is planned, and none may be added to populate the new lane.
 
+Verdict (2026-11-09, at M1 and M2): no prover. The kernel as written is an
+ordered filter over a finite schema tree plus ancestor-stack bookkeeping. The
+sampled V1 matrix and the seeded omission, insertion, and ordering controls
+exercise every branch, which satisfies the repository's invariant rule. No
+harness, proof, or inventory entry exists, and none was added.
+
 Re-evaluate at the M1 and M2 checkpoints against the kernel actually written,
 recording the verdict and its evidence in this section. Propose Kani if the
 kernel grows beyond ordered filtering, for example if activation and
@@ -352,6 +367,17 @@ The 2026-11-06 revision is a documentation change after a clean rebase. It adds
 no proof and validates no runtime behaviour. Its design consequence is D5,
 which replaces a tooling obstacle with an explicit content test for adopting a
 prover.
+
+Implementation outcome (2026-11-14): roadmap task 7.3.1 is delivered. The
+derive emits `RequiredConfigSchema` observations, the pure collector in
+`ortho_config/src/required_values/` compares them with the merged value, and
+every generated loader reports through `OrthoError::MissingRequiredValues`
+after composition. The V1–V5 evidence above stayed green through the rebase onto
+`main` and the ADR renumbering to 0020, and the final candidate `1fbf28cf`
+passed `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+`make markdownlint`, and `make nixie` sequentially. Per the D5 verdict, no
+proof or prover inventory entry was added. What remains is delivery: publish
+the rebased branch and carry PR #589 through review.
 
 ## Context and orientation
 
