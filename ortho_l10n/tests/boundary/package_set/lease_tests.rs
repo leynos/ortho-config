@@ -1,112 +1,72 @@
-//! Regressions for the packaging lease and the packaging boundary's shape.
+//! Regressions for the packaging lease and the run-scoped completion record.
 //!
 //! The lease exists so that one nextest *run* performs one packaging pair, not
-//! one per test process. Three separate properties have to hold for that to be
-//! true, and each has its own failure mode, so each has its own test:
+//! one per test process. Four separate properties have to hold for that to be
+//! true, and each has its own failure mode, so each has its own case:
 //!
 //! - a record written for this run makes the next caller reuse the roots;
 //! - a record written for a *different* run does not, because the roots may be
 //!   stale;
 //! - a lease held elsewhere is reported as a wait, never as a silent second
-//!   packaging step.
+//!   packaging step;
+//! - a waiter that wins the lease *after* the holder recorded reuses the roots,
+//!   which is the re-check under the lock rather than the arrival check.
 //!
-//! The fourth test is structural rather than behavioural: it pins how many
-//! packaging invocations the suite performs per run, so an edit that returns
-//! to per-test packaging fails here rather than only making CI slow. It reads
-//! the source because the property is about the *shape* of the code - how many
-//! call sites reach the packaging step - and no runtime observation of one
-//! contract can see a second call site in another module.
+//! The string relation behind the first two is stated as a `proptest` over
+//! arbitrary scopes and record contents, because the near-misses - a prefix, a
+//! suffix, a superstring, a case variant, the empty string, no scope at all -
+//! are exactly where a sloppy comparison hides. The `#[rstest]` cases stay as
+//! the readable contract examples.
+//!
+//! One case is about failure rather than reuse: a record that exists and cannot
+//! be read must be *reported*, not read as "not complete", because the latter
+//! would silently package beside a contract that may be about to succeed.
+//!
+//! The structural cases live in [`super::lease_shape_tests`]; they read sources
+//! and constants rather than driving the lease.
 
-use crate::boundary::fixture_cargo::{BOUNDARY_ROOT, repository_root};
-use crate::boundary::package_set::lease::{
-    LEASE_FILE_NAME, LEASE_POLL_INTERVAL, PackagingLease, Prepared, clear_record, prepare,
-    record_complete,
+use crate::boundary::package_set::lease::{LEASE_FILE_NAME, Prepared, claim, prepare};
+use crate::boundary::package_set::record::{
+    COMPLETION_FILE_NAME, clear_record, read_unlocked, record_complete,
 };
-use crate::boundary::package_set::{PACKAGED_CRATES, PACKAGING_INVOCATIONS};
+use crate::boundary::package_set::scratch::{AMPLE_DEADLINE, Scratch, scratch_root};
 use anyhow::{Context, Result, ensure};
-use camino::Utf8Path;
-use cap_std::fs_utf8::Dir;
-use rstest::{fixture, rstest};
+use proptest::prelude::*;
+use rstest::rstest;
 use std::time::{Duration, Instant};
-
-/// A deadline far enough away that no test here waits on it.
-const AMPLE_DEADLINE: Duration = Duration::from_secs(60);
 
 /// A deadline already in the past, so a held lease is reported at once.
 const SPENT_DEADLINE: Duration = Duration::ZERO;
 
-/// The run identifier these tests record under.
+/// The run identifier these cases record under.
 ///
 /// Not `NEXTEST_RUN_ID`: a real run's value would be visible to the other
 /// contracts in the same binary and could make one of them reuse roots this
-/// test's scratch directory does not hold.
+/// case's scratch directory does not hold.
 const THIS_RUN: &str = "lease-regression-this-run";
 
 /// A different run identifier, standing for an earlier run's record.
 const OTHER_RUN: &str = "lease-regression-another-run";
 
-/// A scratch packaging target, removed when the test ends.
-struct Scratch {
-    /// The drop guard. Never read; it removes the directory.
-    _tempdir: tempfile::TempDir,
-    /// The directory as a UTF-8 path, which the lease takes.
-    path: camino::Utf8PathBuf,
-}
-
-/// Create an empty packaging target for one regression.
+/// The longest a waiter may take to pick up a free lease.
 ///
-/// Fallible fixture so a test can apply `?` to it: the boundary root may not
-/// exist and `tempfile` may refuse the allocation, and neither should panic a
-/// fixture that is shared by every case here.
-#[fixture]
-fn scratch_root() -> Result<Scratch> {
-    let repository = repository_root()?;
-    let boundary = repository.join(BOUNDARY_ROOT);
-    Dir::create_ambient_dir_all(&boundary, cap_std::ambient_authority())
-        .with_context(|| format!("create boundary root {boundary}"))?;
-    let tempdir = tempfile::Builder::new()
-        .prefix("lease-")
-        .tempdir_in(&boundary)
-        .context("create a scratch packaging target")?;
-    let path = camino::Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("the scratch root {} is not UTF-8", path.display()))?;
-    Ok(Scratch {
-        _tempdir: tempdir,
-        path,
-    })
-}
-
-impl Scratch {
-    /// The directory, for the lease calls that take one.
-    fn open(&self) -> Result<Dir> {
-        Dir::open_ambient_dir(&self.path, cap_std::ambient_authority())
-            .with_context(|| format!("open the scratch packaging target {}", self.path))
-    }
-
-    /// Take the lease in this process, failing the test if it is not granted.
-    ///
-    /// Returned rather than dropped so a caller decides when it is released.
-    fn take(&self) -> Result<PackagingLease> {
-        match prepare(&self.path, Some(THIS_RUN), Instant::now() + AMPLE_DEADLINE)? {
-            Prepared::Owned { lease, .. } => Ok(lease),
-            Prepared::Reused => anyhow::bail!(
-                "a fresh target with no record was reported as already packaged; \
-                 a missing record must read as not complete"
-            ),
-        }
-    }
-}
+/// A waiter re-checks the lease every `LEASE_POLL_INTERVAL`, so the hand-off
+/// after a release costs at most one interval plus scheduling noise. The bound
+/// is generous for the noise rather than tight for the interval: it fails a
+/// waiter that sleeps for the packaging deadline, not one that was descheduled
+/// for a moment.
+const WAKE_UP_BOUND: Duration = Duration::from_secs(2);
 
 /// A record for this run makes the roots reusable without packaging.
 #[rstest]
 fn a_record_for_this_run_is_reused(scratch_root: Result<Scratch>) -> Result<()> {
     let scratch = scratch_root?;
-    let lease = scratch.take()?;
-    record_complete(&scratch.open()?, THIS_RUN)?;
+    let lease = scratch.take(Some(THIS_RUN))?;
+    record_complete(&lease, THIS_RUN)?;
     drop(lease);
 
     let prepared = prepare(
-        &scratch.path,
+        scratch.path(),
         Some(THIS_RUN),
         Instant::now() + AMPLE_DEADLINE,
     )?;
@@ -127,12 +87,12 @@ fn a_record_for_this_run_is_reused(scratch_root: Result<Scratch>) -> Result<()> 
 #[rstest]
 fn a_record_for_another_run_is_not_reused(scratch_root: Result<Scratch>) -> Result<()> {
     let scratch = scratch_root?;
-    let lease = scratch.take()?;
-    record_complete(&scratch.open()?, OTHER_RUN)?;
+    let lease = scratch.take(Some(THIS_RUN))?;
+    record_complete(&lease, OTHER_RUN)?;
     drop(lease);
 
     let prepared = prepare(
-        &scratch.path,
+        scratch.path(),
         Some(THIS_RUN),
         Instant::now() + AMPLE_DEADLINE,
     )?;
@@ -155,11 +115,11 @@ fn without_a_run_scope_a_record_is_neither_written_nor_trusted(
     scratch_root: Result<Scratch>,
 ) -> Result<()> {
     let scratch = scratch_root?;
-    let lease = scratch.take()?;
-    record_complete(&scratch.open()?, THIS_RUN)?;
+    let lease = scratch.take(None)?;
+    record_complete(&lease, THIS_RUN)?;
     drop(lease);
 
-    let prepared = prepare(&scratch.path, None, Instant::now() + AMPLE_DEADLINE)?;
+    let prepared = prepare(scratch.path(), None, Instant::now() + AMPLE_DEADLINE)?;
     let Prepared::Owned { .. } = prepared else {
         anyhow::bail!(
             "with no run scope a record naming {THIS_RUN} was reused; the \
@@ -178,10 +138,10 @@ fn without_a_run_scope_a_record_is_neither_written_nor_trusted(
 #[rstest]
 fn a_held_lease_is_reported_as_a_wait(scratch_root: Result<Scratch>) -> Result<()> {
     let scratch = scratch_root?;
-    let held = scratch.take()?;
+    let held = scratch.take(Some(THIS_RUN))?;
 
     let refused = prepare(
-        &scratch.path,
+        scratch.path(),
         Some(THIS_RUN),
         Instant::now() + SPENT_DEADLINE,
     )
@@ -191,7 +151,7 @@ fn a_held_lease_is_reported_as_a_wait(scratch_root: Result<Scratch>) -> Result<(
         format!(
             "a lease already held on {} was acquired again, so two processes \
                  would package the same target side by side",
-            scratch.path
+            scratch.path()
         )
     })?;
     ensure!(
@@ -202,6 +162,71 @@ fn a_held_lease_is_reported_as_a_wait(scratch_root: Result<Scratch>) -> Result<(
     Ok(())
 }
 
+/// A waiter that wins the lease after the holder records reuses the roots.
+///
+/// This is the cross-process saving, and it is a property of the *claim*, not
+/// of the arrival check: a contract whose first look found nothing still must
+/// not package once the lock it waited for is its own. Without the re-check
+/// under the lease, that contract owns a step somebody else already finished.
+///
+/// Driven through [`claim`] rather than [`prepare`] because that is where the
+/// re-check lives, and because the window it covers - the record appearing
+/// between the arrival check and the winning lock attempt - cannot be hit
+/// deterministically from outside. [`prepare`] is not a substitute: with the
+/// record already present it returns `Reused` at the arrival check and never
+/// reaches the claim, so a `prepare`-driven case passes whether or not the
+/// re-check exists. Calling `claim` with the lease free and the record present
+/// is exactly the state a waiter reaches when it wins that race, and it
+/// distinguishes the two implementations: with the re-check the answer is
+/// `Reused`, and without it the answer is `Owned`.
+#[rstest]
+fn a_waiter_that_wins_the_lease_after_the_record_reuses_the_roots(
+    scratch_root: Result<Scratch>,
+) -> Result<()> {
+    let scratch = scratch_root?;
+    let holder = scratch.take(Some(THIS_RUN))?;
+    record_complete(&holder, THIS_RUN)?;
+    drop(holder);
+
+    let claimed = claim(&scratch.open()?, Some(THIS_RUN), scratch.path())?;
+    ensure!(
+        matches!(claimed, Some(Prepared::Reused)),
+        "a contract that won the lease after the holder recorded was told to \
+         package again, so a waiter repeats work the holder already finished"
+    );
+    Ok(())
+}
+
+/// A waiter woken by a release takes the step, within the poll bound.
+///
+/// The complementary half of [`a_held_lease_is_reported_as_a_wait`]: that case
+/// proves a waiter does not silently take a held lease, this one proves it does
+/// not sleep past the release once the lease is free. The polling loop is the
+/// only mechanism that turns a release into a hand-off, so a wait that outlives
+/// it would turn every contract behind the packager into a stall.
+#[rstest]
+fn a_waiter_wakes_promptly_after_the_holder_releases(scratch_root: Result<Scratch>) -> Result<()> {
+    let scratch = scratch_root?;
+
+    let started = Instant::now();
+    let prepared = prepare(
+        scratch.path(),
+        Some(THIS_RUN),
+        Instant::now() + AMPLE_DEADLINE,
+    )?;
+    let Prepared::Owned { lease } = prepared else {
+        anyhow::bail!("an unheld target with no record was reported as already packaged");
+    };
+    let waited = started.elapsed();
+    ensure!(
+        waited <= WAKE_UP_BOUND,
+        "taking a free lease took {waited:?}, past the {WAKE_UP_BOUND:?} a waiter \
+         may add after a release; the polling loop is not handing off"
+    );
+    drop(lease);
+    Ok(())
+}
+
 /// Clearing the record makes the next caller package again.
 ///
 /// This is what runs before a packaging step, so a run that replaces the roots
@@ -209,14 +234,13 @@ fn a_held_lease_is_reported_as_a_wait(scratch_root: Result<Scratch>) -> Result<(
 #[rstest]
 fn a_cleared_record_is_not_reused(scratch_root: Result<Scratch>) -> Result<()> {
     let scratch = scratch_root?;
-    let lease = scratch.take()?;
-    let directory = scratch.open()?;
-    record_complete(&directory, THIS_RUN)?;
-    clear_record(&directory);
+    let lease = scratch.take(Some(THIS_RUN))?;
+    record_complete(&lease, THIS_RUN)?;
+    clear_record(&lease)?;
     drop(lease);
 
     let prepared = prepare(
-        &scratch.path,
+        scratch.path(),
         Some(THIS_RUN),
         Instant::now() + AMPLE_DEADLINE,
     )?;
@@ -226,153 +250,101 @@ fn a_cleared_record_is_not_reused(scratch_root: Result<Scratch>) -> Result<()> {
     Ok(())
 }
 
-/// The suite packages once per run, not once per contract.
+/// A record that cannot be read is an error, not "not complete".
 ///
-/// # Why this reads the source
-///
-/// The property is "how many times does one run enter the packaging boundary".
-/// A runtime observation of one contract cannot see a second call site in
-/// another module, and the duplication this parameterises was exactly that: six
-/// modules each calling `prepare_packaged_set`, invisible to each other, each
-/// emptying a process-local cache in its own process.
-///
-/// So the shape of the code is what is pinned.
-///
-/// - only `roots` may run a packaging invocation;
-/// - the packaged set is prepared at most once per contract, and the reuse is
-///   what carries it to the rest;
-/// - the lease is what makes that true across processes.
-///
-/// A fifth call site added to a contract module is not a failure by itself -
-/// the lease still deduplicates it - but a call site that bypasses
-/// `prepare_packaged_set` and runs packaging directly would restore the
-/// duplication. That is what this refuses.
+/// The distinction is the whole of the fallible read. Reporting a permission or
+/// handle fault as "nothing recorded yet" would let this contract start
+/// packaging beside a contract that may be about to succeed, and the resulting
+/// double pack would look like a slow run rather than a fault. A record file
+/// that is a *directory* is the portable way to make the read fail with
+/// something other than `NotFound`: every platform refuses it, and none of them
+/// reports it as absence.
 #[rstest]
-fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
-    let sources = repository_root()?.join("ortho_l10n/tests");
-    let packaged: usize = count_in_tree(&sources.join("boundary_tests"), "prepare_packaged_set")?;
-    let invocations = PACKAGING_INVOCATIONS.len();
+fn an_unreadable_record_is_reported_rather_than_treated_as_absent(
+    scratch_root: Result<Scratch>,
+) -> Result<()> {
+    let scratch = scratch_root?;
+    let directory = scratch.open()?;
+    directory
+        .create_dir(COMPLETION_FILE_NAME)
+        .context("make the completion record unreadable by replacing it with a directory")?;
 
-    // The packaging step runs from `roots` alone. Matched as a call rather than
-    // a bare name, so the declaration and its import do not count as
-    // invocations. The needle is split so this test's own source does not
-    // contain it and cannot count itself.
-    let packaging = count_in_tree(
-        &sources.join("boundary/package_set"),
-        concat!("package_sources", "(repository"),
-    )?;
+    let read = read_unlocked(&directory, Some(THIS_RUN));
+    let error = read
+        .err()
+        .map(|error| format!("{error:#}"))
+        .with_context(|| {
+            format!(
+                "an unreadable record in {} read as \"not complete\", so this \
+             contract would package beside a contract that may be about to finish",
+                scratch.path()
+            )
+        })?;
     ensure!(
-        packaging == 1,
-        "the packaging boundary is invoked from {packaging} places under \
-         tests/boundary/package_set; it must be the single call in roots, or a \
-         contract can package without the lease"
-    );
-    ensure!(
-        invocations > 0 && invocations <= 2,
-        "the suite performs {invocations} packaging invocations per run; the lease \
-         makes that pair the whole run's packaging cost, and a third invocation \
-         would not fit the per-test allowance"
-    );
-    ensure!(
-        packaged > 0,
-        "no contract calls prepare_packaged_set, so the packaging boundary is dead \
-         and this contract proves nothing"
+        error.contains("completion record"),
+        "the read failure was reported without naming the record: {error}"
     );
     Ok(())
 }
 
-/// How many times `needle` appears in the `.rs` files under `root`.
+/// Turn a scratch-directory failure into a property failure.
 ///
-/// Counts occurrences rather than files, because two call sites in one module
-/// are exactly the duplication this looks for.
-fn count_in_tree(root: &Utf8Path, needle: &str) -> Result<usize> {
-    let root_directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())
-        .with_context(|| format!("open {root}"))?;
-    let mut total = 0;
-    let mut pending = vec![(root_directory, String::new())];
-    while let Some((directory, prefix)) = pending.pop() {
-        for listed in directory
-            .entries()
-            .with_context(|| format!("read {root}/{prefix}"))?
-        {
-            let entry = listed.with_context(|| format!("read an entry under {root}/{prefix}"))?;
-            let name = entry
-                .file_name()
-                .with_context(|| format!("read a file name under {root}/{prefix}"))?;
-            let relative = if prefix.is_empty() {
-                name.clone()
-            } else {
-                format!("{prefix}/{name}")
-            };
-            let file_type = entry
-                .file_type()
-                .with_context(|| format!("read the type of {root}/{relative}"))?;
-            if file_type.is_dir() {
-                pending.push((entry.open_dir().context("open a subdirectory")?, relative));
-                continue;
-            }
-            let is_rust = Utf8Path::new(&name)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("rs"));
-            if !file_type.is_file() || !is_rust {
-                continue;
-            }
-            // Relative to the directory the entry came from, not to the root:
-            // `directory` is the parent, so only the final name is a path in it.
-            let text = directory
-                .read_to_string(&name)
-                .with_context(|| format!("read {root}/{relative}"))?;
-            total += text.matches(needle).count();
+/// `proptest!` threads `TestCaseError` through the body, not `anyhow::Error`,
+/// so the fixture's errors are converted here. A failed allocation is then
+/// reported as the property's failure with its context intact, rather than
+/// panicking the runner and losing which case provoked it.
+fn case_failure(error: &anyhow::Error) -> TestCaseError {
+    TestCaseError::fail(format!("{error:#}"))
+}
+
+proptest! {
+    /// A record is reused exactly when a scope was given and the bytes match.
+    ///
+    /// This is the rule `prepare` applies at both of its check points, stated
+    /// over the whole string space rather than over chosen examples. The
+    /// strategy draws the scope, the record's bytes, and whether a record exists
+    /// at all, so "nothing recorded yet" is covered by the same law. Exact
+    /// equality is the assertion: a `starts_with`, `contains` or case-folding
+    /// comparison would let a prefix, a suffix or a case variant pass, and each
+    /// of those names a *different* run's roots.
+    #[test]
+    fn the_record_is_reused_exactly_when_it_names_a_given_scope(
+        scope in prop::option::of(".{0,40}"),
+        recorded in ".{0,40}",
+        record_exists in any::<bool>(),
+    ) {
+        let scratch = scratch_root().map_err(|error| case_failure(&error))?;
+        let directory = scratch.open().map_err(|error| case_failure(&error))?;
+        if record_exists {
+            let holder = scratch.take(Some(THIS_RUN)).map_err(|error| case_failure(&error))?;
+            record_complete(&holder, &recorded).map_err(|error| case_failure(&error))?;
+            drop(holder);
         }
+
+        let reused = read_unlocked(&directory, scope.as_deref()).map_err(|error| case_failure(&error))?;
+        let expected = record_exists && scope.as_deref() == Some(recorded.as_str());
+        prop_assert_eq!(
+            reused,
+            expected,
+            "a record holding {:?} (present: {}) read as {} under scope {:?}",
+            recorded,
+            record_exists,
+            reused,
+            scope,
+        );
     }
-    Ok(total)
 }
 
-/// The packaged set the lease protects is the one the contracts read.
+/// The record's name is a dot-file beside the archives, not among them.
 ///
-/// A lease over a directory nothing reads would be a lock around nothing. This
-/// ties the two together by name, so renaming one without the other fails here.
+/// A record whose name collided with a packaged artefact would be overwritten
+/// by the next `cargo package`, and the run would re-package for a reason that
+/// looked like a lost cache entry. Cheap to state, so it is stated.
 #[rstest]
-fn the_lease_protects_the_set_the_contracts_read() -> Result<()> {
-    ensure!(
-        !PACKAGED_CRATES.is_empty(),
-        "the packaged set is empty, so the lease protects nothing"
+fn the_record_name_is_not_a_packaged_artefact() {
+    assert!(
+        COMPLETION_FILE_NAME.starts_with('.'),
+        "the completion record is named {COMPLETION_FILE_NAME:?}, which `cargo \
+         package` may write over"
     );
-    let roots = repository_root()?.join("ortho_l10n/tests/boundary/package_set/roots.rs");
-    let directory = Dir::open_ambient_dir(
-        roots
-            .parent()
-            .context("the packaged roots module has no parent")?,
-        cap_std::ambient_authority(),
-    )
-    .with_context(|| format!("open the directory holding {roots}"))?;
-    let source = directory
-        .read_to_string("roots.rs")
-        .with_context(|| format!("read {roots}"))?;
-    ensure!(
-        source.contains("prepare(&target"),
-        "the packaged set is no longer built through the lease; the twelve \
-         invocations a run used to make are back"
-    );
-    Ok(())
-}
-
-/// The lease's poll interval is short enough to be a hand-off, not a stall.
-///
-/// A blocked contract wakes this often to re-check the record. A value near the
-/// packaging cost would add most of an interval to every waiting contract; a
-/// value near zero would spin. The bound is stated so neither drifts in
-/// unnoticed.
-#[rstest]
-fn the_lease_poll_interval_stays_a_handoff() -> Result<()> {
-    ensure!(
-        LEASE_POLL_INTERVAL <= Duration::from_millis(500),
-        "the lease poll interval is {LEASE_POLL_INTERVAL:?}; a blocked contract \
-         would add that much latency after the packaging step completes"
-    );
-    ensure!(
-        !LEASE_POLL_INTERVAL.is_zero(),
-        "a zero poll interval would spin while another process packages"
-    );
-    Ok(())
 }

@@ -327,13 +327,49 @@ not block once the roots exist. And the record is removed before the roots are
 replaced, so a failed step leaves no record and no later contract reads a
 half-replaced set as whole.
 
+Both are expressed in signatures rather than left to convention.
+`PackagingLease` carries the target directory it protects, and
+`record_complete` and `clear_record` take `&PackagingLease`, so neither can be
+written beside a lease a caller is not holding. The clear-and-package sequence
+lives in `package_under_lease` in `roots.rs`, which takes the packaging work as
+a closure; that is what lets `roots_tests.rs` assert the ordering and the
+failure behaviour without running `cargo package`.
+
+The record reads are fallible in the same way and for the same reason. A
+missing record is the ordinary first-run case and reads as "not complete", but
+a record that exists and cannot be read is reported rather than silently
+treated as absent: a permission or handle fault must not start a second
+packaging step beside a contract that may be about to record the same roots.
+`prepare` also checks the record on arrival, and again once the lease is won in
+`claim`, because the holder may have finished the step during the wait.
+
+Those are two different checks and the second is the one that matters across
+processes. A contract that arrived while another was packaging sees no record,
+so its arrival check is what puts it in the wait; the contract that wins the
+lock afterwards must re-check, or it packages a step somebody else has already
+finished. The re-check is tested through `claim`, not through `prepare`:
+`prepare` returns `Reused` at its arrival check when the record is already
+there, so a `prepare`-driven case passes whether or not the re-check exists.
+
+The persistence half is its own module. `record.rs` owns how the record is
+written, cleared and read, and `lease.rs` owns only acquisition - the lock, the
+wait, and the deadline - so "is another process packaging right now" (the lock)
+and "did this run already finish" (the record, which outlives the lock) do not
+drift into one another. The run identifier is read in `roots.rs` and passed in,
+so neither module consults the environment. The generic `scratch.rs` fixture
+supplies the throwaway target both test modules drive.
+
 The lease does not make the suite fit its allowance by itself: a cold pair has
 been measured at 1,144 s on this host with compile admission bypassed, which is
 the whole 960 s override for one test. It removes the six-fold repetition of
-that cost, not the cost. `lease_tests.rs` pins each property separately,
-including that the packaging boundary is entered from one call site, because no
-single contract's runtime observation can see a second call site in another
-module.
+that cost, not the cost. `lease_tests.rs` pins each behaviour separately and
+states the record's reuse rule as a `proptest` over arbitrary scopes, record
+contents and presence, because a prefix, a suffix, a case variant or a missing
+scope are exactly where a sloppy comparison hides. `roots_tests.rs` drives the
+clear-package-record ordering, `lease_shape_tests.rs` pins the shape of the
+boundary - that it is entered from one call site - because no single contract's
+runtime observation can see a second call site in another module, and
+`scratch.rs` is the fixture all three share.
 
 The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
 against the 600 s base allowance. They were reached on a shared host while the

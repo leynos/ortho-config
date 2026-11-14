@@ -13,7 +13,8 @@
 //! how the archives were produced.
 
 use super::super::fixture_cargo::{BOUNDARY_ROOT, Budget, repository_root};
-use super::lease::{Prepared, clear_record, prepare, record_complete, run_scope};
+use super::lease::{PackagingLease, Prepared, prepare};
+use super::record::{clear_record, record_complete};
 use super::{PACKAGING_INVOCATIONS, package_sources};
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -23,6 +24,25 @@ use std::time::Instant;
 
 /// Directory `cargo package` writes into, relative to the shared target root.
 const PACKAGE_DIRECTORY: &str = "package";
+
+/// Environment variable nextest exports to every test it runs.
+const RUN_ID_VARIABLE: &str = "NEXTEST_RUN_ID";
+
+/// The value the completion record must name for this process to reuse it.
+///
+/// `None` when no run identifier is exported, which is the single-process
+/// runners: there the process-local cache is what deduplicates, and a record
+/// made by an earlier run must not be trusted.
+///
+/// This is the composition edge, so the environment is read here and the
+/// result is passed inward. [`prepare`] and the record helpers take the scope
+/// as an argument and consult no process-global state, which is what lets their
+/// regressions drive them without mutating the environment.
+fn run_scope() -> Option<String> {
+    std::env::var(RUN_ID_VARIABLE)
+        .ok()
+        .filter(|id| !id.is_empty())
+}
 
 /// One unpacked package root, with the paths a consumer patch needs.
 #[derive(Debug, Clone)]
@@ -201,26 +221,10 @@ fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
     let deadline = Instant::now() + budget.remaining();
     match prepare(&target, scope.as_deref(), deadline)? {
         Prepared::Reused => {}
-        Prepared::Owned {
-            lease: _lease,
-            directory,
-        } => {
-            // `_lease` is held, not read: it is released when this arm ends. The
-            // record below is written while it is still held, so no other
-            // process can begin a packaging step between the two.
-            clear_record(&directory);
-            match package_all(&repository, &target, budget) {
-                // Recorded under the lease, so the next contract in this run
-                // sees a complete set only once every invocation has succeeded.
-                Ok(()) => {
-                    if let Some(this_run) = scope.as_deref() {
-                        record_complete(&directory, this_run)?;
-                    }
-                }
-                // A partial run leaves a mixture of old and new roots, and the
-                // record is already gone, so no later contract reads it whole.
-                Err(error) => return Err(error),
-            }
+        Prepared::Owned { lease } => {
+            package_under_lease(&lease, scope.as_deref(), || {
+                package_all(&repository, &target, budget)
+            })?;
         }
     }
 
@@ -234,6 +238,34 @@ fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
         });
     }
     Ok(roots)
+}
+
+/// Replace the roots under a held lease, recording the result.
+///
+/// The order is the whole point, and it is why this is a function rather than
+/// three statements inline: the record is cleared *before* packaging starts and
+/// written *after* it succeeds, both while the lease is held. A reader can
+/// therefore never see a record describing roots that are half-replaced, and a
+/// failed step leaves no record at all.
+///
+/// The packaging work is a closure so a test can drive the sequence without
+/// running `cargo package`, and can make it fail.
+///
+/// # Errors
+///
+/// Returns the packaging error unchanged, or an error from clearing or writing
+/// the record.
+fn package_under_lease(
+    lease: &PackagingLease,
+    scope: Option<&str>,
+    package: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    clear_record(lease)?;
+    package()?;
+    // Recorded only for a named run: without one, the process-local cache is
+    // what deduplicates, and a record this process cannot reuse is a file the
+    // next run has to distrust rather than a saving.
+    scope.map_or_else(|| Ok(()), |this_run| record_complete(lease, this_run))
 }
 
 /// Run every packaging invocation, leaving the roots materialized.
@@ -268,3 +300,7 @@ pub(crate) fn assert_packaged_set_complete() -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "roots_tests.rs"]
+mod roots_tests;

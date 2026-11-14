@@ -404,18 +404,96 @@ not, and could not by arithmetic, turn the suite green.
 
 ### D4. Regression contract (implemented)
 
-`lease_tests.rs` pins, as 8 `#[rstest]` cases:
+`lease_tests.rs` pins, as `#[rstest]` cases plus one `proptest`:
 
 - a record for this run is reused; a record for another run is not;
 - with no run scope, no record is written and none is trusted;
-- a held lease is reported as a wait naming the lease, never taken twice;
+- a held lease is reported as a wait naming the lease, never taken twice, and a
+  free lease is picked up well inside one poll interval;
 - a cleared record is not reused;
-- the suite enters the packaging boundary from exactly one call site in
-  `roots`, and performs at most two invocations per run - read from the source
-  because the property is about the *shape* of the code, and no single
-  contract's runtime observation can see a second call site in another module;
-- the lease protects the set the contracts actually read;
-- the poll interval stays a hand-off rather than a stall.
+- a record that exists and cannot be read is reported as an error rather than
+  read as "not complete";
+- the reuse rule itself, as a property over arbitrary scopes, record contents
+  and presence, so a prefix, a suffix, a case variant, the empty string and a
+  missing scope all refuse.
+
+`lease_shape_tests.rs` adds the two structural claims - the suite enters the
+packaging boundary from exactly one call site, and the lease protects the set
+the contracts read - matched as *call expressions* rather than bare names, so a
+doc comment or an import cannot satisfy them.
+
+The count is no longer stated as "8 cases": it grew during review and a figure
+in prose is one more thing to keep true by hand.
+
+That contract was extended in review, when CodeRabbit's `Testing (Overall)`
+pre-merge row observed that the post-lease re-check had no test at all:
+deleting the re-check left every case green. The gap was real, and it is the
+core cross-process saving - a waiter's first check happens before the holder
+records anything, so only the re-check under the lease can tell it the work is
+done. It is now covered by
+`a_waiter_that_wins_the_lease_after_the_record_reuses_the_roots`, which fails
+when the re-check is removed.
+
+Two further gaps from the same row and from `Unit Architecture` are now closed:
+
+- `package_under_lease` in `roots.rs` takes the packaging work as a closure, so
+  `roots_tests.rs` can assert the clear-before/record-after ordering and the
+  no-record-after-failure guarantee without running `cargo package`. Swapping
+  the two statements, or recording before the step, now fails.
+- `record_matches` returns `Result`, and `clear_record` propagates its removal
+  error, so an unreadable or unremovable record is reported rather than
+  silently read as "not complete". `record_complete` and `clear_record` take
+  `&PackagingLease`, which puts "the lock is held" in the signature.
+
+The `Unit Architecture` finding's fifth point - that the reuse path creates the
+target directory before checking the record - was addressed by making the
+create conditional in `open_target`, so a contract that finds the roots
+complete opens a directory rather than creating one. The literal remedy,
+checking the record before any directory handle exists, is not expressible:
+reading a record needs a handle to the directory holding it.
+
+A second review round closed the remaining points of the same two rows.
+
+- Mixed responsibilities (`Unit Architecture` point 4). The record's
+  persistence - write, clear and both reads - moved to `package_set/record.rs`.
+  `lease.rs` keeps acquisition only, and the module doc says which is which and
+  why the two questions ("is another process packaging" versus "did this run
+  finish") are separate. `run_scope` moved to `roots.rs`, the composition edge,
+  so no library-side module reads the environment.
+- Source-text tests (`Unit Architecture` point 6, `Testing (Overall)` gap 3).
+  The needles are now call expressions, `prepare(&target` and
+  `package_sources(repository`, rather than bare names, so a doc comment, an
+  import or a definition cannot satisfy them. The lease test also requires the
+  unpacked roots to be derived from the leased target, which ties the lock to
+  what the contracts read.
+- The constant-only poll-interval case is replaced by behaviour:
+  `a_waiter_wakes_promptly_after_the_holder_releases` bounds the time to take a
+  free lease at two seconds, which fails a waiter that sleeps for the deadline
+  rather than one that is briefly descheduled. The interval keeps its own bound
+  in `lease_shape_tests.rs`, and both are cited from the constant's doc.
+- A record that exists and cannot be read is now covered by
+  `an_unreadable_record_is_reported_rather_than_treated_as_absent`, which makes
+  the record a directory so every platform refuses the read with something
+  other than `NotFound`. Reverting `read_unlocked` to `is_ok_and` fails it and
+  nothing else.
+- The `Testing (Property / Proof)` warning asked for `proptest`, and the table
+  of six hand-picked scopes did not satisfy it. The relation is now stated as a
+  property over arbitrary `Option<String>` scopes, arbitrary record bytes and
+  `bool` presence: a record is reused if and only if it exists and the bytes
+  equal a scope that was actually given.
+
+All five repairs were proved non-vacuous by mutation: removing the re-check
+fails only the waiter case; swapping clear after packaging fails the two
+ordering cases; never recording fails the two record cases; and treating a read
+failure as absent fails only the unreadable-record case. Every mutation was
+restored and verified byte-identical with `cmp`.
+
+One remedy in the review is deliberately not followed literally. It asks for
+the waiter's reuse to be driven through `prepare`. That is vacuous: with the
+record already present `prepare` returns `Reused` at its arrival check and
+never reaches `claim`, so the case would pass with the re-check deleted. The
+case drives `claim`, which is where the re-check lives and the only seam that
+discriminates the two implementations; the test's doc says so.
 
 ## Progress
 
@@ -441,6 +519,9 @@ not, and could not by arithmetic, turn the suite green.
       26 / 18 / 10 in 907.74 s at the same wall clock.
 - [x] Gates, sequentially.
 - [x] Documentation of the lease in the developers' guide.
+- [x] Review round: the post-lease re-check, the record ordering and the failure
+      behaviour are each covered by a case that fails when the code is broken;
+      `lease_shape_tests.rs` and `roots_tests.rs` carry the new cases.
 
 ## Surprises and discoveries
 
