@@ -84,6 +84,38 @@ def _run(step: dict[str, typ.Any]) -> str:
     return str(step.get("run", ""))
 
 
+def _verification_run(name: str) -> str:
+    """Return one verification step's run block."""
+    return _run(_one_step(_build_test_steps(), name))
+
+
+def _labelled(
+    environment: object, label: str
+) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
+    """Yield ``label`` and the mapping, when the value really is an env block."""
+    if isinstance(environment, dict):
+        yield label, environment
+
+
+def _step_environments(job: dict[str, typ.Any]) -> typ.Iterator[tuple[str, dict]]:
+    """Yield the env blocks declared by a job's steps.
+
+    >>> list(_step_environments({"steps": [{"env": {"A": "1"}}, {"run": "x"}]}))
+    [('step 0 env', {'A': '1'})]
+    """
+    for index, step in enumerate(job.get("steps") or []):
+        yield from _labelled(step.get("env"), f"step {index} env")
+
+
+def _job_environments(
+    document: dict[typ.Union[str, bool], object],
+) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
+    """Yield the env blocks declared by each job and each of its steps."""
+    for job_name, job in workflow_jobs(document).items():
+        yield from _labelled(job.get("env"), f"job {job_name} env")
+        yield from _step_environments(job)
+
+
 def _environment_blocks(
     document: dict[typ.Union[str, bool], object],
 ) -> typ.Iterator[tuple[str, dict[str, typ.Any]]]:
@@ -96,17 +128,8 @@ def _environment_blocks(
     >>> [label for label, _ in _environment_blocks(document)]
     ['workflow env', 'job j env', 'step 0 env']
     """
-    workflow_environment = document.get("env")
-    if isinstance(workflow_environment, dict):
-        yield "workflow env", workflow_environment
-    for job_name, job in workflow_jobs(document).items():
-        environment = job.get("env")
-        if isinstance(environment, dict):
-            yield f"job {job_name} env", environment
-        for index, step in enumerate(job.get("steps") or []):
-            environment = step.get("env")
-            if isinstance(environment, dict):
-                yield f"step {index} env", environment
+    yield from _labelled(document.get("env"), "workflow env")
+    yield from _job_environments(document)
 
 
 @pytest.mark.parametrize(
@@ -141,29 +164,29 @@ def test_each_verification_follows_both_coverage_passes(name: str) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("name", "reader"),
+    [
+        pytest.param(WINDOWS_VERIFY_STEP, "$env:{variable}", id="windows"),
+        pytest.param(LINUX_VERIFY_STEP, "${{{variable}-}}", id="linux"),
+    ],
+)
 @pytest.mark.parametrize("variable", COVERAGE_VARIABLES)
-def test_the_windows_check_rejects_either_variable_going_astray(variable: str) -> None:
-    """Both variables carry the history, so both are read back on Windows."""
-    run = _run(_one_step(_build_test_steps(), WINDOWS_VERIFY_STEP))
-    assert f"$env:{variable}" in run, (
-        f"the Windows check never reads {variable}, so a pass could build "
-        "under a root the check does not look at"
+def test_each_check_reads_back_and_names_both_variables(
+    name: str, reader: str, variable: str
+) -> None:
+    """Both variables carry the root, so both are read back and named on failure.
+
+    The Linux form keeps a set-but-empty value distinct from an absent one,
+    which is why it is a separate reader rather than a shared one.
+    """
+    run = _verification_run(name)
+    assert reader.format(variable=variable) in run, (
+        f"{name!r} never reads {variable}, so a pass could build under a root "
+        "the check does not look at"
     )
     assert f"{variable} is '" in run, (
-        f"the Windows check must name {variable} in its failure message"
-    )
-
-
-@pytest.mark.parametrize("variable", COVERAGE_VARIABLES)
-def test_the_linux_check_rejects_either_variable_going_astray(variable: str) -> None:
-    """The Linux check reads the same two variables back."""
-    run = _run(_one_step(_build_test_steps(), LINUX_VERIFY_STEP))
-    assert f"${{{variable}-}}" in run, (
-        f"the Linux check never reads {variable}, so a pass could build "
-        "under a root the check does not look at"
-    )
-    assert f"{variable} is '" in run, (
-        f"the Linux check must name {variable} in its failure message"
+        f"{name!r} must name {variable} in its failure message"
     )
 
 
@@ -171,7 +194,7 @@ def test_the_windows_check_derives_the_same_root_as_the_chooser() -> None:
     """The check recomputes the chooser's drive-root directory, not a copy."""
     steps = _build_test_steps()
     chooser = _run(_one_step(steps, "Choose the coverage target root"))
-    check = _run(_one_step(steps, WINDOWS_VERIFY_STEP))
+    check = _verification_run(WINDOWS_VERIFY_STEP)
 
     for expression in (
         "[System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)",
@@ -189,7 +212,7 @@ def test_the_windows_check_derives_the_same_root_as_the_chooser() -> None:
 
 def test_the_windows_check_requires_the_derived_directory_to_exist() -> None:
     """Matching variables are not enough: the passes must have built there."""
-    run = _run(_one_step(_build_test_steps(), WINDOWS_VERIFY_STEP))
+    run = _verification_run(WINDOWS_VERIFY_STEP)
     assert "Test-Path -LiteralPath $expected" in run, (
         "the Windows check must observe the directory the builds produced"
     )
@@ -203,7 +226,7 @@ def test_the_linux_check_requires_the_chosen_directory_to_exist() -> None:
     """The nested trybuild projects' target must be on disk after both passes."""
     steps = _build_test_steps()
     chooser = _run(_one_step(steps, "Choose the Linux coverage target root"))
-    check = _run(_one_step(steps, LINUX_VERIFY_STEP))
+    check = _verification_run(LINUX_VERIFY_STEP)
 
     assert '"$RUNNER_TEMP/llvm-cov-target"' in chooser, (
         "the Linux chooser no longer selects the root the check expects"
@@ -220,7 +243,7 @@ def test_the_linux_check_requires_the_chosen_directory_to_exist() -> None:
 @pytest.mark.parametrize("name", [WINDOWS_VERIFY_STEP, LINUX_VERIFY_STEP])
 def test_each_verification_reports_the_root_it_observed(name: str) -> None:
     """A passing run says which root was in use, not only that it passed."""
-    run = _run(_one_step(_build_test_steps(), name))
+    run = _verification_run(name)
     assert OBSERVED_LINE in run, (
         f"{name!r} must report the root it observed"
     )
