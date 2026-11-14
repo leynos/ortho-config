@@ -46,10 +46,10 @@ what is measured, what was tried and reversed, and what remains.
 
 `make boundary`, both runs on this host under contention:
 
-| Run | Log | Passed | Failed | Ignored | Elapsed |
-| --- | --- | --- | --- | --- | --- |
-| before (`50285096`) | `/tmp/boundary-before-harden-boundary-deadline-evidence-20261113.out` | 26 | 18 | 10 | 907.74 s |
-| after (`5967a09b`) | `/tmp/boundary-after-harden-boundary-deadline-evidence-20261113.out` | **42** | **10** | 10 | 908.29 s |
+| Run                 | Log                                                                   | Passed | Failed | Ignored | Elapsed  |
+| ------------------- | --------------------------------------------------------------------- | ------ | ------ | ------- | -------- |
+| before (`50285096`) | `/tmp/boundary-before-harden-boundary-deadline-evidence-20261113.out` | 26     | 18     | 10      | 907.74 s |
+| after (`5967a09b`)  | `/tmp/boundary-after-harden-boundary-deadline-evidence-20261113.out`  | **42** | **10** | 10      | 908.29 s |
 
 Eight more assertions now return a verdict, at the same wall-clock, on equally
 loaded hardware. No test was deleted, ignored, or given a larger budget; the
@@ -57,17 +57,43 @@ loaded hardware. No test was deleted, ignored, or given a larger budget; the
 
 The residual ten decompose as:
 
-| Cause | Count | Reading |
-| --- | --- | --- |
-| `cargo package` killed at a **22 s** remainder | 6 | the pair ran but its allowance was spent |
-| `cargo test --all-targets` killed at an **8 s** remainder | 1 | same, for a consumer build |
-| `cargo metadata` exhausted 900 s waiting on a sibling | 2 | never started |
-| the serialization probe | 1 | its subject is the wait |
+| Cause                                                     | Count | Reading                                  |
+| --------------------------------------------------------- | ----- | ---------------------------------------- |
+| `cargo package` killed at a **22 s** remainder            | 6     | the pair ran but its allowance was spent |
+| `cargo test --all-targets` killed at an **8 s** remainder | 1     | same, for a consumer build               |
+| `cargo metadata` exhausted 900 s waiting on a sibling     | 2     | never started                            |
+| the serialization probe                                   | 1     | its subject is the wait                  |
 
 The packaging pair did run - six `Verifying ortho_l10n` starts, against the
 twelve the unleased suite made - so the deduplication worked. What failed is
 that one pair still exceeds what a contract can be given, which is the D3
 problem and not a lease problem.
+
+### The residual mechanism, named
+
+All ten residual failures are the same defect, and it is not the lease:
+
+1. One packaged contract takes the lease and starts a cold
+   `cargo package --verify`, which needs 802 s on this host.
+2. The other five block in `prepare` polling the lease. Each waits until its
+   own 900 s `SCENARIO_ALLOWANCE` is nearly gone.
+3. The holder is killed at its 440 s `PACKAGE_DEADLINE`, so it never records
+   completion.
+4. A waiter takes the lease with about **22 s** of allowance left, and its own
+   `cargo package` is clamped to that remainder and killed. The error names the
+   allowance, and `roots` caches the formatted failure, so the same text is
+   then reported by every remaining packaged contract.
+
+That is why six tests report the identical `22 second deadline` string: it is
+one failure, replayed. The lease did its job - six `Verifying ortho_l10n`
+starts instead of twelve - but a single cold pair still exceeds one contract's
+whole allowance, so serializing *arithmetic* cannot make it fit.
+
+The fix is therefore not in the lease and not in a bigger number. Either the
+packaging must stop being on the critical path of six contracts (produce the
+roots once, outside the per-contract allowance), or the contracts that only
+read an already-normalized manifest must not trigger packaging at all. Both are
+the D3 direction: make the reader's evidence independent of the writer's clock.
 
 ## Baseline (established before any change; do not re-derive)
 
@@ -209,7 +235,7 @@ one test. The lease removes the six-fold repetition - the suite's packaging
 cost becomes one pair instead of six - but it cannot by itself make the suite
 green. It is a necessary reduction, not a sufficient one.
 
-### D2. Deleted: `--no-verify` plus a hand-written unpacker
+### D2. Deleted: `--no-verify` plus a bespoke unpacker
 
 An earlier version of this plan proposed `cargo package --no-verify` followed
 by an in-process tar/gzip extraction into `package/<name>-<version>/`. The
@@ -292,7 +318,7 @@ accounting of what each packaged contract needs:
 
 ## Decision log
 
-- 2026-11-13: designed a hand-written tar/gzip reader over `tar` + `flate2`
+- 2026-11-13: designed a bespoke tar/gzip reader over `tar` + `flate2`
   dev-dependencies, on scope grounds (read one archive `cargo package` just
   wrote, no re-use).
 - 2026-11-14: **reversed** - deleted that unpacker entirely. The developers'
