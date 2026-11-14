@@ -113,7 +113,6 @@ fn cached_ir_matches(paths: &BridgeCache, json: &str) -> Result<bool, OrthohelpE
         }
     };
 
-    let expected_len = json.len() as u64;
     let metadata = file.metadata().map_err(|err| OrthohelpError::Io {
         path: paths.ir_path.clone(),
         source: err,
@@ -127,17 +126,29 @@ fn cached_ir_matches(paths: &BridgeCache, json: &str) -> Result<bool, OrthohelpE
             ),
         });
     }
-    if metadata.len() != expected_len {
+    bounded_body_matches(file, metadata.len(), json).map_err(|source| OrthohelpError::Io {
+        path: paths.ir_path.clone(),
+        source,
+    })
+}
+
+/// Compares a cached body with `json`, reading at most `json.len() + 1` bytes.
+///
+/// This is the bounded kernel of [`cached_ir_matches`], separated so the read
+/// bound can be tested with a reader that records consumption rather than
+/// relying on allocation instrumentation. `cached_len` is the size metadata
+/// reported; when it disagrees with `json` the body is not read at all, so a
+/// file-sized mismatch costs one `stat` and no allocation.
+fn bounded_body_matches(reader: impl Read, cached_len: u64, json: &str) -> std::io::Result<bool> {
+    let expected_len = json.len() as u64;
+    if cached_len != expected_len {
         return Ok(false);
     }
 
     let mut buffer = Vec::with_capacity(json.len().saturating_add(1));
-    file.take(expected_len.saturating_add(1))
-        .read_to_end(&mut buffer)
-        .map_err(|err| OrthohelpError::Io {
-            path: paths.ir_path.clone(),
-            source: err,
-        })?;
+    reader
+        .take(expected_len.saturating_add(1))
+        .read_to_end(&mut buffer)?;
 
     Ok(buffer == json.as_bytes())
 }
@@ -191,3 +202,7 @@ pub(super) fn write_ir_cache(
 
     Ok(PublishOutcome::Updated)
 }
+
+#[cfg(test)]
+#[path = "ir_cache_tests.rs"]
+mod tests;
