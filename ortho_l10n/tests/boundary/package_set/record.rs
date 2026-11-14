@@ -28,6 +28,10 @@
 //! exists, and it takes the directory directly because it has no proof to
 //! offer.
 
+#[cfg(test)]
+#[path = "record_tests.rs"]
+mod record_tests;
+
 use super::lease::PackagingLease;
 use anyhow::{Context, Result};
 use cap_std::fs_utf8::Dir;

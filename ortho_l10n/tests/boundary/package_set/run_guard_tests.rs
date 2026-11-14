@@ -11,20 +11,27 @@
 //!
 //! These cases pin the two halves that a broken guard would lose: a second
 //! holder is refused while the first is alive, and the first's release hands
-//! the checkout over rather than deadlocking it. The positive behaviour - that
-//! every process reaching the target holds one - is a property of the wiring
-//! rather than of this module, and is pinned in
-//! [`super::super::lease::lease_shape_tests`].
+//! the checkout over rather than deadlocking it.
 //!
-//! Both cases take the guard in this process on a scratch directory, for the
-//! same reason [`super::super::lease::contention_tests`] holds the packaging
-//! lease there: the lock is per open file description on Unix and per sharing
-//! mode on Windows, so a second open from this same process contends exactly as
-//! a second process would.
+//! A third case pins the wiring rather than the lock, because the two above
+//! pass whether or not anything in the suite ever calls [`hold_run`]. That is
+//! the failure that matters: the guard is only worth its lock if the production
+//! path takes it, and takes it *before* reaching the packaging step, so a
+//! dropped or reordered acquisition is noticed here rather than by a race
+//! nothing observes.
+//!
+//! The two lock cases take the guard in this process on a scratch directory,
+//! for the same reason [`super::super::lease::contention_tests`] holds the
+//! packaging lease there: the lock is per open file description on Unix and per
+//! sharing mode on Windows, so a second open from this same process contends
+//! exactly as a second process would.
 
+use crate::boundary::fixture_cargo::repository_root;
 use crate::boundary::package_set::run_guard::{RunGuard, hold_run};
 use crate::boundary::package_set::scratch::{Scratch, scratch_root};
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
+use cap_std::fs_utf8::Dir;
 use rstest::rstest;
 use std::time::{Duration, Instant};
 
@@ -86,4 +93,75 @@ fn a_released_run_guard_is_granted_to_the_next_run(scratch_root: Result<Scratch>
     )?;
     drop(second);
     Ok(())
+}
+
+/// The production packaging path takes the guard, before it packages.
+///
+/// [`hold_run`] holding a lock correctly proves nothing about whether anything
+/// calls it. Delete the call from `build_packaged_set` and every runtime case
+/// in this module still passes, because they call [`hold_run`] themselves; the
+/// defect that returns is the cross-process race the guard exists to close, and
+/// nothing in the suite would notice it.
+///
+/// Three shape facts, each closing a different way the wiring could be lost:
+///
+/// - `roots.rs` calls `hold_run(&boundary` exactly once, so the acquisition
+///   cannot be dropped or duplicated;
+/// - that call appears *before* the leased `prepare(&target` call, so a lock
+///   taken after packaging would not cover the replace it is meant to prevent;
+/// - the result is stored in `RUN_GUARD`, not bound to a local. A local would
+///   drop at the end of the call, releasing the checkout while the contracts
+///   that were promised the roots are still reading them.
+///
+/// Source-reading rather than behavioural because the behaviour it guards is a
+/// lock held for a *process*: a case that observed it would have to reach
+/// `build_packaged_set`, which packages for real.
+#[rstest]
+fn the_packaging_path_takes_the_run_guard_before_packaging() -> Result<()> {
+    let roots = repository_root()?.join("ortho_l10n/tests/boundary/package_set/roots.rs");
+    let source = read_roots(&roots)?;
+
+    let acquisitions = source.matches(concat!("hold_run", "(&boundary")).count();
+    ensure!(
+        acquisitions == 1,
+        "roots.rs acquires the run guard {acquisitions} times; it must be exactly \
+         once, or the checkout is either left unguarded or locked twice over"
+    );
+
+    let acquired_at = source
+        .find(concat!("hold_run", "(&boundary"))
+        .context("the guard acquisition was counted but not located")?;
+    let packaged_at = source
+        .find(concat!("prepare", "(&target"))
+        .context("roots.rs no longer reaches the leased prepare(&target, ..) call")?;
+    ensure!(
+        acquired_at < packaged_at,
+        "roots.rs reaches the packaging step before taking the run guard; a lock \
+         taken afterwards does not cover the replace it exists to prevent"
+    );
+
+    ensure!(
+        source.contains(concat!("RUN_GUARD", ".get_or_init")),
+        "roots.rs does not park the run guard in the RUN_GUARD static; a guard \
+         bound to a local would drop at the end of the call and release the \
+         checkout while the contracts reading the roots are still running"
+    );
+    Ok(())
+}
+
+/// Read `roots.rs` as text.
+///
+/// Its directory rather than its path, so the read goes through a capability
+/// handle like every other source read in these modules.
+fn read_roots(roots: &Utf8Path) -> Result<String> {
+    let directory = Dir::open_ambient_dir(
+        roots
+            .parent()
+            .context("the packaged roots module has no parent")?,
+        cap_std::ambient_authority(),
+    )
+    .with_context(|| format!("open the directory containing {roots}"))?;
+    directory
+        .read_to_string("roots.rs")
+        .with_context(|| format!("read {roots}"))
 }

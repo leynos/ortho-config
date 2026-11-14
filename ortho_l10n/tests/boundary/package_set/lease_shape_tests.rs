@@ -38,16 +38,16 @@ use rstest::{fixture, rstest};
 
 /// The suite packages once per run, not once per contract.
 ///
-/// Three separate shape claims, each about a different way the duplication
-/// could come back:
+/// Four separate shape claims, each about a different way the duplication
+/// could come back or the recipe could stop producing what it promises:
 ///
 /// - only `roots` may run a packaging invocation, so no contract can package
 ///   around the lease;
-/// - the invocation list stays a small, fixed pair, because the pair is the
-///   whole run's packaging cost and a third entry would not fit the per-test
-///   allowance;
+/// - that single call is `roots`' own, not one moved into a sibling;
 /// - at least one contract actually calls `prepare_packaged_set`, so the socket
-///   the boundary is reached through is not dead.
+///   the boundary is reached through is not dead;
+/// - the invocations between them package the whole packaged set, which is the
+///   one relation between two constants that could drift silently.
 ///
 /// A fifth call site to `prepare_packaged_set` is not a failure by itself -
 /// the lease deduplicates it - but a call site that bypasses it and runs
@@ -93,15 +93,35 @@ fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
          be roots' own, or the packaging step has moved out from under the lease"
     );
     ensure!(
-        invocations > 0 && invocations <= 2,
-        "the suite performs {invocations} packaging invocations per run; the lease \
-         makes that pair the whole run's packaging cost, and a third invocation \
-         would not fit the per-test allowance"
-    );
-    ensure!(
         packaged > 0,
         "no contract calls prepare_packaged_set, so the packaging boundary is dead \
          and this contract proves nothing"
+    );
+    // The invocation count is a length in the type, so asserting a bound on it
+    // would be a fact about the constant rather than about the suite. What can
+    // drift is the relation *between* it and the packaged set: add a crate to
+    // `PACKAGED_CRATES` without adding it to an invocation and the roots are
+    // never produced, while every count-based assertion still passes.
+    //
+    // Sorted before comparing, because the two orders answer different
+    // questions and are not meant to agree: `PACKAGED_CRATES` is in dependency
+    // order for the reader, and the invocations are grouped by which edges each
+    // has to patch. Comparing positionally would fail on a correct recipe.
+    let mut invoked: Vec<&str> = PACKAGING_INVOCATIONS
+        .iter()
+        .flat_map(|invocation| invocation.crates.iter().copied())
+        .collect();
+    let mut declared: Vec<&str> = PACKAGED_CRATES
+        .iter()
+        .map(|(name, _version)| *name)
+        .collect();
+    invoked.sort_unstable();
+    declared.sort_unstable();
+    ensure!(
+        invoked == declared,
+        "the {invocations} packaging invocation(s) package {invoked:?} but the set \
+         the contracts read is {declared:?}; a crate in one list and not the \
+         other is either never packaged or never checked"
     );
     Ok(())
 }
@@ -273,12 +293,12 @@ fn count_in_tree(root: &Utf8Path, needle: &str) -> Result<usize> {
 /// must reach the leased step through `prepare(`, and it must pass the same
 /// target the packaged roots are derived from. A rename on either side fails
 /// here rather than leaving a lock that no reader ever contends for.
+///
+/// The set itself is read from source rather than asserted non-empty:
+/// [`PACKAGED_CRATES`] is a fixed-length array, so "not empty" is a fact rustc
+/// checks, not one this case could ever report.
 #[rstest]
 fn the_lease_protects_the_set_the_contracts_read() -> Result<()> {
-    ensure!(
-        !PACKAGED_CRATES.is_empty(),
-        "the packaged set is empty, so the lease protects nothing"
-    );
     let roots = repository_root()?.join("ortho_l10n/tests/boundary/package_set/roots.rs");
     let directory = Dir::open_ambient_dir(
         roots

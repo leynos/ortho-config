@@ -304,19 +304,35 @@ fn package_all(repository: &Utf8Path, target: &Utf8Path, budget: Budget) -> Resu
 ///
 /// # Errors
 ///
-/// Returns an error naming the first missing artefact, or when the set was
-/// never prepared.
+/// Returns an error naming the first missing artefact, when an artefact's
+/// existence cannot be established, or when the set was never prepared.
 pub(crate) fn assert_packaged_set_complete() -> Result<()> {
     let unpacked = unpacked_directory()?;
     for packaged in packaged_set()? {
-        ensure!(
-            packaged.manifest().is_file(),
-            "{} has no unpacked manifest; the packaging step did not produce it",
-            packaged.manifest(),
-        );
+        require_file(&packaged.manifest(), "unpacked manifest")?;
         let archive = unpacked.join(format!("{}-{}.crate", packaged.name, packaged.version));
-        ensure!(archive.is_file(), "{archive} was not written");
+        require_file(&archive, "packaged archive")?;
     }
+    Ok(())
+}
+
+/// Require `path` to be a file, reporting why when that cannot be established.
+///
+/// `Utf8Path::is_file` answers `false` for every failure, so a permission or
+/// handle fault would be reported as "the packaging step did not produce it" -
+/// sending a reader to look for a missing artefact that may well be there.
+/// `try_exists` keeps the two apart, and the directory case is named separately
+/// because it is the one a reader would otherwise misread as absence.
+fn require_file(path: &Utf8Path, role: &str) -> Result<()> {
+    ensure!(
+        path.try_exists()
+            .with_context(|| format!("establish whether {path} exists"))?,
+        "the {role} {path} is absent; the packaging step did not produce it"
+    );
+    ensure!(
+        path.is_file(),
+        "the {role} {path} exists but is not a regular file"
+    );
     Ok(())
 }
 
