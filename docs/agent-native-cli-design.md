@@ -786,27 +786,27 @@ forward-looking fields planned for later schema versions. Readers for schema v1
 apply defaults only to realized fields; planned rows record the intended future
 contract and do not imply that those fields exist today.
 
-| Field                   | Default                  | Status  | Rationale                                                                  |
-| ----------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
-| `canonical_verb`        | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
-| `supports_json`         | `false`                  | planned | Structured output must be declared before tools rely on it.                |
-| `json_stdout_contract`  | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
-| `json_stderr_contract`  | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
-| `exit_classes`          | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
-| `interaction_mode`      | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
-| `mutation_effect`       | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
-| `pagination`            | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
-| `profiles.supported`    | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
-| `profiles.selection`    | `null`                   | v1      | Selection contract exists only once a derive opts into profiles.           |
-| `profiles.list_command` | `null`                   | v1      | Profile listing commands arrive with the 9.1.3 store helpers.              |
-| `delivery_route`        | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
-| `feedback.supported`    | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
-| `execution_ledger`      | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifests`       | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
-| `capability_id`         | `null`                   | planned | Capability routing is optional downstream metadata.                        |
-| `provider_provenance`   | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
-| `renderer.human`        | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
-| `renderer.machine`      | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
+| Field                   | Default                  | Status  | Rationale                                                                     |
+| ----------------------- | ------------------------ | ------- | ----------------------------------------------------------------------------- |
+| `canonical_verb`        | `null`                   | v1      | Legacy command metadata did not classify verbs.                               |
+| `supports_json`         | `false`                  | planned | Structured output must be declared before tools rely on it.                   |
+| `json_stdout_contract`  | `null`                   | planned | No JSON stream invariant exists until the command opts in.                    |
+| `json_stderr_contract`  | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                           |
+| `exit_classes`          | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                        |
+| `interaction_mode`      | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                        |
+| `mutation_effect`       | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.                 |
+| `pagination`            | `null`                   | v1      | List bounds and cursors require explicit command metadata.                    |
+| `profiles.supported`    | `false`                  | v1      | Profiles are opt-in persistent state.                                         |
+| `profiles.selection`    | `null`                   | v1      | Selection contract exists only once a derive opts into profiles.              |
+| `profiles.list_command` | `null`                   | v1      | Profile listing commands arrive with the 9.1.3 store helpers.                 |
+| `delivery_route`        | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.                  |
+| `feedback.supported`    | `false`                  | v1      | Feedback storage or upload must be explicitly available.                      |
+| `execution_ledger`      | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.               |
+| `skill_manifests`       | `[]`                     | v1      | Skill manifests are absent until declared; 6.3.2 ships the validator, §3.4.1. |
+| `capability_id`         | `null`                   | planned | Capability routing is optional downstream metadata.                           |
+| `provider_provenance`   | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance.    |
+| `renderer.human`        | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.               |
+| `renderer.machine`      | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.         |
 
 In roadmap 7.1.1, `PolicyInputs` is empty and the evaluator does not inspect
 bridge metadata. Omitted bridge metadata therefore produces no `warn` or `deny`
@@ -919,9 +919,13 @@ The design and roadmap updates must address these known gaps:
 - `cargo-orthohelp` does not yet enumerate all valid choices in errors;
 - generated file writes are not specified as atomic;
 - renderer metadata, JSON-mode stream contracts, exit-code taxonomy metadata,
-  skill manifest validation, capability/provenance metadata, profile redaction,
-  delivery, feedback, execution ledger, mutation, and pagination metadata are
-  not yet modelled as first-class contracts.
+  capability/provenance metadata, profile redaction, delivery, feedback,
+  execution ledger, mutation, and pagination metadata are not yet modelled as
+  first-class contracts.
+
+Skill manifest validation is no longer a gap: roadmap 6.3.2 ships the reusable
+validator described in §3.4.1, which the agent-context `skill_manifests` field
+feeds.
 
 The following gaps block ordinary `clap` command surfaces from being described
 at all, and are therefore prerequisites rather than enhancements. See

@@ -66,6 +66,13 @@ explicitly approves it and the prerequisites below are complete.
   do not bypass wrappers or install tools implicitly. Keep Rust files below 400
   lines and document public APIs/modules.
 
+**Addendum (2026-11-15).** The prerequisite clause in the first bullet is
+qualified by the maintainer's approval of 2026-11-10, which the decision log
+records. Roadmap 6.3.1 and the canonical policy rules and exceptions of step
+7.1 are complete; 7.1.2 and 7.1.3 remain open, and the approved scope delivers
+6.3.2 without them by reusing the shared glossary and `is_canonical_flag`. The
+original constraint text is left as written.
+
 ## Tolerances (exception triggers)
 
 - Stop if prerequisites are incomplete, explicit per-command effective
@@ -397,6 +404,16 @@ explicitly approves it and the prerequisites below are complete.
   all six gates exited 0 on it, `make lint` now clearing the module cap. The
   suite grew from 2645 to 2647 tests with the repair's two regressions, and the
   candidate is committed as `72fa627d`.
+- [x] (2026-11-15) Repaired both hosted CodeRabbit findings and actioned its
+  developer-documentation check. `spelled_verb` now takes the spelling signal
+  only from a subcommand segment, so an executable named like an off-policy
+  verb is no longer told to rename itself; the regression failed against the
+  pre-repair helper and the users' guide states the exemption. The
+  `guide-skill-validation` example now asserts against the published transcript
+  fence instead of a duplicated literal. The design documents mark 6.3.2
+  delivered, and this plan carries dated addenda for the prerequisite override
+  and the final candidate. The six-gate sweep passed on the frozen repair tree;
+  the commits are `732bc9a7` and `9241c400`.
 
 ## Surprises & discoveries
 
@@ -709,6 +726,16 @@ Closure (2026-11-14): EP-M4 completed. The full sequential gate sweep passed on
 the frozen candidate `e4038718` with a clean working tree, and roadmap 6.3.2
 was checked only after that sweep. Remaining work is hosted review and CI,
 which belong to the PR lifecycle rather than to this plan.
+
+Addendum (2026-11-15): later review superseded that candidate. Codex's P2
+finding showed that verb vocabulary advice, which read only the surface's
+declared canonical verb, could never fire from a real agent-context surface;
+the check now also reads the verb a reference spells. CodeRabbit then found
+that the spelling must come from a subcommand segment rather than from a lone
+executable name, and that the example's output contract should load the
+published transcript instead of a duplicated literal. The final code candidate
+is `9241c400`, carrying 67 `skill_validation` tests; the commits after it
+record this documentation.
 
 ## Context and orientation
 
@@ -1333,6 +1360,12 @@ OrthoConfig format mandate.
   six-gate sweep on the frozen candidate `72fa627d`. Scope and design are
   unchanged; the finding tightened one policy rule's input rather than altering
   the contract.
+
+- 2026-11-15: Repaired the two CodeRabbit findings on the published head and
+  actioned its developer-documentation check. Added the Constraints addendum
+  for the prerequisite override, moved skill manifest validation out of the
+  design documents' remaining-work lists, and recorded the final code candidate
+  `9241c400`. Scope and design are unchanged.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md

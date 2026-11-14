@@ -1341,7 +1341,7 @@ modules divide by one job each:
 - `report` holds the finding, coverage, and status types plus the stable
   finding codes.
 
-Two conventions are easy to break and expensive to debug:
+Four conventions are easy to break and expensive to debug:
 
 1. **Declarations and invocations are different policy questions.** A
    declaration (`--color` in a command reference) asserts only that the option
@@ -1363,12 +1363,21 @@ Two conventions are easy to break and expensive to debug:
 
 Avoid `expect` and `unwrap` in these modules, including test-only helpers
 outside a `#[test]` body; `support.rs` returns values instead. Test helpers
-live in `support`, `tests`, `tests_examples`, `tests_policy`, `tests_surface`,
-`proptests`, and `proptests_examples`; the property tests use independent
-linear oracles rather than calling the validator's own index. Coverage counts
-extraction (`examples_checked`) separately from binding (`examples_bound`), and
-`ValidationStatus::Complete` requires the two to agree with no unsupported
-examples.
+live in `support`, `tests`, `tests_examples`, `tests_policy`,
+`tests_policy_exceptions`, `tests_surface`, `proptests`, and
+`proptests_examples`; each module holds one facet, so a table that outgrows the
+400-line cap moves whole rather than losing cases. The property tests use
+independent linear oracles rather than calling the validator's own index.
+Coverage counts extraction (`examples_checked`) separately from binding
+(`examples_bound`), and `ValidationStatus::Complete` requires the two to agree
+with no unsupported examples.
+
+The consumer fixtures in `cargo-orthohelp/tests/fixtures/skills/` are ordinary
+skill directories: one `SKILL.md` per skill, plus the `command-surface.json`
+that a consumer would supply. They carry no Weaver or Netsuke semantics, so a
+test states the contract instead of borrowing a domain. Add a fixture only for
+a whole-document shape the current pair cannot express; input shapes belong to
+the property suite.
 
 ## Profile layering (roadmap 9.1.1)
 

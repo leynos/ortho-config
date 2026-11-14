@@ -1318,11 +1318,13 @@ flags on top of the derive macro while keeping the application logic explicit.
 - **Consumer application alignment:** Weaver and Netsuke requirements should be
   pushed left into OrthoConfig when they describe reusable command contracts,
   not when they describe semantic execution. Renderer metadata has shipped
-  (roadmap 7.2.2); JSON mode stream contracts, exit-code taxonomy metadata,
-  skill manifest validation, capability provenance metadata, profile redaction,
-  delivery and feedback parser contracts, and configurable execution ledgers
-  remain. The authoritative consumer dependency tier for those reusable
-  capabilities is [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
+  (roadmap 7.2.2), as has skill manifest validation (roadmap 6.3.2, whose
+  contract is in [agent-native-cli-design.md](agent-native-cli-design.md)
+  §3.4.1). JSON mode stream contracts, exit-code taxonomy metadata, capability
+  provenance metadata, profile redaction, delivery and feedback parser
+  contracts, and configurable execution ledgers remain. The authoritative
+  consumer dependency tier for those reusable capabilities is
+  [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
 - **Trust-aware policy composition:** OrthoConfig should provide the runtime
   authority graph, monotonic policy families, explicit delegation, provenance,
   and diagnostics proposed in
