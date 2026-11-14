@@ -14,8 +14,15 @@ use pretty_assertions::assert_eq;
 use rstest::rstest;
 use std::collections::BTreeSet;
 
-/// Total `ErrorKind` variants declared by the supported `clap_builder` 4.6.7.
-const CLAP_ERROR_KIND_COUNT: usize = 17;
+#[path = "support/clap_reviewed.rs"]
+mod clap_reviewed;
+
+use clap_reviewed::CLAP_ERROR_KIND_COUNT;
+
+// The matrix and the reviewed total must move together. Failing at compile
+// time means a new `clap_builder` variant cannot ship with a matrix that kept
+// its old length, even if the runtime comparison below is edited away.
+static_assertions::const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
 
 /// Number of matrix rows that name an embedded en-US translation.
 const TRANSLATED_ROW_COUNT: usize = 14;
