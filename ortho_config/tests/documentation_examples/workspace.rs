@@ -1,7 +1,7 @@
 //! Temporary Cargo workspaces for compiling and running documented Rust.
 
 use anyhow::{Context, Result, ensure};
-use cap_std::{ambient_authority, fs::Dir};
+use cap_std::fs::Dir;
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
@@ -63,24 +63,25 @@ impl ExampleWorkspace {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn new(dependency_alias: DependencyAlias<'_>) -> Result<Self> {
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .context("find documentation repository")?;
-        let workspaces = repository.join("target/documentation-workspaces");
-        Dir::create_ambient_dir_all(&workspaces, ambient_authority())?;
-        let root = tempfile::Builder::new()
-            .prefix("example-")
-            .tempdir_in(workspaces)
-            .context("create documentation example workspace")?;
-        let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
-            .context("open documentation example workspace")?;
-        directory
-            .create_dir_all("src/bin")
-            .context("create bin directory")?;
-        directory
-            .write("Cargo.toml", manifest(dependency_alias))
-            .context("write example manifest")?;
-        layout::seed_lockfile(repository, &directory)?;
+        Self::create(manifest(dependency_alias))
+    }
+
+    /// Create a package from a published dependency recipe.
+    ///
+    /// The recipe supplies the manifest, so the build exercises the exact
+    /// metadata and dependency settings the documents publish.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the recipe is not TOML, lacks a package or its
+    /// `ortho_config` requirement, or the workspace cannot be created.
+    pub fn from_recipe(recipe: &DocumentedExample) -> Result<Self> {
+        Self::create(layout::recipe_manifest(recipe)?)
+    }
+
+    /// Create a temporary package whose manifest is already rendered.
+    fn create(manifest: String) -> Result<Self> {
+        let (root, directory) = layout::create_package(manifest)?;
         Ok(Self {
             root,
             directory,
@@ -101,6 +102,22 @@ impl ExampleWorkspace {
     /// ```
     pub fn add_binary(&mut self, example: &DocumentedExample) -> Result<()> {
         self.add_binary_as(&example.id, example)
+    }
+
+    /// Add an example as the package's `src/main.rs` binary.
+    ///
+    /// Recipe-backed packages name their own binary, so the source cannot live
+    /// under `src/bin`. A successful result writes the exact fence body to
+    /// `src/main.rs`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the example is not Rust or cannot be written.
+    pub fn add_main(&mut self, example: &DocumentedExample) -> Result<()> {
+        ensure!(example.language == "rust", "{} is not Rust", example.id);
+        self.directory
+            .write("src/main.rs", &example.body)
+            .with_context(|| format!("write {} as the package binary", example.id))
     }
 
     /// Add an example as a binary with a Cargo-dispatchable name.

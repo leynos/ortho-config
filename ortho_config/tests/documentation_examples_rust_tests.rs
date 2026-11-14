@@ -6,6 +6,9 @@ mod api_guide;
 #[path = "documentation_examples/boolean_override.rs"]
 mod boolean_override;
 
+#[path = "documentation_examples/cargo_derive.rs"]
+mod cargo_derive;
+
 #[path = "documentation_examples/cargo_flows.rs"]
 mod cargo_flows;
 mod documentation_examples;

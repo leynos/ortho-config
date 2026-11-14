@@ -1080,11 +1080,18 @@ struct MyToolArgs {
 }
 ```
 
-The user guide and README should explain why Cargo injects the subcommand name
-and should state that the wrapper is CLI entry-point structure, not
-configuration loading. This avoids implying that `OrthoConfig::load` or
-subcommand merging can erase the injected argument after clap has already
-rejected it.
+The derive sketch keeps the installed binary name in `bin_name`, so help renders
+`Usage: cargo-mytool <COMMAND>` and `Usage: cargo-mytool mytool [OPTIONS]`.
+This differs from the hand-built helper's Cargo-dispatch spelling
+(`Usage: cargo <COMMAND>`), recorded in the ADR-0004 amendment. Both shapes
+accept Cargo's injected token; only the parent usage spelling differs. The
+[user's guide](users-guide.md#derive-based-template) documents both templates
+and their help strings.
+
+The user guide and README explain why Cargo injects the subcommand name and
+state that the wrapper is CLI entry-point structure, not configuration loading.
+This avoids implying that `OrthoConfig::load` or subcommand merging can erase
+the injected argument after clap has already rejected it.
 
 A macro extension may be useful later if several OrthoConfig-powered Cargo
 tools repeat the wrapper. Candidate syntax is:

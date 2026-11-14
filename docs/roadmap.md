@@ -373,19 +373,19 @@ from carrying a bespoke pattern that other crates copy by hand. See
     `cargo <name> [OPTIONS]` and `cargo-<name> <name> [OPTIONS]` without
     duplicating parser setup.
 
-- [ ] 8.3.2. Document the derive-friendly Cargo subcommand template.
+- [x] 8.3.2. Document the derive-friendly Cargo subcommand template.
   - Requires 8.3.1.
   - See design.md §4.17 and
     adrs/adr-0004-cargo-external-subcommand-entry-point.md.
-  - [ ] Add user-guide and README examples showing a `Cli` wrapper with
+  - [x] Add user-guide and README examples showing a `Cli` wrapper with
     `#[command(name = "cargo", bin_name = "cargo-<name>")]`, a
     `#[command(subcommand)]` field, and an enum variant wrapping the existing
     `#[derive(clap::Args)]` option struct.
-  - [ ] Explain that Cargo intentionally injects the subcommand name as the
+  - [x] Explain that Cargo intentionally injects the subcommand name as the
     first positional argument when dispatching `cargo <name>`.
-  - [ ] State that the wrapper is entry-point structure, not a change to
+  - [x] State that the wrapper is entry-point structure, not a change to
     OrthoConfig's merge precedence or `OrthoConfig::load`.
-  - [ ] Success: users can adapt the documented template without reading
+  - [x] Success: users can adapt the documented template without reading
     Cargo's external-subcommand reference or `cargo-orthohelp` internals.
 
 - [ ] 8.3.3. Evaluate an optional macro attribute for Cargo subcommand
