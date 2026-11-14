@@ -37,10 +37,37 @@ reason.
 ## Status
 
 In progress. The cross-process packaging lease (D1) and its regression contract
-(D4) are delivered and validated in isolation. The suite is **not yet green**:
-the lease removes a six-fold repetition of the packaging work, and the
-remaining starvation is a separate cause that D3 addresses. The sections below
-record what is measured, what was tried and reversed, and what remains.
+(D4) are delivered and validated. The suite is **not yet green**: the lease
+removed eight of the eighteen baseline failures, and the residual ten are a
+different starvation mechanism that D3 addresses. The sections below record
+what is measured, what was tried and reversed, and what remains.
+
+### Measured result, same host, same command
+
+`make boundary`, both runs on this host under contention:
+
+| Run | Log | Passed | Failed | Ignored | Elapsed |
+| --- | --- | --- | --- | --- | --- |
+| before (`50285096`) | `/tmp/boundary-before-harden-boundary-deadline-evidence-20261113.out` | 26 | 18 | 10 | 907.74 s |
+| after (`5967a09b`) | `/tmp/boundary-after-harden-boundary-deadline-evidence-20261113.out` | **42** | **10** | 10 | 908.29 s |
+
+Eight more assertions now return a verdict, at the same wall-clock, on equally
+loaded hardware. No test was deleted, ignored, or given a larger budget; the
+186 s of extra assertions are the contracts that no longer starve.
+
+The residual ten decompose as:
+
+| Cause | Count | Reading |
+| --- | --- | --- |
+| `cargo package` killed at a **22 s** remainder | 6 | the pair ran but its allowance was spent |
+| `cargo test --all-targets` killed at an **8 s** remainder | 1 | same, for a consumer build |
+| `cargo metadata` exhausted 900 s waiting on a sibling | 2 | never started |
+| the serialization probe | 1 | its subject is the wait |
+
+The packaging pair did run - six `Verifying ortho_l10n` starts, against the
+twelve the unleased suite made - so the deduplication worked. What failed is
+that one pair still exceeds what a contract can be given, which is the D3
+problem and not a lease problem.
 
 ## Baseline (established before any change; do not re-derive)
 
