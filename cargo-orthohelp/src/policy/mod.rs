@@ -147,10 +147,14 @@ pub struct Vocabulary {
 }
 
 /// Enforcement mode selected for policy evaluation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Default` is [`PolicyMode::Off`], matching the enforcement default: a
+/// project that configures no policy is checked by nothing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyMode {
     /// Do not evaluate policy checks.
+    #[default]
     Off,
     /// Emit findings without making them fatal.
     Warn,
