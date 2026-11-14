@@ -76,56 +76,80 @@ impl SerdeRenameAll {
     }
 }
 
-/// Container-level rename rules separated by Serde direction.
+/// One Serde attribute value separated by serialization direction.
 ///
-/// A bare `rename_all = "..."` sets both directions. The directional form sets
-/// one side and leaves the other at Serde's default naming.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct SerdeRenameRules {
-    /// Rule applied when serializing.
-    pub serialize: Option<SerdeRenameAll>,
-    /// Rule applied when deserializing.
-    pub deserialize: Option<SerdeRenameAll>,
+/// A bare `key = "..."` sets both directions. The directional form, written
+/// `key(serialize = "...")` or `key(deserialize = "...")`, sets one side and
+/// leaves the other at Serde's default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Directional<T> {
+    /// Value applied when serializing.
+    pub serialize: Option<T>,
+    /// Value applied when deserializing.
+    pub deserialize: Option<T>,
 }
+
+/// Container-level `rename_all` rules, one per direction.
+pub(crate) type SerdeRenameRules = Directional<SerdeRenameAll>;
 
 /// Parses both directions of `#[serde(rename_all = "...")]`.
 pub(crate) fn serde_rename_rules(attrs: &[Attribute]) -> syn::Result<SerdeRenameRules> {
-    let mut rules = SerdeRenameRules::default();
+    parse_directional(attrs, "rename_all", SerdeRenameAll::parse)
+}
+
+/// Parses one directional Serde key into its two direction slots.
+///
+/// `parse_value` decodes the literal for the attribute in question, so the
+/// shared traversal serves both `rename_all` and `rename` without repeating
+/// the bare and directional forms.
+fn parse_directional<T: Clone>(
+    attrs: &[Attribute],
+    key: &str,
+    parse_value: impl Fn(&LitStr) -> syn::Result<T>,
+) -> syn::Result<Directional<T>> {
+    // Spelled out rather than `default()`: the derived `Default` bound would
+    // demand `T: Default`, which a plain enum value need not implement.
+    let mut rules = Directional {
+        serialize: None,
+        deserialize: None,
+    };
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
         attr.parse_nested_meta(|meta| {
-            if !meta.path.is_ident("rename_all") {
+            if !meta.path.is_ident(key) {
                 super::discard_unknown(&meta)?;
                 return Ok(());
             }
             if meta.input.peek(Token![=]) {
-                let value = meta.value()?.parse::<LitStr>()?;
-                let rule = SerdeRenameAll::parse(&value)?;
-                rules.serialize = Some(rule);
-                rules.deserialize = Some(rule);
+                let value = parse_value(&meta.value()?.parse::<LitStr>()?)?;
+                rules.serialize = Some(value.clone());
+                rules.deserialize = Some(value);
                 return Ok(());
             }
-            meta.parse_nested_meta(|nested| parse_rename_all_direction(&nested, &mut rules))
+            if !meta.input.peek(syn::token::Paren) {
+                return Ok(());
+            }
+            meta.parse_nested_meta(|nested| set_direction(&nested, &mut rules, &parse_value))
         })?;
     }
     Ok(rules)
 }
 
-/// Records one direction of a directional `rename_all` form.
-fn parse_rename_all_direction(
+/// Records one direction of the `serialize = "..."` / `deserialize = "..."`
+/// form, leaving unknown directions discarded like any other option.
+fn set_direction<T>(
     nested: &ParseNestedMeta,
-    rules: &mut SerdeRenameRules,
+    rules: &mut Directional<T>,
+    parse_value: &impl Fn(&LitStr) -> syn::Result<T>,
 ) -> syn::Result<()> {
-    if nested.path.is_ident("serialize") {
-        let value = nested.value()?.parse::<LitStr>()?;
-        rules.serialize = Some(SerdeRenameAll::parse(&value)?);
-        Ok(())
+    let slot = if nested.path.is_ident("serialize") {
+        &mut rules.serialize
     } else if nested.path.is_ident("deserialize") {
-        let value = nested.value()?.parse::<LitStr>()?;
-        rules.deserialize = Some(SerdeRenameAll::parse(&value)?);
-        Ok(())
+        &mut rules.deserialize
     } else {
-        super::discard_unknown(nested)
-    }
+        return super::discard_unknown(nested);
+    };
+    *slot = Some(parse_value(&nested.value()?.parse::<LitStr>()?)?);
+    Ok(())
 }
 
 /// Parses the serialization-side `#[serde(rename_all = "...")]` rule.
@@ -136,62 +160,15 @@ pub(crate) fn serde_rename_all(attrs: &[Attribute]) -> syn::Result<Option<SerdeR
     Ok(serde_rename_rules(attrs)?.serialize)
 }
 
-/// Field-level rename names separated by Serde direction.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct SerdeFieldRename {
-    /// Name used when serializing.
-    pub serialize: Option<String>,
-    /// Name used when deserializing.
-    pub deserialize: Option<String>,
-}
+/// Field-level `rename` names, one per direction.
+pub(crate) type SerdeFieldRename = Directional<String>;
 
 /// Parses `#[serde(rename = "...")]` and its directional forms.
 ///
 /// A bare `rename = "..."` sets both directions. `rename(serialize = "...")`
 /// leaves the deserialization name at the container default, and vice versa.
 pub(crate) fn serde_field_rename_rules(attrs: &[Attribute]) -> syn::Result<SerdeFieldRename> {
-    let mut out = SerdeFieldRename::default();
-    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
-        attr.parse_nested_meta(|meta| {
-            if !meta.path.is_ident("rename") {
-                super::discard_unknown(&meta)?;
-                return Ok(());
-            }
-
-            if meta.input.peek(Token![=]) {
-                let value = meta.value()?.parse::<LitStr>()?.value();
-                out.serialize = Some(value.clone());
-                out.deserialize = Some(value);
-                return Ok(());
-            }
-
-            if !meta.input.peek(syn::token::Paren) {
-                return Ok(());
-            }
-
-            meta.parse_nested_meta(|nested| parse_serde_rename_direction(&nested, &mut out))?;
-            Ok(())
-        })?;
-    }
-    Ok(out)
-}
-
-/// Records one direction of Serde's directional field rename form.
-fn parse_serde_rename_direction(
-    nested: &ParseNestedMeta,
-    rename: &mut SerdeFieldRename,
-) -> syn::Result<()> {
-    if nested.path.is_ident("serialize") {
-        let value = nested.value()?.parse::<LitStr>()?;
-        rename.serialize = Some(value.value());
-        Ok(())
-    } else if nested.path.is_ident("deserialize") {
-        let value = nested.value()?.parse::<LitStr>()?;
-        rename.deserialize = Some(value.value());
-        Ok(())
-    } else {
-        super::discard_unknown(nested)
-    }
+    parse_directional(attrs, "rename", |value| Ok(value.value()))
 }
 
 /// Parses the serialization-side field rename.

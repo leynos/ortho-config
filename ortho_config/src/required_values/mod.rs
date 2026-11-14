@@ -15,7 +15,8 @@
 //!
 //! ```rust
 //! use ortho_config::{
-//!     Activation, RequiredConfigSchema, RequiredSchemaError, RequiredSchemaStack, SchemaField,
+//!     Activation, RequiredConfigSchema, RequiredSchemaError, RequiredSchemaStack, SchemaChildren,
+//!     SchemaField,
 //! };
 //!
 //! struct Service;
@@ -25,7 +26,12 @@
 //!         stack: &mut RequiredSchemaStack,
 //!     ) -> Result<Vec<SchemaField>, RequiredSchemaError> {
 //!         stack.enter::<Self>()?;
-//!         let fields = vec![SchemaField::leaf("endpoint", Vec::new(), Activation::Required)];
+//!         let fields = vec![SchemaField::new(
+//!             "endpoint",
+//!             Vec::new(),
+//!             Activation::Required,
+//!             SchemaChildren::Leaf,
+//!         )];
 //!         stack.leave::<Self>();
 //!         Ok(fields)
 //!     }
@@ -70,7 +76,8 @@ const SCHEMA_ERROR_KEY: &str = "required_values_schema";
 ///
 /// ```rust
 /// use ortho_config::{
-///     Activation, RequiredConfigSchema, RequiredSchemaError, RequiredSchemaStack, SchemaField,
+///     Activation, RequiredConfigSchema, RequiredSchemaError, RequiredSchemaStack, SchemaChildren,
+///     SchemaField,
 /// };
 /// # use ortho_config::ensure_no_missing_required_values;
 /// # use serde_json::json;
@@ -83,7 +90,12 @@ const SCHEMA_ERROR_KEY: &str = "required_values_schema";
 ///     ) -> Result<Vec<SchemaField>, RequiredSchemaError> {
 ///         stack.enter::<Self>()?;
 ///         stack.leave::<Self>();
-///         Ok(vec![SchemaField::leaf("url", Vec::new(), Activation::Required)])
+///         Ok(vec![SchemaField::new(
+///             "url",
+///             Vec::new(),
+///             Activation::Required,
+///             SchemaChildren::Leaf,
+///         )])
 ///     }
 /// }
 ///

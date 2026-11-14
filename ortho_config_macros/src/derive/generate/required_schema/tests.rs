@@ -7,6 +7,7 @@
 //! break them.
 
 use anyhow::{Result, anyhow, ensure};
+use rstest::rstest;
 use syn::DeriveInput;
 
 use crate::derive::build::CliFieldMetadata;
@@ -197,34 +198,27 @@ fn container_default_makes_every_field_optional() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn skipped_fields_are_not_inspected() -> Result<()> {
-    let input: DeriveInput = syn::parse_quote! {
-        struct Nested {
-            #[serde(skip)]
-            cache: String,
-        }
-    };
+#[rstest]
+#[case(
+    "#[serde(skip)] cache: String",
+    "cache",
+    "a skipped field is never deserialized"
+)]
+#[case(
+    "#[serde(flatten)] extra: Extra",
+    "extra",
+    "an unmarked flatten has no readable key"
+)]
+fn fields_serde_never_reads_are_not_inspected(
+    #[case] field: &str,
+    #[case] key: &str,
+    #[case] reason: &str,
+) -> Result<()> {
+    let input: DeriveInput = syn::parse_str(&format!("struct Nested {{ {field} }}"))?;
     let tokens = emit_plain(&input)?;
     ensure!(
-        !tokens.contains(r#"String::from("cache")"#),
-        "a skipped field is never deserialized: {tokens}"
-    );
-    Ok(())
-}
-
-#[test]
-fn an_unmarked_flatten_is_not_inspected() -> Result<()> {
-    let input: DeriveInput = syn::parse_quote! {
-        struct Nested {
-            #[serde(flatten)]
-            extra: Extra,
-        }
-    };
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        !tokens.contains(r#"String::from("extra")"#),
-        "an unmarked flatten has no readable key: {tokens}"
+        !tokens.contains(&format!(r#"String::from("{key}")"#)),
+        "{reason}: {tokens}"
     );
     Ok(())
 }

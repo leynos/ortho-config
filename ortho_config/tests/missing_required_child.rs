@@ -11,6 +11,7 @@
 use anyhow::{Context as _, Result, anyhow};
 use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::OrthoConfig;
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::io::Write;
@@ -179,51 +180,56 @@ fn an_unsupplied_configuration_fails_with_a_diagnostic() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn command_line_supply_recovers() -> Result<()> {
-    let directory = tempfile::tempdir().context("create the child fixture directory")?;
-    let path = write_config(directory.path(), "")?;
-    let output = run_probe("cli", &[config_var(&path)])?;
-    assert_loaded(&output, "cli-ref", "cli-region");
-    Ok(())
+/// One advertised route's child-process fixture.
+#[derive(Clone, Copy)]
+struct SupplyCase {
+    /// Inputs the probe supplies, as understood by `probe_args`.
+    mode: &'static str,
+    /// Contents of the discovery file the probe reads.
+    file: &'static str,
+    /// Extra environment pairs, beyond the discovery path every case sets.
+    variables: &'static [(&'static str, &'static str)],
+    /// Value the probe must load for `reference`.
+    reference: &'static str,
+    /// Value the probe must load for `region`.
+    region: &'static str,
 }
 
-#[test]
-fn environment_supply_recovers() -> Result<()> {
+#[rstest]
+#[case::command_line(SupplyCase {
+    mode: "cli",
+    file: "",
+    variables: &[],
+    reference: "cli-ref",
+    region: "cli-region",
+})]
+#[case::environment(SupplyCase {
+    mode: "env",
+    file: "",
+    variables: &[("MRQ_CHILD_REFERENCE", "env-ref"), ("MRQ_CHILD_REGION", "env-region")],
+    reference: "env-ref",
+    region: "env-region",
+})]
+#[case::file(SupplyCase {
+    mode: "file",
+    file: "reference = \"file-ref\"\nregion = \"file-region\"\n",
+    variables: &[],
+    reference: "file-ref",
+    region: "file-region",
+})]
+#[case::mixed(SupplyCase {
+    mode: "mixed",
+    file: "",
+    variables: &[("MRQ_CHILD_REGION", "env-region")],
+    reference: "cli-ref",
+    region: "env-region",
+})]
+fn each_advertised_route_recovers(#[case] case: SupplyCase) -> Result<()> {
     let directory = tempfile::tempdir().context("create the child fixture directory")?;
-    let path = write_config(directory.path(), "")?;
-    let output = run_probe(
-        "env",
-        &[
-            config_var(&path),
-            var("MRQ_CHILD_REFERENCE", "env-ref"),
-            var("MRQ_CHILD_REGION", "env-region"),
-        ],
-    )?;
-    assert_loaded(&output, "env-ref", "env-region");
-    Ok(())
-}
-
-#[test]
-fn file_supply_recovers() -> Result<()> {
-    let directory = tempfile::tempdir().context("create the child fixture directory")?;
-    let path = write_config(
-        directory.path(),
-        "reference = \"file-ref\"\nregion = \"file-region\"\n",
-    )?;
-    let output = run_probe("file", &[config_var(&path)])?;
-    assert_loaded(&output, "file-ref", "file-region");
-    Ok(())
-}
-
-#[test]
-fn mixed_supply_recovers() -> Result<()> {
-    let directory = tempfile::tempdir().context("create the child fixture directory")?;
-    let path = write_config(directory.path(), "")?;
-    let output = run_probe(
-        "mixed",
-        &[config_var(&path), var("MRQ_CHILD_REGION", "env-region")],
-    )?;
-    assert_loaded(&output, "cli-ref", "env-region");
+    let path = write_config(directory.path(), case.file)?;
+    let mut variables = vec![config_var(&path)];
+    variables.extend(case.variables.iter().map(|(name, value)| var(name, value)));
+    let output = run_probe(case.mode, &variables)?;
+    assert_loaded(&output, case.reference, case.region);
     Ok(())
 }

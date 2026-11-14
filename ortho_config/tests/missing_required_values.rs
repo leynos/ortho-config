@@ -226,17 +226,45 @@ fn a_cli_route_names_the_flag_the_parser_accepts() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn an_absent_nested_leaf_is_reported_without_a_cli_route() -> Result<()> {
-    let report = report(load::<NestedRoot>(&[PROGRAM], &[]))?;
-    ensure!(paths(&report) == ["database.host"]);
-    let routes = routes_for(&report, "database.host")?;
+/// A requirement the command line cannot supply.
+#[derive(Clone, Copy)]
+struct NoCliRoute {
+    /// Canonical path the report must name.
+    path: &'static str,
+    /// Environment route the report must advertise instead.
+    environment_route: &'static str,
+}
+
+/// Assert `T` reports exactly `case.path`, with no command-line flag and the
+/// declared environment route as its alternative.
+fn assert_reported_without_cli_route<T: OrthoConfig>(case: NoCliRoute) -> Result<()> {
+    let report = report(load::<T>(&[PROGRAM], &[]))?;
+    ensure!(
+        paths(&report) == [case.path],
+        "expected only `{}`, got {:?}",
+        case.path,
+        paths(&report)
+    );
+    let routes = routes_for(&report, case.path)?;
     ensure!(
         !routes.iter().any(|route| route.starts_with("cli:")),
-        "a nested leaf has no generated flag, got {routes:?}"
+        "no generated flag can supply `{}`, got {routes:?}",
+        case.path
     );
-    ensure!(routes.iter().any(|route| route == "env:MRN_DATABASE__HOST"));
+    ensure!(
+        routes.iter().any(|route| route == case.environment_route),
+        "expected the environment route {}, got {routes:?}",
+        case.environment_route
+    );
     Ok(())
+}
+
+#[test]
+fn an_absent_nested_leaf_is_reported_without_a_cli_route() -> Result<()> {
+    assert_reported_without_cli_route::<NestedRoot>(NoCliRoute {
+        path: "database.host",
+        environment_route: "env:MRN_DATABASE__HOST",
+    })
 }
 
 #[test]
@@ -270,15 +298,11 @@ fn a_present_non_object_is_left_to_the_deserializer() -> Result<()> {
 
 #[test]
 fn a_renamed_field_gets_no_cli_route() -> Result<()> {
-    let report = report(load::<RenamedRoot>(&[PROGRAM], &[]))?;
-    ensure!(paths(&report) == ["ref"]);
-    let routes = routes_for(&report, "ref")?;
-    ensure!(
-        !routes.iter().any(|route| route.starts_with("cli:")),
-        "the parser keys by identifier, so no flag can supply 'ref': {routes:?}"
-    );
-    ensure!(routes.iter().any(|route| route == "env:MRR_REF"));
-    Ok(())
+    // The parser keys by identifier, so no flag can supply the renamed key.
+    assert_reported_without_cli_route::<RenamedRoot>(NoCliRoute {
+        path: "ref",
+        environment_route: "env:MRR_REF",
+    })
 }
 
 #[test]

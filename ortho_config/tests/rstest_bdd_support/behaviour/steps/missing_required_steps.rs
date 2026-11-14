@@ -127,6 +127,80 @@ fn missing_report(error: &OrthoError) -> Result<&ortho_config::MissingRequiredVa
     }
 }
 
+impl MissingRequiredContext {
+    /// Take the reference load recorded by a `when` step.
+    fn take_reference(&self) -> Result<ortho_config::OrthoResult<ReferenceConfig>> {
+        self.reference_result
+            .take_or("reference load result unavailable")
+    }
+
+    /// Take the nested load recorded by a `when` step.
+    fn take_nested(&self) -> Result<ortho_config::OrthoResult<NestedConfig>> {
+        self.nested_result.take_or("nested load result unavailable")
+    }
+
+    /// Take the reference load, or repeat the load when an earlier assertion
+    /// already consumed it.
+    fn reference_or_reload(&self) -> Result<ortho_config::OrthoResult<ReferenceConfig>> {
+        match self.reference_result.take() {
+            Some(result) => Ok(result),
+            None => load_reference(self, &[], &[]),
+        }
+    }
+
+    /// Take the nested load, or repeat the load when an earlier assertion
+    /// already consumed it.
+    fn nested_or_reload(&self) -> Result<ortho_config::OrthoResult<NestedConfig>> {
+        match self.nested_result.take() {
+            Some(result) => Ok(result),
+            None => load_nested(self, &[]),
+        }
+    }
+}
+
+/// Convert a successful load into its configuration, rendering any failure.
+fn loaded_config<T>(result: ortho_config::OrthoResult<T>) -> Result<T> {
+    result.map_err(|error| anyhow!("{error}"))
+}
+
+/// Assert `result` failed with exactly one diagnostic naming `path`.
+fn assert_single_missing_path<T>(result: ortho_config::OrthoResult<T>, path: &str) -> Result<()> {
+    let error = result.err().ok_or_else(|| anyhow!("expected a failure"))?;
+    let report = missing_report(error.as_ref())?;
+    ensure!(
+        report.len() == 1,
+        "expected one diagnostic, got {}: {}",
+        report.len(),
+        report
+    );
+    let actual = report
+        .items()
+        .first()
+        .map(|item| item.path().render())
+        .unwrap_or_default();
+    ensure!(
+        actual == normalize_scalar(path),
+        "expected the path {}, got {actual}",
+        normalize_scalar(path)
+    );
+    Ok(())
+}
+
+/// Assert the diagnostic from `result` advertises `needle` as its `subject`.
+fn assert_diagnostic_mentions<T>(
+    result: ortho_config::OrthoResult<T>,
+    needle: &str,
+    subject: &str,
+) -> Result<()> {
+    let error = result.err().ok_or_else(|| anyhow!("expected a failure"))?;
+    let rendered = error.to_string();
+    ensure!(
+        rendered.contains(&normalize_scalar(needle)),
+        "expected the {subject} in the diagnostic: {rendered}"
+    );
+    Ok(())
+}
+
 #[given("a configuration requiring a reference")]
 fn configuration_requiring_reference(
     missing_required_context: &MissingRequiredContext,
@@ -147,28 +221,7 @@ fn one_diagnostic_names_path(
     missing_required_context: &MissingRequiredContext,
     path: String,
 ) -> Result<()> {
-    let result = missing_required_context
-        .reference_result
-        .take_or("reference load result unavailable")?;
-    let error = result.err().ok_or_else(|| anyhow!("expected a failure"))?;
-    let report = missing_report(error.as_ref())?;
-    ensure!(
-        report.len() == 1,
-        "expected one diagnostic, got {}: {}",
-        report.len(),
-        report
-    );
-    let actual = report
-        .items()
-        .first()
-        .map(|item| item.path().render())
-        .unwrap_or_default();
-    ensure!(
-        actual == normalize_scalar(&path),
-        "expected the path {}, got {actual}",
-        normalize_scalar(&path)
-    );
-    Ok(())
+    assert_single_missing_path(missing_required_context.take_reference()?, &path)
 }
 
 #[then("the diagnostic advertises the command-line flag {flag}")]
@@ -176,19 +229,11 @@ fn diagnostic_advertises_flag(
     missing_required_context: &MissingRequiredContext,
     flag: String,
 ) -> Result<()> {
-    // An earlier assertion consumed the load, so repeat it rather than sharing
-    // a non-cloneable configuration between steps.
-    let result = match missing_required_context.reference_result.take() {
-        Some(result) => result,
-        None => load_reference(missing_required_context, &[], &[])?,
-    };
-    let error = result.err().ok_or_else(|| anyhow!("expected a failure"))?;
-    let rendered = error.to_string();
-    ensure!(
-        rendered.contains(&normalize_scalar(&flag)),
-        "expected the flag in the diagnostic: {rendered}"
-    );
-    Ok(())
+    assert_diagnostic_mentions(
+        missing_required_context.reference_or_reload()?,
+        &flag,
+        "flag",
+    )
 }
 
 #[when("the reference is supplied on the command line")]
@@ -202,10 +247,7 @@ fn supply_reference_on_command_line(
 
 #[then("the configuration loads successfully")]
 fn configuration_loads(missing_required_context: &MissingRequiredContext) -> Result<()> {
-    let result = missing_required_context
-        .reference_result
-        .take_or("reference load result unavailable")?;
-    let config = result.map_err(|error| anyhow!("{error}"))?;
+    let config = loaded_config(missing_required_context.take_reference()?)?;
     ensure!(config.reference == "r-1", "unexpected reference value");
     Ok(())
 }
@@ -221,9 +263,7 @@ fn load_with_reference_and_absent_optional(
 
 #[then("no missing-value diagnostic is produced")]
 fn no_missing_diagnostic(missing_required_context: &MissingRequiredContext) -> Result<()> {
-    let result = missing_required_context
-        .reference_result
-        .take_or("reference load result unavailable")?;
+    let result = missing_required_context.take_reference()?;
     ensure!(
         result.is_ok(),
         "expected a successful load, got {}",
@@ -240,7 +280,7 @@ fn default_port_applied(missing_required_context: &MissingRequiredContext) -> Re
     // The successful load was consumed by the preceding assertion, so reload the
     // same inputs here rather than sharing a non-cloneable configuration.
     let result = load_reference(missing_required_context, &["--reference", "r-1"], &[])?;
-    let config = result.map_err(|error| anyhow!("{error}"))?;
+    let config = loaded_config(result)?;
     ensure!(
         config.port == 8080,
         "expected the default port, got {}",
@@ -276,28 +316,7 @@ fn one_nested_diagnostic_names_path(
     missing_required_context: &MissingRequiredContext,
     path: String,
 ) -> Result<()> {
-    let result = missing_required_context
-        .nested_result
-        .take_or("nested load result unavailable")?;
-    let error = result.err().ok_or_else(|| anyhow!("expected a failure"))?;
-    let report = missing_report(error.as_ref())?;
-    ensure!(
-        report.len() == 1,
-        "expected one diagnostic, got {}: {}",
-        report.len(),
-        report
-    );
-    let actual = report
-        .items()
-        .first()
-        .map(|item| item.path().render())
-        .unwrap_or_default();
-    ensure!(
-        actual == normalize_scalar(&path),
-        "expected the path {}, got {actual}",
-        normalize_scalar(&path)
-    );
-    Ok(())
+    assert_single_missing_path(missing_required_context.take_nested()?, &path)
 }
 
 #[then("the nested diagnostic advertises the environment variable {variable}")]
@@ -305,19 +324,11 @@ fn nested_diagnostic_advertises_variable(
     missing_required_context: &MissingRequiredContext,
     variable: String,
 ) -> Result<()> {
-    // An earlier assertion consumed the load, so repeat it rather than sharing
-    // a non-cloneable configuration between steps.
-    let result = match missing_required_context.nested_result.take() {
-        Some(result) => result,
-        None => load_nested(missing_required_context, &[])?,
-    };
-    let error = result.err().ok_or_else(|| anyhow!("expected a failure"))?;
-    let rendered = error.to_string();
-    ensure!(
-        rendered.contains(&normalize_scalar(&variable)),
-        "expected the variable in the diagnostic: {rendered}"
-    );
-    Ok(())
+    assert_diagnostic_mentions(
+        missing_required_context.nested_or_reload()?,
+        &variable,
+        "variable",
+    )
 }
 
 #[when("the database host is supplied through the environment")]
@@ -332,10 +343,7 @@ fn supply_database_host(missing_required_context: &MissingRequiredContext) -> Re
 
 #[then("the nested configuration loads successfully")]
 fn nested_configuration_loads(missing_required_context: &MissingRequiredContext) -> Result<()> {
-    let result = missing_required_context
-        .nested_result
-        .take_or("nested load result unavailable")?;
-    let config = result.map_err(|error| anyhow!("{error}"))?;
+    let config = loaded_config(missing_required_context.take_nested()?)?;
     ensure!(
         config.database.host == "db.example.test",
         "unexpected database host"
@@ -357,9 +365,7 @@ fn nested_configuration_with_scalar_database(
 fn configuration_error_not_missing(
     missing_required_context: &MissingRequiredContext,
 ) -> Result<()> {
-    let result = missing_required_context
-        .nested_result
-        .take_or("nested load result unavailable")?;
+    let result = missing_required_context.take_nested()?;
     let error = result
         .err()
         .ok_or_else(|| anyhow!("expected a deserialization failure"))?;

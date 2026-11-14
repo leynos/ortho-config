@@ -9,7 +9,7 @@ use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 
 use super::collect::collect_missing;
-use super::schema::{Activation, CliFlagHint, RouteHints, SchemaField};
+use super::schema::{Activation, CliFlagHint, RouteHints, SchemaChildren, SchemaField};
 use crate::error::{MissingRequiredValue, MissingRequiredValues, SupplyRoute};
 
 /// The environment prefix every generated route hint uses.
@@ -38,7 +38,12 @@ fn build_flat(cases: &[Case]) -> (Vec<SchemaField>, Value, RouteHints) {
         .iter()
         .enumerate()
         .map(|(index, (is_required, _))| {
-            SchemaField::leaf(key(index), Vec::new(), activation(*is_required))
+            SchemaField::new(
+                key(index),
+                Vec::new(),
+                activation(*is_required),
+                SchemaChildren::Leaf,
+            )
         })
         .collect();
     let mut object = Map::new();
@@ -243,14 +248,19 @@ fn observed_nested(
         .iter()
         .enumerate()
         .map(|(index, (required, _))| {
-            SchemaField::leaf(format!("c{index}"), Vec::new(), activation(*required))
+            SchemaField::new(
+                format!("c{index}"),
+                Vec::new(),
+                activation(*required),
+                SchemaChildren::Leaf,
+            )
         })
         .collect();
-    let parent = SchemaField::nested(
+    let parent = SchemaField::new(
         "parent",
         Vec::new(),
         activation(parent_required),
-        child_fields,
+        SchemaChildren::Nested(child_fields),
     );
     let mut inner = Map::new();
     for (index, (_, present)) in children.iter().enumerate() {

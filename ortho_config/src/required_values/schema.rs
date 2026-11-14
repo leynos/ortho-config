@@ -39,30 +39,31 @@ pub struct SchemaField {
 }
 
 impl SchemaField {
-    /// Build a leaf requirement.
+    /// Build one requirement node.
+    ///
+    /// A leaf passes [`SchemaChildren::Leaf`]; an object passes
+    /// [`SchemaChildren::Nested`] with its declared children.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{Activation, SchemaChildren, SchemaField};
+    ///
+    /// let leaf = SchemaField::new("port", Vec::new(), Activation::Required, SchemaChildren::Leaf);
+    /// assert_eq!(leaf.key, "port");
+    /// ```
     #[must_use]
-    pub fn leaf(key: impl Into<String>, aliases: Vec<String>, activation: Activation) -> Self {
-        Self {
-            key: key.into(),
-            aliases,
-            activation,
-            children: SchemaChildren::Leaf,
-        }
-    }
-
-    /// Build a nested object requirement.
-    #[must_use]
-    pub fn nested(
+    pub fn new(
         key: impl Into<String>,
         aliases: Vec<String>,
         activation: Activation,
-        children: Vec<Self>,
+        children: SchemaChildren,
     ) -> Self {
         Self {
             key: key.into(),
             aliases,
             activation,
-            children: SchemaChildren::Nested(children),
+            children,
         }
     }
 }

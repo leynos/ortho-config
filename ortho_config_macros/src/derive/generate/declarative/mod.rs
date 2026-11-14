@@ -185,38 +185,30 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
     has_post_merge_hook: bool,
     krate: &TokenStream,
 ) -> TokenStream {
-    let ctx_init = if has_post_merge_hook {
-        quote! {
-            let mut ctx = #krate::PostMergeContext::new(Self::prefix());
+    let (plain_body, labelled_body) =
+        merge_from_layers_bodies(state_ident, has_post_merge_hook, krate);
+    let plain = merge_from_layers_method(&plain_body, krate);
+    let labelled = merge_from_layers_with_program_method(&labelled_body, krate);
+    quote! {
+        impl #config_ident {
+            #plain
+            #labelled
         }
-    } else {
-        quote! {}
-    };
+    }
+}
 
-    let ctx_per_layer = if has_post_merge_hook {
-        quote! {
-            if let Some(path) = layer.path() {
-                ctx.with_file(path.to_owned());
-            }
-            if layer.provenance() == #krate::MergeProvenance::Cli {
-                ctx.with_cli_input();
-            }
-        }
-    } else {
-        quote! {}
-    };
-
-    let post_merge = if has_post_merge_hook {
-        quote! {
-            let mut result = #krate::DeclarativeMerge::finish(state)?;
-            #krate::PostMergeHook::post_merge(&mut result, &ctx)?;
-            Ok(result)
-        }
-    } else {
-        quote! {
-            #krate::DeclarativeMerge::finish(state)
-        }
-    };
+/// Emit both constructor bodies, differing only in the program label.
+///
+/// The two entry points fold the same layers through the same state, so one
+/// closure builds both bodies and keeps their merge behaviour from drifting.
+fn merge_from_layers_bodies(
+    state_ident: &syn::Ident,
+    has_post_merge_hook: bool,
+    krate: &TokenStream,
+) -> (TokenStream, TokenStream) {
+    let ctx_init = post_merge_ctx_init(has_post_merge_hook, krate);
+    let ctx_per_layer = post_merge_ctx_per_layer(has_post_merge_hook, krate);
+    let post_merge = post_merge_finish(has_post_merge_hook, krate);
 
     let build_body = |label: TokenStream| {
         quote! {
@@ -230,66 +222,113 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
             #post_merge
         }
     };
-    let plain_body = build_body(quote! { ::std::option::Option::None });
-    let labelled_body = build_body(quote! { program.map(::std::string::String::from) });
+    (
+        build_body(quote! { ::std::option::Option::None }),
+        build_body(quote! { program.map(::std::string::String::from) }),
+    )
+}
 
+/// Emit the `PostMergeContext` construction, or nothing when the hook is off.
+fn post_merge_ctx_init(has_post_merge_hook: bool, krate: &TokenStream) -> TokenStream {
+    if !has_post_merge_hook {
+        return quote! {};
+    }
     quote! {
-        impl #config_ident {
-            /// Merge the configuration struct from declarative layers.
-            ///
-            /// See the
-            /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#43-declarative-configuration-merging)
-            /// for background and trade-offs.
-            ///
-            /// # Feature Requirements
-            ///
-            /// This method requires the `serde_json` feature (enabled by default).
-            ///
-            /// # Examples
-            ///
-            /// ```rust,ignore
-            /// use ortho_config::{MergeComposer, OrthoConfig};
-            /// use serde::{Deserialize, Serialize};
-            /// use serde_json::json;
-            ///
-            /// #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-            /// #[ortho_config(prefix = "APP")]
-            /// struct AppConfig {
-            ///     #[ortho_config(default = 8080)]
-            ///     port: u16,
-            /// }
-            ///
-            /// let mut composer = MergeComposer::new();
-            /// composer.push_defaults(json!({"port": 8080}));
-            /// composer.push_environment(json!({"port": 9090}));
-            ///
-            /// let config = AppConfig::merge_from_layers(composer.layers())
-            ///     .expect("layers merge successfully");
-            /// assert_eq!(config.port, 9090);
-            /// ```
-            pub fn merge_from_layers<'a, I>(layers: I) -> #krate::OrthoResult<Self>
-            where
-                I: IntoIterator<Item = #krate::MergeLayer<'a>>,
-            {
-                #plain_body
-            }
+        let mut ctx = #krate::PostMergeContext::new(Self::prefix());
+    }
+}
 
-            /// Merge the configuration struct from declarative layers,
-            /// labelling a missing-required-value report with `program`.
-            ///
-            /// Generated loading entry points call this with the program name
-            /// they resolved from their arguments. A caller that merges layers
-            /// directly can keep using [`Self::merge_from_layers`], whose
-            /// report falls back to the configuration type name.
-            pub fn merge_from_layers_with_program<'a, I>(
-                layers: I,
-                program: ::std::option::Option<&str>,
-            ) -> #krate::OrthoResult<Self>
-            where
-                I: IntoIterator<Item = #krate::MergeLayer<'a>>,
-            {
-                #labelled_body
-            }
+/// Emit the per-layer context updates, or nothing when the hook is off.
+fn post_merge_ctx_per_layer(has_post_merge_hook: bool, krate: &TokenStream) -> TokenStream {
+    if !has_post_merge_hook {
+        return quote! {};
+    }
+    quote! {
+        if let Some(path) = layer.path() {
+            ctx.with_file(path.to_owned());
+        }
+        if layer.provenance() == #krate::MergeProvenance::Cli {
+            ctx.with_cli_input();
+        }
+    }
+}
+
+/// Emit the finishing step, invoking the hook when it is enabled.
+fn post_merge_finish(has_post_merge_hook: bool, krate: &TokenStream) -> TokenStream {
+    if has_post_merge_hook {
+        return quote! {
+            let mut result = #krate::DeclarativeMerge::finish(state)?;
+            #krate::PostMergeHook::post_merge(&mut result, &ctx)?;
+            Ok(result)
+        };
+    }
+    quote! {
+        #krate::DeclarativeMerge::finish(state)
+    }
+}
+
+/// Emit the documented `merge_from_layers` inherent method.
+fn merge_from_layers_method(body: &TokenStream, krate: &TokenStream) -> TokenStream {
+    quote! {
+        /// Merge the configuration struct from declarative layers.
+        ///
+        /// See the
+        /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#43-declarative-configuration-merging)
+        /// for background and trade-offs.
+        ///
+        /// # Feature Requirements
+        ///
+        /// This method requires the `serde_json` feature (enabled by default).
+        ///
+        /// # Examples
+        ///
+        /// ```rust,ignore
+        /// use ortho_config::{MergeComposer, OrthoConfig};
+        /// use serde::{Deserialize, Serialize};
+        /// use serde_json::json;
+        ///
+        /// #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+        /// #[ortho_config(prefix = "APP")]
+        /// struct AppConfig {
+        ///     #[ortho_config(default = 8080)]
+        ///     port: u16,
+        /// }
+        ///
+        /// let mut composer = MergeComposer::new();
+        /// composer.push_defaults(json!({"port": 8080}));
+        /// composer.push_environment(json!({"port": 9090}));
+        ///
+        /// let config = AppConfig::merge_from_layers(composer.layers())
+        ///     .expect("layers merge successfully");
+        /// assert_eq!(config.port, 9090);
+        /// ```
+        pub fn merge_from_layers<'a, I>(layers: I) -> #krate::OrthoResult<Self>
+        where
+            I: IntoIterator<Item = #krate::MergeLayer<'a>>,
+        {
+            #body
+        }
+    }
+}
+
+/// Emit the documented `merge_from_layers_with_program` inherent method.
+fn merge_from_layers_with_program_method(body: &TokenStream, krate: &TokenStream) -> TokenStream {
+    quote! {
+        /// Merge the configuration struct from declarative layers,
+        /// labelling a missing-required-value report with `program`.
+        ///
+        /// Generated loading entry points call this with the program name
+        /// they resolved from their arguments. A caller that merges layers
+        /// directly can keep using [`Self::merge_from_layers`], whose
+        /// report falls back to the configuration type name.
+        pub fn merge_from_layers_with_program<'a, I>(
+            layers: I,
+            program: ::std::option::Option<&str>,
+        ) -> #krate::OrthoResult<Self>
+        where
+            I: IntoIterator<Item = #krate::MergeLayer<'a>>,
+        {
+            #body
         }
     }
 }

@@ -12,22 +12,32 @@ use crate::SupplyRoute;
 
 /// A leaf requirement.
 fn required_leaf(key: &str) -> SchemaField {
-    SchemaField::leaf(key, Vec::new(), Activation::Required)
+    SchemaField::new(key, Vec::new(), Activation::Required, SchemaChildren::Leaf)
 }
 
 /// An optional leaf requirement.
 fn optional_leaf(key: &str) -> SchemaField {
-    SchemaField::leaf(key, Vec::new(), Activation::Optional)
+    SchemaField::new(key, Vec::new(), Activation::Optional, SchemaChildren::Leaf)
 }
 
 /// A required nested object.
 fn required_object(key: &str, children: Vec<SchemaField>) -> SchemaField {
-    SchemaField::nested(key, Vec::new(), Activation::Required, children)
+    SchemaField::new(
+        key,
+        Vec::new(),
+        Activation::Required,
+        SchemaChildren::Nested(children),
+    )
 }
 
 /// An optional nested object.
 fn optional_object(key: &str, children: Vec<SchemaField>) -> SchemaField {
-    SchemaField::nested(key, Vec::new(), Activation::Optional, children)
+    SchemaField::new(
+        key,
+        Vec::new(),
+        Activation::Optional,
+        SchemaChildren::Nested(children),
+    )
 }
 
 /// Collect missing paths from a schema and a value.
@@ -119,10 +129,11 @@ fn a_present_non_object_is_left_to_the_deserializer() {
 
 #[test]
 fn aliases_satisfy_a_requirement() {
-    let fields = vec![SchemaField::leaf(
+    let fields = vec![SchemaField::new(
         "reference",
         vec![String::from("ref")],
         Activation::Required,
+        SchemaChildren::Leaf,
     )];
     assert!(
         missing_paths(&fields, &json!({"ref": "x"})).is_empty(),
