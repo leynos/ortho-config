@@ -115,6 +115,10 @@ with a compatibility probe rather than an assumption.
   prover command surface, inventory obligations, D5, and refreshed baseline.
 - [x] (2026-11-09) Rebase both plan commits onto the timeout fix in PR #664;
   retain their patches unchanged and record the temporary parent boundary.
+- [x] (2026-11-14) Return to `main` after #664 merged (`eaf4c028`,
+  `9ede81a1`): rebase onto `959dbd7e` from the boundary `26275a4e`, dropping
+  the pre-merge copies of the timeout fix, and renumber ADR-0018 to ADR-0020
+  after main took 0018 and 0019.
 - [x] (2026-11-09) Obtain explicit plan approval.
 - [x] (2026-11-09) M1 audit: derive field-metadata map, supply-route map, and
   error-classification sites. Settled the schema, requiredness, and route
@@ -394,6 +398,18 @@ range-diff, run gates appropriate to the resulting changes, and push with an
 explicit force-with-lease. Retarget PR #589 to `main` and verify its final
 diff. This base change does not approve feature implementation; M1 still
 requires explicit plan approval.
+
+Status (2026-11-14): PR #664 merged, landing as `eaf4c028` with follow-up
+`9ede81a1`, and this branch returned to `main`. It was rebased onto `959dbd7e`,
+the then-current `origin/main`, replaying only its own commits after the
+exclusive boundary `26275a4e` and dropping the two pre-merge copies of the
+timeout fix. The plan commit that recorded the temporary base remains as
+history. Main had meanwhile taken ADR-0018 and ADR-0019, so this task's
+decision record was renumbered from 0018 to
+[ADR-0020](docs/adrs/adr-0020-enumerate-missing-required-values.md); its file
+name, title, and every reference were updated during the same replay. The
+range-diff audit showed only that renumbering and `docs/contents.md` context as
+differences from the pre-rebase series.
 
 ## Conformance basis
 
