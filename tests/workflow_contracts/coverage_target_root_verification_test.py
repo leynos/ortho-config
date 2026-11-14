@@ -10,11 +10,11 @@ it.
 
 Two steps therefore read the environment back after both coverage passes and
 require the derived directory to exist. Both passes share one job environment,
-so the variables record what each pass inherited and the directory records that
-a coverage build created it; neither is a separate receipt from each pass, and
-the steps say so. This module pins their guards, shells, positions and
-assertions; `coverage_target_root_behaviour_test.py` executes the same scripts
-against supplied environments.
+so the variables record what each pass inherited, and the directory check
+establishes existence rather than which action wrote it; neither is a separate
+receipt from each pass, and the steps say so. This module pins their guards,
+shells, positions and assertions; `coverage_target_root_behaviour_test.py`
+executes the same scripts against supplied environments.
 
 Run via `make test-workflow-contracts`.
 """
@@ -219,10 +219,10 @@ def test_the_windows_check_derives_the_same_root_as_the_chooser() -> None:
 
 
 def test_the_windows_check_requires_the_derived_directory_to_exist() -> None:
-    """Matching variables are not enough: the passes must have built there."""
+    """Matching variables are not enough: the chosen directory must exist."""
     run = _verification_run(WINDOWS_VERIFY_STEP)
     assert "Test-Path -LiteralPath $expected" in run, (
-        "the Windows check must observe the directory the builds produced"
+        "the Windows check must require the chosen directory to exist"
     )
     assert "-not (Test-Path -LiteralPath $expected)" in run, (
         "an absent directory must fail the lane, not merely be reported"
@@ -231,7 +231,7 @@ def test_the_windows_check_requires_the_derived_directory_to_exist() -> None:
 
 
 def test_the_linux_check_requires_the_chosen_directory_to_exist() -> None:
-    """The nested trybuild projects' target must be on disk after both passes."""
+    """The chosen root must be on disk after both passes."""
     steps = _build_test_steps()
     chooser = _run(_one_step(steps, "Choose the Linux coverage target root"))
     check = _verification_run(LINUX_VERIFY_STEP)
@@ -243,7 +243,7 @@ def test_the_linux_check_requires_the_chosen_directory_to_exist() -> None:
         "the Linux check must recompute the chooser's root"
     )
     assert '[ ! -d "$expected" ]' in check, (
-        "the Linux check must observe the directory the builds produced"
+        "the Linux check must require the chosen directory to exist"
     )
     assert "is missing" in check, "a missing directory must be named in the failure"
 
@@ -253,8 +253,8 @@ def test_each_verification_reports_the_root_it_observed(name: str) -> None:
     """A passing run says which root it observed and what it compared.
 
     The message must not claim a receipt from each coverage pass, because both
-    passes share one job environment and the directory is written by whichever
-    pass runs first.
+    passes share one job environment and the check establishes only that the
+    chosen directory exists.
     """
     run = _verification_run(name)
     assert OBSERVED_LINE in run, (

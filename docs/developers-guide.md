@@ -3255,9 +3255,10 @@ command line: a root chosen correctly but still too long passes the check and
 fails at the compiler, which is what the projection arithmetic above guards. It
 also observes them once, not per pass. Both coverage actions inherit one job
 environment, so the variables record what each pass was given rather than what
-it did, and the directory is created by whichever pass runs first. The steps
-therefore report that the chosen root exists and the published variables match,
-and a pass that built elsewhere would leave both checks passing.
+it did, and the directory check establishes only that the chosen directory
+exists, not which action wrote it. The steps therefore report that the chosen
+root exists and the published variables match, and a pass that built elsewhere
+would leave both checks passing.
 
 ### Opting out with `BUILD_STANDARD`
 
