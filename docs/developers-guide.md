@@ -668,6 +668,16 @@ spawn passed 12 of 12; the settling form then passed five consecutive full
 binary runs. A strict assertion in a gated suite would therefore be a check on
 the scheduler, not on the lock.
 
+One consequence is untestable from inside a single process and is recorded
+rather than pretended away. `probe_lock` releases the lock it took on the free
+path, but dropping the probe's handle releases it too, so removing the explicit
+`file.unlock()?` changes no observable behaviour in-process and no gating test
+detects it. The strict assertion in `probes_survive_a_concurrent_fork` is the
+only place the distinction could show, and it is ignored. The explicit unlock
+stays because it states the intent — a probe must not depend on a drop order it
+does not control — but its removal is a mutation the suite would not catch,
+which is the honest limit.
+
 That property applies to the tests of the diagnostics themselves. The tests
 that exercise the settling loop hold the lock from a helper *process*, through
 `lock_support::spawn_helper` with the `hold-until-asked` mode, and release it

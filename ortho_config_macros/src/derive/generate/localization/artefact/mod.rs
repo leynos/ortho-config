@@ -277,11 +277,24 @@ mod lock_holder_tests;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "artefact_lock_walk_tests.rs"]
 mod lock_walk_tests;
+// The `/proc/<pid>/stat` parser, against literal lines. A real process cannot
+// be renamed to `a) b` on cue, so the first-`)` reading that the parser exists
+// to avoid has no other way to be caught.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_stat_tests.rs"]
+mod lock_stat_tests;
 // Test support for the holder report: gated on `test`, not the platform, so
 // every test build compiles the module and its `lock_evidence` import alike.
 #[cfg(test)]
 #[path = "artefact_lock_process.rs"]
 mod lock_process;
+// The two relation branches a real hold cannot produce on cue, driven through
+// the fake: `this process` and `child of this process` are asserted where a
+// real holder supplies them, and a mutant mapping every known parent to the
+// child sentence survived until these called the other two directly.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_relation_tests.rs"]
+mod lock_relation_tests;
 #[cfg(test)]
 #[path = "artefact_lock_report_tests.rs"]
 mod lock_report_tests;

@@ -199,7 +199,7 @@ pub(super) struct RealProcFs;
 /// handle to keep alive would not do: the iterator opens its own, and *that* is
 /// the number the listing reports. See [`ProcFs::descriptor_entries`].
 #[cfg(target_os = "linux")]
-fn read_listing(directory: &Path) -> Result<DescriptorListing, String> {
+pub(super) fn read_listing(directory: &Path) -> Result<DescriptorListing, String> {
     let mut walker = fs::read_dir(directory)
         .map_err(|error| format!("{}: unreadable ({error})", directory.display()))?;
     // The walk is borrowed only for the duration of the call, so `walker` is
@@ -340,7 +340,7 @@ impl ProcFs for RealProcFs {
 /// parenthesis rather than by splitting the whole line: splitting would make a
 /// process called `a) b` look like a different process entirely.
 #[cfg(target_os = "linux")]
-fn parse_stat(stat: &str) -> Option<ProcessStat> {
+pub(super) fn parse_stat(stat: &str) -> Option<ProcessStat> {
     let open = stat.find('(')?;
     let close = stat.rfind(')')?;
     let command = stat.get(open.saturating_add(1)..close)?.to_owned();

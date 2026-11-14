@@ -115,6 +115,19 @@ which is what makes the distinction the diagnostics exist to draw assertable:
   partial, so a mutant that discarded the entries before a fault survived every
   test that drove `FakeProcFs`. Testing the rule where it is decided is what
   makes it evidence.
+- Two sentences the report can write had no direct assertion, and a plausible
+  mutant of each survived the suite: reading `/proc/<pid>/stat` from the first
+  `)` rather than the last, and mapping every known parent to "child of this
+  process". Both are now pinned against literal input — a stat line for a
+  command called `a) b`, and a `FakeProcFs` holder with an unrelated parent —
+  and each mutant fails its test.
+
+A limit that is recorded rather than covered: `probe_lock`'s explicit
+`file.unlock()?` is not observable in a single process, because dropping the
+handle releases the lock as well. Only the ignored fork diagnostic could show
+its removal, so no gating test detects it. The developers' guide states that
+beside the fork-window section rather than implying the line is covered.
+
 - A failed scan carries whatever it matched before the failure, so an unrelated
   descriptor closing mid-scan cannot discard a live holder.
 - `process_stat` answers `Option`, because a process can exit between the record
