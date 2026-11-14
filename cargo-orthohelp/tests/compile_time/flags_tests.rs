@@ -145,18 +145,27 @@ fn development_build_flags_match_the_cargo_configuration() {
     let linux_flags = rustflags_in_config_section(CargoConfigSection::LinuxTarget)
         .expect("Cargo config should define Linux target rustflags");
 
-    let expected_build_flags = DEV_FAST_RUSTFLAGS[..4]
+    let expected_build_flags = DEFAULT_DEV_RUSTFLAGS[..2]
         .iter()
         .map(|flag| (*flag).to_owned())
         .collect::<Vec<_>>();
-    let expected_linux_flags = DEV_FAST_RUSTFLAGS
+    let expected_linux_flags = DEFAULT_DEV_RUSTFLAGS
         .iter()
         .map(|flag| (*flag).to_owned())
         .collect::<Vec<_>>();
 
     assert_eq!(build_flags, expected_build_flags);
     assert_eq!(linux_flags, expected_linux_flags);
-    assert!(!build_flags.contains(&DEV_FAST_RUSTFLAGS[4].to_owned()));
+    assert!(!build_flags.contains(&DEFAULT_DEV_RUSTFLAGS[2].to_owned()));
+    for opt_in in ["-Zcodegen-backend=cranelift", "--cfg=ortho_config_dev_fast"] {
+        assert!(
+            !build_flags
+                .iter()
+                .chain(&linux_flags)
+                .any(|flag| flag == opt_in),
+            "{opt_in} is an opt-in and must not be a default flag"
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]

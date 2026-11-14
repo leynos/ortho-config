@@ -25,6 +25,15 @@ const DEV_FAST_RUSTFLAGS: [&str; 5] = [
     "-Clink-arg=-fuse-ld=mold",
 ];
 
+/// The flags `.cargo/config.toml` selects by default. The Cranelift backend and
+/// the `ortho_config_dev_fast` cfg are disabled there (14 November 2026), so
+/// they appear only in [`DEV_FAST_RUSTFLAGS`], which coverage still strips.
+const DEFAULT_DEV_RUSTFLAGS: [&str; 3] = [
+    "-Zthreads=8",
+    "--check-cfg=cfg(ortho_config_dev_fast)",
+    "-Clink-arg=-fuse-ld=mold",
+];
+
 #[derive(Clone, Copy)]
 enum CargoConfigSection {
     Build,
@@ -176,8 +185,8 @@ fn split_encoded_rustflags(flags: &str) -> Vec<String> {
 }
 
 fn configured_development_rustflags() -> Vec<String> {
-    let flag_count = if cfg!(target_os = "linux") { 5 } else { 4 };
-    DEV_FAST_RUSTFLAGS
+    let flag_count = if cfg!(target_os = "linux") { 3 } else { 2 };
+    DEFAULT_DEV_RUSTFLAGS
         .iter()
         .take(flag_count)
         .map(|flag| (*flag).to_owned())
@@ -213,7 +222,7 @@ fn rustflags_in_config_section(section: CargoConfigSection) -> Option<Vec<String
         .0;
     list.split(',')
         .map(str::trim)
-        .filter(|line| !line.is_empty())
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(|line| line.strip_prefix('"')?.strip_suffix('"').map(str::to_owned))
         .collect()
 }

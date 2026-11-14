@@ -3001,16 +3001,17 @@ that the step selecting beta sets the switch to `0`.
 
 The development build standard is what a contributor's builds, tests, lints and
 type checks use unless a route opts out. It is the parallel `rustc` frontend
-(`-Zthreads=8`) and Cranelift backend on every host, plus the `mold` linker on
-Linux. These compiler options require the pinned dated nightly; see
+(`-Zthreads=8`) on every host with the default LLVM backend, plus the `mold`
+linker on Linux. These compiler options require the pinned dated nightly; see
 [Toolchain pin and freshness](#toolchain-pin-and-freshness). Cranelift's
-unwinding limitation and the one test kept for LLVM coverage are recorded in
-the "Cranelift development backend" section and
+unwinding limitation and the tests it ignores are recorded in the "Cranelift
+development backend" section (now an opt-in) and
 [ADR-0019](adrs/adr-0019-use-cranelift-for-development-builds.md).
 
 The maintainer has made four decisions that this section records: development
-and formatting use a dated nightly, dev-fast uses Cranelift and the parallel
-frontend, Linux uses `mold`, and Dependabot keeps the pin fresh.
+and formatting use a dated nightly, dev-fast uses the parallel frontend (with
+Cranelift as a disabled opt-in since 14 November 2026), Linux uses `mold`, and
+Dependabot keeps the pin fresh.
 
 ### Where the flags live
 
@@ -3021,25 +3022,34 @@ the standard:
 [build]
 rustflags = [
   "-Zthreads=8",
-  "-Zcodegen-backend=cranelift",
-  "--cfg=ortho_config_dev_fast",
+  # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+  # "-Zcodegen-backend=cranelift",
+  # "--cfg=ortho_config_dev_fast",
   "--check-cfg=cfg(ortho_config_dev_fast)",
 ]
 
 [target.'cfg(target_os = "linux")']
 rustflags = [
   "-Zthreads=8",
-  "-Zcodegen-backend=cranelift",
-  "--cfg=ortho_config_dev_fast",
+  # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+  # "-Zcodegen-backend=cranelift",
+  # "--cfg=ortho_config_dev_fast",
   "--check-cfg=cfg(ortho_config_dev_fast)",
   "-Clink-arg=-fuse-ld=mold",
 ]
 ```
 
+The estate standard is LLVM, so LLVM is the default backend here; see the
+[concordat decision record](https://github.com/leynos/concordat/blob/main/docs/adrs/adr-0004-cranelift-is-not-part-of-the-rust-build-standard.md),
+with review due 14 May 2027. The commented lines are the opt-in: uncomment the
+backend and the `ortho_config_dev_fast` cfg together (and
+`STANDARD_BACKEND_FLAG` and `STANDARD_DEV_FAST_CFG` in the Makefile). Cranelift
+does not run destructors while unwinding, so the cfg ignores the
+unwind-dependent tests under it.
+
 `mold` ships for Linux only, so it appears under the Linux target table alone.
 It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
-match. macOS and Windows get Cranelift and the parallel frontend, and keep the
-platform linker.
+match. macOS and Windows get the parallel frontend and keep the platform linker.
 
 Cargo selects one `rustflags` source and does not merge them. A matching
 `[target.*]` table replaces `[build] rustflags` outright, and an assigned
@@ -3047,10 +3057,11 @@ Cargo selects one `rustflags` source and does not merge them. A matching
 source, and each Makefile recipe that assigns `RUSTFLAGS` restates the standard
 through four variables:
 
-- `STANDARD_RUSTFLAGS` is the standard for the host: `-Zthreads=8`,
-  `-Zcodegen-backend=cranelift`, and the `ortho_config_dev_fast` test cfg, plus
-  `-Clink-arg=-fuse-ld=mold` when `BUILD_HOST_OS` is `Linux`. It is empty when
-  `BUILD_STANDARD` is not `1`.
+- `STANDARD_RUSTFLAGS` is the standard for the host: `-Zthreads=8` and the
+  registered `ortho_config_dev_fast` cfg name, plus `-Clink-arg=-fuse-ld=mold`
+  when `BUILD_HOST_OS` is `Linux`. `STANDARD_BACKEND_FLAG` is empty by default;
+  it carries the Cranelift flag only for an opt-in. `STANDARD_RUSTFLAGS` is
+  empty when `BUILD_STANDARD` is not `1`.
 - `GATE_RUSTFLAGS` is `-D warnings` followed by `STANDARD_RUSTFLAGS`. Every
   gate recipe that runs Cargo through the standard uses it.
 - `DEBUG_RUSTFLAGS` is `STANDARD_RUSTFLAGS` alone, so a debug build keeps the
@@ -3091,8 +3102,8 @@ they take.
 
 | Invocation                                           | Flags that reach Cargo                                                       | Route                |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------- |
-| Bare `cargo` build, test or check (Linux)            | `-Zthreads=8 -Zcodegen-backend=cranelift` and `mold`, from the Linux table   | Development          |
-| Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8 -Zcodegen-backend=cranelift`, from `[build]`                    | Development          |
+| Bare `cargo` build, test or check (Linux)            | `-Zthreads=8` and `mold`, from the Linux table                               | Development          |
+| Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8`, from `[build]`                                                | Development          |
 | `make test`, `make typecheck`                        | `-D warnings` and the host's standard, restated                              | Development          |
 | `make boundary`                                      | `-D warnings` and the host's standard, restated                              | Development          |
 | `make lint-clippy`: the `cargo doc` line             | `-D warnings` and the host's standard, restated                              | Development          |

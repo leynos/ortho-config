@@ -11,9 +11,9 @@ CARGO_HOME ?= $(HOME)/.cargo
 WHITAKER ?= whitaker
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
-# The development build standard: the parallel `rustc` frontend, Cranelift
-# backend, and the `mold` linker are the defaults for development, test, lint
-# and typecheck builds.
+# The development build standard: the parallel `rustc` frontend, the default
+# LLVM backend, and the `mold` linker are the defaults for development, test,
+# lint and typecheck builds.
 # `.cargo/config.toml` carries them, so a bare `cargo` invocation gets them
 # too; this block restates them where a recipe assigns `RUSTFLAGS`.
 #
@@ -41,9 +41,11 @@ BUILD_STANDARD ?= 1
 # in place.
 unexport CARGO_ENCODED_RUSTFLAGS
 STANDARD_THREADS_FLAG ?= -Zthreads=8
-STANDARD_BACKEND_FLAG ?= -Zcodegen-backend=cranelift
-STANDARD_DEV_FAST_CFG ?= --cfg=ortho_config_dev_fast \
-	--check-cfg=cfg(ortho_config_dev_fast)
+# Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+# STANDARD_BACKEND_FLAG ?= -Zcodegen-backend=cranelift
+# STANDARD_DEV_FAST_CFG ?= --cfg=ortho_config_dev_fast --check-cfg=cfg(ortho_config_dev_fast)
+STANDARD_BACKEND_FLAG ?=
+STANDARD_DEV_FAST_CFG ?= --check-cfg=cfg(ortho_config_dev_fast)
 STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS

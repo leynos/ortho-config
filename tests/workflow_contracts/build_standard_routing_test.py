@@ -231,12 +231,13 @@ def test_the_linker_is_scoped_to_the_linux_table_alone() -> None:
     assert carriers == [f"[target.{LINUX_CFG}]"], f"the linker is named by {carriers}"
 
 
-def test_cranelift_is_the_development_backend_only() -> None:
-    """Cargo and Make select Cranelift for development; explicit routes opt out.
+def test_cranelift_is_an_opt_in_and_not_the_development_backend() -> None:
+    """Cargo and Make leave Cranelift unselected; LLVM is the default.
 
     The known unwind limitation is recorded in the developers' guide and
-    ADR-0019. This contract checks the intended config and Make route while
-    preserving LLVM for coverage, releases and other explicit workflows.
+    ADR-0019. This contract checks that the config and the Make route keep the
+    Cranelift selection disabled while the frontend flag, the registered cfg
+    name and the opt-in definitions remain.
     """
     document = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     assert "unstable" not in document, "an [unstable] table enables a backend selection"
@@ -249,12 +250,15 @@ def test_cranelift_is_the_development_backend_only() -> None:
         for table in [document.get("build", {}), *document.get("target", {}).values()]
         for flag in table.get("rustflags", [])
     ]
-    sources = [document.get("build", {}), *document.get("target", {}).values()]
-    assert all(BACKEND_FLAG in table.get("rustflags", []) for table in sources), (
-        f"Cargo config does not select Cranelift in every rustflags source: {flags}"
+    assert not any(
+        flag in flags for flag in (BACKEND_FLAG, DEV_FAST_CFG_FLAG)
+    ), f"Cargo config selects Cranelift by default: {flags}"
+    assert all(flag in flags for flag in (THREADS_FLAG, CHECK_CFG_FLAG)), (
+        f"Cargo config omits part of the standard: {flags}"
     )
-    assert all(flag in flags for flag in (THREADS_FLAG, DEV_FAST_CFG_FLAG, CHECK_CFG_FLAG)), (
-        f"Cargo config omits part of dev-fast: {flags}"
+    config_text = CONFIG_PATH.read_text(encoding="utf-8")
+    assert f'# "{BACKEND_FLAG}",' in config_text, (
+        "the disabled Cranelift selection is not kept for an opt-in"
     )
     manifest = tomllib.loads((REPOSITORY_ROOT / "Cargo.toml").read_text(encoding="utf-8"))
     rust_lints = manifest["workspace"]["lints"]["rust"]
@@ -263,7 +267,16 @@ def test_cranelift_is_the_development_backend_only() -> None:
         "the workspace lint configuration does not register the dev-fast cfg"
     )
     makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
-    assert BACKEND_FLAG in makefile, "the Makefile omits the development backend"
+    active_lines = [line for line in makefile.splitlines() if not line.startswith("#")]
+    assert "STANDARD_BACKEND_FLAG ?=" in active_lines, (
+        "the Makefile selects a development backend by default"
+    )
+    assert not any(BACKEND_FLAG in line for line in active_lines), (
+        "the Makefile names the Cranelift backend outside a comment"
+    )
+    assert f"# STANDARD_BACKEND_FLAG ?= {BACKEND_FLAG}" in makefile, (
+        "the disabled Cranelift route is not kept for an opt-in"
+    )
     for workflow in _workflow_files(REPOSITORY_ROOT / ".github" / "workflows"):
         text = workflow.read_text(encoding="utf-8")
         assert "CODEGEN_BACKEND" not in text, f"{workflow.name} selects a codegen backend"
