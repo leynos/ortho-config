@@ -367,47 +367,49 @@ jobs:
         # The 33,497-character failure that motivated the chooser was refused
         # before rustc ran, so nothing in the Rust tree could report it and no
         # local gate can see it. Read both variables back here and require the
-        # derived directory: it is outside the checkout, so only the coverage
-        # actions can have created it.
+        # derived directory. Both passes share one job environment, so the
+        # variables state what each pass inherited, and the directory, being
+        # outside the checkout, shows that a coverage build created it. Neither
+        # proves a separate receipt per pass, so say only what is observed.
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
         run: |
           $expected = Join-Path ([System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)) 'llvm-cov-target'
           if ($env:CARGO_TARGET_DIR -ne $expected) {
-            throw "the passes did not use the chosen target root: CARGO_TARGET_DIR is '$env:CARGO_TARGET_DIR', not '$expected'"
+            throw "CARGO_TARGET_DIR is not the chosen coverage target root: '$env:CARGO_TARGET_DIR', not '$expected'"
           }
           if ($env:CARGO_LLVM_COV_TARGET_DIR -ne $expected) {
-            throw "cargo-llvm-cov was not told the chosen target root: CARGO_LLVM_COV_TARGET_DIR is '$env:CARGO_LLVM_COV_TARGET_DIR', not '$expected'"
+            throw "CARGO_LLVM_COV_TARGET_DIR is not the chosen coverage target root: '$env:CARGO_LLVM_COV_TARGET_DIR', not '$expected'"
           }
           if (-not (Test-Path -LiteralPath $expected)) {
-            throw "the passes did not build under the chosen target root: $expected is missing"
+            throw "no coverage build created the chosen target root: $expected is missing"
           }
-          "Both coverage passes built under $expected"
-          "Both coverage passes built under $expected" >> $env:GITHUB_STEP_SUMMARY
+          "Chosen coverage target root exists and the published variables match: $expected"
+          "Chosen coverage target root exists and the published variables match: $expected" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Verify the Linux coverage target root
         # Same reasoning as the Windows check: the chooser's `GITHUB_ENV`
         # write shows what was intended, and the directory outside the
-        # checkout shows what the nested trybuild projects actually used.
+        # checkout shows that a coverage build created it.
         if: ${{ matrix.platform == 'linux' }}
         shell: bash
         run: |
           set -euo pipefail
           expected="$RUNNER_TEMP/llvm-cov-target"
           if [ "${CARGO_TARGET_DIR-}" != "$expected" ]; then
-            echo "the passes did not use the chosen target root: CARGO_TARGET_DIR is '${CARGO_TARGET_DIR-}', not '$expected'" >&2
+            echo "CARGO_TARGET_DIR is not the chosen coverage target root: '${CARGO_TARGET_DIR-}', not '$expected'" >&2
             exit 1
           fi
           if [ "${CARGO_LLVM_COV_TARGET_DIR-}" != "$expected" ]; then
-            echo "cargo-llvm-cov was not told the chosen target root: CARGO_LLVM_COV_TARGET_DIR is '${CARGO_LLVM_COV_TARGET_DIR-}', not '$expected'" >&2
+            echo "CARGO_LLVM_COV_TARGET_DIR is not the chosen coverage target root: '${CARGO_LLVM_COV_TARGET_DIR-}', not '$expected'" >&2
             exit 1
           fi
           if [ ! -d "$expected" ]; then
-            echo "the passes did not build under the chosen target root: $expected is missing" >&2
+            echo "no coverage build created the chosen target root: $expected is missing" >&2
             exit 1
           fi
-          echo "Both coverage passes built under $expected"
-          echo "Both coverage passes built under $expected" >> "$GITHUB_STEP_SUMMARY"
+          echo "Chosen coverage target root exists and the published variables match: $expected"
+          echo "Chosen coverage target root exists and the published variables match: $expected" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Merge coverage results
         if: ${{ matrix.platform == 'linux' }}
