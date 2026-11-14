@@ -361,6 +361,56 @@ jobs:
         if: ${{ always() && matrix.platform == 'linux' }}
         run: df -BM /
 
+      - name: Verify the Windows coverage target root
+        # The chooser publishes through `GITHUB_ENV`, which records the
+        # workflow's intent rather than what the coverage processes received.
+        # The 33,497-character failure that motivated the chooser was refused
+        # before rustc ran, so nothing in the Rust tree could report it and no
+        # local gate can see it. Read both variables back here and require the
+        # chosen directory exists. Both passes share one job environment, so the
+        # variables state what each pass inherited, and the directory check
+        # states only that the directory is there, not which action wrote it.
+        # Neither proves a separate receipt per pass, so say what is observed.
+        if: ${{ matrix.platform == 'windows' }}
+        shell: pwsh
+        run: |
+          $expected = Join-Path ([System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)) 'llvm-cov-target'
+          if ($env:CARGO_TARGET_DIR -ne $expected) {
+            throw "CARGO_TARGET_DIR is not the chosen coverage target root: '$env:CARGO_TARGET_DIR', not '$expected'"
+          }
+          if ($env:CARGO_LLVM_COV_TARGET_DIR -ne $expected) {
+            throw "CARGO_LLVM_COV_TARGET_DIR is not the chosen coverage target root: '$env:CARGO_LLVM_COV_TARGET_DIR', not '$expected'"
+          }
+          if (-not (Test-Path -LiteralPath $expected)) {
+            throw "the chosen coverage target root is missing: $expected"
+          }
+          "Chosen coverage target root exists and the published variables match: $expected"
+          "Chosen coverage target root exists and the published variables match: $expected" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Verify the Linux coverage target root
+        # Same reasoning as the Windows check: the chooser's `GITHUB_ENV`
+        # write shows what was intended, and this step requires the chosen
+        # directory to exist, without claiming which action wrote it.
+        if: ${{ matrix.platform == 'linux' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/llvm-cov-target"
+          if [ "${CARGO_TARGET_DIR-}" != "$expected" ]; then
+            echo "CARGO_TARGET_DIR is not the chosen coverage target root: '${CARGO_TARGET_DIR-}', not '$expected'" >&2
+            exit 1
+          fi
+          if [ "${CARGO_LLVM_COV_TARGET_DIR-}" != "$expected" ]; then
+            echo "CARGO_LLVM_COV_TARGET_DIR is not the chosen coverage target root: '${CARGO_LLVM_COV_TARGET_DIR-}', not '$expected'" >&2
+            exit 1
+          fi
+          if [ ! -d "$expected" ]; then
+            echo "the chosen coverage target root is missing: $expected" >&2
+            exit 1
+          fi
+          echo "Chosen coverage target root exists and the published variables match: $expected"
+          echo "Chosen coverage target root exists and the published variables match: $expected" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Merge coverage results
         if: ${{ matrix.platform == 'linux' }}
         shell: bash
