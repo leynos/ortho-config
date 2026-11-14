@@ -8,7 +8,7 @@
 //!
 //! Enumeration is best effort by design: it covers declared fields whose
 //! requiredness is decidable from attribute metadata. It does not attempt to
-//! predict the behaviour of a hand-written `Deserialize`, an unmarked
+//! predict the behaviour of a handwritten `Deserialize`, an unmarked
 //! `#[serde(flatten)]`, or an enum payload.
 //!
 //! # Examples

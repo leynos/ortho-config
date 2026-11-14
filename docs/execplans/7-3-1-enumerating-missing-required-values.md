@@ -182,7 +182,7 @@ with a compatibility probe rather than an assumption.
   run then passed. Red log: `/tmp/lint-ortho-config-7-3-1.out`; green log:
   `/tmp/clippy-macros-ortho-config-7-3-1.out`.
 - [x] (2026-11-09) M4 documentation reconciliation: the improved-error design
-  now reports the implemented state and the realised value-based collector;
+  now reports the implemented state and the realized value-based collector;
   `docs/design.md` carries the ownership split; the users' guide, developers'
   guide, agent-native CLI design, contents index, and changelog are updated;
   roadmap 7.3.1 and its three subtasks are checked. `mapsplice replace` was
