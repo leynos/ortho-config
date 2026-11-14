@@ -255,12 +255,16 @@ pub(super) fn inspect_descriptors(
     identity: LockFileIdentity,
     procfs: &dyn ProcFs,
 ) -> DescriptorScanResult {
-    let entries = procfs
+    let listing = procfs
         .descriptor_entries(pid)
         .map_err(|reason| (Vec::new(), reason))?;
+    // Held until every identity has been read. A self-scan lists this very
+    // descriptor, so dropping the iterator first would close it and make its
+    // own entry unreadable — an incomplete scan caused by the scan.
+    let registry = listing.registry;
     let mut descriptors = Vec::new();
-    let mut faults = Vec::new();
-    for &descriptor in entries.descriptors() {
+    let mut faults = listing.fault.into_iter().collect::<Vec<_>>();
+    for &descriptor in listing.entries.descriptors() {
         match procfs.descriptor_identity(pid, descriptor) {
             Ok(seen) if seen == identity => descriptors.push(descriptor),
             Ok(_) => {}
@@ -271,6 +275,7 @@ pub(super) fn inspect_descriptors(
             }
         }
     }
+    drop(registry);
     if faults.is_empty() {
         Ok(descriptors)
     } else {

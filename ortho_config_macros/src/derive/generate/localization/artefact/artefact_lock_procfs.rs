@@ -58,7 +58,21 @@ pub(super) trait ProcFs {
     /// rather than dropped. Every entry the kernel writes there is a decimal
     /// number, so a name that will not parse is evidence about the *scan*, not
     /// about the lock: the scan reports it and still examines the rest.
-    fn descriptor_entries(&self, pid: ProcessId) -> Result<DescriptorEntries, String>;
+    ///
+    /// A listing that stops part-way is returned with the entries it yielded
+    /// and the reason it stopped, never as a bare failure: the entries were
+    /// really read, and the same reasoning that keeps a matched descriptor in
+    /// an incomplete scan keeps them here.
+    ///
+    /// The directory's own handle is handed back too. When the scan is of
+    /// *this* process, `/proc/self/fd` lists the very descriptor the listing
+    /// was read through; dropping the listing before the descriptors are
+    /// identified closes it, and its entry then reads as unreadable. A
+    /// self-scan would report an incomplete scan with no application
+    /// descriptor having changed — the intermittent failure this module
+    /// exists to diagnose, manufactured by the diagnostic itself. The caller
+    /// holds the handle until it has read every identity.
+    fn descriptor_entries(&self, pid: ProcessId) -> Result<DescriptorListing, String>;
 
     /// Reads the file identity one descriptor of `pid` refers to.
     ///
@@ -119,6 +133,19 @@ impl DescriptorEntries {
     }
 }
 
+/// A listing, or what it yielded before it failed.
+///
+/// `registry` is the iterator the listing was read through, held past the
+/// exchange for the reason [`ProcFs::descriptor_entries`] describes.
+pub(super) struct DescriptorListing {
+    /// The entries the directory yielded, whether or not it finished.
+    pub(super) entries: DescriptorEntries,
+    /// Why the enumeration stopped early; `None` when it reached the end.
+    pub(super) fault: Option<String>,
+    /// The open directory iterator, which owns the descriptor a self-scan sees.
+    pub(super) registry: Option<fs::ReadDir>,
+}
+
 /// What `/proc/<pid>/stat` says about one process.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ProcessStat {
@@ -154,26 +181,48 @@ impl ProcessStat {
 #[derive(Debug, Clone, Copy, Default)]
 pub(super) struct RealProcFs;
 
-/// Reads one directory's entries, sorted by name, as a listing reports them.
+/// Reads one directory's entries, keeping what it yielded if it stops early.
+///
+/// An enumeration can fail after it has already yielded entries, and returning
+/// only the error would discard every entry the read did produce — including,
+/// potentially, the one the report exists to name. The entries are therefore
+/// returned alongside the fault, and the caller marks the scan incomplete
+/// rather than carrying on as though the table were empty.
 ///
 /// Sorted because `read_dir` yields entries in no defined order. A scan that
 /// failed part-way through an unsorted listing would report whichever
 /// descriptors happened to precede the failure, making both the report and any
 /// test of it depend on filesystem enumeration order.
+///
+/// The open iterator is returned with the entries, because the descriptor it
+/// holds is the one a self-scan would otherwise find closed. Opening a second
+/// handle to keep alive would not do: the iterator opens its own, and *that* is
+/// the number the listing reports. See [`ProcFs::descriptor_entries`].
 #[cfg(target_os = "linux")]
-fn read_sorted(directory: &Path) -> Result<Vec<fs::DirEntry>, String> {
-    let entries = fs::read_dir(directory)
+fn read_listing(directory: &Path) -> Result<DescriptorListing, String> {
+    let mut walker = fs::read_dir(directory)
         .map_err(|error| format!("{}: unreadable ({error})", directory.display()))?;
-    let mut ordered = entries
-        .collect::<std::io::Result<Vec<_>>>()
-        .map_err(|error| {
-            format!(
-                "{}: an entry could not be read ({error})",
-                directory.display()
-            )
-        })?;
-    ordered.sort_by_key(fs::DirEntry::file_name);
-    Ok(ordered)
+    let mut entries = Vec::new();
+    let mut fault = None;
+    loop {
+        match walker.next() {
+            Some(Ok(entry)) => entries.push(entry),
+            Some(Err(error)) => {
+                fault = Some(format!(
+                    "{}: an entry could not be read ({error})",
+                    directory.display()
+                ));
+                break;
+            }
+            None => break,
+        }
+    }
+    entries.sort_by_key(fs::DirEntry::file_name);
+    Ok(DescriptorListing {
+        entries: split_descriptor_names(&entries),
+        fault,
+        registry: Some(walker),
+    })
 }
 
 /// Returns the descriptor numbers an entry list names, and the names it cannot.
@@ -207,10 +256,8 @@ impl ProcFs for RealProcFs {
             .map_err(|error| format!("{PROC_LOCKS}: unreadable ({error})"))
     }
 
-    fn descriptor_entries(&self, pid: ProcessId) -> Result<DescriptorEntries, String> {
-        let directory = format!("/proc/{pid}/fd");
-        let entries = read_sorted(Path::new(&directory))?;
-        Ok(split_descriptor_names(&entries))
+    fn descriptor_entries(&self, pid: ProcessId) -> Result<DescriptorListing, String> {
+        read_listing(Path::new(&format!("/proc/{pid}/fd")))
     }
 
     fn descriptor_identity(

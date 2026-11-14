@@ -184,6 +184,42 @@ mod holder_tests {
         Ok(())
     }
 
+    /// Verifies an enumeration that stops part-way keeps what it listed.
+    ///
+    /// A directory read can fail after it has already yielded entries. The
+    /// entries it produced are real observations, so a scan that returned only
+    /// the enumeration fault would discard a descriptor it had genuinely read —
+    /// the same defect as stopping at a failed identity, one step earlier. The
+    /// fault must still reach the report, so the scan is not passed off as
+    /// complete.
+    #[test]
+    fn an_enumeration_fault_keeps_the_entries_it_yielded() -> Result<()> {
+        let pid = ProcessId::new(1);
+        let procfs = FakeProcFs::default()
+            .with_partial_listing(
+                pid,
+                vec![Descriptor::new(7)],
+                "/proc/1/fd: an entry could not be read (Stale file handle)",
+            )
+            .with_identity(pid, Descriptor::new(7), identity());
+
+        let outcome = inspect_descriptors(pid, identity(), &procfs);
+        let Err((found, reason)) = outcome else {
+            anyhow::bail!("a listing that stopped part-way must not report success");
+        };
+
+        ensure!(
+            found == vec![Descriptor::new(7)],
+            "a descriptor listed before the enumeration fault must survive it; \
+             got {found:?}",
+        );
+        ensure!(
+            reason.contains("could not be read"),
+            "the enumeration fault itself must reach the report: {reason}",
+        );
+        Ok(())
+    }
+
     /// Verifies a partial scan reports the evidence it kept without claiming absence.
     ///
     /// The scan-level test above pins that the matches survive; this one pins

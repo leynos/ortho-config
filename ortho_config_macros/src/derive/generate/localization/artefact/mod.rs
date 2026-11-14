@@ -279,6 +279,12 @@ mod lock_process;
 #[cfg(test)]
 #[path = "artefact_lock_report_tests.rs"]
 mod lock_report_tests;
+// The scan reading this process's own descriptor table, split from
+// `lock_report_tests` so neither suite outgrows the file-length cap; it is
+// the one case where the diagnostic's own reads appear in its evidence.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_self_scan_tests.rs"]
+mod lock_self_scan_tests;
 // The test doubles both suites drive the boundaries with, shared so the two
 // cannot disagree about what a boundary answers. Gated on the platform with
 // them: both suites that drive these doubles are Linux-only, and `FakeProcFs`

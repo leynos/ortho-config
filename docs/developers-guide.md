@@ -812,6 +812,22 @@ descriptor here" and "I could not tell what this was" are different answers,
 and a failure carries whatever was read before it so an unrelated descriptor
 closing mid-scan cannot discard a holder the scan had already matched.
 
+A listing that stops part-way is returned the same way: with the entries it
+already yielded, the reason it stopped, and the open iterator it was read
+through. Two failures follow from getting that wrong. Discarding the yielded
+entries loses a descriptor the scan had genuinely read, which is the original
+defect one step earlier; and dropping the iterator before the identities are
+read closes a descriptor the listing itself named. When the scan is of this
+process, `/proc/self/fd` lists the iterator's own descriptor, so the second
+failure makes every self-scan report an incomplete scan with no application
+descriptor having changed. `inspect_descriptors` therefore holds the iterator
+until every identity has been read, and
+`a_self_scan_is_not_made_incomplete_by_its_own_listing` asserts that against a
+real `/proc/self/fd` rather than a fake, which has no descriptor to leak. The
+enumeration fault is a fault in its own right:
+`an_enumeration_fault_keeps_the_entries_it_yielded` fails if it is dropped, and
+the self-scan test fails if the iterator is released early.
+
 `Clock` is two methods — `now` and `sleep` — and nothing else. `Boundaries`
 groups the pair because every entry point that takes one takes the other: a
 report that timed its own re-probe on a different clock than the settle used

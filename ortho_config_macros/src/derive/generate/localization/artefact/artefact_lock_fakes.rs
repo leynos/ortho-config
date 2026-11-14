@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use super::lock_clock::Clock;
 use super::lock_evidence::{Descriptor, LockFileIdentity, LockRecord, ProcessId};
-use super::lock_procfs::{DescriptorEntries, ProcFs, ProcessStat};
+use super::lock_procfs::{DescriptorEntries, DescriptorListing, ProcFs, ProcessStat};
 
 /// A procfs whose every answer the test states up front.
 ///
@@ -40,6 +40,8 @@ pub(super) struct FakeProcFs {
     table: Result<Vec<LockRecord>, String>,
     /// Per-process descriptor listings, or the reason none could be read.
     entries: BTreeMap<String, Result<DescriptorEntries, String>>,
+    /// Per-process enumeration faults, for a listing that stopped part-way.
+    faults: BTreeMap<String, String>,
     /// Per-descriptor identities, or the reason one could not be read.
     identities: BTreeMap<(String, String), Result<LockFileIdentity, String>>,
     /// Per-process stat lines, absent where the pid has no stat.
@@ -51,6 +53,7 @@ impl Default for FakeProcFs {
         Self {
             table: Ok(Vec::new()),
             entries: BTreeMap::new(),
+            faults: BTreeMap::new(),
             identities: BTreeMap::new(),
             stats: BTreeMap::new(),
         }
@@ -76,6 +79,26 @@ impl FakeProcFs {
     /// Lists `entries` for `pid` exactly as given, unparsed names included.
     pub(super) fn with_entry_listing(mut self, pid: ProcessId, entries: DescriptorEntries) -> Self {
         self.entries.insert(pid.to_string(), Ok(entries));
+        self
+    }
+
+    /// Lists `descriptors` for `pid` and then fails the enumeration.
+    ///
+    /// The shape a real `read_dir` produces when it stops part-way: the entries
+    /// it already yielded are real, and the fault explains why there are no
+    /// more. A scan that returned only the fault would discard descriptors it
+    /// had genuinely read.
+    pub(super) fn with_partial_listing(
+        mut self,
+        pid: ProcessId,
+        descriptors: Vec<Descriptor>,
+        fault: &str,
+    ) -> Self {
+        self.entries.insert(
+            pid.to_string(),
+            Ok(DescriptorEntries::new(descriptors, Vec::new())),
+        );
+        self.faults.insert(pid.to_string(), fault.to_owned());
         self
     }
 
@@ -126,13 +149,22 @@ impl ProcFs for FakeProcFs {
         self.table.clone()
     }
 
-    fn descriptor_entries(&self, pid: ProcessId) -> Result<DescriptorEntries, String> {
+    fn descriptor_entries(&self, pid: ProcessId) -> Result<DescriptorListing, String> {
         // A pid the test did not describe has no descriptor table, which is
         // how the kernel behaves for a process that has exited.
-        self.entries
+        let entries = self
+            .entries
             .get(&pid.to_string())
             .cloned()
-            .unwrap_or_else(|| Err(format!("/proc/{pid}/fd: unreadable (no such process)")))
+            .unwrap_or_else(|| Err(format!("/proc/{pid}/fd: unreadable (no such process)")))?;
+        Ok(DescriptorListing {
+            entries,
+            fault: self.faults.get(&pid.to_string()).cloned(),
+            // The double has no descriptor to leak, so it holds none. A test
+            // that cares whether the real scan keeps its listing open asserts
+            // against `with_registry` and a case that names this.
+            registry: None,
+        })
     }
 
     fn descriptor_identity(

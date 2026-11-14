@@ -104,7 +104,11 @@ which is what makes the distinction the diagnostics exist to draw assertable:
 
 - `descriptor_entries` returns the descriptor numbers it parsed **and** the
   names it could not, because "there is no descriptor here" and "I could not
-  tell what this was" are different answers.
+  tell what this was" are different answers. A listing that stopped part-way
+  keeps the entries it yielded and names its own fault, and it hands back the
+  open iterator it was read through: dropping that iterator first would close a
+  descriptor the listing named, so a self-scan would report an incomplete scan
+  it caused itself.
 - A failed scan carries whatever it matched before the failure, so an unrelated
   descriptor closing mid-scan cannot discard a live holder.
 - `process_stat` answers `Option`, because a process can exit between the record
