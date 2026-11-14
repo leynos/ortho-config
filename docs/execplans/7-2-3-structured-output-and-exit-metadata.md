@@ -235,7 +235,16 @@ all possible public values are validated.
 - [x] (2026-11-15) M2 implementation: `check_output`, the complete 3 × 6 × 3
   truth table, unrelated-field invariance, sampled properties, four BDD
   scenarios, and an executable Rustdoc example. Commit `946013b2`.
-- [ ] M2: structured-output lint and executable consumer examples.
+- [x] (2026-11-15) M2 documentation: the API-guide rule section with a
+  registered `api-guide-output-policy` example, the users'-guide section, the
+  design note on why the rule is library-only, and the ADR's delivered rule
+  identity. Commit `4d698172`.
+- [x] (2026-11-15) M2 certificate: all seven gates green at `4d698172` with the
+  head unchanged and `make fmt` mutating nothing — fmt, check-fmt, lint
+  (rustdoc, Clippy, Whitaker, interrogate 100%), test (109 targets, 2869
+  passed, 43 ignored, pytest 128 passed), markdownlint with spelling, nixie,
+  and 21 `cargo-orthohelp` doctests.
+- [x] M2: structured-output lint and executable consumer examples.
 - [ ] M3: exit documentation, process regression evidence and completion.
 
 ## Surprises & discoveries
@@ -270,6 +279,13 @@ explicitly therefore found an M1 example that no longer compiled — the
 new `output` field. It is repaired in the M2 implementation commit. The lesson
 is that a new required struct field also invalidates doc examples, and only the
 explicit Rustdoc run observes them.
+
+The output rule's two Clippy repairs repeat the M1 lesson at a smaller scale.
+`severity_for` and the BDD `contract` helper are `Option`-only and match-only,
+so `missing_const_for_fn` demands `const fn`, and the single assertion helper
+that checked message, stable fields and summary together tripped
+`cognitive_complexity`; splitting it into three helpers is the fix, not a
+suppression. Both are visible only under `make lint`, never under `cargo test`.
 
 ## Decision log
 
