@@ -10,7 +10,9 @@
 use ortho_config::{AgentCommand, AgentContext, AgentInput, RendererContract};
 use pretty_assertions::assert_eq;
 
-use super::input::{CommandContract, EffectiveCommandSurface};
+use super::input::{
+    CommandContract, CommandSurfaceError, EffectiveCommandSurface, SkillValidationInput,
+};
 use super::report::codes;
 use super::support::{
     codes_of, example, global, input, manifest, option, option_use, policy, reference,
@@ -171,6 +173,71 @@ fn a_declared_global_is_listed_once_with_its_own_value_type() {
     let colour = colours.first().expect("the length was asserted to be one");
     assert_eq!(colour.value_type.as_deref(), Some("string"));
     assert!(colour.is_global);
+}
+
+/// Builds one `tool` command whose inputs carry declared value types.
+fn context_with_typed_inputs(declarations: &[(&str, Option<&str>)]) -> AgentContext {
+    let inputs = declarations
+        .iter()
+        .map(|(long, value_type)| AgentInput {
+            value_type: value_type.map(str::to_owned),
+            ..agent_input(long)
+        })
+        .collect();
+    AgentContext {
+        commands: vec![AgentCommand {
+            inputs,
+            ..agent_command(&["tool"], &[])
+        }],
+        ..AgentContext::new("tool")
+    }
+}
+
+#[test]
+fn identical_duplicate_inputs_collapse_to_one_option() {
+    // One CLI option declared twice with the same metadata is still one
+    // option; the adapter must not turn it into an ambiguous surface.
+    let context = context_with_typed_inputs(&[("json", Some("string")), ("json", Some("string"))]);
+
+    let surface = EffectiveCommandSurface::from_agent_context(&context, &[]);
+
+    let options = &command_at(&surface, 0).options;
+    assert_eq!(options.len(), 1, "an agreeing repeat is one option");
+    assert_eq!(
+        options.first().map(|option| option.value_type.as_deref()),
+        Some(Some("string"))
+    );
+    validate(
+        &SkillValidationInput::default(),
+        &surface,
+        &policy(PolicyMode::Off),
+    )
+    .expect("an agreeing repeat leaves the surface unambiguous");
+}
+
+#[test]
+fn conflicting_duplicate_inputs_are_rejected() {
+    // Two declarations that disagree cannot both describe the same option.
+    // Collapsing them would let list order decide the value type, so the
+    // adapter keeps both and validation rejects the surface.
+    let context = context_with_typed_inputs(&[("json", Some("string")), ("json", Some("integer"))]);
+
+    let surface = EffectiveCommandSurface::from_agent_context(&context, &[]);
+
+    let error = validate(
+        &SkillValidationInput::default(),
+        &surface,
+        &policy(PolicyMode::Off),
+    )
+    .expect_err("a conflicting repeat must be rejected");
+
+    assert_eq!(
+        error,
+        CommandSurfaceError::ConflictingOption {
+            path: "tool".to_owned(),
+            option: "json".to_owned(),
+        }
+    );
 }
 
 #[test]

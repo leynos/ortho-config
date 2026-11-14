@@ -58,6 +58,9 @@ impl EffectiveCommandSurface {
     /// options, each marked as the consumer classified it. A command that
     /// declares a global option itself keeps its own value type and is still
     /// classified global, so one CLI option never becomes two surface entries.
+    /// Two declarations that state *different* value types are kept, which
+    /// makes the surface ambiguous so validation rejects it instead of
+    /// silently choosing one by list order.
     ///
     /// # Examples
     ///
@@ -125,7 +128,10 @@ impl EffectiveCommandSurface {
 ///
 /// Declared inputs come first in their tree order, so a consumer reading the
 /// surface sees the command's own options before the ones every command
-/// shares. A global a command already declares is not appended twice.
+/// shares. A repeated declaration is collapsed only when it agrees with the
+/// entry already present. A disagreement is preserved, so the surface stays
+/// ambiguous and [`validate`](super::validate) rejects it rather than letting
+/// list order decide which value type a claim is judged against.
 fn effective_options(
     inputs: &[ortho_config::AgentInput],
     globals: &[GlobalOption],
@@ -135,24 +141,48 @@ fn effective_options(
         let Some(long) = input.long.as_deref() else {
             continue;
         };
-        if options.iter().any(|option| option.long == long) {
-            continue;
-        }
-        options.push(EffectiveOption {
-            long: long.to_owned(),
-            value_type: input.value_type.clone(),
-            is_global: globals.iter().any(|global| global.long == long),
-        });
+        let is_global = globals.iter().any(|global| global.long == long);
+        push_option(&mut options, long, input.value_type.as_deref(), is_global);
     }
     for global in globals {
-        if options.iter().any(|option| option.long == global.long) {
-            continue;
-        }
-        options.push(EffectiveOption {
-            long: global.long.clone(),
-            value_type: global.value_type.clone(),
-            is_global: true,
-        });
+        push_option(
+            &mut options,
+            &global.long,
+            global.value_type.as_deref(),
+            true,
+        );
     }
     options
+}
+
+/// Adds one declared option unless an agreeing entry is already present.
+fn push_option(
+    options: &mut Vec<EffectiveOption>,
+    long: &str,
+    value_type: Option<&str>,
+    is_global: bool,
+) {
+    let agrees = options
+        .iter()
+        .find(|option| option.long == long)
+        .is_some_and(|existing| !conflicts(existing, value_type));
+    if agrees {
+        return;
+    }
+    options.push(EffectiveOption {
+        long: long.to_owned(),
+        value_type: value_type.map(str::to_owned),
+        is_global,
+    });
+}
+
+/// Returns whether a repeated declaration states a different value type.
+///
+/// An absent value type states nothing, so it never conflicts with a declared
+/// one; two stated types that differ cannot both describe the same option.
+fn conflicts(existing: &EffectiveOption, value_type: Option<&str>) -> bool {
+    matches!(
+        (existing.value_type.as_deref(), value_type),
+        (Some(declared), Some(repeated)) if declared != repeated
+    )
 }

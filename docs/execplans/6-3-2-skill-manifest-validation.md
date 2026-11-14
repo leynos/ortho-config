@@ -318,6 +318,18 @@ explicitly approves it and the prerequisites below are complete.
   skipped), `make markdownlint` 0 including the spelling gate, and `make nixie`
   0. Logs are under
   `/tmp/{check-fmt,typecheck,lint,test,markdownlint,nixie}-ortho-config-6-3-2-skill-manifest-validation.out`.
+- [x] (2026-11-14) Repaired the second hosted completeness assessment against
+  `aac5182d`. F1: `check_example_options` now returns whether every option was
+  checked, so an example whose surface path is missing is not counted bound.
+  F2: the adapter keeps conflicting duplicate value types and validation
+  rejects them. F3: the generator emits positionals and four new controls
+  exercise the round trip, acceptance, and duplicate-reference rules. F4: the
+  tolerance count is restated against `54dab732`. The independent oracle was
+  updated to the same bound rule, and the oracle and adapter were then
+  refactored to clear the CodeScene `Bumpy Road Ahead` and
+  `Deep, Nested Complexity` findings introduced by the split; `cs delta`
+  reports no findings. Focused module tests (60 passed) and Clippy are green;
+  the full sequential gate sweep follows this record.
 
 ## Surprises & discoveries
 
@@ -455,6 +467,27 @@ explicitly approves it and the prerequisites below are complete.
   lines; the adapter's four cases would push it past the repository's 400-line
   cap. The artefact is renamed here so the plan and the tree agree.
   Date/Author: 2026-11-14, implementation detail of INV-EFFECTIVE-INPUTS.
+- Decision (2026-11-14): An example whose surface path is missing is checked
+  but not bound. The manifest check already reports the undeclared path once,
+  so the example adds no second finding for it; the example instead stops at
+  the first *declared* option because no option can be accepted without the
+  path, and `examples_bound` does not count it. Rationale: the second hosted
+  assessment found that the previous code returned `true` from that branch, so
+  an example whose options were never examined still counted as validated,
+  which overstates coverage and can report `Complete` for a run that checked
+  nothing. Undeclared options before the stop are still reported, because
+  ownership needs only the reference. Date/Author: 2026-11-14, repair of the
+  second assessment's F1.
+- Decision (2026-11-14): The agent-context adapter preserves conflicting
+  duplicate declarations. A repeated input that states the same value type is
+  collapsed to one option, as before. A repeat that states a *different* value
+  type is kept, so the surface is ambiguous and validation returns
+  `CommandSurfaceError::ConflictingOption` instead of letting list order decide
+  which type a claim is judged against. Rationale: the second assessment found
+  that first-wins collapsing silently discarded the disagreement, so an
+  inconsistent source tree produced a plausible but arbitrary surface. An
+  absent value type states nothing and therefore never conflicts. Date/Author:
+  2026-11-14, repair of the second assessment's F2.
 - Decision (2026-11-14): Customize code health with
   `.codescene/code-health-rules.json` rather than by reshaping test-support
   signatures. The file holds one rule set per path and nothing else, so every
@@ -600,14 +633,17 @@ domain semantics.
 
 ## Conformance basis
 
-- Current base: `origin/main` at `724839c4b3789c91847356260612c34dac8acccd`.
+- Current base: `origin/main` at `54dab7321445204c12fa5f6a756cb099556c53fe`.
   The branch's own eleven commits were replayed off the inherited PR #664 parent
   `501ab83134eaba0f9e97e1daeaa29c793a819c53` on 2026-11-14, after #664
   squash-merged as `eaf4c028`. The replay boundary is evidence-based: the
   parent's final head `91750238` has the same tree as the landing commit apart
   from reconciled dependency files, `501ab831` is its ancestor, and the replay
-  range contained no merges and no inherited commits. Recovery refs are
-  `refs/recovery/6-3-2-old-head` and `refs/recovery/6-3-2-old-base`.
+  range contained no merges and no inherited commits. Main then advanced by one
+  test-file-only commit, PR #524 (`54dab732`), and the branch was replayed
+  again onto that head; the replay is an ancestor of the candidate head.
+  Recovery refs are `refs/recovery/6-3-2-old-head` and
+  `refs/recovery/6-3-2-old-base`.
 - Previous planning base: `ddba3578fae04227e426ea3a61aa2b24aa043232`
   (PR #651, merged 2026-11-06), rebased from original planning base
   `dc979878b5728bbb23866df9c05c2570bdb5629e` on branch

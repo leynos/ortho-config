@@ -116,8 +116,7 @@ impl<'a> Validator<'a> {
             );
             return false;
         }
-        self.check_example_options(claim, reference, &example.options);
-        true
+        self.check_example_options(claim, reference, &example.options)
     }
 
     /// Checks each distinct option name once, then applies policy to resolved
@@ -130,12 +129,19 @@ impl<'a> Validator<'a> {
     /// the real command would repeat one offending token. A *declared* option
     /// the command does not accept is reported, and only a use that is both
     /// declared and accepted counts as resolved for policy.
+    ///
+    /// Returns whether every option was checked. When the surface does not
+    /// declare the reference's path, no option can be accepted and the
+    /// remaining checks do not run. That path is already reported once against
+    /// the manifest, so this adds no second finding; it only keeps the example
+    /// out of `examples_bound`, because claiming it was validated would
+    /// overstate coverage.
     fn check_example_options(
         &mut self,
         claim: ClaimRef<'_>,
         reference: &'a SkillCommandRef,
         options: &'a [OptionUse],
-    ) {
+    ) -> bool {
         let mut seen_names: BTreeSet<&str> = BTreeSet::new();
         for option in options {
             if !seen_names.insert(option.name.as_str()) {
@@ -156,7 +162,7 @@ impl<'a> Validator<'a> {
                 continue;
             }
             let Some(resolved) = self.index.command(claim.path) else {
-                return;
+                return false;
             };
             let Some(resolved_option) = resolved.option(&option.name) else {
                 self.push_structural(
@@ -179,6 +185,7 @@ impl<'a> Validator<'a> {
             };
             self.apply_option_policy(claim, options, resolved_use);
         }
+        true
     }
 
     /// Applies policy once per distinct use of one resolved option.
