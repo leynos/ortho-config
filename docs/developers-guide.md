@@ -3227,11 +3227,15 @@ the margin, or moves the assignment fails the contract rather than the Windows
 job.
 
 The contract is arithmetic over measured numbers, not a runtime observation. It
-models the hosted runner's temporary directory as a constant, `D:\a\_temp`, and
-prices every character of the root at the 302 occurrences the failed invocation
-contained. A change to the runner image that lengthened that prefix, or that
-repeated the root more often, would move this projection rather than fail it;
-the hosted Windows leg is what observes the prefix the runner actually used.
+derives the chosen root from the runner constant `D:\a\_temp` by taking only
+its drive, prices that root at the 302 occurrences the failed invocation
+contained, and holds every other part of the measured line fixed. Two limits
+follow. A temporary directory longer below its drive cannot change the chosen
+root, because the chooser uses only the drive, so its length is not part of the
+arithmetic at all. And because the occurrence count is an input rather than a
+re-measurement, an invocation that repeated the root more often would spend the
+2,894-character margin without moving this projection. The hosted Windows leg
+is what observes the runner the arithmetic assumes.
 
 #### Verifying the coverage target root in use
 

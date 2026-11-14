@@ -91,8 +91,11 @@ passes inherit one job environment, so the variables record what each pass was
 given, not what it did with it. The directory check establishes that the chosen
 directory exists; it does not establish which action wrote it, so a pass that
 built elsewhere would not change either check. Distinguishing the passes would
-need evidence from each coverage invocation, which is Option D's cost; the
-projection contract remains the guard for the failure this ADR responds to.
+need evidence from each coverage invocation. Both passes are `uses:` steps of
+`generate-coverage` in `leynos/shared-actions`, so that evidence would have to
+be published by the action itself; the workflow cannot interpose on it without
+changing the shared action or adding a pass of its own. The projection contract
+remains the guard for the failure this ADR responds to.
 
 The Linux step is plain Bash over `$RUNNER_TEMP`, so its acceptance and
 rejection paths are exercised by the contract suite on every host. The Windows
