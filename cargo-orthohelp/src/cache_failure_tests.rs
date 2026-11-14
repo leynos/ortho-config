@@ -18,7 +18,8 @@
 //! One case also depends on the permission bits being enforced, which a
 //! privileged account bypasses. It reports the skip on standard error rather
 //! than returning silently, because a silent return leaves the suite claiming
-//! a pass for a case that never ran.
+//! a pass for a case that never ran. Its non-Unix counterpart reports that the
+//! scenario cannot exist there for the same reason.
 
 use super::*;
 
@@ -244,10 +245,15 @@ fn a_source_entry_that_is_not_valid_utf8_is_reported() {
 
 /// Say on standard error why the unreadable-directory case is not running.
 ///
-/// A silent early return leaves `cargo test` reporting a pass for a case that
-/// never executed, so an account that bypasses permission bits would look the
-/// same as one where the walk was proven to abort. The suite's output is the
-/// only place that difference can be seen.
+/// A silent skip leaves `cargo test` reporting a pass for a case that never
+/// executed, so an account that bypasses permission bits would look the same as
+/// one where the walk was proven to abort. The suite's output is the only place
+/// that difference can be seen.
+///
+/// This is compiled on every platform and called from the Unix case and from
+/// its non-Unix counterpart, so the reporting path is reachable everywhere.
+/// Gating it to `cfg(unix)` with a stub elsewhere would leave the stub unused on
+/// Windows, which `-D dead_code` rejects.
 ///
 /// `print_stderr` is denied workspace-wide because production code should log
 /// through `tracing`; this is a test process announcing a skip, and there is no
@@ -256,11 +262,20 @@ fn a_source_entry_that_is_not_valid_utf8_is_reported() {
     clippy::print_stderr,
     reason = "a skipped test has no other way to report that it did not run"
 )]
-fn report_mode_bits_not_enforced() {
-    eprintln!(
-        "SKIP an_unreadable_source_directory_aborts_the_walk: \
-         this account can read a mode-000 directory"
-    );
+fn report_unreadable_case_skipped(reason: &str) {
+    eprintln!("SKIP an_unreadable_source_directory_aborts_the_walk: {reason}");
+}
+
+/// Reports that the unreadable-directory case cannot exist on this platform.
+///
+/// POSIX permission bits are the mechanism under test, and there is no portable
+/// spelling of them. Without this case the suite would simply omit the scenario
+/// on Windows, which reads the same as a platform where it passed; saying so is
+/// the same treatment the runtime skips get.
+#[cfg(not(unix))]
+#[test]
+fn an_unreadable_source_directory_aborts_the_walk() {
+    report_unreadable_case_skipped("POSIX permission bits are unix-only");
 }
 
 #[cfg(unix)]
@@ -291,7 +306,7 @@ fn an_unreadable_source_directory_aborts_the_walk() {
     std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o755))
         .expect("restore directory access");
     let Some(attempted) = reached else {
-        report_mode_bits_not_enforced();
+        report_unreadable_case_skipped("this account can read a mode-000 directory");
         return;
     };
     let (path, source) =
