@@ -73,6 +73,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "api-guide-agent-context-constructor",
     "api-guide-agent-context-json",
     "guide-boolean-override",
+    "guide-skill-validation",
 ];
 
 /// Compiles and runs the public Rust examples, checking their documented contracts.

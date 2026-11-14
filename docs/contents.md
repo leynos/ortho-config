@@ -7,7 +7,7 @@
 
 - [User's guide](users-guide.md): use OrthoConfig in application and library
   code, including configuration loading, merge behaviour, generated
-  documentation metadata, and error handling.
+  documentation metadata, skill-manifest validation, and error handling.
 - [Developer's guide](developers-guide.md): maintain and extend this
   repository, including build, test, lint, release, and contribution workflows.
 - [cargo-orthohelp policy and agent-context API guide](cargo-orthohelp-api-guide.md):

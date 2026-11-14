@@ -2142,6 +2142,100 @@ Annotate incrementally, starting with destructive commands:
 3. Run the check in warning mode before enforcing it in continuous
    integration.
 
+## Validate skill manifests against commands
+
+A skill manifest claims what a tool can do. `cargo_orthohelp::skill_validation`
+checks those claims against the same command contract that agent context
+describes, and reports the ones the real command would reject.
+
+The library does not read manifests, parse Markdown, or run examples. The
+consumer loads the manifest, extracts its claims, and supplies an explicit
+_effective_ command surface: for each command, the exact path, the long options
+that command accepts, and its canonical verb when known. Supplying the surface
+is the consumer's statement of what the tool really does; the validator never
+infers that a child command inherits its parent's options.
+
+<!-- tested-example: guide-skill-validation -->
+```rust
+use cargo_orthohelp::policy::PolicyMode;
+use cargo_orthohelp::skill_validation::{
+    CommandContract, EffectiveCommandSurface, EffectiveOption, ManifestClaims,
+    ResolvedAgentPolicy, SkillValidationInput, validate,
+};
+use ortho_config::SkillCommandRef;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let path = vec!["tool".to_owned(), "build".to_owned()];
+    let surface = EffectiveCommandSurface {
+        commands: vec![CommandContract {
+            path: path.clone(),
+            options: vec![EffectiveOption {
+                long: "json".to_owned(),
+                value_type: Some("bool".to_owned()),
+            }],
+            canonical_verb: None,
+        }],
+    };
+    let input = SkillValidationInput {
+        manifests: vec![ManifestClaims {
+            id: "build-workflow".to_owned(),
+            commands: vec![SkillCommandRef {
+                path,
+                flags: vec!["yaml".to_owned()],
+            }],
+        }],
+        examples: Vec::new(),
+    };
+    let policy = ResolvedAgentPolicy {
+        mode: PolicyMode::Deny,
+        exceptions: Vec::new(),
+    };
+
+    let report = validate(&input, &surface, &policy)?;
+    for finding in &report.findings {
+        println!(
+            "{} {} {}",
+            finding.manifest_id, finding.source_ordinal, finding.code
+        );
+    }
+    println!("resolved={}", report.coverage.resolved_command_references);
+    Ok(())
+}
+```
+
+The program prints one line per finding and the number of references that
+resolved completely:
+
+<!-- tested-example: guide-skill-validation-output -->
+```text
+build-workflow 1 skill.unknown_flag
+resolved=0
+```
+
+The keys to reading the report are:
+
+- **Structural findings** record a false claim: an unknown command path, a flag
+  the referenced command does not accept, a duplicate manifest ID, or an
+  example that does not bind to a declared reference. They always fail, in
+  every policy mode, and an exception can never excuse them.
+- **Policy findings** carry vocabulary or global-option advice from the
+  7.1 rules. They follow `off`, `warn`, and `deny`, and configured exceptions
+  suppress them.
+- **Coverage** counts what was actually checked. An example the consumer could
+  not extract is marked `Unsupported`; it is counted as unchecked and the
+  report status becomes `Partial` rather than implying full coverage.
+- **Ordering** is manifest input order, then source ordinal, then finding code,
+  so two runs over the same input produce identical reports.
+
+Findings name the stable manifest ID and a one-based source ordinal. They do
+not repeat manifest paths, argument values, or surrounding prose, which keeps a
+report safe to publish and stable across runs.
+
+The validator checks only the claims supplied to it. It does not discover
+commands from prose, validate a shell invocation's quoting or arity, or prove
+that an example succeeds when run. Those remain the consumer's responsibility;
+`docs/agent-native-cli-design.md` records the full boundary.
+
 ## Upgrade from an earlier release
 
 Each release with compatibility notes has a migration guide that separates

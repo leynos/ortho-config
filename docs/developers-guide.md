@@ -1018,6 +1018,41 @@ routing, build graph behaviour, and application-specific persistence. If
 OrthoConfig executes downstream commands or owns downstream side effects, stop
 and revisit the boundary in the agent-native design.
 
+### Skill-manifest validation internals
+
+`cargo_orthohelp::skill_validation` is the reusable half of that boundary. Its
+modules divide by one job each:
+
+- `input` holds the supplied claims, the effective surface, and the typed
+  `CommandSurfaceError` that rejects an ambiguous surface before any claim is
+  read;
+- `resolve::CommandIndex` builds the path lookup once per call;
+- `validate::manifest_index` answers duplicate and ownership questions once per
+  call;
+- `validate` orchestrates the reference checks, and `validate::examples` the
+  example checks;
+- `policy_check` turns the 7.1 policy and the §5 glossary into advice; and
+- `report` holds the finding, coverage, and status types plus the stable
+  finding codes.
+
+Two conventions are easy to break and expensive to debug:
+
+1. **Declarations and invocations are different policy questions.** A
+   declaration (`--color` in a command reference) asserts only that the option
+   exists; it is silent when the name is a known concept. An invocation (an
+   example's `--color always`) also asserts a value, so it is the only place
+   value advice applies. `flag_name_advice` and `option_use_advice` keep that
+   split; do not fold them back into one function.
+2. **The effective surface is per command.** Never union a root command's
+   options into its children. The surface is the consumer's statement of what
+   each command accepts, and the tests pin the negative case.
+
+Avoid `expect` and `unwrap` in these modules, including test-only helpers
+outside a `#[test]` body; `support.rs` returns values instead. Test helpers
+live in `support`, `tests`, `tests_examples`, `tests_policy`, and `proptests`;
+the property tests use an independent linear oracle rather than calling the
+validator's own index.
+
 ## Profile layering (roadmap 9.1.1)
 
 Profile support is opt-in at the struct level through the derive attribute
