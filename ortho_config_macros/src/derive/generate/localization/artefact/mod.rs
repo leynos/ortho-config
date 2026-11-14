@@ -240,9 +240,19 @@ mod lock_tests;
 #[cfg(test)]
 #[path = "artefact_lock_diagnostics.rs"]
 mod lock_diagnostics;
+// The settle's two temporal decisions, split out so a fake clock can reach
+// them; a real clock cannot test "the deadline passed" without waiting it out.
+#[cfg(test)]
+#[path = "artefact_lock_clock.rs"]
+mod lock_clock;
+// Every kernel read the report makes, behind one trait, so a test can fail the
+// read it needs to fail instead of arranging filesystem topology for it.
 #[cfg(test)]
 #[path = "artefact_lock_evidence.rs"]
 mod lock_evidence;
+#[cfg(test)]
+#[path = "artefact_lock_procfs.rs"]
+mod lock_procfs;
 // The procfs half of the report, split from the deciding half so each stays
 // inside the file-length cap and so "no descriptor" and "could not read" have
 // one place to be kept apart.
@@ -262,6 +272,16 @@ mod lock_process;
 #[cfg(test)]
 #[path = "artefact_lock_report_tests.rs"]
 mod lock_report_tests;
+// The test doubles both suites drive the boundaries with, shared so the two
+// cannot disagree about what a boundary answers.
+#[cfg(test)]
+#[path = "artefact_lock_fakes.rs"]
+mod lock_fakes;
+// The settle's deadline and sleep placement, which a real clock can only be
+// made to show by waiting the real budget out.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_settle_tests.rs"]
+mod lock_settle_tests;
 // Bounded contention whose every free assertion routes through
 // `lock_diagnostics`, so a post-release hold fails with the report that names
 // its holder instead of with a bare boolean.

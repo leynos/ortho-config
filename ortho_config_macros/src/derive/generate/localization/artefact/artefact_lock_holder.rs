@@ -26,33 +26,43 @@
 //! unused — it fails to resolve at all.
 
 #[cfg(target_os = "linux")]
-use std::fs;
-#[cfg(target_os = "linux")]
-use std::path::Path;
-
-#[cfg(target_os = "linux")]
-use super::lock_evidence::{Descriptor, DeviceNumber, Inode, LockFileIdentity, ProcessId};
+use super::lock_evidence::{Descriptor, LockFileIdentity, ProcessId};
 #[cfg(target_os = "linux")]
 use super::lock_process::describe_process;
+#[cfg(target_os = "linux")]
+use super::lock_procfs::ProcFs;
 
 /// Appends one description per process still holding a descriptor on the lock.
+///
+/// Reads through `procfs` rather than the filesystem directly, so a caller can
+/// fail one scan and leave the rest answering. See [`super::lock_procfs`] for
+/// why those reads are worth a seam.
 #[cfg(target_os = "linux")]
 pub(super) fn append_owner_lines(
     lines: &mut Vec<String>,
     owners: &[ProcessId],
     identity: LockFileIdentity,
+    procfs: &dyn ProcFs,
 ) {
     let own_pid = ProcessId::new(std::process::id());
     let mut incomplete = 0_usize;
     for &pid in owners {
-        let scan = match inspect_holder(pid, identity) {
+        let scan = match inspect_holder(pid, identity, procfs) {
             Ok(descriptors) => DescriptorScan::Complete(descriptors),
             Err((matched, reason)) => {
                 incomplete = incomplete.saturating_add(1);
                 DescriptorScan::Incomplete { matched, reason }
             }
         };
-        append_owner(lines, pid, scan, own_pid);
+        append_owner(
+            lines,
+            OwnerScan {
+                pid,
+                scan,
+                own_pid,
+                procfs,
+            },
+        );
     }
     if incomplete > 0 {
         lines.push(format!(
@@ -88,6 +98,26 @@ pub(super) enum DescriptorScan {
     },
 }
 
+/// One process's scan, together with what the report needs to describe it.
+///
+/// The pid, the scan taken of it, and the identity of the process writing the
+/// report always travel together: a scan is meaningless without knowing whose
+/// table it came from, and every line naming a holder says how that holder
+/// relates to the reader. Passing them separately let a caller pair one
+/// process's scan with another's name, which is the same transposition the
+/// evidence newtypes exist to prevent — at one remove.
+#[cfg(target_os = "linux")]
+pub(super) struct OwnerScan<'a> {
+    /// The process this scan describes.
+    pub(super) pid: ProcessId,
+    /// What the scan of that process found.
+    pub(super) scan: DescriptorScan,
+    /// The process writing the report, for the relation it states.
+    pub(super) own_pid: ProcessId,
+    /// The procfs the description of `pid` is read through.
+    pub(super) procfs: &'a dyn ProcFs,
+}
+
 /// Describes one process and every descriptor it holds on the lock file.
 ///
 /// An owner with no matching descriptor is reported rather than dropped, but
@@ -99,13 +129,14 @@ pub(super) enum DescriptorScan {
 /// maintainer after a process in the ordinary case where the hold had already
 /// cleared.
 #[cfg(target_os = "linux")]
-pub(super) fn append_owner(
-    lines: &mut Vec<String>,
-    pid: ProcessId,
-    scan: DescriptorScan,
-    own_pid: ProcessId,
-) {
-    let described = describe_process(pid, own_pid);
+pub(super) fn append_owner(lines: &mut Vec<String>, owner: OwnerScan<'_>) {
+    let OwnerScan {
+        pid,
+        scan,
+        own_pid,
+        procfs,
+    } = owner;
+    let described = describe_process(pid, own_pid, procfs);
     match scan {
         DescriptorScan::Complete(descriptors) if descriptors.is_empty() => {
             lines.push(format!(
@@ -166,72 +197,53 @@ type DescriptorScanResult = Result<Vec<Descriptor>, (Vec<Descriptor>, String)>;
 /// that exists and was not read, which is a partial scan and is reported as
 /// one.
 #[cfg(target_os = "linux")]
-fn inspect_holder(pid: ProcessId, identity: LockFileIdentity) -> DescriptorScanResult {
-    inspect_descriptors(&format!("/proc/{pid}/fd"), identity)
+fn inspect_holder(
+    pid: ProcessId,
+    identity: LockFileIdentity,
+    procfs: &dyn ProcFs,
+) -> DescriptorScanResult {
+    inspect_descriptors(pid, identity, procfs)
 }
 
-/// Scans one descriptor directory, which is `/proc/<pid>/fd` outside tests.
+/// Scans one process's descriptor table for descriptors on the locked file.
 ///
-/// The directory is a parameter so a test can drive this exact loop against a
-/// temporary directory. Asserting the loop's behaviour through `append_owner`
-/// alone would not exercise the discard this function exists to prevent — a
-/// mutant that returned an empty match list on failure would still pass — so
-/// the seam is here, at the real `read_dir`, rather than in the report.
+/// The reads go through [`ProcFs`] so a test can drive this exact loop against a
+/// fake table. Asserting the loop's behaviour through `append_owner` alone would
+/// not exercise the discard this function exists to prevent — a mutant that
+/// returned an empty match list on failure would still pass — so the seam is
+/// here, at the reads themselves, rather than in the report.
+///
+/// The scan takes the process rather than a directory path because the two
+/// reads it makes — list the table, then identify each descriptor — must agree
+/// on *which* process they describe. Passing a path let a caller scan one
+/// directory and read identities from another, which no longer type-checks.
+///
+/// A name that is not a descriptor number is *skipped*, not treated as a fault:
+/// every entry the kernel writes is a decimal number, so a name that will not
+/// parse is not a descriptor this scan could have examined and omitted. Failing
+/// on it would mark every process incompletely scanned and drown the real
+/// faults. It is still counted in the report's summary, because a name the scan
+/// did not understand is a gap in its coverage even when it is not an error.
 #[cfg(target_os = "linux")]
 pub(super) fn inspect_descriptors(
-    directory: &str,
+    pid: ProcessId,
     identity: LockFileIdentity,
+    procfs: &dyn ProcFs,
 ) -> DescriptorScanResult {
-    let entries = fs::read_dir(directory)
-        .map_err(|error| (Vec::new(), format!("{directory}: unreadable ({error})")))?;
-    // Sorted so a failure always leaves the same match list. `read_dir` yields
-    // entries in no defined order, so an unsorted scan that hit an unreadable
-    // entry would report whichever descriptors happened to precede it — making
-    // both the report and any test of it depend on filesystem enumeration order.
-    let mut ordered = entries
-        .collect::<std::io::Result<Vec<_>>>()
-        .map_err(|error| {
-            (
-                Vec::new(),
-                format!("{directory}: an entry could not be read ({error})"),
-            )
-        })?;
-    ordered.sort_by_key(std::fs::DirEntry::file_name);
+    let entries = procfs
+        .descriptor_entries(pid)
+        .map_err(|reason| (Vec::new(), reason))?;
     let mut descriptors = Vec::new();
-    for entry in ordered {
-        let Ok(name) = entry.file_name().into_string() else {
-            continue;
-        };
-        let Ok(descriptor) = name.parse().map(Descriptor::new) else {
-            continue;
-        };
-        match refers_to(&entry.path(), identity) {
-            Ok(true) => descriptors.push(descriptor),
-            Ok(false) => {}
+    for &descriptor in entries.descriptors() {
+        match procfs.descriptor_identity(pid, descriptor) {
+            Ok(seen) if seen == identity => descriptors.push(descriptor),
+            Ok(_) => {}
             Err(reason) => {
-                return Err((descriptors, format!("{}: {reason}", entry.path().display())));
+                // The name the read failed on is part of the evidence: without
+                // it the report says only that something could not be read.
+                return Err((descriptors, format!("fd {descriptor}: {reason}")));
             }
         }
     }
     Ok(descriptors)
-}
-
-/// Reports whether one open descriptor refers to the locked file.
-///
-/// The entries under `/proc/<pid>/fd` are symlinks, and [`fs::metadata`]
-/// follows them, so this reads the metadata of the open file rather than of the
-/// link that points at it.
-///
-/// A read failure is returned rather than folded into `false`: "not this file"
-/// and "could not tell" are different answers, and only the first may be used
-/// to conclude that a process holds nothing.
-#[cfg(target_os = "linux")]
-fn refers_to(path: &Path, identity: LockFileIdentity) -> Result<bool, String> {
-    use std::os::unix::fs::MetadataExt;
-
-    let metadata = fs::metadata(path).map_err(|error| format!("unreadable ({error})"))?;
-    Ok(identity.holds(
-        DeviceNumber::from_raw(metadata.dev()),
-        Inode::new(metadata.ino()),
-    ))
 }

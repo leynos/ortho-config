@@ -4,23 +4,32 @@
 //! reason the scan itself was split from the deciding half: the module cap
 //! counts every line a module declares, and the scan plus its tests no longer
 //! fit in one file.
+//!
+//! The fake [`ProcFs`] these tests drive lives here rather than in the scan,
+//! because the scan must not know it has one. It answers from a table the test
+//! builds, so each failure branch is reached by *stating* the fault instead of
+//! arranging a filesystem that produces it.
 
 mod holder_tests {
     //! Pins the distinction this module exists to make: only a scan that
     //! finished can say anything about absence, an unfinished one must not, and
     //! neither may discard a descriptor it actually matched.
 
-    use super::super::lock_holder::{DescriptorScan, append_owner, inspect_descriptors};
-    use crate::derive::generate::localization::artefact::fragment_tests::TempRoot;
-    use crate::derive::generate::localization::artefact::lock_evidence::{Descriptor, ProcessId};
-    use crate::derive::generate::localization::artefact::lock_evidence::{
-        DeviceNumber, Inode, LockFileIdentity,
+    use super::super::lock_evidence::{
+        Descriptor, DeviceNumber, Inode, LockFileIdentity, ProcessId,
     };
+    use super::super::lock_fakes::FakeProcFs;
+    use super::super::lock_holder::{
+        DescriptorScan, OwnerScan, append_owner, append_owner_lines, inspect_descriptors,
+    };
+    use super::super::lock_procfs::DescriptorEntries;
     use anyhow::{Result, ensure};
     use rstest::rstest;
-    use std::fs;
-    use std::os::unix::fs::MetadataExt;
-    use std::path::Path;
+
+    /// Names a lock file identity the tests can compare against.
+    const fn identity() -> LockFileIdentity {
+        LockFileIdentity::of(DeviceNumber::from_raw(0x0801), Inode::new(42))
+    }
 
     /// Verifies only a completed scan can speak about the descriptors it lacked.
     ///
@@ -55,7 +64,15 @@ mod holder_tests {
     ) {
         let own_pid = ProcessId::new(std::process::id());
         let mut lines = Vec::new();
-        append_owner(&mut lines, own_pid, scan, own_pid);
+        append_owner(
+            &mut lines,
+            OwnerScan {
+                pid: own_pid,
+                scan,
+                own_pid,
+                procfs: &FakeProcFs::default(),
+            },
+        );
         let rendered = lines.join("\n");
 
         assert_eq!(
@@ -85,51 +102,25 @@ mod holder_tests {
     ///
     /// This is the case that made the report intermittently useless. Another
     /// thread closing an unrelated descriptor between enumeration and the
-    /// metadata read fails an entry that has nothing to do with the lock, and
+    /// identity read fails an entry that has nothing to do with the lock, and
     /// `/proc/<pid>/fd` holds every descriptor in the process, so this happens
     /// during ordinary parallel test execution. A scan that discarded its
     /// matches would report the lock unexplained while the guard was plainly
     /// still open.
     ///
-    /// The scan is driven over a real temporary directory rather than asserted
-    /// through `append_owner`, and that is deliberate. An earlier version of
-    /// this test built a `DescriptorScan::Incomplete` by hand and passed it to
-    /// the report; it stayed green when the scan was mutated to discard its
-    /// matches, because the discard happens in the scan and the test never ran
-    /// it. Only driving `inspect_descriptors` over real entries pins the
-    /// behaviour that regressed.
-    ///
-    /// The entries are numbered so the live descriptor sorts before the broken
-    /// one, which is what makes the expectation exact: the scan reads `7` —
-    /// a real hard link to the lock file, so its metadata matches — and then
-    /// fails on `8`, a dangling symlink whose metadata cannot be read. Sorting
-    /// is why this is deterministic rather than dependent on enumeration order.
+    /// The descriptors are ordered so the live one is read first, which is what
+    /// makes the expectation exact: the scan matches `7` and then fails on `8`.
+    /// The ordering comes from the fake's listing, so the test states it rather
+    /// than relying on an enumeration order the filesystem does not promise.
     #[test]
     fn a_partial_scan_still_returns_the_descriptors_it_matched() -> Result<()> {
-        use crate::derive::generate::localization::artefact::lock_evidence::{
-            DeviceNumber, Inode, LockFileIdentity,
-        };
-        use std::os::unix::fs::MetadataExt;
+        let pid = ProcessId::new(1);
+        let procfs = FakeProcFs::default()
+            .with_descriptors(pid, vec![Descriptor::new(7), Descriptor::new(8)])
+            .with_identity(pid, Descriptor::new(7), identity())
+            .with_identity_failure(pid, Descriptor::new(8), "the entry vanished");
 
-        let root = TempRoot::new()?;
-        let lock_file = root.path().join("lock");
-        fs::write(&lock_file, b"")?;
-        let metadata = fs::metadata(&lock_file)?;
-        let identity = LockFileIdentity::of(
-            DeviceNumber::from_raw(metadata.dev()),
-            Inode::new(metadata.ino()),
-        );
-
-        let scanned = root.path().join("fd");
-        fs::create_dir(&scanned)?;
-        // A hard link is the same inode on the same device, so the scan's
-        // identity check must accept it exactly as it accepts `/proc`'s.
-        fs::hard_link(&lock_file, scanned.join("7"))?;
-        // Dangling: `fs::metadata` follows the link and fails, which is the
-        // ordinary "entry vanished between enumeration and read" case.
-        std::os::unix::fs::symlink(root.path().join("gone"), scanned.join("8"))?;
-
-        let outcome = inspect_descriptors(&scanned.to_string_lossy(), identity);
+        let outcome = inspect_descriptors(pid, identity(), &procfs);
         let Err((matched, reason)) = outcome else {
             anyhow::bail!("a scan with an unreadable entry must not report success");
         };
@@ -160,7 +151,15 @@ mod holder_tests {
             reason: "a later entry was unreadable".to_owned(),
         };
         let mut lines = Vec::new();
-        append_owner(&mut lines, own_pid, scan, own_pid);
+        append_owner(
+            &mut lines,
+            OwnerScan {
+                pid: own_pid,
+                scan,
+                own_pid,
+                procfs: &FakeProcFs::default(),
+            },
+        );
         let rendered = lines.join("\n");
 
         assert!(
@@ -181,117 +180,103 @@ mod holder_tests {
         );
     }
 
-    /// Verifies a process with no `/proc` entry reports an incomplete scan.
+    /// Verifies a process with no descriptor table reports an incomplete scan.
     ///
-    /// Unlike the table above, nothing here is injected: this is a real pid
-    /// the kernel cannot describe, so the whole path from `append_owner_lines`
-    /// — enumeration, failure, counting, and the summary line that says the
-    /// evidence is partial — is exercised against procfs itself. A pid of
-    /// `u32::MAX` is above `pid_max` on every supported kernel, so the scan
-    /// cannot accidentally observe a live process.
+    /// This is the injected counterpart to the real-procfs case the report
+    /// suite drives: the fake returns the listing failure, so the whole path
+    /// from `append_owner_lines` — enumeration, failure, counting, and the
+    /// summary line that says the evidence is partial — runs without needing a
+    /// pid the kernel is guaranteed to reject.
     #[test]
-    fn a_scan_that_cannot_be_read_reports_the_report_as_incomplete() {
-        use super::super::lock_holder::append_owner_lines;
-        use crate::derive::generate::localization::artefact::lock_evidence::{
-            DeviceNumber, Inode, LockFileIdentity,
-        };
+    fn an_unlistable_descriptor_table_is_an_incomplete_scan() {
+        let pid = ProcessId::new(4242);
+        let procfs = FakeProcFs::default().with_listing_failure(pid, "/proc/4242/fd: unreadable");
 
-        let missing = ProcessId::new(u32::MAX);
-        let identity = LockFileIdentity::of(DeviceNumber::from_raw(0), Inode::new(0));
+        let error = inspect_descriptors(pid, identity(), &procfs)
+            .expect_err("an unlistable table must not report success");
+        assert!(
+            error.0.is_empty(),
+            "nothing was read, so nothing can have matched: {:?}",
+            error.0
+        );
+        assert!(
+            error.1.contains("unreadable"),
+            "the failure must say the table could not be read: {}",
+            error.1,
+        );
+
         let mut lines = Vec::new();
-        append_owner_lines(&mut lines, &[missing], identity);
+        append_owner_lines(&mut lines, &[pid], identity(), &procfs);
         let rendered = lines.join("\n");
-
         assert!(
-            rendered.contains(&format!("/proc/{missing}/fd")),
-            "the report must name the directory it could not read: {rendered}",
-        );
-        assert!(
-            rendered.contains("the scan is incomplete"),
-            "an unreadable process must be reported as an incomplete scan: \
-             {rendered}",
-        );
-        assert!(
-            rendered.contains("1 process(es) could not be read completely"),
-            "the summary must count the process the scan could not read: \
-             {rendered}",
+            rendered.contains("could not be read completely"),
+            "an unlistable table must make the report say it is partial: {rendered}",
         );
         assert!(
             !rendered.contains("has no descriptor on the lock file"),
-            "an unreadable process must not be reported as holding nothing: \
-             {rendered}",
-        );
-    }
-
-    /// Verifies an unscannable directory is a failure, not an empty result.
-    ///
-    /// This is the other half of "did this scan finish": nothing at all was
-    /// read, so the report must say the scan is incomplete and must not treat
-    /// the emptiness as an absence. The directory is one that cannot exist, so
-    /// `read_dir` fails for every user and no permissions manifest is needed.
-    #[test]
-    fn a_directory_that_cannot_be_listed_is_an_incomplete_scan() {
-        let identity = LockFileIdentity::of(DeviceNumber::from_raw(0), Inode::new(0));
-
-        let missing = Path::new("/nonexistent-ortho-config-artefact-scan");
-        let outcome = inspect_descriptors(&missing.to_string_lossy(), identity);
-        let Err((matched, reason)) = outcome else {
-            panic!("a directory that cannot be listed must not report success");
-        };
-
-        assert!(
-            matched.is_empty(),
-            "nothing was read, so nothing can have matched: {matched:?}",
-        );
-        assert!(
-            reason.contains("unreadable"),
-            "the failure must say the directory could not be read: {reason}",
+            "an unlistable table must not be reported as holding nothing: {rendered}",
         );
     }
 
     /// Verifies non-descriptor names are skipped without failing the scan.
     ///
-    /// The skip is deliberate: every entry under `/proc/<pid>/fd` is a decimal
-    /// descriptor number written by the kernel, so a non-numeric name is not a
-    /// descriptor this scan could have examined and omitted. Treating it as a
-    /// fault would report every process as incompletely scanned and drown the
-    /// real failures. A placeholder word and a non-UTF-8 byte sequence cover
-    /// the two ways a name can fail to parse, and neither may affect the
-    /// descriptor that does parse.
+    /// Every entry under `/proc/<pid>/fd` is a decimal descriptor number
+    /// written by the kernel, so a name that does not parse is not a descriptor
+    /// this scan could have examined and omitted. Treating it as a fault would
+    /// mark every process incompletely scanned and drown the real failures.
+    /// The skipped name must also leave the descriptor that does parse intact,
+    /// which is why the good descriptor is listed after it.
     #[test]
     fn names_that_are_not_descriptors_are_skipped() -> Result<()> {
-        use std::ffi::OsStr;
-        use std::os::unix::ffi::OsStrExt;
-
-        let root = TempRoot::new()?;
-        let lock_file = root.path().join("lock");
-        fs::write(&lock_file, b"")?;
-        let metadata = fs::metadata(&lock_file)?;
-        let identity = LockFileIdentity::of(
-            DeviceNumber::from_raw(metadata.dev()),
-            Inode::new(metadata.ino()),
+        let pid = ProcessId::new(7);
+        let entries = DescriptorEntries::new(
+            vec![Descriptor::new(3)],
+            vec!["not-a-descriptor".to_owned(), "\u{fffd}\u{fffd}".to_owned()],
         );
+        // The reader keeps the names it could not parse, so the skip is
+        // recorded rather than silent: a report built from this table can say
+        // what it did not understand.
+        ensure!(
+            entries.unparsed() == ["not-a-descriptor", "\u{fffd}\u{fffd}"],
+            "the names that are not descriptors must survive the listing: {:?}",
+            entries.unparsed(),
+        );
+        let procfs = FakeProcFs::default()
+            .with_entry_listing(pid, entries)
+            .with_identity(pid, Descriptor::new(3), identity());
 
-        let scanned = root.path().join("fd");
-        fs::create_dir(&scanned)?;
-        fs::hard_link(&lock_file, scanned.join("7"))?;
-        // A word where a number belongs, and a name that is not even valid
-        // UTF-8. Both are skipped; neither may turn the scan into a failure.
-        fs::hard_link(&lock_file, scanned.join("not-a-descriptor"))?;
-        let non_utf8 = OsStr::from_bytes(b"\xff\xfe");
-        fs::hard_link(&lock_file, scanned.join(non_utf8))?;
-
-        let outcome = inspect_descriptors(&scanned.to_string_lossy(), identity);
-        let Ok(matched) = outcome else {
-            return Err(anyhow::anyhow!(
-                "non-descriptor names must be skipped, not treated as a failed scan"
-            ));
-        };
+        let matched = inspect_descriptors(pid, identity(), &procfs).map_err(|(_, reason)| {
+            anyhow::anyhow!("non-descriptor names must not fail the scan: {reason}")
+        })?;
 
         ensure!(
-            matched == vec![Descriptor::new(7)],
+            matched == vec![Descriptor::new(3)],
             "only the numeric name may be reported, and the skip must not \
              disturb it; got {matched:?}",
+        );
+        Ok(())
+    }
+
+    /// Verifies a descriptor on another file is not reported as holding the lock.
+    ///
+    /// The scan's job is to name descriptors *on this file*. A descriptor that
+    /// opens something else is an ordinary observation, not a fault, and must
+    /// neither appear in the report nor make the scan incomplete.
+    #[test]
+    fn a_descriptor_on_another_file_is_not_reported() -> Result<()> {
+        let pid = ProcessId::new(9);
+        let other = LockFileIdentity::of(DeviceNumber::from_raw(0x0802), Inode::new(99));
+        let procfs = FakeProcFs::default()
+            .with_descriptors(pid, vec![Descriptor::new(5)])
+            .with_identity(pid, Descriptor::new(5), other);
+
+        let matched = inspect_descriptors(pid, identity(), &procfs).map_err(|(_, reason)| {
+            anyhow::anyhow!("an unrelated descriptor is not a fault: {reason}")
+        })?;
+
+        ensure!(
+            matched.is_empty(),
+            "a descriptor on another file must not be reported as the lock: {matched:?}",
         );
         Ok(())
     }

@@ -26,28 +26,24 @@
 
 use std::fs;
 use std::path::Path;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 
 use super::artefact_lock::{LockProbe, lock_path, probe_lock};
+use super::lock_clock::{Clock, RealClock};
 #[cfg(target_os = "linux")]
-use super::lock_evidence::{
-    DeviceNumber, Inode, LockFileIdentity, LockRecord, ProcessId, parse_lock_record,
-};
+use super::lock_evidence::{DeviceNumber, Inode, LockFileIdentity, LockRecord, ProcessId};
+#[cfg(target_os = "linux")]
+use super::lock_procfs::{PROC_LOCKS, ProcFs, RealProcFs};
 use super::lock_support::SHORT_WAIT_THRESHOLD;
-
-/// Where the kernel publishes its lock table on Linux.
-#[cfg(target_os = "linux")]
-const PROC_LOCKS: &str = "/proc/locks";
 
 /// How long the delayed re-probe waits before looking at the lock again.
 ///
 /// The suite's existing short-wait constant rather than a new one: it is
 /// already small enough to sit inside a failing test's budget and long enough
 /// for a lock released a moment late to be observed as free.
-const RECHECK_DELAY: Duration = SHORT_WAIT_THRESHOLD;
+pub(super) const RECHECK_DELAY: Duration = SHORT_WAIT_THRESHOLD;
 
 /// How long a release assertion waits for a fork-inherited description to clear.
 ///
@@ -59,7 +55,10 @@ const RECHECK_DELAY: Duration = SHORT_WAIT_THRESHOLD;
 pub(super) const SETTLE_BUDGET: Duration = Duration::from_secs(2);
 
 /// How long each settling probe waits before looking at the lock again.
-const SETTLE_INTERVAL: Duration = Duration::from_millis(10);
+///
+/// Shared with the settle's own tests, which assert every wait is one interval
+/// and that none follows the final probe.
+pub(super) const SETTLE_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Explains why an `FLOCK` record can name this process while a child owns it.
 ///
@@ -98,7 +97,36 @@ pub(super) fn ensure_released(root: &Path, expectation: &str) -> Result<()> {
     let probe = probe_lock(root).with_context(|| expectation.to_owned())?;
     match probe {
         LockProbe::Free => Ok(()),
-        LockProbe::Held { metadata } => Err(report_hold(root, expectation, &metadata)),
+        LockProbe::Held { metadata } => Err(report_hold(
+            root,
+            expectation,
+            &metadata,
+            &Boundaries::real(),
+        )),
+    }
+}
+
+/// The clock and procfs the settle and its report read through.
+///
+/// They travel together everywhere they are used: every entry point that takes
+/// one takes the other, because a report that timed its own re-probe with a
+/// different clock than the settle used would describe a hold it cannot
+/// account for. Grouping them keeps the two in step and keeps the signatures
+/// from growing a parameter each time a boundary is added.
+pub(super) struct Boundaries<'a> {
+    /// When the settle's deadline has passed, and how it waits between probes.
+    pub(super) clock: &'a dyn Clock,
+    /// Where the report's kernel evidence is read.
+    pub(super) procfs: &'a dyn ProcFs,
+}
+
+impl Boundaries<'_> {
+    /// Returns the production boundaries: the real clock and real procfs.
+    pub(super) fn real() -> Self {
+        Self {
+            clock: &RealClock,
+            procfs: &RealProcFs,
+        }
     }
 }
 
@@ -130,6 +158,25 @@ pub(super) fn ensure_settles_free(root: &Path, expectation: &str) -> Result<()> 
     ensure_settles_free_observed(root, expectation, &|_| {})
 }
 
+/// Asserts the lock settles, with the clock and procfs the caller supplies.
+///
+/// The production entry points above supply [`RealClock`] and [`RealProcFs`];
+/// this one exists so a test can supply a fake and assert the deadline
+/// behaviour exactly rather than by waiting it out. Everything else about the
+/// settle — the probe order, what counts as a hold, what the report says — is
+/// shared, so a fake changes the *timing* under test and nothing else.
+///
+/// # Errors
+///
+/// The same failure [`ensure_settles_free`] describes.
+pub(super) fn ensure_settles_free_with(
+    root: &Path,
+    expectation: &str,
+    boundaries: &Boundaries<'_>,
+) -> Result<()> {
+    ensure_settles_free_observed_with(root, expectation, &|_| {}, boundaries)
+}
+
 /// Asserts the lock settles, reporting every probe to `observe` first.
 ///
 /// [`ensure_settles_free`] with one addition: `observe` is handed each probe
@@ -157,17 +204,43 @@ pub(super) fn ensure_settles_free_observed(
     expectation: &str,
     observe: &dyn Fn(&LockProbe),
 ) -> Result<()> {
-    let deadline = Instant::now() + SETTLE_BUDGET;
+    ensure_settles_free_observed_with(root, expectation, observe, &Boundaries::real())
+}
+
+/// Asserts the lock settles, taking the clock and procfs explicitly.
+///
+/// This is the whole of the settle; the entry points above differ only in what
+/// they supply. The deadline is read from `clock` and the wait between probes
+/// is taken through it, so a fake that never advances reaches the deadline in
+/// as many iterations as there are probes rather than in
+/// `SETTLE_BUDGET / SETTLE_INTERVAL` real sleeps.
+///
+/// The settle sleeps only when it is about to probe again. It does not sleep
+/// after the probe that returned `Free`, and it does not sleep after the probe
+/// that found the deadline passed: either would delay the answer the caller is
+/// waiting for by one interval it cannot use.
+///
+/// # Errors
+///
+/// The same failure [`ensure_settles_free`] describes, and the probe's own I/O
+/// error when a probe cannot be taken.
+pub(super) fn ensure_settles_free_observed_with(
+    root: &Path,
+    expectation: &str,
+    observe: &dyn Fn(&LockProbe),
+    boundaries: &Boundaries<'_>,
+) -> Result<()> {
+    let deadline = boundaries.clock.now() + SETTLE_BUDGET;
     let mut probe = probe_lock(root).with_context(|| expectation.to_owned())?;
     loop {
         observe(&probe);
         let LockProbe::Held { metadata } = probe else {
             return Ok(());
         };
-        if Instant::now() >= deadline {
-            return Err(report_hold(root, expectation, &metadata));
+        if boundaries.clock.now() >= deadline {
+            return Err(report_hold(root, expectation, &metadata, boundaries));
         }
-        thread::sleep(SETTLE_INTERVAL);
+        boundaries.clock.sleep(SETTLE_INTERVAL);
         probe = probe_lock(root).with_context(|| expectation.to_owned())?;
     }
 }
@@ -177,7 +250,12 @@ pub(super) fn ensure_settles_free_observed(
 /// The caller's expectation leads, every line below it is one observation, and
 /// nothing here can fail: a report that could return an error of its own would
 /// have to choose between two failures at the one moment both matter.
-fn report_hold(root: &Path, expectation: &str, metadata: &fs::Metadata) -> anyhow::Error {
+fn report_hold(
+    root: &Path,
+    expectation: &str,
+    metadata: &fs::Metadata,
+    boundaries: &Boundaries<'_>,
+) -> anyhow::Error {
     let mut lines = vec![
         expectation.to_owned(),
         format!(
@@ -185,14 +263,14 @@ fn report_hold(root: &Path, expectation: &str, metadata: &fs::Metadata) -> anyho
             lock_path(root).display()
         ),
     ];
-    lines.extend(holder_lines(root, metadata));
-    lines.push(recheck_line(root));
+    lines.extend(holder_lines(root, metadata, boundaries.procfs));
+    lines.push(recheck_line(root, boundaries.clock));
     anyhow!(lines.join("\n"))
 }
 
 /// Reports what the platform can say about the lock's holder.
 #[cfg(target_os = "linux")]
-fn holder_lines(root: &Path, metadata: &fs::Metadata) -> Vec<String> {
+fn holder_lines(root: &Path, metadata: &fs::Metadata, procfs: &dyn ProcFs) -> Vec<String> {
     use std::os::unix::fs::MetadataExt;
 
     let device = DeviceNumber::from_raw(metadata.dev());
@@ -202,8 +280,8 @@ fn holder_lines(root: &Path, metadata: &fs::Metadata) -> Vec<String> {
         format!("device {device}, inode {inode}"),
     ];
     let identity = LockFileIdentity::of(device, inode);
-    let owners = append_record_lines(&mut lines, identity);
-    super::lock_holder::append_owner_lines(&mut lines, &owners, identity);
+    let owners = append_record_lines(&mut lines, identity, procfs);
+    super::lock_holder::append_owner_lines(&mut lines, &owners, identity, procfs);
     lines
 }
 
@@ -213,7 +291,11 @@ fn holder_lines(root: &Path, metadata: &fs::Metadata) -> Vec<String> {
 /// see that the lock was genuinely held, and see that only the *holder* is
 /// unavailable rather than the evidence.
 #[cfg(not(target_os = "linux"))]
-fn holder_lines(root: &Path, metadata: &fs::Metadata) -> Vec<String> {
+fn holder_lines(
+    root: &Path,
+    metadata: &fs::Metadata,
+    _procfs: &dyn super::lock_procfs::ProcFs,
+) -> Vec<String> {
     vec![format!(
         "holder diagnostics are Linux-only: {} ({} bytes) is held, but this platform cannot report which process holds it",
         lock_path(root).display(),
@@ -227,8 +309,8 @@ fn holder_lines(root: &Path, metadata: &fs::Metadata) -> Vec<String> {
 /// the first points at a descriptor closed later than intended, the second at a
 /// live owner. One delayed observation separates them for the cost of a single
 /// short sleep, paid only on an already-failing path.
-fn recheck_line(root: &Path) -> String {
-    thread::sleep(RECHECK_DELAY);
+fn recheck_line(root: &Path, clock: &dyn Clock) -> String {
+    clock.sleep(RECHECK_DELAY);
     match probe_lock(root) {
         Ok(LockProbe::Free) => format!("re-probe after {RECHECK_DELAY:?}: now free"),
         Ok(LockProbe::Held { .. }) => format!("re-probe after {RECHECK_DELAY:?}: still held"),
@@ -242,8 +324,12 @@ fn recheck_line(root: &Path) -> String {
 /// a peer waiting — but their pid is never treated as an owner: a waiter does
 /// not hold anything.
 #[cfg(target_os = "linux")]
-fn append_record_lines(lines: &mut Vec<String>, identity: LockFileIdentity) -> Vec<ProcessId> {
-    let records = match read_records() {
+fn append_record_lines(
+    lines: &mut Vec<String>,
+    identity: LockFileIdentity,
+    procfs: &dyn ProcFs,
+) -> Vec<ProcessId> {
+    let records = match procfs.lock_table() {
         Ok(records) => records,
         Err(report) => {
             lines.push(report);
@@ -278,16 +364,4 @@ fn append_record_lines(lines: &mut Vec<String>, identity: LockFileIdentity) -> V
     owners.sort_unstable();
     owners.dedup();
     owners
-}
-
-/// Reads and parses the kernel's lock table.
-///
-/// A failed read is returned as text rather than an error: the caller is
-/// already reporting a failure, and a diagnosis that could not be gathered must
-/// appear *inside* that report.
-#[cfg(target_os = "linux")]
-fn read_records() -> Result<Vec<LockRecord>, String> {
-    fs::read_to_string(PROC_LOCKS)
-        .map(|table| table.lines().filter_map(parse_lock_record).collect())
-        .map_err(|error| format!("{PROC_LOCKS}: unreadable ({error})"))
 }
