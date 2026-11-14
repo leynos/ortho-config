@@ -103,22 +103,27 @@ def _kill_and_reap_direct_process(process: subprocess.Popen[str]) -> None:
 
 
 def _child_environment(
-    path: str, parent_environment: collections.abc.Mapping[str, str]
+    path: str,
+    parent_environment: collections.abc.Mapping[str, str],
+    is_windows: bool,
 ) -> dict[str, str]:
     """Build the minimal environment needed by Bun and its shell harness."""
+    allowed_names = BUN_ENVIRONMENT_ALLOWLIST
+    if is_windows:
+        allowed_names = tuple(
+            dict.fromkeys(
+                name.upper()
+                for name in (
+                    *BUN_ENVIRONMENT_ALLOWLIST,
+                    *WINDOWS_ENVIRONMENT_ALLOWLIST,
+                )
+            )
+        )
     environment = {
         name: parent_environment[name]
-        for name in BUN_ENVIRONMENT_ALLOWLIST
+        for name in allowed_names
         if name in parent_environment
     }
-    if os.name == "nt":
-        environment.update(
-            {
-                name: parent_environment[name]
-                for name in WINDOWS_ENVIRONMENT_ALLOWLIST
-                if name in parent_environment
-            }
-        )
     environment["PATH"] = path
     return environment
 
@@ -159,7 +164,7 @@ def _run_bash(
     if bash_executable is None:
         pytest.skip("bash is required to execute extracted workflow scripts")
 
-    environment = _child_environment(path, os.environ)
+    environment = _child_environment(path, os.environ, is_windows=os.name == "nt")
     process = subprocess.Popen(
         [bash_executable],
         cwd=working_directory,
@@ -180,7 +185,8 @@ def _run_bash(
     )
 
 
-def test_child_environment_excludes_unlisted_parent_values() -> None:
+@pytest.mark.parametrize("is_windows", (False, True), ids=("posix", "windows"))
+def test_child_environment_excludes_unlisted_parent_values(is_windows: bool) -> None:
     """Only Bun, proxy and platform variables enter the child environment."""
     parent_environment = {
         "HOME": "/runner/home",
@@ -188,6 +194,7 @@ def test_child_environment_excludes_unlisted_parent_values() -> None:
         "BUN_INSTALL": "/runner/bun",
         "XDG_CACHE_HOME": "/runner/cache",
         "HTTPS_PROXY": "https://proxy.example",
+        "https_proxy": "http://lowercase-proxy.example",
         "CS_ACCESS_TOKEN": "secret-value",
         "UNRELATED_VARIABLE": "unused-value",
         "SYSTEMROOT": "C:\\Windows",
@@ -195,13 +202,22 @@ def test_child_environment_excludes_unlisted_parent_values() -> None:
     }
     child_path = "/runner/bin"
 
-    actual_environment = _child_environment(child_path, parent_environment)
+    actual_environment = _child_environment(
+        child_path, parent_environment, is_windows
+    )
     expected_environment = {
-        name: value
-        for name, value in parent_environment.items()
-        if name in BUN_ENVIRONMENT_ALLOWLIST
-        or (os.name == "nt" and name in WINDOWS_ENVIRONMENT_ALLOWLIST)
+        "HOME": "/runner/home",
+        "TMPDIR": "/runner/tmp",
+        "BUN_INSTALL": "/runner/bun",
+        "XDG_CACHE_HOME": "/runner/cache",
+        "HTTPS_PROXY": "https://proxy.example",
     }
+    if is_windows:
+        expected_environment.update(
+            {"SYSTEMROOT": "C:\\Windows", "USERPROFILE": "C:\\Users\\runner"}
+        )
+    else:
+        expected_environment["https_proxy"] = "http://lowercase-proxy.example"
     expected_environment["PATH"] = child_path
 
     assert actual_environment == expected_environment, (
