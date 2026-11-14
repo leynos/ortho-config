@@ -178,6 +178,21 @@ pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
 /// The lease decides whether they run at all: a contract that finds this
 /// run's roots already complete returns the paths without packaging, so the
 /// work is done once per run rather than once per test process.
+///
+/// # Why the fill is clamped to the contract's *original* allowance
+///
+/// The after-run's six "22 second deadline" failures came from a contract that
+/// won the lease with 22 s of its 900 s allowance left, so its fill was clamped
+/// to that remainder. Restarting the clock after the lease wait would give the
+/// fill a fresh 900 s, but it would also let a contract that waited 878 s then
+/// pack for 440 s - 1,318 s inside a 960 s nextest allowance. nextest would
+/// stop the test first, and the error naming the invocation would never be
+/// printed, which is exactly what [`Budget`]'s module comment exists to
+/// prevent. The clamp is therefore correct. What it exposes is that the
+/// measured pair - 802 s plus 342 s, about 1,144 s - cannot fit a 900 s
+/// allowance under either bound, and that is recorded in
+/// `docs/execplans/harden-boundary-deadline-evidence-20261113.md` rather than
+/// repaired here by raising a figure.
 fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
     let repository = repository_root()?;
     let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
