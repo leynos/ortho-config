@@ -1,0 +1,27 @@
+{
+  "commands": [
+    {
+      "path": ["tool"],
+      "options": [
+        {"long": "color", "value_type": "string"},
+        {"long": "json", "value_type": "bool"}
+      ],
+      "canonical_verb": null
+    },
+    {
+      "path": ["tool", "records", "get"],
+      "options": [
+        {"long": "json", "value_type": "bool"}
+      ],
+      "canonical_verb": "get"
+    },
+    {
+      "path": ["tool", "build"],
+      "options": [
+        {"long": "color", "value_type": "string"},
+        {"long": "json", "value_type": "bool"}
+      ],
+      "canonical_verb": null
+    }
+  ]
+}
