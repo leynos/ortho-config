@@ -323,8 +323,13 @@ mod proptests;
 #[path = "renderer_proptests.rs"]
 mod renderer_proptests;
 
+#[cfg(test)]
+#[path = "output_proptests.rs"]
+mod output_proptests;
+
 // Visible to the crate so the skill-validation bridge regression can build IR
 // fixtures with the same builders instead of a second copy; the module is
 // test-only and adds nothing to the public API.
+
 #[cfg(test)]
 pub(crate) mod tests;

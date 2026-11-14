@@ -150,6 +150,10 @@ impl Default for NestedFixtureCommand {
 /// with a structured stream, and an output field classified non-localized so a
 /// change of human language cannot be mistaken for a protocol rename.
 ///
+/// The command also declares a full `output(...)` block, because the
+/// structured-output contract is only observable end to end when a fixture
+/// declares a capability an agent could act on.
+///
 /// Both records declare every policy leaf, because a leaf that code generation
 /// silently drops is invisible to a test whose fixture never declares it. The
 /// four toggle leaves share a three-variant vocabulary, so one pair repeats
@@ -196,6 +200,13 @@ impl Default for NestedFixtureCommand {
             subprocess_inheritance = "allowed",
             field("error_code", localization = "non_localized")
         )
+    ),
+    output(
+        supports_json = true,
+        stdout = "data",
+        stderr_diagnostics = true,
+        exit_class(name = "success", meaning = "The greeting was printed"),
+        exit_class(name = "usage", meaning = "The invocation was invalid")
     )
 )]
 pub struct NestedGreetCommand {
@@ -208,9 +219,9 @@ pub struct NestedGreetCommand {
 }
 /// Empty command proving leaf commands without options survive the bridge.
 ///
-/// Deliberately declares no `renderer(...)` group: it is the undeclared child
-/// the E4 scenarios assert keeps the legacy support defaults and makes no
-/// presentation claim.
+/// Deliberately declares neither a `renderer(...)` nor an `output(...)` group:
+/// it is the undeclared child the scenarios assert keeps the legacy support
+/// defaults and makes no presentation or structured-output claim.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "NESTED_FIXTURE")]
 pub struct NestedVersionCommand {}
@@ -269,8 +280,15 @@ impl Default for NestedAdminSubcommand {
 }
 
 /// Options for the nested fixture audit command.
+///
+/// Declares an explicit structured-output refusal. `version` declares nothing,
+/// so the pair is what proves an author's `false` reaches an agent while an
+/// author's silence stays silence.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "NESTED_FIXTURE")]
+#[ortho_config(
+    prefix = "NESTED_FIXTURE",
+    output(supports_json = false, stdout = "summary")
+)]
 pub struct NestedAuditCommand {
     /// Reports intended audit actions without applying them.
     #[ortho_config(default = false)]

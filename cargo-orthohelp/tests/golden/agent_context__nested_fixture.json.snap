@@ -110,6 +110,10 @@ expression: snapshot
         "machine": {
           "supported": false
         }
+      },
+      "output": {
+        "supports_json": false,
+        "stdout": "summary"
       }
     },
     {
@@ -313,6 +317,21 @@ expression: snapshot
             }
           ]
         }
+      },
+      "output": {
+        "supports_json": true,
+        "stdout": "data",
+        "stderr_diagnostics": true,
+        "exit_classes": [
+          {
+            "name": "success",
+            "meaning": "The greeting was printed"
+          },
+          {
+            "name": "usage",
+            "meaning": "The invocation was invalid"
+          }
+        ]
       }
     },
     {
