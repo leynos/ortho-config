@@ -9,7 +9,10 @@
 // shared helper turns every case into a privacy error and never reaches the
 // transposition.
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "one include reaches the whole vocabulary; the fixture calls only part of it"
+)]
 #[path = "../../src/derive/generate/localization/artefact/artefact_lock_evidence.rs"]
 mod evidence;
 
