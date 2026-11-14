@@ -223,7 +223,15 @@ all possible public values are validated.
   ADR-0023 during the third rebase, the realized `output` rows and
   omission rules in design §8.1/§8.2, the component-design records, the
   users'-guide section, and a tested `guide-output-metadata` example.
-- [ ] M1: metadata, derive transport, documentation and integration coverage.
+- [x] (2026-11-14) M1 gate repair: the first certificate attempt failed on
+  Clippy (19 denied lints in the new suites) and the second on Whitaker's
+  `module-max-lines` (`agent_context/mod.rs` at 402 lines). Both were repaired
+  in commits `b63ec8ad` and `163d280a`; no assertion was weakened.
+- [x] (2026-11-14) M1 certificate: all five gates green at `163d280a` —
+  check-fmt, lint (rustdoc, Clippy, Whitaker, docstring-coverage 100%), test
+  (112 Rust targets plus pytest 128 passed), markdownlint (including spelling),
+  and nixie.
+- [x] M1: metadata, derive transport, documentation and integration coverage.
 - [ ] M2: structured-output lint and executable consumer examples.
 - [ ] M3: exit documentation, process regression evidence and completion.
 
@@ -242,6 +250,15 @@ must not promise automatic command linting through that CLI flag.
 The existing `main() -> Result<(), OrthohelpError>` maps ordinary runtime
 errors to failure status 1. Clap uses its own exit path. Policy denial shares
 status 1 with other failures; `summary.deny` distinguishes it in the report.
+
+The lint gates catch what a compiling test run does not. The new wire tests
+first returned `Result` so a fixture could use `?`, which the repository's
+denied `panic_in_result_fn` rejects; they also took owned JSON values and
+indexed vectors. Separately, Whitaker's `module-max-lines` counts the
+`agent_context` root file, so adding one `mod` plus its re-export took it to
+402 lines. Both are cheap to avoid up front: write asserting tests as `()`,
+take references in helpers, and check the owning module's length before adding
+to it.
 
 ## Decision log
 
