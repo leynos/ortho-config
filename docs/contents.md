@@ -7,7 +7,7 @@
 
 - [User's guide](users-guide.md): use OrthoConfig in application and library
   code, including configuration loading, merge behaviour, generated
-  documentation metadata, and error handling.
+  documentation metadata, skill-manifest validation, and error handling.
 - [Developer's guide](developers-guide.md): maintain and extend this
   repository, including build, test, lint, release, and contribution workflows.
 - [cargo-orthohelp policy and agent-context API guide](cargo-orthohelp-api-guide.md):
@@ -222,6 +222,9 @@
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
+  - [Skill manifest validation](execplans/6-3-2-skill-manifest-validation.md):
+    delivery record for roadmap item 6.3.2, validating manifest claims and
+    normalized examples against the complete command contract.
   - [Dual-renderer metadata](execplans/7-2-2-dual-renderer-metadata.md):
     review the approval-gated plan for renderer support, presentation policies,
     and stable protocol fields in roadmap 7.2.2.

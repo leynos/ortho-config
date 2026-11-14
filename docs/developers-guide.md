@@ -1018,6 +1018,54 @@ routing, build graph behaviour, and application-specific persistence. If
 OrthoConfig executes downstream commands or owns downstream side effects, stop
 and revisit the boundary in the agent-native design.
 
+### Skill-manifest validation internals
+
+`cargo_orthohelp::skill_validation` is the reusable half of that boundary. Its
+modules divide by one job each:
+
+- `input` holds the supplied claims, the effective surface, and the typed
+  `CommandSurfaceError` that rejects an ambiguous surface before any claim is
+  read;
+- `resolve::CommandIndex` builds the path lookup once per call;
+- `validate::manifest_index` answers duplicate and ownership questions once per
+  call;
+- `validate` orchestrates the reference checks, and `validate::examples` the
+  example checks;
+- `policy_check` turns the 7.1 policy and the §5 glossary into advice;
+- `surface` adapts an `AgentContext` plus an explicit `GlobalOption` list into
+  an effective surface, inventing no inheritance; and
+- `report` holds the finding, coverage, and status types plus the stable
+  finding codes.
+
+Two conventions are easy to break and expensive to debug:
+
+1. **Declarations and invocations are different policy questions.** A
+   declaration (`--color` in a command reference) asserts only that the option
+   exists; it is silent when the name is a known concept. An invocation (an
+   example's `--color always`) also asserts a value, so it is the only place
+   value advice applies. `flag_name_advice` and `option_use_advice` keep that
+   split; do not fold them back into one function.
+2. **The effective surface is per command.** Never union a root command's
+   options into its children. The surface is the consumer's statement of what
+   each command accepts, and the tests pin the negative case.
+3. **Global-option classification is supplied, never inferred.** Only
+   `EffectiveOption::is_global` opens the glossary rules; a matching name on a
+   domain command must stay silent in value advice. `from_agent_context` marks
+   an option global only because the caller listed it in `GlobalOption`.
+4. **One finding per offending claim.** A reference's flag and an example's
+   option each produce at most one finding. The option checks chain —
+   ownership, then reality — so an undeclared option is reported once and not
+   re-reported as unaccepted.
+
+Avoid `expect` and `unwrap` in these modules, including test-only helpers
+outside a `#[test]` body; `support.rs` returns values instead. Test helpers
+live in `support`, `tests`, `tests_examples`, `tests_policy`, `tests_surface`,
+`proptests`, and `proptests_examples`; the property tests use independent
+linear oracles rather than calling the validator's own index. Coverage counts
+extraction (`examples_checked`) separately from binding (`examples_bound`), and
+`ValidationStatus::Complete` requires the two to agree with no unsupported
+examples.
+
 ## Profile layering (roadmap 9.1.1)
 
 Profile support is opt-in at the struct level through the derive attribute
@@ -1174,6 +1222,14 @@ unimplemented 7.1.2 lint rules do not import them yet. Assertions in new policy
 tests split by crate: `assert!`-style boolean checks in `cargo-orthohelp`, and
 matcher- or collection-shaped checks in `ortho_config` agent-context tests
 (Decision D8).
+
+The human-facing global-option glossary is a second table with one owner,
+`cargo-orthohelp/src/policy/vocabulary/global_options.rs`. Each entry pairs a
+concept with its canonical long name, the values it accepts, and the legacy
+spellings that should be reported. `skill_validation::policy_check` is its
+current consumer: it turns a resolved flag or option use into advice naming the
+canonical spelling. Add a new canonical option, accepted value, or near miss in
+that table only; consumers look concepts up rather than restating them.
 
 Fixtures: `tests/fixtures/orthohelp_policy_warn_fixture/` (mode `warn`, one
 redundant exception, one scoped exception) and
@@ -4781,6 +4837,41 @@ PyYAML otherwise keeps the last value silently and a job declaring `runs-on`
 twice would read as the half GitHub may not run. The library's loader does the
 same for the CV-005 shape and exits 2 on a file it cannot read, rather than
 passing.
+
+## Code health rules
+
+`.codescene/code-health-rules.json` holds every deviation from CodeScene's
+built-in code health rules. Write only the overrides, never a full copy of the
+rule set: a rule a file does not mention keeps its default weight, so the file
+stays a list of deliberate exceptions rather than a second, drifting rule
+catalogue.
+
+A rule set needs a `matching_content_path` glob and should carry a
+`matching_content_path_doc` saying why that path is different. Prefer the
+narrowest glob that covers the case, and prefer a partial weight to `0.0`. Do
+not disable a critical rule; prefer reshaping the code, which is what most
+findings ask for.
+
+Test-only fixture builders are the one recurring exception. A helper such as
+`command(&[&str], &[&str])` takes the literal flag and path names the test is
+about, which is exactly what a string-heavy signature is for, so the "String
+Heavy Function Arguments" factor is disabled for those modules alone.
+Production code takes the struct instead: `policy_check` binds the policy,
+path, and name once in a `ClaimPolicy` borrow, and `validate` builds findings
+through `FindingData` constructors rather than a three-field literal at every
+call site.
+
+Check a change before pushing it:
+
+```bash
+cs rules-config validate
+cs check-rules cargo-orthohelp/src/skill_validation/support.rs
+cs delta main --output-format json --pretty
+```
+
+`cs rules-config validate` rejects a malformed file, `cs check-rules` confirms
+which rule set a path matches, and `cs delta` reports only the issues the
+change introduces.
 
 ## Command checklist
 

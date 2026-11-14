@@ -62,6 +62,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-renderer-metadata",
     "guide-scoped-discovery",
     "guide-selected-subcommand-sources",
+    "guide-skill-validation",
+    "guide-skill-validation-output",
     "guide-source-aware-load",
     "guide-subcommand",
     "guide-subcommand-merge-sources",

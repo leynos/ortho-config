@@ -28,6 +28,7 @@ omitted when undeclared.
 | **Optional**         | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.         |
 | **Optional**         | Agent-native policy checks | Read the projected `renderer` block from agent context.                      |
 | **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.     |
+| **Optional**         | Skill manifest validation  | Supply an explicit effective command surface to the validator.               |
 | **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.          |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
@@ -202,3 +203,16 @@ implementation in tests. See the
 [user's guide](users-guide.md#run-test-subprocesses-under-a-deadline) for the
 contract and the [developer's guide](developers-guide.md) for why the
 repository routes Cargo, host-tool, and documented-binary commands through it.
+
+## 8. Optionally validate skill manifests
+
+`cargo_orthohelp::skill_validation` checks the command references and
+structured examples a consumer extracted from a skill manifest against the same
+command contract agent context describes. Adoption is opt-in: the library reads
+no manifest, parses no Markdown, and runs no example. A consumer supplies
+normalized claims, an explicit effective command surface, and a resolved
+policy, and receives one ordered report.
+
+See
+[Validate skill manifests against commands](users-guide.md#validate-skill-manifests-against-commands)
+for the contract and a worked example.

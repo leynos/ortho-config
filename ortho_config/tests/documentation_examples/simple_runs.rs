@@ -126,6 +126,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         args: &[],
         stdout: "",
     },
+    SimpleRun {
+        id: "guide-skill-validation",
+        args: &[],
+        stdout: "build-workflow 1 skill.unknown_flag\nresolved=0\n",
+    },
 ];
 
 /// Runs every [`SimpleRun`] against the built workspace.

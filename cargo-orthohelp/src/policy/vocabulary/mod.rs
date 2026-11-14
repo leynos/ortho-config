@@ -15,6 +15,8 @@
 
 use crate::policy::Vocabulary;
 
+pub mod global_options;
+
 /// Canonical command verbs from design §5.
 pub const CANONICAL_VERBS: &[&str] = &[
     "get", "list", "create", "update", "delete", "jobs", "profile", "feedback",

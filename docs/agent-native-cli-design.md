@@ -334,6 +334,78 @@ manifest path, schema version, and command index. Downstream applications
 perform manifest validation and own skill-specific prose and workflow guidance,
 such as Weaver's safe Rust rename workflow or Netsuke's build workflow.
 
+### 3.4.1 Skill-manifest validation ownership
+
+"Downstream applications perform manifest validation" means the consumer calls
+a reusable validator; it does not mean every consumer reimplements the checks.
+`cargo_orthohelp::skill_validation` provides the checks, while the consumer
+keeps every decision the library cannot make safely:
+
+- **Consumer owns loading and extraction.** It reads the manifest, validates
+  its format, parses prose, and extracts command references and examples.
+  OrthoConfig never loads a manifest path, never parses arbitrary Markdown, and
+  never executes a shell example. Manifest paths are inert metadata.
+- **Consumer owns the effective command surface.** It supplies one
+  `CommandContract` per command: the exact path, the options that command
+  accepts, and its canonical verb. Inheritance is never inferred. Unioning root
+  options into child commands would silently certify a claim the real CLI
+  rejects, so a consumer that cannot produce an unambiguous per-command surface
+  must stop rather than approximate one. Each option states explicitly whether
+  the tool treats it as a global option on that command; global-option policy
+  applies only to those, never to an option whose name merely resembles one.
+  `EffectiveCommandSurface::from_agent_context` builds a surface from an
+  `AgentContext` plus the `GlobalOption` list the consumer owns, and adds
+  nothing the caller did not list.
+- **Library owns the comparison.** Given the claims and the surface, the
+  validator reports unknown paths, flags absent from the referenced command,
+  duplicate manifest IDs, examples that do not bind to a declared reference,
+  example options the reference does not declare or the command does not
+  accept, and vocabulary or global-option advice under the configured policy.
+  Each offending claim yields at most one finding for its path and one per
+  declared flag or example option: an example option its reference does not
+  declare is reported once and not re-reported against the real command.
+
+An example arrives *normalized* rather than as a command string:
+
+- the command path it runs;
+- each option's name, whether a value was present, and the value itself;
+- positional values;
+- the owning manifest ID and command-reference ordinal; and
+- an extraction state of `Checked` or `Unsupported`.
+
+Normalization is what makes the claims checkable without guessing shell
+grammar. A consumer that cannot parse an example marks it `Unsupported`; the
+report counts it as unchecked and the overall status becomes `Partial`. An
+unsupported example is never counted as validated, and never silently dropped.
+
+Extraction is not binding. `examples_checked` counts extracted examples, while
+`examples_bound` counts those that then reached their option checks; an example
+whose manifest is unknown or ambiguous, whose ordinal selects no reference, or
+whose path differs from its reference is extracted but never bound. The report
+status is `Complete` only when nothing was unsupported and every extracted
+example bound, so a partially validated run can never read as complete.
+
+Results separate two classes that must not be conflated:
+
+- **Structural findings** record a false claim. Their severity is always deny
+  and their presence always fails validation, whatever the policy mode.
+  Exceptions cannot authorize a nonexistent command or flag.
+- **Policy findings** record style advice from the 7.1 vocabulary rules and
+  the §5 global-option glossary. They follow `off`, `warn`, and `deny`, and
+  configured exceptions suppress them.
+
+Findings identify a stable manifest ID and a one-based source ordinal. They do
+not quote raw paths, argument values, or surrounding prose, so a report is safe
+to publish and stable across runs. Findings are ordered by manifest input
+order, source ordinal, then finding code, which makes repeated runs over the
+same input byte-identical.
+
+The extraction boundary is deliberately narrow. Validation does not promise
+exhaustive discovery from prose, general Markdown or shell parsing, executable
+command validity, option arity, quoting, side effects, or example runtime
+success. Those remain consumer responsibilities, and the checked coverage
+counts describe only what was actually supplied.
+
 ## 4. Whole-CLI introspection
 
 Whole-CLI introspection is the first implementation dependency. The
@@ -415,6 +487,14 @@ must be explicit and visible in generated context. It should also flag
 near-miss global options when a project uses legacy names for a concept in the
 glossary, such as `--output-format`, `--colour-policy`, `--diag-json`, boolean
 `--progress`, `--no-emoji`, or boolean `--accessible`.
+
+The glossary above is implemented once, as data, in
+`cargo_orthohelp::policy::vocabulary::global_options`. The skill-manifest
+validator reads it today, so a new canonical option or accepted value is added
+in one place rather than re-stated per check. The roadmap 7.1.3 policy pass
+will read the same table when its lint rules are implemented. Accepted values
+are matched exactly; an unaccepted value produces advice that names the
+accepted set and never echoes the supplied value.
 
 ## 6. Required command semantics
 
