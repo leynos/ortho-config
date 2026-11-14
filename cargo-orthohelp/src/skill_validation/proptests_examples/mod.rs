@@ -13,12 +13,9 @@
 //! into a child. Each control fails the comparison it guards, so neither
 //! comparison can pass vacuously.
 
-use std::collections::BTreeSet;
-
 use proptest::prelude::*;
 
 use super::input::{ExampleExtraction, NormalizedExample, OptionUse, SkillValidationInput};
-use super::report::{SkillValidationReport, codes};
 use super::support::{command, input, manifest, reference, surface};
 
 /// Fixed command paths the generator may declare or reference.
@@ -33,6 +30,9 @@ const NAMES: &[&str] = &["json", "color", "bogus", "extra"];
 /// Opaque values an example may carry, including hostile and empty shapes.
 const VALUES: &[&str] = &["always", "with space", "-x", "s3krit"];
 
+/// Positional arguments an example may carry, including hostile shapes.
+const POSITIONALS: &[&str] = &["input.txt", "--literal", "with space"];
+
 /// One generated example claim.
 #[derive(Debug, Clone)]
 struct Spec {
@@ -46,6 +46,8 @@ struct Spec {
     path: usize,
     /// Option uses in source order, as name index and optional value.
     options: Vec<(usize, Option<String>)>,
+    /// Positional arguments the example shows, preserved verbatim.
+    positionals: Vec<String>,
 }
 
 /// One generated validation case.
@@ -68,18 +70,28 @@ fn spec_strategy() -> impl Strategy<Value = Spec> {
         ),
         0..=3,
     );
-    (0..2u8, prop::bool::ANY, 0..=3usize, 0..PATHS.len(), uses).prop_map(
-        |(manifest, is_extracted, ordinal, path, options)| Spec {
-            manifest,
-            is_extracted,
-            ordinal,
-            path,
-            options: options
-                .into_iter()
-                .map(|(name, value)| (name, value.map(str::to_owned)))
-                .collect(),
-        },
+    let extra_positionals = prop::collection::vec(prop::sample::select(POSITIONALS), 0..=2);
+    (
+        0..2u8,
+        prop::bool::ANY,
+        0..=3usize,
+        0..PATHS.len(),
+        uses,
+        extra_positionals,
     )
+        .prop_map(
+            |(manifest, is_extracted, ordinal, path, options, positionals)| Spec {
+                manifest,
+                is_extracted,
+                ordinal,
+                path,
+                options: options
+                    .into_iter()
+                    .map(|(name, value)| (name, value.map(str::to_owned)))
+                    .collect(),
+                positionals: positionals.into_iter().map(str::to_owned).collect(),
+            },
+        )
 }
 
 /// Generates varied surfaces, claims, and examples.
@@ -145,7 +157,7 @@ fn build_example(spec: &Spec, position: usize, manifest_id: &str) -> NormalizedE
                 source_ordinal: index.saturating_add(1),
             })
             .collect(),
-        positionals: Vec::new(),
+        positionals: spec.positionals.clone(),
         source_ordinal: position.saturating_add(1),
         extraction: if spec.is_extracted {
             ExampleExtraction::Checked
@@ -191,204 +203,5 @@ impl Case {
     }
 }
 
-/// One expected example finding.
-struct Expected {
-    /// Position of the owning manifest, or `usize::MAX` when none owns it.
-    order: usize,
-    /// Manifest ID the example named.
-    manifest_id: String,
-    /// One-based source ordinal of the example.
-    source_ordinal: usize,
-    /// Expected finding code.
-    code: &'static str,
-    /// Expected option name, when the code carries one.
-    option: Option<String>,
-}
-
-/// Where one example's findings are anchored.
-#[derive(Clone)]
-struct Anchor {
-    /// Position of the owning manifest, or `usize::MAX` when none owns it.
-    order: usize,
-    /// Manifest ID the example named.
-    manifest_id: String,
-    /// One-based source ordinal of the example.
-    source_ordinal: usize,
-}
-
-impl Anchor {
-    /// Anchors an expectation to one example.
-    fn new(order: usize, manifest_id: &str, source_ordinal: usize) -> Self {
-        Self {
-            order,
-            manifest_id: manifest_id.to_owned(),
-            source_ordinal,
-        }
-    }
-
-    /// Builds one expected finding at this anchor.
-    fn finding(&self, code: &'static str, option: Option<&str>) -> Expected {
-        Expected {
-            order: self.order,
-            manifest_id: self.manifest_id.clone(),
-            source_ordinal: self.source_ordinal,
-            code,
-            option: option.map(str::to_owned),
-        }
-    }
-}
-
-/// One example whose owner resolved uniquely, plus what the surface says.
-struct Bound<'a> {
-    /// Where this example's findings are anchored.
-    anchor: &'a Anchor,
-    /// The owning manifest's command references.
-    references: &'a [(usize, u8)],
-    /// The surface's option mask for the example's path, when declared.
-    accepted: Option<u8>,
-}
-
-/// Coverage the oracle predicts.
-#[derive(Debug, Default)]
-struct ExpectedCoverage {
-    /// Examples that reached their option checks.
-    bound: usize,
-    /// Examples the consumer extracted completely.
-    checked: usize,
-    /// Examples the consumer could not extract.
-    unchecked: usize,
-}
-
-/// The oracle's accumulated expectations.
-#[derive(Default)]
-struct Oracle {
-    /// Expected findings in claim order.
-    findings: Vec<Expected>,
-    /// Expected coverage.
-    coverage: ExpectedCoverage,
-}
-
-impl Oracle {
-    /// Predicts one example's findings and coverage contribution.
-    fn expect(&mut self, case: &Case, spec: &Spec, source_ordinal: usize) {
-        if !spec.is_extracted {
-            self.coverage.unchecked = self.coverage.unchecked.saturating_add(1);
-            return;
-        }
-        self.coverage.checked = self.coverage.checked.saturating_add(1);
-        let manifest_id = format!("m{}", spec.manifest);
-        let owners: Vec<(usize, &[(usize, u8)])> = case
-            .manifests
-            .iter()
-            .enumerate()
-            .filter(|(_, entry)| entry.0 == spec.manifest)
-            .map(|(order, entry)| (order, entry.1.as_slice()))
-            .collect();
-
-        match owners.as_slice() {
-            [] => {
-                let anchor = Anchor::new(usize::MAX, &manifest_id, source_ordinal);
-                self.findings
-                    .push(anchor.finding(codes::EXAMPLE_UNKNOWN_MANIFEST, None));
-            }
-            [(order, _), _, ..] => {
-                let anchor = Anchor::new(*order, &manifest_id, source_ordinal);
-                self.findings
-                    .push(anchor.finding(codes::EXAMPLE_AMBIGUOUS_MANIFEST, None));
-            }
-            [(order, references)] => {
-                let anchor = Anchor::new(*order, &manifest_id, source_ordinal);
-                let bound = Bound {
-                    anchor: &anchor,
-                    references,
-                    accepted: declared_mask(case, spec.path),
-                };
-                self.expect_bound(spec, &bound);
-            }
-        }
-    }
-
-    /// Predicts the findings of an example whose owner resolved uniquely.
-    fn expect_bound(&mut self, spec: &Spec, bound: &Bound<'_>) {
-        let Some((reference_path, declared)) = spec
-            .ordinal
-            .checked_sub(1)
-            .and_then(|index| bound.references.get(index))
-        else {
-            self.findings
-                .push(bound.anchor.finding(codes::EXAMPLE_UNBOUND_REFERENCE, None));
-            return;
-        };
-        if *reference_path != spec.path {
-            self.findings
-                .push(bound.anchor.finding(codes::EXAMPLE_PATH_MISMATCH, None));
-            return;
-        }
-        self.coverage.bound = self.coverage.bound.saturating_add(1);
-        // Ownership is checked before reality, and the two are not symmetric: an
-        // option the reference never declared is reported even when the path is
-        // absent from the surface. Only a *declared* option needs the surface,
-        // and a path the surface does not declare stops the remaining checks
-        // rather than cascading.
-        let mut seen: BTreeSet<&str> = BTreeSet::new();
-        for (name_index, _) in &spec.options {
-            let name = NAMES.get(*name_index).copied().unwrap_or("json");
-            if !seen.insert(name) {
-                continue;
-            }
-            let bit = 1u8 << name_index;
-            let is_declared = *name_index < DECLARED.len() && declared & bit != 0;
-            let code = if is_declared {
-                match bound.accepted {
-                    None => return,
-                    Some(known) if known & bit == 0 => Some(codes::EXAMPLE_UNKNOWN_OPTION),
-                    Some(_) => None,
-                }
-            } else {
-                Some(codes::EXAMPLE_UNDECLARED_OPTION)
-            };
-            if let Some(finding_code) = code {
-                self.findings
-                    .push(bound.anchor.finding(finding_code, Some(name)));
-            }
-        }
-    }
-}
-
-/// Re-derives the expected findings, coverage, and status for one case.
-fn oracle(case: &Case) -> (Vec<Expected>, ExpectedCoverage) {
-    let mut oracle = Oracle::default();
-    for (position, spec) in case.examples.iter().enumerate() {
-        oracle.expect(case, spec, position.saturating_add(1));
-    }
-    // The validator's sort is stable, and expectations were pushed in the same
-    // order, so equal keys keep the same relative order on both sides.
-    oracle.findings.sort_by(|left, right| {
-        left.order
-            .cmp(&right.order)
-            .then(left.source_ordinal.cmp(&right.source_ordinal))
-            .then(left.code.cmp(right.code))
-    });
-    (oracle.findings, oracle.coverage)
-}
-
-/// Reduces a report to the example findings the oracle predicts.
-fn example_comparables(
-    report: &SkillValidationReport,
-) -> Vec<(String, usize, String, Option<String>)> {
-    report
-        .findings
-        .iter()
-        .filter(|finding| finding.code.starts_with("skill.example."))
-        .map(|finding| {
-            (
-                finding.manifest_id.clone(),
-                finding.source_ordinal,
-                finding.code.clone(),
-                finding.option.clone(),
-            )
-        })
-        .collect()
-}
-
+mod oracle;
 mod properties;

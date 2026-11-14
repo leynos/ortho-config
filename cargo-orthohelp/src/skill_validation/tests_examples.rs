@@ -9,7 +9,7 @@
 use pretty_assertions::assert_eq;
 use rstest::rstest;
 
-use super::report::codes;
+use super::report::{ValidationStatus, codes};
 use super::support::{
     codes_of, command, command_with_globals, example, input, manifest, option_use, policy,
     reference, surface,
@@ -141,6 +141,43 @@ fn a_root_only_option_is_not_available_on_a_child_command() {
         codes_of(&report),
         vec![codes::EXAMPLE_UNKNOWN_OPTION, codes::UNKNOWN_FLAG],
         "the effective surface must not union the root command's inputs"
+    );
+}
+
+#[test]
+fn an_example_whose_path_the_surface_lacks_is_not_counted_bound() {
+    // The manifest declares the reference, so the example binds to it, but the
+    // surface does not declare that path. No option can then be accepted and
+    // the later option checks never run, so the run must not claim the example
+    // was validated. The missing path is already reported once against the
+    // manifest, so the example adds no finding of its own.
+    let commands = surface(vec![command(&["tool"], &["json"])]);
+    let claims = input(
+        vec![manifest(
+            "operation-skill",
+            vec![reference(&["tool", "paint"], &["json", "yaml"])],
+        )],
+        vec![example(
+            "operation-skill",
+            1,
+            &["tool", "paint"],
+            vec![option_use("json", None, 1), option_use("yaml", None, 2)],
+        )],
+    );
+
+    let report =
+        validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
+
+    assert_eq!(codes_of(&report), vec![codes::UNKNOWN_PATH]);
+    assert_eq!(report.coverage.examples_checked, 1);
+    assert_eq!(
+        report.coverage.examples_bound, 0,
+        "an example whose options were never checked is not bound"
+    );
+    assert_eq!(
+        report.status,
+        ValidationStatus::Partial,
+        "a partially checked example must not report completeness"
     );
 }
 
