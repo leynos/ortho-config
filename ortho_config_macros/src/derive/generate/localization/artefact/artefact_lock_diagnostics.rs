@@ -113,18 +113,27 @@ pub(super) fn ensure_released(root: &Path, expectation: &str) -> Result<()> {
 /// different clock than the settle used would describe a hold it cannot
 /// account for. Grouping them keeps the two in step and keeps the signatures
 /// from growing a parameter each time a boundary is added.
+///
+/// The procfs half is Linux-only. This platform holds the clock on its own,
+/// because the settle is portable while the holder evidence is not: on a
+/// platform without `/proc` the report says so and reads nothing, so carrying a
+/// procfs there would be a boundary with no observation behind it — and it
+/// would drag every procfs type into a build that cannot use any of them.
 pub(super) struct Boundaries<'a> {
     /// When the settle's deadline has passed, and how it waits between probes.
     pub(super) clock: &'a dyn Clock,
     /// Where the report's kernel evidence is read.
+    #[cfg(target_os = "linux")]
     pub(super) procfs: &'a dyn ProcFs,
 }
 
 impl Boundaries<'_> {
-    /// Returns the production boundaries: the real clock and real procfs.
+    /// Returns the production boundaries: the real clock, and the real procfs
+    /// where the platform has one.
     pub(super) fn real() -> Self {
         Self {
             clock: &RealClock,
+            #[cfg(target_os = "linux")]
             procfs: &RealProcFs,
         }
     }
@@ -169,6 +178,10 @@ pub(super) fn ensure_settles_free(root: &Path, expectation: &str) -> Result<()> 
 /// # Errors
 ///
 /// The same failure [`ensure_settles_free`] describes.
+// Gated on the platform with the one suite that supplies a fake: on another
+// target nothing calls it, and `-D warnings` would report it as dead code —
+// the same class of failure `Descriptor` was gated for.
+#[cfg(target_os = "linux")]
 pub(super) fn ensure_settles_free_with(
     root: &Path,
     expectation: &str,
@@ -263,16 +276,17 @@ fn report_hold(
             lock_path(root).display()
         ),
     ];
-    lines.extend(holder_lines(root, metadata, boundaries.procfs));
+    lines.extend(holder_lines(root, metadata, boundaries));
     lines.push(recheck_line(root, boundaries.clock));
     anyhow!(lines.join("\n"))
 }
 
 /// Reports what the platform can say about the lock's holder.
 #[cfg(target_os = "linux")]
-fn holder_lines(root: &Path, metadata: &fs::Metadata, procfs: &dyn ProcFs) -> Vec<String> {
+fn holder_lines(root: &Path, metadata: &fs::Metadata, boundaries: &Boundaries<'_>) -> Vec<String> {
     use std::os::unix::fs::MetadataExt;
 
+    let procfs = boundaries.procfs;
     let device = DeviceNumber::from_raw(metadata.dev());
     let inode = Inode::new(metadata.ino());
     let mut lines = vec![
@@ -291,11 +305,7 @@ fn holder_lines(root: &Path, metadata: &fs::Metadata, procfs: &dyn ProcFs) -> Ve
 /// see that the lock was genuinely held, and see that only the *holder* is
 /// unavailable rather than the evidence.
 #[cfg(not(target_os = "linux"))]
-fn holder_lines(
-    root: &Path,
-    metadata: &fs::Metadata,
-    _procfs: &dyn super::lock_procfs::ProcFs,
-) -> Vec<String> {
+fn holder_lines(root: &Path, metadata: &fs::Metadata, _boundaries: &Boundaries<'_>) -> Vec<String> {
     vec![format!(
         "holder diagnostics are Linux-only: {} ({} bytes) is held, but this platform cannot report which process holds it",
         lock_path(root).display(),

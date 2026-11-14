@@ -250,13 +250,20 @@ mod lock_clock;
 #[cfg(test)]
 #[path = "artefact_lock_evidence.rs"]
 mod lock_evidence;
-#[cfg(test)]
+// Gated on the platform as well as `test`, like `lock_process`: every item in
+// it is derived from `/proc`, and `Descriptor` is itself `cfg(target_os =
+// "linux")`. Compiled on another target, the module's own imports would name
+// items that platform removes and `-D warnings` would fail the build — which is
+// what `build-test (windows)` did before this gate.
+#[cfg(all(test, target_os = "linux"))]
 #[path = "artefact_lock_procfs.rs"]
 mod lock_procfs;
 // The procfs half of the report, split from the deciding half so each stays
 // inside the file-length cap and so "no descriptor" and "could not read" have
-// one place to be kept apart.
-#[cfg(test)]
+// one place to be kept apart. Gated on the platform with the scan it holds:
+// every function in it takes a `ProcFs`, and its only caller is the Linux-only
+// `holder_lines`.
+#[cfg(all(test, target_os = "linux"))]
 #[path = "artefact_lock_holder.rs"]
 mod lock_holder;
 // The scan's tests live beside it, not inside: the cap counts every line a
@@ -273,8 +280,10 @@ mod lock_process;
 #[path = "artefact_lock_report_tests.rs"]
 mod lock_report_tests;
 // The test doubles both suites drive the boundaries with, shared so the two
-// cannot disagree about what a boundary answers.
-#[cfg(test)]
+// cannot disagree about what a boundary answers. Gated on the platform with
+// them: both suites that drive these doubles are Linux-only, and `FakeProcFs`
+// implements the Linux-only `ProcFs` over the Linux-only `Descriptor`.
+#[cfg(all(test, target_os = "linux"))]
 #[path = "artefact_lock_fakes.rs"]
 mod lock_fakes;
 // The settle's deadline and sleep placement, which a real clock can only be

@@ -171,7 +171,7 @@ pub(super) struct FakeClock {
 
 impl FakeClock {
     /// Starts at `start`, advancing by `step` on every sleep.
-    pub(super) fn new(start: Instant, step: Duration) -> Self {
+    pub(super) const fn new(start: Instant, step: Duration) -> Self {
         Self {
             now: Cell::new(start),
             step,
