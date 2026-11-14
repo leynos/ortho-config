@@ -1,7 +1,7 @@
 """Contract for the pinned merger and its exact coverage inputs.
 
-These tests pin both workflow commands and exercise their guards against
-missing, empty and unexpected reports.
+These tests pin both workflow commands and exercise their input guards and
+empty-output check.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -52,7 +52,6 @@ MERGER_VERSION: typ.Final[str] = "6.0.0"
 
 #: A small report the stub emits unchanged when the merge succeeds.
 LCOV_OUTPUT: typ.Final[str] = "TN:\nSF:src/lib.rs\nDA:1,1\nend_of_record\n"
-
 
 def _job(workflow_name: str, job_name: str) -> dict[str, object]:
     """Load one named job from a workflow."""
@@ -124,7 +123,7 @@ def _run_script(
 ) -> tuple[subprocess.CompletedProcess[str], pathlib.Path]:
     """Run a merge script with a local `bun` stub and return its result."""
     stub_directory = working_directory / "bin"
-    stub_directory.mkdir()
+    stub_directory.mkdir(exist_ok=True)
     argument_path = working_directory / "bun-arguments.txt"
     bun_stub = stub_directory / "bun"
     bun_stub.write_text(
@@ -197,8 +196,8 @@ def test_each_workflow_has_one_exactly_pinned_merge_step(
     assert "if ! test -s lcov.info; then" in script, (
         f"expected the output guard to use test -s; got {script!r}"
     )
-    assert "if ! grep -Eq '^SF:.+' lcov.info; then" in script, (
-        f"expected the output guard to require an SF record; got {script!r}"
+    assert "if ! grep -Eq '^SF:.*[^[:space:]]' lcov.info; then" in script, (
+        f"expected the output guard to require a non-empty SF path; got {script!r}"
     )
     assert _pinned_version(script) == MERGER_VERSION, (
         f"expected merger version {MERGER_VERSION!r}; "
