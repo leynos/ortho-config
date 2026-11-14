@@ -256,6 +256,16 @@ explicitly approves it and the prerequisites below are complete.
   v0.11.0 migration guide. Evidence: `85769ae3`; the full sequential sweep
   passed again and CodeScene reported no new issue.
 
+- [x] (2026-11-14) Corrected the last stale claim CodeRabbit's Developer
+  Documentation check reported: "Outcomes & retrospective" no longer says the
+  linter and the validator read the shared glossary today. It names
+  `cargo_orthohelp::policy::vocabulary::global_options` as the glossary data,
+  records the skill-manifest validator as its only current consumer, and states
+  that the roadmap 7.1.2 and 7.1.3 linter and policy passes will read the table
+  once implemented, matching `docs/agent-native-cli-design.md` §5. Evidence:
+  `make fmt` and `make markdownlint` pass; the sentence no longer contradicts
+  the roadmap item states.
+
 ## Surprises & discoveries
 
 - Observation: `SkillManifest` and `SkillCommandRef` exist as serializable
@@ -425,10 +435,12 @@ Implementation (2026-11-10): EP-M1 to EP-M3 are complete. The reusable
 validator lives in `cargo_orthohelp::skill_validation` and consumes supplied
 manifest claims, normalized examples, an explicit per-command effective option
 surface, and a resolved policy. The shared global-option glossary is data in
-`cargo_orthohelp::policy::vocabulary::global_options`; the linter and the
-validator read the same table. Structural findings are independent of policy
-mode, policy advice is emitted only for resolved claims, and report order is
-stable by manifest input order, source ordinal, then code.
+`cargo_orthohelp::policy::vocabulary::global_options`. The skill-manifest
+validator is its only consumer today. The roadmap 7.1.2 and 7.1.3 linter and
+policy passes will read the table once they are implemented. Structural
+findings are independent of policy mode, policy advice is emitted only for
+resolved claims, and report order is stable by manifest input order, source
+ordinal, then code.
 
 Lessons: the two largest implementation files exceeded the 400-line cap and
 were split (`validate` into `validate/mod.rs`, `validate/examples.rs`,
