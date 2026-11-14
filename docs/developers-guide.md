@@ -332,10 +332,25 @@ reads anything; the record answers "did this run already finish" and outlives
 the lease. Neither answers "may these roots be replaced while I read them", and
 a contract that reuses them reads them *after* `prepare` returns, with no lock
 held. So every process that touches the target holds the run guard exclusively
-for its whole life: a second boundary run in the same checkout has to wait, and
+for its whole life: a second process reaching the target has to wait, and
 cannot begin replacing a set the first is still reading. The guard is
 process-wide, not per call, precisely because the reads outlive the call that
 promised them.
+
+The guard's span is a process's life, which is *not* the same as a run's. It
+stops two processes overlapping, and that is what the record's `Reused` answer
+needs: no packaging step may replace the roots while the process that was
+promised them is reading. It does not stop two whole runs interleaving process
+by process - A's process exits, B's replaces the record, A's next process
+packages again - so reuse is deduplicated per process, and the guard should not
+be described as excluding overlapping runs. An overlapping run's cost is
+bounded rather than shared: its process waits for the guard up to its own
+contract allowance, then reports the contention, so two whole runs interleaved
+pay the packaging cost up to once per process instead of once per run. Making
+the reuse span a run rather than a process would need a run-lifetime guard (a
+lock keyed on the run identifier, held by whoever is still alive) or a
+packaging target per run; neither is implemented, and the suite does not
+currently depend on it.
 
 Three properties are worth keeping in mind when editing it. The lease is held
 for the packaging step alone, never while a contract reads the roots, so

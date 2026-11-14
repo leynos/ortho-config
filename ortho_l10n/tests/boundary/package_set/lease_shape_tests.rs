@@ -9,8 +9,9 @@
 //! emptying a process-local cache in its own process.
 //!
 //! They are separated from [`super::lease_tests`] because that module's cases
-//! drive the lease through real locks and temporary directories; these never
-//! touch either.
+//! drive the lease through real locks on a real packaging target. These read
+//! source text, and the two that need somewhere to plant a file take the same
+//! throwaway tree the lease cases use rather than a target with a lock on it.
 //!
 //! # Binding to calls, not substrings
 //!
@@ -114,9 +115,10 @@ fn the_packaging_boundary_is_entered_once_per_run() -> Result<()> {
 /// guarantee was stated over a tree the bypass was not in - so this fixture
 /// plants the call exactly there and requires the scan to find it.
 ///
-/// The fixture is a scratch tree, never the repository: these cases run from a
-/// checkout that must not be written to, and the property under test is about
-/// the scan's reach rather than about any file that exists.
+/// The fixture writes into a throwaway tree under the boundary root, the same
+/// place [`super::scratch`] puts its packaging targets, and not into any source
+/// file: what is under test is the scan's reach, not any file the checkout
+/// already holds. The tree is a `TempDir`, so a case leaves nothing behind.
 #[rstest]
 fn a_call_outside_package_set_is_counted(scratch_sources: Result<ScratchSources>) -> Result<()> {
     let scratch = scratch_sources?;
@@ -177,7 +179,8 @@ impl ScratchSources {
 /// Build a [`ScratchSources`] tree for a case that plants its own sources.
 ///
 /// Real repository sources are deliberately not used, so a case can plant a
-/// bypass without writing to the checkout.
+/// bypass without writing to any tracked file. The tree itself lives under the
+/// boundary root, beside the packaging targets, and is removed on drop.
 #[fixture]
 fn scratch_sources(scratch_root: Result<Scratch>) -> Result<ScratchSources> {
     let scratch = scratch_root?;

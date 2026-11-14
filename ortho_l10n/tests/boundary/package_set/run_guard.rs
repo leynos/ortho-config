@@ -1,4 +1,4 @@
-//! Excludes overlapping boundary runs from one checkout.
+//! Excludes overlapping boundary processes from one checkout.
 //!
 //! The packaging lease answers "is a packaging step running right now". It does
 //! not answer "may the roots I was just promised be replaced while I read
@@ -12,8 +12,20 @@
 //! This module supplies that exclusion: a second lock, [`RunGuard`], taken by
 //! every process that reaches the target and held for the process's whole life.
 //! Holding it per process is the smallest span that covers the reads, which
-//! outlive the call that promised them, and it costs nothing when no second run
-//! is present.
+//! outlive the call that promised them, and it costs nothing when no second
+//! process is present.
+//!
+//! # What the guard does not cover
+//!
+//! Its span is a process, not a run, and the difference is visible if two whole
+//! runs interleave: A's process holds the guard, exits, B's process replaces the
+//! record, and A's next process packages afresh. So the guarantee is "no two
+//! processes overlap", which is what the record's `Reused` answer needs - the
+//! roots cannot be replaced under a reader that is still running - and not "one
+//! packaging step per run". Nothing in the suite depends on the stronger claim;
+//! wording that made it would be overstating this lock. Reuse across a whole
+//! run would need a guard held for the run instead, keyed on the run identifier,
+//! or a packaging target per run.
 //!
 //! It is deliberately *not* the packaging lease, and it could not be folded
 //! into it. The lease is taken and released around one step; widening it to the
@@ -76,9 +88,9 @@ pub(crate) fn hold_run(boundary: &Utf8Path, deadline: Instant) -> Result<RunGuar
         let left = deadline.saturating_duration_since(Instant::now());
         ensure!(
             !left.is_zero(),
-            "another boundary run holds {guard_path} for this checkout; \
-             overlapping runs would replace the packaged roots one another is \
-             reading, so this contract stopped instead",
+            "another boundary process holds {guard_path} for this checkout; \
+             overlapping processes would replace the packaged roots one another \
+             is reading, so this contract stopped instead",
         );
         std::thread::sleep(LEASE_POLL_INTERVAL.min(left));
     }
