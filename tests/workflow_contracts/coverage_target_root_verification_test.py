@@ -9,9 +9,12 @@ ran, so nothing in the Rust tree could report it and no local gate can observe
 it.
 
 Two steps therefore read the environment back after both coverage passes and
-require the directory the passes built in. This module pins their guards,
-shells, positions and assertions; `coverage_target_root_behaviour_test.py`
-executes the same scripts against supplied environments.
+require the derived directory to exist. Both passes share one job environment,
+so the variables record what each pass inherited and the directory records that
+a coverage build created it; neither is a separate receipt from each pass, and
+the steps say so. This module pins their guards, shells, positions and
+assertions; `coverage_target_root_behaviour_test.py` executes the same scripts
+against supplied environments.
 
 Run via `make test-workflow-contracts`.
 """
@@ -51,8 +54,12 @@ COVERAGE_VARIABLES: typ.Final[tuple[str, ...]] = (
 DERIVED_DIRECTORY: typ.Final[str] = "llvm-cov-target"
 
 #: The summary line each successful check writes, so a passing run says which
-#: root it observed rather than only that it observed one.
-OBSERVED_LINE: typ.Final[str] = "Both coverage passes built under"
+#: root it observed and what it compared, rather than only that it passed. The
+#: wording stops at the variables and the directory: the passes share one job
+#: environment, so neither check observes a receipt from each pass separately.
+OBSERVED_LINE: typ.Final[str] = (
+    "Chosen coverage target root exists and the published variables match:"
+)
 
 
 def _build_test_steps() -> list[dict[str, typ.Any]]:
@@ -185,8 +192,9 @@ def test_each_check_reads_back_and_names_both_variables(
         f"{name!r} never reads {variable}, so a pass could build under a root "
         "the check does not look at"
     )
-    assert f"{variable} is '" in run, (
-        f"{name!r} must name {variable} in its failure message"
+    assert f"{variable} is not the chosen coverage target root" in run, (
+        f"{name!r} must state that {variable} is not the chosen root, rather "
+        "than infer what the passes did"
     )
 
 
@@ -242,10 +250,18 @@ def test_the_linux_check_requires_the_chosen_directory_to_exist() -> None:
 
 @pytest.mark.parametrize("name", [WINDOWS_VERIFY_STEP, LINUX_VERIFY_STEP])
 def test_each_verification_reports_the_root_it_observed(name: str) -> None:
-    """A passing run says which root was in use, not only that it passed."""
+    """A passing run says which root it observed and what it compared.
+
+    The message must not claim a receipt from each coverage pass, because both
+    passes share one job environment and the directory is written by whichever
+    pass runs first.
+    """
     run = _verification_run(name)
     assert OBSERVED_LINE in run, (
-        f"{name!r} must report the root it observed"
+        f"{name!r} must report the root it observed and the match it checked"
+    )
+    assert "Both coverage passes built under" not in run, (
+        f"{name!r} claims a per-pass receipt the check does not observe"
     )
     assert "GITHUB_STEP_SUMMARY" in run, (
         f"{name!r} must publish the observed root to the job summary"

@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0020: Verify the coverage target root the passes received
+# Architectural decision record (ADR) 0020: Verify the coverage target root in use
 
 ## Status
 
@@ -23,8 +23,8 @@ edit that adds a step-level `env`, that reorders a chooser after the actions,
 or that lets a platform's value arrive empty would leave the chooser looking
 correct while the coverage processes built somewhere else — and the first
 evidence would again be a refused command line on one leg. Reading the
-variables back, and requiring the directory the passes built in, turns that
-class of edit into a failure where it happens.
+variables back, and requiring the derived directory to exist, turns that class
+of edit into a failure where it happens.
 
 ## Decision Drivers
 
@@ -84,6 +84,15 @@ Adopt Option A. Two steps named `Verify the Windows coverage target root` and
 reads both variables, compares them with the root its chooser derives, and
 requires that directory to exist. Each writes the root it observed to the step
 summary, so a passing run records the value rather than the expectation.
+
+What the steps observe is bounded, and their success line says so: "Chosen
+coverage target root exists and the published variables match". Both coverage
+passes inherit one job environment, so the variables record what each pass was
+given, not what it did with it, and the derived directory is written by
+whichever pass runs first. A pass that built elsewhere would not change either
+check. Distinguishing the passes would need evidence from each coverage
+invocation, which is Option D's cost; the projection contract remains the guard
+for the failure this ADR responds to.
 
 The Linux step is plain Bash over `$RUNNER_TEMP`, so its acceptance and
 rejection paths are exercised by the contract suite on every host. The Windows

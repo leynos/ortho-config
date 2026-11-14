@@ -3233,15 +3233,15 @@ contained. A change to the runner image that lengthened that prefix, or that
 repeated the root more often, would move this projection rather than fail it;
 the hosted Windows leg is what observes the prefix the runner actually used.
 
-#### Verifying the root the passes received
+#### Verifying the coverage target root in use
 
 The choosers publish through `GITHUB_ENV`, which records intent. The two
 `Verify the … coverage target root` steps read it back after the second
-coverage action and require the directory the passes built in, so a chooser
-that is shadowed by an `env` block, reordered, or left with an empty value
-fails the leg that owns it instead of surfacing later as a refused command
-line. Each step recomputes its expected root from the chooser's own expression
-— the Windows step re-derives the drive root from `RUNNER_TEMP`, the Linux step
+coverage action and require the chosen directory to exist, so a chooser that is
+shadowed by an `env` block, reordered, or left with an empty value fails the
+leg that owns it instead of surfacing later as a refused command line. Each
+step recomputes its expected root from the chooser's own expression — the
+Windows step re-derives the drive root from `RUNNER_TEMP`, the Linux step
 rebuilds `$RUNNER_TEMP/llvm-cov-target` — so there is no second copy of the
 path to drift.
 
@@ -3252,7 +3252,12 @@ is `/`; the suite observes both its rejection paths there and leaves acceptance
 to the hosted Windows leg, which runs the step with the real directory present.
 The check observes the environment and the directory, not the length of any
 command line: a root chosen correctly but still too long passes the check and
-fails at the compiler, which is what the projection arithmetic above guards.
+fails at the compiler, which is what the projection arithmetic above guards. It
+also observes them once, not per pass. Both coverage actions inherit one job
+environment, so the variables record what each pass was given rather than what
+it did, and the directory is created by whichever pass runs first. The steps
+therefore report that the chosen root exists and the published variables match,
+and a pass that built elsewhere would leave both checks passing.
 
 ### Opting out with `BUILD_STANDARD`
 
