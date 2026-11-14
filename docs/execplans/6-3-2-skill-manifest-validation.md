@@ -563,6 +563,17 @@ decision to introduce formal verification.
   `e4038718` then passed with `MAKE_EXIT:0` and 113 `test result: ok` suites;
   the whole gate sweep was repeated on that commit with a clean working tree,
   so every gate certificate now refers to one candidate.
+- Repository gates on the replayed candidate (2026-11-14, head `a465f690`,
+  based on `origin/main` `724839c4`): `make check-fmt` reported 103 files
+  unchanged, `make markdownlint` (with spelling) reported zero issues, and
+  `make nixie` validated every diagram. `make typecheck` finished with
+  `MAKE_EXIT:0`; `make lint` completed rustdoc, Clippy, Whitaker, and the
+  docstring-coverage gate (1011 documented items) with `MAKE_EXIT:0`;
+  `make test` finished with `MAKE_EXIT:0`, 114 `test result: ok` suites, no
+  failing test, and the Python suite at 128 passed with 5 skipped. The replay
+  invalidated the earlier certificates by candidate identity, so these replace
+  them. Each gate wrote
+  `/tmp/<gate>-ortho-config-6-3-2-skill-manifest-validation.out`.
 
 No introduced contractual business logic is selected for formal verification:
 exact finite membership and reuse of completed policy rules have direct,
