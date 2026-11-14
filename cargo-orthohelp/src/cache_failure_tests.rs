@@ -14,6 +14,11 @@
 //! `/`-separated relative link targets and POSIX permission bits have no
 //! portable spelling. The two absent-root cases are the exceptions: a missing
 //! directory is missing on every platform, so they run everywhere.
+//!
+//! One case also depends on the permission bits being enforced, which a
+//! privileged account bypasses. It reports the skip on standard error rather
+//! than returning silently, because a silent return leaves the suite claiming
+//! a pass for a case that never ran.
 
 use super::*;
 
@@ -237,6 +242,27 @@ fn a_source_entry_that_is_not_valid_utf8_is_reported() {
     );
 }
 
+/// Say on standard error why the unreadable-directory case is not running.
+///
+/// A silent early return leaves `cargo test` reporting a pass for a case that
+/// never executed, so an account that bypasses permission bits would look the
+/// same as one where the walk was proven to abort. The suite's output is the
+/// only place that difference can be seen.
+///
+/// `print_stderr` is denied workspace-wide because production code should log
+/// through `tracing`; this is a test process announcing a skip, and there is no
+/// subscriber to receive an event.
+#[expect(
+    clippy::print_stderr,
+    reason = "a skipped test has no other way to report that it did not run"
+)]
+fn report_mode_bits_not_enforced() {
+    eprintln!(
+        "SKIP an_unreadable_source_directory_aborts_the_walk: \
+         this account can read a mode-000 directory"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn an_unreadable_source_directory_aborts_the_walk() {
@@ -265,6 +291,7 @@ fn an_unreadable_source_directory_aborts_the_walk() {
     std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o755))
         .expect("restore directory access");
     let Some(attempted) = reached else {
+        report_mode_bits_not_enforced();
         return;
     };
     let (path, source) =
