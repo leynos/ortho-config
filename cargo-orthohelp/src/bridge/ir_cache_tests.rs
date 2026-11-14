@@ -6,8 +6,8 @@
 //! that cannot be replaced. Both have to be reported with the stage that
 //! produced them, because the caller names the outcome from that stage alone.
 
-use super::BridgeCache;
-use super::ir_cache::{PublishStage, write_ir_cache};
+use super::super::BridgeCache;
+use super::{PublishStage, write_ir_cache};
 use crate::error::OrthohelpError;
 
 use camino::Utf8PathBuf;
