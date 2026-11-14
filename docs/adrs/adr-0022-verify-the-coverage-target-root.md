@@ -44,10 +44,10 @@ of edit into a failure where it happens.
 ### Option A: Read the environment back after both coverage passes
 
 One step per platform reads both variables after the second coverage action and
-requires the directory the coverage action built in. The expected value is
-recomputed from the same expression the chooser uses, so the two cannot drift:
-the Windows step re-derives the drive root from `RUNNER_TEMP`, and the Linux
-step rebuilds `$RUNNER_TEMP/llvm-cov-target`.
+requires the chosen directory to exist. The expected value is recomputed from
+the same expression the chooser uses, so the two cannot drift: the Windows step
+re-derives the drive root from `RUNNER_TEMP`, and the Linux step rebuilds
+`$RUNNER_TEMP/llvm-cov-target`.
 
 ### Option B: Trust the chooser and keep only the contract tests
 
@@ -88,11 +88,11 @@ summary, so a passing run records the value rather than the expectation.
 What the steps observe is bounded, and their success line says so: "Chosen
 coverage target root exists and the published variables match". Both coverage
 passes inherit one job environment, so the variables record what each pass was
-given, not what it did with it, and the derived directory is written by
-whichever pass runs first. A pass that built elsewhere would not change either
-check. Distinguishing the passes would need evidence from each coverage
-invocation, which is Option D's cost; the projection contract remains the guard
-for the failure this ADR responds to.
+given, not what it did with it. The directory check establishes that the chosen
+directory exists; it does not establish which action wrote it, so a pass that
+built elsewhere would not change either check. Distinguishing the passes would
+need evidence from each coverage invocation, which is Option D's cost; the
+projection contract remains the guard for the failure this ADR responds to.
 
 The Linux step is plain Bash over `$RUNNER_TEMP`, so its acceptance and
 rejection paths are exercised by the contract suite on every host. The Windows

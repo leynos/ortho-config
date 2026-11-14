@@ -367,10 +367,10 @@ jobs:
         # The 33,497-character failure that motivated the chooser was refused
         # before rustc ran, so nothing in the Rust tree could report it and no
         # local gate can see it. Read both variables back here and require the
-        # derived directory. Both passes share one job environment, so the
-        # variables state what each pass inherited, and the directory, being
-        # outside the checkout, shows that a coverage build created it. Neither
-        # proves a separate receipt per pass, so say only what is observed.
+        # chosen directory exists. Both passes share one job environment, so the
+        # variables state what each pass inherited, and the directory check
+        # states only that the directory is there, not which action wrote it.
+        # Neither proves a separate receipt per pass, so say what is observed.
         if: ${{ matrix.platform == 'windows' }}
         shell: pwsh
         run: |
@@ -382,15 +382,15 @@ jobs:
             throw "CARGO_LLVM_COV_TARGET_DIR is not the chosen coverage target root: '$env:CARGO_LLVM_COV_TARGET_DIR', not '$expected'"
           }
           if (-not (Test-Path -LiteralPath $expected)) {
-            throw "no coverage build created the chosen target root: $expected is missing"
+            throw "the chosen coverage target root is missing: $expected"
           }
           "Chosen coverage target root exists and the published variables match: $expected"
           "Chosen coverage target root exists and the published variables match: $expected" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Verify the Linux coverage target root
         # Same reasoning as the Windows check: the chooser's `GITHUB_ENV`
-        # write shows what was intended, and the directory outside the
-        # checkout shows that a coverage build created it.
+        # write shows what was intended, and this step requires the chosen
+        # directory to exist, without claiming which action wrote it.
         if: ${{ matrix.platform == 'linux' }}
         shell: bash
         run: |
@@ -405,7 +405,7 @@ jobs:
             exit 1
           fi
           if [ ! -d "$expected" ]; then
-            echo "no coverage build created the chosen target root: $expected is missing" >&2
+            echo "the chosen coverage target root is missing: $expected" >&2
             exit 1
           fi
           echo "Chosen coverage target root exists and the published variables match: $expected"
