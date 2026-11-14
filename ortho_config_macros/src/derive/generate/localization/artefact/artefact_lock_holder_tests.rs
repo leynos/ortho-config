@@ -10,11 +10,17 @@ mod holder_tests {
     //! finished can say anything about absence, an unfinished one must not, and
     //! neither may discard a descriptor it actually matched.
 
-    use super::super::lock_holder::{DescriptorScan, append_owner};
+    use super::super::lock_holder::{DescriptorScan, append_owner, inspect_descriptors};
+    use crate::derive::generate::localization::artefact::fragment_tests::TempRoot;
     use crate::derive::generate::localization::artefact::lock_evidence::{Descriptor, ProcessId};
+    use crate::derive::generate::localization::artefact::lock_evidence::{
+        DeviceNumber, Inode, LockFileIdentity,
+    };
     use anyhow::{Result, ensure};
     use rstest::rstest;
     use std::fs;
+    use std::os::unix::fs::MetadataExt;
+    use std::path::Path;
 
     /// Verifies only a completed scan can speak about the descriptors it lacked.
     ///
@@ -100,8 +106,6 @@ mod holder_tests {
     /// is why this is deterministic rather than dependent on enumeration order.
     #[test]
     fn a_partial_scan_still_returns_the_descriptors_it_matched() -> Result<()> {
-        use super::super::lock_holder::inspect_descriptors;
-        use crate::derive::generate::localization::artefact::fragment_tests::TempRoot;
         use crate::derive::generate::localization::artefact::lock_evidence::{
             DeviceNumber, Inode, LockFileIdentity,
         };
@@ -217,5 +221,78 @@ mod holder_tests {
             "an unreadable process must not be reported as holding nothing: \
              {rendered}",
         );
+    }
+
+    /// Verifies an unscannable directory is a failure, not an empty result.
+    ///
+    /// This is the other half of "did this scan finish": nothing at all was
+    /// read, so the report must say the scan is incomplete and must not treat
+    /// the emptiness as an absence. The directory is one that cannot exist, so
+    /// `read_dir` fails for every user and no permissions manifest is needed.
+    #[test]
+    fn a_directory_that_cannot_be_listed_is_an_incomplete_scan() {
+        let identity = LockFileIdentity::of(DeviceNumber::from_raw(0), Inode::new(0));
+
+        let missing = Path::new("/nonexistent-ortho-config-artefact-scan");
+        let outcome = inspect_descriptors(&missing.to_string_lossy(), identity);
+        let Err((matched, reason)) = outcome else {
+            panic!("a directory that cannot be listed must not report success");
+        };
+
+        assert!(
+            matched.is_empty(),
+            "nothing was read, so nothing can have matched: {matched:?}",
+        );
+        assert!(
+            reason.contains("unreadable"),
+            "the failure must say the directory could not be read: {reason}",
+        );
+    }
+
+    /// Verifies non-descriptor names are skipped without failing the scan.
+    ///
+    /// The skip is deliberate: every entry under `/proc/<pid>/fd` is a decimal
+    /// descriptor number written by the kernel, so a non-numeric name is not a
+    /// descriptor this scan could have examined and omitted. Treating it as a
+    /// fault would report every process as incompletely scanned and drown the
+    /// real failures. A placeholder word and a non-UTF-8 byte sequence cover
+    /// the two ways a name can fail to parse, and neither may affect the
+    /// descriptor that does parse.
+    #[test]
+    fn names_that_are_not_descriptors_are_skipped() -> Result<()> {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = TempRoot::new()?;
+        let lock_file = root.path().join("lock");
+        fs::write(&lock_file, b"")?;
+        let metadata = fs::metadata(&lock_file)?;
+        let identity = LockFileIdentity::of(
+            DeviceNumber::from_raw(metadata.dev()),
+            Inode::new(metadata.ino()),
+        );
+
+        let scanned = root.path().join("fd");
+        fs::create_dir(&scanned)?;
+        fs::hard_link(&lock_file, scanned.join("7"))?;
+        // A word where a number belongs, and a name that is not even valid
+        // UTF-8. Both are skipped; neither may turn the scan into a failure.
+        fs::hard_link(&lock_file, scanned.join("not-a-descriptor"))?;
+        let non_utf8 = OsStr::from_bytes(b"\xff\xfe");
+        fs::hard_link(&lock_file, scanned.join(non_utf8))?;
+
+        let outcome = inspect_descriptors(&scanned.to_string_lossy(), identity);
+        let Ok(matched) = outcome else {
+            return Err(anyhow::anyhow!(
+                "non-descriptor names must be skipped, not treated as a failed scan"
+            ));
+        };
+
+        ensure!(
+            matched == vec![Descriptor::new(7)],
+            "only the numeric name may be reported, and the skip must not \
+             disturb it; got {matched:?}",
+        );
+        Ok(())
     }
 }
