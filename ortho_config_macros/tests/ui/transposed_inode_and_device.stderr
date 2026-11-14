@@ -1,0 +1,18 @@
+error[E0308]: arguments to this function are incorrect
+  --> tests/ui/transposed_inode_and_device.rs:23:21
+   |
+23 |     let _identity = LockFileIdentity::of(inode, device);
+   |                     ^^^^^^^^^^^^^^^^^^^^ -----  ------ expected `Inode`, found `DeviceNumber`
+   |                                          |
+   |                                          expected `DeviceNumber`, found `Inode`
+   |
+note: associated function defined here
+  --> tests/ui/../../src/derive/generate/localization/artefact/artefact_lock_evidence.rs
+   |
+   |     pub(super) const fn of(device: DeviceNumber, inode: Inode) -> Self {
+   |                         ^^
+help: swap these arguments
+   |
+23 -     let _identity = LockFileIdentity::of(inode, device);
+23 +     let _identity = LockFileIdentity::of(device, inode);
+   |
