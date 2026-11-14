@@ -28,6 +28,9 @@
   understand the documentation intermediate representation (IR), bridge
   pipeline, localized reference generation, PowerShell help, and future
   agent-context output.
+- [Check and gen command amendment](cargo-orthohelp-check-gen-design.md):
+  review roadmap 7.2.8's explicit operations, deprecated aliases, policy
+  coverage, and parallel-delivery cross-over with 7.2.3.
 - [Roadmap](roadmap.md): track active future work, numbered after the archived
   v0.8.0 roadmap.
 
