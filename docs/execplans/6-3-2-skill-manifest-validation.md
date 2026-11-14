@@ -243,6 +243,19 @@ explicitly approves it and the prerequisites below are complete.
   `cargo clippy -p cargo-orthohelp --all-targets --all-features -- -D warnings`
   now exits 0.
 
+- [x] (2026-11-14) Closed the test and documentation gaps CodeRabbit's
+  pre-merge checks reported against `e60027ac`. Each repair removes the vacuity
+  the check named: the verb-exemption branch now has a test case, the BDD step
+  asserts a finding that only example checking produces rather than the
+  consumer's extraction count, the malformed-array end-to-end test calls the
+  adapter's parse path instead of `serde_json` directly, `PolicyMode`'s default
+  is asserted, and the property module gains a control that corrupts a real
+  report and shows the oracle comparison rejects it. Documentation now names
+  `policy/vocabulary/global_options.rs` as the glossary's owner, stops claiming
+  the linter reads it before 7.1.3 lands, and signposts the validator from the
+  v0.11.0 migration guide. Evidence: `85769ae3`; the full sequential sweep
+  passed again and CodeScene reported no new issue.
+
 ## Surprises & discoveries
 
 - Observation: `SkillManifest` and `SkillCommandRef` exist as serializable
