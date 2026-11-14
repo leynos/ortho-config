@@ -11,9 +11,13 @@ spends that allowance queuing.
 
 This plan separates the two things the suite conflates: **what is asserted**
 (the dependency graph) and **how long a compile may take** (a wall-clock
-bound). Every property that can be read from resolved metadata is moved off the
-compile path. The compiles that genuinely *are* the assertion keep an explicit,
-generous per-test bound, and their diagnostics name the invocation and the
+bound). Deliverable one was to move every metadata-readable property off the
+compile path; the survey found that the suite had already done so - every graph
+fact resolves through `cargo metadata` - so the only compile in the evidence
+path is `cargo package --verify`, whose claim *is* the compile. What this plan
+delivers is the separation around that compile: the packaging runs once per run
+instead of once per contract, and the compiles that genuinely *are* the
+assertion keep explicit bounds whose diagnostics name the invocation and the
 reason.
 
 ## Constraints
@@ -36,11 +40,13 @@ reason.
 
 ## Status
 
-In progress. The cross-process packaging lease (D1) and its regression contract
-(D4) are delivered and validated. The suite is **not yet green**: the lease
-removed eight of the eighteen baseline failures, and the residual ten are a
-different starvation mechanism that D3 addresses. The sections below record
-what is measured, what was tried and reversed, and what remains.
+In progress, with an undelivered milestone. The cross-process packaging lease
+(D1) and its regression contract (D4) are delivered and validated. The suite is
+**not green**: the lease removed eight of the eighteen baseline failures, and
+the residual ten are a starvation mechanism D3 was meant to address but does
+not, for the measured arithmetic reason recorded under "Why D3 is not
+delivered". The sections below record what is measured, what was tried and
+reversed, what remains, and why it is reported rather than improvised.
 
 ### Measured result, same host, same command
 
@@ -52,8 +58,10 @@ what is measured, what was tried and reversed, and what remains.
 | after (`5967a09b`)  | `/tmp/boundary-after-harden-boundary-deadline-evidence-20261113.out`  | **42** | **10** | 10      | 908.29 s |
 
 Eight more assertions now return a verdict, at the same wall-clock, on equally
-loaded hardware. No test was deleted, ignored, or given a larger budget; the
-186 s of extra assertions are the contracts that no longer starve.
+loaded hardware. No test was deleted, ignored, or given a larger budget. The
+wall clock does not move because the run is bounded by the same 900 s shared
+allowance either way: the extra eight are the contracts that now finish inside
+it instead of exhausting it.
 
 The residual ten decompose as:
 
@@ -61,17 +69,22 @@ The residual ten decompose as:
 | --------------------------------------------------------- | ----- | ---------------------------------------- |
 | `cargo package` killed at a **22 s** remainder            | 6     | the pair ran but its allowance was spent |
 | `cargo test --all-targets` killed at an **8 s** remainder | 1     | same, for a consumer build               |
-| `cargo metadata` exhausted 900 s waiting on a sibling     | 2     | never started                            |
+| `cargo metadata` exhausted 900 s waiting on a sibling     | 1     | never started                            |
+| a negative control wrapping the same blocked metadata     | 1     | never started                            |
 | the serialization probe                                   | 1     | its subject is the wait                  |
 
-The packaging pair did run - six `Verifying ortho_l10n` starts, against the
-twelve the unleased suite made - so the deduplication worked. What failed is
-that one pair still exceeds what a contract can be given, which is the D3
+The packaging pair did run - the log holds six `Verifying ortho_l10n` starts,
+where the baseline began none - so the lease moved the suite from "packaging
+never starts" to "packaging runs and is cut at a named remainder". What failed
+is that one pair still exceeds what a contract can be given, which is the D3
 problem and not a lease problem.
 
 ### The residual mechanism, named
 
-All ten residual failures are the same defect, and it is not the lease:
+Nine of the ten residual failures are the same defect, and it is not the lease.
+The tenth is the serialization probe, which fails because the same starvation
+keeps its sibling holding the lock, so it is a victim rather than a distinct
+cause:
 
 1. One packaged contract takes the lease and starts a cold
    `cargo package --verify`, which needs 802 s on this host.
@@ -83,17 +96,63 @@ All ten residual failures are the same defect, and it is not the lease:
    `cargo package` is clamped to that remainder and killed. The error names the
    allowance, and `roots` caches the formatted failure, so the same text is
    then reported by every remaining packaged contract.
+5. The contracts that never reach packaging at all - one `cargo metadata`
+   contract and one negative control - exhaust their allowance while queued
+   behind the same cold fill inside the nested-Cargo mutex, so their error
+   names a metadata wait rather than a packaging one.
 
 That is why six tests report the identical `22 second deadline` string: it is
-one failure, replayed. The lease did its job - six `Verifying ortho_l10n`
-starts instead of twelve - but a single cold pair still exceeds one contract's
-whole allowance, so serializing *arithmetic* cannot make it fit.
+one failure, replayed from `roots`' cached error. The lease did its job - the
+after-run log holds six `Verifying ortho_l10n` starts against the baseline's
+none - but a single cold pair still exceeds one contract's whole allowance, so
+serializing *arithmetic* cannot make it fit. The baseline never began a
+packaging invocation at all, which is why "twelve invocations the unleased
+suite would make" is a count derived from the contract list rather than read
+from a log.
 
-The fix is therefore not in the lease and not in a bigger number. Either the
-packaging must stop being on the critical path of six contracts (produce the
-roots once, outside the per-contract allowance), or the contracts that only
-read an already-normalized manifest must not trigger packaging at all. Both are
-the D3 direction: make the reader's evidence independent of the writer's clock.
+### The cost is real, and warming the boundary target does not avoid it
+
+The three measured invocations in `/tmp/warm-measure.log` all succeeded
+(`rc=0`), and the timings look like a cold-start curve:
+
+| Invocation                                       | Wall time | `Compiling` lines |
+| ------------------------------------------------ | --------- | ----------------- |
+| `cargo package --verify` (`ortho_l10n` + facade) | 802.0 s   | 122               |
+| `cargo package --verify` (`ortho_config_macros`) | 341.8 s   | -                 |
+| the first invocation again, immediately after    | 88.2 s    | 2                 |
+
+They are not one, and the timestamps say why. The 802 s run started at 02:08
+against a packaging target whose `debug/build` was already populated at 01:21,
+so it was *not* filling a cold target: it compiled 122 crates anyway. The 88.2
+s repeat was fast only because the run immediately before it had just written
+the fingerprints it keys on.
+
+The reason is the target directory. The packaging step sets `CARGO_TARGET_DIR`
+to `target/localization-boundary/packaging-target`, and
+`cargo package --verify` honours it: the 122 crates land in that target's
+`debug/build` (531 MiB of build output is still there), not in the workspace
+`target/debug`. The log's
+`Compiling ortho_l10n v0.10.0 (…/target/package/ortho_l10n-0.10.0)` form names
+the *unpacked source root*, which is where Cargo reads the crate from, not
+where it writes the objects.
+
+So the 802 s was not a cold *target*: the target was populated at 01:21 and the
+run still compiled 122 crates. What the 88.2 s repeat demonstrates is that the
+fingerprints Cargo keys on had been written by the immediately preceding run
+and the second run found them. That makes the fill a property of the sequence,
+not of the calendar: the nested Cargo inherits `RUSTFLAGS`, so a target warmed
+under different flags is reprocessed whole, and the suite cannot rely on a
+warmth it does not control. The precise reason the 01:21 population did not
+satisfy the 02:08 run is not recorded in the surviving log, so it is stated as
+an observation rather than attributed to one flag change.
+
+The residual is therefore exactly what it looked like: the pair costs 1,144 s
+on this host against a 900 s per-contract allowance and a 960 s nextest
+allowance, and no ordering or warming of the suite changes that reliably. It
+follows that a warm-up step would not be a repair - it would only move the same
+802 s earlier, and would still be lost whenever the target is cleaned - so the
+only remaining lever is to stop charging the fill to a contract at all. That is
+the architectural change this plan records as undelivered.
 
 ## Baseline (established before any change; do not re-derive)
 
@@ -268,9 +327,80 @@ accounting of what each packaged contract needs:
   and build foreign consumer roots from the packaged sources. The build is the
   assertion here - "a stranger can depend on this and it compiles" is the claim
   - so the compile stays and keeps an explicit bound.
-- **`closure::*` workspace contracts.** Assertions over resolved metadata; the
-  compile is corroboration. These are the ones where a metadata-only path is
-  available.
+- **`closure::*` workspace contracts.** Assertions over resolved metadata, and
+  *already* metadata-only: `workspace_metadata` runs
+  `cargo metadata --format-version=1 --all-features --filter-platform
+  host-tuple`,
+  and `FixtureCargo::resolve_metadata` parses the same subcommand's output.
+  There is nothing here to move off a compile, because no compile is in the
+  evidence path. The only cost these have is the shared `NESTED_CARGO` mutex,
+  which is serialization rather than compilation.
+
+That survey changes D3's conclusion. Once the workspace contracts are seen to
+be metadata-only already, the assignment's "if a property can be asserted from
+the resolved package graph, it needs no compile" has no unsatisfied instance:
+every property in the suite either *is* a resolved-graph fact, or is
+`cargo package --verify`'s own compile - "the archive cargo just wrote unpacks
+and builds". The remaining cost is not a misplaced compile. It is the price of
+the packaging claim itself, and D3 can only be about who pays it.
+
+#### What D3 would have had to redistribute
+
+The measurement above was expected to narrow D3 into a redistribution of cost.
+The properties the packaged contracts assert would not change - no contract
+moves to metadata that was not already asserting a metadata fact - and only the
+*who pays* would move:
+
+- **The cold verification stops being inside a contract's allowance.** It is
+  the packaging target's first fill, and it is a property of the target rather
+  than of any contract. Paying it from the contract that happens to arrive
+  first makes that contract's verdict depend on how warm the target was, which
+  is exactly the conflation this plan exists to remove.
+- **The four `manifests::*` contracts keep their compile.** They read
+  `Cargo.toml` as TOML from an unpacked root, and that root is the unpacked
+  `--verify`, which nobody may bypass. What changes is not their evidence but
+  who pays for producing it.
+- **What does not change.** The consumer contracts still build their roots; the
+  consumer's build is the claim. No test is deleted, ignored, or retried, and
+  no budget is raised to absorb load.
+
+#### Why D3 is not delivered, and what it would take
+
+Two candidate repairs were tested against the constraints and both fail on
+arithmetic rather than on taste:
+
+- **Restart the allowance after the lease wait.** Rejected. A contract that
+  waited 878 s and then packed for 440 s would spend 1,318 s inside a 960 s
+  nextest allowance. nextest would stop the test first, and the error naming
+  the invocation - the one thing `budget.rs` exists to protect - would never be
+  printed. The clamp is correct; it is what the clamp *reports* that is thin.
+- **Let the four `manifests::*` contracts read only invocation 1's output.**
+  Rejected as a property change, not a cost change. Three of the four read
+  `ortho_l10n` and `ortho_config` alone, which invocation 1 produces, but
+  `packaged_manifests_carry_no_path_dependencies` iterates [`PACKAGED_CRATES`]
+  and needs all three. Splitting the set so a contract can assert "these
+  manifests are normalized" while `ortho_config_macros` has not been packaged
+  weakens the claim from "the packaged set is whole" to "the part I looked at
+  is whole". That is a smaller property, so the assignment's "the number of
+  asserted properties must not go down" forbids it.
+
+What the numbers actually require is that the cold fill happen **outside every
+contract's allowance** - a warm-up step before the suite, or a bound sized for
+a cold fill rather than a warm one. Both change the suite's architecture: the
+first adds a prerequisite the Makefile and the nextest override would have to
+carry, and it only helps while the target survives; the second raises a budget
+to absorb load, which the assignment explicitly forbids. Neither is available
+without a decision the assignment did not delegate, so D3 stops here and is
+reported rather than improvised.
+
+This is not a regression the lease introduced. The baseline on unmodified
+`main` failed these same six contracts, with
+`the boundary contract's 900 second allowance was exhausted while cargo package
+… waited for a sibling nested Cargo invocation to finish`:
+on `main` they never started packaging at all. The lease moved the failure
+from "never ran" to "ran and was cut at a named remainder", which is a real
+diagnostic improvement and the reason the pass count rose from 26 to 42. It did
+not, and could not by arithmetic, turn the suite green.
 
 ### D4. Regression contract (implemented)
 
@@ -295,26 +425,69 @@ accounting of what each packaged contract needs:
 - [x] D2 (`--no-verify` + unpacker) designed, implemented, and deleted against
       the developers' guide.
 - [ ] D3: move the metadata-only workspace closure assertions off the compile.
-- [ ] After-run on this loaded host with contention present in the log.
-- [ ] Gates, sequentially.
-- [ ] Documentation of the lease in the developers' guide.
+      **Not delivered, and not deliverable on this host within the contract.**
+      The survey below found no property that a compile uniquely proves twice;
+      the suite's metadata assertions already use `cargo metadata`. What the
+      compile in the after-run is spent on is `cargo package --verify`, whose
+      whole purpose *is* the compile, and the pair costs 1,144 s measured
+      against a 900 s allowance. See "Why D3 is not delivered".
+- [x] D4: regression contract. `lease_tests.rs` pins the reuse scope, the lease,
+      the record lifetime and the poll interval as 8 `rstest` cases, and
+      `boundary_packaging_test.py` proves the deadline arithmetic from source
+      so a budget can never be raised past the nextest allowance silently.
+- [x] After-run on this loaded host with contention present in the log:
+      `/tmp/boundary-after-harden-boundary-deadline-evidence-20261113.out`,
+      42 passed / 10 failed / 10 ignored in 908.29 s against the baseline's
+      26 / 18 / 10 in 907.74 s at the same wall clock.
+- [x] Gates, sequentially.
+- [x] Documentation of the lease in the developers' guide.
 
 ## Surprises and discoveries
 
-- **The suite's red is mostly the mutex, not the packaging.** Nine of the
-  baseline's 18 failures are `cargo metadata` never starting because a sibling
-  held `NESTED_CARGO`. Nine is more than the six packaging failures, so a
-  packaging-only fix cannot turn the suite green even with unlimited budget.
-- **`--verify` is far more expensive than the plan assumed.** 802 s for the
-  first invocation alone, measured with admission bypassed, against the earlier
-  216 s figure taken with a warm cache.
+- **The suite's red is the mutex as much as the packaging.** All 18 baseline
+  failures are nested Cargo calls that never started because a sibling held
+  `NESTED_CARGO`; classifying them by the invocation the error names gives six
+  `cargo package`, seven `cargo metadata` (five direct, plus both negative
+  controls, whose "did not behave" wraps the same blocked metadata call), three
+  `cargo test` for the consumer builds, and two serialization probes whose
+  sibling never releases the lock. Twelve of the eighteen are therefore waiting
+  for a lock rather than packaging, so the lease - which only removes repeated
+  packaging - cannot turn the suite green even with an unlimited budget. That
+  is why passes rose from 26 to 42.
+- **The fill is a sequence property, not a cold-start one.** The 88.2 s repeat
+  of the 802 s invocation looked like a cold-start curve, and the plan first
+  read it that way. The timestamps refute that: the 802 s run began at 02:08
+  against a packaging target whose `debug/build` was populated at 01:21, so the
+  target was already warm and it compiled 122 crates regardless. The 88.2 s
+  repeat was cheap because the run immediately before it had just written the
+  fingerprints Cargo keys on. Warming the target before the suite would only
+  move the same work earlier, and a cleaned target loses it again, so the cost
+  is a property of the sequence rather than of the calendar.
+- **The packaged lock is not a different graph.** An earlier draft of this plan
+  claimed `--verify` resolved `displaydoc` 0.2.5 against the workspace's 0.2.7
+  and `memchr` 2.7.6 against 2.8.3. Comparing the unpacked roots' `Cargo.lock`
+  with the repository's shows zero packages that differ by name and version:
+  the packaged lock is a strict subset at identical versions. That claim was
+  wrong and is recorded here so it is not reintroduced.
+- **The lease wait is charged to the packaging that follows it.** `Budget::new`
+  starts the contract's 900 s clock before `prepare_packaged_set`, so a
+  contract that polls the lease for 878 s and then wins it hands the packaging
+  step a 22 s remainder, and the cold fill is clamped to it. `process.rs`
+  already fixed exactly this for `NESTED_CARGO` - it computes the child's bound
+  only after the wait has ended - but the lease never received the same
+  treatment. This is the direct cause of the 22 s and 8 s kills in the
+  after-run.
 - **The four `packaged_*` manifest contracts compile nothing yet pay the whole
   packaging cost**, because they each enter `prepare_packaged_set` in their own
   process to reach a file that `cargo package` has already written.
-- The packaged lock resolves older crates than the workspace's (`displaydoc`
-  0.2.5 against 0.2.7, `memchr` 2.7.6 against 2.8.3), so `--verify` compiles a
-  *different* graph. This was not changed; it is recorded because it makes the
-  verify's cost data-dependent and not representative of the workspace build.
+- **Correction, measured from the unpacked roots.** The packaged `Cargo.lock`
+  is a strict subset of the workspace's at *identical* versions: comparing
+  `package/<name>-0.10.0/Cargo.lock` against the repository lock gives zero
+  packages by name and version that differ, only packages the packaged crate
+  does not depend on. An earlier draft of this plan claimed the packaged lock
+  resolved `displaydoc` 0.2.5 against 0.2.7 and `memchr` 2.7.6 against 2.8.3;
+  the workspace lock holds those same versions, so that claim was wrong. The
+  verify's cost is a cold *target directory*, not a different graph.
 
 ## Decision log
 
@@ -334,12 +507,42 @@ accounting of what each packaged contract needs:
   the contract's own allowance instead, and an allowance spent by the wait is
   reported by the existing `Budget::bound` machinery, which names the
   invocation that could not start.
+- 2026-11-14: **D3 considered and dropped.** The first candidate was the same
+  mechanism `process.rs` applies to `NESTED_CARGO`: compute the packaging bound
+  from what remains *after* the lease wait, rather than from a clock started
+  before it. That candidate was tested against nextest's allowance and rejected
+  - a wait of 878 s plus a 440 s pack is 1,318 s inside a 960 s allowance, so
+  nextest would stop the test before the naming error printed. Its variant,
+  letting the four `manifests::*` contracts read only invocation 1's output,
+  was rejected as a weakening of "the packaged set is whole" to "the part I
+  looked at is whole". The survey also found nothing to move from compile to
+  metadata: the workspace contracts already resolve through `cargo metadata`.
+  D3 is therefore reported undelivered rather than delivered in a form that
+  trades one bound for another. No budget was raised, no test deleted or
+  ignored, and the arithmetic in `boundary_packaging_test.py`
+  (`PACKAGE_DEADLINE * invocations < allowance`,
+  `CARGO_DEADLINE < SCENARIO_ALLOWANCE`) is unchanged.
+- 2026-11-14: rejected, with reasons, three further alternatives: a larger
+  `SCENARIO_ALLOWANCE` (it must stay below nextest's 960 s, and the plan's
+  whole premise is that a bound smaller than the runner's is what makes a
+  failure nameable); a longer-lived completion record (it cannot prove the
+  roots still describe the sources); and writing the manifests straight from
+  the workspace (they are the *normalized* manifests, which only
+  `cargo package` produces). A fourth - warming the packaging target before the
+  suite - was rejected once the timestamps showed the 802 s run was already
+  warm and compiled 122 crates anyway; a warm-up only moves the same work
+  earlier and is lost again on a cleaned target.
 
 ## Risks
 
-- **The lease does not make the suite green on its own.** Stated plainly here
-  so the reduction is not mistaken for a fix. D3 and the allowance accounting
-  are what address the remaining starvation.
+- **The lease does not make the suite green on its own, and nothing in this
+  branch does.** Stated plainly here so the 26-to-42 reduction is not mistaken
+  for a fix. On a contended host the boundary target is still red: ten
+  contracts fail, all of them because the shared 900 s allowance is smaller
+  than the measured 1,144 s cold fill of `cargo package --verify` and smaller
+  than the contention the suite runs under. Closing that requires moving the
+  fill outside every contract's allowance, which is the undelivered
+  architectural change, not a tuning exercise.
 - The lease is new code on a filesystem boundary. Mitigated by exempting only
   that module in `dylint.toml` and by regressions that pin each property
   separately, including that the recorded scope is per run.
@@ -358,6 +561,47 @@ accounting of what each packaged contract needs:
 
 ## Outcomes and retrospective
 
-The lease is delivered and validated in isolation (8 regressions green, target
-clippy-clean). The suite-level after-run and the remaining D3 work are recorded
-as incomplete rather than claimed.
+**Delivered.** The boundary suite's assertions are now separated from its
+wall-clock deadline by a cross-process lease (`package_set/lease.rs`, with 8
+`rstest` cases in `lease_tests.rs`), and the deadline diagnostic names the
+invocation and the reason. On this loaded host the after-run finishes 42
+contracts where the baseline finished 26, both at the same ~908 s wall clock,
+and every one of the ten residual failures now names the invocation and the
+bound that stopped it instead of reporting an unattributed timeout:
+
+- six packaging deadlines, all reading:
+
+  ```text
+  cargo package for ortho_l10n, ortho_config (bounded by the boundary
+  contract's shared allowance) exceeded the 22 second deadline; its
+  process tree was killed
+  ```
+
+- one consumer build cut at an 8 s remainder, in the same words;
+- one `cargo metadata … waited for a sibling nested Cargo invocation to finish`;
+- one negative control whose "did not behave" wraps the same blocked metadata;
+- one serialization probe that timed out waiting for the lock.
+
+The nine that are not the probe all trace to one arithmetic fact: the contract
+that won the lease had spent most of its 900 s allowance waiting, so the cold
+fill was clamped to a remainder. The baseline reported the same allowance as
+exhausted before `cargo package` could start at all, so the lease changed the
+failure from "never ran" to "ran and was cut at a named remainder", not from
+red to green.
+
+**Not delivered: D3.** Recorded rather than claimed. The survey above shows the
+suite already asserts every graph property from `cargo metadata`; the only
+compile in the evidence path is `cargo package --verify`, whose claim *is* the
+compile. Measured cost of the pair on this host is 802.0 s + 341.8 s = 1,144 s
+against a 900 s per-contract allowance and nextest's 960 s. Warming the target
+does not reduce it: the 802 s run was already warm and still compiled 122
+crates, and the 88.2 s repeat was cheap only because its immediate predecessor
+had just written the fingerprints. Two candidate repairs were tested and both
+fail on arithmetic or on property strength; the only remaining lever is to move
+the fill outside every contract's allowance, which is an architectural change
+the assignment did not authorize.
+
+**Honest summary of the suite's state at this branch.** The boundary target is
+still red on a contended host. It is red *for a measured, named reason* rather
+than for an unattributed timeout, but it is red, and no reader should take the
+42/10 split as green.
