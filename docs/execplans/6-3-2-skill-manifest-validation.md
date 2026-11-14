@@ -216,6 +216,14 @@ explicitly approves it and the prerequisites below are complete.
     The final gate sweep then reran every other gate on the same clean tree,
     and roadmap 6.3.2 with its three sub-items is checked. Evidence:
     `/tmp/test-ortho-config-6-3-2-skill-manifest-validation.out`.
+- [x] (2026-11-14) Replayed the branch's own eleven commits from the inherited
+  PR #664 parent onto `origin/main` after #664 squash-merged, and retargeted
+  the pull request to `main`. `range-diff` reports every patch unchanged; the
+  only merged file was the documentation-example allowlist, which kept a
+  main-only entry while adding this feature's two. A first replay used an
+  `origin/main` that advanced mid-operation; the replay was repeated onto the
+  newer head so no main content appears deleted. Gates were then rerun on the
+  replayed candidate.
 
 ## Surprises & discoveries
 
@@ -276,6 +284,16 @@ explicitly approves it and the prerequisites below are complete.
 
 ## Decision log
 
+- Decision (2026-11-14): Execute the return-to-main step that the 2026-11-09
+  decision deferred. PR #664 merged on 2026-11-11 as `eaf4c028`; the branch's
+  eleven own commits were replayed with `--onto origin/main 501ab831`. The
+  bundled restack planner refused the boundary because the parent's final head
+  (`91750238`) is later than the inherited parent, so the boundary was
+  established from preserved history instead: `501ab831` is an ancestor of
+  `91750238`, the landing commit and `91750238` differ only in reconciled
+  `Cargo.lock` and `scripts/requirements-test.txt`, and the replay range holds
+  no merges. `range-diff` then showed all eleven patches unchanged.
+  Date/Author: 2026-11-14, execution of the approved plan.
 - Decision (2026-11-10): No new ADR for this feature. Design §3.4.1 now records
   the ownership boundary, the normalized example shape, and the structural
   versus policy result classes; ADR-0003 already governs agent-context schema
@@ -399,10 +417,14 @@ domain semantics.
 
 ## Conformance basis
 
-- Current temporary base: `501ab83134eaba0f9e97e1daeaa29c793a819c53`
-  (`issue-644-nested-cargo-timeouts`, PR #664), which includes the following PR
-  #651 base. Return to `main` after #664 merges as described in the decision
-  log; do not infer feature approval from that merge.
+- Current base: `origin/main` at `724839c4b3789c91847356260612c34dac8acccd`.
+  The branch's own eleven commits were replayed off the inherited PR #664 parent
+  `501ab83134eaba0f9e97e1daeaa29c793a819c53` on 2026-11-14, after #664
+  squash-merged as `eaf4c028`. The replay boundary is evidence-based: the
+  parent's final head `91750238` has the same tree as the landing commit apart
+  from reconciled dependency files, `501ab831` is its ancestor, and the replay
+  range contained no merges and no inherited commits. Recovery refs are
+  `refs/recovery/6-3-2-old-head` and `refs/recovery/6-3-2-old-base`.
 - Previous planning base: `ddba3578fae04227e426ea3a61aa2b24aa043232`
   (PR #651, merged 2026-11-06), rebased from original planning base
   `dc979878b5728bbb23866df9c05c2570bdb5629e` on branch
@@ -956,6 +978,12 @@ OrthoConfig format mandate.
   agent's return-to-main procedure without changing feature scope. Refreshed
   the parent to `501ab831` after its process-ownership improvements landed
   during validation; the initial-parent results remain historical evidence.
+
+- 2026-11-14: Replayed the branch's own commits onto `main` after PR #664
+  squash-merged, retargeted the pull request, and recorded the evidence for the
+  superseded-parent boundary. EP-M4 had already closed; the replay invalidates
+  the earlier gate certificates by candidate identity, so the gates were run
+  again on the replayed head.
 
 - 2026-11-14: Closed EP-M4. Recorded the green full `make test` run and the
   repeated gate sweep on candidate `e4038718`, the third documentation-example

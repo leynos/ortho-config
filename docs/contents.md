@@ -223,7 +223,7 @@
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
   - [Skill manifest validation](execplans/6-3-2-skill-manifest-validation.md):
-    approval-gated plan for roadmap item 6.3.2, validating manifest claims and
+    delivery record for roadmap item 6.3.2, validating manifest claims and
     normalized examples against the complete command contract.
   - [Dual-renderer metadata](execplans/7-2-2-dual-renderer-metadata.md):
     review the approval-gated plan for renderer support, presentation policies,
