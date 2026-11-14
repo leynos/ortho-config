@@ -254,7 +254,15 @@ all possible public values are validated.
   the registered `guide-policy-deny` recipe, design §6.1.1 and §9, the
   developers'-guide policy-API testing section, the agent-native design's
   delivered/deferred boundary, ADR-0020's delivery note, and roadmap 7.2.3.
-- [ ] M3: exit documentation, process regression evidence and completion.
+- [x] (2026-11-15) M3 certificate: all seven gates green at `24c04193` with the
+  head unchanged and `make fmt` mutating nothing — fmt, check-fmt, lint
+  (rustdoc, Clippy, Whitaker, interrogate 100%), test (109 targets, 2871
+  passed, 43 ignored, pytest 128 passed), markdownlint with spelling, nixie,
+  and 21 `cargo-orthohelp` doctests. The named acceptance tests
+  (`missing_package_reports_failure_status`,
+  `documented_policy_denial_keeps_the_report_and_exits_one`, and
+  `policy_check_commands_match_the_executed_flow`) are visible in the log.
+- [x] M3: exit documentation, process regression evidence and completion.
 
 ## Surprises & discoveries
 
