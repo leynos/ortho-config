@@ -1,0 +1,25 @@
+{
+  "usage": "Test-only fixture builders take the literal names a test is about (flag names, manifest IDs, paths) as &str parameters. That is the point of a fixture helper, so the production-code heuristic for string-heavy signatures is not applied to them. Every other rule keeps its default weight on these files.",
+  "rule_sets": [
+    {
+      "matching_content_path": "cargo-orthohelp/src/skill_validation/support.rs",
+      "matching_content_path_doc": "Crate-internal test-support builders (cfg(test)).",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "cargo-orthohelp/tests/skill_validation_bdd.rs",
+      "matching_content_path_doc": "Behavioural-test fixture builders consumed by the step definitions.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
+    }
+  ]
+}

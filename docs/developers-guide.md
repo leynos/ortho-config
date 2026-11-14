@@ -4817,6 +4817,41 @@ twice would read as the half GitHub may not run. The library's loader does the
 same for the CV-005 shape and exits 2 on a file it cannot read, rather than
 passing.
 
+## Code health rules
+
+`.codescene/code-health-rules.json` holds every deviation from CodeScene's
+built-in code health rules. Write only the overrides, never a full copy of the
+rule set: a rule a file does not mention keeps its default weight, so the file
+stays a list of deliberate exceptions rather than a second, drifting rule
+catalogue.
+
+A rule set needs a `matching_content_path` glob and should carry a
+`matching_content_path_doc` saying why that path is different. Prefer the
+narrowest glob that covers the case, and prefer a partial weight to `0.0`. Do
+not disable a critical rule; prefer reshaping the code, which is what most
+findings ask for.
+
+Test-only fixture builders are the one recurring exception. A helper such as
+`command(&[&str], &[&str])` takes the literal flag and path names the test is
+about, which is exactly what a string-heavy signature is for, so the "String
+Heavy Function Arguments" factor is disabled for those modules alone.
+Production code takes the struct instead: `policy_check` binds the policy,
+path, and name once in a `ClaimPolicy` borrow, and `validate` builds findings
+through `FindingData` constructors rather than a three-field literal at every
+call site.
+
+Check a change before pushing it:
+
+```bash
+cs rules-config validate
+cs check-rules cargo-orthohelp/src/skill_validation/support.rs
+cs delta main --output-format json --pretty
+```
+
+`cs rules-config validate` rejects a malformed file, `cs check-rules` confirms
+which rule set a path matches, and `cs delta` reports only the issues the
+change introduces.
+
 ## Command checklist
 
 Run from repository root.

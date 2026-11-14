@@ -112,6 +112,20 @@ pub(crate) fn example(
     }
 }
 
+/// Validates one manifest's references against a single `tool` command that
+/// declares `json`, under `mode`.
+///
+/// Most structural tests need exactly that arrangement, so it lives here
+/// rather than being restated by each of them.
+pub(crate) fn validate_tool_references(
+    references: Vec<SkillCommandRef>,
+    mode: PolicyMode,
+) -> SkillValidationReport {
+    let commands = surface(vec![command(&["tool"], &["json"])]);
+    let claims = input(vec![manifest("operation-skill", references)], Vec::new());
+    super::validate(&claims, &commands, &policy(mode)).expect("the surface is unambiguous")
+}
+
 /// Builds a policy with the supplied mode and no exceptions.
 pub(crate) fn policy(mode: PolicyMode) -> ResolvedAgentPolicy {
     ResolvedAgentPolicy {

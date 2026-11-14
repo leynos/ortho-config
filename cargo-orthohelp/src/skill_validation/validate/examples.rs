@@ -27,23 +27,23 @@ impl<'a> Validator<'a> {
         match self.manifests.owner(&example.manifest_id) {
             OwnerKey::Missing => self.push_structural(
                 claim,
-                FindingData {
-                    code: codes::EXAMPLE_UNKNOWN_MANIFEST,
-                    option: None,
-                    message: format!("manifest ID '{}' is not declared", example.manifest_id),
-                },
+                FindingData::structural(
+                    codes::EXAMPLE_UNKNOWN_MANIFEST,
+                    None,
+                    format!("manifest ID '{}' is not declared", example.manifest_id),
+                ),
             ),
             OwnerKey::Ambiguous(order) => self.push_structural(
                 Self::example_claim(order, example),
-                FindingData {
-                    code: codes::EXAMPLE_AMBIGUOUS_MANIFEST,
-                    option: None,
-                    message: format!(
+                FindingData::structural(
+                    codes::EXAMPLE_AMBIGUOUS_MANIFEST,
+                    None,
+                    format!(
                         "manifest ID '{}' is declared more than once; \
                          the example owner is ambiguous",
                         example.manifest_id
                     ),
-                },
+                ),
             ),
             OwnerKey::Unique(order) => {
                 let manifests = self.manifests.manifests;
@@ -75,22 +75,22 @@ impl<'a> Validator<'a> {
         let Some(reference) = reference_at(manifest, example.command_reference_ordinal) else {
             self.push_structural(
                 claim,
-                FindingData {
-                    code: codes::EXAMPLE_UNBOUND_REFERENCE,
-                    option: None,
-                    message: "example does not select a declared command reference".to_owned(),
-                },
+                FindingData::structural(
+                    codes::EXAMPLE_UNBOUND_REFERENCE,
+                    None,
+                    "example does not select a declared command reference".to_owned(),
+                ),
             );
             return;
         };
         if example.path != reference.path {
             self.push_structural(
                 claim,
-                FindingData {
-                    code: codes::EXAMPLE_PATH_MISMATCH,
-                    option: None,
-                    message: "example path differs from its owning command reference".to_owned(),
-                },
+                FindingData::structural(
+                    codes::EXAMPLE_PATH_MISMATCH,
+                    None,
+                    "example path differs from its owning command reference".to_owned(),
+                ),
             );
             return;
         }
@@ -112,14 +112,14 @@ impl<'a> Validator<'a> {
             {
                 self.push_structural(
                     claim,
-                    FindingData {
-                        code: codes::EXAMPLE_UNDECLARED_OPTION,
-                        option: Some(option.name.clone()),
-                        message: format!(
+                    FindingData::structural(
+                        codes::EXAMPLE_UNDECLARED_OPTION,
+                        Some(option.name.clone()),
+                        format!(
                             "example option '{}' is not declared by its command reference",
                             option.name
                         ),
-                    },
+                    ),
                 );
             }
         }
@@ -137,15 +137,15 @@ impl<'a> Validator<'a> {
             if seen_names.insert(option.name.as_str()) && !accepted {
                 self.push_structural(
                     claim,
-                    FindingData {
-                        code: codes::EXAMPLE_UNKNOWN_OPTION,
-                        option: Some(option.name.clone()),
-                        message: format!(
+                    FindingData::structural(
+                        codes::EXAMPLE_UNKNOWN_OPTION,
+                        Some(option.name.clone()),
+                        format!(
                             "example option '{}' is not accepted by '{}'",
                             option.name,
                             join_path(claim.path)
                         ),
-                    },
+                    ),
                 );
             }
             if accepted && seen_uses.insert((option.name.as_str(), option.value.as_deref())) {

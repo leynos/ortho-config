@@ -67,47 +67,34 @@ fn policy_mode_sets_the_finding_severity(
     );
 }
 
-#[test]
-fn a_flag_exception_suppresses_vocabulary_advice() {
-    let commands = surface(vec![command(&["tool"], &["colour-policy"])]);
+#[rstest]
+#[case(&["tool"], None, Vec::new())]
+#[case(
+    &["tool", "render"],
+    Some("tool build"),
+    vec![codes::POLICY_GLOBAL_OPTION_NEAR_MISS]
+)]
+fn a_flag_exception_suppresses_advice_only_within_its_scope(
+    #[case] command_path: &[&str],
+    #[case] scope: Option<&str>,
+    #[case] expected: Vec<&str>,
+) {
+    let commands = surface(vec![command(command_path, &["colour-policy"])]);
     let claims = input(
         vec![manifest(
             "operation-skill",
-            vec![reference(&["tool"], &["colour-policy"])],
+            vec![reference(command_path, &["colour-policy"])],
         )],
         Vec::new(),
     );
-    let exempt = ResolvedAgentPolicy {
+    let excepting = ResolvedAgentPolicy {
         mode: PolicyMode::Deny,
-        exceptions: vec![flag_exception("colour-policy", None)],
+        exceptions: vec![flag_exception("colour-policy", scope)],
     };
 
-    let report = validate(&claims, &commands, &exempt).expect("the surface is unambiguous");
+    let report = validate(&claims, &commands, &excepting).expect("the surface is unambiguous");
 
-    assert_eq!(report.findings, Vec::new());
-}
-
-#[test]
-fn an_exception_scope_must_match_the_command_path() {
-    let commands = surface(vec![command(&["tool", "render"], &["colour-policy"])]);
-    let claims = input(
-        vec![manifest(
-            "operation-skill",
-            vec![reference(&["tool", "render"], &["colour-policy"])],
-        )],
-        Vec::new(),
-    );
-    let wrong_scope = ResolvedAgentPolicy {
-        mode: PolicyMode::Deny,
-        exceptions: vec![flag_exception("colour-policy", Some("tool build"))],
-    };
-
-    let report = validate(&claims, &commands, &wrong_scope).expect("the surface is unambiguous");
-
-    assert_eq!(
-        codes_of(&report),
-        vec![codes::POLICY_GLOBAL_OPTION_NEAR_MISS]
-    );
+    assert_eq!(codes_of(&report), expected);
 }
 
 #[test]
