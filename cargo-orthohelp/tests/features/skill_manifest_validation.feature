@@ -10,6 +10,7 @@ Feature: Validate skill claims against an agent command contract
 
   Scenario: Check normalized example values and global options
     Given a command contract with explicit effective global options
+    And deny policy without an exception for that option
     And a build workflow example with an option name and value
     When the adapter submits the normalized example
     Then the option is checked on that command

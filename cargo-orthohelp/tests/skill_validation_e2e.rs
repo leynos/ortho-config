@@ -211,10 +211,14 @@ fn a_repeated_heading_is_a_typed_fixture_error() {
 
 #[test]
 fn a_malformed_array_is_a_typed_fixture_error() {
+    // The adapter's own parse path must reject the document, so the test calls
+    // `manifest` rather than serde: a serde-only assertion would pass even if
+    // the adapter stopped reporting the error.
     let markdown = format!("{COMMAND_INDEX_HEADING}\n\n```json\n[{{\"path\": 1}}]\n```\n");
-    let body = fenced_json_after(&markdown, COMMAND_INDEX_HEADING)
-        .expect("the command index heading is present");
-    let parsed: Result<Vec<ortho_config::SkillCommandRef>, _> = serde_json::from_str(body);
+    let parsed = Fixture("build-workflow").manifest(&markdown);
 
-    assert!(parsed.is_err(), "a malformed array must not parse");
+    assert!(
+        parsed.is_err(),
+        "a malformed command index must not parse into claims"
+    );
 }

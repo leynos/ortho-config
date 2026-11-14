@@ -58,7 +58,7 @@ fn build_workflow_example(context: &mut SkillContext) -> StepResult<()> {
         example(
             "build-workflow",
             &["tool", "build"],
-            vec![option_use("color", Some("always"), 1)],
+            vec![option_use("color", Some("sometimes"), 1)],
         ),
     );
     Ok(())
@@ -235,16 +235,20 @@ fn identifies_manifest_and_ordinal(context: &mut SkillContext) -> StepResult<()>
 
 #[then("the option is checked on that command")]
 fn option_is_checked_on_command(context: &mut SkillContext) -> StepResult<()> {
-    let (findings, checked) = with_report(context, |report| {
-        (report.findings.len(), report.coverage.examples_checked)
+    // `examples_checked` only echoes the consumer's extraction flag, so it
+    // stays true whatever the validator does. Assert the finding that example
+    // checking alone produces: the glossary rejects `--color sometimes`.
+    let matches = with_report(context, |report| {
+        report.findings.iter().any(|finding| {
+            finding.code == codes::POLICY_GLOBAL_OPTION_VALUE
+                && finding.option.as_deref() == Some("color")
+                && finding.command_path == vec!["tool", "build"]
+        })
     })?;
-    if findings == 0 && checked == 1 {
+    if matches {
         Ok(())
     } else {
-        Err(format!(
-            "expected one clean checked example, got {findings} findings and {checked} checked"
-        )
-        .into())
+        Err("no glossary-value finding for `--color sometimes`".into())
     }
 }
 
@@ -256,7 +260,7 @@ fn value_is_preserved(context: &mut SkillContext) -> StepResult<()> {
         .and_then(|input| input.examples.first().cloned())
         .and_then(|example| example.options.first().cloned())
         .and_then(|option| option.value);
-    if value.as_deref() == Some("always") {
+    if value.as_deref() == Some("sometimes") {
         Ok(())
     } else {
         Err(format!("the normalized value was not preserved: {value:?}").into())

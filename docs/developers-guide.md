@@ -1210,6 +1210,14 @@ tests split by crate: `assert!`-style boolean checks in `cargo-orthohelp`, and
 matcher- or collection-shaped checks in `ortho_config` agent-context tests
 (Decision D8).
 
+The human-facing global-option glossary is a second table with one owner,
+`cargo-orthohelp/src/policy/vocabulary/global_options.rs`. Each entry pairs a
+concept with its canonical long name, the values it accepts, and the legacy
+spellings that should be reported. `skill_validation::policy_check` is its
+current consumer: it turns a resolved flag or option use into advice naming the
+canonical spelling. Add a new canonical option, accepted value, or near miss in
+that table only; consumers look concepts up rather than restating them.
+
 Fixtures: `tests/fixtures/orthohelp_policy_warn_fixture/` (mode `warn`, one
 redundant exception, one scoped exception) and
 `tests/fixtures/orthohelp_policy_deny_fixture/` (mode `deny`, one malformed
