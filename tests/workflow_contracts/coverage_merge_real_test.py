@@ -49,26 +49,38 @@ def _stop_process_tree(process: subprocess.Popen[str]) -> None:
     try:
         process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
-        if os.name == "posix":
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        else:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+        pass
+
+    if os.name == "posix" and _process_group_exists(process.pid):
         try:
-            process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
-            for stream in (process.stdin, process.stdout, process.stderr):
-                if stream is not None:
-                    stream.close()
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    elif os.name != "posix":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    try:
+        process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
+
+
+def _process_group_exists(process_group_id: int) -> bool:
+    """Check independently whether any process remains in a POSIX group."""
+    try:
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 def _run_bash(
@@ -95,9 +107,7 @@ def _run_bash(
         text=True,
     )
     try:
-        stdout, stderr = process.communicate(
-            input=script, timeout=timeout_seconds
-        )
+        stdout, stderr = process.communicate(input=script, timeout=timeout_seconds)
     except BaseException:
         _stop_process_tree(process)
         raise
@@ -122,11 +132,12 @@ def _run_real_merger(
 @pytest.mark.skipif(
     os.name != "posix", reason="the process-group timeout check requires POSIX"
 )
-def test_bash_timeout_terminates_its_process_group(tmp_path: pathlib.Path) -> None:
-    """A timed-out Bash script cannot leave its child writing in tmp_path."""
+def test_timeout_kills_descendant_ignoring_sigterm(tmp_path: pathlib.Path) -> None:
+    """Timeout cleanup kills a child that ignores SIGTERM and closes its pipes."""
     marker_path = tmp_path / "surviving-child.txt"
     script = (
-        f"( sleep 1; printf alive > {shlex.quote(str(marker_path))} ) &\n"
+        f"( trap '' TERM; sleep 1; printf alive > {shlex.quote(str(marker_path))} ) "
+        "</dev/null >/dev/null 2>&1 &\n"
         "wait\n"
     )
 
