@@ -13,11 +13,13 @@
 //! how the archives were produced.
 
 use super::super::fixture_cargo::{BOUNDARY_ROOT, Budget, repository_root};
+use super::lease::{Prepared, clear_record, prepare, record_complete, run_scope};
 use super::{PACKAGING_INVOCATIONS, package_sources};
 use anyhow::{Context, Result, ensure};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use std::sync::OnceLock;
+use std::time::Instant;
 
 /// Directory `cargo package` writes into, relative to the shared target root.
 const PACKAGE_DIRECTORY: &str = "package";
@@ -102,13 +104,18 @@ static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
 /// under `make boundary`, which runs one process.
 ///
 /// The first caller spends `budget` on the two packaging invocations; later
-/// callers in the same process are no-ops that do not consume it.
+/// callers in the same process are no-ops that do not consume it. Across
+/// processes, [`build_packaged_set`] takes a lease on the packaging target and
+/// reuses the roots once per nextest run, so the twelve invocations a full
+/// `boundary` run would otherwise make become two. See [`lease`] for why the
+/// reuse is scoped to one run rather than to the target directory.
 ///
 /// # Errors
 ///
 /// Returns an error when either packaging invocation fails, when the
-/// contract's shared allowance is spent before one can start, or when one of
-/// the expected unpacked roots is missing afterwards.
+/// contract's shared allowance is spent before one can start, when another
+/// process holds the packaging lease past the allowance, or when one of the
+/// expected unpacked roots is missing afterwards.
 pub(crate) fn prepare_packaged_set(budget: Budget) -> Result<()> {
     let packaged =
         PACKAGED.get_or_init(|| build_packaged_set(budget).map_err(|error| format!("{error:#}")));
@@ -167,14 +174,39 @@ pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
 }
 
 /// Run both packaging invocations and collect the unpacked roots.
+///
+/// The lease decides whether they run at all: a contract that finds this
+/// run's roots already complete returns the paths without packaging, so the
+/// work is done once per run rather than once per test process.
 fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
     let repository = repository_root()?;
     let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
-    Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
-        .with_context(|| format!("create packaging target {target}"))?;
 
-    for invocation in &PACKAGING_INVOCATIONS {
-        package_sources(&repository, &target, invocation, budget)?;
+    let scope = run_scope();
+    let deadline = Instant::now() + budget.remaining();
+    match prepare(&target, scope.as_deref(), deadline)? {
+        Prepared::Reused => {}
+        Prepared::Owned {
+            lease: _lease,
+            directory,
+        } => {
+            // `_lease` is held, not read: it is released when this arm ends. The
+            // record below is written while it is still held, so no other
+            // process can begin a packaging step between the two.
+            clear_record(&directory);
+            match package_all(&repository, &target, budget) {
+                // Recorded under the lease, so the next contract in this run
+                // sees a complete set only once every invocation has succeeded.
+                Ok(()) => {
+                    if let Some(this_run) = scope.as_deref() {
+                        record_complete(&directory, this_run)?;
+                    }
+                }
+                // A partial run leaves a mixture of old and new roots, and the
+                // record is already gone, so no later contract reads it whole.
+                Err(error) => return Err(error),
+            }
+        }
     }
 
     let package_directory = target.join(PACKAGE_DIRECTORY);
@@ -187,6 +219,14 @@ fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
         });
     }
     Ok(roots)
+}
+
+/// Run every packaging invocation, leaving the roots materialized.
+fn package_all(repository: &Utf8Path, target: &Utf8Path, budget: Budget) -> Result<()> {
+    for invocation in &PACKAGING_INVOCATIONS {
+        package_sources(repository, target, invocation, budget)?;
+    }
+    Ok(())
 }
 
 /// Assert every packaged root and archive exists.
