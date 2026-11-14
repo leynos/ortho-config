@@ -76,8 +76,8 @@ pub(crate) fn assert_version_silence(document: &Value, origin: &str) -> Result<(
     let version =
         command_by_leaf(document, "version").map_err(|error| format!("{origin}: {error}"))?;
 
-    match version.get("output") {
-        None => Ok(()),
-        Some(invented) => Err(format!("{origin}: version declared nothing, got {invented}").into()),
-    }
+    version.get("output").map_or_else(
+        || Ok(()),
+        |invented| Err(format!("{origin}: version declared nothing, got {invented}").into()),
+    )
 }

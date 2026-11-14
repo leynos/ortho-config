@@ -147,7 +147,11 @@ fn exit_classes_keep_author_order_and_text() {
         .collect::<Vec<_>>();
     assert_eq!(names, ["usage", "success"], "order should be preserved");
     assert_eq!(
-        output.exit_classes[1].meaning, "The command completed — nothing to do",
+        output
+            .exit_classes
+            .get(1)
+            .map(|entry| entry.meaning.as_str()),
+        Some("The command completed — nothing to do"),
         "meanings are transported verbatim, never localized"
     );
 }
@@ -165,13 +169,18 @@ fn localizer_does_not_alter_output_metadata() {
     let localizer = StaticLocalizer::new([("root.about", "Root command.")]);
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", Some(&localizer));
-    let output = context.commands[0]
-        .output
-        .clone()
+    let output = context
+        .commands
+        .first()
+        .and_then(|command| command.output.clone())
         .expect("the declared block should survive localization");
 
     assert_eq!(
-        output.exit_classes[0].meaning, "The command completed",
+        output
+            .exit_classes
+            .first()
+            .map(|entry| entry.meaning.as_str()),
+        Some("The command completed"),
         "a class meaning is an identifier's explanation, not a Fluent key"
     );
     assert_eq!(output.stdout, Some(AgentStdoutPurpose::Summary));

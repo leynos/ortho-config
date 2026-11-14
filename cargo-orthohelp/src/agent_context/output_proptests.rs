@@ -185,27 +185,41 @@ fn output_tree() -> impl Strategy<Value = DocMetadata> {
         prop::collection::vec(any_output(), 0..=31),
     )
         .prop_map(|(depth, breadth, specs)| {
-            let mut specs = specs.into_iter();
-            build_node(depth, breadth, &mut specs, "root", true)
+            let mut declared = specs.into_iter();
+            let shape = NodeShape {
+                remaining_depth: depth,
+                breadth,
+            };
+            build_node(shape, &mut declared, "root", true)
         })
+}
+
+/// The level budget and branching factor shared by one generated tree.
+#[derive(Clone, Copy)]
+struct NodeShape {
+    /// Levels still to build below the current node.
+    remaining_depth: usize,
+    /// Children each non-leaf node receives.
+    breadth: usize,
 }
 
 /// Builds one node and, below it, a full `breadth`-ary subtree.
 fn build_node(
-    remaining_depth: usize,
-    breadth: usize,
+    shape: NodeShape,
     specs: &mut impl Iterator<Item = Option<IrOutput>>,
     name: &str,
     is_root: bool,
 ) -> DocMetadata {
     let mut node = doc(name, is_root);
     node.output = specs.next().flatten();
-    if remaining_depth > 0 {
-        node.subcommands = (0..breadth)
+    if shape.remaining_depth > 0 {
+        node.subcommands = (0..shape.breadth)
             .map(|index| {
                 build_node(
-                    remaining_depth - 1,
-                    breadth,
+                    NodeShape {
+                        remaining_depth: shape.remaining_depth - 1,
+                        breadth: shape.breadth,
+                    },
                     specs,
                     &format!("{name}-{index}"),
                     false,
@@ -253,7 +267,11 @@ fn any_stdout() -> impl Strategy<Value = IrStdoutPurpose> {
 /// must not deduplicate on the way through.
 fn any_class() -> impl Strategy<Value = IrExitClass> {
     (0_u8..3, "\\PC{1,20}").prop_map(|(slot, meaning)| {
-        let name = ["success", "usage", "failure"][usize::from(slot)];
+        let name = match slot {
+            0 => "success",
+            1 => "usage",
+            _ => "failure",
+        };
         IrExitClass {
             name: name.to_owned(),
             meaning,

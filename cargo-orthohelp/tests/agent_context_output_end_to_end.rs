@@ -106,15 +106,15 @@ fn refusal_and_silence_stay_distinguishable() -> Result<(), TestError> {
 #[test]
 fn output_metadata_is_locale_independent() -> Result<(), TestError> {
     let (_first_temp, first_dir) = temp_out_dir()?;
-    let first = run_orthohelp(&first_dir, "en-US")?;
-    let first: Value = serde_json::from_slice(&first.stdout)?;
+    let first_run = run_orthohelp(&first_dir, "en-US")?;
+    let first_document: Value = serde_json::from_slice(&first_run.stdout)?;
 
     let (_second_temp, second_dir) = temp_out_dir()?;
-    let second = run_orthohelp(&second_dir, "fr-FR")?;
-    let second: Value = serde_json::from_slice(&second.stdout)?;
+    let second_run = run_orthohelp(&second_dir, "fr-FR")?;
+    let second_document: Value = serde_json::from_slice(&second_run.stdout)?;
 
-    output_assertions::assert_greet_output(&first, "en-US stdout")?;
-    output_assertions::assert_greet_output(&second, "fr-FR stdout")?;
+    output_assertions::assert_greet_output(&first_document, "en-US stdout")?;
+    output_assertions::assert_greet_output(&second_document, "fr-FR stdout")?;
     Ok(())
 }
 

@@ -74,8 +74,10 @@ mod tests {
 
     /// Emits the block for the supplied declaration, if any.
     fn emitted(output: Option<OutputAttrs>) -> String {
-        let mut doc = DocStructAttrs::default();
-        doc.output = output;
+        let doc = DocStructAttrs {
+            output,
+            ..DocStructAttrs::default()
+        };
         build_output_metadata(&doc, &quote! { ortho_config }).to_string()
     }
 
