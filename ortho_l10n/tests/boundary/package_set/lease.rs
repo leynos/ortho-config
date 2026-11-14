@@ -181,17 +181,8 @@ pub(crate) fn prepare(
         if record_matches(&directory, scope) {
             return Ok(Prepared::Reused);
         }
-        match try_lease(&directory, target) {
-            Ok(lease) => {
-                if record_matches(&directory, scope) {
-                    return Ok(Prepared::Reused);
-                }
-                return Ok(Prepared::Owned { lease, directory });
-            }
-            Err(error) if is_held_elsewhere(&error) => {}
-            Err(error) => {
-                return Err(error).context(format!("lease the packaging target {target}"));
-            }
+        if let Some(prepared) = claim(&directory, scope, target)? {
+            return Ok(prepared);
         }
         let left = deadline.saturating_duration_since(Instant::now());
         ensure!(
@@ -203,6 +194,33 @@ pub(crate) fn prepare(
             target.join(LEASE_FILE_NAME),
         );
         std::thread::sleep(LEASE_POLL_INTERVAL.min(left));
+    }
+}
+
+/// Try to take the lease, reporting whether this contract now owns the step.
+///
+/// Returns `Ok(None)` when another process holds the lease, which asks the
+/// caller to keep waiting rather than to report a failure. `Ok(Some(..))` means
+/// the contract either owns the packaging step or found the roots already
+/// complete for this run — the second check exists because the holder may have
+/// finished between the caller's first check and the moment the lock was won.
+///
+/// # Errors
+///
+/// Returns an error when the lease cannot be taken for any reason other than
+/// another process holding it.
+fn claim(directory: &Dir, scope: Option<&str>, target: &Utf8Path) -> Result<Option<Prepared>> {
+    match try_lease(directory, target) {
+        Ok(lease) => Ok(Some(if record_matches(directory, scope) {
+            Prepared::Reused
+        } else {
+            Prepared::Owned {
+                lease,
+                directory: directory.try_clone()?,
+            }
+        })),
+        Err(error) if is_held_elsewhere(&error) => Ok(None),
+        Err(error) => Err(error).context(format!("lease the packaging target {target}")),
     }
 }
 
