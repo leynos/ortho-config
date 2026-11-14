@@ -98,77 +98,54 @@ mod holder_tests {
         }
     }
 
-    /// Verifies a scan that fails after matching a descriptor still returns it.
+    /// Verifies a scan that hits an unreadable entry still returns its match.
     ///
     /// This is the case that made the report intermittently useless. Another
     /// thread closing an unrelated descriptor between enumeration and the
     /// identity read fails an entry that has nothing to do with the lock, and
     /// `/proc/<pid>/fd` holds every descriptor in the process, so this happens
     /// during ordinary parallel test execution. A scan that discarded its
-    /// matches would report the lock unexplained while the guard was plainly
-    /// still open.
+    /// matches, or that returned at the first fault, would report the lock
+    /// unexplained while the guard was plainly still open.
     ///
-    /// The descriptors are ordered so the live one is read first, which is what
-    /// makes the expectation exact: the scan matches `7` and then fails on `8`.
-    /// The ordering comes from the fake's listing, so the test states it rather
-    /// than relying on an enumeration order the filesystem does not promise.
-    #[test]
-    fn a_partial_scan_still_returns_the_descriptors_it_matched() -> Result<()> {
+    /// The two cases differ only in which descriptor reads first, and that is
+    /// the whole point of pinning both. `match_before_fault` is the weaker
+    /// order: a scan that kept what it had matched and then stopped still
+    /// passes it. The listing is sorted, so `fault_before_match` is the order
+    /// that actually occurs — an unrelated descriptor closed by another thread
+    /// takes the *lowest* free number — and only a scan that reads on past the
+    /// fault finds the lock's descriptor at all.
+    ///
+    /// The listing is sorted here for the same reason the kernel's is: the
+    /// order a case exercises is then decided by the descriptor numbers it
+    /// states, not by the order the case happens to list them in. The sort is
+    /// over those numbers rather than over `Descriptor`, which deliberately
+    /// offers no ordering of its own.
+    #[rstest]
+    #[case::match_before_fault(7, 8)]
+    #[case::fault_before_match(7, 2)]
+    fn a_fault_does_not_hide_a_match(#[case] matched: u32, #[case] faulted: u32) -> Result<()> {
         let pid = ProcessId::new(1);
+        let mut reading_order = [matched, faulted];
+        reading_order.sort_unstable();
         let procfs = FakeProcFs::default()
-            .with_descriptors(pid, vec![Descriptor::new(7), Descriptor::new(8)])
-            .with_identity(pid, Descriptor::new(7), identity())
-            .with_identity_failure(pid, Descriptor::new(8), "the entry vanished");
+            .with_descriptors(pid, reading_order.map(Descriptor::new).to_vec())
+            .with_identity(pid, Descriptor::new(matched), identity())
+            .with_identity_failure(pid, Descriptor::new(faulted), "the entry vanished");
 
         let outcome = inspect_descriptors(pid, identity(), &procfs);
-        let Err((matched, reason)) = outcome else {
+        let Err((found, reason)) = outcome else {
             anyhow::bail!("a scan with an unreadable entry must not report success");
         };
 
         ensure!(
-            matched == vec![Descriptor::new(7)],
-            "the descriptor matched before the failure must survive it; \
-             discarding it is the regression this test exists for; got {matched:?}",
+            found == vec![Descriptor::new(matched)],
+            "a match must survive a fault whichever side of it the match sorts \
+             on; discarding it, or stopping at the fault, is the regression \
+             this test exists for; got {found:?}",
         );
         ensure!(
-            reason.contains('8'),
-            "the failure must name the entry it could not read: {reason}",
-        );
-        Ok(())
-    }
-
-    /// Verifies a fault *before* a match does not hide the match.
-    ///
-    /// The case above orders the live descriptor first, so a scan that kept
-    /// what it had matched and then stopped still passes it. That is the
-    /// weaker of the two orders, and the listing is sorted, so it is not the
-    /// order that happens in practice: an unrelated descriptor closed by
-    /// another thread takes the *lowest* free number, which sorts before the
-    /// lock's. A scan that returned at the first fault would then never reach
-    /// the lock and would omit the descriptor line the report exists to print.
-    ///
-    /// The failure here is on `2`, below the match on `7`, so the match is only
-    /// found by carrying on past the fault.
-    #[test]
-    fn a_fault_before_a_match_does_not_hide_the_match() -> Result<()> {
-        let pid = ProcessId::new(1);
-        let procfs = FakeProcFs::default()
-            .with_descriptors(pid, vec![Descriptor::new(2), Descriptor::new(7)])
-            .with_identity_failure(pid, Descriptor::new(2), "the entry vanished")
-            .with_identity(pid, Descriptor::new(7), identity());
-
-        let outcome = inspect_descriptors(pid, identity(), &procfs);
-        let Err((matched, reason)) = outcome else {
-            anyhow::bail!("a scan with an unreadable entry must not report success");
-        };
-
-        ensure!(
-            matched == vec![Descriptor::new(7)],
-            "a match sorted after the fault must still be found; stopping at \
-             the fault is the regression this test exists for; got {matched:?}",
-        );
-        ensure!(
-            reason.contains('2'),
+            reason.contains(&faulted.to_string()),
             "the failure must name the entry it could not read: {reason}",
         );
         Ok(())

@@ -745,14 +745,14 @@ collected into one reason naming each entry it could not read, and every match
 is kept. The sorting also means a failure leaves the same match list rather
 than whichever entries `read_dir` happened to yield first.
 
-`a_partial_scan_still_returns_the_descriptors_it_matched` pins the match-before
--fault order, `a_fault_before_a_match_does_not_hide_the_match` pins the
-fault-before-match order, and `every_unreadable_entry_is_named` pins that both
-faults reach the report. All three drive `inspect_descriptors` through
-`FakeProcFs` rather than the filesystem, so the loop under test is the real one
-and the fault is *stated* rather than arranged; an earlier version built the
-`Incomplete` result by hand and passed against a mutant that discarded matches,
-which is the vacuity the seam exists to prevent.
+`a_fault_does_not_hide_a_match` pins both orders as two cases of one test —
+`match_before_fault` and `fault_before_match` — and
+`every_unreadable_entry_is_named` pins that both faults reach the report. All
+three drive `inspect_descriptors` through `FakeProcFs` rather than the
+filesystem, so the loop under test is the real one and the fault is *stated*
+rather than arranged; an earlier version built the `Incomplete` result by hand
+and passed against a mutant that discarded matches, which is the vacuity the
+seam exists to prevent.
 
 An entry whose identity cannot be read is treated as a failed scan for the same
 reason. The scan's tests live in `artefact_lock_holder_tests.rs`: the cap
