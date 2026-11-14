@@ -95,6 +95,32 @@ All notable changes to this project will be documented in this file.
   including a deny-mode policy violation, and `2` for Clap's usage rejection.
   No diagnostic field carries them; a positive `summary.deny` count
   distinguishes a policy denial from any other failure.
+### Added (clap error translations)
+
+- **Complete en-US coverage for `clap` parse errors (roadmap 11.2.1).** The
+  crate now ships en-US text for every parse-raised `clap` error kind it
+  classifies, and publishes that classification as `CLAP_ERROR_IDS`. Fourteen
+  kinds map to Fluent identifiers, and the four that predate this matrix keep
+  their historical spelling, so existing override catalogues keep resolving.
+  The three kinds whose text `clap` renders itself — `DisplayHelp`,
+  `DisplayVersion`, and `DisplayHelpOnMissingArgumentOrSubcommand` — carry the
+  `DisplayOnly` sentinel and are never substituted. A test-only pre-publication
+  gate (`cargo test -p ortho_config --test clap_error_coverage`) fails when the
+  matrix and the resolved `clap_builder` inventory diverge; it never runs in a
+  consumer build. See:
+  - [Translate or override clap parse errors](docs/users-guide.md#translate-or-override-clap-parse-errors)
+  - [Design §6.1.1](docs/cli-localization-design.md#611-pre-publication-coverage-gate)
+  - [ADR-0020](docs/adrs/adr-0020-pre-publication-clap-coverage-gate.md)
+
+### Changed (clap error behaviour)
+
+- **Missing-input help is no longer translated.** The help `clap` renders when
+  a required argument or subcommand is missing
+  (`ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand`) is now classified as
+  display-only, so a consumer override of `clap-error-missing-subcommand` no
+  longer replaces it. The rendered text is `clap`'s own and the process keeps
+  `clap`'s error exit status. Unknown subcommands still use the translated
+  `clap-error-invalid-subcommand` message.
 
 ### Changed (source compatibility)
 

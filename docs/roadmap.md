@@ -686,22 +686,22 @@ later progressively add opinion.
 
 ### 11.2. Widen clap-error coverage and preserve clap's rich context
 
-- [ ] 11.2.1. Ship en-US translations for the complete clap stable error
+- [x] 11.2.1. Ship en-US translations for the complete clap stable error
   matrix.
   - Requires 11.1.1.
   - See cli-localization-design.md §6.1 and §6.2.
-  - [ ] Add Fluent strings for `NoEquals`, `ValueValidation`, `TooManyValues`,
+  - [x] Add Fluent strings for `NoEquals`, `ValueValidation`, `TooManyValues`,
     `TooFewValues`, `WrongNumberOfValues`, `ArgumentConflict`,
     `InvalidUtf8`, `Io`, and `Format` (alongside the four existing
     identifiers).
-  - [ ] Define `pub enum ClapErrorTranslation { Translated(&'static str),
+  - [x] Define `pub enum ClapErrorTranslation { Translated(&'static str),
     DisplayOnly }` and expose `pub const CLAP_ERROR_IDS:
     &[(clap::error::ErrorKind, ClapErrorTranslation)]`. The matrix is
     **exhaustive** over `ErrorKind`: display-only variants
     (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`,
     `DisplayVersion`) appear with the `DisplayOnly` sentinel, so the gate
     reduces to a simple length comparison.
-  - [ ] Implement the mechanical coverage gate (a test-only pre-publication
+  - [x] Implement the mechanical coverage gate (a test-only pre-publication
     check plus `const_assert_eq!`) as specified in
     [cli-localization-design.md §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate).
     The design document owns the mechanism; this task implements it. No build
@@ -710,6 +710,11 @@ later progressively add opinion.
     `ErrorKind` variants of this workspace's resolved `clap_builder` without
     classifying display-only variants, because the exhaustive matrix pairs each
     variant with either a translated identifier or the sentinel.
+  - Finding: the gate lives in `ortho_config/tests/clap_error_coverage.rs`; the
+    developers' guide owns its operating procedure, and the users' guide lists
+    the shipped identifiers.
+  - Validation: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+    `make markdownlint`, and `make nixie` passed on 2026-11-15.
 
 - [ ] 11.2.2. Switch error localization to clap's mutation surface.
   - Requires 11.2.1.

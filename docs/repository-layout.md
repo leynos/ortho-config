@@ -89,10 +89,20 @@ targets. Each directory-style suite needs its own `[[test]]` stanza in
   contains CLI parsing tests across configuration sources in the `common`,
   `config_path`, `error_cases`, `option_cases`, and `parsing` modules, plus
   `xdg` on Unix and Redox.
+- `ortho_config/tests/clap_error_coverage.rs` (target `clap_error_coverage`) is
+  the pre-publication gate described in the
+  [developers' guide](developers-guide.md#the-pre-publication-clap-coverage-gate).
+  It reads the root `Cargo.lock` and `cargo metadata --locked --offline`,
+  locates the resolved `clap_builder` source, counts `ErrorKind` variants, and
+  compares them with the reviewed total. Its decisions live in
+  `tests/support/clap_publication/`, its reviewed data in
+  `tests/support/clap_reviewed.rs`, and its lock and source fixtures in
+  `tests/fixtures/clap_publication/`.
 
-Run either target independently with
-`cargo test -p ortho_config --test subcommand` or
-`cargo test -p ortho_config --test clap_integration`.
+Run any target independently with
+`cargo test -p ortho_config --test subcommand`,
+`cargo test -p ortho_config --test clap_integration`, or
+`cargo test -p ortho_config --test clap_error_coverage`.
 
 ## Behavioural test inventory
 
