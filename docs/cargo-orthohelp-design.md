@@ -949,6 +949,14 @@ check alone writes `policy-report.json` and exits. This mirrors the
 generator preconditions (`root_type`, a library target, or an `ortho_config`
 dependency).
 
+The stage evaluates configuration only. Reusable command-metadata rules such as
+`policy::rules::behaviour::check_behaviour` and
+`policy::rules::output::check_output` are library APIs over a compiled agent
+context and are not run by this stage. Wiring them in would need the bridge
+build that Decision D11 excludes, so expanding `--check-agent-native` to cover
+command metadata requires a separate accepted design decision rather than an
+incidental bridge build.
+
 ### 6.3.3 Bridge build ownership and recovery
 
 The `target/orthohelp/<hash>/` directory remains the stable identity for cached

@@ -74,6 +74,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-scoped-discovery",
     "api-guide-policy-report-constructors",
     "api-guide-policy-report-json",
+    "api-guide-output-policy",
     "api-guide-agent-context-constructor",
     "api-guide-agent-context-json",
     "guide-boolean-override",

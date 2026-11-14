@@ -96,6 +96,50 @@ fn main() -> Result<(), serde_json::Error> {
 }
 ```
 
+### Structured-output rule
+
+`cargo_orthohelp::policy::rules::output::check_output` is the reusable
+structured-output check that sits beside
+`cargo_orthohelp::policy::rules::behaviour::check_behaviour`. It reports one
+`json_support_missing` finding for every command whose declared stdout purpose
+is `data` and whose JSON support is false or undeclared. Off mode returns an
+empty report, and the rule never infers anything from a verb, flag, renderer
+default, or parent command.
+
+The check is not wired into `--check-agent-native`: that CLI path evaluates
+configuration only and has no command metadata to inspect, so callers with a
+compiled agent context invoke the rule directly. The example runs both checkers
+over one context and reads each report's deny count.
+
+<!-- tested-example: api-guide-output-policy -->
+```rust
+use cargo_orthohelp::policy::PolicyMode;
+use cargo_orthohelp::policy::rules::behaviour::check_behaviour;
+use cargo_orthohelp::policy::rules::output::check_output;
+use ortho_config::AgentContext;
+
+fn main() -> Result<(), serde_json::Error> {
+    let context: AgentContext = serde_json::from_value(serde_json::json!({
+        "schema_version": "1",
+        "kind": "demo.agent_context",
+        "package": "demo",
+        "commands": [{
+            "path": ["demo", "get"],
+            "interaction_mode": "non_interactive",
+            "mutation_effect": "read_only",
+            "output": { "stdout": "data" }
+        }]
+    }))?;
+
+    let behaviour = check_behaviour(&context, PolicyMode::Deny);
+    let output = check_output(&context, PolicyMode::Deny);
+
+    assert_eq!(behaviour.summary.deny, 0);
+    assert_eq!(output.summary.deny, 1);
+    Ok(())
+}
+```
+
 ## Agent context
 
 Use `ortho_config::agent_context` to describe an invocable command surface.

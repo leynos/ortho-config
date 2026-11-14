@@ -220,8 +220,9 @@ JSON compatibility is preserved; the Rust source API is not.
 - Numeric exit-code mappings and their stability guarantees remain with roadmap
   7.2.5.
 - Whether a lint rule should require JSON support for a data-returning command
-  is roadmap 7.2.3's policy API; the first rule is delivered as `check_output`,
-  and expanding the CLI's check to run it is later work.
+  is roadmap 7.2.3's policy API. The first rule is delivered as `check_output`
+  with rule ID `agent-native.output.json-missing` and code
+  `json_support_missing`; expanding the CLI's check to run it is later work.
 
 ## Architectural rationale
 

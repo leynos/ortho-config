@@ -133,6 +133,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "",
     },
     SimpleRun {
+        id: "api-guide-output-policy",
+        args: &[],
+        stdout: "",
+    },
+    SimpleRun {
         id: "api-guide-agent-context-constructor",
         args: &[],
         stdout: "",

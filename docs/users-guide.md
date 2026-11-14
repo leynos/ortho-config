@@ -2102,7 +2102,8 @@ A declaration is not a check. The derive records what an author stated; it
 never inspects flags, arguments, or a running process to confirm it. The
 metadata flows into the documentation IR, the localized per-locale artefacts,
 and agent context as an `output` object. Checking whether a data-returning
-command actually declares JSON support is a separate, opt-in step.
+command actually declares JSON support is a separate, opt-in step described in
+[Lint declared structured output](#lint-declared-structured-output).
 
 Because the wire contract is additive, the JSON stays compatible. The Rust
 source API is not: constructing documentation IR or an `AgentCommand` by struct
@@ -2400,6 +2401,29 @@ The validator checks only the claims supplied to it. It does not discover
 commands from prose, validate a shell invocation's quoting or arity, or prove
 that an example succeeds when run. Those remain the consumer's responsibility;
 `docs/agent-native-cli-design.md` records the full boundary.
+
+## Lint declared structured output
+
+The structured-output rule is exported beside the behaviour rules as
+`cargo_orthohelp::policy::rules::output::check_output(context, mode)`. It
+reports one `json_support_missing` finding (rule
+`agent-native.output.json-missing`) for every command whose declared stdout
+purpose is `data` and whose `supports_json` is false or undeclared.
+
+It compares declarations rather than observing a process. A command that emits
+some other structured format but has no JSON mode must declare `stdout` as its
+real purpose instead of `"data"`; the rule is deliberately about JSON because
+that is the capability the product asks for. The finding names `--json` and
+gives the `output(supports_json = true)` annotation to add only if the
+application implements it; the alternative remedy is to correct the data claim.
+A canonical verb such as `get` is never treated as evidence, `path`, `summary`,
+`none`, and the tolerant `unknown` fallback never fire, an absent block never
+becomes a defaulted record, and `PolicyMode::Off` returns an empty report.
+
+Like `check_behaviour`, the rule consumes a compiled agent context, so it is a
+library API rather than part of `--check-agent-native`; see the
+[cargo-orthohelp API guide](cargo-orthohelp-api-guide.md#structured-output-rule)
+for a runnable example that calls both checkers.
 
 ## Upgrade from an earlier release
 

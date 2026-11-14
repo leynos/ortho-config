@@ -232,6 +232,9 @@ all possible public values are validated.
   (112 Rust targets plus pytest 128 passed), markdownlint (including spelling),
   and nixie.
 - [x] M1: metadata, derive transport, documentation and integration coverage.
+- [x] (2026-11-15) M2 implementation: `check_output`, the complete 3 × 6 × 3
+  truth table, unrelated-field invariance, sampled properties, four BDD
+  scenarios, and an executable Rustdoc example. Commit `946013b2`.
 - [ ] M2: structured-output lint and executable consumer examples.
 - [ ] M3: exit documentation, process regression evidence and completion.
 
@@ -259,6 +262,14 @@ indexed vectors. Separately, Whitaker's `module-max-lines` counts the
 402 lines. Both are cheap to avoid up front: write asserting tests as `()`,
 take references in helpers, and check the owning module's length before adding
 to it.
+
+The M1 certificate did not cover doctests: `make test` runs the Cargo test
+targets, not `cargo test --doc`. The M2 instruction to run the Rustdoc suite
+explicitly therefore found an M1 example that no longer compiled — the
+`bridge_ir_to_agent_context` doc example still built `DocMetadata` without the
+new `output` field. It is repaired in the M2 implementation commit. The lesson
+is that a new required struct field also invalidates doc examples, and only the
+explicit Rustdoc run observes them.
 
 ## Decision log
 
@@ -293,6 +304,15 @@ before the callback; a fork check consumes it without weakening any other
 group. Design §8.1's planned flat `supports_json` and `exit_classes` rows were
 replaced by realized `output` rows so no document describes a second source of
 truth.
+
+2026-11-15, implementation decision: the output rule orders with the stable
+`sort_by`, unlike the behaviour rules' `sort_unstable_by`, because this plan
+requires encounter order to survive for equal paths. A finding's content is a
+pure function of the command path, so tied order is not externally
+distinguishable; the stable sort nevertheless keeps the stated contract.
+`check_output` returns `PolicySeverity` directly because its one rule has no
+quick-fix category to project, and its message distinguishes an explicit
+refusal from an undeclared capability while sharing both remedies.
 
 ## Context and orientation
 

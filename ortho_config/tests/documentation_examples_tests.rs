@@ -20,6 +20,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "api-guide-agent-context-json",
     "api-guide-policy-report-constructors",
     "api-guide-policy-report-json",
+    "api-guide-output-policy",
     "guide-agent-context",
     "guide-alias-derive",
     "guide-alias-install",
