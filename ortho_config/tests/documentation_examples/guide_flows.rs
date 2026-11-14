@@ -199,6 +199,7 @@ pub(super) fn assert_behaviour_check_flow(workspace: &mut ExampleWorkspace) -> R
         pagination: None,
         examples: Vec::new(),
         renderer: RendererContract::default(),
+        output: None,
     });
     let context_json = serde_json::to_string(&context)?;
     workspace.write_run_file(

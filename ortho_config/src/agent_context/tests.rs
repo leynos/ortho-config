@@ -343,6 +343,7 @@ pub(super) fn sample_agent_context() -> AgentContext {
                 output_mode: Some("json".to_owned()),
             }],
             renderer: RendererContract::default(),
+            output: None,
         }],
         profiles: ProfilesDeclaration::unsupported(),
         feedback: SupportDeclaration { supported: false },

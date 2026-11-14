@@ -27,6 +27,34 @@ pub(crate) struct DocStructAttrs {
     pub behaviour: Option<BehaviourAttrs>,
     /// Declared human and machine rendering copied into generated help.
     pub renderer: Option<RendererAttrs>,
+    /// Declared structured-output capability and exit classes (roadmap 7.2.3).
+    pub output: Option<OutputAttrs>,
+}
+
+/// Declared structured-output capability for a command (roadmap 7.2.3).
+///
+/// Mirrors the rendered `ortho_config::docs::OutputMetadata` block. Scalar
+/// leaves stay optional so an undeclared aspect remains undeclared, and the
+/// stdout token stays a validated string until the generate stage converts it.
+#[derive(Default, Clone)]
+pub(crate) struct OutputAttrs {
+    /// Declared JSON capability; `None` means undeclared.
+    pub supports_json: Option<bool>,
+    /// Declared stdout purpose token.
+    pub stdout: Option<String>,
+    /// Declared diagnostic-stderr claim; `None` means undeclared.
+    pub stderr_diagnostics: Option<bool>,
+    /// Documented exit classes in declaration order.
+    pub exit_classes: Vec<ExitClassAttr>,
+}
+
+/// One documented exit class from an `exit_class(...)` declaration.
+#[derive(Clone)]
+pub(crate) struct ExitClassAttr {
+    /// Stable, non-localized class identifier.
+    pub name: String,
+    /// Nonblank explanation carried verbatim into the IR.
+    pub meaning: String,
 }
 
 /// Heading ID overrides for documentation sections.

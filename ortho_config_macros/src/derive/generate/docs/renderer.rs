@@ -102,7 +102,10 @@ fn record_tokens(record: &RendererRecordAttrs, krate: &TokenStream) -> TokenStre
 }
 
 /// Emits an `Option<bool>` initialiser for a declared support value.
-fn bool_option_tokens(value: Option<bool>) -> TokenStream {
+///
+/// Shared with the `output` block's generator, which has the same
+/// undeclared-stays-`None` rule.
+pub(super) fn bool_option_tokens(value: Option<bool>) -> TokenStream {
     value.map_or_else(|| quote! { None }, |declared| quote! { Some(#declared) })
 }
 
@@ -112,7 +115,14 @@ fn bool_option_tokens(value: Option<bool>) -> TokenStream {
 /// capitalizing each segment, which is exactly the `snake_case` spelling the
 /// parser accepted. An unrecognized token emits `None` so the generator stays
 /// total; the parser is the gate that prevents it.
-fn enum_option_tokens(value: Option<&str>, type_name: &str, krate: &TokenStream) -> TokenStream {
+///
+/// Shared with the `output` block's generator, whose enum leaves follow the
+/// same `snake_case` wire spelling.
+pub(super) fn enum_option_tokens(
+    value: Option<&str>,
+    type_name: &str,
+    krate: &TokenStream,
+) -> TokenStream {
     let Some(token) = value else {
         return quote! { None };
     };

@@ -17,6 +17,9 @@ use input::build_input;
 mod renderer;
 use renderer::map_renderer;
 
+mod output;
+use output::map_output;
+
 mod policy;
 pub use policy::apply_policy_to_context;
 
@@ -236,6 +239,7 @@ fn walk(
         pagination: None,
         examples: Vec::new(),
         renderer: map_renderer(meta.renderer.as_ref()),
+        output: map_output(meta.output.as_ref()),
     });
 
     for subcommand in &meta.subcommands {

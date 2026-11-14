@@ -121,6 +121,7 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
                 pagination,
                 examples,
                 renderer,
+                output: None,
             },
         )
 }

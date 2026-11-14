@@ -164,6 +164,7 @@ fn command() -> impl Strategy<Value = AgentCommand> {
                 pagination: None,
                 examples: Vec::new(),
                 renderer: RendererContract::default(),
+                output: None,
             },
         )
 }

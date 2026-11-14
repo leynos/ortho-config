@@ -105,6 +105,7 @@ fn greet_command_context() -> AgentCommand {
             output_mode: Some("text".to_owned()),
         }],
         renderer: RendererContract::default(),
+        output: None,
     }
 }
 
@@ -155,6 +156,7 @@ fn take_leave_command_context() -> AgentCommand {
             output_mode: Some("text".to_owned()),
         }],
         renderer: RendererContract::default(),
+        output: None,
     }
 }
 

@@ -36,9 +36,11 @@ mod profiles;
 
 pub use profiles::{ProfileSelectionContract, ProfilesDeclaration};
 
+mod output;
 mod renderer;
 mod renderer_wire;
 
+pub use output::{ExitClass, OutputContract, StdoutPurpose};
 pub use renderer::{
     AccessibilityPolicy, ClosedStdinPolicy, InheritancePolicy, PlainPolicy, RenderWidth,
     RendererContract, RendererField, RendererFieldLocalization, RendererRecord, StreamContent,
@@ -160,6 +162,15 @@ pub struct AgentCommand {
     /// affirmative promise.
     #[serde(default)]
     pub renderer: RendererContract,
+    /// Declared structured-output capability for this command.
+    ///
+    /// Absent (`None`) means the author declared nothing, which is distinct
+    /// from a present block that explicitly declines JSON support. Omitted from
+    /// the wire when absent, like [`AgentCommand::summary`] and the optional
+    /// profile fields; this is an additive schema-v1 exception to the
+    /// explicit-`null` convention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<OutputContract>,
 }
 
 /// Asynchronous submission metadata for a command.

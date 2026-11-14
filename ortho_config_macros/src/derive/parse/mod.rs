@@ -23,6 +23,7 @@ mod field_attrs;
 mod input;
 mod literals;
 mod localization;
+mod output_attrs;
 mod renderer_attrs;
 mod renderer_values;
 mod serde_attrs;
@@ -41,7 +42,8 @@ pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};
 use doc_attrs::apply_field_doc_attr;
 pub(crate) use doc_types::{
     BehaviourAttrs, DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs,
-    HeadingOverrides, RenderWidthAttr, RendererFieldAttr, RendererRecordAttrs,
+    ExitClassAttr, HeadingOverrides, OutputAttrs, RenderWidthAttr, RendererFieldAttr,
+    RendererRecordAttrs,
 };
 pub(crate) use field_attrs::parse_field_attrs;
 pub(crate) use input::parse_input;
@@ -54,6 +56,7 @@ pub(crate) use literals::__doc_lit_str;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::lit_char;
 pub(crate) use literals::lit_crate_path;
+pub(crate) use output_attrs::parse_output_meta;
 pub(crate) use renderer_attrs::parse_renderer_meta;
 pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
