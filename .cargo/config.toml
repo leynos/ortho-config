@@ -9,9 +9,12 @@
 #
 # - `-Zthreads=8` is the parallel `rustc` frontend. It is nightly-only, which
 #   is why rust-toolchain.toml pins a dated nightly.
-# - `-Zcodegen-backend=cranelift` selects the fast development backend. The
-#   `ortho_config_dev_fast` cfg lets one unwind-dependent test remain enabled
-#   for LLVM coverage, because Cranelift cannot unwind through compiled frames.
+# - Development builds use LLVM, the estate standard. The opt-in lines below
+#   select the Cranelift backend (`-Zcodegen-backend=cranelift`) and define the
+#   `ortho_config_dev_fast` cfg, which ignores the unwind-dependent tests that
+#   Cranelift cannot run; the `--check-cfg` line keeps the cfg name registered.
+#   Cranelift cannot unwind through compiled frames. Opt-in via
+#   `--config 'build.rustflags=[...]'` is not supported: uncomment both blocks.
 # - `-Clink-arg=-fuse-ld=mold` selects the `mold` linker. `mold` ships for Linux
 #   only, so it appears solely under the Linux target table, never in `[build]`
 #   and never under `cfg(unix)`, which macOS builds also take.
@@ -26,16 +29,18 @@
 [build]
 rustflags = [
   "-Zthreads=8",
-  "-Zcodegen-backend=cranelift",
-  "--cfg=ortho_config_dev_fast",
+  # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+  # "-Zcodegen-backend=cranelift",
+  # "--cfg=ortho_config_dev_fast",
   "--check-cfg=cfg(ortho_config_dev_fast)",
 ]
 
 [target.'cfg(target_os = "linux")']
 rustflags = [
   "-Zthreads=8",
-  "-Zcodegen-backend=cranelift",
-  "--cfg=ortho_config_dev_fast",
+  # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+  # "-Zcodegen-backend=cranelift",
+  # "--cfg=ortho_config_dev_fast",
   "--check-cfg=cfg(ortho_config_dev_fast)",
   "-Clink-arg=-fuse-ld=mold",
 ]

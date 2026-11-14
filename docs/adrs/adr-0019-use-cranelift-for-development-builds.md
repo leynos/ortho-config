@@ -2,9 +2,13 @@
 
 ## Status
 
-Accepted. Development builds use Cranelift and the parallel `rustc` frontend;
-coverage builds use LLVM. This decision supersedes the backend exclusion in
+Accepted. This decision supersedes the backend exclusion in
 [ADR-0018](adr-0018-adopt-a-dated-nightly-and-the-development-build-standard.md).
+Amended 14 November 2026: the estate standard is LLVM, so the Cranelift
+selection and the `ortho_config_dev_fast` cfg are commented out in
+`.cargo/config.toml` and the Makefile, and development builds use LLVM and the
+parallel `rustc` frontend, with review due 14 May 2027. The opt-in lines stay.
+The text below records the original decision.
 
 ## Date
 
