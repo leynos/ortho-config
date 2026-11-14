@@ -4,7 +4,10 @@
 //! not answer "may the roots I was just promised be replaced while I read
 //! them", because it is released before the consumer reads anything. The run
 //! guard answers the second question, and its whole content is that a second
-//! run cannot get past it while a first run is alive.
+//! *process* cannot get past it while a first is alive. That is narrower than
+//! excluding two whole runs, which could still interleave process by process;
+//! see the module documentation for why the process span is the one that
+//! matters here.
 //!
 //! These cases pin the two halves that a broken guard would lose: a second
 //! holder is refused while the first is alive, and the first's release hands
@@ -53,14 +56,15 @@ fn a_second_run_guard_is_refused_while_the_first_is_held(
         .map(|error| format!("{error:#}"))
         .with_context(|| {
             format!(
-                "a second boundary run was granted the guard on {}; overlapping \
-                 runs would replace the packaged roots one another is reading",
+                "a second boundary process was granted the guard on {}; \
+                 overlapping processes would replace the packaged roots one \
+                 another is reading",
                 scratch.path()
             )
         })?;
     ensure!(
-        refused.contains("boundary run holds"),
-        "the refusal did not say another run holds the guard: {refused}"
+        refused.contains("boundary process holds"),
+        "the refusal did not say another process holds the guard: {refused}"
     );
     Ok(())
 }

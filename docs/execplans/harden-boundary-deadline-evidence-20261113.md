@@ -73,10 +73,12 @@ The residual ten decompose as:
 | a negative control wrapping the same blocked metadata     | 1     | never started                            |
 | the serialization probe                                   | 1     | its subject is the wait                  |
 
-The packaging pair did run - the log holds six `Verifying ortho_l10n` starts,
-where the baseline began none - so the lease moved the suite from "packaging
-never starts" to "packaging runs and is cut at a named remainder". What failed
-is that one pair still exceeds what a contract can be given, which is the D3
+The packaging pair did run - the log holds six `Verifying ortho_l10n` lines,
+where the baseline began none - so the suite moved from "packaging never
+starts" to "packaging runs and is cut at a named remainder". Those six lines
+are one cached stderr tail, not six starts (see the mechanism below), so they
+are evidence that the step began, not that it ran repeatedly. What failed is
+that one pair still exceeds what a contract can be given, which is the D3
 problem and not a lease problem.
 
 ### The residual mechanism, named
@@ -86,25 +88,32 @@ The tenth is the serialization probe, which fails because the same starvation
 keeps its sibling holding the lock, so it is a victim rather than a distinct
 cause:
 
-1. One packaged contract takes the lease and starts a cold
-   `cargo package --verify`, which needs 802 s on this host.
-2. The other five block in `prepare` polling the lease. Each waits until its
-   own 900 s `SCENARIO_ALLOWANCE` is nearly gone.
-3. The holder is killed at its 440 s `PACKAGE_DEADLINE`, so it never records
-   completion.
-4. A waiter takes the lease with about **22 s** of allowance left, and its own
-   `cargo package` is clamped to that remainder and killed. The error names the
-   allowance, and `roots` caches the formatted failure, so the same text is
-   then reported by every remaining packaged contract.
-5. The contracts that never reach packaging at all - one `cargo metadata`
+1. One packaged contract wins `PACKAGED`'s `OnceLock` and starts a cold
+   `cargo package --verify`, which needs 802 s on this host. The other five
+   packaged contracts never reach `prepare` at all: they block on that
+   `OnceLock` initialization, not on the lease, for their whole allowance.
+2. That one caller's own clock starts at `Budget::new`, and the cold pair is
+   a `cargo package` run beneath the nested-Cargo mutex. The remainder it is
+   given is what is left of its 900 s `SCENARIO_ALLOWANCE` after everything
+   queued ahead of it inside that mutex - which, after 440 s of
+   `PACKAGE_DEADLINE` and the rest, is about **22 s**.
+3. Its `cargo package` is therefore bounded to that remainder and killed. The
+   error names the allowance, and `roots` caches the formatted failure, so the
+   same text is then reported by every packaged contract waiting on the same
+   `OnceLock`.
+4. The contracts that never reach packaging at all - one `cargo metadata`
    contract and one negative control - exhaust their allowance while queued
    behind the same cold fill inside the nested-Cargo mutex, so their error
    names a metadata wait rather than a packaging one.
 
 That is why six tests report the identical `22 second deadline` string: it is
-one failure, replayed from `roots`' cached error. The lease did its job - the
-after-run log holds six `Verifying ortho_l10n` starts against the baseline's
-none - but a single cold pair still exceeds one contract's whole allowance, so
+one failure, replayed from `roots`' cached error. The same cache explains the
+six `Verifying ortho_l10n` lines, and they must not be read as six starts: each
+sits exactly seventeen lines into its own `Error:` block, which is one stderr
+tail replayed six times rather than six invocations that each began and died.
+So what the after-run proves against the baseline's zero is that packaging
+started and was cut at a named remainder, not that the lease serialized six
+attempts. A single cold pair still exceeds one contract's whole allowance, so
 serializing *arithmetic* cannot make it fit. The baseline never began a
 packaging invocation at all, which is why "twelve invocations the unleased
 suite would make" is a count derived from the contract list rather than read
@@ -703,6 +712,20 @@ mutation check is the thing to re-run if that ever happens.
   file to 442 lines and Whitaker's `module-max-lines` refused it at 400. It
   also needs its own `no_std_fs_operations` exclusion in `dylint.toml`, on the
   same terms as the lease's, because the exclusion is keyed by module path.
+- 2026-11-14: **the guard's span is a process, not a run**, recorded after
+  review pointed out that it does not establish run-level exclusion. It does
+  not, and the documentation now says so rather than implying otherwise: two
+  whole runs can interleave process by process - A's process exits, B's
+  replaces the record, A's next process packages again - which defeats
+  once-per-run reuse while leaving the property the guard exists for intact.
+  That property is that no packaging step can replace roots under a process
+  still reading them, and a process span is exactly the span that covers those
+  reads. Nothing in the suite depends on the stronger claim today; a
+  run-lifetime guard keyed on `NEXTEST_RUN_ID`, or a packaging target per run,
+  is the route if it ever does. The reviewer's A-B-A interleaving case is not
+  written: it would need a second run identifier and a process to exit
+  mid-sequence, and the behaviour it would pin is the limitation just described
+  rather than a guarantee.
 
 ## Risks
 
