@@ -33,6 +33,9 @@ ignore = [
   "`#\\[tokio::test\\(flavor = \"current_thread\"\\)\\]`",
   "`Invoke-ScriptAnalyzer`",
   "`PSScriptAnalyzer`",
+  # `flate2` is the upstream crate name and is absent from the shared
+  # dictionary. Exempt only that exact code span so a nearby typo is checked.
+  "`flate2`",
   "`[^`\\n]*localised_help[^`\\n]*`",
   "`Artifacts`",
   # "mold" names the linker (https://github.com/rui314/mold), not a fungus.
