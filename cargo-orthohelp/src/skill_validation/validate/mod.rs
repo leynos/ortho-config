@@ -18,7 +18,7 @@ use super::policy_check::{PolicyAdvice, ResolvedAgentPolicy, flag_name_advice, v
 use super::report::{
     Coverage, FindingCategory, SkillValidationReport, ValidationFinding, ValidationStatus, codes,
 };
-use super::resolve::{CommandIndex, join_path};
+use super::resolve::{CommandIndex, CommandPath, OptionName, join_path};
 use crate::policy::PolicySeverity;
 
 mod examples;
@@ -176,7 +176,11 @@ impl<'a> Validator<'a> {
 
     /// Checks one command reference, then its resolved policy.
     fn check_reference(&mut self, claim: ClaimRef<'a>, reference: &'a SkillCommandRef) {
-        if self.index.command(&reference.path).is_none() {
+        if self
+            .index
+            .command(CommandPath::new(&reference.path))
+            .is_none()
+        {
             self.push_structural(
                 claim,
                 FindingData::structural(
@@ -184,7 +188,7 @@ impl<'a> Validator<'a> {
                     None,
                     format!(
                         "command path '{}' is not declared by the command surface",
-                        join_path(&reference.path)
+                        join_path(CommandPath::new(&reference.path))
                     ),
                 ),
             );
@@ -206,10 +210,10 @@ impl<'a> Validator<'a> {
 
     /// Checks one declared flag and its policy standing.
     fn check_flag(&mut self, claim: ClaimRef<'_>, flag: &str) -> bool {
-        let Some(command) = self.index.command(claim.path) else {
+        let Some(command) = self.index.command(CommandPath::new(claim.path)) else {
             return false;
         };
-        let Some(option) = command.option(flag) else {
+        let Some(option) = command.option(OptionName::new(flag)) else {
             self.push_structural(
                 claim,
                 FindingData::structural(
@@ -217,7 +221,7 @@ impl<'a> Validator<'a> {
                     Some(flag.to_owned()),
                     format!(
                         "flag '{flag}' is not accepted by '{}'",
-                        join_path(claim.path)
+                        join_path(CommandPath::new(claim.path))
                     ),
                 ),
             );
@@ -235,7 +239,7 @@ impl<'a> Validator<'a> {
     fn check_reference_verb(&mut self, claim: ClaimRef<'_>) {
         let canonical_verb = self
             .index
-            .command(claim.path)
+            .command(CommandPath::new(claim.path))
             .and_then(|command| command.canonical_verb.clone());
         if let Some(verb) = canonical_verb {
             self.push_advice(claim, verb_advice(self.policy, claim.path, &verb));
