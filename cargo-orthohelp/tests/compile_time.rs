@@ -193,20 +193,28 @@ fn configured_development_rustflags() -> Vec<String> {
         .collect()
 }
 
+/// The trimmed lines of the Cargo configuration, without TOML comment lines, so
+/// a commented-out opt-in flag and its note never reach the parser.
+fn uncommented_config_lines() -> impl Iterator<Item = &'static str> {
+    CARGO_CONFIG
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.starts_with('#'))
+}
+
 fn rustflags_in_config_section(section: CargoConfigSection) -> Option<Vec<String>> {
     let section_header = section.header();
     let mut in_section = false;
     let mut section_found = false;
     let mut section_lines = Vec::new();
-    for line in CARGO_CONFIG.lines() {
-        let trimmed = line.trim();
+    for trimmed in uncommented_config_lines() {
         if trimmed.starts_with('[') && trimmed.ends_with(']') {
             if section_found {
                 break;
             }
             in_section = trimmed == section_header;
             section_found |= in_section;
-        } else if in_section && !trimmed.starts_with('#') {
+        } else if in_section {
             section_lines.push(trimmed);
         }
     }
@@ -222,7 +230,7 @@ fn rustflags_in_config_section(section: CargoConfigSection) -> Option<Vec<String
         .0;
     list.split(',')
         .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter(|line| !line.is_empty())
         .map(|line| line.strip_prefix('"')?.strip_suffix('"').map(str::to_owned))
         .collect()
 }
