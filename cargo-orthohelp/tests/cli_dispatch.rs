@@ -22,6 +22,9 @@ const EXIT_FAILURE: i32 = 1;
 
 /// Process status for Clap's argument and dispatch rejection.
 const EXIT_USAGE: i32 = 2;
+use camino::Utf8Path;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 
 fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
@@ -162,6 +165,18 @@ fn version_reports_success_and_the_built_version(
     "invalid value '9'",
     None
 )]
+#[case::injection_shaped_root_type(
+    &[
+        "orthohelp",
+        "--package",
+        "orthohelp_fixture",
+        "--root-type",
+        "Config as OrthoConfigDocs>::get_doc_metadata(); std::process::exit(1); let _ = <Config",
+    ],
+    "injection-shaped root type should fail",
+    "InvalidRootType",
+    None
+)]
 fn command_failure_cases(
     #[case] args: &[&str],
     #[case] failure_message: &str,
@@ -206,6 +221,44 @@ fn direct_invocation_without_subcommand_includes_cargo_hint() {
     );
 }
 
+#[test]
+fn metadata_root_type_injection_is_rejected() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let package_dir = tempfile::tempdir()?;
+    let package_path = Utf8Path::from_path(package_dir.path())
+        .ok_or("temporary package path should be valid UTF-8")?;
+    let dir = Dir::open_ambient_dir(package_path, ambient_authority())?;
+    dir.create_dir("src")?;
+    dir.write("src/lib.rs", "pub struct Config;\n")?;
+    dir.write(
+        "Cargo.toml",
+        concat!(
+            "[package]\n",
+            "name = \"root_type_injection_fixture\"\n",
+            "version = \"0.1.0\"\n",
+            "edition = \"2024\"\n",
+            "\n",
+            "[package.metadata.ortho_config]\n",
+            "root_type = \"Config as OrthoConfigDocs>::get_doc_metadata(); ",
+            "std::process::exit(1); let _ = <Config\"\n",
+        ),
+    )?;
+
+    let exe = fixtures::cargo_orthohelp_exe()?;
+    let output = Command::new(exe.as_str())
+        .current_dir(package_dir.path())
+        .args(["orthohelp", "--format", "agent-context", "--out-dir", "out"])
+        .output()?;
+
+    if output.status.success() {
+        return Err("metadata root type injection should fail".into());
+    }
+    let stderr = stderr(&output);
+    if !stderr.contains("InvalidRootType") {
+        return Err(format!("unexpected diagnostic:\n{stderr}").into());
+    }
+    Ok(())
+}
+
 /// A runtime failure keeps status 1, distinct from Clap's usage status.
 ///
 /// An unknown package is rejected while selecting the package, after Clap has
@@ -230,6 +283,7 @@ fn missing_package_reports_failure_status() {
         "the failure should name the missing package, stderr:\n{diagnostics}"
     );
 }
+
 
 #[rstest]
 #[case::unknown_extra_argument(

@@ -81,7 +81,11 @@ pub struct Args {
     /// Select the package's library target.
     #[arg(long = "lib")]
     pub is_lib: bool,
-    /// Root configuration type (for example, `my_crate::Config`).
+    /// Root configuration type path (for example, `my_crate::Config`).
+    ///
+    /// Accepts a plain type path only. Generics, tuples, references,
+    /// qualified self types, global paths, and statement- or expression-shaped
+    /// values are rejected before the bridge is generated.
     #[arg(long, value_name = "path::Type")]
     pub root_type: Option<String>,
     /// Locale to render (repeat for multiple locales).
