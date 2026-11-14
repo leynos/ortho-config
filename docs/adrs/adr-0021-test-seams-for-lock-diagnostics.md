@@ -109,6 +109,12 @@ which is what makes the distinction the diagnostics exist to draw assertable:
   open iterator it was read through: dropping that iterator first would close a
   descriptor the listing named, so a self-scan would report an incomplete scan
   it caused itself.
+- The retention rule is a seam of its own. `collect_until_fault` is generic
+  over the item and error type precisely so it can be driven from a scripted
+  list; a fake can only hand over a listing that is already complete or already
+  partial, so a mutant that discarded the entries before a fault survived every
+  test that drove `FakeProcFs`. Testing the rule where it is decided is what
+  makes it evidence.
 - A failed scan carries whatever it matched before the failure, so an unrelated
   descriptor closing mid-scan cannot discard a live holder.
 - `process_stat` answers `Option`, because a process can exit between the record

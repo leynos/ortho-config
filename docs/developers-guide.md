@@ -824,9 +824,19 @@ descriptor having changed. `inspect_descriptors` therefore holds the iterator
 until every identity has been read, and
 `a_self_scan_is_not_made_incomplete_by_its_own_listing` asserts that against a
 real `/proc/self/fd` rather than a fake, which has no descriptor to leak. The
-enumeration fault is a fault in its own right:
-`an_enumeration_fault_keeps_the_entries_it_yielded` fails if it is dropped, and
-the self-scan test fails if the iterator is released early.
+enumeration fault is a fault in its own right, and the self-scan test fails if
+the iterator is released early.
+
+The retention rule is decided by `collect_until_fault`, not by
+`inspect_descriptors`, and it is tested there. A fake hands over a listing that
+is already complete or already partial, so no test driving `FakeProcFs` can
+distinguish a reader that keeps the entries before a fault from one that
+discards them — a mutant that cleared them survived
+`an_enumeration_fault_keeps_the_entries_it_yielded`, which is why the loop was
+made a generic function of its own. `a_fault_keeps_every_entry_read_before_it`
+drives it with two names and a synthetic error, and fails if the entries are
+cleared; `a_listing_that_finishes_reports_no_fault` is its counterpart, so a
+reader that reported a fault unconditionally cannot pass both.
 
 `Clock` is two methods — `now` and `sleep` — and nothing else. `Boundaries`
 groups the pair because every entry point that takes one takes the other: a

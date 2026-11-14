@@ -202,27 +202,76 @@ pub(super) struct RealProcFs;
 fn read_listing(directory: &Path) -> Result<DescriptorListing, String> {
     let mut walker = fs::read_dir(directory)
         .map_err(|error| format!("{}: unreadable ({error})", directory.display()))?;
-    let mut entries = Vec::new();
+    // The walk is borrowed only for the duration of the call, so `walker` is
+    // free to be handed back as the listing's open handle afterwards.
+    let mut listing = collect_until_fault(
+        || walker.next(),
+        |error| {
+            format!(
+                "{}: an entry could not be read ({error})",
+                directory.display()
+            )
+        },
+    );
+    // Sorted here, not in the walk, because `read_dir` yields entries in no
+    // defined order and this is the point at which the listing is fixed. An
+    // unsorted partial listing would make both the report and any test of it
+    // depend on filesystem enumeration order.
+    listing.items.sort_by_key(fs::DirEntry::file_name);
+    Ok(DescriptorListing {
+        entries: split_descriptor_names(&listing.items),
+        fault: listing.fault,
+        registry: Some(walker),
+    })
+}
+
+/// What a fallible listing yielded, and why it stopped if it stopped early.
+///
+/// Gated with [`read_listing`], its only user: ungated it would be dead code on
+/// every other target, which `-D warnings` turns into a build failure.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub(super) struct Collected<T> {
+    /// Every item read before the fault, in the order it was yielded.
+    pub(super) items: Vec<T>,
+    /// Why the listing stopped early; `None` when it reached the end.
+    pub(super) fault: Option<String>,
+}
+
+/// Collects a fallible listing, keeping every item it yielded before a fault.
+///
+/// The fault is reported *alongside* the items rather than replacing them,
+/// which is the whole reason this is a function of its own: the obvious
+/// `collect::<Result<Vec<_>, _>>()` returns nothing at all on failure, and the
+/// items it discards may include the one the report exists to name.
+///
+/// `describe` renders the error, so the caller decides what the failure says
+/// while this function decides only that the items survive it. Keeping the two
+/// apart is what lets a test drive the retention rule with a two-element list
+/// and a synthetic error, instead of arranging a directory that fails part-way.
+///
+/// Generic rather than written against `fs::DirEntry` for that reason: an
+/// enumeration error is not something a test can provoke on cue in a real
+/// directory, so a seam tied to the filesystem would leave this loop — the only
+/// code that decides whether entries survive a fault — untested.
+#[cfg(target_os = "linux")]
+pub(super) fn collect_until_fault<T, E>(
+    mut next: impl FnMut() -> Option<Result<T, E>>,
+    describe: impl FnOnce(E) -> String,
+) -> Collected<T> {
+    let mut items = Vec::new();
     let mut fault = None;
     loop {
-        match walker.next() {
-            Some(Ok(entry)) => entries.push(entry),
+        match next() {
+            Some(Ok(item)) => items.push(item),
             Some(Err(error)) => {
-                fault = Some(format!(
-                    "{}: an entry could not be read ({error})",
-                    directory.display()
-                ));
+                fault = Some(describe(error));
                 break;
             }
             None => break,
         }
     }
-    entries.sort_by_key(fs::DirEntry::file_name);
-    Ok(DescriptorListing {
-        entries: split_descriptor_names(&entries),
-        fault,
-        registry: Some(walker),
-    })
+    Collected { items, fault }
 }
 
 /// Returns the descriptor numbers an entry list names, and the names it cannot.

@@ -271,6 +271,12 @@ mod lock_holder;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "artefact_lock_holder_tests.rs"]
 mod lock_holder_tests;
+// The directory walk that decides whether entries survive an enumeration error,
+// driven directly: the fake hands over a listing that is already complete or
+// already partial, so it cannot show whether the walk itself discards entries.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_walk_tests.rs"]
+mod lock_walk_tests;
 // Test support for the holder report: gated on `test`, not the platform, so
 // every test build compiles the module and its `lock_evidence` import alike.
 #[cfg(test)]
