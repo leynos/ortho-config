@@ -3226,6 +3226,13 @@ from the measured invocation, so a change that restores the long root, shortens
 the margin, or moves the assignment fails the contract rather than the Windows
 job.
 
+The contract is arithmetic over measured numbers, not a runtime observation. It
+models the hosted runner's temporary directory as a constant, `D:\a\_temp`, and
+prices every character of the root at the 302 occurrences the failed invocation
+contained. A change to the runner image that lengthened that prefix, or that
+repeated the root more often, would move this projection rather than fail it;
+the hosted Windows leg is what observes the prefix the runner actually used.
+
 #### Verifying the root the passes received
 
 The choosers publish through `GITHUB_ENV`, which records intent. The two
