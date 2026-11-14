@@ -4671,6 +4671,19 @@ publisher rather than the lane, since the comment on that leg records why
 `metrics` is there at all, namely that it is off by default and the facade
 would otherwise never be compiled in CI.
 
+**The merge accepts two checked reports.** Both workflows use Bun `1.2.21` to
+invoke `lcov-result-merger@6.0.0` with only `lcov-serde-saphyr.info` and
+`lcov-no-serde-saphyr.info`. A pre-merge guard requires both reports to be
+non-empty and rejects every other `lcov-*.info` file; the merged `lcov.info`
+must be non-empty and contain an `SF:` source-file record with a non-whitespace
+path. The registry publishes integrity
+`sha512-RsXi/N4J9b37mu83d3L8WdCGU0jsftN6GlXaJySK6fu+zD48joHC579hpA3K4brPvwWOhbNX5NoT7mghxDi5qw==`
+for this release. The digest is a review reference, not a workflow check; the
+inline `bun x` invocation has no checked-in lockfile for this package or its
+transitive dependencies. Dependabot does not track this pin, so review and
+update both workflows together. Remaining risks are unlocked transitive
+dependencies and same-runner persistence between report generation and upload.
+
 **The publisher is guarded on the ref, and runs one at a time.** It declares no
 `workflow_dispatch` today, so `github.ref` is always main and the guard changes
 nothing now; it is there because a dispatch can be aimed at any branch and the
@@ -4745,10 +4758,16 @@ runner-placement contract.
 tables map each pull-request feature leg to the publisher leg that writes its
 report; the broad leg ratchets in the Linux cell of the matrix, through
 `with-ratchet: ${{ matrix.ratchet }}`, which the library reads in. Its
-`[selection]` pins the publisher's exact inputs, so a change made to both lanes
-at once is still a reviewed change. `coverage_lane_facts_test.py` keeps the two
-facts the shared rules do not know: only the Linux leg ratchets, and the
-pull-request checkout is shallow.
+`[selection]` pins the publisher's coverage-generation inputs, so a change made
+to both lanes at once is still a reviewed change. It does not define the files
+accepted by the later merge. `coverage_lane_facts_test.py` keeps the two facts
+the shared rules do not know: only the Linux leg ratchets, and the pull-request
+checkout is shallow. `coverage_merge_test.py` owns the merger pin, exact report
+filenames, input guards and merge/upload order; `coverage_merge_output_test.py`
+checks generated LCOV-like output against the source-path guard, and
+`coverage_merge_real_test.py` checks the pinned package's no-record rejection
+and preservation of records from both reports. These tests own merge inputs;
+`.github/cv005.toml` owns generation selections.
 
 **The ratchet has to stay switched on.** Pairing the legs' selections proves
 the comparison is fair, not that it happens. The library counts the broad leg
