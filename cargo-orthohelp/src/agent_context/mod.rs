@@ -77,6 +77,7 @@ struct SelectorFlag<'a>(&'a str);
 ///     behaviour: None,
 ///     renderer: None,
 ///     profiles: None,
+///     output: None,
 /// };
 ///
 /// let context = bridge_ir_to_agent_context(&metadata, "example", None);
