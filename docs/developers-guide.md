@@ -1372,6 +1372,19 @@ runner needs its own diagnostics or capture policy; do not add another
 process-group, Job Object, or blocking pipe-reader implementation to a package.
 These helpers are for tests and must not be used by production code.
 
+The runner's own failure branches are tested against real children, and the
+deadline cases assert the child's fate rather than only the message: a runner
+that reported a timeout and then left the child running would satisfy a
+message-only assertion. Each case gives its child a survival marker — the child
+writes a file only after it has outlived its budget, the case waits past that
+point, and the case asserts no marker appeared. The marker covers the owned
+group rather than the root alone, so killing only the root while a descendant
+slept on is caught. A pid probe on the root would miss that case, and would
+also depend on whether the shell `exec`s the sleep or forks it, so prefer the
+marker. The detached-writer case needs `setsid`; it probes for the executable
+and skips where it is absent, because `setsid` is not POSIX and a `cfg(unix)`
+target does not imply it.
+
 Documentation example scenarios start a fixed 956-second monotonic envelope
 inside their 960-second nextest override, reserving two two-second cleanup
 allowances. Individual build, execution, and discovery operations have 956, 60,
