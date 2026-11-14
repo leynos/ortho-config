@@ -115,7 +115,7 @@ jobs:
         # On a hosted runner (Windows, or a fork's Linux fallback) there is
         # no proxy and the action fails closed, so it runs on Ubicloud only.
         if: ${{ runner.environment == 'self-hosted' }}
-        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/export-ubicloud-cache-credentials@fc0e10220207b951bf693aba2ce4f9dafc1a0206
 
       - name: Setup Rust
         # `install-mold` puts the pinned, digest-verified mold on PATH on a
@@ -126,7 +126,7 @@ jobs:
         # exclude it. The action sets no linker flag; `.cargo/config.toml`
         # selects mold. `mold-version` is held equal to tools/mold/VERSION by
         # tests/workflow_contracts/build_tools_provisioning_test.py.
-        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/setup-rust@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           install-mold: 'true'
           mold-version: '2.41.0'
@@ -192,7 +192,7 @@ jobs:
         # first release with `--check` and `--git`. The Markdown check is
         # platform-independent, so it runs on the Linux lane only.
         if: ${{ matrix.platform == 'linux' }}
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           version: "0.6.1"
 
@@ -241,7 +241,7 @@ jobs:
 
       - name: Install Whitaker
         if: ${{ matrix.platform == 'linux' }}
-        uses: leynos/shared-actions/.github/actions/install-whitaker@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/install-whitaker@fc0e10220207b951bf693aba2ce4f9dafc1a0206
 
       - name: Disk sample (before lint)
         if: ${{ always() && matrix.platform == 'linux' }}
@@ -330,7 +330,7 @@ jobs:
         # chooser. The values match so cargo-llvm-cov does not append
         # `llvm-cov-target` again. Linux keeps nested trybuild projects outside
         # this checkout; Windows also keeps the compiler command line short.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/generate-coverage@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -349,7 +349,7 @@ jobs:
       - name: Test and Measure Coverage (without serde_saphyr)
         # Same short Windows target root as the first leg, and from the same
         # place: the step that chooses it republishes through GITHUB_ENV.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/generate-coverage@fc0e10220207b951bf693aba2ce4f9dafc1a0206
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -624,7 +624,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/setup-rust@fc0e10220207b951bf693aba2ce4f9dafc1a0206
 
       - name: Setup uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
