@@ -388,8 +388,9 @@ project:
   acceptable where a trait object would be disproportionate. Production code
   must not reach for `std::env::var`/`var_os` outside that composition root. In
   this repository the injection seam is `ortho_config::EnvSource` (`MapEnv` in
-  tests), and where injection is impossible the accepted local form is the RAII
-  guards in `ortho_config_test_helpers::env`.
+  tests). The RAII guards in `ortho_config_test_helpers::env` are a known
+  deviation in existing tests, not an exemption; new code injects the
+  environment.
 - **Process-wide locks are not an escape hatch.** Serializing environment
   mutation behind a shared `Mutex`, `OnceLock`, or `serial_test` attribute is
   not an accepted fallback. It serializes the suite, defeats property-based
