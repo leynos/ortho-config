@@ -184,7 +184,36 @@ explicitly approves it and the prerequisites below are complete.
   rule, so the shared global-option glossary is delivered here as an additive
   extension of `policy::vocabulary` rather than as a second vocabulary.
   Recorded in the Decision log.
-- [ ] EP-M1: specify the normalized input contract and passing contract tests.
+- [x] (2026-11-10) EP-M1: specified the normalized input contract in
+  `cargo-orthohelp/src/skill_validation/` (`input`, `report`, `resolve`,
+  `policy_check`, `validate`). `PolicyMode` gained `Default = Off` so
+  `ResolvedAgentPolicy` can be built without a mode. Evidence: 35 library tests
+  pass, including the `rstest` ambiguous-surface cases (empty path, duplicate
+  path, empty option, conflicting option) and the byte-stability and
+  order-independence cases.
+- [x] (2026-11-10) EP-M2: implemented exact structural resolution over an
+  explicit per-command effective surface. A reference with an unknown path
+  produces one path finding and no cascading flag findings; flags are compared
+  exactly and reported once each. Evidence: `proptests.rs` compares the
+  validator against an independent linear oracle; focused tests pass.
+- [x] (2026-11-10) EP-M3: implemented example binding, policy advice, and the
+  fixture adapter. Operation and build-workflow fixtures live under
+  `cargo-orthohelp/tests/fixtures/skills/`; the feature file has five
+  scenarios. Evidence:
+  `cargo test -p cargo-orthohelp --test skill_validation_bdd` passed 6 tests and
+  `--test skill_validation_e2e` passed 5 tests, including the source-drift and
+  malformed-array negative controls.
+- [ ] EP-M4: documentation, final sequential gates, and roadmap closure.
+  - [x] (2026-11-13) Documentation written: design §3.4.1 boundary text,
+    users' guide section with a compiled example and its transcript,
+    developers' guide notes, and the documentation index.
+  - [x] (2026-11-13) `make fmt`, `make check-fmt`, `make typecheck`, and
+    `make lint` (rustdoc, Clippy, Whitaker) pass on the implementation
+    candidate. `make markdownlint` (including `make spellcheck`) and
+    `make nixie` also pass.
+  - [ ] `make test` has not yet completed green in one run on this candidate;
+    two earlier runs exposed and drove the repair of the documentation-example
+    registry entries. The final full run and the roadmap tick remain.
 
 ## Surprises & discoveries
 
@@ -209,6 +238,33 @@ explicitly approves it and the prerequisites below are complete.
   and accepting/rejecting fixtures. These demonstrate runner operation, not
   skill-validation correctness. Production proof inventories are empty and fail
   with `FORMAL-EMPTY`; ordinary gates do not execute provers.
+- Observation: `rstest-bdd` injects a fixture by parameter name, so a step
+  parameter named `context` needs a fixture called `context`, not
+  `skill_context`. Typed placeholders such as `{option:string}` already accept
+  and strip surrounding quotes, so a step attribute must not add its own quoted
+  literal regex. Impact: recorded in the step glue rather than worked around in
+  the feature text.
+- Observation: the documentation-example harness requires every fenced block in
+  `DOCUMENT_PATHS` to carry a `<!-- tested-example: id -->` marker. Impact: the
+  new users-guide program is registered in both `STANDARD_RUST_EXAMPLES` and the
+  `SIMPLE_RUNS` transcript table rather than left unmarked.
+- Observation: Clippy's `assert_is_empty` fires only on the single-argument
+  `assert!(value.is_empty())` form. Impact: finding-list assertions use
+  `assert_eq!(report.findings, Vec::new())`, which also shows the actual value
+  on failure.
+- Observation (2026-11-13): Whitaker's `no_std_fs_operations` denies
+  `std::fs::read_to_string` in integration tests, and its `excluded_crates`
+  keys on the target name, so the crate-level `cargo_orthohelp` entry does not
+  cover `skill_validation_e2e`. Impact: the fixture adapter opens a
+  `cap_std::fs_utf8::Dir` on the checked-in fixture root and reads relative
+  camino paths through it, matching the pattern in
+  `nested_subcommand_end_to_end.rs`, rather than adding a lint exclusion.
+- Observation (2026-11-13): the documentation-example harness has three
+  separate registries, not two. Besides `STANDARD_RUST_EXAMPLES` and
+  `SIMPLE_RUNS`, `documentation_examples_tests.rs` pins every fenced block's
+  identifier in `EXPECTED_EXAMPLE_IDS`. Impact: a non-Rust transcript fence
+  needs its own `<!-- tested-example: id -->` marker and an entry in that
+  allowlist, or `every_documented_fence_has_a_known_unique_identifier` fails.
 - Prior art: the Agent Skills specification defines YAML frontmatter and
   Markdown body but no standardized command/example grammar for arbitrary
   prose. It points to `skills-ref` for structure and naming validation. This
@@ -218,6 +274,19 @@ explicitly approves it and the prerequisites below are complete.
 
 ## Decision log
 
+- Decision (2026-11-10): No new ADR for this feature. Design §3.4.1 now records
+  the ownership boundary, the normalized example shape, and the structural
+  versus policy result classes; ADR-0003 already governs agent-context schema
+  ownership and ADR-0008 governs policy modes and exceptions. This work adds no
+  wire-schema change, no runtime dependency, and no new persisted format, so a
+  further ADR would restate existing decisions. Revisit if a released consumer
+  contract later depends on these result classes. Date/Author: 2026-11-10,
+  approved deviation scope.
+- Decision (2026-11-10): `PolicyMode` derives `Default` with `#[default] Off`.
+  The documented enforcement default is off, so `ResolvedAgentPolicy` can be
+  built by callers that supply only exceptions. This changes no serialized
+  representation: the enum keeps its `snake_case` names. Date/Author:
+  2026-11-10, implementation detail of the approved scope.
 - Decision (2026-11-10): Deliver the full 6.3.2 feature on the maintainer's
   explicit approval, notwithstanding the incomplete 7.1.2 and 7.1.3
   prerequisites. The canonical human-facing global-option glossary from
@@ -279,13 +348,30 @@ explicitly approves it and the prerequisites below are complete.
 
 ## Outcomes & retrospective
 
-Planning only. No implementation has started. Wyvern reconnaissance and all six
-expert perspectives have been reconciled. The original October repository
-checks passed for that planning snapshot; they do not constitute feature
-acceptance. The shared compiler cache was unavailable, so the admitted builds
-ran uncached. Record implementation outcomes and lessons at later milestones.
-Do not mark the plan complete while prerequisites, design updates, or
-acceptance gates remain.
+Planning history: Wyvern reconnaissance and all six expert perspectives were
+reconciled. The original October repository checks passed for that planning
+snapshot; they do not constitute feature acceptance.
+
+Implementation (2026-11-10): EP-M1 to EP-M3 are complete. The reusable
+validator lives in `cargo_orthohelp::skill_validation` and consumes supplied
+manifest claims, normalized examples, an explicit per-command effective option
+surface, and a resolved policy. The shared global-option glossary is data in
+`cargo_orthohelp::policy::vocabulary::global_options`; the linter and the
+validator read the same table. Structural findings are independent of policy
+mode, policy advice is emitted only for resolved claims, and report order is
+stable by manifest input order, source ordinal, then code.
+
+Lessons: the two largest implementation files exceeded the 400-line cap and
+were split (`validate` into `validate/mod.rs`, `validate/examples.rs`,
+`validate/manifest_index.rs`; the tests into `tests.rs`, `tests_examples.rs`,
+`tests_policy.rs`). `rstest-bdd` fixture binding is by parameter name, and
+typed placeholders already handle quoted values. The independent property
+oracle caught two ordering expectations that the unit tests had asserted
+backwards, which is the evidence that the oracle is not a restatement of the
+implementation.
+
+Remaining work at the time of writing: final sequential gates and roadmap
+closure (EP-M4). Do not mark the plan complete while gates remain.
 
 ## Context and orientation
 
@@ -412,6 +498,43 @@ decision to introduce formal verification.
   edits fixture text without changing extracted claims must fail. Use generic
   operation-skill and build-workflow skill fixtures; do not embed either
   application's domain semantics. Empty coverage must be represented honestly.
+
+### Recorded evidence
+
+- Focused library suite: `cargo test -p cargo-orthohelp --lib skill_validation`
+  passed 35 tests. The cases cover empty input, nested resolution, unknown path
+  without flag cascade, per-flag single reporting, duplicate manifest ID on the
+  repeat, exact option comparison, partial status for unsupported extraction,
+  ordering, byte stability, surface-order independence, and the four typed
+  ambiguous-surface rejections.
+- Behavioural suite:
+  `cargo test -p cargo-orthohelp --test skill_validation_bdd` passed 6 tests,
+  including a test that pins the finding codes quoted by the feature file to
+  their exported constants.
+- Consumer end-to-end suite:
+  `cargo test -p cargo-orthohelp --test skill_validation_e2e` passed 5 tests.
+  The drift test re-parses mutated fixture text and asserts both the extracted
+  record and the resulting findings, so a stale adapter fails before the
+  finding assertion.
+- Package Clippy:
+  `cargo clippy -p cargo-orthohelp --all-targets --all-features -- -D warnings`
+  finished clean after the repair of seven published-API and test-hygiene
+  findings (`missing_const_for_fn`, `needless_pass_by_value`, `ref_option`,
+  `too_many_arguments`, `shadow_reuse`, `excessive_nesting`, `assert_is_empty`,
+  `panic_in_result_fn`).
+- Logs are kept under `/tmp/*-ortho-config-6-3-2-skill-manifest-validation.out`.
+- Repository gates on the implementation candidate (2026-11-13):
+  `make check-fmt` reported 100 files unchanged; `make typecheck` finished with
+  `MAKE_EXIT:0`; `make lint` completed rustdoc, Clippy, and Whitaker with
+  `MAKE_EXIT:0`; `make markdownlint` (with the spelling gate) and `make nixie`
+  both exited 0. `make test` was interrupted twice by session boundaries rather
+  than by a failing assertion; the two real failures it did expose were the
+  users-guide transcript fence without a marker and its missing
+  `EXPECTED_EXAMPLE_IDS` entry, both repaired and re-checked with
+  `cargo test -p ortho_config --test documentation_examples_tests --test
+  documentation_examples_rust_tests`
+  (`CARGO_EXIT:0`). A single complete `make test` run on the frozen candidate
+  is still required before closure.
 
 No introduced contractual business logic is selected for formal verification:
 exact finite membership and reuse of completed policy rules have direct,
