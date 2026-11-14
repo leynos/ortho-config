@@ -1612,10 +1612,12 @@ The tool builds a small bridge against the selected package. Name the root
 configuration type in the package's `Cargo.toml` with
 `[package.metadata.ortho_config] root_type = "crate::path::Type"` (or pass
 `--root-type`), keep that type public, and make its documentation metadata
-available from the selected library or binary target. The default format is
-`ir`. `--format agent-context` writes `agent-context.json` and also emits the
-same compact JSON document to standard output, so a pipeline can consume it
-directly.
+available from the selected library or binary target. The value must be a plain
+type path; generics, tuples, references, qualified self types, global paths,
+and statement- or expression-shaped values are rejected before the bridge is
+generated. The default format is `ir`. `--format agent-context` writes
+`agent-context.json` and also emits the same compact JSON document to standard
+output, so a pipeline can consume it directly.
 
 ## Collect bridge-cache metrics
 
