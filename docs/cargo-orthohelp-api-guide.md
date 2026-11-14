@@ -155,6 +155,7 @@ fn main() -> Result<(), serde_json::Error> {
         pagination: None,
         examples: Vec::new(),
         renderer: RendererContract::default(),
+        output: None,
     };
 
     context.commands = vec![describe_command];
@@ -173,6 +174,7 @@ fn main() -> Result<(), serde_json::Error> {
         pagination: None,
         examples: Vec::new(),
         renderer: RendererContract::default(),
+        output: None,
     });
 
     println!("{}", serde_json::to_string_pretty(&context)?);

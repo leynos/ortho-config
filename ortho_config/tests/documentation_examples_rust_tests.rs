@@ -68,6 +68,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-localization-ids",
     "guide-tracing",
     "guide-orthohelp-metadata",
+    "guide-output-metadata",
     "guide-behaviour-metadata",
     "guide-check-command",
     "guide-scoped-discovery",

@@ -9,7 +9,7 @@
 //! `supports_json` stays an `Option` rather than defaulting to `false`, so an
 //! agent can tell "the author refused JSON" from "the author said nothing".
 //!
-//! See ADR-0020 for the vocabulary, the omission rules, and the no-inference
+//! See ADR-0023 for the vocabulary, the omission rules, and the no-inference
 //! contract.
 
 use serde::{Deserialize, Serialize};

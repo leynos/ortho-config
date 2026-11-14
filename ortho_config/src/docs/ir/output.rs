@@ -10,7 +10,7 @@
 //! corresponding `Option` being `None`, and only the agent-context layer models
 //! the tolerant `unknown` wire state.
 //!
-//! See ADR-0020 for the accepted vocabulary, the omission rules, and the
+//! See ADR-0023 for the accepted vocabulary, the omission rules, and the
 //! no-inference contract. A later roadmap item (7.2.5) owns numeric exit-code
 //! mappings, so [`ExitClass`] intentionally carries no code number.
 

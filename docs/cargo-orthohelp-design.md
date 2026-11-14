@@ -188,6 +188,7 @@ pub struct DocMetadata {
     pub windows: Option<WindowsMetadata>, // Windows-only generator hints
     pub behaviour: Option<BehaviourMetadata>, // declared execution behaviour
     pub renderer: Option<RendererMetadata>, // declared human/machine rendering
+    pub output: Option<OutputMetadata>, // declared structured-output capability
 }
 ```
 
@@ -241,6 +242,17 @@ Renderer data contains no translatable text, so localization copies it verbatim
 into each per-locale artefact; a localizer must never alter it. See
 [ADR-0016](adrs/adr-0016-dual-renderer-metadata-surface.md) for the vocabulary
 and the reason each meaning is declared rather than inferred.
+
+`output` is absent unless the command declares an `output(...)` group, and its
+absence is deliberate: a defaulted `supports_json` of `false` would report a
+refusal the author never made. A present block holds `supports_json`, `stdout`
+(`data`, `path`, `summary`, or `none`), `stderr_diagnostics`, and an ordered
+`exit_classes` list of stable `name`/`meaning` pairs. Every undeclared member
+is omitted, and an empty class list is omitted, so an empty block serializes as
+`{}` and claims nothing. The block contains no translatable text and is copied
+verbatim into each per-locale artefact. Numeric exit codes and stream framing
+remain roadmap 7.2.5 and 7.2.4 work. See
+[ADR-0023](adrs/adr-0023-explicit-structured-output-declarations.md).
 
 ### 2.2 Field-level metadata
 
@@ -542,6 +554,12 @@ Namespace: `#[ortho_config(…)]`. Selected keys:
   `field("…", localization = "localized|non_localized")` entries. Values are
   checked against a closed vocabulary at macro time, so a typo is a compile
   error rather than a silently absent claim.
+- Structured output (optional, per command): a sibling `output(…)` group
+  accepting `supports_json`, `stdout`, `stderr_diagnostics`, and repeated
+  `exit_class(name = "…", meaning = "…")` entries. Class names must match
+  `[a-z][a-z0-9_]*` and be unique within a command; meanings are nonblank and
+  carried verbatim. See
+  [ADR-0023](adrs/adr-0023-explicit-structured-output-declarations.md).
 
 ### 3.3 Diagnostics
 
@@ -856,10 +874,11 @@ documentation-oriented metadata into the compact contract described in
 - include command semantics such as interaction mode, mutation boundaries,
   pagination, async job metadata, profile support, delivery support, feedback
   support, and output contracts when declared;
-- include renderer metadata, JSON mode stream contracts, exit-code taxonomy
-  metadata, skill manifest links, capability/provenance metadata, profile
+- include renderer metadata, declared structured-output capability and exit
+  classes, skill manifest links, capability/provenance metadata, profile
   redaction metadata, delivery/feedback parser contracts, and execution-ledger
-  nouns when declared;
+  nouns when declared. JSON mode stream contracts (7.2.4) and numeric exit-code
+  taxonomies (7.2.5) remain deferred;
 - emit policy warnings or failures through the same validation path used by
   `--check-agent-native`.
 
@@ -1094,6 +1113,13 @@ sentinel so generators can surface gaps during development.
   "renderer": {
     "human": { "supported": true, "tty": "adapts" },
     "machine": { "supported": true, "stdout": "structured" }
+  },
+  "output": {
+    "supports_json": true,
+    "stdout": "data",
+    "exit_classes": [
+      { "name": "success", "meaning": "The command completed" }
+    ]
   }
 }
 ```
@@ -1107,13 +1133,13 @@ localized IR:
 - `help_id`/`long_help_id` -> `help`/`long_help`
 - `note_id`/`title_id`/`text_id` -> `note`/`title`/`text`
 
-The `renderer` block is the exception: it is copied verbatim, never renamed and
-never localized. Its leaf values are closed policy tokens and opaque
-application-defined field identifiers, so translating any of them would corrupt
-a protocol contract. Dropping the block is equally a bug, because a per-locale
-artefact would then contradict the agent context generated from the same
-metadata; both faces carry it, and the behavioural suite compares them across
-locales.
+The `renderer` and `output` blocks are the exception: both are copied verbatim,
+never renamed and never localized. Their leaf values are closed policy tokens,
+opaque application-defined field identifiers, and non-localized class names and
+meanings, so translating any of them would corrupt a protocol contract.
+Dropping either block is equally a bug, because a per-locale artefact would
+then contradict the agent context generated from the same metadata; both faces
+carry them, and the behavioural suite compares them across locales.
 
 ### 6.4.2 Locale resource discovery
 

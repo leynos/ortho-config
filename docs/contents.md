@@ -103,6 +103,10 @@
   review the steps that read the chosen root back after both coverage passes,
   the rejection paths their contract suite executes, and the acceptance path
   the hosted Windows leg observes.
+- [ADR-0023: Explicit structured-output declarations](adrs/adr-0023-explicit-structured-output-declarations.md):
+  review the accepted `output(...)` derive group, the refusal-versus-silence
+  distinction, the omission rules for a declared block, and the deferred stream
+  framing and numeric exit taxonomy.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

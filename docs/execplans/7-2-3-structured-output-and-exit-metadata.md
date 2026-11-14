@@ -215,6 +215,14 @@ all possible public values are validated.
   #664 head). `git range-diff` reports both patches unchanged and
   `git diff 959dbd7e..HEAD` is limited to the two planning documents.
 - [x] (2026-11-14) Obtain explicit plan approval.
+- [x] (2026-11-14) M1 implementation: strict IR, tolerant wire, tool mirror,
+  derive parser and generator, bridge mapping, nested fixtures, wire/bridge/
+  property/snapshot suites, the actual-binary end-to-end target, and the
+  regenerated golden snapshot. Commits `5f839cfe` and `47f41718`.
+- [x] (2026-11-14) M1 documentation: ADR-0020 as written, renumbered to
+  ADR-0023 during the third rebase, the realized `output` rows and
+  omission rules in design §8.1/§8.2, the component-design records, the
+  users'-guide section, and a tested `guide-output-metadata` example.
 - [ ] M1: metadata, derive transport, documentation and integration coverage.
 - [ ] M2: structured-output lint and executable consumer examples.
 - [ ] M3: exit documentation, process regression evidence and completion.
@@ -253,6 +261,21 @@ are proportionate for this metadata transport and one finite predicate. No
 unbounded theorem or new stateful business algorithm is introduced. Do not
 manufacture a Verus wrapper around an equivalent boolean assumption. Reassess
 if implementation introduces such an algorithm or a stronger claim.
+
+2026-11-14, implementation decision: the accepted surface is recorded as
+ADR-0023, the number free once main took 0020 and 0021 for the artefact-lock
+work and 0022 for the coverage-target-root verification (it was written as
+ADR-0020 and renumbered during the rebase). The block is
+`Option<OutputMetadata>` in both
+IR owners and `Option<OutputContract>` in agent context, with no role-specific
+legacy default: unlike the renderer records, a declared `supports_json: false`
+must stay distinguishable from an undeclared capability, so an absent block
+never becomes a defaulted record. `output()` with no members is accepted and
+serializes as `{}` because syn's nested- attribute loop rejects an empty group
+before the callback; a fork check consumes it without weakening any other
+group. Design §8.1's planned flat `supports_json` and `exit_classes` rows were
+replaced by realized `output` rows so no document describes a second source of
+truth.
 
 ## Context and orientation
 

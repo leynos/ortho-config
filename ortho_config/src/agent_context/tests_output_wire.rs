@@ -1,6 +1,6 @@
 //! Tolerant decoding of structured-output contracts in agent context.
 //!
-//! The wire format is the lenient half of the contract. ADR-0020 gives it two
+//! The wire format is the lenient half of the contract. ADR-0023 gives it two
 //! obligations this module pins: an unrecognized stdout token reads as
 //! `unknown` without disturbing the rest of the document, and an undeclared
 //! member is omitted rather than written as `null`. The strict authoring

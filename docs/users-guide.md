@@ -2019,6 +2019,95 @@ literal now needs the new field. Read [the changelog](../CHANGELOG.md) for the
 exact field to name if you build those values yourself; applications that only
 derive the configuration need no change.
 
+## Declare structured output and exit classes
+
+Renderer metadata says how a command _writes_. Output metadata says what an
+agent may _rely on_: whether a JSON mode exists, what the normal result on
+stdout is, whether stderr carries diagnostics, and which exit classes the
+command documents. Declare it in its own nested group:
+
+<!-- tested-example: guide-output-metadata -->
+```rust
+use ortho_config::{OrthoConfig, OrthoConfigDocs};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "APP_",
+    output(
+        supports_json = true,
+        stdout = "data",
+        stderr_diagnostics = true,
+        exit_class(name = "success", meaning = "The report was written"),
+        exit_class(name = "usage", meaning = "The invocation was invalid")
+    )
+)]
+struct ReportArgs {
+    /// Path of the report to write.
+    #[ortho_config(default = String::from("report.json"))]
+    path: String,
+}
+
+fn main() {
+    // The block is an `Option`: a command that declares nothing carries no
+    // output metadata at all rather than a defaulted claim.
+    if let Some(output) = ReportArgs::get_doc_metadata().output {
+        let classes: Vec<&str> = output
+            .exit_classes
+            .iter()
+            .map(|class| class.name.as_str())
+            .collect();
+        println!(
+            "supports_json={:?} stdout={:?} classes={classes:?}",
+            output.supports_json, output.stdout
+        );
+    }
+}
+```
+
+The example prints
+`supports_json=Some(true) stdout=Some(Data) classes=["success", "usage"]`. The
+group accepts four keys:
+
+- `supports_json = true` or `false` — whether a JSON mode exists;
+- `stdout = "data"`, `"path"`, `"summary"`, or `"none"` — the purpose of a
+  normal successful result. `data` is the result itself, `path` is a filesystem
+  path the command produced, `summary` is a human-readable account of work
+  done, and `none` means a successful invocation writes nothing. Help, version,
+  and error output are excluded;
+- `stderr_diagnostics = true` or `false` — whether stderr can carry
+  diagnostics, which says nothing about exit status; and
+- `exit_class(name = "…", meaning = "…")`, repeatable — one documented exit
+  class. `name` must match `[a-z][a-z0-9_]*` and be unique within the command;
+  `meaning` must not be blank.
+
+Class names are protocol identifiers and meanings are carried verbatim, so
+neither may be localized. No numeric status is declared: mapping classes to
+process exit codes is later roadmap work, and inventing a number here would
+pre-empt it.
+
+Three conventions follow from the no-inference rule:
+
+- A refusal is not a silence. `supports_json = false` states that no JSON mode
+  exists; leaving the key out states nothing. An agent that conflates the two
+  will either retry a capability that was refused or skip one that exists.
+- An empty block claims nothing. `output()` is accepted, reaches the wire as
+  `{}`, and means exactly what no block means. Every undeclared key is omitted
+  rather than replaced by `false`.
+- Declare each command separately. A subcommand never inherits its parent's
+  output block, because sibling commands commonly differ: one emits JSON and
+  another prints prose.
+
+A declaration is not a check. The derive records what an author stated; it
+never inspects flags, arguments, or a running process to confirm it. The
+metadata flows into the documentation IR, the localized per-locale artefacts,
+and agent context as an `output` object. Checking whether a data-returning
+command actually declares JSON support is a separate, opt-in step.
+
+Because the wire contract is additive, the JSON stays compatible. The Rust
+source API is not: constructing documentation IR or an `AgentCommand` by struct
+literal now needs the `output` field set to `None` when nothing is declared.
+
 ## Agent-native policy checking
 
 `cargo orthohelp --check-agent-native` runs an opt-in policy check against a

@@ -534,6 +534,13 @@ Agent-context output metadata should describe:
 - stable exit classes and their meanings;
 - the response schema when it is known.
 
+Roadmap 7.2.3 realizes the first four as the sibling `output` block described
+by [ADR-0023](adrs/adr-0023-explicit-structured-output-declarations.md):
+`supports_json`, `stdout`, `stderr_diagnostics`, and `exit_classes`. Each
+declaration is explicit; nothing is inferred from a verb, a flag, or an
+observed stream. The response schema and the `JsonModeContract`-style stream
+choices below remain roadmap 7.2.4 work and will extend the same block.
+
 `cargo-orthohelp` should dogfood this by returning structured success summaries
 for generated artefacts when `--json` is provided.
 
@@ -786,27 +793,28 @@ forward-looking fields planned for later schema versions. Readers for schema v1
 apply defaults only to realized fields; planned rows record the intended future
 contract and do not imply that those fields exist today.
 
-| Field                   | Default                  | Status  | Rationale                                                                     |
-| ----------------------- | ------------------------ | ------- | ----------------------------------------------------------------------------- |
-| `canonical_verb`        | `null`                   | v1      | Legacy command metadata did not classify verbs.                               |
-| `supports_json`         | `false`                  | planned | Structured output must be declared before tools rely on it.                   |
-| `json_stdout_contract`  | `null`                   | planned | No JSON stream invariant exists until the command opts in.                    |
-| `json_stderr_contract`  | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                           |
-| `exit_classes`          | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                        |
-| `interaction_mode`      | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                        |
-| `mutation_effect`       | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.                 |
-| `pagination`            | `null`                   | v1      | List bounds and cursors require explicit command metadata.                    |
-| `profiles.supported`    | `false`                  | v1      | Profiles are opt-in persistent state.                                         |
-| `profiles.selection`    | `null`                   | v1      | Selection contract exists only once a derive opts into profiles.              |
-| `profiles.list_command` | `null`                   | v1      | Profile listing commands arrive with the 9.1.3 store helpers.                 |
-| `delivery_route`        | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.                  |
-| `feedback.supported`    | `false`                  | v1      | Feedback storage or upload must be explicitly available.                      |
-| `execution_ledger`      | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.               |
-| `skill_manifests`       | `[]`                     | v1      | Skill manifests are absent until declared; 6.3.2 ships the validator, §3.4.1. |
-| `capability_id`         | `null`                   | planned | Capability routing is optional downstream metadata.                           |
-| `provider_provenance`   | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance.    |
-| `renderer.human`        | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.               |
-| `renderer.machine`      | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.         |
+| Field                       | Default                  | Status  | Rationale                                                                     |
+| --------------------------- | ------------------------ | ------- | ----------------------------------------------------------------------------- |
+| `canonical_verb`            | `null`                   | v1      | Legacy command metadata did not classify verbs.                               |
+| `output`                    | absent                   | v1      | No block exists unless an author declares one.                                |
+| `output.supports_json`      | absent                   | v1      | Undeclared is not a refusal; `false` must be stated explicitly.               |
+| `output.stdout`             | absent                   | v1      | Purpose is never inferred from a verb, flag, or output format.                |
+| `output.stderr_diagnostics` | absent                   | v1      | Diagnostic stderr remains unspecified until declared.                         |
+| `output.exit_classes`       | `[]`, omitted            | v1      | An empty list documents no class; it never asserts failure is impossible.     |
+| `interaction_mode`          | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                        |
+| `mutation_effect`           | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.                 |
+| `pagination`                | `null`                   | v1      | List bounds and cursors require explicit command metadata.                    |
+| `profiles.supported`        | `false`                  | v1      | Profiles are opt-in persistent state.                                         |
+| `profiles.selection`        | `null`                   | v1      | Selection contract exists only once a derive opts into profiles.              |
+| `profiles.list_command`     | `null`                   | v1      | Profile listing commands arrive with the 9.1.3 store helpers.                 |
+| `delivery_route`            | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.                  |
+| `feedback.supported`        | `false`                  | v1      | Feedback storage or upload must be explicitly available.                      |
+| `execution_ledger`          | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.               |
+| `skill_manifests`           | `[]`                     | v1      | Skill manifests are absent until declared; 6.3.2 ships the validator, §3.4.1. |
+| `capability_id`             | `null`                   | planned | Capability routing is optional downstream metadata.                           |
+| `provider_provenance`       | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance.    |
+| `renderer.human`            | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.               |
+| `renderer.machine`          | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.         |
 
 In roadmap 7.1.1, `PolicyInputs` is empty and the evaluator does not inspect
 bridge metadata. Omitted bridge metadata therefore produces no `warn` or `deny`
@@ -834,6 +842,15 @@ support, capability provenance, delivery support, feedback support, or
 execution-ledger support. The default is always the least capable compatible
 state until a derive attribute, application adapter, or later schema version
 declares a stronger contract.
+
+The structured-output block is the exception that proves that rule: it has no
+"least capable" default at all. An undeclared command carries no `output`
+block, because a defaulted `output.supports_json` of `false` would turn silence
+into a refusal the author never made. Within a declared block, each member
+follows the same rule and stays absent until declared, and `exit_classes` is
+omitted while empty. Stream framing for JSON mode (`JsonModeContract`-style)
+remains planned for roadmap 7.2.4 and will extend `output`; no wire shape is
+fixed here.
 
 The existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`,
 `--format agent-context`, and `--format all` outputs are compatibility
@@ -863,6 +880,18 @@ strict deserializers. Readers must ignore unknown object fields, and schema
 types must not add `deny_unknown_fields` while retaining the same major
 version. Absent fields use the realized-field defaults recorded in §8.1;
 validation never mutates payloads to populate those defaults.
+
+The structured-output block added by roadmap 7.2.3 is such an additive change
+and keeps schema version `1`. On a command that declares nothing the block is
+absent. Inside a present block every undeclared member is omitted and an empty
+`exit_classes` is omitted, so a present empty block serializes as `{}` and
+claims nothing. Unlike other optional blocks, no member is ever written as
+`null`, and a present `null` for the block, a member, or `exit_classes` is
+invalid. An unrecognized `stdout` token reads as `unknown`, which never counts
+as data-returning and re-serializes as `"unknown"`; the documentation IR
+rejects that token instead of discarding a declaration. The docs IR remains at
+version `2.0` for the same change, and a reader that predates the block ignores
+it.
 
 Breaking changes require bumping `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`. Breaking
 changes include renaming or removing fields, changing enum wire strings,

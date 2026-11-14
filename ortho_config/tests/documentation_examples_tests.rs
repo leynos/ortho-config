@@ -53,6 +53,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-orthohelp-format-all",
     "guide-orthohelp-format-all-tree",
     "guide-orthohelp-metadata",
+    "guide-output-metadata",
     "guide-policy-check",
     "guide-policy-ci",
     "guide-policy-config",
