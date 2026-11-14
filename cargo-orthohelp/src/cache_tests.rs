@@ -344,15 +344,27 @@ fn an_unreadable_source_directory_aborts_the_walk() {
     std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o000))
         .expect("make the directory unreadable");
 
-    let failure = fingerprint_package(&root);
+    // Privileged accounts bypass permission bits, so the walk would enter the
+    // directory and fingerprint it instead of failing. Detect that the way
+    // `ortho_config`'s probe tests do — by asking whether the locked path is
+    // still readable — rather than by inspecting the uid.
+    let reaches_through_mode = std::fs::read_dir(&private).is_ok();
+    // One `match` rather than a `let ... else` rebind: the workspace denies
+    // `clippy::shadow_reuse`, which any shadowing rebind of the outcome trips.
+    let reached = if reaches_through_mode {
+        None
+    } else {
+        Some(fingerprint_package(&root))
+    };
 
-    // Restore access first so the temporary tree can be removed, then judge
-    // the fingerprint. This case needs an unprivileged account: one permitted
-    // to read through mode 000 would fingerprint the empty directory instead.
+    // Restore access before asserting so the temporary tree can be removed.
     std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o755))
         .expect("restore directory access");
+    let Some(attempted) = reached else {
+        return;
+    };
     let (path, source) =
-        io_failure(failure.expect_err(
+        io_failure(attempted.expect_err(
             "a directory the walk cannot enter must abort fingerprinting, not be skipped",
         ));
     assert_eq!(
