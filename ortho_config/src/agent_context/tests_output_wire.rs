@@ -38,33 +38,20 @@ fn decode_output(output: &Value) -> OutputContract {
         .expect("the fixture command should declare an output contract")
 }
 
-/// A command that declares nothing carries no contract at all.
-#[test]
-fn absent_output_stays_none() {
-    let context = decode_context(&json!([{"path": ["wire-cli"]}]));
+/// Omission and an explicit `null` both read as an absent contract.
+#[rstest]
+#[case::omitted(json!({"path": ["wire-cli"]}))]
+#[case::explicit_null(json!({"path": ["wire-cli"], "output": null}))]
+fn absent_output_stays_none(#[case] command: Value) {
+    let context = decode_context(&json!([command]));
 
     assert_eq!(
         context
             .commands
             .first()
-            .and_then(|command| command.output.as_ref()),
+            .and_then(|declared| declared.output.as_ref()),
         None,
-        "an undeclared command must not acquire a default contract"
-    );
-}
-
-/// An explicit `null` reads as absence, matching the omission rule.
-#[test]
-fn null_output_reads_as_none() {
-    let context = decode_context(&json!([{"path": ["wire-cli"], "output": null}]));
-
-    assert_eq!(
-        context
-            .commands
-            .first()
-            .and_then(|command| command.output.as_ref()),
-        None,
-        "null and omission must mean the same thing"
+        "neither omission nor an explicit null may become a default contract: {command}"
     );
 }
 
