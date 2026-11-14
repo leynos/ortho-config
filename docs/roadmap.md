@@ -12,6 +12,7 @@ The source documents for this roadmap are:
 - [Design Document: The `OrthoConfig` Crate](design.md);
 - [Agent-native CLI assistance design](agent-native-cli-design.md);
 - [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md);
+- [Check and gen command amendment](cargo-orthohelp-check-gen-design.md);
 - [Improved error message design](improved-error-message-design.md);
 - [CLI localization surface design](cli-localization-design.md);
 - [DDLint gap analysis](ddlint-gap-analysis.md);
@@ -287,6 +288,42 @@ unsafe mutation surfaces before release.
     names when a stable capability command would suffice.
   - [ ] Keep provider registries, selection, execution, and safety harnesses
     application-owned.
+
+- [ ] 7.2.8. Expose explicit `cargo orthohelp check` and `gen` operations.
+  - Requires 7.1.1, 7.2.1, and 7.2.3.
+  - See [check and gen design amendment](cargo-orthohelp-check-gen-design.md)
+    and the command-surface amendment to
+    [ADR-0008](adrs/adr-0008-agent-native-policy-configuration.md).
+  - Planning and independent CLI work may proceed alongside 7.2.3; that
+    dependency gates final integration and completion, not the start of work.
+    The 7.2.3 agent continues its existing scope and does not wait for 7.2.8.
+  - [ ] Move documentation and agent-context generation behind `gen`, reusing
+    the existing pipeline and preserving formats, defaults, options, artefact
+    paths, locale behaviour, and cache semantics.
+  - [ ] Make `check` acquire command metadata once and invoke the existing
+    configuration and behaviour checks plus 7.2.3's real output policy API.
+    Do not duplicate policy predicates or require unfinished future rules.
+  - [ ] Provide `check --scope config` without a bridge build, root type, or
+    library target. Enabled full checking must fail explicitly when required
+    metadata is unavailable rather than silently skipping command rules.
+  - [ ] Retain bare generation as a deprecated alias for `gen` and
+    `--check-agent-native` as a deprecated configuration-only alias. Preserve
+    legacy combined check/generation ordering and stdout ownership; warn only
+    on stderr, without changing operation exit statuses or removing aliases.
+  - [ ] Emit one deterministic policy report with correct merged counts and
+    additive coverage distinguishing non-evaluation, clean evaluation,
+    findings, and failure. Preserve off/warn/deny policy and 0/1/2 statuses;
+    off mode and zero applicable declarations must not imply compliance.
+  - [ ] Meet 7.2.3 at its public metadata and `check_output` interface. Record
+    the producer revision and pass a real-process nested-fixture test from
+    derive/bridge output to `json_support_missing` and deny status 1. Mocks or
+    direct API-only tests do not discharge this cross-over acceptance gate.
+  - [ ] Cover canonical and deprecated routing, Cargo/direct dispatch,
+    generation parity, policy modes, bridge/cache failures, no-bridge config
+    checks, single-document stdout, coverage, and schema compatibility.
+  - [ ] Update help, completions, README, guides, and tested migration examples.
+    Mark the item complete only after integration with 7.2.3; leave 7.2.4 and
+    7.2.5's stream and numeric-taxonomy work separate and unchecked.
 
 ### 7.3. Rebuild improved required-value diagnostics
 

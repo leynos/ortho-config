@@ -205,3 +205,31 @@ documents a CI recipe asserting the mode
   cargo-orthohelp](../cargo-orthohelp-design.md) §6.3.2.
 - [Execution plan for roadmap 7.1.1](../execplans/7-1-1-opt-in-agent-native-policy-configuration.md).
 - [ADR-0003: Define schema ownership for agent-native contracts](adr-0003-define-schema-ownership-for-agent-native-contracts.md).
+
+## Amendment (2026-11-14): explicit check and gen operations
+
+The requested command-surface direction is `cargo orthohelp check` for policy
+checking and `cargo orthohelp gen` for documentation and agent-context
+generation. [Roadmap item 7.2.8](../roadmap.md) owns implementation; the
+[design amendment](../cargo-orthohelp-check-gen-design.md) specifies the
+contract for review. This record does not claim that those commands already
+exist.
+
+D11's no-bridge guarantee continues to govern the deprecated
+`--check-agent-native` form and its canonical replacement,
+`check --scope config`. It does not prohibit the new full `check` operation
+from obtaining command metadata and calling the reusable behaviour and output
+checkers. Bare generation remains a deprecated alias for `gen`. Preserve the
+legacy combined check/generation path, warning only on stderr and retaining
+its single-report stdout contract.
+
+D9's enforcement defaults and override boundary remain unchanged, as do D5/D6's
+report channels and existing process statuses. The new operation adds explicit
+execution coverage so disabled or excluded checks cannot be mistaken for a
+clean evaluation. Missing metadata during an enabled full check is a failure,
+not permission to fall back silently to configuration-only checking.
+
+7.2.3 continues independently as the metadata and reusable-output-checker
+producer. 7.2.8 owns CLI integration and meets that producer at its public API
+and real-process acceptance test. This amendment neither expands 7.2.3 nor
+blocks its implementation; full 7.2.8 completion requires that integration.
