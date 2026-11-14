@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import os
 import pathlib
+import shlex
+import signal
 import shutil
 import subprocess
+import time
 
 import pytest
 
 import coverage_merge_test as workflow_contract
+
+#: Maximum time allowed for either real merger execution.
+MERGER_TIMEOUT_SECONDS = 180
+
+#: Grace period before a timed-out process tree is forcefully stopped.
+PROCESS_TERMINATION_GRACE_SECONDS = 5
 
 #: Distinct valid LCOV records expected to survive a real merge.
 VALID_REPORTS: dict[str, str] = {
@@ -22,28 +31,120 @@ VALID_REPORTS: dict[str, str] = {
 }
 
 
-def _run_real_merger(script: str, working_directory: pathlib.Path) -> subprocess.CompletedProcess[str]:
-    """Run an extracted workflow script with the installed Bun executable."""
+def _stop_process_tree(process: subprocess.Popen[str]) -> None:
+    """Stop a timed-out Bash process and any merger children it started."""
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    else:
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    try:
+        process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        try:
+            process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+
+
+def _run_bash(
+    script: str,
+    working_directory: pathlib.Path,
+    path: str,
+    timeout_seconds: float = MERGER_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    """Run Bash with bounded cleanup for the shell and its descendants."""
     bash_executable = shutil.which("bash")
     if bash_executable is None:
         pytest.skip("bash is required to execute extracted workflow scripts")
+
+    environment = os.environ.copy()
+    environment["PATH"] = path
+    process = subprocess.Popen(
+        [bash_executable],
+        cwd=working_directory,
+        env=environment,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=os.name == "posix",
+        text=True,
+    )
+    try:
+        stdout, stderr = process.communicate(
+            input=script, timeout=timeout_seconds
+        )
+    except BaseException:
+        _stop_process_tree(process)
+        raise
+    return subprocess.CompletedProcess(
+        process.args, process.returncode, stdout, stderr
+    )
+
+
+def _run_real_merger(
+    script: str, working_directory: pathlib.Path
+) -> subprocess.CompletedProcess[str]:
+    """Run an extracted workflow script with the installed Bun executable."""
     bun_executable = shutil.which("bun")
     if bun_executable is None:
         pytest.skip("Bun is required to execute the pinned real merger")
-
-    environment = os.environ.copy()
-    environment["PATH"] = os.pathsep.join(
-        (str(pathlib.Path(bun_executable).parent), environment.get("PATH", os.defpath))
+    path = os.pathsep.join(
+        (str(pathlib.Path(bun_executable).parent), os.environ.get("PATH", os.defpath))
     )
-    return subprocess.run(
-        [bash_executable],
-        input=script,
-        cwd=working_directory,
-        env=environment,
-        capture_output=True,
-        check=False,
-        text=True,
-        timeout=180,
+    return _run_bash(script, working_directory, path)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="the process-group timeout check requires POSIX"
+)
+def test_bash_timeout_terminates_its_process_group(tmp_path: pathlib.Path) -> None:
+    """A timed-out Bash script cannot leave its child writing in tmp_path."""
+    marker_path = tmp_path / "surviving-child.txt"
+    script = (
+        f"( sleep 1; printf alive > {shlex.quote(str(marker_path))} ) &\n"
+        "wait\n"
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        _run_bash(
+            script,
+            tmp_path,
+            os.environ.get("PATH", os.defpath),
+            timeout_seconds=0.2,
+        )
+
+    time.sleep(1.1)
+    marker_contents = (
+        marker_path.read_text(encoding="utf-8") if marker_path.exists() else None
+    )
+    assert not marker_path.exists(), (
+        f"expected process cleanup to stop the child before it writes; "
+        f"got {marker_contents!r}"
     )
 
 
