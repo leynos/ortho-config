@@ -31,47 +31,71 @@ VALID_REPORTS: dict[str, str] = {
 }
 
 
-def _stop_process_tree(process: subprocess.Popen[str]) -> None:
-    """Stop a timed-out Bash process and any merger children it started."""
-    if os.name == "posix":
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-    else:
-        subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+def _taskkill_process_tree(process: subprocess.Popen[str]) -> None:
+    """Stop a Windows process tree by its Bash root process ID."""
+    subprocess.run(
+        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
 
+
+def _signal_process_group(process_group_id: int, signal_number: int) -> None:
+    """Send one signal to a POSIX process group if it still exists."""
+    try:
+        os.killpg(process_group_id, signal_number)
+    except ProcessLookupError:
+        pass
+
+
+def _request_tree_termination(process: subprocess.Popen[str]) -> None:
+    """Request graceful POSIX shutdown or stop the Windows process tree."""
+    if os.name == "posix":
+        _signal_process_group(process.pid, signal.SIGTERM)
+    else:
+        _taskkill_process_tree(process)
+
+
+def _wait_for_tree_grace_period(process: subprocess.Popen[str]) -> None:
+    """Wait briefly for the Bash process and captured streams to close."""
     try:
         process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
         pass
 
-    if os.name == "posix" and _process_group_exists(process.pid):
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-    elif os.name != "posix":
-        subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
 
+def _force_stop_surviving_tree(process: subprocess.Popen[str]) -> None:
+    """Force-stop any process that survived the graceful termination."""
+    if os.name == "posix" and _process_group_exists(process.pid):
+        _signal_process_group(process.pid, signal.SIGKILL)
+    elif os.name != "posix":
+        _taskkill_process_tree(process)
+
+
+def _kill_and_reap_direct_process(process: subprocess.Popen[str]) -> None:
+    """Kill and reap Bash if captured streams still have not closed."""
+    process.kill()
+    process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+    for stream in (process.stdin, process.stdout, process.stderr):
+        if stream is not None:
+            stream.close()
+
+
+def _finish_process_cleanup(process: subprocess.Popen[str]) -> None:
+    """Finish waiting after survivors have received a forceful stop."""
     try:
         process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
-        for stream in (process.stdin, process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
+        _kill_and_reap_direct_process(process)
+
+
+def _stop_process_tree(process: subprocess.Popen[str]) -> None:
+    """Stop a timed-out Bash process and any merger children it started."""
+    _request_tree_termination(process)
+    _wait_for_tree_grace_period(process)
+    _force_stop_surviving_tree(process)
+    _finish_process_cleanup(process)
 
 
 def _process_group_exists(process_group_id: int) -> bool:
