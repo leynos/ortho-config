@@ -231,13 +231,12 @@ def test_the_linker_is_scoped_to_the_linux_table_alone() -> None:
     assert carriers == [f"[target.{LINUX_CFG}]"], f"the linker is named by {carriers}"
 
 
-def test_cranelift_is_an_opt_in_and_not_the_development_backend() -> None:
-    """Cargo and Make leave Cranelift unselected; LLVM is the default.
+def test_cargo_config_leaves_cranelift_unselected() -> None:
+    """Cargo leaves Cranelift unselected; LLVM is the default.
 
     The known unwind limitation is recorded in the developers' guide and
-    ADR-0019. This contract checks that the config and the Make route keep the
-    Cranelift selection disabled while the frontend flag, the registered cfg
-    name and the opt-in definitions remain.
+    ADR-0019. The frontend flag and the registered cfg name remain, and the
+    disabled selection stays in the file for an opt-in.
     """
     document = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     assert "unstable" not in document, "an [unstable] table enables a backend selection"
@@ -260,13 +259,21 @@ def test_cranelift_is_an_opt_in_and_not_the_development_backend() -> None:
     assert f'# "{BACKEND_FLAG}",' in config_text, (
         "the disabled Cranelift selection is not kept for an opt-in"
     )
+
+
+def test_workspace_registers_the_dev_fast_cfg() -> None:
+    """The workspace lint configuration keeps the opt-in cfg name registered."""
     manifest = tomllib.loads((REPOSITORY_ROOT / "Cargo.toml").read_text(encoding="utf-8"))
     rust_lints = manifest["workspace"]["lints"]["rust"]
     registered_cfgs = rust_lints["unexpected_cfgs"]["check-cfg"]
     assert CHECK_CFG_FLAG.partition("=")[2] in registered_cfgs, (
         "the workspace lint configuration does not register the dev-fast cfg"
     )
-    makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
+
+
+def test_make_leaves_the_development_backend_unselected() -> None:
+    """The Makefile selects no backend by default and keeps the opt-in route."""
+    makefile =(REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
     active_lines = [line for line in makefile.splitlines() if not line.startswith("#")]
     assert "STANDARD_BACKEND_FLAG ?=" in active_lines, (
         "the Makefile selects a development backend by default"
@@ -277,6 +284,10 @@ def test_cranelift_is_an_opt_in_and_not_the_development_backend() -> None:
     assert f"# STANDARD_BACKEND_FLAG ?= {BACKEND_FLAG}" in makefile, (
         "the disabled Cranelift route is not kept for an opt-in"
     )
+
+
+def test_workflows_do_not_select_a_codegen_backend() -> None:
+    """No workflow selects a codegen backend or names the Cranelift flag."""
     for workflow in _workflow_files(REPOSITORY_ROOT / ".github" / "workflows"):
         text = workflow.read_text(encoding="utf-8")
         assert "CODEGEN_BACKEND" not in text, f"{workflow.name} selects a codegen backend"

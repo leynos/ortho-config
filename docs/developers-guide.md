@@ -3045,7 +3045,11 @@ with review due 14 May 2027. The commented lines are the opt-in: uncomment the
 backend and the `ortho_config_dev_fast` cfg together (and
 `STANDARD_BACKEND_FLAG` and `STANDARD_DEV_FAST_CFG` in the Makefile). Cranelift
 does not run destructors while unwinding, so the cfg ignores the
-unwind-dependent tests under it.
+unwind-dependent tests under it. A persistent opt-in also changes the
+default-only expectations in
+`tests/workflow_contracts/build_standard_*_test.py` and
+`cargo-orthohelp/tests/compile_time/flags_tests.rs`; a one-off `--config` or
+`RUSTFLAGS` override needs neither.
 
 `mold` ships for Linux only, so it appears under the Linux target table alone.
 It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
@@ -3345,7 +3349,8 @@ the published rustup manifests.
 - The nightly is needed because `-Zthreads=8`, the parallel `rustc` frontend, is
   nightly-only.
 - `llvm-tools-preview` is for local `cargo llvm-cov`.
-- `rustc-codegen-cranelift-preview` is the backend used by dev-fast builds.
+- `rustc-codegen-cranelift-preview` is the optional Cranelift backend for an
+  opt-in; development builds use LLVM by default.
 
 `scripts/build-tools-common.sh` reads the channel from `rust-toolchain.toml`,
 so the installer and the check follow the pin and no second copy exists.
@@ -3492,7 +3497,7 @@ The pinned nightly is `rustc 1.101.0-nightly (2026-10-15)`. The
 
 ### Known limitation
 
-Cranelift is selected for development builds with a known unwind limitation: a
+Cranelift, an opt-in since 14 November 2026, has a known unwind limitation: a
 panic raised in Cranelift-compiled code does not find the unwind handler. As a
 result:
 

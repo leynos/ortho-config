@@ -206,7 +206,7 @@ fn rustflags_in_config_section(section: CargoConfigSection) -> Option<Vec<String
             }
             in_section = trimmed == section_header;
             section_found |= in_section;
-        } else if in_section {
+        } else if in_section && !trimmed.starts_with('#') {
             section_lines.push(trimmed);
         }
     }
