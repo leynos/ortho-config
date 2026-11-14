@@ -79,7 +79,9 @@ pub struct ValidationFinding {
 /// Deterministic coverage counts for one validation call.
 ///
 /// Counts are descriptive. They do not assert that a manifest's prose was
-/// exhaustively understood.
+/// exhaustively understood. Extracted counts and bound counts are kept
+/// separate: a consumer's extraction flag says what it understood, and
+/// `examples_bound` says what the validator could actually check.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Coverage {
     /// Command references supplied by all manifests.
@@ -90,15 +92,23 @@ pub struct Coverage {
     pub examples_checked: usize,
     /// Examples the consumer marked unsupported.
     pub examples_unchecked: usize,
+    /// Extracted examples that reached their option checks.
+    ///
+    /// An example whose owner, ordinal, or path did not bind is extracted and
+    /// counted in `examples_checked`, but it is not counted here: its dependent
+    /// option checks never ran.
+    #[serde(default)]
+    pub examples_bound: usize,
 }
 
 /// Whether the supplied claims were validated completely.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ValidationStatus {
-    /// Every supplied example was checked.
+    /// Every extracted example also reached its option checks.
     Complete,
-    /// At least one example was unsupported and therefore unchecked.
+    /// At least one example was unsupported, or extracted but never bound to a
+    /// command reference, and is therefore unchecked.
     Partial,
 }
 

@@ -2155,6 +2155,16 @@ that command accepts, and its canonical verb when known. Supplying the surface
 is the consumer's statement of what the tool really does; the validator never
 infers that a child command inherits its parent's options.
 
+Each option also states whether the tool treats it as a _global_ option on that
+command. Global-option policy, such as the shared glossary's canonical spelling
+and accepted values, applies only to options so marked. The flag is never
+inferred from a name: a domain command with its own `--color` is not judged by
+the glossary rule for the global colour-policy option. A consumer that already
+holds an `AgentContext` can build the surface with
+`EffectiveCommandSurface::from_agent_context`, passing the options it knows are
+global as `GlobalOption` values; the adapter still adds nothing to a child that
+the caller did not list.
+
 <!-- tested-example: guide-skill-validation -->
 ```rust
 use cargo_orthohelp::policy::PolicyMode;
@@ -2172,6 +2182,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             options: vec![EffectiveOption {
                 long: "json".to_owned(),
                 value_type: Some("bool".to_owned()),
+                is_global: false,
             }],
             canonical_verb: None,
         }],
@@ -2221,9 +2232,18 @@ The keys to reading the report are:
 - **Policy findings** carry vocabulary or global-option advice from the
   7.1 rules. They follow `off`, `warn`, and `deny`, and configured exceptions
   suppress them.
-- **Coverage** counts what was actually checked. An example the consumer could
-  not extract is marked `Unsupported`; it is counted as unchecked and the
-  report status becomes `Partial` rather than implying full coverage.
+- **Coverage** counts what was actually checked. `examples_checked` counts the
+  examples the consumer extracted; `examples_bound` counts those that then
+  reached their option checks. An example the consumer could not extract is
+  marked `Unsupported` and counted as unchecked. The status is `Complete` only
+  when nothing was unsupported and every extracted example bound; an
+  unsupported example, an unknown manifest, an unbound reference, or a path
+  mismatch makes it `Partial` rather than implying full coverage.
+- **One finding per offending option.** A claimed flag or example option
+  produces at most one finding for its path and at most one finding of its own,
+  so a single mistake is never reported twice. An example option the reference
+  does not declare is reported once; the validator does not then repeat it as
+  an option the command does not accept.
 - **Ordering** is manifest input order, then source ordinal, then finding code,
   so two runs over the same input produce identical reports.
 

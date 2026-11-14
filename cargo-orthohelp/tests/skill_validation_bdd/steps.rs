@@ -14,8 +14,9 @@ use cargo_orthohelp::skill_validation::{
 use rstest_bdd_macros::{given, then, when};
 
 use super::{
-    SkillContext, StepResult, add_command, add_example, add_manifest, add_option_to_last_command,
-    add_reference, command, example, option_use, reference,
+    SkillContext, StepResult, add_command, add_example, add_global_option_to_last_command,
+    add_manifest, add_option_to_last_command, add_reference, command, command_with_globals,
+    example, option_use, reference,
 };
 
 #[given("a command contract with a nested command and effective options")]
@@ -39,8 +40,14 @@ fn operation_skill_claims(context: &mut SkillContext) -> StepResult<()> {
 
 #[given("a command contract with explicit effective global options")]
 fn explicit_global_options(context: &mut SkillContext) {
-    add_command(context, command(&["tool"], &["color", "json"]));
-    add_command(context, command(&["tool", "build"], &["color", "json"]));
+    add_command(
+        context,
+        command_with_globals(&["tool"], &["color", "json"], &["color"]),
+    );
+    add_command(
+        context,
+        command_with_globals(&["tool", "build"], &["color", "json"], &["color"]),
+    );
 }
 
 #[given("a build workflow example with an option name and value")]
@@ -64,10 +71,10 @@ fn build_workflow_example(context: &mut SkillContext) -> StepResult<()> {
     Ok(())
 }
 
-#[given("a real command accepting the declared option {option:string}")]
+#[given("a real command accepting the declared global option {option:string}")]
 fn real_command_accepting_option(context: &mut SkillContext, option: String) -> StepResult<()> {
     add_command(context, command(&["tool"], &[]));
-    add_option_to_last_command(context, &option)?;
+    add_global_option_to_last_command(context, &option)?;
     add_manifest(
         context,
         ManifestClaims {

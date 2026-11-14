@@ -101,12 +101,21 @@ impl<'a> Validator<'a> {
             self.check_duplicate_id(position, manifest);
             self.check_manifest(position, manifest);
         }
+        let mut bound: usize = 0;
         for example in &input.examples {
-            self.check_example(example);
+            if self.check_example(example) {
+                bound = bound.saturating_add(1);
+            }
         }
+        self.coverage.examples_bound = bound;
         self.coverage.examples_checked = count_extraction(input, ExampleExtraction::Checked);
         self.coverage.examples_unchecked = count_extraction(input, ExampleExtraction::Unsupported);
-        let status = if self.coverage.examples_unchecked == 0 {
+        // Extraction alone is not validation: an example that never reached its
+        // option checks has not been checked, so the report must not claim a
+        // complete run.
+        let status = if self.coverage.examples_unchecked == 0
+            && self.coverage.examples_bound == self.coverage.examples_checked
+        {
             ValidationStatus::Complete
         } else {
             ValidationStatus::Partial
@@ -197,11 +206,10 @@ impl<'a> Validator<'a> {
 
     /// Checks one declared flag and its policy standing.
     fn check_flag(&mut self, claim: ClaimRef<'_>, flag: &str) -> bool {
-        let accepted = self
-            .index
-            .command(claim.path)
-            .is_some_and(|command| command.accepts(flag));
-        if !accepted {
+        let Some(command) = self.index.command(claim.path) else {
+            return false;
+        };
+        let Some(option) = command.option(flag) else {
             self.push_structural(
                 claim,
                 FindingData::structural(
@@ -214,8 +222,12 @@ impl<'a> Validator<'a> {
                 ),
             );
             return false;
-        }
-        self.push_advice(claim, flag_name_advice(self.policy, claim.path, flag));
+        };
+        let is_global = option.is_global();
+        self.push_advice(
+            claim,
+            flag_name_advice(self.policy, claim.path, flag, is_global),
+        );
         true
     }
 

@@ -107,6 +107,16 @@ pub struct EffectiveOption {
     pub long: String,
     /// Declared value type such as `string`, `bool`, or `path`.
     pub value_type: Option<String>,
+    /// Whether this option is a global option on this command.
+    ///
+    /// The consumer or bridge states this explicitly; the validator never
+    /// infers it from a name, from the root command, or from a parent path.
+    /// Global-option policy rules, such as the shared glossary's canonical
+    /// spelling and accepted values, apply only when this is true. A domain
+    /// command with its own local `--color` therefore never receives advice
+    /// meant for the global colour-policy option.
+    #[serde(default)]
+    pub is_global: bool,
 }
 
 /// A typed failure in the supplied command surface.

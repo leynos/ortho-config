@@ -1031,7 +1031,9 @@ modules divide by one job each:
   call;
 - `validate` orchestrates the reference checks, and `validate::examples` the
   example checks;
-- `policy_check` turns the 7.1 policy and the §5 glossary into advice; and
+- `policy_check` turns the 7.1 policy and the §5 glossary into advice;
+- `surface` adapts an `AgentContext` plus an explicit `GlobalOption` list into
+  an effective surface, inventing no inheritance; and
 - `report` holds the finding, coverage, and status types plus the stable
   finding codes.
 
@@ -1046,12 +1048,23 @@ Two conventions are easy to break and expensive to debug:
 2. **The effective surface is per command.** Never union a root command's
    options into its children. The surface is the consumer's statement of what
    each command accepts, and the tests pin the negative case.
+3. **Global-option classification is supplied, never inferred.** Only
+   `EffectiveOption::is_global` opens the glossary rules; a matching name on a
+   domain command must stay silent in value advice. `from_agent_context` marks
+   an option global only because the caller listed it in `GlobalOption`.
+4. **One finding per offending claim.** A reference's flag and an example's
+   option each produce at most one finding. The option checks chain —
+   ownership, then reality — so an undeclared option is reported once and not
+   re-reported as unaccepted.
 
 Avoid `expect` and `unwrap` in these modules, including test-only helpers
 outside a `#[test]` body; `support.rs` returns values instead. Test helpers
-live in `support`, `tests`, `tests_examples`, `tests_policy`, and `proptests`;
-the property tests use an independent linear oracle rather than calling the
-validator's own index.
+live in `support`, `tests`, `tests_examples`, `tests_policy`, `tests_surface`,
+`proptests`, and `proptests_examples`; the property tests use independent
+linear oracles rather than calling the validator's own index. Coverage counts
+extraction (`examples_checked`) separately from binding (`examples_bound`), and
+`ValidationStatus::Complete` requires the two to agree with no unsupported
+examples.
 
 ## Profile layering (roadmap 9.1.1)
 

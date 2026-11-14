@@ -190,13 +190,23 @@ fn source_drift_flows_into_the_extracted_record_and_the_report() {
     .expect("the surface is unambiguous");
     let found = codes_of(&report);
 
-    assert!(
-        found.contains(&codes::EXAMPLE_UNDECLARED_OPTION),
-        "missing undeclared-option finding: {found:?}"
+    // The drifted name is reported once, by the ownership check that fires
+    // first: the fixture's reference still declares `json`, so `missing-option`
+    // is undeclared. One finding per example option is the plan's rule, so the
+    // command-membership check must not re-report the same token.
+    assert_eq!(
+        found,
+        vec![codes::EXAMPLE_UNDECLARED_OPTION],
+        "the drifted option must produce exactly one finding"
     );
-    assert!(
-        found.contains(&codes::EXAMPLE_UNKNOWN_OPTION),
-        "missing unknown-option finding: {found:?}"
+    let finding = report
+        .findings
+        .first()
+        .expect("the assertion above found one finding");
+    assert_eq!(
+        finding.option.as_deref(),
+        Some("missing-option"),
+        "the finding must name the drifted option"
     );
 }
 

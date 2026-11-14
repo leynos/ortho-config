@@ -7,10 +7,12 @@
 //! child, and a child that declares a global option does resolve it.
 
 use pretty_assertions::assert_eq;
+use rstest::rstest;
 
 use super::report::codes;
 use super::support::{
-    codes_of, command, example, input, manifest, option_use, policy, reference, surface,
+    codes_of, command, command_with_globals, example, input, manifest, option_use, policy,
+    reference, surface,
 };
 use super::validate;
 use crate::policy::PolicyMode;
@@ -79,13 +81,25 @@ fn example_reference_and_path_must_match_the_manifest() {
     );
 }
 
-#[test]
-fn example_options_must_be_declared_and_real() {
+#[rstest]
+#[case::undeclared_and_unaccepted(&["json"], vec![codes::EXAMPLE_UNDECLARED_OPTION])]
+#[case::declared_but_unaccepted(
+    &["json", "yaml"],
+    vec![codes::EXAMPLE_UNKNOWN_OPTION, codes::UNKNOWN_FLAG]
+)]
+fn example_options_are_reported_once_at_their_first_failure(
+    #[case] declared: &[&str],
+    #[case] expected: Vec<&str>,
+) {
+    // One option name may fail both the ownership and the membership check. The
+    // plan allows at most one finding per example option, and the reference is
+    // the claim the example elaborates, so ownership wins and reality is not
+    // re-reported for the same token.
     let commands = surface(vec![command(&["tool"], &["json"])]);
     let claims = input(
         vec![manifest(
             "operation-skill",
-            vec![reference(&["tool"], &["json"])],
+            vec![reference(&["tool"], declared)],
         )],
         vec![example(
             "operation-skill",
@@ -98,13 +112,7 @@ fn example_options_must_be_declared_and_real() {
     let report =
         validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
 
-    assert_eq!(
-        codes_of(&report),
-        vec![
-            codes::EXAMPLE_UNDECLARED_OPTION,
-            codes::EXAMPLE_UNKNOWN_OPTION
-        ]
-    );
+    assert_eq!(codes_of(&report), expected);
 }
 
 #[test]
@@ -138,20 +146,23 @@ fn a_root_only_option_is_not_available_on_a_child_command() {
 
 #[test]
 fn a_declared_child_global_option_resolves() {
-    let commands = surface(vec![
-        command(&["tool"], &["json"]),
-        command(&["tool", "build"], &["json"]),
-    ]);
+    // The child declares `color` itself and the consumer classifies it global;
+    // the example then resolves and reaches its option checks.
+    let commands = surface(vec![command_with_globals(
+        &["tool", "build"],
+        &["json", "color"],
+        &["color"],
+    )]);
     let claims = input(
         vec![manifest(
             "build-workflow",
-            vec![reference(&["tool", "build"], &["json"])],
+            vec![reference(&["tool", "build"], &["json", "color"])],
         )],
         vec![example(
             "build-workflow",
             1,
             &["tool", "build"],
-            vec![option_use("json", None, 1)],
+            vec![option_use("color", Some("always"), 1)],
         )],
     );
 
@@ -160,4 +171,5 @@ fn a_declared_child_global_option_resolves() {
 
     assert_eq!(report.findings, Vec::new());
     assert_eq!(report.coverage.examples_checked, 1);
+    assert_eq!(report.coverage.examples_bound, 1);
 }

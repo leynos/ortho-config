@@ -17,7 +17,7 @@ Feature: Validate skill claims against an agent command contract
     And value presence and contents are preserved
 
   Scenario: Report a noncanonical option under deny policy
-    Given a real command accepting the declared option "colour-policy"
+    Given a real command accepting the declared global option "colour-policy"
     And an example using "colour-policy" with value "always"
     And deny policy without an exception for that option
     When the consumer submits the normalized example

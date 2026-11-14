@@ -60,6 +60,7 @@ fn resolved_nested_reference_produces_no_findings() {
             resolved_command_references: 1,
             examples_checked: 0,
             examples_unchecked: 0,
+            examples_bound: 0,
         }
     );
 }
@@ -284,10 +285,12 @@ fn surface_order_does_not_change_findings() {
             EffectiveOption {
                 long: "json".to_owned(),
                 value_type: Some("bool".to_owned()),
+                is_global: false,
             },
             EffectiveOption {
                 long: "json".to_owned(),
                 value_type: Some("string".to_owned()),
+                is_global: false,
             },
         ],
         canonical_verb: None,

@@ -106,8 +106,9 @@ impl OptionUse<'_> {
 /// One resolved claim's policy context.
 ///
 /// The configured policy, the exact command path the claim resolved against,
-/// and the name the claim used travel together in every rule, so they are held
-/// as one receiver rather than threaded through each helper.
+/// the name the claim used, and whether the surface classifies that option as
+/// global travel together in every rule, so they are held as one receiver
+/// rather than threaded through each helper.
 struct ClaimPolicy<'a> {
     /// Configured policy and explicit exceptions.
     policy: &'a ResolvedAgentPolicy,
@@ -115,6 +116,8 @@ struct ClaimPolicy<'a> {
     path: &'a [String],
     /// Flag or verb name the claim used.
     name: &'a str,
+    /// Whether the surface classifies this option as global.
+    is_global: bool,
 }
 
 impl<'a> ClaimPolicy<'a> {
@@ -124,18 +127,25 @@ impl<'a> ClaimPolicy<'a> {
     }
 
     /// Applies the shared name and value rules for one option.
+    ///
+    /// Glossary rules describe the *global* option of a canonical name, so
+    /// they apply only when the surface says this option is the global one.
+    /// Generic vocabulary rules, such as an off-policy flag spelling, are about
+    /// the name the CLI offers and apply either way.
     fn option_advice(&self, usage: OptionUse<'a>) -> Option<PolicyAdvice> {
         if self.is_exempt(ExceptionKind::Flag) {
             return None;
         }
-        if let Some(concept) = concept_for_long_name(self.name) {
-            return match usage {
-                OptionUse::Declaration => None,
-                OptionUse::Invocation(value) => value_advice(concept, value),
-            };
-        }
-        if let Some(concept) = near_miss_concept(self.name) {
-            return Some(self.near_miss_advice(concept));
+        if self.is_global {
+            if let Some(concept) = concept_for_long_name(self.name) {
+                return match usage {
+                    OptionUse::Declaration => None,
+                    OptionUse::Invocation(value) => value_advice(concept, value),
+                };
+            }
+            if let Some(concept) = near_miss_concept(self.name) {
+                return Some(self.near_miss_advice(concept));
+            }
         }
         if is_canonical_flag(self.name) {
             return None;
@@ -188,8 +198,31 @@ pub(crate) fn flag_name_advice(
     policy: &ResolvedAgentPolicy,
     path: &[String],
     name: &str,
+    is_global: bool,
 ) -> Option<PolicyAdvice> {
-    ClaimPolicy { policy, path, name }.option_advice(OptionUse::Declaration)
+    ClaimPolicy {
+        policy,
+        path,
+        name,
+        is_global,
+    }
+    .option_advice(OptionUse::Declaration)
+}
+
+/// One option use inside an example, as the policy rules see it.
+///
+/// The four fields always travel together: a use has no meaning without the
+/// command that accepts it and the surface's classification of that option, so
+/// they are passed as one value rather than as parallel arguments.
+pub(crate) struct UseSite<'a> {
+    /// Exact command path the use resolved against.
+    pub(crate) path: &'a [String],
+    /// Option name the example used.
+    pub(crate) name: &'a str,
+    /// Value the example supplied, if any.
+    pub(crate) value: Option<&'a str>,
+    /// Whether the surface classifies this option as global.
+    pub(crate) is_global: bool,
 }
 
 /// Returns policy advice for one option use inside an example.
@@ -199,11 +232,15 @@ pub(crate) fn flag_name_advice(
 /// normalize.
 pub(crate) fn option_use_advice<'a>(
     policy: &'a ResolvedAgentPolicy,
-    path: &'a [String],
-    name: &'a str,
-    value: Option<&'a str>,
+    site: &UseSite<'a>,
 ) -> Option<PolicyAdvice> {
-    ClaimPolicy { policy, path, name }.option_advice(OptionUse::Invocation(value))
+    ClaimPolicy {
+        policy,
+        path: site.path,
+        name: site.name,
+        is_global: site.is_global,
+    }
+    .option_advice(OptionUse::Invocation(site.value))
 }
 
 /// Returns policy advice for a resolved command verb.
@@ -216,6 +253,7 @@ pub(crate) fn verb_advice(
         policy,
         path,
         name: verb,
+        is_global: false,
     }
     .verb_advice()
 }
