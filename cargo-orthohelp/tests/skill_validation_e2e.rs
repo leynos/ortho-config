@@ -131,6 +131,15 @@ fn codes_of(report: &SkillValidationReport) -> Vec<&str> {
         .collect()
 }
 
+/// Returns the first `color` value in example order.
+fn colour_value(examples: &[NormalizedExample]) -> Option<String> {
+    examples
+        .iter()
+        .flat_map(|example| example.options.iter())
+        .find(|option| option.name == "color")
+        .and_then(|option| option.value.clone())
+}
+
 /// Returns the option names each example uses, in example order.
 fn option_names(examples: &[NormalizedExample]) -> Vec<String> {
     examples
@@ -208,6 +217,58 @@ fn source_drift_flows_into_the_extracted_record_and_the_report() {
         Some("missing-option"),
         "the finding must name the drifted option"
     );
+}
+
+#[test]
+fn fixture_value_drift_reaches_the_extracted_record_and_the_policy_finding() {
+    // The fixture's `color` option is classified global by the shared surface,
+    // so an accepted value is silent. Mutating the *source* value must travel
+    // through extraction into the finding: a consumer that dropped values
+    // would still extract the option name and stay silent here.
+    let fixture = Fixture("build-workflow");
+    let markdown = fixture.markdown().expect("the fixture reads");
+    let baseline = parse_examples(&markdown).expect("the baseline parses");
+    assert_eq!(
+        colour_value(&baseline).as_deref(),
+        Some("always"),
+        "the fixture must start with an accepted value"
+    );
+
+    let drifted = markdown.replace("\"value\": \"always\"", "\"value\": \"sometimes\"");
+    assert_ne!(drifted, markdown, "the fixture no longer contains `always`");
+
+    let examples = parse_examples(&drifted).expect("the drifted examples parse");
+    assert_eq!(
+        colour_value(&examples).as_deref(),
+        Some("sometimes"),
+        "the adapter must carry the mutated value, not a stale record"
+    );
+
+    let input = SkillValidationInput {
+        manifests: vec![
+            fixture
+                .manifest(&drifted)
+                .expect("the drifted manifest parses"),
+        ],
+        examples,
+    };
+    let report = validate(
+        &input,
+        &load_surface().expect("the surface loads"),
+        &deny_policy(),
+    )
+    .expect("the surface is unambiguous");
+
+    assert_eq!(
+        codes_of(&report),
+        vec![codes::POLICY_GLOBAL_OPTION_VALUE],
+        "a non-canonical global value must be reported"
+    );
+    let finding = report
+        .findings
+        .first()
+        .expect("the assertion above found one finding");
+    assert_eq!(finding.option.as_deref(), Some("color"));
 }
 
 #[test]

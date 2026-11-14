@@ -81,6 +81,19 @@ pub(super) struct ExpectedCoverage {
     pub(super) unchecked: usize,
 }
 
+/// How the oracle treats the surface's acceptance of a declared option.
+#[derive(Clone, Copy, Default)]
+enum Acceptance {
+    /// Only an accepted option is silent; a declared but unaccepted one is
+    /// reported.
+    #[default]
+    Honour,
+    /// Treat every declared option as accepted. This is the mutant the
+    /// acceptance control compares against, so the rule has a witness on the
+    /// same input rather than only across different surfaces.
+    Ignore,
+}
+
 /// The oracle's accumulated expectations.
 #[derive(Default)]
 struct Oracle {
@@ -88,6 +101,8 @@ struct Oracle {
     findings: Vec<Expected>,
     /// Expected coverage.
     coverage: ExpectedCoverage,
+    /// How acceptance is treated.
+    acceptance: Acceptance,
 }
 
 impl Oracle {
@@ -139,7 +154,12 @@ impl Oracle {
                 return;
             }
         };
-        if self.expect_options(spec, bound, declared) {
+        let rules = OptionRules {
+            declared,
+            accepted: bound.accepted,
+            acceptance: self.acceptance,
+        };
+        if self.expect_options(spec, bound, rules) {
             self.coverage.bound = self.coverage.bound.saturating_add(1);
         }
     }
@@ -154,12 +174,12 @@ impl Oracle {
     /// absent from the surface. Only a *declared* option needs the surface, and
     /// a path the surface does not declare stops the remaining checks rather
     /// than cascading.
-    fn expect_options(&mut self, spec: &Spec, bound: &Bound<'_>, declared: u8) -> bool {
+    fn expect_options(&mut self, spec: &Spec, bound: &Bound<'_>, rules: OptionRules) -> bool {
         let mut seen: BTreeSet<&str> = BTreeSet::new();
         let steps = spec
             .options
             .iter()
-            .filter_map(|(index, _)| distinct_step(*index, declared, bound.accepted, &mut seen));
+            .filter_map(|(index, _)| distinct_step(*index, rules, &mut seen));
         for (name, step) in steps {
             match step {
                 Step::Stop => return false,
@@ -167,7 +187,9 @@ impl Oracle {
                 Step::Report(code) => self.findings.push(bound.anchor.finding(code, Some(name))),
             }
         }
-        true
+        // A path the surface lacks leaves the example unbound even when it used
+        // no declared option: nothing about that path was checked.
+        bound.accepted.is_some()
     }
 }
 
@@ -189,6 +211,17 @@ fn bound_reference(spec: &Spec, bound: &Bound<'_>) -> Result<u8, &'static str> {
     Err(codes::EXAMPLE_PATH_MISMATCH)
 }
 
+/// What the oracle knows about one example's reference and its surface.
+#[derive(Clone, Copy)]
+struct OptionRules {
+    /// Flags the owning reference declares.
+    declared: u8,
+    /// Options the surface accepts, or `None` when it lacks the example's path.
+    accepted: Option<u8>,
+    /// How acceptance is treated.
+    acceptance: Acceptance,
+}
+
 /// What checking one distinct example option implies.
 enum Step {
     /// The surface lacks the example's path, so no later option is checkable.
@@ -206,24 +239,27 @@ enum Step {
 /// finding.
 fn distinct_step<'a>(
     name_index: usize,
-    declared: u8,
-    accepted: Option<u8>,
+    rules: OptionRules,
     seen: &mut BTreeSet<&'a str>,
 ) -> Option<(&'a str, Step)> {
     let name = NAMES.get(name_index).copied()?;
     if !seen.insert(name) {
         return None;
     }
-    Some((name, classify_option(name_index, declared, accepted)))
+    Some((name, classify_option(name_index, rules)))
 }
 
 /// Classifies one distinct option against its reference and the surface.
-fn classify_option(name_index: usize, declared: u8, accepted: Option<u8>) -> Step {
+fn classify_option(name_index: usize, rules: OptionRules) -> Step {
     let bit = 1u8 << name_index;
-    let is_declared = name_index < DECLARED.len() && declared & bit != 0;
+    let is_declared = name_index < DECLARED.len() && rules.declared & bit != 0;
     if !is_declared {
         return Step::Report(codes::EXAMPLE_UNDECLARED_OPTION);
     }
+    let accepted = match rules.acceptance {
+        Acceptance::Honour => rules.accepted,
+        Acceptance::Ignore => Some(u8::MAX),
+    };
     match accepted {
         None => Step::Stop,
         Some(known) if known & bit == 0 => Step::Report(codes::EXAMPLE_UNKNOWN_OPTION),
@@ -233,7 +269,24 @@ fn classify_option(name_index: usize, declared: u8, accepted: Option<u8>) -> Ste
 
 /// Re-derives the expected findings, coverage, and status for one case.
 pub(super) fn oracle(case: &Case) -> (Vec<Expected>, ExpectedCoverage) {
-    let mut oracle = Oracle::default();
+    oracle_with(case, Acceptance::Honour)
+}
+
+/// Predicts the same case as if the surface accepted every declared option.
+///
+/// This exists only as a control: a comparison that still agrees after this
+/// mutation cannot be detecting the acceptance rule.
+#[cfg(test)]
+pub(super) fn oracle_ignoring_acceptance(case: &Case) -> (Vec<Expected>, ExpectedCoverage) {
+    oracle_with(case, Acceptance::Ignore)
+}
+
+/// Re-derives one case under the supplied acceptance policy.
+fn oracle_with(case: &Case, acceptance: Acceptance) -> (Vec<Expected>, ExpectedCoverage) {
+    let mut oracle = Oracle {
+        acceptance,
+        ..Oracle::default()
+    };
     for (position, spec) in case.examples.iter().enumerate() {
         oracle.expect(case, spec, position.saturating_add(1));
     }

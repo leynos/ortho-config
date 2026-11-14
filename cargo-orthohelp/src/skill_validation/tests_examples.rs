@@ -182,6 +182,71 @@ fn an_example_whose_path_the_surface_lacks_is_not_counted_bound() {
 }
 
 #[test]
+fn an_optionless_example_whose_path_the_surface_lacks_is_not_counted_bound() {
+    // No option needs the surface, so the previous rule had nothing to stop at
+    // and counted the example as bound. Its path was still never checked, so
+    // the run must not report completeness.
+    let commands = surface(vec![command(&["tool"], &["json"])]);
+    let claims = input(
+        vec![manifest(
+            "operation-skill",
+            vec![reference(&["tool", "paint"], &["json"])],
+        )],
+        vec![example(
+            "operation-skill",
+            1,
+            &["tool", "paint"],
+            Vec::new(),
+        )],
+    );
+
+    let report =
+        validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
+
+    assert_eq!(codes_of(&report), vec![codes::UNKNOWN_PATH]);
+    assert_eq!(report.coverage.examples_checked, 1);
+    assert_eq!(
+        report.coverage.examples_bound, 0,
+        "an optionless example on a missing path was never checked"
+    );
+    assert_eq!(report.status, ValidationStatus::Partial);
+}
+
+#[test]
+fn an_undeclared_option_does_not_bind_an_example_to_a_missing_path() {
+    // The undeclared option is still reported, because ownership needs only
+    // the reference, but the example does not become bound merely because its
+    // single option was classified without consulting the surface.
+    let commands = surface(vec![command(&["tool"], &["json"])]);
+    let claims = input(
+        vec![manifest(
+            "operation-skill",
+            vec![reference(&["tool", "paint"], &["json"])],
+        )],
+        vec![example(
+            "operation-skill",
+            1,
+            &["tool", "paint"],
+            vec![option_use("other", None, 1)],
+        )],
+    );
+
+    let report =
+        validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
+
+    assert_eq!(
+        codes_of(&report),
+        vec![codes::EXAMPLE_UNDECLARED_OPTION, codes::UNKNOWN_PATH]
+    );
+    assert_eq!(report.coverage.examples_checked, 1);
+    assert_eq!(
+        report.coverage.examples_bound, 0,
+        "a missing path leaves the example unbound"
+    );
+    assert_eq!(report.status, ValidationStatus::Partial);
+}
+
+#[test]
 fn a_declared_child_global_option_resolves() {
     // The child declares `color` itself and the consumer classifies it global;
     // the example then resolves and reaches its option checks.

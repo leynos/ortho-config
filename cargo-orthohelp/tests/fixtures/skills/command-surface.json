@@ -3,7 +3,7 @@
     {
       "path": ["tool"],
       "options": [
-        {"long": "color", "value_type": "string"},
+        {"long": "color", "value_type": "string", "is_global": true},
         {"long": "json", "value_type": "bool"}
       ],
       "canonical_verb": null
@@ -18,7 +18,7 @@
     {
       "path": ["tool", "build"],
       "options": [
-        {"long": "color", "value_type": "string"},
+        {"long": "color", "value_type": "string", "is_global": true},
         {"long": "json", "value_type": "bool"}
       ],
       "canonical_verb": null

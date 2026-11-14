@@ -17,7 +17,9 @@ use super::super::support::{
     reference, surface,
 };
 use super::super::validate;
-use super::oracle::{example_comparables, expected_comparables, oracle};
+use super::oracle::{
+    example_comparables, expected_comparables, oracle, oracle_ignoring_acceptance,
+};
 use super::{Case, Spec, build_example, case_strategy, spec_strategy};
 
 proptest! {
@@ -245,14 +247,15 @@ fn a_value_kept_across_the_input_boundary_still_decides_the_advice() {
 }
 
 #[test]
-fn ignoring_command_acceptance_changes_the_comparison() {
-    // A declared option the command also accepts produces no finding, so a
-    // mutant that ignored the acceptance branch would still agree with the
-    // oracle on that case. Narrowing the surface to a different option makes
-    // the validator report `unknown_option`, which the oracle does not
-    // predict: the acceptance branch is load-bearing in the comparison.
-    let agreed = Case {
-        surface: vec![(0, 0b001)],
+fn an_ignored_acceptance_branch_disagrees_on_the_same_input() {
+    // The acceptance rule must be load-bearing for *this* input, not only
+    // across two different surfaces. The mutation is applied to the oracle
+    // itself: given the same case, the honest oracle predicts the
+    // `unknown_option` the validator reports, while the oracle that treats
+    // every declared option as accepted predicts silence. A comparison that
+    // still agreed after this mutation could not be detecting the rule.
+    let case = Case {
+        surface: vec![(0, 0b010)],
         manifests: vec![(0, vec![(0, 0b001)])],
         examples: vec![Spec {
             manifest: 0,
@@ -263,43 +266,35 @@ fn ignoring_command_acceptance_changes_the_comparison() {
             positionals: Vec::new(),
         }],
     };
-    let (predicted, _) = oracle(&agreed);
     let report = validate(
-        &agreed.to_input(),
-        &agreed.to_surface(),
+        &case.to_input(),
+        &case.to_surface(),
         &policy(PolicyMode::Off),
     )
     .expect("the fixed surface is unambiguous");
-    assert_eq!(
-        example_comparables(&report),
-        expected_comparables(&predicted),
-        "the control must start agreed"
-    );
+    let observed = example_comparables(&report);
+    let (honest, _) = oracle(&case);
+    let (mutant, _) = oracle_ignoring_acceptance(&case);
 
-    let narrowed = Case {
-        surface: vec![(0, 0b010)],
-        ..agreed
-    };
-    let narrowed_report = validate(
-        &narrowed.to_input(),
-        &narrowed.to_surface(),
-        &policy(PolicyMode::Off),
-    )
-    .expect("the fixed surface is unambiguous");
     assert_eq!(
-        example_comparables(&narrowed_report),
+        observed,
+        expected_comparables(&honest),
+        "the honest oracle must agree with the validator on this input"
+    );
+    assert_eq!(
+        observed,
         vec![(
             "m0".to_owned(),
             1,
             codes::EXAMPLE_UNKNOWN_OPTION.to_owned(),
             Some("json".to_owned())
         )],
-        "a declared but unaccepted option is reported"
+        "the surface accepts a different option than the reference declares"
     );
     assert_ne!(
-        example_comparables(&narrowed_report),
-        expected_comparables(&predicted),
-        "the comparison must reject what the oracle did not predict"
+        observed,
+        expected_comparables(&mutant),
+        "ignoring acceptance must change the prediction for the same input"
     );
 }
 

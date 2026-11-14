@@ -241,6 +241,69 @@ fn conflicting_duplicate_inputs_are_rejected() {
 }
 
 #[test]
+fn silent_duplicates_do_not_hide_a_later_conflict() {
+    // First-wins deduplication discarded both stated types when a silent
+    // declaration came first. Every order of the same three declarations must
+    // still be rejected, so declaration order cannot decide the type.
+    let orders = [
+        [None, Some("string"), Some("integer")],
+        [None, Some("integer"), Some("string")],
+        [Some("string"), None, Some("integer")],
+        [Some("integer"), None, Some("string")],
+        [Some("string"), Some("integer"), None],
+        [Some("integer"), Some("string"), None],
+    ];
+
+    for order in orders {
+        let context = context_with_typed_inputs(&[
+            ("json", order[0]),
+            ("json", order[1]),
+            ("json", order[2]),
+        ]);
+        let surface = EffectiveCommandSurface::from_agent_context(&context, &[]);
+        let error = validate(
+            &SkillValidationInput::default(),
+            &surface,
+            &policy(PolicyMode::Off),
+        )
+        .expect_err("stated types that differ must be rejected in any order");
+
+        assert_eq!(
+            error,
+            CommandSurfaceError::ConflictingOption {
+                path: "tool".to_owned(),
+                option: "json".to_owned(),
+            },
+            "order {order:?} must not be silently resolved"
+        );
+    }
+}
+
+#[test]
+fn a_stated_global_type_reaches_a_silent_input_declaration() {
+    // The input states no type and the global states `string`. The retained
+    // entry must adopt the stated type rather than keeping the silence it saw
+    // first, and it stays classified global.
+    let context = context_with_typed_inputs(&[("color", None)]);
+    let globals = [GlobalOption {
+        long: "color".to_owned(),
+        value_type: Some("string".to_owned()),
+    }];
+
+    let surface = EffectiveCommandSurface::from_agent_context(&context, &globals);
+
+    let options = &command_at(&surface, 0).options;
+    assert_eq!(options.len(), 1, "the input and the global are one option");
+    let colour = options.first().expect("the length was asserted to be one");
+    assert_eq!(
+        colour.value_type.as_deref(),
+        Some("string"),
+        "a stated type must not be dropped because an earlier declaration was silent"
+    );
+    assert!(colour.is_global);
+}
+
+#[test]
 fn an_input_without_a_long_name_contributes_no_option() {
     let context = AgentContext {
         commands: vec![AgentCommand {

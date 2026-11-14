@@ -155,20 +155,40 @@ fn effective_options(
     options
 }
 
-/// Adds one declared option unless an agreeing entry is already present.
+/// Adds one declared option, merging an agreeing entry and preserving a
+/// disagreeing one.
+///
+/// Merging is not first-wins. An entry that stated no value type adopts the
+/// first declaration that states one, because silence makes no claim to
+/// compare against. Only two *stated* types can disagree, and a disagreement
+/// is pushed as a second entry so validation reports it: discarding it here
+/// would let declaration order decide which type a claim is judged against.
 fn push_option(
     options: &mut Vec<EffectiveOption>,
     long: &str,
     value_type: Option<&str>,
     is_global: bool,
 ) {
-    let agrees = options
-        .iter()
-        .find(|option| option.long == long)
-        .is_some_and(|existing| !conflicts(existing, value_type));
-    if agrees {
+    let Some(existing) = options.iter_mut().find(|option| option.long == long) else {
+        push_declared(options, long, value_type, is_global);
+        return;
+    };
+    if conflicts(existing, value_type) {
+        push_declared(options, long, value_type, is_global);
         return;
     }
+    if existing.value_type.is_none() {
+        existing.value_type = value_type.map(str::to_owned);
+    }
+}
+
+/// Appends one declaration as a new surface entry.
+fn push_declared(
+    options: &mut Vec<EffectiveOption>,
+    long: &str,
+    value_type: Option<&str>,
+    is_global: bool,
+) {
     options.push(EffectiveOption {
         long: long.to_owned(),
         value_type: value_type.map(str::to_owned),
