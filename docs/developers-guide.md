@@ -624,6 +624,292 @@ render. Atomic per-file writes keep each file whole, but the directory as a
 whole is not replaced atomically and the layout may change between renders. A
 reader that must be consistent has to take the same lock or retry.
 
+### Diagnosing a post-release lock hold
+
+`is_free` answers a boolean, so a test that finds the lock held after releasing
+it can report only that. Issue #606 recorded such failures, and a bare boolean
+cannot say whether a descriptor leaked in this process or an unrelated process
+holds the same inode — cases that call for opposite fixes. The test-only
+`artefact_lock_diagnostics` module turns a hold into a report naming the lock
+file, the `device`/`inode` it was observed on, every matching `/proc/locks`
+record, the process and parent of each recorded owner, their relation to the
+reporting process, and the descriptors each recorded owner still holds on the
+file. A child that inherited the open file description is not scanned, so the
+report names the recorded owner and says it has no descriptor of its own
+instead of naming the child. It then re-probes once after
+`SHORT_WAIT_THRESHOLD`, which separates a lock released a moment late from one
+with a live owner. The caller's own expectation stays the first line;
+diagnostic faults are folded into the report text and never replace the primary
+failure.
+
+The evidence starts at `probe_lock`, which takes one non-blocking observation
+and answers a `LockProbe` rather than a boolean. `LockProbe::Free` means the
+probe acquired the lock, so nothing held it; `LockProbe::Held` means something
+did, and carries the lock file's `Metadata`, read through the contending handle
+so the report can name the `device`/`inode` it failed on. The metadata is paid
+for only on the held path, because a free probe has already answered the
+question. The probe is read-only by construction — it opens the existing file
+without create or truncate and drops its own acquisition before returning — so
+an observation cannot create the lock file, clear it, or keep the lock it took.
+`is_free` is the boolean view of the same observation, kept for callers that
+only assert the lock's state; the diagnostics call `probe_lock` instead,
+because a hold they cannot describe is the defect this module exists to fix.
+
+Two assertions exist and the split between them is deliberate.
+`ensure_released` demands the lock be free at the instant it is probed, and is
+what the ignored fork diagnostic uses. `ensure_settles_free` retries within a
+two-second `SETTLE_BUDGET` and is what the gating suites use. The reason is a
+`flock` property rather than a code defect: the lock belongs to the open file
+description, which a child inherits across `fork` and loses only at `exec`. Any
+peer test that spawns a process can therefore make a correctly released lock
+read as held for the length of that `fork`. With a forking peer present the
+strict form failed 11 of 12 runs, while the same cycles isolated from any peer
+spawn passed 12 of 12; the settling form then passed five consecutive full
+binary runs. A strict assertion in a gated suite would therefore be a check on
+the scheduler, not on the lock.
+
+One consequence is untestable from inside a single process and is recorded
+rather than pretended away. `probe_lock` releases the lock it took on the free
+path, but dropping the probe's handle releases it too, so removing the explicit
+`file.unlock()?` changes no observable behaviour in-process and no gating test
+detects it. The strict assertion in `probes_survive_a_concurrent_fork` is the
+only place the distinction could show, and it is ignored. The explicit unlock
+stays because it states the intent — a probe must not depend on a drop order it
+does not control — but its removal is a mutation the suite would not catch,
+which is the honest limit.
+
+That property applies to the tests of the diagnostics themselves. The tests
+that exercise the settling loop hold the lock from a helper *process*, through
+`lock_support::spawn_helper` with the `hold-until-asked` mode, and release it
+by request. An in-process guard would put the lock in the test binary's own
+descriptor table, where every peer suite's `fork` reaches it and keeps it alive
+under this process's name until the child's `exec`; a test written that way
+fails intermittently for the very reason it exists to diagnose. Holding in a
+helper's own table keeps both the hold and the release independent of any peer.
+Separating the holder from this process's table does not, by itself, order the
+release against the probes. `ensure_settles_free_observed` reports each probe
+to a callback before acting on it, and the held-to-free test releases from the
+first `Held` it sees rather than from a thread that sleeps. Releasing on a
+timer left a race — a releaser scheduled first could finish before the first
+probe, so a correct settle returned early and failed an elapsed-time check that
+never established the order it claimed. Releasing from the observed probe makes
+the sequence held, released, free, and the recorded sequence is also the
+negative control: a settle that accepted its first `Held` shows `[false]` and
+fails.
+
+The number of held probes is deliberately not fixed. `probe_lock` drops its own
+acquisition before returning, so the callback is not a lock-holding window; it
+establishes only that this probe observed the state it reports. The helper
+polls for the release every `POLL_INTERVAL` while the settle re-probes every
+`SETTLE_INTERVAL`, so a correct settle often sees two held probes before the
+holder answers. The test therefore asserts the shape — one or more `Held`
+followed by a `Free` — rather than a probe count, because a count would fail
+whenever the helper was merely slow.
+
+`artefact_lock_evidence.rs` holds the pure half — the glibc `dev_t` split, the
+`/proc/locks` parser, and the vocabulary they speak — tested on every platform,
+because a mis-split device or a skipped line both read as "nothing holds this
+lock". `/proc/locks` is a racing snapshot filtered to the reader's pid
+namespace, and `FLOCK` records name the acquiring process even when a child
+inherited the description, so the report states what it observed rather than
+implying a certainty the kernel does not offer. `artefact_lock_process.rs`
+holds the other impure half: reading `/proc/<pid>/stat` to name a recorded
+owner and say whether it is this process or a child of it. It is kept apart
+from the diagnostics so each file stays within the length cap, and because
+describing a process is a different concern from deciding what a hold means.
+
+`artefact_lock_holder.rs` is the third half: the descriptor scan itself. It is
+split out for the same length reason, and for one of its own. A failed read and
+an empty read lead to opposite conclusions — "this process holds nothing" says
+something about absence, while "this process could not be read" says nothing —
+so the scan returns a `DescriptorScan` that keeps `Complete` and `Incomplete`
+apart instead of collapsing a failure into an empty list.
+
+Only a completed scan may say anything about the descriptors it did not find,
+and even then it does not conclude inheritance on its own. The descriptor scan
+and the `/proc/locks` record are separate observations taken at different
+moments, so a complete scan that finds no descriptor on the file is equally
+explained by the recorded acquirer having released the lock in between. The
+report names both possibilities rather than asserting the one that accuses a
+process; `reports_the_process_and_descriptor_that_still_hold_the_lock` and the
+`only_a_complete_scan_may_report_inheritance` table pin that wording, with a
+`Complete`, a `Complete`-and-holding, and an `Incomplete` case.
+
+An incomplete scan still carries every descriptor it matched. Those were really
+observed, so they are evidence, and discarding them is how the report became
+intermittently useless: `/proc/<pid>/fd` holds every descriptor in the process,
+so another thread closing an unrelated descriptor between enumeration and the
+metadata read fails an entry that has nothing to do with the lock. That is
+ordinary during parallel test execution. A scan that emptied its match list on
+such a failure would report the lock unexplained while the guard was still
+open, and would fail the test that requires a descriptor line — for a reason
+unrelated to the lock. A partial scan therefore reports its matches *and* says
+the scan is incomplete, and makes no claim about absence.
+
+A fault does not end the scan either. Keeping only the matches enumerated
+*before* the fault is the same failure one step later, because the listing is
+sorted: an unrelated descriptor closed by another thread takes the lowest free
+number, so it sorts *before* the lock's and a scan that returned at the first
+fault would never reach the lock at all. Every entry is read, every fault is
+collected into one reason naming each entry it could not read, and every match
+is kept. The sorting also means a failure leaves the same match list rather
+than whichever entries `read_dir` happened to yield first.
+
+`a_fault_does_not_hide_a_match` pins both orders as two cases of one test —
+`match_before_fault` and `fault_before_match` — and
+`every_unreadable_entry_is_named` pins that both faults reach the report. All
+three drive `inspect_descriptors` through `FakeProcFs` rather than the
+filesystem, so the loop under test is the real one and the fault is *stated*
+rather than arranged; an earlier version built the `Incomplete` result by hand
+and passed against a mutant that discarded matches, which is the vacuity the
+seam exists to prevent.
+
+An entry whose identity cannot be read is treated as a failed scan for the same
+reason. The scan's tests live in `artefact_lock_holder_tests.rs`: the cap
+counts every line a module declares, so the scan and the cases that pin it no
+longer fit in one file.
+
+Registering that third module pushed `artefact/mod.rs` past the 400-line cap,
+which the `module_max_lines` lint reports as a formatting failure on an
+untouched file. The prune moved out to `artefact_prune.rs` in response: it owns
+the one question "which files does this render keep", and it already carried
+the only test-injection point in the prune, so the failure a regression test
+provokes has a single place to be defined and cannot drift from the code that
+reads it. `artefact` re-imports the three names its `publish` caller and
+`prune_tests` reach for, so neither had to learn the new file name.
+
+The evidence vocabulary is built from newtypes — `ProcessId`, `Inode`,
+`Descriptor`, `DeviceNumber`, and `LockFileIdentity` — rather than bare
+integers. Every one of these is the same width as at least one other, and the
+functions above pass several side by side, so a transposed pair of `u32`s would
+compile, run, and quietly report the wrong holder. A `LockRecord` likewise
+stores its `DeviceNumber` whole instead of a split `major`/`minor` pair, which
+keeps the matching logic in `LockFileIdentity::holds` rather than spread across
+call sites that each have to recombine the halves correctly. See
+[ADR-0020](adrs/adr-0020-lock-evidence-newtypes.md) for why these are
+handwritten tuple structs rather than `newt-hype` or `the-newtype` wrappers.
+
+The scan reads ambient procfs through `std::fs` rather than a capability
+handle. That departs from the `AGENTS.md` preference for `cap_std`, and is
+confined to test support: the artefacts live below an ambient `OUT_DIR` chosen
+by Cargo, there is no capability root to thread through, and the lock API
+itself requires a `std::fs::File`. `ortho_config_macros` is listed under
+`no_std_fs_operations` in `dylint.toml` for the same reason.
+
+### The diagnostics' two boundaries
+
+Every kernel read the report makes goes through `ProcFs`, in
+`artefact_lock_procfs.rs`, and every wait and deadline goes through `Clock`, in
+`artefact_lock_clock.rs`. Both are `pub(super)` and both exist only for these
+test-only diagnostics; `RealProcFs` and `RealClock` are the sole production
+implementations and are constructed in exactly one place, `Boundaries::real`.
+Before the seams existed, the report's most consequential branches could only
+be reached by arranging filesystem topology — a descriptor table that fails
+part way through, a `/proc/<pid>/stat` that cannot be read, a settle deadline
+that expires — so the failure paths that matter most were the ones no test
+exercised. Treating them as boundaries is what makes "the scan failed" and "the
+scan found nothing" separately assertable without a real held lock, a real
+fork, or a real `/proc` entry.
+
+`ProcFs` has one method per observation — the lock table, a descriptor listing,
+one descriptor's identity, one process's stat line — rather than a single "read
+a path". A single read method would be simpler to implement and would make the
+report's branches indistinguishable from each other in a fake: failing "the
+lock table" and failing "a descriptor" would look the same. The methods answer
+in their *callers'* vocabulary, not the kernel's: `descriptor_entries` returns
+the numbers it parsed and the names it could not, because "there is no
+descriptor here" and "I could not tell what this was" are different answers,
+and a failure carries whatever was read before it so an unrelated descriptor
+closing mid-scan cannot discard a holder the scan had already matched.
+
+A listing that stops part-way is returned the same way: with the entries it
+already yielded, the reason it stopped, and the open iterator it was read
+through. Two failures follow from getting that wrong. Discarding the yielded
+entries loses a descriptor the scan had genuinely read, which is the original
+defect one step earlier; and dropping the iterator before the identities are
+read closes a descriptor the listing itself named. When the scan is of this
+process, `/proc/self/fd` lists the iterator's own descriptor, so the second
+failure makes every self-scan report an incomplete scan with no application
+descriptor having changed. `inspect_descriptors` therefore holds the iterator
+until every identity has been read, and
+`a_self_scan_is_not_made_incomplete_by_its_own_listing` asserts that against a
+real `/proc/self/fd` rather than a fake, which has no descriptor to leak. The
+enumeration fault is a fault in its own right, and the self-scan test fails if
+the iterator is released early.
+
+The retention rule is decided by `collect_until_fault`, not by
+`inspect_descriptors`, and it is tested there. A fake hands over a listing that
+is already complete or already partial, so no test driving `FakeProcFs` can
+distinguish a reader that keeps the entries before a fault from one that
+discards them — a mutant that cleared them survived
+`an_enumeration_fault_keeps_the_entries_it_yielded`, which is why the loop was
+made a generic function of its own. `a_fault_keeps_every_entry_read_before_it`
+drives it with two names and a synthetic error, and fails if the entries are
+cleared; `a_listing_that_finishes_reports_no_fault` is its counterpart, so a
+reader that reported a fault unconditionally cannot pass both.
+
+`Clock` is two methods — `now` and `sleep` — and nothing else. `Boundaries`
+groups the pair because every entry point that takes one takes the other: a
+report that timed its own re-probe on a different clock than the settle used
+would describe a hold it cannot account for. The fake clock advances only when
+the code under test sleeps, so
+`a_hold_that_outlives_the_budget_fails_with_the_report` reaches the deadline in
+as many iterations as the settle has probes instead of waiting `SETTLE_BUDGET`
+out. That test was checked against a mutant that moved the sleep before the
+deadline check; it failed with "200 waits for 200 probes", which is what makes
+it evidence rather than decoration. `FakeClock`'s zero-step case is deliberate:
+the settle can then never reach its deadline by itself, so the deadline has to
+be what ends the loop.
+
+Re-use policy: neither trait is a general-purpose filesystem or time
+abstraction, neither is public, and neither leaves this module tree. A new
+observation the report needs is a new `ProcFs` method plus its `RealProcFs`
+implementation; a new wait is a `Clock` call through the `Boundaries` already
+in hand, not a fresh `std::thread::sleep`. Nothing outside `artefact_lock_*`
+may depend on either, and `Boundaries::real` is the only place a production
+implementation is chosen. See
+[ADR-0021](adrs/adr-0021-test-seams-for-lock-diagnostics.md) for the drivers
+behind the split and the options it rejected.
+
+The doubles both suites drive the boundaries with live in
+`artefact_lock_fakes.rs`, shared so `lock_holder_tests` and `lock_settle_tests`
+cannot disagree about what a boundary answers. `FakeProcFs` is keyed on the
+rendered form of each newtype — the newtypes expose no `get()`, by design — and
+a pid the test did not describe has no descriptor table at all, which is how
+the kernel behaves for a process that has exited. That default is the trap in
+the suite: `an_undescribable_process_is_named_as_such` first failed because it
+gave its pid an empty table, which is a *complete* scan in which "no
+descriptor" is the correct answer, rather than the unreadable listing the test
+meant.
+
+Re-run the suites that exercise this directly:
+
+```sh
+# The gated suites, at the parallelism the failures were observed under.
+cargo test -p ortho_config_macros --lib -- --test-threads=32
+
+# The ignored fork diagnostic, which asserts strictly and reports the holder.
+cargo test -p ortho_config_macros --lib -- --ignored --exact \
+  derive::generate::localization::artefact::lock_stress_tests::probes_survive_a_concurrent_fork
+```
+
+Running the test binary directly needs the sysroot's target library directory
+on the loader path, or it fails to find `libstd`:
+
+```sh
+LD_LIBRARY_PATH="$(rustc --print target-libdir)" \
+  target/debug/deps/ortho_config_macros-<hash> --test-threads=32
+```
+
+`--test-threads` controls libtest's concurrency only. It does not bound the
+compiler jobs a `cargo build` uses, and it is not a Nextest setting — this
+repository runs the lock suites under libtest, so Nextest's per-test process
+model is unavailable here. The ticket's baseline was one failure in roughly
+four full-binary runs on 2026-10-16 and six consecutive passes on 2026-10-19,
+so a green run is weak evidence. **A green `make test` does not establish that
+the flake is gone**; only the settling budget doing its job, with the strict
+diagnostic still able to reproduce the window, does.
+
 A second opt-in, `ORTHO_CONFIG_ARTEFACT_REPORT=1`, turns on the observation
 channel that explains the same sequence when a build is slow or fails. It
 writes three files below the artefact root, none of which is part of the
@@ -696,13 +982,13 @@ share one `OUT_DIR` per package and an unset variable would otherwise be
 indistinguishable from a stale one.
 
 `artefact/artefact_probe.rs` owns the stale-fragment policy:
-`source_still_exists` is its only entry point, `probe_metadata` is the only
-`std::fs::metadata` call site for it, and `classify_metadata` is the only copy
-of the rule that `NotFound` alone means stale while every other metadata error
-aborts the merge. `merge_fragments` is the single production caller; the
-identity artefact's merge and the merge-level regression tests are its only
-call sites. For OS-independent policy tests, `with_metadata_outcome` is a
-test-only, thread-local injection that matches one exact probe path and is
+`source_still_exists` is its only entry point, `probe_metadata` is its only
+`std::fs::metadata` call site in production code, and `classify_metadata` is
+the only copy of the rule that `NotFound` alone means stale while every other
+metadata error aborts the merge. `merge_fragments` is the single production
+caller; the identity artefact's merge and the merge-level regression tests are
+its only call sites. For OS-independent policy tests, `with_metadata_outcome`
+is a test-only, thread-local injection that matches one exact probe path and is
 compiled out of non-test builds. It exists because no filesystem layout
 provokes the same metadata error portably: a regular file in a parent position
 yields `NotADirectory` on Unix and `NotFound` on Windows. Which `ErrorKind` a
