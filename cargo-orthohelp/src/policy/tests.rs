@@ -16,6 +16,13 @@ fn empty_report_uses_tool_owned_schema_version() {
     assert_eq!(report.summary, PolicySummary::default());
 }
 
+#[test]
+fn policy_mode_defaults_to_off() {
+    // The documented enforcement default is `off`; a `Default` that drifted to
+    // `deny` would silently make every caller enforcing a policy.
+    assert_eq!(PolicyMode::default(), PolicyMode::Off);
+}
+
 #[rstest]
 fn report_serializes_stable_machine_fields() {
     let report = sample_policy_report();

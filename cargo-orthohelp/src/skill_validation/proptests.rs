@@ -8,9 +8,11 @@
 //! The generator deliberately produces empty, singleton, nested, matching,
 //! missing, and reordered cases: some paths are absent from the surface, some
 //! references declare flags the command does not accept, and manifest IDs may
-//! repeat. Mutation controls at the end of the module show that the oracle's
-//! verdict survives dropping a reference, looking a flag up on a sibling
-//! command, and swapping two commands' option sets.
+//! repeat. The tests at the end of the module mutate a claim and check that the
+//! validator's verdict moves with it: dropping a reference, looking a flag up
+//! on a sibling command, and swapping two commands' option sets each change the
+//! result. A further control corrupts a real report and shows the comparison
+//! above rejects it, so that comparison cannot pass vacuously.
 
 use proptest::prelude::*;
 
@@ -243,6 +245,40 @@ proptest! {
         prop_assert_eq!(comparable(&forward), comparable(&reversed));
         prop_assert_eq!(forward.coverage, reversed.coverage);
     }
+}
+
+#[test]
+fn the_oracle_comparison_rejects_a_corrupted_report() {
+    // `findings_match_the_linear_oracle` compares two sequences; if either side
+    // were constant, every case would pass. This control starts from a genuine
+    // agreement, then drops one finding and shows the comparison notices.
+    let case = Case {
+        surface: vec![(0, 0b001)],
+        manifests: vec![(0, vec![(0, 0b111)])],
+    };
+    let report = validate(
+        &case.to_input(),
+        &case.to_surface(),
+        &policy(PolicyMode::Off),
+    )
+    .expect("the fixed surface is unambiguous");
+    let (expected_with_order, _, _) = oracle(&case);
+    let expected: Vec<Comparable> = expected_with_order
+        .into_iter()
+        .map(|(_, finding)| finding)
+        .collect();
+
+    assert_eq!(
+        comparable(&report),
+        expected,
+        "the control must start agreed"
+    );
+    let mut corrupted = comparable(&report);
+    corrupted.pop();
+    assert_ne!(
+        corrupted, expected,
+        "a dropped finding must break the comparison"
+    );
 }
 
 #[test]

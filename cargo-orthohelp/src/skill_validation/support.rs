@@ -144,6 +144,16 @@ pub(crate) fn flag_exception(name: &str, scope: Option<&str>) -> PolicyException
     }
 }
 
+/// Builds a verb exception with an optional space-separated command scope.
+pub(crate) fn verb_exception(name: &str, scope: Option<&str>) -> PolicyException {
+    PolicyException {
+        kind: ExceptionKind::Verb,
+        name: name.to_owned(),
+        reason: "test exception".to_owned(),
+        command_path: scope.map(str::to_owned),
+    }
+}
+
 /// Returns the finding codes in report order.
 ///
 /// # Examples

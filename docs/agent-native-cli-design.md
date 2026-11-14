@@ -474,9 +474,10 @@ glossary, such as `--output-format`, `--colour-policy`, `--diag-json`, boolean
 `--progress`, `--no-emoji`, or boolean `--accessible`.
 
 The glossary above is implemented once, as data, in
-`cargo_orthohelp::policy::vocabulary::global_options`. The linter and the
-skill-manifest validator both read it, so a new canonical option or accepted
-value is added in one place rather than re-stated per check. Accepted values
+`cargo_orthohelp::policy::vocabulary::global_options`. The skill-manifest
+validator reads it today, so a new canonical option or accepted value is added
+in one place rather than re-stated per check. The roadmap 7.1.3 policy pass
+will read the same table when its lint rules are implemented. Accepted values
 are matched exactly; an unaccepted value produces advice that names the
 accepted set and never echoes the supplied value.
 
