@@ -26,7 +26,10 @@
 //! deadline, a record already present. [What a waiter sees while a holder is
 //! packaging](super::lease::contention_tests) covers the interior, where a
 //! contract is genuinely waiting behind another and observes the release or the
-//! record as it happens.
+//! record as it happens. `a_free_lease_is_taken_within_the_poll_bound` sits
+//! between the two: it holds nothing, but it bounds what an uncontended
+//! acquisition costs, which is the half of the wait's cost no contender can
+//! show.
 //!
 //! The structural cases live in [`super::lease_shape_tests`]; they read sources
 //! and constants rather than driving the lease.
@@ -194,15 +197,18 @@ fn a_waiter_that_wins_the_lease_after_the_record_reuses_the_roots(
     Ok(())
 }
 
-/// A waiter woken by a release takes the step, within the poll bound.
+/// A free lease is taken inside the poll bound.
 ///
-/// The complementary half of [`a_held_lease_is_reported_as_a_wait`]: that case
-/// proves a waiter does not silently take a held lease, this one proves it does
-/// not sleep past the release once the lease is free. The polling loop is the
-/// only mechanism that turns a release into a hand-off, so a wait that outlives
-/// it would turn every contract behind the packager into a stall.
+/// No lease is held here and no record is present, so this is the uncontended
+/// opening of the step rather than a hand-off: it bounds what the acquisition
+/// itself costs when nothing stands in the way. A `prepare` that waited on the
+/// poll interval before its first attempt, or that slept for the deadline
+/// rather than for an interval, fails this and nothing else. The contended
+/// hand-off it might be mistaken for is
+/// [`super::contention_tests::a_waiter_behind_a_holder_takes_the_step_once_it_is_released`],
+/// which holds the lease and observes the waiter.
 #[rstest]
-fn a_waiter_wakes_promptly_after_the_holder_releases(scratch_root: Result<Scratch>) -> Result<()> {
+fn a_free_lease_is_taken_within_the_poll_bound(scratch_root: Result<Scratch>) -> Result<()> {
     let scratch = scratch_root?;
 
     let started = Instant::now();
@@ -218,7 +224,7 @@ fn a_waiter_wakes_promptly_after_the_holder_releases(scratch_root: Result<Scratc
     ensure!(
         waited <= WAKE_UP_BOUND,
         "taking a free lease took {waited:?}, past the {WAKE_UP_BOUND:?} a waiter \
-         may add after a release; the polling loop is not handing off"
+         may add after a release; acquisition is sleeping before it tries"
     );
     drop(lease);
     Ok(())

@@ -467,8 +467,8 @@ A second review round closed the remaining points of the same two rows.
   unpacked roots to be derived from the leased target, which ties the lock to
   what the contracts read.
 - The constant-only poll-interval case is replaced by behaviour:
-  `a_waiter_wakes_promptly_after_the_holder_releases` bounds the time to take a
-  free lease at two seconds, which fails a waiter that sleeps for the deadline
+  `a_free_lease_is_taken_within_the_poll_bound` bounds the time to take a free
+  lease at two seconds, which fails a waiter that sleeps for the deadline
   rather than one that is briefly descheduled. The interval keeps its own bound
   in `lease_shape_tests.rs`, and both are cited from the constant's doc.
 - A record that exists and cannot be read is now covered by
@@ -498,12 +498,12 @@ discriminates the two implementations; the test's doc says so.
 A third round found the remaining hole, and found it precisely. Every case then
 in `lease_tests.rs` starts at an *edge* of the lease's life:
 `a_held_lease_is_reported_as_a_wait` uses a spent deadline, so the refusal is
-reported without looping, and
-`a_waiter_wakes_promptly_after_the_holder_releases` starts with the lease
-already free. Neither drives the polling loop under contention, so a `prepare`
-that refused contention immediately - or one that slept until the deadline -
-passed both. `contention_tests.rs` now starts a waiter in a second thread
-behind a lease held in this process and observes it there:
+reported without looping, and `a_free_lease_is_taken_within_the_poll_bound`
+starts with the lease already free. Neither drives the polling loop under
+contention, so a `prepare` that refused contention immediately - or one that
+slept until the deadline - passed both. `contention_tests.rs` now starts a
+waiter in a second thread behind a lease held in this process and observes it
+there:
 
 - `a_waiter_behind_a_holder_takes_the_step_once_it_is_released` proves the
   waiter is still waiting after a window of five poll intervals, releases the
@@ -533,6 +533,15 @@ Two mutations size the pair, and each isolates one defect:
   hand-off case stays green. So the pair is not one test written twice.
 
 Both mutations were restored and verified byte-identical with `cmp`.
+
+The window has a limit, and it is stated rather than papered over. The start
+signal is sent immediately before `prepare`, so on its own it proves the thread
+entered the call, not that it had reached the lease attempt. A thread
+descheduled for the whole window would read as waiting. What closes the gap is
+the mutation evidence, not the timing: refusing contention on first sight fails
+both cases, so the assertion does discriminate the loop. A future change that
+made the thread yield before its first attempt would weaken this, and the
+mutation check is the thing to re-run if that ever happens.
 
 ## Progress
 
