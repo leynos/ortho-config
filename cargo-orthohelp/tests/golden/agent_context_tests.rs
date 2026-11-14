@@ -17,6 +17,13 @@ use crate::fixtures;
     Some("orthohelp_fixture::SimpleFixtureConfig"),
     "agent_context__simple_fixture.json"
 )]
+// A bare type name exercises the package-crate qualification path.
+#[case::bare_root_type(
+    "orthohelp_fixture",
+    Some("SimpleFixtureConfig"),
+    "agent_context__simple_fixture.json"
+)]
+// `None` exercises the `package.metadata.ortho_config.root_type` source.
 #[case::enum_root("orthohelp_fixture", None, "agent_context__fixture.json")]
 #[case::nested(
     "orthohelp_fixture",

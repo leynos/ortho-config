@@ -193,7 +193,7 @@ pub fn select_package(
         .clone()
         .or_else(|| metadata_defaults.root_type.clone())
         .ok_or(OrthohelpError::MissingRootType)?;
-    let root_type = normalize_root_type(&raw_root_type, &crate_ident);
+    let root_type = parse_root_type(&raw_root_type, &crate_ident)?;
 
     ensure_library_target(package)?;
     if let Some(bin) = args.bin.as_ref() {
@@ -306,11 +306,30 @@ fn find_ortho_config_dependency(
     })
 }
 
-/// Qualifies a root type with the package crate name while preserving explicit paths.
+/// Parses and canonicalizes the root configuration type path.
 ///
-/// `crate::Type` is made suitable for the generated bridge crate, already qualified paths
-/// pass through, and a bare type name receives the package path as its prefix.
-fn normalize_root_type(raw: &str, crate_ident: &str) -> String {
+/// The root type is spliced into generated bridge source, so this accepts only
+/// a plain path of identifiers. `crate::Type` is rewritten to the package crate
+/// name because the bridge is a separate crate, a bare type name receives the
+/// package crate prefix, and an already-qualified path passes through. The
+/// returned value is rendered from the parsed path, never from the original
+/// text, so a statement or expression cannot reach the generated source.
+///
+/// # Errors
+///
+/// Returns [`OrthohelpError::InvalidRootType`] when the rewritten value does
+/// not parse as a type path, or when it carries a qualified self type, a
+/// leading `::`, or generic or parenthesized path arguments.
+fn parse_root_type(raw: &str, crate_ident: &str) -> Result<String, OrthohelpError> {
+    let candidate = qualify_root_type(raw, crate_ident);
+    let parsed = syn::parse_str::<syn::TypePath>(&candidate)
+        .map_err(|error| invalid_root_type(raw, error.to_string()))?;
+    ensure_supported_root_type(&parsed, raw)?;
+    Ok(render_root_type(&parsed))
+}
+
+/// Applies the package-crate rewrite that makes `raw` resolvable from the bridge.
+fn qualify_root_type(raw: &str, crate_ident: &str) -> String {
     if let Some(stripped) = raw.strip_prefix("crate::") {
         return format!("{crate_ident}::{stripped}");
     }
@@ -322,19 +341,59 @@ fn normalize_root_type(raw: &str, crate_ident: &str) -> String {
     format!("{crate_ident}::{raw}")
 }
 
-#[cfg(test)]
-mod tests {
-    //! Unit tests for metadata helpers.
+/// Rejects parsed type paths that fall outside the supported root type grammar.
+fn ensure_supported_root_type(parsed: &syn::TypePath, raw: &str) -> Result<(), OrthohelpError> {
+    if parsed.qself.is_some() {
+        return Err(invalid_root_type(
+            raw,
+            "qualified self types such as `<Type as Trait>::Assoc` are not supported",
+        ));
+    }
 
-    use super::*;
-    use rstest::rstest;
+    if parsed.path.leading_colon.is_some() {
+        return Err(invalid_root_type(
+            raw,
+            "global paths starting with `::` are not supported",
+        ));
+    }
 
-    #[rstest]
-    #[case::crate_prefix("crate::Config", "demo", "demo::Config")]
-    #[case::bare_type("Config", "demo", "demo::Config")]
-    #[case::qualified("demo::Config", "ignored", "demo::Config")]
-    fn normalizes_root_type(#[case] raw: &str, #[case] crate_ident: &str, #[case] expected: &str) {
-        let normalized = normalize_root_type(raw, crate_ident);
-        assert_eq!(normalized, expected);
+    if let Some(segment) = parsed
+        .path
+        .segments
+        .iter()
+        .find(|segment| !matches!(segment.arguments, syn::PathArguments::None))
+    {
+        return Err(invalid_root_type(
+            raw,
+            format!(
+                "generic or parenthesized arguments on `{}` are not supported",
+                segment.ident
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Renders the accepted path from its parsed segments rather than the input text.
+fn render_root_type(parsed: &syn::TypePath) -> String {
+    parsed
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
+}
+
+/// Builds a diagnostic that preserves the caller's original spelling.
+fn invalid_root_type(value: &str, message: impl Into<String>) -> OrthohelpError {
+    OrthohelpError::InvalidRootType {
+        value: value.to_owned(),
+        message: message.into(),
     }
 }
+
+#[cfg(test)]
+#[path = "metadata_tests.rs"]
+mod tests;
