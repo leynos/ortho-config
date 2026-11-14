@@ -372,3 +372,11 @@ fn sleep_until(deadline: Instant) {
 #[cfg(test)]
 #[path = "runner_deadline_tests.rs"]
 mod deadline_tests;
+
+#[cfg(all(test, unix))]
+#[path = "runner_failure_tests.rs"]
+mod failure_tests;
+
+#[cfg(all(test, unix))]
+#[path = "runner_guard_tests.rs"]
+mod guard_tests;

@@ -151,3 +151,7 @@ const fn format_config_format(format: &ConfigFormat) -> &'static str {
         ConfigFormat::Json => "JSON",
     }
 }
+
+#[cfg(test)]
+#[path = "entry_tests.rs"]
+mod tests;

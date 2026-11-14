@@ -126,3 +126,7 @@ pub(super) fn write_ir_cache(
 
     Ok(PublishOutcome::Updated)
 }
+
+#[cfg(test)]
+#[path = "ir_cache_tests.rs"]
+mod tests;

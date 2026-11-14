@@ -297,3 +297,7 @@ fn proc_stat_has_writer(stat: &str, group: i32) -> io::Result<bool> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing proc group ID"))?;
     Ok(process_group == group && !matches!(state, 'Z' | 'X'))
 }
+
+#[cfg(test)]
+#[path = "tree_unix_tests.rs"]
+mod tests;

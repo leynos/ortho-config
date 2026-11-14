@@ -293,3 +293,7 @@ fn lock_progress(progress: &Mutex<Progress>) -> MutexGuard<'_, Progress> {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
+
+#[cfg(all(test, unix))]
+#[path = "capture_tests.rs"]
+mod tests;

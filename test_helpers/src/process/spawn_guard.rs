@@ -146,3 +146,7 @@ impl ChildWrapper for GuardedChild {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "spawn_guard_tests.rs"]
+mod tests;

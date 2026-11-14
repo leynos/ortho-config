@@ -162,3 +162,6 @@ fn write_file(dir: &Dir, path: &str, contents: &str) -> Result<(), CacheTestErro
     file.write_all(contents.as_bytes())?;
     Ok(())
 }
+
+#[path = "cache_failure_tests.rs"]
+mod failure_tests;
