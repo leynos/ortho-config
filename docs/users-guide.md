@@ -2281,7 +2281,10 @@ The keys to reading the report are:
   every policy mode, and an exception can never excuse them.
 - **Policy findings** carry vocabulary or global-option advice from the
   7.1 rules. They follow `off`, `warn`, and `deny`, and configured exceptions
-  suppress them.
+  suppress them. Vocabulary advice covers a command verb as the reference
+  spells it, as well as any canonical verb the surface declares, so an alias
+  such as `info` is advised even though a bridge only classifies canonical
+  segments.
 - **Coverage** counts what was actually checked. `examples_checked` counts the
   examples the consumer extracted; `examples_bound` counts those that then
   reached their option checks. An example the consumer could not extract is

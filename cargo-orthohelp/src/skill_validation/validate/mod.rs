@@ -235,14 +235,26 @@ impl<'a> Validator<'a> {
         true
     }
 
-    /// Applies policy advice to the resolved command's declared verb.
+    /// Applies policy advice to the verb the reference spells and to the one
+    /// the command declares.
+    ///
+    /// The spelling is the reference's last path segment, because that is what
+    /// the skill's reader would actually type. The declared canonical verb is
+    /// a second, independent signal: a bridge classifies a segment only when it
+    /// is already canonical, so relying on the metadata alone would skip
+    /// exactly the alias spellings this rule exists to catch. A name reached
+    /// both ways is advised once.
     fn check_reference_verb(&mut self, claim: ClaimRef<'_>) {
         let canonical_verb = self
             .index
             .command(CommandPath::new(claim.path))
             .and_then(|command| command.canonical_verb.clone());
-        if let Some(verb) = canonical_verb {
-            self.push_advice(claim, verb_advice(self.policy, claim.path, &verb));
+        let spelled = claim.path.last().cloned();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        for verb in spelled.into_iter().chain(canonical_verb) {
+            if seen.insert(verb.clone()) {
+                self.push_advice(claim, verb_advice(self.policy, claim.path, &verb));
+            }
         }
     }
 

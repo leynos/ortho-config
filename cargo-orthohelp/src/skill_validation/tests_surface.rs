@@ -149,6 +149,44 @@ fn the_global_classification_reaches_the_policy_gate() {
 }
 
 #[test]
+fn an_alias_verb_in_the_command_path_is_reported_from_a_generated_context() {
+    // The bridge classifies a verb only when the path segment is canonical, so
+    // a command actually named `info` reaches the surface with no canonical
+    // metadata. The rule must therefore read the spelling the reference uses;
+    // otherwise the one spelling it exists to catch is never reported.
+    let context = AgentContext {
+        commands: vec![
+            agent_command(&["tool"], &[]),
+            agent_command(&["tool", "info"], &[]),
+        ],
+        ..AgentContext::new("tool")
+    };
+    let surface = EffectiveCommandSurface::from_agent_context(&context, &[]);
+    assert_eq!(
+        command_at(&surface, 1).canonical_verb,
+        None,
+        "an alias segment is not canonical, so the bridge supplies no verb"
+    );
+
+    let claims = input(
+        vec![manifest(
+            "operation-skill",
+            vec![reference(&["tool", "info"], &[])],
+        )],
+        Vec::new(),
+    );
+
+    let report = validate(&claims, &surface, &policy(PolicyMode::Deny))
+        .expect("the adapter produces an unambiguous surface");
+
+    assert_eq!(
+        codes_of(&report),
+        vec![codes::POLICY_NONCANONICAL_VERB],
+        "the spelled alias must be advised even without canonical metadata"
+    );
+}
+
+#[test]
 fn a_declared_global_is_listed_once_with_its_own_value_type() {
     let context = AgentContext {
         commands: vec![AgentCommand {

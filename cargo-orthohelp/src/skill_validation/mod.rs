@@ -92,4 +92,6 @@ mod tests_examples;
 #[cfg(test)]
 mod tests_policy;
 #[cfg(test)]
+mod tests_policy_exceptions;
+#[cfg(test)]
 mod tests_surface;

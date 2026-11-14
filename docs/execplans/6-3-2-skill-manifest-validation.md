@@ -369,6 +369,30 @@ explicitly approves it and the prerequisites below are complete.
   `comenq` as `c0557915` (ETA about 6 h 23 m). The description now records the
   final candidate, the three assessment repair rounds, the fourth clear
   verdict, and the `resolve.rs` code-health repair.
+- [x] (2026-11-14) Repaired the Codex P2 review finding. `check_reference_verb`
+  read only the surface's `canonical_verb`, which the agent-context adapter
+  sets through `canonical_verb_for`; that helper returns a verb only for
+  segments already in `CANONICAL_VERBS`, which never includes the `info`/`ls`
+  aliases `off_policy_verb_replacement` recognizes. A surface built from a real
+  `AgentContext` therefore never produced `skill.policy.noncanonical_verb`, and
+  only hand-built surfaces that set `canonical_verb: Some("info")` exercised
+  the rule. The check now advises on the reference's spelled verb as well, and
+  a companion test asserts that a name reached both ways is advised once. Red
+  first:
+  `tests_surface::an_alias_verb_in_the_command_path_is_reported_from_a_generated_context`
+  failed with `[]` against `["skill.policy.noncanonical_verb"]` on an
+  `AgentContext` whose `tool info` command carries no canonical metadata, and
+  passes after the repair. All 66 `skill_validation` library tests pass, and
+  the users' guide records that vocabulary advice covers the spelled verb.
+- [x] (2026-11-14) Split `tests_policy.rs` to satisfy the Whitaker
+  `module-max-lines` cap. The companion dedupe test took the module to 423
+  lines against a 400-line limit, so the exception contract tests moved to
+  `tests_policy_exceptions.rs` (163 lines) and `tests_policy.rs` is now 280
+  lines. The split follows the existing test-module grouping: each file holds
+  one facet, and the new module's header states the invariant its cases share.
+  Coverage is unchanged; the same cases run from the new location. The full
+  six-gate sweep is re-run on the resulting frozen tree, because the earlier
+  sweep certified the pre-split source.
 
 ## Surprises & discoveries
 
@@ -561,6 +585,14 @@ explicitly approves it and the prerequisites below are complete.
   confined to the two test-support modules, where the literal names are the
   test's subject and a wrapper would only obscure it. Date/Author: 2026-11-14,
   execution of the approved plan.
+- Decision (2026-11-14): The verb policy reads the reference's spelled segment,
+  not only the surface's `canonical_verb`. The metadata names the verb a bridge
+  recognizes, and that recognition is defined by membership in
+  `CANONICAL_VERBS`; the aliases the rule rejects (`info`, `ls`) are by
+  definition outside it, so the metadata can never carry them from a generated
+  context. Both signals are checked because a consumer may still declare a verb
+  directly, and a name reached both ways is advised once. Date/Author:
+  2026-11-14, repair of the Codex review's P2 finding.
 - Decision (2026-11-14): Execute the return-to-main step that the 2026-11-09
   decision deferred. PR #664 merged on 2026-11-11 as `eaf4c028`; the branch's
   eleven own commits were replayed with `--onto origin/main 501ab831`. The
