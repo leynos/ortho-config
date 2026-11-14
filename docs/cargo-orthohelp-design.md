@@ -831,6 +831,14 @@ Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
 cache.
 
+Publishing a newly generated IR compares it with the existing entry before
+replacing the file, so identical content keeps its modification time. The
+comparison is bounded by the new payload's length: the entry's size is checked
+through metadata first, and its body is then read through a limit of one byte
+beyond that length. A larger or otherwise mismatched entry is therefore never
+read into memory. An entry that is not a regular file is reported as a read
+failure instead of being treated as a harmless mismatch and overwritten.
+
 Digests are SHA-256 and the crate-internal `cargo-orthohelp/src/hex.rs` helper
 renders full digests as 64 lowercase hexadecimal digits. `sha2` 0.11 returns
 `hybrid_array::Array<u8, _>` from `finalize`, and that type does not implement
