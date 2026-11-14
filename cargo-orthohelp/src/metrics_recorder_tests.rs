@@ -140,29 +140,31 @@ fn a_registered_counter_reports_an_absolute_value() {
     );
 }
 
-#[test]
-fn a_registered_gauge_reports_increment_decrement_and_set() {
-    let output = captured(|| {
-        let gauge = registered_gauge();
-        gauge.increment(1.5);
-        gauge.decrement(0.5);
-        gauge.set(2.0);
-    });
+/// One gauge operation and the verb it must be reported under.
+///
+/// Captured separately rather than together: three events read from one
+/// capture would let a recorder that reported the right verbs and the right
+/// values in the *wrong pairing* pass, which is exactly the defect an
+/// assertion per operation catches.
+#[rstest::rstest]
+#[case::increment("gauge_increment", "value=1.5", |gauge: &Gauge| gauge.increment(1.5))]
+#[case::decrement("gauge_decrement", "value=0.5", |gauge: &Gauge| gauge.decrement(0.5))]
+#[case::set("gauge_set", "value=2", |gauge: &Gauge| gauge.set(2.0))]
+fn a_registered_gauge_reports_each_verb_with_its_own_value(
+    #[case] kind: &str,
+    #[case] value: &str,
+    #[case] update: fn(&Gauge),
+) {
+    let output = captured(|| update(&registered_gauge()));
 
-    for (kind, value) in [
-        ("gauge_increment", "value=1.5"),
-        ("gauge_decrement", "value=0.5"),
-        ("gauge_set", "value=2"),
-    ] {
-        assert!(
-            output.contains(&format!("kind=\"{kind}\"")),
-            "a gauge update reports {kind}: {output}"
-        );
-        assert!(
-            output.contains(value),
-            "a gauge update reports its value: {output}"
-        );
-    }
+    assert!(
+        output.contains(&format!("kind=\"{kind}\"")),
+        "a gauge update reports {kind}: {output}"
+    );
+    assert!(
+        output.contains(value),
+        "a {kind} reports its own value {value}: {output}"
+    );
 }
 
 #[test]
