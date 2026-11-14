@@ -137,12 +137,20 @@ fn a_length_mismatch_performs_no_body_reads() {
 #[test]
 fn an_equal_length_comparison_reads_at_most_one_byte_past_the_payload() {
     let json = "cached IR";
-    let grown = vec![b'x'; json.len() + 64];
+    // The grown body starts with the whole payload, so a comparison that
+    // accepted a matching prefix would report a match here. Only an exact
+    // length-and-content check can reject it.
+    let mut grown = json.as_bytes().to_vec();
+    grown.extend_from_slice(&[b'x'; 64]);
     let mut reader = CountingReader::new(&grown);
 
     let matches = bounded_body_matches(&mut reader, json.len() as u64, json).expect("compare body");
 
-    assert!(!matches, "a body that grew must not masquerade as a match");
+    assert!(
+        !matches,
+        "a body that outgrew the payload must not masquerade as a match, \
+         even when its prefix is identical"
+    );
     assert_eq!(
         reader.consumed,
         json.len() + 1,
