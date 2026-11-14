@@ -2,9 +2,10 @@
 
 ## Status
 
-DRAFT — awaiting explicit approval before implementation. This pull request
-contains planning documentation only. Approval of the plan authorizes the
-milestones below; publication of this draft does not constitute approval.
+APPROVED — the user approved this plan on 2026-11-14 and directed
+implementation to proceed. The M1–M3 milestones below are authorized. The
+temporary #664 prerequisite merged on 2026-11-11 as `eaf4c028`, and the branch
+was rebased onto `origin/main` at `959dbd7e` before implementation began.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -54,6 +55,14 @@ later parent changes. Replay only this branch's plan/implementation commits; do
 not replay the timeout-fix commits after a squash merge. Audit with
 `git range-diff`, rerun the applicable gates, lease-push against the observed
 remote head, refresh tracking, and verify the PR base and head.
+
+That procedure completed on 2026-11-14. #664 merged as `eaf4c028`; its final
+head was `91750238`, which advanced linearly past the recorded `8309e3b4`
+boundary, so `91750238` was not inherited and `git merge-base --all` returned
+`8309e3b4` alone. Recovery refs
+`refs/recovery/7-2-3-{old-base,old-head,target}` retain the pre-rebase
+identities. Only the two planning commits were replayed onto `959dbd7e`;
+`git range-diff` reports both unchanged.
 
 The traceability chain is:
 
@@ -197,8 +206,15 @@ all possible public values are validated.
   draft PR #661.
 - [x] (2026-11-09) Rebase the sole plan commit onto the #664 prerequisite;
   `git range-diff` confirms an unchanged patch and no conflicts.
-- [ ] Publish the prerequisite note and retarget PR #661 to the timeout fix.
-- [ ] Obtain explicit plan approval.
+- [x] (2026-11-11) #664 merged as `eaf4c028`; the timeout-fix prerequisite
+  landed on `main`, so no retarget of PR #661 to the prerequisite branch is
+  required.
+- [x] (2026-11-14) Rebase onto `origin/main` at `959dbd7e`, replaying only this
+  branch's two planning commits from the exclusive boundary `8309e3b4` (the
+  recovered #664 fork point, a unique merge base and an ancestor of the merged
+  #664 head). `git range-diff` reports both patches unchanged and
+  `git diff 959dbd7e..HEAD` is limited to the two planning documents.
+- [x] (2026-11-14) Obtain explicit plan approval.
 - [ ] M1: metadata, derive transport, documentation and integration coverage.
 - [ ] M2: structured-output lint and executable consumer examples.
 - [ ] M3: exit documentation, process regression evidence and completion.
