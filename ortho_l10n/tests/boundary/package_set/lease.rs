@@ -41,6 +41,15 @@
 //! there, and the lease keeps even a direct call to the packaging step from
 //! running beside another process.
 //!
+//! # What this module owns, and what it does not
+//!
+//! Only acquisition: the lease, the wait for it, and the deadline that bounds
+//! the wait. The *contents* of the record - how it is written, cleared and
+//! read - live in [`super::record`], which is also where the two-invariants
+//! argument for taking the lease as a precondition is made. The run identifier
+//! is read by [`super::roots`] and passed in, so this module consults no
+//! environment variable.
+//!
 //! # Why a file lock
 //!
 //! `cap-std` exposes no locking API, so the lease is the standard library's
@@ -57,6 +66,11 @@
 #[path = "lease_tests.rs"]
 mod lease_tests;
 
+#[cfg(test)]
+#[path = "lease_shape_tests.rs"]
+mod lease_shape_tests;
+
+use super::record::read_under_lease;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::fs_utf8::Dir;
@@ -71,16 +85,12 @@ use std::time::{Duration, Instant};
 /// or the process dies.
 pub(crate) const LEASE_FILE_NAME: &str = ".packaging.lease";
 
-/// Name of the record naming the run whose roots are materialized.
-const COMPLETION_FILE_NAME: &str = ".packaging-complete";
-
-/// Environment variable nextest exports to every test it runs.
-const RUN_ID_VARIABLE: &str = "NEXTEST_RUN_ID";
-
 /// How often a blocked contract re-checks the lease and the record.
 ///
 /// The packaging step is measured in hundreds of seconds, so polling this
-/// often costs nothing measurable while keeping the hand-off prompt.
+/// often costs nothing measurable while keeping the hand-off prompt. The bound
+/// is pinned by `the_lease_poll_interval_stays_a_handoff`, and the hand-off it
+/// promises is pinned by `a_waiter_wakes_promptly_after_the_holder_releases`.
 pub(crate) const LEASE_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 /// A lease held for the whole of the packaging step.
@@ -89,9 +99,27 @@ pub(crate) const LEASE_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// lease, and so does the death of the process that holds it. The packaging
 /// target is rewritten beneath it, so the handle is carried for the whole step
 /// rather than dropped after the check.
+///
+/// The target is carried too, rather than passed alongside, so the record
+/// helpers can take the lease itself and have the directory they write under.
+/// Holding a lease and naming a different directory is then not expressible.
 pub(crate) struct PackagingLease {
     /// The locked file. Never read; kept so the kernel lock outlives the call.
     _file: File,
+    /// The packaging target the lease protects.
+    directory: Dir,
+}
+
+impl PackagingLease {
+    /// The packaging target this lease protects.
+    ///
+    /// `pub(super)` rather than private: [`super::record`] takes the lease as
+    /// the proof that the lock is held, and needs the directory it protects to
+    /// write, clear and read the record under it. It stays inside the
+    /// `package_set` boundary, so no contract can reach it.
+    pub(super) const fn directory(&self) -> &Dir {
+        &self.directory
+    }
 }
 
 /// What a contract found when it arrived at the packaging step.
@@ -99,47 +127,11 @@ pub(crate) enum Prepared {
     /// The roots were already materialized by this run; package nothing.
     Reused,
     /// This contract owns the step. The lease must be held until the roots are
-    /// whole, and `directory` is the target it protects.
+    /// whole, and it names the target those roots live under.
     Owned {
         /// The held lease, released when this value drops.
         lease: PackagingLease,
-        /// The packaging target, for the record beside the roots.
-        directory: Dir,
     },
-}
-
-/// Record that this run's packaged set is complete.
-///
-/// A free function rather than a method on [`PackagingLease`], though it must
-/// only ever be called while that lease is held. The lease cannot enforce the
-/// ordering in its type without a lifetime parameter threaded through every
-/// caller, and a `&self` it never reads is a lint violation rather than a
-/// guarantee. The ordering is stated where the guard actually lives, in
-/// [`super::roots`]'s packaging step: the record is written inside the
-/// `Prepared::Owned` arm, before the lease is dropped.
-///
-/// A reader can therefore see a partial record only if this call raced the
-/// release of the lease, which the exclusive lock makes impossible: the write
-/// happens while the lock is held, and the lock is released after it.
-///
-/// # Errors
-///
-/// Returns an error when the record cannot be written.
-pub(crate) fn record_complete(directory: &Dir, scope: &str) -> Result<()> {
-    directory
-        .write(COMPLETION_FILE_NAME, scope)
-        .context("record that the packaged set is complete")
-}
-
-/// The value the completion record must name for this process to reuse it.
-///
-/// `None` when no run identifier is exported, which is the single-process
-/// runners: there the process-local cache is what deduplicates, and a record
-/// made by an earlier run must not be trusted.
-pub(crate) fn run_scope() -> Option<String> {
-    std::env::var(RUN_ID_VARIABLE)
-        .ok()
-        .filter(|id| !id.is_empty())
 }
 
 /// Take the packaging lease, or report that this run's roots are complete.
@@ -166,19 +158,16 @@ pub(crate) fn run_scope() -> Option<String> {
 /// # Errors
 ///
 /// Returns an error when the target cannot be created or opened, when the lease
-/// cannot be locked, or when `deadline` passes while another contract still
-/// holds it.
+/// cannot be locked, when the record cannot be read, or when `deadline` passes
+/// while another contract still holds it.
 pub(crate) fn prepare(
     target: &Utf8Path,
     scope: Option<&str>,
     deadline: Instant,
 ) -> Result<Prepared> {
-    Dir::create_ambient_dir_all(target, cap_std::ambient_authority())
-        .with_context(|| format!("create the packaging target {target}"))?;
-    let directory = Dir::open_ambient_dir(target, cap_std::ambient_authority())
-        .with_context(|| format!("open the packaging target {target}"))?;
+    let directory = open_target(target)?;
     loop {
-        if record_matches(&directory, scope) {
+        if read_under_lease_path(&directory, scope)? {
             return Ok(Prepared::Reused);
         }
         if let Some(prepared) = claim(&directory, scope, target)? {
@@ -197,6 +186,48 @@ pub(crate) fn prepare(
     }
 }
 
+/// The arrival check, spelled for a directory handle rather than a lease.
+///
+/// Named apart from the record module's `read_unlocked` so the call reads as
+/// what it is - "look before taking the lock" - and a reader does not have to
+/// follow an import to see that no lease is involved.
+///
+/// # Errors
+///
+/// Returns an error when the record exists but cannot be read.
+fn read_under_lease_path(directory: &Dir, scope: Option<&str>) -> Result<bool> {
+    super::record::read_unlocked(directory, scope)
+}
+
+/// Open the packaging target, creating it only if it is not there yet.
+///
+/// The distinction matters on the reuse path, which is supposed to touch
+/// nothing: a contract that arrives at a target that already exists makes no
+/// change to it, so the conditional create is what keeps the reuse path free of
+/// writes. Opening has to come first because the record lives *inside* the
+/// directory - a reuse check that ran before opening it would have nothing to
+/// read. What can be ordered the other way round is the create, and that is
+/// what this does. The target is shared by every contract in the run, so a
+/// neighbour having created it is the ordinary case rather than a race to
+/// report.
+///
+/// # Errors
+///
+/// Returns an error when the target exists but cannot be opened, or when it is
+/// absent and cannot be created.
+fn open_target(target: &Utf8Path) -> Result<Dir> {
+    match Dir::open_ambient_dir(target, cap_std::ambient_authority()) {
+        Ok(directory) => Ok(directory),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            Dir::create_ambient_dir_all(target, cap_std::ambient_authority())
+                .with_context(|| format!("create the packaging target {target}"))?;
+            Dir::open_ambient_dir(target, cap_std::ambient_authority())
+                .with_context(|| format!("open the packaging target {target}"))
+        }
+        Err(error) => Err(error).with_context(|| format!("open the packaging target {target}")),
+    }
+}
+
 /// Try to take the lease, reporting whether this contract now owns the step.
 ///
 /// Returns `Ok(None)` when another process holds the lease, which asks the
@@ -208,35 +239,17 @@ pub(crate) fn prepare(
 /// # Errors
 ///
 /// Returns an error when the lease cannot be taken for any reason other than
-/// another process holding it.
+/// another process holding it, or when the record cannot be read under it.
 fn claim(directory: &Dir, scope: Option<&str>, target: &Utf8Path) -> Result<Option<Prepared>> {
     match try_lease(directory, target) {
-        Ok(lease) => Ok(Some(if record_matches(directory, scope) {
+        Ok(lease) => Ok(Some(if read_under_lease(&lease, scope)? {
             Prepared::Reused
         } else {
-            Prepared::Owned {
-                lease,
-                directory: directory.try_clone()?,
-            }
+            Prepared::Owned { lease }
         })),
         Err(error) if is_held_elsewhere(&error) => Ok(None),
         Err(error) => Err(error).context(format!("lease the packaging target {target}")),
     }
-}
-
-/// Whether the completion record names this run.
-///
-/// A missing or unreadable record reads as "not complete": the roots are then
-/// packaged again rather than trusted on the strength of a file that cannot be
-/// read. With no scope the answer is always `false`, because a record written
-/// by an earlier run says nothing about this process's sources.
-fn record_matches(directory: &Dir, scope: Option<&str>) -> bool {
-    let Some(this_run) = scope else {
-        return false;
-    };
-    directory
-        .read_to_string(COMPLETION_FILE_NAME)
-        .is_ok_and(|record| record == this_run)
 }
 
 /// Open the lease file and take its lock without waiting.
@@ -258,7 +271,10 @@ fn try_lease(directory: &Dir, _target: &Utf8Path) -> io::Result<PackagingLease> 
         .create(LEASE_FILE_NAME)
         .map(cap_std::fs_utf8::File::into_std)?;
     match file.try_lock() {
-        Ok(()) => Ok(PackagingLease { _file: file }),
+        Ok(()) => Ok(PackagingLease {
+            _file: file,
+            directory: directory.try_clone()?,
+        }),
         Err(TryLockError::WouldBlock) => Err(io::Error::from(io::ErrorKind::WouldBlock)),
         Err(TryLockError::Error(error)) => Err(error),
     }
@@ -266,19 +282,22 @@ fn try_lease(directory: &Dir, _target: &Utf8Path) -> io::Result<PackagingLease> 
 
 /// Open the lease file with no sharing permitted.
 #[cfg(windows)]
-fn try_lease(_directory: &Dir, target: &Utf8Path) -> io::Result<PackagingLease> {
+fn try_lease(directory: &Dir, target: &Utf8Path) -> io::Result<PackagingLease> {
     use std::os::windows::fs::OpenOptionsExt;
 
     // `share_mode(0)` denies read, write and delete to every other open,
     // including one from this process. The file is therefore created if it is
     // absent and opened exclusively if it is not.
-    std::fs::OpenOptions::new()
+    let file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(false)
         .share_mode(0)
-        .open(target.join(LEASE_FILE_NAME).as_std_path())
-        .map(|file| PackagingLease { _file: file })
+        .open(target.join(LEASE_FILE_NAME).as_std_path())?;
+    Ok(PackagingLease {
+        _file: file,
+        directory: directory.try_clone()?,
+    })
 }
 
 /// Whether an open or lock failed because another process holds the lease.
@@ -296,15 +315,4 @@ fn is_held_elsewhere(error: &io::Error) -> bool {
     {
         error.kind() == io::ErrorKind::WouldBlock
     }
-}
-
-/// Drop the completion record before the roots are replaced.
-///
-/// Called under the lease, before the first packaging invocation. Without it a
-/// run could record a set, lose a root, and have a later contract in the same
-/// run read the record as proof that the set is whole. Removing it first makes
-/// the invariant local: the record exists only between a successful pair and
-/// the next packaging step, and a failed step leaves none behind.
-pub(crate) fn clear_record(directory: &Dir) {
-    let _removed = directory.remove_file(COMPLETION_FILE_NAME);
 }

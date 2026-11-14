@@ -158,7 +158,12 @@ const ORTHO_CONFIG_DEPENDENCIES: &[(&str, &str)] = &[
 ];
 
 mod lease;
+mod record;
 mod roots;
+
+#[cfg(test)]
+#[path = "scratch.rs"]
+mod scratch;
 
 // Re-exported so the contracts keep naming one module for the packaged set.
 pub(crate) use roots::{
