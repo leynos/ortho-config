@@ -197,6 +197,9 @@ def test_each_workflow_has_one_exactly_pinned_merge_step(
     assert "if ! test -s lcov.info; then" in script, (
         f"expected the output guard to use test -s; got {script!r}"
     )
+    assert "if ! grep -Eq '^SF:.+' lcov.info; then" in script, (
+        f"expected the output guard to require an SF record; got {script!r}"
+    )
     assert _pinned_version(script) == MERGER_VERSION, (
         f"expected merger version {MERGER_VERSION!r}; "
         f"got {_pinned_version(script)!r}"
@@ -322,9 +325,7 @@ def test_merge_passes_exact_inputs_and_preserves_output(
     )
 
 
-@pytest.mark.parametrize(
-    "workflow_case", WORKFLOW_CASES, ids=WORKFLOW_IDS
-)
+@pytest.mark.parametrize("workflow_case", WORKFLOW_CASES, ids=WORKFLOW_IDS)
 @pytest.mark.parametrize(
     "invalid_report",
     [
