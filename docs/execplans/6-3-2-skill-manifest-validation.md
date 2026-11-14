@@ -304,6 +304,21 @@ explicitly approves it and the prerequisites below are complete.
   option produces and that the finding names it, instead of expecting the
   double report the plan forbids.
 
+- [x] (2026-11-14) Replayed the branch onto the current main head `54dab732`
+  (PR #524, "Remove orphaned Jail test helpers") before publication, because
+  the branch still sat on `724839c4`. The replay was clean: `git range-diff`
+  reported all 18 branch commits unchanged, and every path this feature touches
+  is byte-identical to the pre-rebase candidate, so the gate certificates carry
+  by content identity. Main's single advance is confined to
+  `ortho_config/tests`, which the feature does not modify, but the gates were
+  re-run anyway against the rebased tree rather than assumed. Evidence, all
+  sequential on `1594f70f`: `make check-fmt` 0, `make typecheck` 0, `make lint`
+  0 (rustdoc, Clippy, Whitaker, and the Python `interrogate` gate all passed),
+  `make test` 0 (every Cargo target passed, 128 Python tests passed with 5
+  skipped), `make markdownlint` 0 including the spelling gate, and `make nixie`
+  0. Logs are under
+  `/tmp/{check-fmt,typecheck,lint,test,markdownlint,nixie}-ortho-config-6-3-2-skill-manifest-validation.out`.
+
 ## Surprises & discoveries
 
 - Observation: the example checks are ordered, and the order is observable.
@@ -1166,6 +1181,11 @@ OrthoConfig format mandate.
   registry, the capability-filesystem repair of the Whitaker finding, and the
   roadmap 6.3.2 tick. No scope or design change; hosted review and CI remain
   with the PR lifecycle.
+
+- 2026-11-14: Replayed the branch onto main's new head `54dab732`, recorded
+  the six-gate sweep on `1594f70f`, and confirmed the feature paths are
+  unchanged by the replay. Superseded the hosted completeness verdict given
+  against `0acc69e5`; a fresh assessment is required for this revision.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
