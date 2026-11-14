@@ -9,4 +9,4 @@ hello_world-cli-greet-about = 設定されたテンプレートを使用して�
 hello_world-cli-context-about = エージェント向けの機械可読なコマンドコンテキストを出力します。
 hello_world-cli-take-leave-about = 受信者への別れのワークフローの進行を説明します。
 clap-error-missing-argument = 不足しているオプションを指定してください: { $argument }
-clap-error-missing-subcommand = ワークフローを選択してください: { $valid_subcommands }
+clap-error-invalid-subcommand = { $subcommand } ではなく利用可能なワークフローを選択してください

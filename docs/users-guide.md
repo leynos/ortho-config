@@ -1112,8 +1112,10 @@ fn main() {
 
 Preserve `clap`'s display-only exits for `--help` and `--version`; use
 `is_display_request` when a wider application error layer needs to distinguish
-them. `OrthoError::try_aggregate` combines independent validation failures
-without inventing an error for an empty collection. The result extension traits
+them. Help rendered because a required argument or subcommand is missing is
+also left untranslated, but keeps `clap`'s error exit status.
+`OrthoError::try_aggregate` combines independent validation failures without
+inventing an error for an empty collection. The result extension traits
 `OrthoResultExt`, `OrthoMergeExt`, and `ResultIntoFigment` keep conversions
 explicit at integration boundaries.
 

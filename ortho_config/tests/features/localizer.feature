@@ -52,3 +52,21 @@ Feature: Localizer trait
     Given a derived configuration struct with a localization catalogue
     When the command line is parsed with a Fluent localizer
     Then the help text resolves through the derive-generated identifiers
+
+  Scenario: A newly covered parser error is translated
+    Given a localized command requiring equals for its option
+    When I parse that option without equals
+    Then the error kind is NoEquals
+    And the en-US no-equals translation is rendered
+
+  Scenario: Missing-input help remains clap output
+    Given a localized command showing help when arguments are absent
+    When I parse no arguments
+    Then the error kind is DisplayHelpOnMissingArgumentOrSubcommand
+    And the localizer is not called
+    And the output and exit status equal stock clap
+
+  Scenario: An unavailable override retains usable English
+    Given an incomplete locale and the embedded en-US catalogue
+    When I trigger a newly covered parser error
+    Then the embedded en-US translation is rendered without formatting errors

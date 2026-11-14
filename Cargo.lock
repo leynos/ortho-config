@@ -455,6 +455,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_error_matrix_fixture"
+version = "0.10.0"
+dependencies = [
+ "clap",
+ "ortho_config",
+]
+
+[[package]]
 name = "clap_lex"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

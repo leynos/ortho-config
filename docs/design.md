@@ -963,20 +963,19 @@ text and errors can be patched without rewriting parser wiring.
   Collision checks are scoped per parent: two sibling commands or two sibling
   arguments that normalize to the same Fluent id panic as programmer errors.
 
-- **Error formatter:** `localize_clap_error_with_command` maps each `ErrorKind`
-  onto a Fluent identifier (`clap-error-<kebab-kind>`), special-casing help on
-  missing subcommands to reuse the `clap-error-missing-subcommand` copy. It
+- **Error formatter:** `localize_clap_error_with_command` consults the
+  `CLAP_ERROR_IDS` matrix: translated kinds name their Fluent identifier, while
+  display-only kinds (`DisplayHelp`, `DisplayVersion`, and
+  `DisplayHelpOnMissingArgumentOrSubcommand`) are returned unchanged. It
   forwards context values such as the invalid argument, offending value, and
   available subcommands using keys like `argument`, `value`, `expected`,
-  `actual`, `subcommand`, and `valid_subcommands`. When `clap` omits these
-  details (for example, `DisplayHelpOnMissingArgumentOrSubcommand`), the
-  command is inspected to populate subcommand names. Display requests (`--help`/
-  `--version`) bypass localization. When a lookup fails, the original `clap`
-  message is preserved, ensuring the formatter is non-destructive. A companion
-  `clap_error_formatter` closure wraps a shared `Arc<dyn Localizer>` so command
-  builders can reuse the formatter without cloning localizer internals;
-  `localize_clap_error` remains as a convenience when the command is
-  unavailable.
+  `actual`, `subcommand`, and `valid_subcommands`. When `clap` omits the
+  subcommand list, the command is inspected to populate it. When a lookup
+  fails, the original `clap` message is preserved, ensuring the formatter is
+  non-destructive. A companion `clap_error_formatter` closure wraps a shared
+  `Arc<dyn Localizer>` so command builders can reuse the formatter without
+  cloning localizer internals; `localize_clap_error` remains as a convenience
+  when the command is unavailable.
 
 ### 4.13. Dynamic rule tables
 
