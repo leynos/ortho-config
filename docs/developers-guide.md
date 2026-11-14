@@ -351,6 +351,17 @@ finished. The re-check is tested through `claim`, not through `prepare`:
 `prepare` returns `Reused` at its arrival check when the record is already
 there, so a `prepare`-driven case passes whether or not the re-check exists.
 
+A waiter can also be released by the record rather than by the lease, and that
+is worth stating because it is not the obvious reading of the loop. `prepare`
+re-reads the record at the top of every iteration, so a waiter whose holder
+records the roots is answered with `Reused` while the holder still owns the
+lease; it never waits for the release. That is the cross-process saving in its
+strongest form, and `contention_tests.rs` pins it: it observes the waiter still
+waiting, records through the holder, and requires `Reused` without releasing.
+The companion case there proves the hand-off on release, which no case did
+before, because every other one starts at an edge of the lease's life: no
+holder, a spent deadline, or a record already present.
+
 The persistence half is its own module. `record.rs` owns how the record is
 written, cleared and read, and `lease.rs` owns only acquisition - the lock, the
 wait, and the deadline - so "is another process packaging right now" (the lock)
@@ -365,11 +376,14 @@ the whole 960 s override for one test. It removes the six-fold repetition of
 that cost, not the cost. `lease_tests.rs` pins each behaviour separately and
 states the record's reuse rule as a `proptest` over arbitrary scopes, record
 contents and presence, because a prefix, a suffix, a case variant or a missing
-scope are exactly where a sloppy comparison hides. `roots_tests.rs` drives the
-clear-package-record ordering, `lease_shape_tests.rs` pins the shape of the
-boundary - that it is entered from one call site - because no single contract's
-runtime observation can see a second call site in another module, and
-`scratch.rs` is the fixture all three share.
+scope are exactly where a sloppy comparison hides. `contention_tests.rs` puts a
+waiter behind a holder and observes both ways it can be released - by the
+record while the holder is still packaging, and by the release itself.
+`roots_tests.rs` drives the clear-package-record ordering,
+`lease_shape_tests.rs` pins the shape of the boundary - that it is entered from
+one call site - because no single contract's runtime observation can see a
+second call site in another module, and `scratch.rs` is the fixture all four
+share.
 
 The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
 against the 600 s base allowance. They were reached on a shared host while the

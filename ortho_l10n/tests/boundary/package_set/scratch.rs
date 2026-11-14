@@ -23,6 +23,15 @@ use std::time::{Duration, Instant};
 /// A deadline far enough away that nothing here waits on it.
 pub(crate) const AMPLE_DEADLINE: Duration = Duration::from_secs(60);
 
+/// The longest a waiter may take to pick up a free lease.
+///
+/// A waiter re-checks the lease every `LEASE_POLL_INTERVAL`, so the hand-off
+/// after a release costs at most one interval plus scheduling noise. The bound
+/// is generous for the noise rather than tight for the interval: it fails a
+/// waiter that sleeps for the packaging deadline, not one that was descheduled
+/// for a moment.
+pub(crate) const WAKE_UP_BOUND: Duration = Duration::from_secs(2);
+
 /// A scratch packaging target, removed when the value drops.
 pub(crate) struct Scratch {
     /// The drop guard. Never read; it removes the directory.

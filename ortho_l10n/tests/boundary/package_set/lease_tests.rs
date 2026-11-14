@@ -22,6 +22,12 @@
 //! be read must be *reported*, not read as "not complete", because the latter
 //! would silently package beside a contract that may be about to succeed.
 //!
+//! Every case here starts at an edge of the lease's life: no holder, a spent
+//! deadline, a record already present. [What a waiter sees while a holder is
+//! packaging](super::lease::contention_tests) covers the interior, where a
+//! contract is genuinely waiting behind another and observes the release or the
+//! record as it happens.
+//!
 //! The structural cases live in [`super::lease_shape_tests`]; they read sources
 //! and constants rather than driving the lease.
 
@@ -29,7 +35,7 @@ use crate::boundary::package_set::lease::{LEASE_FILE_NAME, Prepared, claim, prep
 use crate::boundary::package_set::record::{
     COMPLETION_FILE_NAME, clear_record, read_unlocked, record_complete,
 };
-use crate::boundary::package_set::scratch::{AMPLE_DEADLINE, Scratch, scratch_root};
+use crate::boundary::package_set::scratch::{AMPLE_DEADLINE, Scratch, WAKE_UP_BOUND, scratch_root};
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 use rstest::rstest;
@@ -47,15 +53,6 @@ const THIS_RUN: &str = "lease-regression-this-run";
 
 /// A different run identifier, standing for an earlier run's record.
 const OTHER_RUN: &str = "lease-regression-another-run";
-
-/// The longest a waiter may take to pick up a free lease.
-///
-/// A waiter re-checks the lease every `LEASE_POLL_INTERVAL`, so the hand-off
-/// after a release costs at most one interval plus scheduling noise. The bound
-/// is generous for the noise rather than tight for the interval: it fails a
-/// waiter that sleeps for the packaging deadline, not one that was descheduled
-/// for a moment.
-const WAKE_UP_BOUND: Duration = Duration::from_secs(2);
 
 /// A record for this run makes the roots reusable without packaging.
 #[rstest]
