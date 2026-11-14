@@ -1,8 +1,9 @@
 # Ship the en-US clap error matrix (11.2.1)
 
-Status: M1 complete — the public matrix, ten new en-US strings, runtime
-consultation, and the V1–V3 tests are in place and green. Implementation
-proceeds at M2 (2026-11-10).
+Status: M3 complete — the matrix, the en-US strings, the runtime consultation,
+the pre-publication gate, the consumer and developer documentation, and the
+roadmap checkbox are all in place, and every gate is green on the final
+candidate. Delivery follows (2026-11-15).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -181,7 +182,39 @@ stopping and reporting.
       `DisplayHelp` row at unchanged length failed `matrix_kinds_are_unique`,
       `display_only_rows_are_the_three_render_variants`, and the
       `display_version` inventory case. Both mutations were restored.
-- [ ] M3: finish consumer documentation and mark roadmap task done.
+- [x] (2026-11-15) M2 committed as `d726f3cc` (25 files). The first gate run
+      failed `lint` on two Clippy diagnostics in the new proptest helper
+      (`doc_markdown` on `ExecPlan`, `collapsible_if` at the gate insertion);
+      after backticking the term and folding the nested `if` into a let-chain,
+      a full re-run on frozen tree `39cd27c3` passed all seven gates:
+      `check-fmt` (2 s), `typecheck` (1 s), `lint` (36 s, including Whitaker and
+      docstring coverage 598/598), `boundary` (45 s, 35 passed), `test` (256 s,
+      116 green suite results, pytest 119 passed), `markdownlint` (12 s), and
+      `nixie` (1 s). The frozen tree re-derived identically after the last
+      gate.
+- [x] (2026-11-15) M3: reconciled the consumer and developer documentation.
+      `docs/users-guide.md` gained the enumeration example, the 17-row
+      `ErrorKind` outcome table, the four historical identifiers, override
+      guidance built on `FluentLocalizer::with_en_us_defaults`, the display-only
+      handling, the missing-input help change, and the fallback. The example is
+      registered as `guide-clap-error-matrix` in its fence marker, in
+      `SIMPLE_RUNS`, in `STANDARD_RUST_EXAMPLES`, and in
+      `EXPECTED_EXAMPLE_IDS`, so both documentation-example targets execute it
+      rather than only list it. `docs/developers-guide.md` documents gate
+      ownership, prerequisites, the two run commands, a refusal-to-repair
+      table, and the seven-step procedure for a new clap variant;
+      `docs/repository-layout.md` inventories the new target;
+      `docs/cli-localization-design.md` §6.1.1 names where the reviewed identity
+      and count live; `CHANGELOG.md` records the added coverage and the changed
+      missing-input behaviour. Roadmap 11.2.1 and its three sub-items are
+      checked, with their finding and validation notes. A full seven-gate
+      certificate on frozen tree `529721bb` is green: `check-fmt` (1 s),
+      `typecheck` (2 s), `lint` (10 s, including rustdoc, Clippy, Whitaker, and
+      docstring coverage 598/598), `boundary` (13 s, 35 passed, 7 ignored),
+      `test` (171 s, 116 green suite results, the documentation-example targets
+      at 58 passed/13 ignored and 14 passed, pytest 119 passed), `markdownlint`
+      (18 s, 99 files, spellcheck and `typos.toml` unchanged), and `nixie`
+      (2 s). The frozen tree re-derived identically after the last gate.
 
 ## Surprises & discoveries
 
@@ -287,6 +320,20 @@ narrowing the count.
 `cargo fmt` here is rustfmt's own `cargo-fmt` 1.10.0, which rejects
 `--workspace`; `make check-fmt` uses `--all`, so use `--all` in ad-hoc runs.
 
+M3 (2026-11-15) could not use `mapsplice` for the roadmap completion. Both
+`mapsplice replace docs/roadmap.md 11.2.1 <fragment>` and
+`mapsplice replace docs/roadmap.md 11.2 <fragment>` fail closed with
+`dependency anchor '11.2.1' was not found in the target roadmap`
+(`error_class=dangling_dependency`), and an identity replacement of the
+unchanged step 11.2 reproduces it. The validator resolves `Requires` references
+against the roadmap with the addressed anchor removed and before the fragment
+is spliced back, so any task another item depends on cannot be replaced. Task
+11.2.3 is also required by a later step (line 819), which is why the step-level
+replacement reported it. The roadmap item therefore received the minimal hand
+edit the library would have produced: no numbering changes, three checkboxes
+flipped, and two nested notes added, followed by the Markdown formatter and
+gates. Recorded here rather than treating an infrastructure refusal as a pass.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -324,6 +371,17 @@ narrowing the count.
   suite run does not depend on `cargo test --workspace` having built it.
 
 ## Outcomes & retrospective
+
+M3 closed the implementation on 2026-11-15. The users' guide enumerates the
+matrix, names the override identifiers, and documents the display-only and
+missing-input behaviour; the developers' guide owns the gate's troubleshooting
+procedure and its variant-intake steps; the roadmap records 11.2.1 as done with
+its finding and validation notes. A seven-gate certificate on frozen tree
+`529721bb` is green, and it includes the two documentation-example targets that
+execute the new example instead of only listing it. The only remaining work is
+delivery: publish the branch, refresh the draft pull request, and take it
+through review. Acceptance criteria E1–E4 are met and evidenced in Progress;
+none is outstanding.
 
 The plan incorporates the merged prover tooling from PR #651 and is now based on
 [PR #664](https://github.com/leynos/ortho-config/pull/664), which addresses

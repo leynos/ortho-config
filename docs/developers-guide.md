@@ -1780,6 +1780,112 @@ Run `coderabbit review --agent` after major milestones that change schemas,
 documentation contracts, or externally visible behaviour. Clear its concerns
 before moving to the next milestone.
 
+## The pre-publication clap coverage gate
+
+`clap::error::ErrorKind` is `#[non_exhaustive]`, so a `clap_builder` release
+can add a variant the shipped matrix does not classify. The workspace detects
+that before publication with a test-only gate, specified in
+[design §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate)
+and [ADR-0020](adrs/adr-0020-pre-publication-clap-coverage-gate.md). It adds no
+build script, writes no `rustc-env` value, and runs in no consumer build.
+
+### Ownership and pieces
+
+- `ortho_config/tests/clap_error_coverage.rs` is the gate. It wires the checks
+  in publication order: metadata, lock, identity, edge, count.
+- `ortho_config/tests/support/clap_publication/` holds the decisions as pure
+  functions, split by subject. `lock` parses `Cargo.lock` and selects entries,
+  `identity` holds the reviewed identities and the metadata cross-checks,
+  `source` locates and counts `ErrorKind`, and `files` confines reads to
+  capability handles. `controls` and `properties` are their unit and property
+  tests.
+- `ortho_config/tests/support/clap_reviewed.rs` holds
+  `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
+  `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
+  matrix test's `const_assert_eq!` fails the build when the matrix length and
+  the reviewed total disagree.
+- `ortho_config/tests/fixtures/clap_publication/` holds the lock and source
+  fixtures the negative controls consume. They are data, not compiled targets.
+
+### Prerequisites
+
+- The root `Cargo.lock` must describe the resolution under review and be
+  committed. The gate runs `cargo metadata --locked --offline`, so a stale
+  lock, an unlocked change, or a missing registry source fails the gate rather
+  than silently checking a different identity.
+- The test-only dev-dependencies `cargo_metadata`, `syn` (with `full`),
+  `toml`, and `static_assertions` must be available.
+- The gate reads `ortho_config`'s configured target and feature selection.
+  Keep the `clap` dependency unconditional: a target- or feature-conditional
+  edge makes the resolution ambiguous, and the gate refuses it.
+
+### Run the gate
+
+```bash
+cargo test -p ortho_config --test clap_error_coverage --locked --offline
+cargo test -p ortho_config --test clap_error_matrix --locked --offline
+```
+
+`make test` runs both as part of the suite. Run them directly when changing the
+matrix, the reviewed identity, or the resolved `clap` version.
+
+### Troubleshooting a refusal
+
+Every refusal names the check that failed. The repair is always a review
+decision, never widening the gate.
+
+| Refusal                                                                  | Meaning                                      | Repair                                                                    |
+| ------------------------------------------------------------------------ | -------------------------------------------- | ------------------------------------------------------------------------- |
+| `clap_builder declares N ErrorKind variants but the reviewed total is M` | Upstream added, removed, or merged a variant | Review the release, then follow "When clap adds a variant"                |
+| `... but the reviewed version is ...`                                    | The lock moved to a new release              | Review that release, then update `ReviewedPackage`                        |
+| `... but the reviewed checksum is ...`                                   | A different artefact for the same version    | Treat it as a new identity: review it, or restore the intended version    |
+| `... but the reviewed source is ...`                                     | A `[patch]`, path, or git override           | Remove the override, or review it deliberately and record why             |
+| `Cargo.lock has no package named ...`                                    | The lock lost an expected entry              | Rebuild the lock; confirm the facade edge still resolves                  |
+| `Cargo.lock lists more than one package named ...`                       | Two versions are locked                      | Make one version apply, or the review must cover both                     |
+| `records no clap_builder dependency for clap`                            | The facade edge changed                      | Check the resolved `clap` features and the lock's dependency entries      |
+| `conditionally compiles ...`                                             | A `cfg`-gated enum or variant                | The gate fails closed; redesign it for that shape, do not drop the audit  |
+| `... should be valid Rust`                                               | `syn` could not parse the resolved source    | Inspect the file: a vendor patch or an unexpected `src/` file explains it |
+| `declares more than one top-level ErrorKind enum`                        | The definition moved or split                | Update the locator in `source` with a covered change                      |
+| `declares no top-level ErrorKind enum to inventory`                      | The definition left the files the gate scans | Update the locator in `source` with a covered change                      |
+
+The `conditionally compiles` refusal is deliberate. Counting a conditional
+variant would report an inventory that may not be compiled, so the gate stops
+instead.
+
+### When clap adds a variant
+
+1. Confirm the change upstream: read the release notes and the added source.
+   Do not update the total from the gate's failure message alone.
+2. Classify the variant as translated or display-only. A kind that produces
+   text `clap` renders itself is display-only.
+3. For a translated kind, add the row to `CLAP_ERROR_IDS` in
+   `ortho_config/src/localizer/clap_error_ids.rs`, add an en-US message to
+   `ortho_l10n/locales/en-US/messages.ftl`, add the matrix case in
+   `tests/clap_error_matrix.rs`, and add a rendering case in
+   `tests/clap_error_translations.rs`. Choose an identifier in the
+   `clap-error-` namespace that no row already uses; the four historical
+   spellings must not change.
+4. For a display-only kind, add the sentinel row and extend the expected
+   display-only set in `tests/clap_error_matrix.rs`.
+5. Update `CLAP_ERROR_KIND_COUNT` in `tests/support/clap_reviewed.rs` and the
+   matching fixture at
+   `tests/fixtures/clap_publication/sources/error_kind_reviewed.rs`. If the
+   resolved version, source, or checksum moved, update `REVIEWED_CLAP` and
+   `REVIEWED_CLAP_BUILDER` in `tests/support/clap_publication/identity.rs`.
+6. Update the reviewed date, identity, and total in
+   [design §6.1.1](cli-localization-design.md#611-pre-publication-coverage-gate)
+   and the table in the
+   [users' guide](users-guide.md#translate-or-override-clap-parse-errors).
+7. Run both targets, then the full gates.
+
+### Boundary
+
+The gate validates this workspace's publication graph only. A consumer that
+resolves a different `clap_builder` keeps the shipped matrix and relies on the
+runtime fallback for an unmapped kind; no consumer build runs or fails this
+check. The gate does not classify variants, does not verify the Fluent
+messages' wording, and does not replace the matrix or translation suites.
+
 ## Agent-native architecture boundary
 
 Agent-native CLI assistance is contract modelling work inside OrthoConfig, not

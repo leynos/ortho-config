@@ -492,8 +492,12 @@ compiled inventory cannot be established exhaustively fails closed.
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`
 remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit
-test data beside the matrix test. As reviewed on 2026-11-09 the workspace
-resolves `clap_builder` `4.6.7` from
+test data beside the matrix test, in
+`ortho_config/tests/support/clap_reviewed.rs` and
+`ortho_config/tests/support/clap_publication/identity.rs`; the
+[developers' guide](developers-guide.md#the-pre-publication-clap-coverage-gate)
+owns the operating procedure. As reviewed on 2026-11-09 the workspace resolves
+`clap_builder` `4.6.7` from
 `registry+https://github.com/rust-lang/crates.io-index` with checksum
 `ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d`, and that
 `ErrorKind` declares seventeen variants; the test data, not this paragraph,
