@@ -339,6 +339,16 @@ explicitly approves it and the prerequisites below are complete.
   `cs review cargo-orthohelp/src/skill_validation/resolve.rs` now reports score
   10.0 with no findings. The full six-gate sweep was re-run on the resulting
   working tree and every gate exited 0.
+- [x] (2026-11-14) Repaired the third hosted assessment. Coverage now requires
+  the claimed path to exist whatever options the example names, so an
+  optionless example or one using only undeclared options on a missing path
+  stays unbound (both cases have regressions, and the oracle applies the same
+  rule). The adapter merges a stated value type into a silent entry and detects
+  a disagreement in every declaration order, including a stated global type
+  reaching a silent input. The acceptance control is now a same-input oracle
+  mutant (`oracle_ignoring_acceptance`), and the fixture marks `color` global
+  with a source value-drift test that asserts the extracted value and the
+  resulting `skill.policy.global_option_value` finding.
 
 ## Surprises & discoveries
 
@@ -500,6 +510,19 @@ explicitly approves it and the prerequisites below are complete.
   inconsistent source tree produced a plausible but arbitrary surface. An
   absent value type states nothing and therefore never conflicts. Date/Author:
   2026-11-14, repair of the second assessment's F2.
+- Decision (2026-11-14): Coverage requires the claimed path to exist,
+  independent of which options the example names. An optionless example, or one
+  whose only options its reference does not declare, previously returned bound
+  because nothing consulted the surface; a run of such examples could report
+  `Complete` while every claimed path was undeclared. Ownership findings are
+  still emitted first, in source order, before the example is left unbound.
+  Date/Author: 2026-11-14, repair of the third assessment's F1.
+- Decision (2026-11-14): A silent duplicate declaration is upgraded, not
+  discarded. `EffectiveOption.value_type` is adopted from the first declaration
+  that states one, and only two *stated* types can conflict. The previous
+  first-wins comparison let `None, string, integer` collapse to `None`, so the
+  disagreement never reached validation. Date/Author: 2026-11-14, repair of the
+  third assessment's F2.
 - Decision (2026-11-14): Customize code health with
   `.codescene/code-health-rules.json` rather than by reshaping test-support
   signatures. The file holds one rule set per path and nothing else, so every

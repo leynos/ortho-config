@@ -130,18 +130,20 @@ impl<'a> Validator<'a> {
     /// the command does not accept is reported, and only a use that is both
     /// declared and accepted counts as resolved for policy.
     ///
-    /// Returns whether every option was checked. When the surface does not
-    /// declare the reference's path, no option can be accepted and the
-    /// remaining checks do not run. That path is already reported once against
-    /// the manifest, so this adds no second finding; it only keeps the example
-    /// out of `examples_bound`, because claiming it was validated would
-    /// overstate coverage.
+    /// Returns whether every option was checked *and* the surface declares the
+    /// reference's path. A path the surface lacks means no option can be
+    /// accepted, so a declared option stops the remaining checks; that path is
+    /// already reported once against the manifest, so this adds no second
+    /// finding. The example stays unbound even when it uses no declared option,
+    /// because the path it claims was never checked at all; counting it would
+    /// let a run of otherwise unchecked examples report completeness.
     fn check_example_options(
         &mut self,
         claim: ClaimRef<'_>,
         reference: &'a SkillCommandRef,
         options: &'a [OptionUse],
     ) -> bool {
+        let has_claimed_path = self.index.command(CommandPath::new(claim.path)).is_some();
         let mut seen_names: BTreeSet<&str> = BTreeSet::new();
         for option in options {
             if !seen_names.insert(option.name.as_str()) {
@@ -185,7 +187,7 @@ impl<'a> Validator<'a> {
             };
             self.apply_option_policy(claim, options, resolved_use);
         }
-        true
+        has_claimed_path
     }
 
     /// Applies policy once per distinct use of one resolved option.
