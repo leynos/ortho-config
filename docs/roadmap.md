@@ -180,12 +180,12 @@ fields.
   - [x] Link skill manifest locations from agent context.
   - [x] Keep downstream skill prose application-owned.
 
-- [ ] 6.3.2. Add skill manifest validation.
+- [x] 6.3.2. Add skill manifest validation.
   - Requires 6.3.1 and step 7.1.
   - See agent-native-cli-design.md §3.4 and §5.
-  - [ ] Validate that skills mention real command paths and flags.
-  - [ ] Validate that examples honour canonical vocabulary and global options.
-  - [ ] Add fixtures for Weaver-style operation skills and Netsuke-style build
+  - [x] Validate that skills mention real command paths and flags.
+  - [x] Validate that examples honour canonical vocabulary and global options.
+  - [x] Add fixtures for Weaver-style operation skills and Netsuke-style build
     workflow skills without embedding either application's domain semantics.
 
 ## 7. Enforce agent-native policy

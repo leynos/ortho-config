@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`, `Tolerances`, `Risks`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan`
 current at every milestone.
 
-Status: APPROVED (2026-11-10; implementation authorized)
+Status: IMPLEMENTED (2026-11-14; all local gates green, hosted review pending)
 
 ## Purpose / big picture
 
@@ -203,7 +203,7 @@ explicitly approves it and the prerequisites below are complete.
   `cargo test -p cargo-orthohelp --test skill_validation_bdd` passed 6 tests and
   `--test skill_validation_e2e` passed 5 tests, including the source-drift and
   malformed-array negative controls.
-- [ ] EP-M4: documentation, final sequential gates, and roadmap closure.
+- [x] EP-M4: documentation, final sequential gates, and roadmap closure.
   - [x] (2026-11-13) Documentation written: design §3.4.1 boundary text,
     users' guide section with a compiled example and its transcript,
     developers' guide notes, and the documentation index.
@@ -211,9 +211,11 @@ explicitly approves it and the prerequisites below are complete.
     `make lint` (rustdoc, Clippy, Whitaker) pass on the implementation
     candidate. `make markdownlint` (including `make spellcheck`) and
     `make nixie` also pass.
-  - [ ] `make test` has not yet completed green in one run on this candidate;
-    two earlier runs exposed and drove the repair of the documentation-example
-    registry entries. The final full run and the roadmap tick remain.
+  - [x] (2026-11-14) A complete `make test` run passed on the frozen candidate
+    `e4038718`: `MAKE_EXIT:0`, 113 `test result: ok` suites, no failing test.
+    The final gate sweep then reran every other gate on the same clean tree,
+    and roadmap 6.3.2 with its three sub-items is checked. Evidence:
+    `/tmp/test-ortho-config-6-3-2-skill-manifest-validation.out`.
 
 ## Surprises & discoveries
 
@@ -370,8 +372,10 @@ oracle caught two ordering expectations that the unit tests had asserted
 backwards, which is the evidence that the oracle is not a restatement of the
 implementation.
 
-Remaining work at the time of writing: final sequential gates and roadmap
-closure (EP-M4). Do not mark the plan complete while gates remain.
+Closure (2026-11-14): EP-M4 completed. The full sequential gate sweep passed on
+the frozen candidate `e4038718` with a clean working tree, and roadmap 6.3.2
+was checked only after that sweep. Remaining work is hosted review and CI,
+which belong to the PR lifecycle rather than to this plan.
 
 ## Context and orientation
 
@@ -533,8 +537,10 @@ decision to introduce formal verification.
   `EXPECTED_EXAMPLE_IDS` entry, both repaired and re-checked with
   `cargo test -p ortho_config --test documentation_examples_tests --test
   documentation_examples_rust_tests`
-  (`CARGO_EXIT:0`). A single complete `make test` run on the frozen candidate
-  is still required before closure.
+  (`CARGO_EXIT:0`). The final complete `make test` run on the frozen candidate
+  `e4038718` then passed with `MAKE_EXIT:0` and 113 `test result: ok` suites;
+  the whole gate sweep was repeated on that commit with a clean working tree,
+  so every gate certificate now refers to one candidate.
 
 No introduced contractual business logic is selected for formal verification:
 exact finite membership and reuse of completed policy rules have direct,
@@ -950,6 +956,12 @@ OrthoConfig format mandate.
   agent's return-to-main procedure without changing feature scope. Refreshed
   the parent to `501ab831` after its process-ownership improvements landed
   during validation; the initial-parent results remain historical evidence.
+
+- 2026-11-14: Closed EP-M4. Recorded the green full `make test` run and the
+  repeated gate sweep on candidate `e4038718`, the third documentation-example
+  registry, the capability-filesystem repair of the Whitaker finding, and the
+  roadmap 6.3.2 tick. No scope or design change; hosted review and CI remain
+  with the PR lifecycle.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
