@@ -262,6 +262,11 @@ all possible public values are validated.
   (`missing_package_reports_failure_status`,
   `documented_policy_denial_keeps_the_report_and_exits_one`, and
   `policy_check_commands_match_the_executed_flow`) are visible in the log.
+- [x] (2026-11-15) Review repair: CodeScene's advisory Code Duplication rule
+  paired `absent_output_stays_none` with `null_output_reads_as_none`, so the
+  two wire spellings now form one `rstest` table. All seven gates green at
+  `2c9c069f` with the head unchanged and `make fmt` mutating nothing — 113
+  result lines, 2872 passed, 43 ignored, pytest 128 passed.
 - [x] M3: exit documentation, process regression evidence and completion.
 
 ## Surprises & discoveries
@@ -303,6 +308,13 @@ so `missing_const_for_fn` demands `const fn`, and the single assertion helper
 that checked message, stable fields and summary together tripped
 `cognitive_complexity`; splitting it into three helpers is the fix, not a
 suppression. Both are visible only under `make lint`, never under `cargo test`.
+
+CodeScene enforces rules its own CLI calls advisory. A Code Duplication pairing
+between the two absent-output wire tests failed the hosted code-health row
+while leaving the file at 9.38, and two small tests with the same shape were
+enough to trip it. Folding them into one `rstest` table cleared it; a
+`@codescene` directive would have been the wrong instrument for a genuine
+duplicate.
 
 ## Decision log
 
