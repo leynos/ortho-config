@@ -60,7 +60,26 @@
 //! protects is that target.
 //!
 //! The lease is held for the packaging step alone, never while a contract
-//! reads the roots, so readers never block on it once the roots exist.
+//! reads the roots, so readers never block on it once the roots exist. What
+//! makes that safe is one level up: every process that reaches this module
+//! holds the *run guard* (see [`super::run_guard::hold_run`]) for its whole
+//! lifetime, so no other run can begin replacing the roots while this one is
+//! still reading them.
+//!
+//! # Two locks, two different questions
+//!
+//! - the **lease** asks "is a packaging step running right now", and is held
+//!   for that step;
+//! - the **run guard** asks "is another boundary run reading this checkout",
+//!   and is held for a process's whole life.
+//!
+//! The second is what makes the first correct. A contract that reuses this
+//! run's roots answers `Reused` from the record without holding the lease: the
+//! record is proof about *this run*, not a lock on the directory. That answer
+//! stays true only while no packaging step may replace the roots behind it, so
+//! the exclusion has to cover the consumer's reads, not just the record check.
+//! Holding it per process is the smallest span that does, and it costs nothing
+//! when no second run is present.
 
 #[cfg(test)]
 #[path = "lease_tests.rs"]
@@ -174,7 +193,10 @@ pub(crate) fn prepare(
     let directory = open_target(target)?;
     loop {
         // The arrival check, before any lease exists. `read_unlocked` takes the
-        // directory because this caller has no proof to offer.
+        // directory because this caller has no proof to offer; what makes the
+        // answer safe is [`super::run_guard::hold_run`], which keeps every
+        // other run out of this checkout for as long as this process can read
+        // anything.
         if read_unlocked(&directory, scope)? {
             return Ok(Prepared::Reused);
         }

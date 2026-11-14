@@ -160,6 +160,7 @@ const ORTHO_CONFIG_DEPENDENCIES: &[(&str, &str)] = &[
 mod lease;
 mod record;
 mod roots;
+mod run_guard;
 
 #[cfg(test)]
 #[path = "scratch.rs"]

@@ -299,9 +299,12 @@ the shared allowance, which is what makes the shared budget load-bearing rather
 than a restatement of the caps.
 
 The package-set cache is process-local to the packaged boundary contracts. It
-shares successful roots and retains failures from unbounded packaging attempts,
-but does not cache a failure caused by a caller's sequence deadline. A later
-caller with time remaining can retry.
+shares successful roots and caches failures too, including one caused by a
+caller's own sequence deadline: `PACKAGED` is a `OnceLock<Result<_, String>>`,
+so whichever caller wins the initialization decides the answer for the whole
+process. That is deliberate rather than an oversight - a packaging step that
+failed is a reason to report the failure to every contract, not to start it
+again beside a process that may already be replacing the same roots.
 
 That cache does not deduplicate across nextest's processes, so the packaged
 contracts additionally take a **cross-process lease** on the packaging target
@@ -321,19 +324,36 @@ identifier - `cargo test` and `make boundary` - no record is written and none
 is trusted, and the lease degrades to a plain mutex over the packaging step,
 which the process-local cache already deduplicates.
 
-Two properties are worth keeping in mind when editing it. The lease is held for
-the packaging step alone, never while a contract reads the roots, so readers do
-not block once the roots exist. And the record is removed before the roots are
-replaced, so a failed step leaves no record and no later contract reads a
+A second lock, the **run guard** (`.boundary-run`, in the boundary root rather
+than in the packaging target, and implemented in `run_guard.rs` rather than in
+`lease.rs`), is what makes the record's promise safe to act on. The lease
+answers "is a packaging step running right now" and is released before anybody
+reads anything; the record answers "did this run already finish" and outlives
+the lease. Neither answers "may these roots be replaced while I read them", and
+a contract that reuses them reads them *after* `prepare` returns, with no lock
+held. So every process that touches the target holds the run guard exclusively
+for its whole life: a second boundary run in the same checkout has to wait, and
+cannot begin replacing a set the first is still reading. The guard is
+process-wide, not per call, precisely because the reads outlive the call that
+promised them.
+
+Three properties are worth keeping in mind when editing it. The lease is held
+for the packaging step alone, never while a contract reads the roots, so
+readers do not block once the roots exist. The run guard is what keeps that
+safe, and is never released early. And the record is removed before the roots
+are replaced, so a failed step leaves no record and no later contract reads a
 half-replaced set as whole.
 
-Both are expressed in signatures rather than left to convention.
-`PackagingLease` carries the target directory it protects, and
+The lease and the record are expressed in signatures rather than left to
+convention. `PackagingLease` carries the target directory it protects, and
 `record_complete` and `clear_record` take `&PackagingLease`, so neither can be
 written beside a lease a caller is not holding. The clear-and-package sequence
 lives in `package_under_lease` in `roots.rs`, which takes the packaging work as
 a closure; that is what lets `roots_tests.rs` assert the ordering and the
-failure behaviour without running `cargo package`.
+failure behaviour without running `cargo package`. The run guard is expressed
+the same way but one level up: `hold_run` returns a `RunGuard`, and
+`build_packaged_set` parks it in a `static OnceLock`, so the process cannot
+forget to keep it.
 
 The record reads are fallible in the same way and for the same reason. A
 missing record is the ordinary first-run case and reads as "not complete", but
