@@ -75,6 +75,8 @@ pub use report::{
 pub use validate::validate;
 
 #[cfg(test)]
+mod assertions;
+#[cfg(test)]
 mod proptests;
 #[cfg(test)]
 mod support;

@@ -103,6 +103,81 @@ impl OptionUse<'_> {
     }
 }
 
+/// One resolved claim's policy context.
+///
+/// The configured policy, the exact command path the claim resolved against,
+/// and the name the claim used travel together in every rule, so they are held
+/// as one receiver rather than threaded through each helper.
+struct ClaimPolicy<'a> {
+    /// Configured policy and explicit exceptions.
+    policy: &'a ResolvedAgentPolicy,
+    /// Exact command path the claim resolved against.
+    path: &'a [String],
+    /// Flag or verb name the claim used.
+    name: &'a str,
+}
+
+impl<'a> ClaimPolicy<'a> {
+    /// Returns whether the configured policy silences a claim of `kind`.
+    fn is_exempt(&self, kind: ExceptionKind) -> bool {
+        !self.policy.is_active() || self.policy.allows(kind, self.name, self.path)
+    }
+
+    /// Applies the shared name and value rules for one option.
+    fn option_advice(&self, usage: OptionUse<'a>) -> Option<PolicyAdvice> {
+        if self.is_exempt(ExceptionKind::Flag) {
+            return None;
+        }
+        if let Some(concept) = concept_for_long_name(self.name) {
+            return match usage {
+                OptionUse::Declaration => None,
+                OptionUse::Invocation(value) => value_advice(concept, value),
+            };
+        }
+        if let Some(concept) = near_miss_concept(self.name) {
+            return Some(self.near_miss_advice(concept));
+        }
+        if is_canonical_flag(self.name) {
+            return None;
+        }
+        off_policy_flag_replacement(self.name, usage.value())
+            .map(|replacement| self.off_policy_advice(replacement))
+    }
+
+    /// Applies the shared rules to a resolved command verb.
+    fn verb_advice(&self) -> Option<PolicyAdvice> {
+        if self.is_exempt(ExceptionKind::Verb) {
+            return None;
+        }
+        off_policy_verb_replacement(self.name).map(|replacement| PolicyAdvice {
+            code: codes::POLICY_NONCANONICAL_VERB,
+            option: Some(self.name.to_owned()),
+            message: format!("verb '{}' is off policy; use '{replacement}'", self.name),
+        })
+    }
+
+    /// Builds advice for a legacy spelling of a glossary concept.
+    fn near_miss_advice(&self, concept: &GlobalOptionConcept) -> PolicyAdvice {
+        let hint = replacement_hint(concept);
+        let bare = self.name.trim_start_matches('-');
+        PolicyAdvice {
+            code: codes::POLICY_GLOBAL_OPTION_NEAR_MISS,
+            option: Some(bare.to_owned()),
+            message: format!("option '--{bare}' is a legacy spelling; use '{hint}'"),
+        }
+    }
+
+    /// Builds advice for a documented off-policy flag spelling.
+    fn off_policy_advice(&self, replacement: &str) -> PolicyAdvice {
+        let bare = self.name.trim_start_matches('-');
+        PolicyAdvice {
+            code: codes::POLICY_NONCANONICAL_FLAG,
+            option: Some(bare.to_owned()),
+            message: format!("option '--{bare}' is off policy; use '{replacement}'"),
+        }
+    }
+}
+
 /// Returns policy advice for a flag a manifest merely declares.
 ///
 /// A declaration makes no claim about a value, so the value shape of a
@@ -114,7 +189,7 @@ pub(crate) fn flag_name_advice(
     path: &[String],
     name: &str,
 ) -> Option<PolicyAdvice> {
-    advice(policy, path, name, OptionUse::Declaration)
+    ClaimPolicy { policy, path, name }.option_advice(OptionUse::Declaration)
 }
 
 /// Returns policy advice for one option use inside an example.
@@ -122,39 +197,13 @@ pub(crate) fn flag_name_advice(
 /// `--` prefixes are normalized for the glossary lookups because policy asks
 /// whether a *name* is canonical. Structural membership deliberately does not
 /// normalize.
-pub(crate) fn option_use_advice(
-    policy: &ResolvedAgentPolicy,
-    path: &[String],
-    name: &str,
-    value: Option<&str>,
+pub(crate) fn option_use_advice<'a>(
+    policy: &'a ResolvedAgentPolicy,
+    path: &'a [String],
+    name: &'a str,
+    value: Option<&'a str>,
 ) -> Option<PolicyAdvice> {
-    advice(policy, path, name, OptionUse::Invocation(value))
-}
-
-/// Applies the shared name and value rules for one option.
-fn advice(
-    policy: &ResolvedAgentPolicy,
-    path: &[String],
-    name: &str,
-    usage: OptionUse<'_>,
-) -> Option<PolicyAdvice> {
-    if !policy.is_active() || policy.allows(ExceptionKind::Flag, name, path) {
-        return None;
-    }
-    if let Some(concept) = concept_for_long_name(name) {
-        return match usage {
-            OptionUse::Declaration => None,
-            OptionUse::Invocation(value) => value_advice(concept, value),
-        };
-    }
-    if let Some(concept) = near_miss_concept(name) {
-        return Some(near_miss_advice(concept, name));
-    }
-    if is_canonical_flag(name) {
-        return None;
-    }
-    off_policy_flag_replacement(name, usage.value())
-        .map(|replacement| off_policy_advice(name, replacement))
+    ClaimPolicy { policy, path, name }.option_advice(OptionUse::Invocation(value))
 }
 
 /// Returns policy advice for a resolved command verb.
@@ -163,14 +212,12 @@ pub(crate) fn verb_advice(
     path: &[String],
     verb: &str,
 ) -> Option<PolicyAdvice> {
-    if !policy.is_active() || policy.allows(ExceptionKind::Verb, verb, path) {
-        return None;
+    ClaimPolicy {
+        policy,
+        path,
+        name: verb,
     }
-    off_policy_verb_replacement(verb).map(|replacement| PolicyAdvice {
-        code: codes::POLICY_NONCANONICAL_VERB,
-        option: Some(verb.to_owned()),
-        message: format!("verb '{verb}' is off policy; use '{replacement}'"),
-    })
+    .verb_advice()
 }
 
 /// Checks a canonical glossary option's value shape.
@@ -187,27 +234,6 @@ fn value_advice(concept: &GlobalOptionConcept, value: Option<&str>) -> Option<Po
         option: Some(concept.canonical.trim_start_matches('-').to_owned()),
         message: format!("option '{}' must be used as '{hint}'", concept.canonical),
     })
-}
-
-/// Builds advice for a legacy spelling of a glossary concept.
-fn near_miss_advice(concept: &GlobalOptionConcept, name: &str) -> PolicyAdvice {
-    let hint = replacement_hint(concept);
-    let bare = name.trim_start_matches('-');
-    PolicyAdvice {
-        code: codes::POLICY_GLOBAL_OPTION_NEAR_MISS,
-        option: Some(bare.to_owned()),
-        message: format!("option '--{bare}' is a legacy spelling; use '{hint}'"),
-    }
-}
-
-/// Builds advice for a documented off-policy flag spelling.
-fn off_policy_advice(name: &str, replacement: &str) -> PolicyAdvice {
-    let bare = name.trim_start_matches('-');
-    PolicyAdvice {
-        code: codes::POLICY_NONCANONICAL_FLAG,
-        option: Some(bare.to_owned()),
-        message: format!("option '--{bare}' is off policy; use '{replacement}'"),
-    }
 }
 
 /// Returns whether an exception name matches the observed name.

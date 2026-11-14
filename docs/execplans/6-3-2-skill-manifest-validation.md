@@ -224,6 +224,24 @@ explicitly approves it and the prerequisites below are complete.
   `origin/main` that advanced mid-operation; the replay was repeated onto the
   newer head so no main content appears deleted. Gates were then rerun on the
   replayed candidate.
+- [x] (2026-11-14) Cleared the seven CodeScene delta findings against
+  `724839c4`. Five production and test files were refactored to a code health
+  score of 10.00: `validate/mod.rs` and `validate/examples.rs` build findings
+  through `FindingData` constructors instead of a three-field literal at each
+  site, `policy_check.rs` resolves through a `ClaimPolicy` borrow carrying the
+  policy, path, and name once, and the duplicated test pairs in `tests.rs`,
+  `tests_policy.rs`, and `tests/skill_validation_e2e.rs` became parameterized
+  `rstest` cases over a small domain type. The two remaining files are
+  test-only fixture builders, so `.codescene/code-health-rules.json` disables
+  the single "String Heavy Function Arguments" rule for exactly those two
+  paths, with a `matching_content_path_doc` stating why.
+  `cs rules-config validate` accepts it and `cs check` reports 10.00 for every
+  changed file.
+- [x] (2026-11-14) Re-ran the focused Clippy pass after the refactor: the
+  `unused_self` and two `missing_const_for_fn` findings it raised were fixed in
+  place, and
+  `cargo clippy -p cargo-orthohelp --all-targets --all-features -- -D warnings`
+  now exits 0.
 
 ## Surprises & discoveries
 
@@ -275,6 +293,14 @@ explicitly approves it and the prerequisites below are complete.
   identifier in `EXPECTED_EXAMPLE_IDS`. Impact: a non-Rust transcript fence
   needs its own `<!-- tested-example: id -->` marker and an entry in that
   allowlist, or `every_documented_fence_has_a_known_unique_identifier` fails.
+- Observation (2026-11-14): CodeScene's "String Heavy Function Arguments"
+  factor counts `&str`, `&[&str]`, and `&[String]` parameters but not
+  `Option<&str>`, and computes the reported percentage as string arguments over
+  all arguments including `&self`. That makes a fixture builder such as
+  `command(&[&str], &[&str])` score badly even though the literal names are
+  precisely what the test is about. Impact: production modules were reshaped so
+  the names travel inside one struct, and the two test-support modules keep
+  their signatures under a path-scoped rule weight of 0.0.
 - Prior art: the Agent Skills specification defines YAML frontmatter and
   Markdown body but no standardized command/example grammar for arbitrary
   prose. It points to `skills-ref` for structure and naming validation. This
@@ -284,6 +310,16 @@ explicitly approves it and the prerequisites below are complete.
 
 ## Decision log
 
+- Decision (2026-11-14): Customize code health with
+  `.codescene/code-health-rules.json` rather than by reshaping test-support
+  signatures. The file holds one rule set per path and nothing else, so every
+  other rule keeps its default weight on the files it names, and each set
+  carries a `matching_content_path_doc` recording the reason. Disabling the
+  factor for two test-only fixture modules is CodeScene's own documented
+  test-code leniency; the alternative was wrapping roughly three hundred call
+  sites in newtypes or widening parameters to `impl AsRef<str>`, both of which
+  make the tests harder to read for a metric rather than for a reader.
+  Date/Author: 2026-11-14, execution of the approved plan.
 - Decision (2026-11-14): Execute the return-to-main step that the 2026-11-09
   decision deferred. PR #664 merged on 2026-11-11 as `eaf4c028`; the branch's
   eleven own commits were replayed with `--onto origin/main 501ab831`. The

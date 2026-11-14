@@ -9,18 +9,18 @@
 use pretty_assertions::assert_eq;
 use rstest::rstest;
 
+use super::assertions::{assert_clean, assert_partial, assert_structural};
 use super::input::{
     CommandContract, CommandSurfaceError, EffectiveCommandSurface, EffectiveOption,
     ExampleExtraction,
 };
-use super::report::{Coverage, FindingCategory, ValidationStatus, codes};
+use super::report::{Coverage, codes};
 use super::support::{
-    codes_of, command, command_with_verb, example, input, manifest, only, option_use, policy,
-    reference, surface,
+    codes_of, command, command_with_verb, example, input, manifest, only, option_use, path, policy,
+    reference, surface, validate_tool_references,
 };
 use super::validate;
 use crate::policy::PolicyMode;
-use crate::policy::PolicySeverity;
 
 #[test]
 fn empty_input_is_complete_and_empty() {
@@ -31,12 +31,8 @@ fn empty_input_is_complete_and_empty() {
     )
     .expect("an empty surface is unambiguous");
 
-    assert_eq!(report.findings, Vec::new());
     assert_eq!(report.coverage, Coverage::default());
-    assert_eq!(report.status, ValidationStatus::Complete);
-    assert!(report.is_complete());
-    assert!(!report.has_structural_findings());
-    assert!(!report.has_policy_findings());
+    assert_clean(&report);
 }
 
 #[test]
@@ -68,52 +64,42 @@ fn resolved_nested_reference_produces_no_findings() {
     );
 }
 
-#[test]
-fn unknown_path_does_not_cascade_into_flags() {
-    let commands = surface(vec![command(&["tool"], &["json"])]);
-    let claims = input(
-        vec![manifest(
-            "operation-skill",
-            vec![reference(&["tool", "missing"], &["json", "bogus"])],
-        )],
-        Vec::new(),
-    );
-
-    let report =
-        validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
-
-    let finding = only(&report);
-    assert_eq!(finding.code, codes::UNKNOWN_PATH);
-    assert_eq!(finding.category, FindingCategory::Structural);
-    assert_eq!(
-        finding.severity,
-        PolicySeverity::Deny,
-        "structural findings ignore the policy mode"
-    );
-    assert_eq!(
-        finding.command_path,
-        vec!["tool".to_owned(), "missing".to_owned()]
-    );
-    assert_eq!(report.coverage.resolved_command_references, 0);
+/// What an unresolvable reference is anchored to in its finding.
+#[derive(Clone, Copy)]
+enum Anchor {
+    /// The whole command path, which the surface does not declare.
+    Path(&'static [&'static str]),
+    /// One flag name, which the resolved command does not accept.
+    Option(&'static str),
 }
 
-#[test]
-fn unknown_flag_is_reported_once_per_flag() {
-    let commands = surface(vec![command(&["tool"], &["json"])]);
-    let claims = input(
-        vec![manifest(
-            "operation-skill",
-            vec![reference(&["tool"], &["json", "yaml", "yaml"])],
-        )],
-        Vec::new(),
-    );
-
-    let report =
-        validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
+#[rstest]
+#[case(
+    &["tool", "missing"],
+    &["json", "bogus"],
+    codes::UNKNOWN_PATH,
+    Anchor::Path(&["tool", "missing"])
+)]
+#[case(
+    &["tool"],
+    &["json", "yaml", "yaml"],
+    codes::UNKNOWN_FLAG,
+    Anchor::Option("yaml")
+)]
+fn an_unresolvable_reference_yields_one_anchored_finding(
+    #[case] reference_path: &[&str],
+    #[case] flags: &[&str],
+    #[case] code: &str,
+    #[case] anchor: Anchor,
+) {
+    let report = validate_tool_references(vec![reference(reference_path, flags)], PolicyMode::Off);
 
     let finding = only(&report);
-    assert_eq!(finding.code, codes::UNKNOWN_FLAG);
-    assert_eq!(finding.option.as_deref(), Some("yaml"));
+    assert_structural(finding, code);
+    match anchor {
+        Anchor::Path(segments) => assert_eq!(finding.command_path, path(segments)),
+        Anchor::Option(name) => assert_eq!(finding.option.as_deref(), Some(name)),
+    }
     assert_eq!(report.coverage.resolved_command_references, 0);
 }
 
@@ -133,9 +119,9 @@ fn duplicate_manifest_id_is_reported_on_the_repeat() {
 
     let finding = only(&report);
     assert_eq!(finding.code, codes::DUPLICATE_MANIFEST_ID);
-    assert_eq!(finding.manifest_id, "dup");
     assert_eq!(
-        finding.source_ordinal, 2,
+        (finding.manifest_id.as_str(), finding.source_ordinal),
+        ("dup", 2),
         "the second manifest is the repeat"
     );
     assert_eq!(
@@ -187,10 +173,14 @@ fn unsupported_examples_are_unchecked_and_make_the_report_partial() {
         validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
 
     assert_eq!(report.findings, Vec::new());
-    assert_eq!(report.coverage.examples_checked, 0);
-    assert_eq!(report.coverage.examples_unchecked, 1);
-    assert_eq!(report.status, ValidationStatus::Partial);
-    assert!(!report.is_complete());
+    assert_eq!(
+        (
+            report.coverage.examples_checked,
+            report.coverage.examples_unchecked
+        ),
+        (0, 1)
+    );
+    assert_partial(&report);
 }
 
 #[test]

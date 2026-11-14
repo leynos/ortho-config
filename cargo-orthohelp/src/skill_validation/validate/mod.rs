@@ -19,6 +19,7 @@ use super::report::{
     Coverage, FindingCategory, SkillValidationReport, ValidationFinding, ValidationStatus, codes,
 };
 use super::resolve::{CommandIndex, join_path};
+use crate::policy::PolicySeverity;
 
 mod examples;
 mod manifest_index;
@@ -36,14 +37,46 @@ struct ClaimRef<'a> {
     path: &'a [String],
 }
 
-/// A structural finding before it is anchored and ordered.
+/// A finding before it is anchored and ordered.
 struct FindingData {
+    /// Structural or policy origin, which also fixes the severity rule.
+    category: FindingCategory,
     /// Stable finding code.
     code: &'static str,
     /// Option or flag name when relevant.
     option: Option<String>,
     /// Human-readable diagnostic.
     message: String,
+}
+
+impl FindingData {
+    /// A broken claim, denied whatever the configured policy mode says.
+    const fn structural(code: &'static str, option: Option<String>, message: String) -> Self {
+        Self {
+            category: FindingCategory::Structural,
+            code,
+            option,
+            message,
+        }
+    }
+
+    /// Policy advice for a claim that already resolved.
+    fn advisory(advice: PolicyAdvice) -> Self {
+        Self {
+            category: FindingCategory::Policy,
+            code: advice.code,
+            option: advice.option,
+            message: advice.message,
+        }
+    }
+
+    /// Returns the severity this finding carries under `policy`.
+    const fn severity(&self, policy: &ResolvedAgentPolicy) -> PolicySeverity {
+        match self.category {
+            FindingCategory::Structural => PolicySeverity::Deny,
+            FindingCategory::Policy => policy.severity(),
+        }
+    }
 }
 
 /// State for one validation call.
@@ -108,14 +141,14 @@ impl<'a> Validator<'a> {
                 source_ordinal: position.saturating_add(1),
                 path: &[],
             },
-            FindingData {
-                code: codes::DUPLICATE_MANIFEST_ID,
-                option: None,
-                message: format!(
+            FindingData::structural(
+                codes::DUPLICATE_MANIFEST_ID,
+                None,
+                format!(
                     "manifest ID '{}' is declared more than once; examples for it are ambiguous",
                     manifest.id
                 ),
-            },
+            ),
         );
     }
 
@@ -137,14 +170,14 @@ impl<'a> Validator<'a> {
         if self.index.command(&reference.path).is_none() {
             self.push_structural(
                 claim,
-                FindingData {
-                    code: codes::UNKNOWN_PATH,
-                    option: None,
-                    message: format!(
+                FindingData::structural(
+                    codes::UNKNOWN_PATH,
+                    None,
+                    format!(
                         "command path '{}' is not declared by the command surface",
                         join_path(&reference.path)
                     ),
-                },
+                ),
             );
             return;
         }
@@ -171,14 +204,14 @@ impl<'a> Validator<'a> {
         if !accepted {
             self.push_structural(
                 claim,
-                FindingData {
-                    code: codes::UNKNOWN_FLAG,
-                    option: Some(flag.to_owned()),
-                    message: format!(
+                FindingData::structural(
+                    codes::UNKNOWN_FLAG,
+                    Some(flag.to_owned()),
+                    format!(
                         "flag '{flag}' is not accepted by '{}'",
                         join_path(claim.path)
                     ),
-                },
+                ),
             );
             return false;
         }
@@ -199,35 +232,29 @@ impl<'a> Validator<'a> {
 
     /// Appends a structural finding anchored to `claim`.
     fn push_structural(&mut self, claim: ClaimRef<'_>, data: FindingData) {
+        self.push(claim, data);
+    }
+
+    /// Appends policy advice, when there is any.
+    fn push_advice(&mut self, claim: ClaimRef<'_>, advice: Option<PolicyAdvice>) {
+        if let Some(policy_advice) = advice {
+            self.push(claim, FindingData::advisory(policy_advice));
+        }
+    }
+
+    /// Appends one anchored finding, carrying the severity its category fixes.
+    fn push(&mut self, claim: ClaimRef<'_>, data: FindingData) {
         self.findings.push((
             claim.order,
             ValidationFinding {
-                category: FindingCategory::Structural,
+                category: data.category,
                 code: data.code.to_owned(),
-                severity: crate::policy::PolicySeverity::Deny,
+                severity: data.severity(self.policy),
                 manifest_id: claim.manifest_id.to_owned(),
                 source_ordinal: claim.source_ordinal,
                 command_path: claim.path.to_vec(),
                 option: data.option,
                 message: data.message,
-            },
-        ));
-    }
-
-    /// Appends policy advice, when there is any.
-    fn push_advice(&mut self, claim: ClaimRef<'_>, advice: Option<PolicyAdvice>) {
-        let Some(policy_advice) = advice else { return };
-        self.findings.push((
-            claim.order,
-            ValidationFinding {
-                category: FindingCategory::Policy,
-                code: policy_advice.code.to_owned(),
-                severity: self.policy.severity(),
-                manifest_id: claim.manifest_id.to_owned(),
-                source_ordinal: claim.source_ordinal,
-                command_path: claim.path.to_vec(),
-                option: policy_advice.option,
-                message: policy_advice.message,
             },
         ));
     }

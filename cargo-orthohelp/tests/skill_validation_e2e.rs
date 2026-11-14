@@ -20,6 +20,7 @@ use cargo_orthohelp::skill_validation::{
     EffectiveCommandSurface, ManifestClaims, NormalizedExample, ResolvedAgentPolicy,
     SkillValidationInput, SkillValidationReport, codes, validate,
 };
+use rstest::rstest;
 
 /// Error type for the fixture helpers.
 type TestError = Box<dyn Error>;
@@ -64,22 +65,41 @@ fn fenced_json_after<'a>(markdown: &'a str, heading: &str) -> Result<&'a str, St
     Ok(body.trim())
 }
 
-/// Reads one fixture document.
-fn read_markdown(directory: &str) -> Result<String, TestError> {
-    let relative = Utf8PathBuf::from(directory).join("SKILL.md");
-    Ok(fixture_dir()?.read_to_string(relative)?)
+/// One checked-in fixture directory under `tests/fixtures/skills`.
+///
+/// A fixture is named by its own directory, and its manifest ID is that same
+/// name, so the type keeps the two from drifting apart.
+#[derive(Clone, Copy)]
+struct Fixture(&'static str);
+
+impl Fixture {
+    /// Reads this fixture's Markdown source.
+    fn markdown(self) -> Result<String, TestError> {
+        let relative = Utf8PathBuf::from(self.0).join("SKILL.md");
+        Ok(fixture_dir()?.read_to_string(relative)?)
+    }
+
+    /// Parses this fixture's command claims out of its Markdown source.
+    fn manifest(self, markdown: &str) -> Result<ManifestClaims, TestError> {
+        let commands = serde_json::from_str(fenced_json_after(markdown, COMMAND_INDEX_HEADING)?)?;
+        Ok(ManifestClaims {
+            id: self.0.to_owned(),
+            commands,
+        })
+    }
+
+    /// Validates this fixture's claims against the shared command surface.
+    fn validate(self) -> Result<SkillValidationReport, TestError> {
+        let markdown = self.markdown()?;
+        let input = SkillValidationInput {
+            manifests: vec![self.manifest(&markdown)?],
+            examples: parse_examples(&markdown)?,
+        };
+        Ok(validate(&input, &load_surface()?, &deny_policy())?)
+    }
 }
 
-/// Parses one fixture document into command claims.
-fn parse_manifest(markdown: &str, id: &str) -> Result<ManifestClaims, TestError> {
-    let commands = serde_json::from_str(fenced_json_after(markdown, COMMAND_INDEX_HEADING)?)?;
-    Ok(ManifestClaims {
-        id: id.to_owned(),
-        commands,
-    })
-}
-
-/// Parses one fixture document into normalized examples.
+/// Parses normalized examples out of Markdown source.
 fn parse_examples(markdown: &str) -> Result<Vec<NormalizedExample>, TestError> {
     Ok(serde_json::from_str(fenced_json_after(
         markdown,
@@ -102,16 +122,6 @@ const fn deny_policy() -> ResolvedAgentPolicy {
     }
 }
 
-/// Validates one fixture document and returns its report.
-fn validate_fixture(directory: &str, id: &str) -> Result<SkillValidationReport, TestError> {
-    let markdown = read_markdown(directory)?;
-    let input = SkillValidationInput {
-        manifests: vec![parse_manifest(&markdown, id)?],
-        examples: parse_examples(&markdown)?,
-    };
-    Ok(validate(&input, &load_surface()?, &deny_policy())?)
-}
-
 /// Returns the finding codes present in a report.
 fn codes_of(report: &SkillValidationReport) -> Vec<&str> {
     report
@@ -130,9 +140,11 @@ fn option_names(examples: &[NormalizedExample]) -> Vec<String> {
         .collect()
 }
 
-#[test]
-fn the_operation_fixture_validates_cleanly() {
-    let report = validate_fixture("operation", "operation").expect("the fixture validates");
+#[rstest]
+#[case(Fixture("operation"), 1)]
+#[case(Fixture("build-workflow"), 2)]
+fn a_supplied_fixture_validates_cleanly(#[case] fixture: Fixture, #[case] examples_checked: usize) {
+    let report = fixture.validate().expect("the fixture validates");
 
     assert!(
         report.findings.is_empty(),
@@ -141,28 +153,14 @@ fn the_operation_fixture_validates_cleanly() {
     );
     assert_eq!(report.coverage.command_references, 1);
     assert_eq!(report.coverage.resolved_command_references, 1);
-    assert_eq!(report.coverage.examples_checked, 1);
-    assert!(report.is_complete());
-}
-
-#[test]
-fn the_build_workflow_fixture_validates_cleanly() {
-    let report =
-        validate_fixture("build-workflow", "build-workflow").expect("the fixture validates");
-
-    assert!(
-        report.findings.is_empty(),
-        "unexpected findings: {:?}",
-        codes_of(&report)
-    );
-    assert_eq!(report.coverage.command_references, 1);
-    assert_eq!(report.coverage.examples_checked, 2);
+    assert_eq!(report.coverage.examples_checked, examples_checked);
     assert!(report.is_complete());
 }
 
 #[test]
 fn source_drift_flows_into_the_extracted_record_and_the_report() {
-    let markdown = read_markdown("build-workflow").expect("the fixture reads");
+    let fixture = Fixture("build-workflow");
+    let markdown = fixture.markdown().expect("the fixture reads");
     let baseline = parse_examples(&markdown).expect("the baseline parses");
     assert_eq!(option_names(&baseline), vec!["json", "color"]);
 
@@ -178,7 +176,9 @@ fn source_drift_flows_into_the_extracted_record_and_the_report() {
 
     let input = SkillValidationInput {
         manifests: vec![
-            parse_manifest(&drifted, "build-workflow").expect("the drifted manifest parses"),
+            fixture
+                .manifest(&drifted)
+                .expect("the drifted manifest parses"),
         ],
         examples,
     };
