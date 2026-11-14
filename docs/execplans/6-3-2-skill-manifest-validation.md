@@ -349,6 +349,26 @@ explicitly approves it and the prerequisites below are complete.
   mutant (`oracle_ignoring_acceptance`), and the fixture marks `color` global
   with a source value-drift test that asserts the extracted value and the
   resulting `skill.policy.global_option_value` finding.
+- [x] (2026-11-14) Fourth hosted completeness assessment returned a **clear**
+  whole-plan verdict for this candidate. Assessment-ID
+  `632-completeness-20261114-0bc29528`, base `54dab732`, head `0bc29528`, plan
+  revision blob `a30c92fc`, which matches the blob at that head. The reply
+  confirmed all three prior findings addressed in source and reported no
+  remaining in-scope defect. It added two limits, both dispositioned: hosted
+  jobs still running at lookup time, and Gecko reporting from its initial-scan
+  results. The hosted jobs have since completed green, and Gecko's check run
+  for this head concludes `success` with "No vulnerabilities found" under its
+  configured initial-PR-open scan mode; the changes since that scan add no
+  dependency, network boundary, or `unsafe` block.
+- [x] (2026-11-14) Published the repaired candidate and marked the pull request
+  ready. Hosted checks on `0bc29528` are green: `build-test` (linux and
+  windows), `msrv`, both advisory Clippy legs, all three packaging dry runs,
+  the CodeScene code-health gate, and the Gecko security review. Marking ready
+  triggered an automatic review that CodeRabbit rate-limited ("next included
+  review available in 23 minutes"), so one formal review was queued through
+  `comenq` as `c0557915` (ETA about 6 h 23 m). The description now records the
+  final candidate, the three assessment repair rounds, the fourth clear
+  verdict, and the `resolve.rs` code-health repair.
 
 ## Surprises & discoveries
 
@@ -533,6 +553,14 @@ explicitly approves it and the prerequisites below are complete.
   sites in newtypes or widening parameters to `impl AsRef<str>`, both of which
   make the tests harder to read for a metric rather than for a reader.
   Date/Author: 2026-11-14, execution of the approved plan.
+- Decision (2026-11-14): Repair the `String Heavy Function Arguments` finding
+  in `skill_validation/resolve.rs` with domain wrappers, not a rule exception.
+  `CommandPath`, `OptionName`, and `RenderedPath` state which string is a path,
+  a name, or a rendered diagnostic, so the declared types also stop a lookup
+  from swapping a path for an option name. The path-scoped rule weight stays
+  confined to the two test-support modules, where the literal names are the
+  test's subject and a wrapper would only obscure it. Date/Author: 2026-11-14,
+  execution of the approved plan.
 - Decision (2026-11-14): Execute the return-to-main step that the 2026-11-09
   decision deferred. PR #664 merged on 2026-11-11 as `eaf4c028`; the branch's
   eleven own commits were replayed with `--onto origin/main 501ab831`. The
