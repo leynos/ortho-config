@@ -792,11 +792,37 @@ split_subcommands_into_functions = false
 help_info_uri = "https://example.com/help/MyApp"
 ```
 
+#### 6.1.1 `root_type` grammar
+
+`root_type` is spliced into the generated bridge source, so both the
+`--root-type` flag and `package.metadata.ortho_config.root_type` must parse as
+a restricted Rust type path before generation:
+
+```plaintext
+root_type  = segment, { "::", segment } ;
+segment    = Rust identifier ;
+```
+
+The accepted forms are a bare type name (`AppConfig`), a package-relative path
+(`crate::AppConfig`), and a fully qualified path (`my_app::AppConfig`). A bare
+name and a `crate::` prefix are both rewritten to the selected package's crate
+name, because the bridge is a separate crate. The parsed path is rendered from
+its syntax tree, and that rendered value is what the cache key and the
+generated source receive.
+
+Generics and parenthesized path arguments (`Config<T>`, `Fn(A) -> B`), tuples
+(`(A, B)`), references (`&Config`), qualified self types
+(`<Config as Trait>::Assoc`), global paths (`::my_app::Config`), and any
+statement- or expression-shaped input are rejected with an `InvalidRootType`
+diagnostic. Parsing rather than pattern matching is essential: the value must
+never reach the generated source as text the caller controls.
+
 ### 6.2 Pipeline
 
 1. Discover the package with `cargo metadata`.
 2. Determine the root type from CLI or metadata. If missing, emit an error
-   with remediation guidance.
+   with remediation guidance. Parse the value as the restricted type path in
+   §6.1.1 and reject any other form before generating source.
 3. Select the ephemeral bridge's IR cache entry under
    `target/orthohelp/<hash>/`, then create invocation-private bridge inputs:
    - Dependencies: `user_crate`, `ortho_config`.

@@ -2,6 +2,9 @@
 
 mod fixtures;
 
+use camino::Utf8Path;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 use insta::assert_snapshot;
 use rstest::rstest;
 use std::error::Error;
@@ -108,6 +111,18 @@ fn help_output_matches_snapshots(
     "invalid value '9'",
     None
 )]
+#[case::injection_shaped_root_type(
+    &[
+        "orthohelp",
+        "--package",
+        "orthohelp_fixture",
+        "--root-type",
+        "Config as OrthoConfigDocs>::get_doc_metadata(); std::process::exit(1); let _ = <Config",
+    ],
+    "injection-shaped root type should fail",
+    "InvalidRootType",
+    None
+)]
 fn command_failure_cases(
     #[case] args: &[&str],
     #[case] failure_message: &str,
@@ -142,6 +157,44 @@ fn direct_invocation_without_subcommand_includes_cargo_hint() {
         ),
         "unexpected error output:\n{stderr}"
     );
+}
+
+#[test]
+fn metadata_root_type_injection_is_rejected() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let package_dir = tempfile::tempdir()?;
+    let package_path = Utf8Path::from_path(package_dir.path())
+        .ok_or("temporary package path should be valid UTF-8")?;
+    let dir = Dir::open_ambient_dir(package_path, ambient_authority())?;
+    dir.create_dir("src")?;
+    dir.write("src/lib.rs", "pub struct Config;\n")?;
+    dir.write(
+        "Cargo.toml",
+        concat!(
+            "[package]\n",
+            "name = \"root_type_injection_fixture\"\n",
+            "version = \"0.1.0\"\n",
+            "edition = \"2024\"\n",
+            "\n",
+            "[package.metadata.ortho_config]\n",
+            "root_type = \"Config as OrthoConfigDocs>::get_doc_metadata(); ",
+            "std::process::exit(1); let _ = <Config\"\n",
+        ),
+    )?;
+
+    let exe = fixtures::cargo_orthohelp_exe()?;
+    let output = Command::new(exe.as_str())
+        .current_dir(package_dir.path())
+        .args(["orthohelp", "--format", "agent-context", "--out-dir", "out"])
+        .output()?;
+
+    if output.status.success() {
+        return Err("metadata root type injection should fail".into());
+    }
+    let stderr = stderr(&output);
+    if !stderr.contains("InvalidRootType") {
+        return Err(format!("unexpected diagnostic:\n{stderr}").into());
+    }
+    Ok(())
 }
 
 #[rstest]
