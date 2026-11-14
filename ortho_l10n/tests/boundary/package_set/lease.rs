@@ -67,6 +67,10 @@
 mod lease_tests;
 
 #[cfg(test)]
+#[path = "contention_tests.rs"]
+mod contention_tests;
+
+#[cfg(test)]
 #[path = "lease_shape_tests.rs"]
 mod lease_shape_tests;
 
@@ -88,9 +92,11 @@ pub(crate) const LEASE_FILE_NAME: &str = ".packaging.lease";
 /// How often a blocked contract re-checks the lease and the record.
 ///
 /// The packaging step is measured in hundreds of seconds, so polling this
-/// often costs nothing measurable while keeping the hand-off prompt. The bound
-/// is pinned by `the_lease_poll_interval_stays_a_handoff`, and the hand-off it
-/// promises is pinned by `a_waiter_wakes_promptly_after_the_holder_releases`.
+/// often costs nothing measurable while keeping the hand-off prompt. Both
+/// properties it promises are pinned behaviourally, in
+/// [`super::lease::contention_tests`]: a waiter behind a holder takes the step
+/// within the bound once the lease is released, and reuses the roots the holder
+/// records while it waits.
 pub(crate) const LEASE_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 /// A lease held for the whole of the packaging step.

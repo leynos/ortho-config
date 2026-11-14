@@ -495,11 +495,51 @@ never reaches `claim`, so the case would pass with the re-check deleted. The
 case drives `claim`, which is where the re-check lives and the only seam that
 discriminates the two implementations; the test's doc says so.
 
+A third round found the remaining hole, and found it precisely. Every case then
+in `lease_tests.rs` starts at an *edge* of the lease's life:
+`a_held_lease_is_reported_as_a_wait` uses a spent deadline, so the refusal is
+reported without looping, and
+`a_waiter_wakes_promptly_after_the_holder_releases` starts with the lease
+already free. Neither drives the polling loop under contention, so a `prepare`
+that refused contention immediately - or one that slept until the deadline -
+passed both. `contention_tests.rs` now starts a waiter in a second thread
+behind a lease held in this process and observes it there:
+
+- `a_waiter_behind_a_holder_takes_the_step_once_it_is_released` proves the
+  waiter is still waiting after a window of five poll intervals, releases the
+  holder, and requires `Prepared::Owned` within the hand-off bound. This is the
+  case that was missing: the hand-off on release, observed from the waiting
+  side.
+- `a_waiter_reuses_the_roots_the_holder_records_while_it_waits` records through
+  the holder and requires `Prepared::Reused` *without* releasing it. This is
+  the saving in its strongest form and it corrects a claim in the earlier
+  disposition: `prepare` re-reads the record at the top of every iteration, so
+  a waiter can and should be answered by the record while the holder still owns
+  the lease. Saying it must not return before release was wrong, and the case
+  pins the correct behaviour instead.
+
+Both cases hold the lease in the test's own process, which models a second
+process on both platforms for two different reasons: Unix locks are held per
+open file description, so a second open contends, and Windows denies every
+other open of the file outright.
+
+Two mutations size the pair, and each isolates one defect:
+
+- Reporting the contention refusal at once makes **both** new cases fail, while
+  all 12 pre-existing lease cases stay green - the exact claim that the
+  existing suite did not reach the polling loop.
+- Reading the record only on arrival, never inside the loop, fails **only**
+  `a_waiter_reuses_the_roots_the_holder_records_while_it_waits`, while the
+  hand-off case stays green. So the pair is not one test written twice.
+
+Both mutations were restored and verified byte-identical with `cmp`.
+
 ## Progress
 
 - [x] Baseline established; decomposed into the starvation mechanisms above.
 - [x] D1 lease implemented, wired through `roots`/`mod`/`closure`, exempted in
-      `dylint.toml`, and covered by 8 regressions.
+      `dylint.toml`, and covered by regressions in `lease_tests.rs`,
+      `contention_tests.rs` and `lease_shape_tests.rs`.
 - [x] D2 (`--no-verify` + unpacker) designed, implemented, and deleted against
       the developers' guide.
 - [ ] D3: move the metadata-only workspace closure assertions off the compile.
@@ -509,10 +549,11 @@ discriminates the two implementations; the test's doc says so.
       compile in the after-run is spent on is `cargo package --verify`, whose
       whole purpose *is* the compile, and the pair costs 1,144 s measured
       against a 900 s allowance. See "Why D3 is not delivered".
-- [x] D4: regression contract. `lease_tests.rs` pins the reuse scope, the lease,
-      the record lifetime and the poll interval as 8 `rstest` cases, and
-      `boundary_packaging_test.py` proves the deadline arithmetic from source
-      so a budget can never be raised past the nextest allowance silently.
+- [x] D4: regression contract. `lease_tests.rs`, `contention_tests.rs` and
+      `roots_tests.rs` pin the reuse scope, the lease, the record lifetime and
+      the wait itself, and `boundary_packaging_test.py` proves the deadline
+      arithmetic from source so a budget can never be raised past the nextest
+      allowance silently.
 - [x] After-run on this loaded host with contention present in the log:
       `/tmp/boundary-after-harden-boundary-deadline-evidence-20261113.out`,
       42 passed / 10 failed / 10 ignored in 908.29 s against the baseline's
