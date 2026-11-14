@@ -303,6 +303,38 @@ shares successful roots and retains failures from unbounded packaging attempts,
 but does not cache a failure caused by a caller's sequence deadline. A later
 caller with time remaining can retry.
 
+That cache does not deduplicate across nextest's processes, so the packaged
+contracts additionally take a **cross-process lease** on the packaging target
+(`ortho_l10n/tests/boundary/package_set/lease.rs`). One contract locks
+`.packaging.lease` for the whole packaging step and records the roots complete
+only once both invocations have succeeded; the others find the record and read
+the roots without packaging. Without it, six contracts each emptied the
+process-local cache in their own process and ran both invocations, so one run
+packaged the same sources six times.
+
+The record names `NEXTEST_RUN_ID`, so the reuse spans one run and no wider. A
+later run may be reading sources that have changed, and nothing here can
+cheaply prove it is not; a per-run record needs no such proof, because the run
+that reads the roots is the run that wrote them. Widening the reuse to the
+target directory's lifetime would trade that proof for wall time. With no run
+identifier - `cargo test` and `make boundary` - no record is written and none
+is trusted, and the lease degrades to a plain mutex over the packaging step,
+which the process-local cache already deduplicates.
+
+Two properties are worth keeping in mind when editing it. The lease is held for
+the packaging step alone, never while a contract reads the roots, so readers do
+not block once the roots exist. And the record is removed before the roots are
+replaced, so a failed step leaves no record and no later contract reads a
+half-replaced set as whole.
+
+The lease does not make the suite fit its allowance by itself: a cold pair has
+been measured at 1,144 s on this host with compile admission bypassed, which is
+the whole 960 s override for one test. It removes the six-fold repetition of
+that cost, not the cost. `lease_tests.rs` pins each property separately,
+including that the packaging boundary is entered from one call site, because no
+single contract's runtime observation can see a second call site in another
+module.
+
 The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
 against the 600 s base allowance. They were reached on a shared host while the
 children queued behind 340 compile-admission requests, and the timeout error
