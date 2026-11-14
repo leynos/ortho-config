@@ -156,8 +156,31 @@ stopping and reporting.
       to carry consumer copy. Realigned the example with the sentinel contract
       (its consumer override now targets `clap-error-invalid-subcommand`) and
       updated design §4.12 and the users' guide; `hello_world --lib` is green.
-- [ ] M2: implement the test-only reviewed count assertion, pre-publication
-      inventory gate, and fault-detection evidence.
+- [x] (2026-11-14) M1 committed as `54a7e97e` after a full gate certificate on
+      frozen tree `2f37742e`: `check-fmt`, `typecheck`, `lint`, `test`,
+      `markdownlint`, and `nixie` all passed, plus `cargo test -p ortho_config
+      --doc` (80 passed). `make test` reported 2468 passed, 0 failed, 37
+      ignored across 112 binaries, with the pytest step green (119 passed, 16
+      skipped). `clap_error_matrix` (22), `clap_error_translations` (21),
+      `clap_error_cli` (5), and `localised_help` (19) all executed.
+- [x] (2026-11-14) M2: added the test-only publication gate.
+      `clap_error_coverage` reads `cargo metadata --locked --offline`, resolves
+      `clap` and `clap_builder` across the normal facade edge, cross-checks
+      both against the workspace lock (version, source, checksum, and edge),
+      locates the `ErrorKind` source through metadata's `manifest_path`, and
+      compares the `syn`-parsed variant count with `CLAP_ERROR_KIND_COUNT`. The
+      same constant drives `static_assertions::const_assert_eq!` in the matrix
+      test. Committed fixtures cover the supported and an unknown identity,
+      checksum and source drift, a missing facade edge, an ambiguous builder,
+      variant drift, a feature-gated variant, a duplicate definition, a file
+      without a definition, and malformed input; three `proptest` properties
+      cover declaration order, shape, comments, discriminants, conditional
+      variants, and truncation. The target reports 17 passed. Controls: 16 in
+      place of 17 failed the const assertion with `E0080` at the assertion
+      line, and replacing the `DisplayVersion` matrix row with a duplicate
+      `DisplayHelp` row at unchanged length failed `matrix_kinds_are_unique`,
+      `display_only_rows_are_the_three_render_variants`, and the
+      `display_version` inventory case. Both mutations were restored.
 - [ ] M3: finish consumer documentation and mark roadmap task done.
 
 ## Surprises & discoveries
@@ -214,6 +237,19 @@ subcommand message. The new sentinel contract requires pass-through instead.
 The current formatter reconstructs translated errors and preserves only a
 rendered tail. Rich structured context preservation remains task 11.2.2.
 
+A full local `make test` run can fail on the `ortho_l10n` boundary contract
+without any defect in this change:
+`consumer::workspace_facade_consumer_builds_and_tests` builds a cold
+138-package consumer under the fixed 440 s `CARGO_DEADLINE` in
+`ortho_l10n/tests/boundary/fixture_cargo/environment.rs`. On a saturated
+compile-admission pool that budget expires while third-party crates are still
+compiling, and the runner kills the tree. The discriminator is that the failure
+reports a deadline with no rustc diagnostic.
+`target/localization-boundary/cargo-target` is shared by every fixture, so
+`make boundary` warms it and the next `make test` finishes the same test in
+about 90 s. Treat a first-run deadline as environmental, warm the fixture
+target, and re-run the gate instead of changing the deadline or the test.
+
 M1 (2026-11-10) confirmed five implementation facts. clap's stock `NoEquals`
 text is "equal sign is needed when assigning values to '--colour'", not the
 "required" wording the catalogue uses, so the fallback control asserts "needed".
@@ -232,6 +268,24 @@ the missing-input BDD scenario, reporting that the catalogue was consulted
 once. Deleting the `clap-error-no-equals` message failed the catalogue-presence
 test, the real-parse `NoEquals` case, and the rendered snapshot. After both
 edits were reverted, every affected suite returned green.
+
+M2 (2026-11-14) settled where the duplicate-plus-omission control belongs. The
+`rstest` case table *is* the enumeration of supported kinds, so a duplicated
+case line silently drops the kind it replaced. The control therefore applies to
+`CLAP_ERROR_IDS`, the inventory the suite consumes: replacing the
+`DisplayVersion` row with a second `DisplayHelp` row keeps the length at 17 and
+fails three independent checks. A duplicated case line remains undetectable by
+construction; the production matrix, the reviewed constant, and the publication
+gate are what bound the enumeration.
+
+The gate uses `cargo metadata --locked --offline` with the workspace's default
+feature resolution and every target platform. `clap` and `clap_builder` are
+unconditional dependencies, so a wider graph cannot hide the facade edge, and a
+`cfg`-conditional declaration in the resolved source fails closed rather than
+narrowing the count.
+
+`cargo fmt` here is rustfmt's own `cargo-fmt` 1.10.0, which rejects
+`--workspace`; `make check-fmt` uses `--all`, so use `--all` in ad-hoc runs.
 
 ## Decision log
 

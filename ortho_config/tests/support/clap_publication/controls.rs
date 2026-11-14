@@ -1,0 +1,189 @@
+//! Durable negative controls for the publication gate.
+//!
+//! ADR-0020 requires each refusal to be demonstrated against a committed
+//! fixture, so these tests are ordinary unit tests over
+//! `tests/fixtures/clap_publication/` rather than mutations of the real lock or
+//! registry cache. Every control asserts the reason for the failure, not merely
+//! that a failure happened: a gate that refused everything would still fail the
+//! supportive cases above them.
+
+use anyhow::{Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
+
+use super::compare_count;
+use super::files::read_text;
+use super::identity::{
+    REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, verify_lock_edge, verify_lock_identity,
+};
+use super::lock::{Lockfile, select_unique};
+use super::source::count_error_kind_variants;
+use crate::clap_reviewed::CLAP_ERROR_KIND_COUNT;
+
+/// The directory holding the committed gate fixtures.
+fn fixture_root() -> Utf8PathBuf {
+    Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/clap_publication")
+}
+
+/// Read one fixture as UTF-8 text.
+fn read_fixture(relative: &str) -> Result<String> {
+    read_text(&fixture_root().join(relative))
+}
+
+/// The refusal message, or an empty string when the check passed.
+fn refusal(result: Result<()>) -> String {
+    match result {
+        Ok(()) => String::new(),
+        Err(error) => error.to_string(),
+    }
+}
+
+/// Fail unless the refusal names the expected reason.
+///
+/// These tests return `Result`, so they report with `ensure!` rather than
+/// `assert!`: the workspace denies panics inside `Result`-returning functions.
+fn ensure_refusal(message: &str, expected: &str) -> Result<()> {
+    ensure!(
+        message.contains(expected),
+        "{message:?} should name {expected:?}",
+    );
+    Ok(())
+}
+
+/// The supported lock satisfies both reviewed identities.
+#[test]
+fn supported_lock_matches_the_reviewed_identities() -> Result<()> {
+    let lock = Lockfile::parse(&read_fixture("supported/Cargo.lock")?)?;
+    let facade = select_unique(lock.packages(), REVIEWED_CLAP.name)?;
+    let builder = select_unique(lock.packages(), REVIEWED_CLAP_BUILDER.name)?;
+
+    verify_lock_identity(facade, &REVIEWED_CLAP)?;
+    verify_lock_identity(builder, &REVIEWED_CLAP_BUILDER)?;
+    Ok(())
+}
+
+/// The supported lock records exactly one facade edge.
+#[test]
+fn supported_lock_has_one_facade_edge() -> Result<()> {
+    let lock = Lockfile::parse(&read_fixture("supported/Cargo.lock")?)?;
+    let facade = select_unique(lock.packages(), REVIEWED_CLAP.name)?;
+
+    verify_lock_edge(facade)
+}
+
+/// An unreviewed version fails, and the message names the version.
+#[test]
+fn unknown_version_fails_the_identity_check() -> Result<()> {
+    let lock = Lockfile::parse(&read_fixture("unknown_identity/Cargo.lock")?)?;
+    let facade = select_unique(lock.packages(), REVIEWED_CLAP.name)?;
+
+    let message = refusal(verify_lock_identity(facade, &REVIEWED_CLAP));
+    ensure_refusal(&message, "reviewed version")
+}
+
+/// The reviewed version resolved from another artefact fails on its checksum.
+#[test]
+fn checksum_drift_fails_the_identity_check() -> Result<()> {
+    let lock = Lockfile::parse(&read_fixture("checksum_drift/Cargo.lock")?)?;
+    let facade = select_unique(lock.packages(), REVIEWED_CLAP.name)?;
+
+    let message = refusal(verify_lock_identity(facade, &REVIEWED_CLAP));
+    ensure_refusal(&message, "reviewed checksum")
+}
+
+/// The reviewed version resolved from a replaced source fails on its source.
+#[test]
+fn source_drift_fails_the_identity_check() -> Result<()> {
+    let lock = Lockfile::parse(&read_fixture("source_drift/Cargo.lock")?)?;
+    let facade = select_unique(lock.packages(), REVIEWED_CLAP.name)?;
+
+    let message = refusal(verify_lock_identity(facade, &REVIEWED_CLAP));
+    ensure_refusal(&message, "reviewed source")
+}
+
+/// A lock that lost the builder edge fails, naming the missing dependency.
+#[test]
+fn missing_facade_edge_fails_the_edge_check() -> Result<()> {
+    let lock = Lockfile::parse(&read_fixture("missing_facade_edge/Cargo.lock")?)?;
+    let facade = select_unique(lock.packages(), REVIEWED_CLAP.name)?;
+
+    let message = refusal(verify_lock_edge(facade));
+    ensure_refusal(&message, "records no clap_builder dependency")
+}
+
+/// Two builder versions fail selection rather than choosing one.
+#[test]
+fn ambiguous_builder_fails_selection() -> Result<()> {
+    let lock = Lockfile::parse(&read_fixture("ambiguous_builder/Cargo.lock")?)?;
+
+    let error = refusal(select_unique(lock.packages(), REVIEWED_CLAP_BUILDER.name).map(|_| ()));
+    ensure_refusal(&error, "more than one package named")
+}
+
+/// The reviewed synthetic source agrees with the reviewed total.
+#[test]
+fn reviewed_source_agrees_with_the_reviewed_total() -> Result<()> {
+    let source = read_fixture("sources/error_kind_reviewed.rs")?;
+    let origin = Utf8Path::new("sources/error_kind_reviewed.rs");
+
+    let parsed = count_error_kind_variants(&source, origin)?;
+    ensure!(
+        parsed == CLAP_ERROR_KIND_COUNT,
+        "the reviewed fixture parses {parsed} variants",
+    );
+    compare_count(parsed, CLAP_ERROR_KIND_COUNT)
+}
+
+/// A source with two fewer variants fails the comparison, not the parse.
+#[test]
+fn drifted_source_fails_the_count_comparison() -> Result<()> {
+    let source = read_fixture("sources/error_kind_fifteen.rs")?;
+    let origin = Utf8Path::new("sources/error_kind_fifteen.rs");
+
+    let parsed = count_error_kind_variants(&source, origin)?;
+    ensure!(
+        parsed == 15,
+        "the fixture should parse with fifteen variants, found {parsed}",
+    );
+    let message = refusal(compare_count(parsed, CLAP_ERROR_KIND_COUNT));
+    ensure_refusal(&message, "reviewed total is 17")
+}
+
+/// A feature-gated variant is refused rather than counted or skipped.
+#[test]
+fn cfg_gated_variant_is_refused() -> Result<()> {
+    let source = read_fixture("sources/error_kind_cfg.rs")?;
+    let origin = Utf8Path::new("sources/error_kind_cfg.rs");
+
+    let error = refusal(count_error_kind_variants(&source, origin).map(|_| ()));
+    ensure_refusal(&error, "conditionally compiles")
+}
+
+/// A truncated enum is refused as a parse error.
+#[test]
+fn malformed_source_is_refused() -> Result<()> {
+    let source = read_fixture("sources/error_kind_malformed.txt")?;
+    let origin = Utf8Path::new("sources/error_kind_malformed.txt");
+
+    let error = refusal(count_error_kind_variants(&source, origin).map(|_| ()));
+    ensure_refusal(&error, "should be valid Rust")
+}
+
+/// Two definitions of the same name are refused as ambiguous.
+#[test]
+fn duplicate_definitions_are_refused() -> Result<()> {
+    let source = read_fixture("sources/two_error_kinds.rs")?;
+    let origin = Utf8Path::new("sources/two_error_kinds.rs");
+
+    let error = refusal(count_error_kind_variants(&source, origin).map(|_| ()));
+    ensure_refusal(&error, "more than one top-level ErrorKind")
+}
+
+/// A file with no definition fails only when it is the expected location.
+#[test]
+fn file_without_a_definition_is_refused() -> Result<()> {
+    let source = read_fixture("sources/no_error_kind.rs")?;
+    let origin = Utf8Path::new("sources/no_error_kind.rs");
+
+    let error = refusal(count_error_kind_variants(&source, origin).map(|_| ()));
+    ensure_refusal(&error, "declares no top-level ErrorKind")
+}
