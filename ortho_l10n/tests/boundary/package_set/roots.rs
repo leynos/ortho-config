@@ -15,6 +15,7 @@
 use super::super::fixture_cargo::{BOUNDARY_ROOT, Budget, repository_root};
 use super::lease::{PackagingLease, Prepared, prepare};
 use super::record::{clear_record, record_complete};
+use super::run_guard::{RunGuard, hold_run};
 use super::{PACKAGING_INVOCATIONS, package_sources};
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -99,6 +100,16 @@ pub(crate) const PACKAGED_CRATES: [(&str, &str); 3] = [
 /// a caller reading it is a caller that cannot spawn packaging or Cargo, which
 /// is what keeps the contracts' own queries free of side effects.
 static PACKAGED: OnceLock<Result<Vec<PackagedCrate>, String>> = OnceLock::new();
+
+/// The boundary's run guard, held until this process exits.
+///
+/// A `static` rather than a local because the lock's promise is "no other run
+/// will touch these roots while I am alive", and the roots outlive
+/// [`build_packaged_set`] by the whole life of the contracts reading them.
+/// Dropping it at the end of the build would let a second run start replacing
+/// the set while the first is still reading it, which is the defect this
+/// exists to prevent.
+static RUN_GUARD: OnceLock<RunGuard> = OnceLock::new();
 
 /// Package and unpack this release's crates, once per test process.
 ///
@@ -215,10 +226,18 @@ pub(crate) fn unpacked_directory() -> Result<Utf8PathBuf> {
 /// repaired here by raising a figure.
 fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
     let repository = repository_root()?;
-    let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
+    let boundary = repository.join(BOUNDARY_ROOT);
+    let target = boundary.join("packaging-target");
+
+    let deadline = Instant::now() + budget.remaining();
+    // Taken before anything in the target is read or written, and kept for the
+    // life of the process by `RUN_GUARD`. Without it a second run could begin
+    // replacing the roots this one is about to read, which is exactly what
+    // `Prepared::Reused` promises cannot happen.
+    let guard = hold_run(&boundary, deadline)?;
+    let _held = RUN_GUARD.get_or_init(|| guard);
 
     let scope = run_scope();
-    let deadline = Instant::now() + budget.remaining();
     match prepare(&target, scope.as_deref(), deadline)? {
         Prepared::Reused => {}
         Prepared::Owned { lease } => {

@@ -26,11 +26,19 @@ const AMPLE_DEADLINE: Duration = Duration::from_secs(60);
 const THIS_RUN: &str = "roots-regression-this-run";
 
 /// A scratch packaging target with a lease already taken.
+///
+/// The fields are ordered for their destructors, not for the reader. Rust
+/// drops them in declaration order, so declaring the lease first is what makes
+/// it the first to go: its file handle closes and the lock is released before
+/// the scratch tree is removed. The reverse order leaves the lock held while
+/// `TempDir` tries to delete the directory, and on Windows that deletion is
+/// denied by the lease's own share mode - silently, because `TempDir` ignores
+/// cleanup errors, so the case would pass while leaving the tree behind.
 struct Held {
-    /// Owns the scratch directory, removing it when the case ends.
-    tempdir: tempfile::TempDir,
     /// The lease, held for the whole of the sequence under test.
     lease: PackagingLease,
+    /// Owns the scratch directory, removing it when the case ends.
+    tempdir: tempfile::TempDir,
 }
 
 /// Take a lease on a fresh target, failing the case if it is not granted.
@@ -57,7 +65,7 @@ fn held_lease() -> Result<Held> {
              the sequence below would not run at all"
         ),
     };
-    Ok(Held { tempdir, lease })
+    Ok(Held { lease, tempdir })
 }
 
 /// The directory the held lease protects.

@@ -600,17 +600,39 @@ mutation check is the thing to re-run if that ever happens.
   with the repository's shows zero packages that differ by name and version:
   the packaged lock is a strict subset at identical versions. That claim was
   wrong and is recorded here so it is not reintroduced.
-- **The lease wait is charged to the packaging that follows it.** `Budget::new`
-  starts the contract's 900 s clock before `prepare_packaged_set`, so a
-  contract that polls the lease for 878 s and then wins it hands the packaging
-  step a 22 s remainder, and the cold fill is clamped to it. `process.rs`
-  already fixed exactly this for `NESTED_CARGO` - it computes the child's bound
-  only after the wait has ended - but the lease never received the same
-  treatment. This is the direct cause of the 22 s and 8 s kills in the
-  after-run.
-- **The four `packaged_*` manifest contracts compile nothing yet pay the whole
-  packaging cost**, because they each enter `prepare_packaged_set` in their own
-  process to reach a file that `cargo package` has already written.
+- **The wait charged to the packaging that follows it is the nested-Cargo
+  mutex, not the lease.** An earlier draft of this section said the lease's
+  wait produced the 22 s and 8 s kills: a contract polling the lease for 878 s
+  would win it with a 22 s remainder, and the cold fill would be clamped to
+  that. That reading does not survive the measurement. `make boundary` runs
+  `cargo test`, one process for the binary, and `prepare_packaged_set` reaches
+  `build_packaged_set` through `PACKAGED.get_or_init`, which caches the
+  `Result` - failures included. Only the caller that wins the `OnceLock`
+  initialization calls `prepare` at all; every other packaged contract blocks
+  on that initialization and then receives the same cached answer. So at most
+  one contract per process can be polling the lease, and the other five are
+  waiting on the cache. The after-run's six identical `22 second deadline`
+  blocks confirm it: their captured stderr tails are byte-identical at 1,180
+  bytes, which is one failure replayed through the cache, not six independent
+  packaging attempts each clamped to the same remainder. What a contract spends
+  its allowance on before that point is `serialize`'s wait for `NESTED_CARGO`,
+  which `Budget::expired_while_waiting` and the two
+  `waited for a sibling nested Cargo invocation` errors name directly, and which
+  `process.rs` already charges correctly by computing the child's bound only
+  after the wait has ended. The lease wait is real but is nextest's
+  cross-process case, where each contract is its own process and does reach
+  `prepare`; it is not what the single-process `make boundary` measurement
+  shows.
+- **The six `Verifying ortho_l10n` lines are one tail, not six starts.** The
+  baseline log holds none, so packaging did start under the lease, but the
+  count of those lines is the count of cached error replays rather than of
+  invocations. The after-run is evidence that the packaging step ran; it is not
+  evidence of six of them.
+- **The four `packaged_*` manifest contracts compile nothing yet would each pay
+  the whole packaging cost under nextest**, because each runs in its own
+  process and would otherwise empty the process-local cache to reach a file
+  `cargo package` has already written. Under `make boundary` the single
+  `OnceLock` is what stops them; under nextest the lease is.
 - **Correction, measured from the unpacked roots.** The packaged `Cargo.lock`
   is a strict subset of the workspace's at *identical* versions: comparing
   `package/<name>-0.10.0/Cargo.lock` against the repository lock gives zero
@@ -663,6 +685,24 @@ mutation check is the thing to re-run if that ever happens.
   suite - was rejected once the timestamps showed the 802 s run was already
   warm and compiled 122 crates anyway; a warm-up only moves the same work
   earlier and is lost again on a cleaned target.
+- 2026-11-14: **added the run guard** (`.boundary-run`), held exclusively by
+  every process that reaches the packaging target for that process's whole
+  life. Review raised a real gap: the arrival check returns `Reused` from the
+  record without holding the lease, and the caller then reads roots that a
+  second run's packaging step is free to replace, because the only thing
+  serializing the target is a nextest test group, which is scoped to one
+  invocation. Holding the lease for the consumer's reads was the suggested
+  remedy and was rejected on two counts: `File::lock_shared` on a handle that
+  already holds the exclusive lock is documented as unspecified and possibly
+  deadlocking, so it cannot express a downgrade; and Windows has no downgrade
+  at all. A checkout-wide exclusion expresses the property directly instead,
+  needs no lock conversion, and is the reviewer's own second alternative. It is
+  held per process rather than per call because the reads outlive `prepare` -
+  which is also why it could not simply be folded into the lease. The guard
+  lives in its own `run_guard` module: folding it into `lease.rs` took that
+  file to 442 lines and Whitaker's `module-max-lines` refused it at 400. It
+  also needs its own `no_std_fs_operations` exclusion in `dylint.toml`, on the
+  same terms as the lease's, because the exclusion is keyed by module path.
 
 ## Risks
 
@@ -713,12 +753,19 @@ bound that stopped it instead of reporting an unattributed timeout:
 - one negative control whose "did not behave" wraps the same blocked metadata;
 - one serialization probe that timed out waiting for the lock.
 
-The nine that are not the probe all trace to one arithmetic fact: the contract
-that won the lease had spent most of its 900 s allowance waiting, so the cold
-fill was clamped to a remainder. The baseline reported the same allowance as
-exhausted before `cargo package` could start at all, so the lease changed the
-failure from "never ran" to "ran and was cut at a named remainder", not from
-red to green.
+The nine that are not the probe all trace to the 900 s allowance being spent
+before the invocation they name could finish. In the `make boundary`
+measurement the spender is the wait for `NESTED_CARGO`: one contract wins the
+`OnceLock` initialization and runs the packaging step, and the rest block on
+that initialization - receiving its cached `Result` afterwards, which is why
+six of them print one identical 1,180-byte tail. That contract's own clock
+started at `Budget::new`, so a packaging invocation bounded by what is left is
+cut at the remainder. Under nextest the same arithmetic applies, but there the
+spender can also be the packaging lease, because each contract is its own
+process and each one does reach `prepare`. The baseline reported the allowance
+as exhausted before `cargo package` could start at all, so the lease changed
+the failure from "never ran" to "ran and was cut at a named remainder", not
+from red to green.
 
 **Not delivered: D3.** Recorded rather than claimed. The survey above shows the
 suite already asserts every graph property from `cargo metadata`; the only
