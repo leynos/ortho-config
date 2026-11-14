@@ -448,20 +448,23 @@ explicitly approves it and the prerequisites below are complete.
   strictly more informative report; the field is `serde(default)` so older
   report JSON still deserializes. Date/Author: 2026-11-14, repair of F4.
 - Decision (2026-11-14): Accept the file and line tolerance breach for this
-  feature and record it rather than splitting the milestone. Measured against
-  the approved base, excluding this ExecPlan, the candidate changes 40 files
-  and net +5,466 lines, against the stated 30-file and 1,500-line limits. The
-  pre-repair candidate `0acc69e5` measured 36 files and net +4,152, which
-  matches the hosted assessment's independent count; the review repairs added
-  the adapter, property and regression modules. This entry is measured against
-  the current base `54dab732` at `ce0cbc51` with `git diff --numstat` and the
-  plan path excluded. The excess is the feature itself: a validator, its policy
-  seam, a consumer adapter, five unit/property test modules, a behavioural
-  feature file, two end-to-end fixtures, and the documentation that records the
+  feature and record it rather than splitting the milestone. Disposition:
+  **accepted**, not pending and not waived. The maintainer approved delivering
+  6.3.2 in full on 2026-11-10 (Progress), which is the authorization for the
+  breach; this entry records the measured excess and its rationale so the
+  acceptance is auditable. Measured against the approved base, excluding this
+  ExecPlan, the candidate changes 40 files and net +5,466 lines, against the
+  stated 30-file and 1,500-line limits. The pre-repair candidate `0acc69e5`
+  measured 36 files and net +4,152, which matches the hosted assessment's
+  independent count; the review repairs added the adapter, property and
+  regression modules. This entry was measured against the current base
+  `54dab732` at `ce0cbc51` with `git diff --numstat` and the plan path
+  excluded. The excess is the feature itself: a validator, its policy seam, a
+  consumer adapter, five unit/property test modules, a behavioural feature
+  file, two end-to-end fixtures, and the documentation that records the
   boundary. Splitting it would leave the plan's acceptance unverifiable in any
-  single candidate. The maintainer approved delivering 6.3.2 in full, so the
-  tolerance is recorded as breached with that rationale rather than silently
-  assumed satisfied. Date/Author: 2026-11-14, repair of the assessment's V3.
+  single candidate. Date/Author: 2026-11-14, repair of the assessment's V3 and
+  second-round F4.
 - Decision (2026-11-14): Adapter tests live in `tests_surface.rs`, not
   `tests.rs` as the verification plan names. `tests.rs` already holds 319
   lines; the adapter's four cases would push it past the repository's 400-line
