@@ -391,8 +391,12 @@ explicitly approves it and the prerequisites below are complete.
   lines. The split follows the existing test-module grouping: each file holds
   one facet, and the new module's header states the invariant its cases share.
   Coverage is unchanged; the same cases run from the new location. The full
-  six-gate sweep is re-run on the resulting frozen tree, because the earlier
-  sweep certified the pre-split source.
+  six-gate sweep was then re-run on the frozen tree, because the earlier sweep
+  certified the pre-split source: the fingerprint of `HEAD`, `git status`, and
+  the changed paths was identical before the first gate and after the last, and
+  all six gates exited 0 on it, `make lint` now clearing the module cap. The
+  suite grew from 2645 to 2647 tests with the repair's two regressions, and the
+  candidate is committed as `72fa627d`.
 
 ## Surprises & discoveries
 
@@ -1321,6 +1325,14 @@ OrthoConfig format mandate.
   the six-gate sweep on `1594f70f`, and confirmed the feature paths are
   unchanged by the replay. Superseded the hosted completeness verdict given
   against `0acc69e5`; a fresh assessment is required for this revision.
+
+- 2026-11-14: Repaired the Codex P2 finding that made vocabulary advice for
+  command verbs unreachable from a real agent-context surface, added its
+  generated-context regression and a dedupe companion, and split the policy
+  exception tests to stay within the Whitaker module cap. Recorded the green
+  six-gate sweep on the frozen candidate `72fa627d`. Scope and design are
+  unchanged; the finding tightened one policy rule's input rather than altering
+  the contract.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
