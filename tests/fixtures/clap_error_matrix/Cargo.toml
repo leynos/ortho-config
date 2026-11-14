@@ -1,0 +1,17 @@
+[package]
+name = "clap_error_matrix_fixture"
+version = "0.10.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+clap = "4"
+ortho_config = { path = "../../../ortho_config", version = "0.10.0" }
+
+[[bin]]
+name = "clap-error-fixture"
+path = "src/main.rs"

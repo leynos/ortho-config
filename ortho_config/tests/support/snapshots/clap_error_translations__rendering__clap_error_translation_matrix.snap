@@ -1,0 +1,77 @@
+---
+source: ortho_config/tests/clap_error_translations.rs
+expression: rendered
+---
+--- InvalidValue
+error: Invalid value for ⁨[speed]⁩: ⁨other⁩
+  [possible values: fast, slow]
+
+For more information, try '--help'.
+--- UnknownArgument
+error: Unknown argument: ⁨--other⁩
+
+Usage: prog [OPTIONS]
+
+For more information, try '--help'.
+--- InvalidSubcommand
+error: Unknown subcommand: ⁨confi⁩
+
+  tip: a similar subcommand exists: 'config'
+
+Usage: prog [COMMAND]
+
+For more information, try '--help'.
+--- NoEquals
+error: Equal sign is required when assigning a value to ⁨--color=<color>⁩
+
+Usage: prog [OPTIONS]
+
+For more information, try '--help'.
+--- ValueValidation
+error: Invalid value for ⁨[num]⁩: ⁨NotANumber⁩ was rejected by the value parser
+
+For more information, try '--help'.
+--- TooManyValues
+error: Unexpected value for ⁨[arg]...⁩: no more values were expected
+
+Usage: prog [arg]...
+
+For more information, try '--help'.
+--- TooFewValues
+error: Too few values for ⁨--opt <some_opt> <some_opt> <some_opt>...⁩: at least ⁨3⁩ required, but ⁨2⁩ provided
+
+Usage: prog [OPTIONS]
+
+For more information, try '--help'.
+--- WrongNumberOfValues
+error: Wrong number of values for ⁨--opt <some_opt> <some_opt>⁩: ⁨2⁩ required, but ⁨1⁩ provided
+
+Usage: prog [OPTIONS]
+
+For more information, try '--help'.
+--- ArgumentConflict
+error: The argument ⁨--debug⁩ cannot be used with another argument
+
+Usage: prog --debug
+
+For more information, try '--help'.
+--- MissingRequiredArgument
+error: Missing required argument: ⁨<debug>⁩
+  <debug>
+
+Usage: prog <debug>
+
+For more information, try '--help'.
+--- MissingSubcommand
+error: Missing subcommand. Available options: ⁨test, help⁩
+  [subcommands: test, help]
+
+Usage: prog <COMMAND>
+
+For more information, try '--help'.
+--- InvalidUtf8
+error: The provided value is not valid UTF-8
+--- Io
+error: An input/output error occurred while producing command-line diagnostics
+--- Format
+error: The command line could not be rendered

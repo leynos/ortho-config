@@ -8,11 +8,13 @@
 //! preserves the rendered usage tail, but it does not carry over the internal
 //! `clap` context beyond what is present in the original `Display` output.
 
+use super::clap_error_ids::{ClapErrorTranslation, translation_for};
 use crate::{LocalizationArgs, Localizer};
 use clap::{
     Command as ClapCommand,
     error::{ContextKind, ContextValue, Error as ClapError, ErrorKind},
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -31,12 +33,15 @@ pub fn clap_error_formatter(
 
 /// Rewrites a `clap` error message using the provided localizer.
 ///
-/// - Maps the [`ErrorKind`] to a Fluent identifier of the form
-///   `clap-error-<kebab-kind>`.
+/// - Consults [`CLAP_ERROR_IDS`](super::CLAP_ERROR_IDS) for the kind's
+///   outcome: translated kinds name their Fluent identifier, display-only
+///   kinds are returned untouched, and a kind newer than the matrix derives a
+///   `clap-error-<kebab-kind>` identifier.
 /// - Includes relevant [`ContextKind`] values as Fluent arguments (for
 ///   example, `argument`, `value`, `expected`, `actual`).
 /// - Falls back to the original `clap` message when the localizer does not
-///   return a translation.
+///   return a translation, so a missing Fluent argument never replaces a
+///   usable diagnostic with an unresolved placeholder.
 /// - Intended for display-only scenarios: the returned [`ClapError`] carries
 ///   the translated text and original rendered tail but does not preserve the
 ///   internal `clap` context/command metadata.
@@ -66,14 +71,11 @@ pub fn localize_clap_error_with_command(
     localizer: &dyn Localizer,
     command: Option<&ClapCommand>,
 ) -> ClapError {
-    if matches!(
-        error.kind(),
-        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-    ) {
-        return error;
-    }
-
-    let id = message_id(error.kind());
+    let id = match catalogue_id(error.kind()) {
+        CatalogueId::Skip => return error,
+        CatalogueId::Translate(identifier) => Cow::Borrowed(identifier),
+        CatalogueId::Derived(identifier) => Cow::Owned(identifier),
+    };
     let args = localization_args(&error, command);
     let args_ref = (!args.is_empty()).then_some(&args);
 
@@ -136,18 +138,25 @@ fn append_tail(translated: String, tail: &str) -> String {
     }
 }
 
-/// Maps `clap` error kinds to the stable `clap-error-<kind>` catalogue namespace.
+/// The catalogue decision for one clap error kind.
+enum CatalogueId {
+    /// The matrix names an embedded identifier to look up.
+    Translate(&'static str),
+    /// clap renders this surface itself, so the error is returned untouched.
+    Skip,
+    /// The matrix predates the kind, so derive the legacy identifier shape.
+    Derived(String),
+}
+
+/// Consults the published matrix before deriving an identifier.
 ///
-/// Common missing-argument and missing-subcommand cases use the established
-/// catalogue keys; remaining kinds derive their suffix from the enum variant.
-fn message_id(kind: ErrorKind) -> String {
-    match kind {
-        ErrorKind::MissingRequiredArgument => "clap-error-missing-argument".to_owned(),
-        ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand | ErrorKind::MissingSubcommand => {
-            "clap-error-missing-subcommand".to_owned()
-        }
-        ErrorKind::UnknownArgument => "clap-error-unknown-argument".to_owned(),
-        _ => format!("clap-error-{}", to_kebab_case(kind)),
+/// A kind newer than the matrix keeps the pre-matrix derived identifier, so an
+/// unmapped kind still tries a translation instead of silently passing through.
+fn catalogue_id(kind: ErrorKind) -> CatalogueId {
+    match translation_for(kind) {
+        Some(ClapErrorTranslation::Translated(identifier)) => CatalogueId::Translate(identifier),
+        Some(ClapErrorTranslation::DisplayOnly) => CatalogueId::Skip,
+        None => CatalogueId::Derived(format!("clap-error-{}", to_kebab_case(kind))),
     }
 }
 

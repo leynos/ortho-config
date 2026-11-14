@@ -1,8 +1,8 @@
 # Ship the en-US clap error matrix (11.2.1)
 
-Status: M0.1 complete — the governing design, ADR-0020, roadmap wording, and
-developers' guide now describe the pre-publication workspace gate. Feature
-implementation proceeds at M1 (2026-11-09).
+Status: M1 complete — the public matrix, ten new en-US strings, runtime
+consultation, and the V1–V3 tests are in place and green. Implementation
+proceeds at M2 (2026-11-10).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -146,7 +146,16 @@ stopping and reporting.
 - [x] (2026-11-09) M0.1: amended design §6.1.1, §6.1, and §12; recorded
       [ADR-0020](../adrs/adr-0020-pre-publication-clap-coverage-gate.md);
       reconciled roadmap 11.2.1 and the developers' guide; indexed the ADR.
-- [ ] M1: implement the canonical matrix, strings, and runtime integration.
+- [x] (2026-11-10) M1: implemented the canonical matrix, the ten new en-US
+      strings, runtime consultation, and the V1–V3 tests. The matrix,
+      translation, display-only, BDD, and CLI suites pass; both negative
+      controls turned the intended assertions red and the restored tree went
+      green again.
+- [x] (2026-11-10) M1 follow-up: the full workspace test run exposed
+      `examples/hello_world`, which still expected a missing-input parse error
+      to carry consumer copy. Realigned the example with the sentinel contract
+      (its consumer override now targets `clap-error-invalid-subcommand`) and
+      updated design §4.12 and the users' guide; `hello_world --lib` is green.
 - [ ] M2: implement the test-only reviewed count assertion, pre-publication
       inventory gate, and fault-detection evidence.
 - [ ] M3: finish consumer documentation and mark roadmap task done.
@@ -178,6 +187,13 @@ The requested nine additions plus four existing entries total thirteen.
 `InvalidSubcommand`, explicitly named by §6.1, is also required: ten new
 translations produce fourteen translated entries and three sentinels.
 
+The full workspace test run found one consumer of the superseded mapping.
+`examples/hello_world` asserted that a missing-input parse error carried the
+consumer's `clap-error-missing-subcommand` copy. Under the sentinel contract
+that error is display-only, so the example now demonstrates a consumer override
+on `clap-error-invalid-subcommand` (an unknown subcommand) instead. The
+behaviour change is recorded in the users' guide and design §4.12.
+
 The design's build-script outputs are removed by the selected mechanism. The
 source inventory is read by a pre-publication test; because that runtime test
 value cannot initialize a Rust const, keep a reviewed count constant in the
@@ -197,6 +213,25 @@ review are proportionate.
 subcommand message. The new sentinel contract requires pass-through instead.
 The current formatter reconstructs translated errors and preserves only a
 rendered tail. Rich structured context preservation remains task 11.2.2.
+
+M1 (2026-11-10) confirmed five implementation facts. clap's stock `NoEquals`
+text is "equal sign is needed when assigning values to '--colour'", not the
+"required" wording the catalogue uses, so the fallback control asserts "needed".
+`DisplayHelpOnMissingArgumentOrSubcommand` exits with status 2 on stderr, while
+`DisplayHelp` and `DisplayVersion` exit 0 on stdout; the CLI fixture pins all
+three. Real clap parse errors carry every variable the new strings use; only
+`Io`, `Format`, and a raw `InvalidUtf8` are context-free. The new BDD steps
+needed a second module so both step files stay within the 400-line cap. The CLI
+fixture is a workspace member because `tests/*/main.rs` auto-discovery does not
+descend into `tests/fixtures/*/src/main.rs`, and the runner builds it once so
+targeted runs work.
+
+Negative controls were exercised and reverted. Mapping the three display-only
+kinds back to a translated identifier failed all three display unit cases and
+the missing-input BDD scenario, reporting that the catalogue was consulted
+once. Deleting the `clap-error-no-equals` message failed the catalogue-presence
+test, the real-parse `NoEquals` case, and the rendered snapshot. After both
+edits were reverted, every affected suite returned green.
 
 ## Decision log
 
@@ -228,6 +263,11 @@ rendered tail. Rich structured context preservation remains task 11.2.2.
   catalogue lookup and integration plumbing; reasoning and its limits follow.
 - 2026-10-14: add no compatibility wrapper. Existing identifiers remain stable
   as required by the localization contract; the crate is pre-1.0.
+- 2026-11-10: place the CLI fixture at repository-root
+  `tests/fixtures/clap_error_matrix` beside the existing fixture members rather
+  than inside `ortho_config/tests/fixtures/`, so it is not nested in a
+  published package. The runner invokes `cargo build -p` once so a targeted
+  suite run does not depend on `cargo test --workspace` having built it.
 
 ## Outcomes & retrospective
 
@@ -289,6 +329,17 @@ the parent fix, run the ordinary gates, then publish with the recorded lease.
 If the parent is rewritten before merging, reconcile its old and new history
 before choosing a replacement boundary. Returning to main does not grant
 implementation approval.
+
+M1 (2026-11-10) delivered the public matrix (`ortho_config::CLAP_ERROR_IDS` and
+`ClapErrorTranslation`, exported through both the crate root and
+`ortho_config::localizer`), the ten new en-US strings, and the runtime
+consultation that skips the three display-only kinds. Focused suites pass: 22
+matrix tests, 21 catalogue and real-parse tests, 17 localizer unit tests, 12
+localized-parse tests, the whole BDD target with three new scenarios, and five
+subprocess CLI cases covering help, version, missing-input help, a translated
+parser error, and the unavailable-locale fallback. Full commit gates are
+pending before this milestone commits. M2 remains: the reviewed-count constant,
+the pre-publication inventory gate, and its drift controls.
 
 ## Context and orientation
 
