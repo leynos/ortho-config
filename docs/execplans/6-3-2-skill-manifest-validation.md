@@ -437,11 +437,15 @@ explicitly approves it and the prerequisites below are complete.
   report JSON still deserializes. Date/Author: 2026-11-14, repair of F4.
 - Decision (2026-11-14): Accept the file and line tolerance breach for this
   feature and record it rather than splitting the milestone. Measured against
-  the approved base `724839c4`, excluding this ExecPlan, the candidate changes
-  39 files and net +5,386 lines, against the stated 30-file and 1,500-line
-  limits. The excess is the feature itself: a validator, its policy seam, a
-  consumer adapter, five unit/property test modules, a behavioural feature
-  file, two end-to-end fixtures, and the documentation that records the
+  the approved base, excluding this ExecPlan, the candidate changes 40 files
+  and net +5,466 lines, against the stated 30-file and 1,500-line limits. The
+  pre-repair candidate `0acc69e5` measured 36 files and net +4,152, which
+  matches the hosted assessment's independent count; the review repairs added
+  the adapter, property and regression modules. This entry is measured against
+  the current base `54dab732` at `ce0cbc51` with `git diff --numstat` and the
+  plan path excluded. The excess is the feature itself: a validator, its policy
+  seam, a consumer adapter, five unit/property test modules, a behavioural
+  feature file, two end-to-end fixtures, and the documentation that records the
   boundary. Splitting it would leave the plan's acceptance unverifiable in any
   single candidate. The maintainer approved delivering 6.3.2 in full, so the
   tolerance is recorded as breached with that rationale rather than silently
