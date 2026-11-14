@@ -774,6 +774,66 @@ by Cargo, there is no capability root to thread through, and the lock API
 itself requires a `std::fs::File`. `ortho_config_macros` is listed under
 `no_std_fs_operations` in `dylint.toml` for the same reason.
 
+### The diagnostics' two boundaries
+
+Every kernel read the report makes goes through `ProcFs`, in
+`artefact_lock_procfs.rs`, and every wait and deadline goes through `Clock`, in
+`artefact_lock_clock.rs`. Both are `pub(super)` and both exist only for these
+test-only diagnostics; `RealProcFs` and `RealClock` are the sole production
+implementations and are constructed in exactly one place, `Boundaries::real`.
+Before the seams existed, the report's most consequential branches could only
+be reached by arranging filesystem topology — a descriptor table that fails
+part way through, a `/proc/<pid>/stat` that cannot be read, a settle deadline
+that expires — so the failure paths that matter most were the ones no test
+exercised. Treating them as boundaries is what makes "the scan failed" and "the
+scan found nothing" separately assertable without a real held lock, a real
+fork, or a real `/proc` entry.
+
+`ProcFs` has one method per observation — the lock table, a descriptor listing,
+one descriptor's identity, one process's stat line — rather than a single "read
+a path". A single read method would be simpler to implement and would make the
+report's branches indistinguishable from each other in a fake: failing "the
+lock table" and failing "a descriptor" would look the same. The methods answer
+in their *callers'* vocabulary, not the kernel's: `descriptor_entries` returns
+the numbers it parsed and the names it could not, because "there is no
+descriptor here" and "I could not tell what this was" are different answers,
+and a failure carries whatever was read before it so an unrelated descriptor
+closing mid-scan cannot discard a holder the scan had already matched.
+
+`Clock` is two methods — `now` and `sleep` — and nothing else. `Boundaries`
+groups the pair because every entry point that takes one takes the other: a
+report that timed its own re-probe on a different clock than the settle used
+would describe a hold it cannot account for. The fake clock advances only when
+the code under test sleeps, so
+`a_hold_that_outlives_the_budget_fails_with_the_report` reaches the deadline in
+as many iterations as the settle has probes instead of waiting `SETTLE_BUDGET`
+out. That test was checked against a mutant that moved the sleep before the
+deadline check; it failed with "200 waits for 200 probes", which is what makes
+it evidence rather than decoration. `FakeClock`'s zero-step case is deliberate:
+the settle can then never reach its deadline by itself, so the deadline has to
+be what ends the loop.
+
+Re-use policy: neither trait is a general-purpose filesystem or time
+abstraction, neither is public, and neither leaves this module tree. A new
+observation the report needs is a new `ProcFs` method plus its `RealProcFs`
+implementation; a new wait is a `Clock` call through the `Boundaries` already
+in hand, not a fresh `std::thread::sleep`. Nothing outside `artefact_lock_*`
+may depend on either, and `Boundaries::real` is the only place a production
+implementation is chosen. See
+[ADR-0021](adrs/adr-0021-test-seams-for-lock-diagnostics.md) for the drivers
+behind the split and the options it rejected.
+
+The doubles both suites drive the boundaries with live in
+`artefact_lock_fakes.rs`, shared so `lock_holder_tests` and `lock_settle_tests`
+cannot disagree about what a boundary answers. `FakeProcFs` is keyed on the
+rendered form of each newtype — the newtypes expose no `get()`, by design — and
+a pid the test did not describe has no descriptor table at all, which is how
+the kernel behaves for a process that has exited. That default is the trap in
+the suite: `an_undescribable_process_is_named_as_such` first failed because it
+gave its pid an empty table, which is a *complete* scan in which "no
+descriptor" is the correct answer, rather than the unreadable listing the test
+meant.
+
 Re-run the suites that exercise this directly:
 
 ```sh

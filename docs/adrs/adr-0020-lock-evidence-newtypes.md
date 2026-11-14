@@ -190,6 +190,21 @@ asserts that shape rather than a number, so it fails on early success or on a
 free probe preceding the hold, and does not fail merely because the helper was
 slow to answer.
 
+### The clock and procfs boundaries
+
+The newtypes make a transposed argument a compile error, but they say nothing
+about *where the evidence comes from*. Putting every kernel read behind a
+`ProcFs` trait and every wait behind a `Clock` trait is a separate decision
+with its own drivers and rejected options, so it is recorded separately in
+[ADR-0021](adr-0021-test-seams-for-lock-diagnostics.md).
+
+One consequence belongs here, because it is a limit of *this* decision. The
+newtypes expose no `get()`, so a test double keyed on their values has to
+render them — `FakeProcFs` keys on `Display` output rather than on the numbers.
+That is the only place the vocabulary's opacity costs anything, and it costs a
+`to_string()` per lookup in test code, which is the trade the newtypes were
+chosen for.
+
 ## Alternatives rejected
 
 - `newt-hype` collapses same-inner newtypes to one type, defeating the purpose.
