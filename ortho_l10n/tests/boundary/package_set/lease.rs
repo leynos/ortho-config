@@ -70,7 +70,7 @@ mod lease_tests;
 #[path = "lease_shape_tests.rs"]
 mod lease_shape_tests;
 
-use super::record::read_under_lease;
+use super::record::{read_under_lease, read_unlocked};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::fs_utf8::Dir;
@@ -167,7 +167,9 @@ pub(crate) fn prepare(
 ) -> Result<Prepared> {
     let directory = open_target(target)?;
     loop {
-        if read_under_lease_path(&directory, scope)? {
+        // The arrival check, before any lease exists. `read_unlocked` takes the
+        // directory because this caller has no proof to offer.
+        if read_unlocked(&directory, scope)? {
             return Ok(Prepared::Reused);
         }
         if let Some(prepared) = claim(&directory, scope, target)? {
@@ -184,19 +186,6 @@ pub(crate) fn prepare(
         );
         std::thread::sleep(LEASE_POLL_INTERVAL.min(left));
     }
-}
-
-/// The arrival check, spelled for a directory handle rather than a lease.
-///
-/// Named apart from the record module's `read_unlocked` so the call reads as
-/// what it is - "look before taking the lock" - and a reader does not have to
-/// follow an import to see that no lease is involved.
-///
-/// # Errors
-///
-/// Returns an error when the record exists but cannot be read.
-fn read_under_lease_path(directory: &Dir, scope: Option<&str>) -> Result<bool> {
-    super::record::read_unlocked(directory, scope)
 }
 
 /// Open the packaging target, creating it only if it is not there yet.
