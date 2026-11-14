@@ -29,6 +29,12 @@ fn cache_at(root: &TempDir, ir_path: Utf8PathBuf) -> Result<BridgeCache, Box<dyn
 }
 
 /// A cache rooted at `root` whose publish target is its own `ir.json`.
+///
+/// Only the `unix` case needs this shape: the write-stage case below publishes
+/// to a directory it names itself, and a self-referential `ir.json` there would
+/// test the wrong branch. Gating it with its sole caller keeps the module free
+/// of dead code on Windows, where `-D dead-code` is implied by `-D warnings`.
+#[cfg(unix)]
 fn cache_in(root: &TempDir) -> Result<BridgeCache, Box<dyn Error>> {
     let cache = cache_at(root, Utf8PathBuf::new())?;
     let ir_path = cache.cache_dir.join("ir.json");
