@@ -206,7 +206,10 @@ fn missing_placeholder_context_keeps_the_original_diagnostic() {
 
     let rendered = localize_clap_error(stock, &localizer).to_string();
 
-    assert_eq!(rendered, "error: stock body");
+    assert_eq!(
+        rendered, "error: stock body",
+        "a missing placeholder must keep clap's own diagnostic"
+    );
     let failures = issues.ids();
     assert_eq!(
         failures.len(),
@@ -215,7 +218,8 @@ fn missing_placeholder_context_keeps_the_original_diagnostic() {
     );
     assert_eq!(
         failures.first().map(String::as_str),
-        Some("clap-error-missing-subcommand")
+        Some("clap-error-missing-subcommand"),
+        "the report should name the translation that could not be formatted"
     );
 }
 

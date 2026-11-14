@@ -340,8 +340,16 @@ fn missing_clap_error_translation_emits_warning_fields(fallback_localizer: Trans
         )
     });
 
-    assert_eq!(err.kind(), clap::error::ErrorKind::Io);
-    assert_eq!(err.to_string(), "error: stock body");
+    assert_eq!(
+        err.kind(),
+        clap::error::ErrorKind::Io,
+        "the catalogue gap must not change the reported error kind"
+    );
+    assert_eq!(
+        err.to_string(),
+        "error: stock body",
+        "the catalogue gap must retain clap's stock diagnostic"
+    );
     let captured_events = events.events();
     let warning = captured_events
         .iter()
@@ -349,15 +357,18 @@ fn missing_clap_error_translation_emits_warning_fields(fallback_localizer: Trans
         .expect("missing translation warning should be emitted");
     assert_eq!(
         warning.fields.get("identifier").map(String::as_str),
-        Some("clap-error-io")
+        Some("clap-error-io"),
+        "the warning should name the missing translation identifier"
     );
     assert_eq!(
         warning.fields.get("error_kind").map(String::as_str),
-        Some("Io")
+        Some("Io"),
+        "the warning should name the clap error kind"
     );
     assert_eq!(
         warning.fields.get("locale").map(String::as_str),
-        Some("fr-FR")
+        Some("fr-FR"),
+        "the warning should name the locale that lacked the message"
     );
 }
 

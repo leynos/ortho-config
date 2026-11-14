@@ -2,8 +2,10 @@
 
 Status: M3 complete — the matrix, the en-US strings, the runtime consultation,
 the pre-publication gate, the consumer and developer documentation, and the
-roadmap checkbox are all in place, and every gate is green on the final
-candidate. Delivery follows (2026-11-15).
+roadmap checkbox are all in place. The branch has been replayed onto
+`origin/main` after PR #664 merged, its local review findings are
+dispositioned, and the rebased candidate is awaiting its full gate certificate
+before publication (2026-11-15).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -215,6 +217,28 @@ stopping and reporting.
       at 58 passed/13 ignored and 14 passed, pytest 119 passed), `markdownlint`
       (18 s, 99 files, spellcheck and `typos.toml` unchanged), and `nixie`
       (2 s). The frozen tree re-derived identically after the last gate.
+- [x] (2026-11-15) M3 follow-up: local review, rebase, and review repairs.
+      A local `coderabbit review --agent` pass covered all 62 changed paths
+      across the eight branch commits (`501ab831..ee3eed22`, CLI 0.9.5, exit 0,
+      357 s) and raised seven findings. Four were actioned, three were
+      dispositioned with evidence. Actioned: the ADR link in
+      `docs/cli-localization-design.md` used `../adrs/` from inside `docs/`;
+      `clap_error_cli` now builds and runs its fixture through
+      `test_helpers::process::run_with_deadline`; the fixture executable is read
+      back from Cargo's JSON artefact stream instead of being derived from the
+      test binary's own directory, which was wrong for a release or cross-target
+      run; and `load_metadata` now runs `cargo metadata` through the same
+      deadline-bounded runner using `MetadataCommand::cargo_command`. Two
+      assertion groups gained expectation-specific messages. Dispositioned: the
+      claim that six `Cargo.lock` fixtures are untracked is false (`git
+      ls-files` lists all six and none is ignored), and two findings prescribed
+      a helper that did not exist at the reviewed commit. The branch was then
+      rebased onto `origin/main` (`959dbd7e`, containing PR #664 as squash
+      `eaf4c028`); the four timeout-fix commits were dropped as already
+      squashed. The rebase exposed an ADR number collision — main had taken
+      0018 and 0019 — so this branch's ADR moved to
+      `docs/adrs/adr-0020-pre-publication-clap-coverage-gate.md` and every
+      reference was renumbered in the same commits. Full re-gating follows.
 
 ## Surprises & discoveries
 
@@ -334,6 +358,29 @@ edit the library would have produced: no numbering changes, three checkboxes
 flipped, and two nested notes added, followed by the Markdown formatter and
 gates. Recorded here rather than treating an infrastructure refusal as a pass.
 
+Rebasing onto main on 2026-11-15 showed that an ADR number is a shared resource
+across the whole estate, not a branch-local choice. ADR-0018 was free when M0.1
+recorded this branch's gate decision, and main had taken 0018 and 0019 by the
+time the branch returned. The replay had to renumber the ADR to 0020 inside the
+commits that introduce it, not in a trailing fixup, or the history would carry
+a commit that links to a file it does not create.
+
+The local review's most severe finding was false: it reported that the six
+publication `Cargo.lock` fixtures were untracked, while `git ls-files` lists
+all six and `git check-ignore` matches none. Two further findings prescribed
+`test_helpers::process`, a module that exists on main but not at the reviewed
+commit, which is exactly why the rebase had to land before those findings could
+be judged. The lesson is to check a review's premises against the commit it
+names before either repairing or dismissing it.
+
+The fixture locator was wrong in a way the passing gate could not show. The
+suite derived the fixture path from the test executable's own directory, but
+`cargo test` for this package places that executable under
+`target/debug/build/ortho_config/<hash>/out/`, while the nested `cargo build`
+writes the fixture to `target/debug/`. It passed only because the stale path
+happened to resolve in earlier runs. Reading the executable back from Cargo's
+JSON artefact stream removes the assumption entirely.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -369,6 +416,15 @@ gates. Recorded here rather than treating an infrastructure refusal as a pass.
   than inside `ortho_config/tests/fixtures/`, so it is not nested in a
   published package. The runner invokes `cargo build -p` once so a targeted
   suite run does not depend on `cargo test --workspace` having built it.
+- 2026-11-15: run both nested Cargo invocations in this work — the fixture
+  build and `cargo metadata` — through
+  `test_helpers::process::run_with_deadline`, with explicit deadlines. The
+  shared runner already owns process-tree cleanup and bounded output
+  collection, so the gate does not carry a second copy of that logic.
+- 2026-11-15: resolve the fixture executable from Cargo's JSON artefact stream
+  rather than from the test executable's own directory. The nested build's
+  profile and target directory are its own, so a derived path is an assumption
+  the test cannot check.
 
 ## Outcomes & retrospective
 
@@ -383,12 +439,13 @@ delivery: publish the branch, refresh the draft pull request, and take it
 through review. Acceptance criteria E1–E4 are met and evidenced in Progress;
 none is outstanding.
 
-The plan incorporates the merged prover tooling from PR #651 and is now based on
-[PR #664](https://github.com/leynos/ortho-config/pull/664), which addresses
-nested Cargo timeouts that blocked validation on main. Draft PR #588 now
-targets that branch. Formatting, lint, typecheck, and full tests passed on the
-rebased candidate. Documentation and workflow-contract checks also passed; the
-revised plan is ready for review.
+The plan incorporates the merged prover tooling from PR #651, and the nested
+Cargo timeout fix that blocked validation on main has since landed from
+[PR #664](https://github.com/leynos/ortho-config/pull/664) as squash
+`eaf4c028`. Draft PR #588 is therefore based on `main` directly, with the
+timeout fix inherited rather than carried. Formatting, lint, typecheck, and
+full tests passed on the rebased candidate. Documentation and workflow-contract
+checks also passed.
 
 The earlier plan was approved on 2026-11-09, and M0 ran immediately. M0 ended
 with a no-go for the original build-time identity binding: the evidence showed
@@ -441,6 +498,18 @@ the parent fix, run the ordinary gates, then publish with the recorded lease.
 If the parent is rewritten before merging, reconcile its old and new history
 before choosing a replacement boundary. Returning to main does not grant
 implementation approval.
+
+This returned to main on 2026-11-15. PR #664 landed as squash `eaf4c028`, with
+the follow-up review commit `9ede81a1` on top; `origin/main` stood at
+`959dbd7e`. The eight branch commits were replayed onto that head with
+`git rebase --onto origin/main 501ab831`, dropping the four timeout-fix commits
+as already squashed. Two conflicts arose: this branch's ADR entry in
+`docs/contents.md`, because main had taken ADR-0018 and ADR-0019, and the
+ExecPlan status line. The ADR was renumbered to 0020 in every replayed commit
+with a per-commit sweep, and the status line took the milestone's own wording.
+The pre-rebase head is retained at `refs/recovery/11-2-1-prerebase`
+(`ee3eed22`) for comparison. PR #588 already targets `main`, so no retarget was
+needed beyond that.
 
 M1 (2026-11-10) delivered the public matrix (`ortho_config::CLAP_ERROR_IDS` and
 `ClapErrorTranslation`, exported through both the crate root and

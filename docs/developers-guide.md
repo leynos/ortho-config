@@ -1829,6 +1829,12 @@ cargo test -p ortho_config --test clap_error_matrix --locked --offline
 `make test` runs both as part of the suite. Run them directly when changing the
 matrix, the reviewed identity, or the resolved `clap` version.
 
+The gate's `cargo metadata` call and the CLI suite's one-time fixture build are
+nested Cargo invocations, so both run through
+`test_helpers::process::run_with_deadline` with an explicit deadline. A wedged
+Cargo call then fails the suite within a known budget instead of hanging it,
+and the shared runner owns process-tree cleanup and output bounding.
+
 ### Troubleshooting a refusal
 
 Every refusal names the check that failed. The repair is always a review

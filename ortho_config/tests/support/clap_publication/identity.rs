@@ -10,8 +10,13 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cargo_metadata::{DependencyKind, Metadata, MetadataCommand, Node, NodeDep, Package};
+use std::time::Duration;
+use test_helpers::process::run_with_deadline;
 
 use super::lock::{LockedPackage, dependency_name};
+
+/// Budget for the gate's `cargo metadata` cross-check.
+const METADATA_DEADLINE: Duration = Duration::from_secs(120);
 
 /// One reviewed registry package identity.
 pub(crate) struct ReviewedPackage {
@@ -48,13 +53,29 @@ const FACADE_PACKAGE: &str = "ortho_config";
 ///
 /// `--offline` keeps the gate hermetic; `--locked` makes Cargo fail rather
 /// than update the lock, so metadata and `Cargo.lock` describe one resolution.
+///
+/// Cargo runs through the shared deadline-bounded test runner, so a metadata
+/// invocation that hangs cannot block the whole suite.
 pub(crate) fn load_metadata(manifest_dir: &Utf8Path) -> Result<Metadata> {
     let manifest = manifest_dir.join("Cargo.toml");
-    MetadataCommand::new()
+    let command = MetadataCommand::new()
         .manifest_path(manifest.as_std_path())
         .other_options(vec!["--locked".to_owned(), "--offline".to_owned()])
-        .exec()
-        .with_context(|| format!("run cargo metadata --locked --offline for {manifest}"))
+        .cargo_command();
+    let output = run_with_deadline(
+        command,
+        METADATA_DEADLINE,
+        "cargo metadata --locked --offline",
+    )
+    .with_context(|| format!("run cargo metadata --locked --offline for {manifest}"))?;
+    ensure!(
+        output.status.success(),
+        "cargo metadata --locked --offline failed for {manifest}: {stderr}",
+        stderr = String::from_utf8_lossy(&output.stderr),
+    );
+    let report =
+        std::str::from_utf8(&output.stdout).context("cargo metadata should report UTF-8 JSON")?;
+    MetadataCommand::parse(report).context("parse the cargo metadata report")
 }
 
 /// Select the unique workspace member named [`FACADE_PACKAGE`].
