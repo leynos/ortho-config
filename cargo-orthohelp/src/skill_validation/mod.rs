@@ -35,6 +35,7 @@
 //!         options: vec![EffectiveOption {
 //!             long: "json".to_owned(),
 //!             value_type: Some("bool".to_owned()),
+//!             is_global: false,
 //!         }],
 //!         canonical_verb: Some("get".to_owned()),
 //!     }],
@@ -62,6 +63,7 @@ pub mod input;
 pub mod policy_check;
 pub mod report;
 mod resolve;
+mod surface;
 mod validate;
 
 pub use input::{
@@ -72,12 +74,15 @@ pub use policy_check::ResolvedAgentPolicy;
 pub use report::{
     Coverage, FindingCategory, SkillValidationReport, ValidationFinding, ValidationStatus, codes,
 };
+pub use surface::GlobalOption;
 pub use validate::validate;
 
 #[cfg(test)]
 mod assertions;
 #[cfg(test)]
 mod proptests;
+#[cfg(test)]
+mod proptests_examples;
 #[cfg(test)]
 mod support;
 #[cfg(test)]
@@ -86,3 +91,5 @@ mod tests;
 mod tests_examples;
 #[cfg(test)]
 mod tests_policy;
+#[cfg(test)]
+mod tests_surface;

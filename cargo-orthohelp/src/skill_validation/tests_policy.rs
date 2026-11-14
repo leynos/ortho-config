@@ -12,15 +12,19 @@ use super::input::EffectiveCommandSurface;
 use super::policy_check::ResolvedAgentPolicy;
 use super::report::{FindingCategory, codes};
 use super::support::{
-    codes_of, command, command_with_verb, example, flag_exception, input, manifest, only,
-    option_use, policy, reference, surface, verb_exception,
+    codes_of, command, command_with_globals, command_with_verb, example, flag_exception, input,
+    manifest, only, option_use, policy, reference, surface, verb_exception,
 };
 use super::validate;
 use crate::policy::{ExceptionKind, PolicyConfig, PolicyException, PolicyMode, PolicySeverity};
 
 #[test]
 fn policy_off_silences_vocabulary_but_not_structural_findings() {
-    let commands = surface(vec![command(&["tool"], &["colour-policy"])]);
+    let commands = surface(vec![command_with_globals(
+        &["tool"],
+        &["colour-policy"],
+        &["colour-policy"],
+    )]);
     let claims = input(
         vec![manifest(
             "operation-skill",
@@ -46,7 +50,11 @@ fn policy_mode_sets_the_finding_severity(
     #[case] mode: PolicyMode,
     #[case] severity: PolicySeverity,
 ) {
-    let commands = surface(vec![command(&["tool"], &["colour-policy"])]);
+    let commands = surface(vec![command_with_globals(
+        &["tool"],
+        &["colour-policy"],
+        &["colour-policy"],
+    )]);
     let claims = input(
         vec![manifest(
             "operation-skill",
@@ -81,7 +89,11 @@ impl Declared {
     /// Builds the surface this arrangement declares at `command_path`.
     fn surface(self, command_path: &[&str]) -> EffectiveCommandSurface {
         match self {
-            Self::Flag => surface(vec![command(command_path, &["colour-policy"])]),
+            Self::Flag => surface(vec![command_with_globals(
+                command_path,
+                &["colour-policy"],
+                &["colour-policy"],
+            )]),
             Self::Verb => surface(vec![command_with_verb(command_path, &["json"], "info")]),
         }
     }
@@ -242,7 +254,11 @@ fn off_policy_verbs_and_flags_name_their_replacement() {
 
 #[test]
 fn glossary_values_are_checked_without_echoing_them() {
-    let commands = surface(vec![command(&["tool"], &["color"])]);
+    let commands = surface(vec![command_with_globals(
+        &["tool"],
+        &["color"],
+        &["color"],
+    )]);
     let claims = input(
         vec![manifest(
             "operation-skill",
@@ -274,7 +290,11 @@ fn glossary_values_are_checked_without_echoing_them() {
 
 #[test]
 fn an_accepted_glossary_value_is_silent() {
-    let commands = surface(vec![command(&["tool"], &["color"])]);
+    let commands = surface(vec![command_with_globals(
+        &["tool"],
+        &["color"],
+        &["color"],
+    )]);
     let claims = input(
         vec![manifest(
             "operation-skill",
@@ -296,6 +316,65 @@ fn an_accepted_glossary_value_is_silent() {
         "an accepted value and a bare declaration are both silent: {:?}",
         codes_of(&report)
     );
+}
+
+#[test]
+fn a_domain_option_is_not_checked_against_the_global_glossary() {
+    // The surface does not classify this command's `color` as the global
+    // colour-policy option, so a domain value must not be judged by the
+    // glossary's accepted values. Without the classification the validator
+    // would fail a perfectly good domain command.
+    let commands = surface(vec![command(&["tool", "paint"], &["color"])]);
+    let claims = input(
+        vec![manifest(
+            "operation-skill",
+            vec![reference(&["tool", "paint"], &["color"])],
+        )],
+        vec![example(
+            "operation-skill",
+            1,
+            &["tool", "paint"],
+            vec![option_use("color", Some("blue"), 1)],
+        )],
+    );
+
+    let report = validate(&claims, &commands, &policy(PolicyMode::Deny))
+        .expect("the surface is unambiguous");
+
+    assert!(
+        report.findings.is_empty(),
+        "a domain option must not receive global-option advice: {:?}",
+        codes_of(&report)
+    );
+}
+
+#[test]
+fn policy_advice_requires_an_owned_example_option() {
+    // The example's reference does not declare `color`, so the use never
+    // resolved. Reporting a value finding as well would judge a claim the
+    // example has already contradicted.
+    let commands = surface(vec![command_with_globals(
+        &["tool"],
+        &["json", "color"],
+        &["color"],
+    )]);
+    let claims = input(
+        vec![manifest(
+            "operation-skill",
+            vec![reference(&["tool"], &["json"])],
+        )],
+        vec![example(
+            "operation-skill",
+            1,
+            &["tool"],
+            vec![option_use("color", Some("sometimes"), 1)],
+        )],
+    );
+
+    let report = validate(&claims, &commands, &policy(PolicyMode::Deny))
+        .expect("the surface is unambiguous");
+
+    assert_eq!(codes_of(&report), vec![codes::EXAMPLE_UNDECLARED_OPTION]);
 }
 
 #[test]

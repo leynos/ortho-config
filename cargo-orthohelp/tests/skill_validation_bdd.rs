@@ -58,11 +58,41 @@ scenarios!(
     fixtures = [context: SkillContext]
 );
 
-/// Builds one effective option with no declared value type.
+/// Builds one domain option with no declared value type.
 pub(crate) fn option(long: &str) -> EffectiveOption {
     EffectiveOption {
         long: long.to_owned(),
         value_type: None,
+        is_global: false,
+    }
+}
+
+/// Builds one global option, as a consumer would classify it.
+pub(crate) fn global(long: &str) -> EffectiveOption {
+    EffectiveOption {
+        is_global: true,
+        ..option(long)
+    }
+}
+
+/// Builds one command contract whose listed options are global options.
+pub(crate) fn command_with_globals(
+    segments: &[&str],
+    options: &[&str],
+    globals: &[&str],
+) -> CommandContract {
+    CommandContract {
+        options: options
+            .iter()
+            .map(|name| {
+                if globals.contains(name) {
+                    global(name)
+                } else {
+                    option(name)
+                }
+            })
+            .collect(),
+        ..command(segments, &[])
     }
 }
 
@@ -88,6 +118,22 @@ pub(crate) fn add_command(context: &SkillContext, contract: CommandContract) {
 
 /// Appends one option name to the last command on the surface.
 pub(crate) fn add_option_to_last_command(context: &SkillContext, long: &str) -> StepResult<()> {
+    push_option_on_last_command(context, option(long))
+}
+
+/// Appends one global option to the last declared command.
+pub(crate) fn add_global_option_to_last_command(
+    context: &SkillContext,
+    long: &str,
+) -> StepResult<()> {
+    push_option_on_last_command(context, global(long))
+}
+
+/// Appends one prepared option to the last declared command.
+fn push_option_on_last_command(
+    context: &SkillContext,
+    prepared: EffectiveOption,
+) -> StepResult<()> {
     let mut surface = context
         .surface
         .get_or_insert_with(EffectiveCommandSurface::default);
@@ -95,7 +141,7 @@ pub(crate) fn add_option_to_last_command(context: &SkillContext, long: &str) -> 
         .commands
         .last_mut()
         .ok_or("no command has been declared")?;
-    command.options.push(option(long));
+    command.options.push(prepared);
     Ok(())
 }
 

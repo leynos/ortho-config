@@ -350,12 +350,20 @@ keeps every decision the library cannot make safely:
   accepts, and its canonical verb. Inheritance is never inferred. Unioning root
   options into child commands would silently certify a claim the real CLI
   rejects, so a consumer that cannot produce an unambiguous per-command surface
-  must stop rather than approximate one.
+  must stop rather than approximate one. Each option states explicitly whether
+  the tool treats it as a global option on that command; global-option policy
+  applies only to those, never to an option whose name merely resembles one.
+  `EffectiveCommandSurface::from_agent_context` builds a surface from an
+  `AgentContext` plus the `GlobalOption` list the consumer owns, and adds
+  nothing the caller did not list.
 - **Library owns the comparison.** Given the claims and the surface, the
   validator reports unknown paths, flags absent from the referenced command,
   duplicate manifest IDs, examples that do not bind to a declared reference,
   example options the reference does not declare or the command does not
   accept, and vocabulary or global-option advice under the configured policy.
+  Each offending claim yields at most one finding for its path and one per
+  declared flag or example option: an example option its reference does not
+  declare is reported once and not re-reported against the real command.
 
 An example arrives *normalized* rather than as a command string:
 
@@ -369,6 +377,13 @@ Normalization is what makes the claims checkable without guessing shell
 grammar. A consumer that cannot parse an example marks it `Unsupported`; the
 report counts it as unchecked and the overall status becomes `Partial`. An
 unsupported example is never counted as validated, and never silently dropped.
+
+Extraction is not binding. `examples_checked` counts extracted examples, while
+`examples_bound` counts those that then reached their option checks; an example
+whose manifest is unknown or ambiguous, whose ordinal selects no reference, or
+whose path differs from its reference is extracted but never bound. The report
+status is `Complete` only when nothing was unsupported and every extracted
+example bound, so a partially validated run can never read as complete.
 
 Results separate two classes that must not be conflated:
 

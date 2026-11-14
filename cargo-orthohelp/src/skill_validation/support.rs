@@ -24,11 +24,20 @@ pub(crate) fn path(segments: &[&str]) -> Vec<String> {
         .collect()
 }
 
-/// Builds one effective option with no declared value type.
+/// Builds one domain option with no declared value type.
 pub(crate) fn option(long: &str) -> EffectiveOption {
     EffectiveOption {
         long: long.to_owned(),
         value_type: None,
+        is_global: false,
+    }
+}
+
+/// Builds one global option, as a consumer would classify it.
+pub(crate) fn global(long: &str) -> EffectiveOption {
+    EffectiveOption {
+        is_global: true,
+        ..option(long)
     }
 }
 
@@ -38,6 +47,27 @@ pub(crate) fn command(segments: &[&str], options: &[&str]) -> CommandContract {
         path: path(segments),
         options: options.iter().map(|name| option(name)).collect(),
         canonical_verb: None,
+    }
+}
+
+/// Builds one command contract whose listed options are global options.
+pub(crate) fn command_with_globals(
+    segments: &[&str],
+    options: &[&str],
+    globals: &[&str],
+) -> CommandContract {
+    CommandContract {
+        options: options
+            .iter()
+            .map(|name| {
+                if globals.contains(name) {
+                    global(name)
+                } else {
+                    option(name)
+                }
+            })
+            .collect(),
+        ..command(segments, &[])
     }
 }
 

@@ -266,8 +266,62 @@ explicitly approves it and the prerequisites below are complete.
   `make fmt` and `make markdownlint` pass; the sentence no longer contradicts
   the roadmap item states.
 
+- [x] (2026-11-14) Repaired the four findings and three verification gaps the
+  hosted completeness assessment returned as "not clear" against `0acc69e5`.
+  Each was checked against source before repair and none was rebutted.
+  - F1, global-option classification: `EffectiveOption` now carries an explicit
+    `is_global` that the consumer states, `ResolvedOption` threads it through
+    resolution, and only `PolicyMode`-gated glossary advice reads it. The
+    validator no longer infers globality from a name, a root command, or a
+    parent path, so a domain `--color` is not judged by the global glossary.
+  - F2, one finding per example option: the example option checks chain —
+    ownership of the reference's declared flags first, then the command's
+    accepted options — so an undeclared option is reported once instead of
+    again as unaccepted, matching the plan's per-claim finding bound.
+  - F3, policy only for resolved uses: value advice applies only to an option
+    that is both declared by the reference and accepted by the command.
+  - F4, coverage honesty: `Coverage::examples_bound` records examples that
+    reached their option checks, and `ValidationStatus::Complete` now requires
+    every extracted example to have bound with none unsupported. Previously an
+    extracted-but-unbound example left the report `Complete`.
+  - V1: `EffectiveCommandSurface::from_agent_context` plus `GlobalOption`
+    adapt a real `AgentContext`; `tests_surface.rs` drives it from a tree whose
+    root declares a root-only option and whose child does not, asserting the
+    child never sees the root's option and that the global classification
+    reaches the policy gate.
+  - V2: `proptests_examples.rs` generates the whole binding chain and compares
+    the validator against an independent linear oracle covering all five
+    example findings, coverage, and status. Mutant controls show the
+    comparison is non-vacuous: corrupting the oracle's acceptance branch fails
+    it, a dropped value changes a round-tripped record, and unioning the root's
+    options into a child hides the finding the real surface emits.
+  - V3: the tolerance breach is recorded below rather than treated as
+    satisfied.
+  Evidence: focused `cargo test -p cargo-orthohelp --lib skill_validation` (52
+  passed) and `PROPTEST_CASES=2000` on both property modules (12 passed);
+  `--test skill_validation_bdd` (6 passed) and `--test skill_validation_e2e` (5
+  passed). The end-to-end drift test now asserts the single finding the drifted
+  option produces and that the finding names it, instead of expecting the
+  double report the plan forbids.
+
 ## Surprises & discoveries
 
+- Observation: the example checks are ordered, and the order is observable.
+  Ownership of the reference's declared flags runs before the command lookup,
+  so an option the reference never declared is reported even when its path is
+  absent from the surface, while a *declared* option on an absent path stops
+  the remaining checks instead of cascading. An oracle written in the other
+  order reported nothing for the first case and the property test caught it.
+  Evidence: `validate/examples.rs::check_example_options` and the minimal
+  counterexample proptest shrank to. Impact: any future reordering of those
+  checks changes the finding set, so the chain is asserted in the oracle and in
+  `tests_examples`.
+- Observation: agent-context types deliberately implement no `Default` for
+  `AgentCommand` and `AgentInput`, so an adapter example must state every
+  field. Evidence: `ortho_config/src/agent_context/mod.rs` derives `PartialEq`
+  and `Eq` but not `Default` on those structs, unlike `AgentContext`, which has
+  `new`. Impact: the doctest and `tests_surface.rs` spell out the full
+  literals; a `..Default::default()` shortcut does not compile.
 - Observation: `SkillManifest` and `SkillCommandRef` exist as serializable
   metadata, but there is no manifest reader or validator; current agent-context
   fixtures contain no populated skill manifests. Evidence:
@@ -333,6 +387,55 @@ explicitly approves it and the prerequisites below are complete.
 
 ## Decision log
 
+- Decision (2026-11-14): Global-option status is supplied, not inferred.
+  `EffectiveOption` gains `is_global`, defaulting to false so an existing
+  consumer's JSON surface keeps its meaning, and `ResolvedOption` carries the
+  same bit through path resolution. Only a global option receives the §5
+  glossary's spelling and accepted-value advice; every other option is still
+  subject only to the canonical vocabulary rules. An adapter,
+  `EffectiveCommandSurface::from_agent_context`, builds a surface from an
+  `AgentContext` plus the consumer's `GlobalOption` list and adds nothing else.
+  Rationale: the previous code treated any option named `color` as the global
+  colour-policy option, which would fail a domain command that legitimately
+  accepts `--color blue`. The plan already forbids inferring inheritance at the
+  surface boundary; this applies the same rule to global classification.
+  Date/Author: 2026-11-14, repair of the hosted assessment's F1.
+- Decision (2026-11-14): An example option produces one finding. The checks
+  run ownership first: an option its owning reference does not declare is
+  reported as undeclared and not re-examined; a declared option the command
+  does not accept is reported as unknown; only an option that is both declared
+  and accepted reaches policy advice. Rationale: the plan bounds findings at
+  "one per declared flag or example option", and the reference is the claim the
+  example elaborates, so a second finding about the real command repeats one
+  offending token. The same chaining already governed a reference with an
+  unknown path, which does not cascade into flag findings. Date/Author:
+  2026-11-14, repair of F2 and F3.
+- Decision (2026-11-14): Separate extraction from binding in coverage.
+  `examples_checked` keeps its meaning — the consumer extracted the example —
+  and the new `examples_bound` counts those that reached their option checks.
+  `ValidationStatus::Complete` requires no unsupported example and
+  `examples_bound == examples_checked`. Rationale: an extracted example whose
+  manifest is unknown, whose ordinal selects no reference, or whose path
+  mismatches was previously counted as validated, so a run with unchecked
+  claims could report `Complete`. Consumers that read only the counters see a
+  strictly more informative report; the field is `serde(default)` so older
+  report JSON still deserializes. Date/Author: 2026-11-14, repair of F4.
+- Decision (2026-11-14): Accept the file and line tolerance breach for this
+  feature and record it rather than splitting the milestone. Measured against
+  the approved base `724839c4`, excluding this ExecPlan, the candidate changes
+  39 files and net +5,386 lines, against the stated 30-file and 1,500-line
+  limits. The excess is the feature itself: a validator, its policy seam, a
+  consumer adapter, five unit/property test modules, a behavioural feature
+  file, two end-to-end fixtures, and the documentation that records the
+  boundary. Splitting it would leave the plan's acceptance unverifiable in any
+  single candidate. The maintainer approved delivering 6.3.2 in full, so the
+  tolerance is recorded as breached with that rationale rather than silently
+  assumed satisfied. Date/Author: 2026-11-14, repair of the assessment's V3.
+- Decision (2026-11-14): Adapter tests live in `tests_surface.rs`, not
+  `tests.rs` as the verification plan names. `tests.rs` already holds 319
+  lines; the adapter's four cases would push it past the repository's 400-line
+  cap. The artefact is renamed here so the plan and the tree agree.
+  Date/Author: 2026-11-14, implementation detail of INV-EFFECTIVE-INPUTS.
 - Decision (2026-11-14): Customize code health with
   `.codescene/code-health-rules.json` rather than by reshaping test-support
   signatures. The file holds one rule set per path and nothing else, so every
@@ -559,9 +662,10 @@ decision to introduce formal verification.
 - `INV-EFFECTIVE-INPUTS`: table-test that the consumer/bridge adapter passes
   explicit per-command effective inputs exactly, including an explicit global
   option and a similarly named root-only non-global option. Artefact:
-  `cargo-orthohelp/src/skill_validation/tests.rs`. A root-option-union mutant
-  must fail. This test covers the real adapter boundary; the oracle alone does
-  not prove clap metadata.
+  `cargo-orthohelp/src/skill_validation/tests_surface.rs`; the adapter arrived
+  after `tests.rs` neared the file-size cap, and the rename is recorded in the
+  decision log. A root-option-union mutant must fail. This test covers the real
+  adapter boundary; the oracle alone does not prove clap metadata.
 - `INV-EXAMPLE-BINDING`: an example must bind to a specific reference ordinal
   in its owning manifest, and each example option must be in that reference's
   declared flags as well as the real effective inputs for that path. Generated
