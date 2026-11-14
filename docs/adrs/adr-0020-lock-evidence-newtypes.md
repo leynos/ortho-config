@@ -135,13 +135,29 @@ path.
 
 The descriptor scan is separated for a second reason beyond the cap. A scan
 that fails and a scan that finds nothing are different evidence, and only the
-second supports saying the lock survives in an inherited description. The scan
-returns a `DescriptorScan` that keeps `Complete` and `Incomplete` apart, so a
-read failure cannot be mistaken for an empty descriptor table and become a
-claim against an innocent process. An unreadable entry inside an otherwise
-readable directory is treated as an incomplete scan for the same reason:
-dropping it would produce the same false claim. This is a correction to an
-earlier draft that folded both failures into "no descriptor".
+second says anything about absence. The scan returns a `DescriptorScan` that
+keeps `Complete` and `Incomplete` apart, so a read failure cannot be mistaken
+for an empty descriptor table. This is a correction to an earlier draft that
+folded both failures into "no descriptor".
+
+A complete scan that finds nothing does not, by itself, establish inheritance.
+The descriptor scan and the `/proc/locks` record are separate observations
+taken at different moments, so an empty scan is equally explained by the
+recorded acquirer having released the lock in between. The report names both
+possibilities instead of asserting the one that accuses a process. That is a
+correction to an earlier draft of this same section, which made the scan's
+silence into a conclusion the observation cannot support.
+
+An incomplete scan keeps the descriptors it matched before the failure rather
+than discarding them. An unreadable entry inside an otherwise readable
+directory is ordinary — `/proc/<pid>/fd` holds every descriptor in the process,
+and another thread closing an unrelated one between enumeration and the
+metadata read fails an entry that has nothing to do with the lock. Discarding
+the matches there would report the lock unexplained while the guard was still
+open, which is exactly the intermittent failure this work exists to make
+diagnosable; the entry is still reported as making the scan incomplete, so no
+claim of absence is made. The scan is sorted so a failure leaves the same match
+list rather than depending on `read_dir` order.
 
 `artefact_lock_report_tests.rs` pins both settle outcomes against a *separate*
 holder process: one test releases the lock part-way through the window and

@@ -249,6 +249,11 @@ mod lock_evidence;
 #[cfg(test)]
 #[path = "artefact_lock_holder.rs"]
 mod lock_holder;
+// The scan's tests live beside it, not inside: the cap counts every line a
+// module declares, and the scan plus the cases that pin it no longer fit.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_holder_tests.rs"]
+mod lock_holder_tests;
 // Test support for the holder report: gated on `test`, not the platform, so
 // every test build compiles the module and its `lock_evidence` import alike.
 #[cfg(test)]

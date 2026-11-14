@@ -245,11 +245,15 @@ fn settles_report_a_probe_error_instead_of_a_free_answer() -> Result<()> {
 /// requested after the first of them, then a free one.
 ///
 /// The number of held probes is *not* fixed. The helper polls for the request
-/// every `POLL_INTERVAL` (25 ms) while the settle re-probes every
-/// `SETTLE_INTERVAL` (10 ms), so a correct settle routinely sees one or two
-/// held probes before the holder answers. Requiring exactly two would make
-/// this test fail whenever the helper was merely slow, which is the scheduler
-/// again rather than the lock. What is asserted instead is the *shape*:
+/// on its own `POLL_INTERVAL` while the settle re-probes every
+/// `SETTLE_INTERVAL` (10 ms), and the poll interval is the longer of the two,
+/// so a correct settle routinely sees several held probes before the holder
+/// answers. Requiring a fixed count would make this test fail whenever the
+/// helper was merely slow, which is the scheduler again rather than the lock.
+/// The intervals are deliberately not restated as literals here: they live in
+/// `artefact_lock` and `artefact_lock_diagnostics`, and a copy in a comment
+/// silently goes stale when one of them is retuned. What is asserted instead
+/// is the *shape*:
 /// at least one `Held`, a free probe after it, and no free probe before it.
 #[cfg(target_os = "linux")]
 #[test]
