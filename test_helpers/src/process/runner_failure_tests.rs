@@ -130,6 +130,20 @@ fn both_streams_are_captured_on_success() {
     assert!(output.status.success());
 }
 
+/// Whether `setsid` can be run, which the detached-writer case depends on.
+///
+/// `setsid` is not POSIX, so a `cfg(unix)` target does not imply it exists.
+/// Stock macOS has no `setsid` at all, and running the case there would fail
+/// with an unfinished-reader assertion that says nothing about the runner.
+fn has_setsid() -> bool {
+    Command::new("setsid")
+        .arg("true")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 #[test]
 fn a_writer_outside_the_owned_group_is_reported_as_unfinished_readers() {
     // `setsid` puts the writer in a new session, so the group kill that cleans
@@ -141,6 +155,9 @@ fn a_writer_outside_the_owned_group_is_reported_as_unfinished_readers() {
     // session before the root exits. Without that settle time the writer is
     // occasionally still in the root's group when the runner reaps it, and the
     // case then sees a clean end-of-file instead of unfinished readers.
+    if !has_setsid() {
+        return;
+    }
     let mut command = Command::new("sh");
     command.args(["-c", "setsid sleep 4 & sleep 0.2"]);
 
