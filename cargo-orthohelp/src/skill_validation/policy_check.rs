@@ -17,7 +17,7 @@ use crate::policy::vocabulary::{
 use crate::policy::{PolicyMode, PolicySeverity};
 
 use super::report::codes;
-use super::resolve::join_path;
+use super::resolve::{CommandPath, join_path};
 
 /// Policy configuration resolved for one validation call.
 ///
@@ -289,5 +289,5 @@ fn scope_matches(exception: &PolicyException, path: &[String]) -> bool {
     exception
         .command_path
         .as_deref()
-        .is_none_or(|scope| scope == join_path(path))
+        .is_none_or(|scope| scope == join_path(CommandPath::new(path)).as_str())
 }

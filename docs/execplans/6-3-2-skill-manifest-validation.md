@@ -330,6 +330,15 @@ explicitly approves it and the prerequisites below are complete.
   `Deep, Nested Complexity` findings introduced by the split; `cs delta`
   reports no findings. Focused module tests (60 passed) and Clippy are green;
   the full sequential gate sweep follows this record.
+- [x] (2026-11-14) Cleared the hosted CodeScene advisory. Its quality gate
+  failed `String Heavy Function Arguments` on `skill_validation/resolve.rs`
+  (42% of function arguments were string types). Paths, option names, and
+  rendered diagnostics in that module now travel as `CommandPath`,
+  `OptionName`, and `RenderedPath` wrappers, so the index lookup cannot swap a
+  path for a name and no signature spells a bare `&str`.
+  `cs review cargo-orthohelp/src/skill_validation/resolve.rs` now reports score
+  10.0 with no findings. The full six-gate sweep was re-run on the resulting
+  working tree and every gate exited 0.
 
 ## Surprises & discoveries
 

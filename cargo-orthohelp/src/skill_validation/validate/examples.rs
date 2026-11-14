@@ -13,7 +13,7 @@ use ortho_config::SkillCommandRef;
 use super::super::input::{ExampleExtraction, ManifestClaims, NormalizedExample, OptionUse};
 use super::super::policy_check::{UseSite, option_use_advice};
 use super::super::report::codes;
-use super::super::resolve::join_path;
+use super::super::resolve::{CommandPath, OptionName, join_path};
 use super::manifest_index::OwnerKey;
 use super::{ClaimRef, FindingData, Validator, reference_at};
 
@@ -161,10 +161,10 @@ impl<'a> Validator<'a> {
                 );
                 continue;
             }
-            let Some(resolved) = self.index.command(claim.path) else {
+            let Some(resolved) = self.index.command(CommandPath::new(claim.path)) else {
                 return false;
             };
-            let Some(resolved_option) = resolved.option(&option.name) else {
+            let Some(resolved_option) = resolved.option(OptionName::new(&option.name)) else {
                 self.push_structural(
                     claim,
                     FindingData::structural(
@@ -173,7 +173,7 @@ impl<'a> Validator<'a> {
                         format!(
                             "example option '{}' is not accepted by '{}'",
                             option.name,
-                            join_path(claim.path)
+                            join_path(CommandPath::new(claim.path))
                         ),
                     ),
                 );
