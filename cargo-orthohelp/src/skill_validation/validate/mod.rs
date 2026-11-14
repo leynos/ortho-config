@@ -238,10 +238,10 @@ impl<'a> Validator<'a> {
     /// Applies policy advice to the verb the reference spells and to the one
     /// the command declares.
     ///
-    /// The spelling is the reference's last path segment, because that is what
-    /// the skill's reader would actually type. The declared canonical verb is
-    /// a second, independent signal: a bridge classifies a segment only when it
-    /// is already canonical, so relying on the metadata alone would skip
+    /// The spelling is the reference's last subcommand segment, because that is
+    /// what the skill's reader would actually type. The declared canonical verb
+    /// is a second, independent signal: a bridge classifies a segment only when
+    /// it is already canonical, so relying on the metadata alone would skip
     /// exactly the alias spellings this rule exists to catch. A name reached
     /// both ways is advised once.
     fn check_reference_verb(&mut self, claim: ClaimRef<'_>) {
@@ -249,7 +249,7 @@ impl<'a> Validator<'a> {
             .index
             .command(CommandPath::new(claim.path))
             .and_then(|command| command.canonical_verb.clone());
-        let spelled = claim.path.last().cloned();
+        let spelled = spelled_verb(claim.path);
         let mut seen: BTreeSet<String> = BTreeSet::new();
         for verb in spelled.into_iter().chain(canonical_verb) {
             if seen.insert(verb.clone()) {
@@ -285,6 +285,18 @@ impl<'a> Validator<'a> {
                 message: data.message,
             },
         ));
+    }
+}
+
+/// Returns the verb a reference spells, when its path has a subcommand.
+///
+/// A one-segment path names the executable itself. Some executables are named
+/// like off-policy verbs (`info` is a real program), and renaming one is not
+/// the advice this rule gives, so the spelling signal starts one segment down.
+fn spelled_verb(path: &[String]) -> Option<String> {
+    match path {
+        [_, _, ..] => path.last().cloned(),
+        _ => None,
     }
 }
 

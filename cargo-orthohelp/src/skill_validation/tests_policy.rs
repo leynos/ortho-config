@@ -102,6 +102,30 @@ fn a_verb_spelled_and_declared_alike_is_advised_once() {
 }
 
 #[test]
+fn an_executable_name_that_reads_like_an_off_policy_verb_is_not_advised() {
+    // `info` is a real program name, so a one-segment path names the
+    // executable rather than a verb. There is no verb to rename, and telling a
+    // tool to call itself `get` would be wrong advice.
+    let commands = surface(vec![command(&["info"], &["json"])]);
+    let claims = input(
+        vec![manifest(
+            "operation-skill",
+            vec![reference(&["info"], &["json"])],
+        )],
+        Vec::new(),
+    );
+
+    let report = validate(&claims, &commands, &policy(PolicyMode::Deny))
+        .expect("the surface is unambiguous");
+
+    assert!(
+        report.findings.is_empty(),
+        "an executable name is not a verb: {:?}",
+        codes_of(&report)
+    );
+}
+
+#[test]
 fn off_policy_verbs_and_flags_name_their_replacement() {
     let commands = surface(vec![command_with_verb(&["tool"], &["format"], "info")]);
     let claims = input(
