@@ -24,7 +24,9 @@
 //! writer outside the owned process group is the only way to make a reader
 //! outlive the cleanup budget. That case needs `setsid`, which is not POSIX, so
 //! it probes for the executable and skips where it is absent (stock macOS); a
-//! `cfg(unix)` target does not imply it.
+//! `cfg(unix)` target does not imply it. The skip writes its reason to standard
+//! error, because a silent return would leave the suite reporting a pass for a
+//! case that never ran.
 
 use super::{run_with_deadline, run_with_deadline_until};
 
@@ -312,6 +314,27 @@ fn has_setsid() -> bool {
         .is_ok_and(|status| status.success())
 }
 
+/// Say on standard error why the detached-writer case is not running.
+///
+/// A silent early return leaves `cargo test` reporting a pass for a case that
+/// never executed, so a platform without `setsid` would look the same as one
+/// where the runner was proven to report unfinished readers. The suite's
+/// output is the only place that difference can be seen.
+///
+/// `print_stderr` is denied workspace-wide because production code should log
+/// through `tracing`; this is a test process announcing a skip on the platform
+/// that cannot run the case, and there is no subscriber to receive an event.
+#[expect(
+    clippy::print_stderr,
+    reason = "a skipped test has no other way to report that it did not run"
+)]
+fn report_missing_setsid() {
+    eprintln!(
+        "SKIP a_writer_outside_the_owned_group_is_reported_as_unfinished_readers: \
+         `setsid` is not available on this platform"
+    );
+}
+
 #[test]
 fn a_writer_outside_the_owned_group_is_reported_as_unfinished_readers() {
     // `setsid` puts the writer in a new session, so the group kill that cleans
@@ -324,6 +347,7 @@ fn a_writer_outside_the_owned_group_is_reported_as_unfinished_readers() {
     // occasionally still in the root's group when the runner reaps it, and the
     // case then sees a clean end-of-file instead of unfinished readers.
     if !has_setsid() {
+        report_missing_setsid();
         return;
     }
     let mut command = Command::new("sh");
