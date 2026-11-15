@@ -119,10 +119,18 @@ with a compatibility probe rather than an assumption.
   `9ede81a1`): rebase onto `959dbd7e` from the boundary `26275a4e`, dropping
   the pre-merge copies of the timeout fix, and renumber ADR-0018 to ADR-0020
   after main took 0018 and 0019.
+- [x] (2026-11-15) Rebase onto `f086edc9` (PR #615 landed): main took 0020 and
+  0021 for the artefact-lock records, so renumber this task's decisions from
+  0020/0021 to ADR-0023/ADR-0024 with the file names, titles, and every
+  reference updated.
+- [x] (2026-11-16) Rebase onto `7b750601`: main took 0023 for the
+  structured-output record, so renumber this task's decisions again, from
+  0023/0024 to ADR-0024/ADR-0025, with the file names, titles, and every
+  reference updated.
 - [x] (2026-11-09) Obtain explicit plan approval.
 - [x] (2026-11-09) M1 audit: derive field-metadata map, supply-route map, and
   error-classification sites. Settled the schema, requiredness, and route
-  contract in ADR-0020 and the improved-error design.
+  contract in ADR-0024 and the improved-error design.
 - [x] (2026-11-09) M1 aggregate red reproducer recorded against the unchanged
   loader: two absent required fields produced
   `Failed to merge CLI with configuration: missing field 'reference'`, naming
@@ -247,12 +255,12 @@ with a compatibility probe rather than an assumption.
   - Two trybuild fixtures with committed `.stderr` files pin the
     `RequiredConfigSchema` bound for a nested field and the rejection of
     `#[command(subcommand)]` combined with `#[ortho_config(nested)]`.
-  - [ADR-0021](../adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md)
-    records selected-subcommand enumeration; ADR-0020 gains an amendment
+  - [ADR-0025](../adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md)
+    records selected-subcommand enumeration; ADR-0024 gains an amendment
     banner and `## Amendments` section, and the design document, users' guide,
     developers' guide, migration guide, changelog, and contents index follow.
 - [x] M1: establish exact schema and source contracts with executable evidence
-  (ADR-0020, characterization evidence, and the recorded red reproducer).
+  (ADR-0024, characterization evidence, and the recorded red reproducer).
 - [x] M2: implement and property-test collection with typed diagnostics.
 - [x] M3: integrate all supported generated loading paths and recovery tests.
 - [x] M4: reconcile documentation, gates, and roadmap completion.
@@ -377,7 +385,7 @@ The 2026-11-15 assessment repair round produced four findings worth keeping.
    environment variable is `PREFIX_CMDS_<NAME>_<FIELD>` and their file root is
    `[cmds.<name>]`. Advertising the type's prefix and file root would name
    spellings the loader never reads, which is exactly the false-route failure
-   the design forbids. ADR-0021 records the loader-scope decision and the
+   the design forbids. ADR-0025 records the loader-scope decision and the
    widened `RequiredConfigSchema` bound it forces on the four
    `load_and_merge_subcommand_for*` helpers and the `SubcmdConfigMerge` methods.
 
@@ -451,7 +459,7 @@ milestone, following the conditions under "Proof sketch before implementation".
 D6 (2026-11-15, accepted): extend enumeration to selected subcommands through a
 loader-scoped `RouteScope` rather than by widening `RouteHints`, and record the
 decision in
-[ADR-0021](../adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md).
+[ADR-0025](../adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md).
 `RouteHints` is a statement about the type; the subcommand loaders read a
 different prefix and file root, so the scope has to travel with the loader. The
 consequence is accepted deliberately: `load_and_merge_subcommand_for*` and
@@ -523,7 +531,7 @@ stylistic — the combined-load behavioural scenarios were absent, the
 no-double-evaluation claim had no measurement behind it, the macro bound and
 the subcommand conflict had no compile-fail pin, and selected-subcommand
 coverage was neither implemented nor recorded as a decision. Every one is now
-closed with the evidence listed in Progress, and ADR-0021 records the loader
+closed with the evidence listed in Progress, and ADR-0025 records the loader
 scope and the widened bound it forces. The round also retired an assumption the
 earlier plan carried: that the subcommand helpers could report through the
 type's own route hints. They cannot, and saying so in an ADR is the honest
@@ -583,11 +591,14 @@ the then-current `origin/main`, replaying only its own commits after the
 exclusive boundary `26275a4e` and dropping the two pre-merge copies of the
 timeout fix. The plan commit that recorded the temporary base remains as
 history. Main had meanwhile taken ADR-0018 and ADR-0019, so this task's
-decision record was renumbered from 0018 to
-[ADR-0020](docs/adrs/adr-0020-enumerate-missing-required-values.md); its file
-name, title, and every reference were updated during the same replay. The
-range-diff audit showed only that renumbering and `docs/contents.md` context as
-differences from the pre-rebase series.
+decision record was renumbered from 0018 to 0020; its file name, title, and
+every reference were updated during the same replay. The range-diff audit
+showed only that renumbering and `docs/contents.md` context as differences from
+the pre-rebase series. A later rebase onto `f086edc9` took the numbers to 0022
+and 0023, because main took 0020 and 0021 for the artefact-lock records; a final
+rebase onto `7b750601` took them to 0024 and 0025, because main took 0023 for
+the structured-output record. See
+[ADR-0024](../adrs/adr-0024-enumerate-missing-required-values.md).
 
 ## Conformance basis
 
@@ -992,10 +1003,10 @@ plateau; no private compatibility adapters are necessary. Remaining gap: final
 public guidance and roadmap closeout.
 
 Amendment (2026-11-15): M3 also delivered selected-subcommand enumeration,
-which this milestone originally left inside the ADR-0020 coverage exclusion. A
+which this milestone originally left inside the ADR-0024 coverage exclusion. A
 loader-scoped `RouteScope` now carries the `PREFIX_CMDS_<NAME>_` environment
 prefix and the `[cmds.<name>]` file section, and
-[ADR-0021](../adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+[ADR-0025](../adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md)
 supersedes that exclusion. R1–R4 are delivered with no coverage exclusion.
 
 ### M4 — documentation and final conformance

@@ -1,11 +1,11 @@
-# Architectural decision record (ADR) 0020: Enumerate missing required configuration values
+# Architectural decision record (ADR) 0024: Enumerate missing required configuration values
 
 ## Status
 
 Accepted for implementation.
 
 Amended by
-[ADR-0021](adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+[ADR-0025](adr-0025-enumerate-missing-values-for-selected-subcommands.md)
 (2026-11-15).
 
 Date: 2026-11-09.
@@ -311,7 +311,7 @@ absent leaves inside a supplied opaque value remain Serde errors.
 
 ### 2026-11-15 — selected-subcommand enumeration
 
-[ADR-0021](adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+[ADR-0025](adr-0025-enumerate-missing-values-for-selected-subcommands.md)
 removes the coverage contract's exclusion of selected-subcommand merges. A
 selected subcommand now collects through a loader-specific `RouteScope` before
 deserialization, so its report names `PREFIX_CMDS_<NAME>_key` variables and

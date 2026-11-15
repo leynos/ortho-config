@@ -125,7 +125,7 @@ All notable changes to this project will be documented in this file.
   `[cmds.<name>]` file paths, so the advertised spellings are the ones the
   loader really reads; only the selected variant contributes requirements. The
   library never exits; callers decide how to present the report. See
-  [ADR-0020](docs/adrs/adr-0020-enumerate-missing-required-values.md), [ADR-0021](docs/adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md),
+  [ADR-0024](docs/adrs/adr-0024-enumerate-missing-required-values.md), [ADR-0025](docs/adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md),
   and
   [the user's guide](docs/users-guide.md#recover-from-missing-required-values).
 

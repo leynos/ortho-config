@@ -95,16 +95,10 @@
 - [ADR-0020: Newtypes for lock evidence](adrs/adr-0020-lock-evidence-newtypes.md):
   review the evidence vocabulary that makes a transposed pid, descriptor,
   device, or inode a compile error, and the rejected newtype crates.
-- [ADR-0020: Enumerate missing required configuration values](adrs/adr-0020-enumerate-missing-required-values.md):
-  review the typed missing-values payload, the opt-in schema composition
-  contract, the requiredness matrix, and the truthful supply-route rules.
 - [ADR-0021: Test seams for the lock diagnostics](adrs/adr-0021-test-seams-for-lock-diagnostics.md):
   review the `ProcFs` and `Clock` traits that make the report's failure
   branches and its settle deadline directly testable, and the rejected
   single-read and mock-crate alternatives.
-- [ADR-0021: Enumerate missing required values for selected subcommands](adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md):
-  review the loader-scoped supply routes and the widened subcommand merge
-  bounds that extend ADR-0020 to selected subcommands.
 - [ADR-0022: Verify the coverage target root in use](adrs/adr-0022-verify-the-coverage-target-root.md):
   review the steps that read the chosen root back after both coverage passes,
   the rejection paths their contract suite executes, and the acceptance path
@@ -113,6 +107,12 @@
   review the accepted `output(...)` derive group, the refusal-versus-silence
   distinction, the omission rules for a declared block, and the deferred stream
   framing and numeric exit taxonomy.
+- [ADR-0024: Enumerate missing required configuration values](adrs/adr-0024-enumerate-missing-required-values.md):
+  review the typed missing-values payload, the opt-in schema composition
+  contract, the requiredness matrix, and the truthful supply-route rules.
+- [ADR-0025: Enumerate missing required values for selected subcommands](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md):
+  review the loader-scoped supply routes and the widened subcommand merge
+  bounds that extend ADR-0024 to selected subcommands.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

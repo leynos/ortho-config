@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0021: Enumerate missing required values for selected subcommands
+# Architectural decision record (ADR) 0025: Enumerate missing required values for selected subcommands
 
 ## Status
 
@@ -6,12 +6,12 @@ Accepted.
 
 Date: 2026-11-15.
 
-This record amends [ADR-0020](adr-0020-enumerate-missing-required-values.md),
+This record amends [ADR-0024](adr-0024-enumerate-missing-required-values.md),
 which excluded selected-subcommand merges from enumeration.
 
 ## Context and problem statement
 
-ADR-0020 reported every activated absent requirement in one typed error, but
+ADR-0024 reported every activated absent requirement in one typed error, but
 its coverage contract excluded "selected-subcommand values merged through the
 Figment extraction helpers". The exclusion was recorded against an
 implementation assumption: that such a merge finishes by extracting directly
@@ -27,7 +27,7 @@ for a second, spurious reason.
 
 ## Decision drivers
 
-- One-diagnostic recovery is the value of ADR-0020; excluding a whole loader
+- One-diagnostic recovery is the value of ADR-0024; excluding a whole loader
   family leaves the common case uncovered.
 - An advertised route must be one the loader really reads, or the diagnostic is
   worse than silence.
@@ -97,7 +97,7 @@ that derives `OrthoConfig` already satisfies it.
 ## Goals and non-goals
 
 - Goals:
-  - Cover the selected-subcommand loaders with the ADR-0020 contract.
+  - Cover the selected-subcommand loaders with the ADR-0024 contract.
   - Keep every advertised route reproducible with the loader that raised it.
   - Leave the raw generic boundary untouched.
 - Non-goals:
@@ -117,10 +117,10 @@ that derives `OrthoConfig` already satisfies it.
 - A subcommand whose prefix or command name differs between the parser and the
   loader would still advertise a wrong route; the shared helper is what keeps
   them equal, so it must stay the only producer.
-- Enumeration still inherits every ADR-0020 limitation: custom `Deserialize`
+- Enumeration still inherits every ADR-0024 limitation: custom `Deserialize`
   implementations, unmarked `#[serde(flatten)]`, and enum payloads.
 - The CLI hint for a selected subcommand comes from the derived schema, so a
-  subcommand that renames its fields keeps the ADR-0020 rule of omitting a flag
+  subcommand that renames its fields keeps the ADR-0024 rule of omitting a flag
   the parser cannot populate.
 
 ## Architectural rationale
@@ -132,5 +132,5 @@ change.
 
 ## References
 
-- [ADR-0020: Enumerate missing required configuration values](adr-0020-enumerate-missing-required-values.md).
+- [ADR-0024: Enumerate missing required configuration values](adr-0024-enumerate-missing-required-values.md).
 - [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).

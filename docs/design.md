@@ -173,7 +173,7 @@ to read without hiding the semantics of error mapping.
 Missing required configuration values are reported through a typed error rather
 than the deserializer's first failure; the decision, requiredness matrix, and
 coverage limits are recorded in
-[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md). [ADR-0021](adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md). [ADR-0025](adrs/adr-0025-enumerate-missing-values-for-selected-subcommands.md)
 extends that contract to selected subcommands.
 
 - `ortho_config/src/required_values/` owns schema declarations, the recursion

@@ -2,7 +2,7 @@
 
 Status: implemented in roadmap task 7.3.1. The schema contract, requiredness
 matrix, and supply-route rules are settled in
-[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md). The public
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md). The public
 `OrthoError` enum in `ortho_config/src/error/types.rs` exposes the
 `OrthoError::MissingRequiredValues` variant; this document records the design
 that produced it.
@@ -81,7 +81,7 @@ MissingRequiredValues(Box<MissingRequiredValues>),
 expects_object: bool }`.
 The full public surface, including the `RequiredConfigSchema` companion trait
 and the `#[ortho_config(nested)]` marker, is specified in
-[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md).
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md).
 
 ### 2.1 Settled schema support matrix
 
@@ -150,7 +150,7 @@ belongs to `ortho_config`, not the generated loader:
   do.
 
 The full public surface is specified in
-[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md), and the
+[ADR-0024](adrs/adr-0024-enumerate-missing-required-values.md), and the
 developers' guide records the ownership boundaries.
 
 ## 4. Historical implementation outline
