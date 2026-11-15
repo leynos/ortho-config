@@ -24,30 +24,30 @@ pub(crate) fn parse_input(
 ) -> Result<(syn::Ident, Vec<syn::Field>, StructAttrs, Vec<FieldAttrs>), syn::Error> {
     let ident = input.ident.clone();
     let struct_attrs = parse_struct_attrs(&input.attrs)?;
-    let fields = match &input.data {
-        Data::Struct(data) => match &data.fields {
-            Fields::Named(named) => named.named.iter().cloned().collect::<Vec<_>>(),
-            _ => {
-                return Err(syn::Error::new_spanned(
-                    data.struct_token,
-                    "OrthoConfig requires named fields",
-                ));
-            }
-        },
-        _ => {
-            return Err(syn::Error::new_spanned(
-                ident.clone(),
-                "OrthoConfig can only be derived for structs",
-            ));
-        }
-    };
-
-    let mut field_attrs = Vec::new();
-    for f in &fields {
-        field_attrs.push(parse_field_attrs(f)?);
-    }
+    let fields = named_fields(input)?;
+    let field_attrs = fields
+        .iter()
+        .map(parse_field_attrs)
+        .collect::<Result<Vec<_>, _>>()?;
     validate_project_root_field(&fields, &field_attrs, &struct_attrs)?;
     Ok((ident, fields, struct_attrs, field_attrs))
+}
+
+/// Returns the struct's named fields, rejecting enums, unions and tuple structs.
+fn named_fields(input: &DeriveInput) -> Result<Vec<syn::Field>, syn::Error> {
+    let Data::Struct(data) = &input.data else {
+        return Err(syn::Error::new_spanned(
+            input.ident.clone(),
+            "OrthoConfig can only be derived for structs",
+        ));
+    };
+    let Fields::Named(named) = &data.fields else {
+        return Err(syn::Error::new_spanned(
+            data.struct_token,
+            "OrthoConfig requires named fields",
+        ));
+    };
+    Ok(named.named.iter().cloned().collect())
 }
 
 /// Accepts a path type whose final segment is `PathBuf`, including qualified paths.

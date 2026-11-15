@@ -88,19 +88,17 @@ enum Commands {
 }
 
 fn main() -> Result<(), String> {
-    let cli = Commands::parse();
     let db_url = "postgres://user:pass@localhost/registry";
-    let final_cmd = match cli {
-        Commands::AddUser(args) => {
-            let merged = args.load_and_merge().map_err(|e| e.to_string())?;
-            Commands::AddUser(merged)
-        }
-        Commands::ListItems(args) => {
-            let merged = args.load_and_merge().map_err(|e| e.to_string())?;
-            Commands::ListItems(merged)
-        }
-    };
-    final_cmd.run(db_url)
+    merge_configuration(Commands::parse())?.run(db_url)
+}
+
+/// Merges each subcommand's file and environment configuration under its CLI values.
+fn merge_configuration(cli: Commands) -> Result<Commands, String> {
+    match cli {
+        Commands::AddUser(args) => args.load_and_merge().map(Commands::AddUser),
+        Commands::ListItems(args) => args.load_and_merge().map(Commands::ListItems),
+    }
+    .map_err(|e| e.to_string())
 }
 
 /// Writes the connection notice and command output while holding one stdout lock.

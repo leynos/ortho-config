@@ -75,43 +75,31 @@ fn apply_record_field(
         return unknown_record_key(nested);
     };
     let key = ident.to_string();
+    let token = |slot: &mut Option<String>, values: &[&str]| set_token(nested, &key, slot, values);
     match key.as_str() {
         "supported" => set_once(&mut record.supported, parse_bool(nested)?, nested, &key),
-        "tty" => set_token(nested, &key, &mut record.tty, TTY_VALUES),
-        "closed_stdin" => set_token(nested, &key, &mut record.closed_stdin, CLOSED_STDIN_VALUES),
-        "colour" => set_token(nested, &key, &mut record.colour, TOGGLE_VALUES),
-        "emoji" => set_token(nested, &key, &mut record.emoji, TOGGLE_VALUES),
-        "progress" => set_token(nested, &key, &mut record.progress, TOGGLE_VALUES),
-        "pager" => set_token(nested, &key, &mut record.pager, TOGGLE_VALUES),
+        "tty" => token(&mut record.tty, TTY_VALUES),
+        "closed_stdin" => token(&mut record.closed_stdin, CLOSED_STDIN_VALUES),
+        "colour" => token(&mut record.colour, TOGGLE_VALUES),
+        "emoji" => token(&mut record.emoji, TOGGLE_VALUES),
+        "progress" => token(&mut record.progress, TOGGLE_VALUES),
+        "pager" => token(&mut record.pager, TOGGLE_VALUES),
         "width" => set_once(&mut record.width, parse_width(nested)?, nested, &key),
-        "accessibility" => set_token(
-            nested,
-            &key,
-            &mut record.accessibility,
-            ACCESSIBILITY_VALUES,
-        ),
-        "plain" => set_token(nested, &key, &mut record.plain, PLAIN_VALUES),
-        "stdout" => set_token(nested, &key, &mut record.stdout, STREAM_VALUES),
-        "stderr" => set_token(nested, &key, &mut record.stderr, STREAM_VALUES),
-        "progress_inheritance" => set_token(
-            nested,
-            &key,
-            &mut record.progress_inheritance,
-            INHERITANCE_VALUES,
-        ),
-        "subprocess_inheritance" => set_token(
-            nested,
-            &key,
-            &mut record.subprocess_inheritance,
-            INHERITANCE_VALUES,
-        ),
-        "field" => {
-            let entry = parse_field_entry(nested)?;
-            record.fields.push(entry);
-            reject_duplicate_fields(&record.fields, nested)
-        }
+        "accessibility" => token(&mut record.accessibility, ACCESSIBILITY_VALUES),
+        "plain" => token(&mut record.plain, PLAIN_VALUES),
+        "stdout" => token(&mut record.stdout, STREAM_VALUES),
+        "stderr" => token(&mut record.stderr, STREAM_VALUES),
+        "progress_inheritance" => token(&mut record.progress_inheritance, INHERITANCE_VALUES),
+        "subprocess_inheritance" => token(&mut record.subprocess_inheritance, INHERITANCE_VALUES),
+        "field" => push_field_entry(nested, record),
         _ => unknown_record_key(nested),
     }
+}
+
+/// Parses one `field(...)` entry into the record, rejecting a repeated id.
+fn push_field_entry(nested: &ParseNestedMeta, record: &mut RendererRecordAttrs) -> syn::Result<()> {
+    record.fields.push(parse_field_entry(nested)?);
+    reject_duplicate_fields(&record.fields, nested)
 }
 
 /// Validates one token leaf and stores it, rejecting a repeated assignment.

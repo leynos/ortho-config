@@ -138,15 +138,7 @@ fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
 
     // The command only avoids a source build if the named crate publishes the
     // binstall metadata that resolves its release archives.
-    let repository_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let repository = Dir::open_ambient_dir(repository_root, ambient_authority())
-        .context("open the repository root")?;
-    let manifest: toml::Value = toml::from_str(
-        &repository
-            .read_to_string("cargo-orthohelp/Cargo.toml")
-            .context("read the cargo-orthohelp manifest")?,
-    )
-    .context("parse the cargo-orthohelp manifest")?;
+    let manifest = read_orthohelp_manifest()?;
     let package = manifest
         .get("package")
         .context("cargo-orthohelp should declare [package]")?;
@@ -155,6 +147,24 @@ fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
         .get("metadata")
         .and_then(|metadata| metadata.get("binstall"))
         .context("cargo-orthohelp should declare [package.metadata.binstall]")?;
+    ensure_binstall_metadata(binstall)
+}
+
+/// Read and parse the `cargo-orthohelp` manifest from the repository root.
+fn read_orthohelp_manifest() -> Result<toml::Value> {
+    let repository_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let repository = Dir::open_ambient_dir(repository_root, ambient_authority())
+        .context("open the repository root")?;
+    toml::from_str(
+        &repository
+            .read_to_string("cargo-orthohelp/Cargo.toml")
+            .context("read the cargo-orthohelp manifest")?,
+    )
+    .context("parse the cargo-orthohelp manifest")
+}
+
+/// Requires the binstall table to name a tarball format and where to find it.
+fn ensure_binstall_metadata(binstall: &toml::Value) -> Result<()> {
     ensure!(binstall.get("pkg-fmt").and_then(toml::Value::as_str) == Some("tgz"));
     for key in ["pkg-url", "bin-dir"] {
         ensure!(

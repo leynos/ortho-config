@@ -17,12 +17,12 @@
 //! [`ControlFailure`] for the two failure modes this module distinguishes.
 
 use super::super::fixture_cargo::{
-    Budget, EdgeKind, FixtureCargo, Metadata, absolute_member, repository_root, toml_string,
+    Budget, EdgeKind, FixtureCargo, Metadata, absolute_member, manifest_text, repository_root,
+    toml_string,
 };
 use super::{CONSUMER_PACKAGE, assert_absent_packages};
 use anyhow::{Context, Result};
 use camino::Utf8Path;
-use std::fmt::Write as _;
 
 /// The fixture families a negative control can inject.
 ///
@@ -180,49 +180,40 @@ fn negative_control_manifest(injection: Injection) -> Result<String> {
         Utf8Path::new("test_helpers"),
     )?);
 
+    let mut lines = vec![
+        "[package]".to_owned(),
+        format!("name = \"{CONSUMER_PACKAGE}\""),
+        "version = \"0.0.0\"".to_owned(),
+        "edition = \"2024\"".to_owned(),
+        String::new(),
+        "[workspace]".to_owned(),
+        String::new(),
+        "[dependencies]".to_owned(),
+        format!("ortho_l10n = {{ path = {runtime_path} }}"),
+    ];
+    let edge = injected_edge(injection, &helpers_path);
     // A normal injection shares `[dependencies]` with the runtime, so both
     // entries are written under one heading. Emitting a heading twice is a TOML
     // duplicate-key error, which would fail the control for a reason that names
     // no crate at all.
-    let mut manifest = String::new();
-    writeln!(manifest, "[package]")?;
-    writeln!(manifest, "name = \"{CONSUMER_PACKAGE}\"")?;
-    writeln!(manifest, "version = \"0.0.0\"")?;
-    writeln!(manifest, "edition = \"2024\"")?;
-    writeln!(manifest)?;
-    writeln!(manifest, "[workspace]")?;
-    writeln!(manifest)?;
-    writeln!(manifest, "[dependencies]")?;
-    writeln!(manifest, "ortho_l10n = {{ path = {runtime_path} }}")?;
     if matches!(injection, Injection::NormalClap) {
-        write_injected_edge(&mut manifest, injection, &helpers_path)?;
+        lines.extend([edge, String::new()]);
+    } else {
+        lines.extend([String::new(), format!("[{}]", injection.table()), edge]);
     }
-    writeln!(manifest)?;
-    if !matches!(injection, Injection::NormalClap) {
-        writeln!(manifest, "[{}]", injection.table())?;
-        write_injected_edge(&mut manifest, injection, &helpers_path)?;
-    }
-    Ok(manifest)
+    Ok(manifest_text(lines))
 }
 
-/// Write the one dependency line an injection adds.
-fn write_injected_edge(
-    manifest: &mut String,
-    injection: Injection,
-    helpers_path: &str,
-) -> Result<()> {
+/// The one dependency line an injection adds.
+fn injected_edge(injection: Injection, helpers_path: &str) -> String {
     match injection {
+        // A version requirement rather than a path: the control must not
+        // depend on the workspace's Clap version pin staying reachable.
         Injection::NormalClap | Injection::BuildClap | Injection::DevClap => {
-            // A version requirement rather than a path: the control must not
-            // depend on the workspace's Clap version pin staying reachable.
-            writeln!(manifest, "clap = \"4\"")?;
+            "clap = \"4\"".to_owned()
         }
         Injection::DevTestHelpers => {
-            writeln!(
-                manifest,
-                "ortho_config_test_helpers = {{ path = {helpers_path} }}"
-            )?;
+            format!("ortho_config_test_helpers = {{ path = {helpers_path} }}")
         }
     }
-    Ok(())
 }

@@ -46,33 +46,31 @@ pub(crate) fn build_fixture(
     cargo: &FixtureCargo,
     previous_out_dir: Option<&Path>,
 ) -> Result<FixtureBuild> {
-    let mut command = Command::new("cargo");
-    cargo_environment::CargoEnvironment::build().apply(&mut command);
-    command
-        .args([
-            "build",
-            "-p",
-            "orthohelp_fixture",
-            "--message-format=json-render-diagnostics",
-        ])
-        .arg("--target-dir")
-        .arg(&cargo.target_directory)
-        .current_dir(&cargo.repository)
-        .env_remove("ORTHO_CONFIG_EMIT_IDENTIFIERS");
-    if emit {
-        command.env("ORTHO_CONFIG_EMIT_IDENTIFIERS", "1");
-    }
+    let mut command = fixture_build_command(emit, cargo);
     let messages = Arc::new(Mutex::new(CargoMessages::for_package(
         cargo.package_id.clone(),
     )));
-    let observed_messages = Arc::clone(&messages);
-    // The nested Cargo holds the lease handle this process hands it, so a
-    // replacement cannot clean the target mid-build or after this process is
-    // interrupted while Cargo is still running. Cargo's own children receive a
-    // null standard input, so the handle stops at Cargo; the parent's tree
-    // termination removes the compilers beneath it.
+    let output = run_observed_build(&mut command, cargo, &messages)?;
+    let (out_dir, counts) = settle_report(&messages, previous_out_dir)?;
+    record_phase(cargo, emit, counts, &output.stderr)?;
+    Ok(FixtureBuild { out_dir, counts })
+}
+
+/// Run the build under the runner, feeding Cargo's output to `messages`.
+///
+/// The nested Cargo holds the lease handle this process hands it, so a
+/// replacement cannot clean the target mid-build or after this process is
+/// interrupted while Cargo is still running. Cargo's own children receive a
+/// null standard input, so the handle stops at Cargo; the parent's tree
+/// termination removes the compilers beneath it.
+fn run_observed_build(
+    command: &mut Command,
+    cargo: &FixtureCargo,
+    messages: &Arc<Mutex<CargoMessages>>,
+) -> Result<std::process::Output> {
+    let observed_messages = Arc::clone(messages);
     let output = process_runner::run_with_hooks(
-        &mut command,
+        command,
         process_runner::Operation("build identifier artefact fixture"),
         cargo.bounded_policy(
             process_runner::Policy::build(),
@@ -91,20 +89,61 @@ pub(crate) fn build_fixture(
         "fixture build should succeed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let mut report = lock_cargo_messages(&messages);
+    Ok(output)
+}
+
+/// Read the build-script directory and unit counts from Cargo's messages.
+///
+/// A build that reused the script reports no directory, so the previous one
+/// stands in when the caller has it.
+fn settle_report(
+    messages: &Mutex<CargoMessages>,
+    previous_out_dir: Option<&Path>,
+) -> Result<(PathBuf, BuildCounts)> {
+    let mut report = lock_cargo_messages(messages);
     let out_dir = report
         .finish()?
         .or_else(|| previous_out_dir.map(Path::to_path_buf))
         .context("Cargo output omitted the fixture build-script directory")?;
-    let counts = report.counts();
-    if let Some(telemetry) = cargo.telemetry() {
-        telemetry.record(PhaseRecord {
-            emit,
-            counts,
-            stderr: &output.stderr,
-        })?;
+    Ok((out_dir, report.counts()))
+}
+
+/// The `cargo build` command for the fixture, with artefact emission on or off.
+fn fixture_build_command(emit: bool, cargo: &FixtureCargo) -> Command {
+    let mut command = Command::new("cargo");
+    cargo_environment::CargoEnvironment::build().apply(&mut command);
+    command
+        .args([
+            "build",
+            "-p",
+            "orthohelp_fixture",
+            "--message-format=json-render-diagnostics",
+        ])
+        .arg("--target-dir")
+        .arg(&cargo.target_directory)
+        .current_dir(&cargo.repository)
+        .env_remove("ORTHO_CONFIG_EMIT_IDENTIFIERS");
+    if emit {
+        command.env("ORTHO_CONFIG_EMIT_IDENTIFIERS", "1");
     }
-    Ok(FixtureBuild { out_dir, counts })
+    command
+}
+
+/// Report the build's phase to the case's telemetry, when it keeps any.
+fn record_phase(
+    cargo: &FixtureCargo,
+    emit: bool,
+    counts: BuildCounts,
+    stderr: &[u8],
+) -> Result<()> {
+    let Some(telemetry) = cargo.telemetry() else {
+        return Ok(());
+    };
+    telemetry.record(PhaseRecord {
+        emit,
+        counts,
+        stderr,
+    })
 }
 
 /// Remove only the fixture's build output in its private target directory.

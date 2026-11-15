@@ -123,21 +123,33 @@ fn parse_default_expr(
     meta: &syn::meta::ParseNestedMeta<'_>,
     kind: ClapDefaultKind,
 ) -> syn::Result<Option<ClapInferredDefault>> {
-    let parsed = match kind {
-        ClapDefaultKind::Value => ClapInferredDefault::Value(Box::new(ClapDefaultValue {
-            value: meta.value()?.parse::<Expr>()?,
-            value_parser: None,
-            value_enum: false,
-            value_delimiter: None,
-            ignore_case: None,
-            leaf_type: syn::parse_quote! { () },
-            shape: ClapDefaultValueShape::Scalar,
-        })),
-        ClapDefaultKind::ValueT => ClapInferredDefault::ValueT(meta.value()?.parse::<Expr>()?),
-        ClapDefaultKind::ValuesT => ClapInferredDefault::ValuesT(meta.value()?.parse::<Expr>()?),
-        ClapDefaultKind::Other => return Ok(None),
-    };
-    Ok(Some(parsed))
+    match kind {
+        ClapDefaultKind::Value => string_default(meta).map(Some),
+        ClapDefaultKind::ValueT => parse_expr_value(meta, ClapInferredDefault::ValueT).map(Some),
+        ClapDefaultKind::ValuesT => parse_expr_value(meta, ClapInferredDefault::ValuesT).map(Some),
+        ClapDefaultKind::Other => Ok(None),
+    }
+}
+
+/// Parses the `= <expr>` value and wraps it with `wrap`.
+fn parse_expr_value(
+    meta: &syn::meta::ParseNestedMeta<'_>,
+    wrap: fn(Expr) -> ClapInferredDefault,
+) -> syn::Result<ClapInferredDefault> {
+    meta.value()?.parse::<Expr>().map(wrap)
+}
+
+/// Builds a string default whose parser hints and type are filled in later.
+fn string_default(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<ClapInferredDefault> {
+    Ok(ClapInferredDefault::Value(Box::new(ClapDefaultValue {
+        value: meta.value()?.parse::<Expr>()?,
+        value_parser: None,
+        value_enum: false,
+        value_delimiter: None,
+        ignore_case: None,
+        leaf_type: syn::parse_quote! { () },
+        shape: ClapDefaultValueShape::Scalar,
+    })))
 }
 
 /// Parses default keys and parser hints from one clap nested meta item.
@@ -161,26 +173,35 @@ fn parse_default_from_meta(
         return assign_default_expr(meta, existing_default, parsed);
     }
 
+    if record_parser_hint(meta, hints)? {
+        return Ok(());
+    }
+    skip_unrelated_meta(meta)
+}
+
+/// Records a parser hint, returning whether `meta` named one.
+fn record_parser_hint(
+    meta: &syn::meta::ParseNestedMeta<'_>,
+    hints: &mut ClapDefaultHints,
+) -> syn::Result<bool> {
     if meta.path.is_ident("value_parser") {
         hints.value_parser = Some(meta.value()?.parse()?);
-        return Ok(());
-    }
-    if meta.path.is_ident("value_enum") {
+    } else if meta.path.is_ident("value_enum") {
         hints.value_enum = true;
-        return Ok(());
-    }
-    if meta.path.is_ident("value_delimiter") {
+    } else if meta.path.is_ident("value_delimiter") {
         hints.value_delimiter = Some(meta.value()?.parse()?);
-        return Ok(());
-    }
-    if meta.path.is_ident("ignore_case") {
+    } else if meta.path.is_ident("ignore_case") {
         hints.ignore_case = Some(meta.value()?.parse()?);
-        return Ok(());
+    } else {
+        return Ok(false);
     }
+    Ok(true)
+}
 
+/// Consumes the value of a clap option unrelated to default inference.
+fn skip_unrelated_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
     if meta.input.peek(syn::Token![=]) {
-        let value = meta.value()?;
-        let _: Expr = value.parse()?;
+        meta.value()?.parse::<Expr>()?;
     } else if meta.input.peek(syn::token::Paren) {
         let content;
         syn::parenthesized!(content in meta.input);
@@ -218,20 +239,30 @@ pub(crate) fn clap_default_value(field: &syn::Field) -> syn::Result<Option<ClapI
         clap_default_value_from_attribute(attr, &mut default_expr, &mut hints)?;
     }
     if let Some(ClapInferredDefault::Value(default)) = default_expr.as_mut() {
-        let inferred_type = clap_default_value_type(&field.ty).map_err(|unsupported| {
-            syn::Error::new_spanned(
-                field,
-                format!(
-                    "clap `default_value` inference for `cli_default_as_absent` does not support {unsupported}; use a scalar, `Option<T>`, or `Vec<T>`, or provide `#[ortho_config(default = ...)]`"
-                ),
-            )
-        })?;
-        default.value_parser = hints.value_parser;
-        default.value_enum = hints.value_enum;
-        default.value_delimiter = hints.value_delimiter;
-        default.ignore_case = hints.ignore_case;
-        default.leaf_type = inferred_type.leaf;
-        default.shape = inferred_type.shape;
+        complete_string_default(field, default, hints)?;
     }
     Ok(default_expr)
+}
+
+/// Fills a string default with the parser hints and the field's leaf type.
+fn complete_string_default(
+    field: &syn::Field,
+    default: &mut ClapDefaultValue,
+    hints: ClapDefaultHints,
+) -> syn::Result<()> {
+    let inferred_type = clap_default_value_type(&field.ty).map_err(|unsupported| {
+        syn::Error::new_spanned(
+            field,
+            format!(
+                "clap `default_value` inference for `cli_default_as_absent` does not support {unsupported}; use a scalar, `Option<T>`, or `Vec<T>`, or provide `#[ortho_config(default = ...)]`"
+            ),
+        )
+    })?;
+    default.value_parser = hints.value_parser;
+    default.value_enum = hints.value_enum;
+    default.value_delimiter = hints.value_delimiter;
+    default.ignore_case = hints.ignore_case;
+    default.leaf_type = inferred_type.leaf;
+    default.shape = inferred_type.shape;
+    Ok(())
 }
