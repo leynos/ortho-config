@@ -278,31 +278,15 @@ enum RecordedPid {
 #[cfg(any(target_os = "linux", test))]
 pub(super) fn parse_lock_record(line: &str) -> Option<LockRecord> {
     let mut fields = line.split_whitespace();
-    let ordinal = fields.next()?;
-    if !ordinal.ends_with(':') {
+    if !fields.next()?.ends_with(':') {
         return None;
     }
-    let mut blocked = false;
-    let kind = loop {
-        let field = fields.next()?;
-        if field == "->" {
-            blocked = true;
-            continue;
-        }
-        break field.to_owned();
-    };
+    let (blocked, kind) = parse_blocked_kind(&mut fields)?;
     let mode = fields.next()?.to_owned();
     let access = fields.next()?.to_owned();
-    let pid = match parse_pid(fields.next()?)? {
-        RecordedPid::Owner(pid) => Some(pid),
-        RecordedPid::NoOwner => None,
-    };
+    let pid = owner_of(parse_pid(fields.next()?)?);
     let (device, inode) = parse_identity(fields.next()?)?;
-    // The byte range is always two tokens. A record that stops after the start
-    // offset is not one this parser can report faithfully.
-    let start = fields.next()?;
-    let end = fields.next()?;
-    let range = format!("{start} {end}");
+    let range = parse_range(&mut fields)?;
     Some(LockRecord {
         blocked,
         kind,
@@ -313,6 +297,39 @@ pub(super) fn parse_lock_record(line: &str) -> Option<LockRecord> {
         inode,
         range,
     })
+}
+
+/// Reads the lock kind, noting whether a `->` marker flagged the record blocked.
+#[cfg(any(target_os = "linux", test))]
+fn parse_blocked_kind<'a>(fields: &mut impl Iterator<Item = &'a str>) -> Option<(bool, String)> {
+    let mut blocked = false;
+    loop {
+        let field = fields.next()?;
+        if field != "->" {
+            return Some((blocked, field.to_owned()));
+        }
+        blocked = true;
+    }
+}
+
+/// The owning process a pid column named, or `None` when the kernel named none.
+#[cfg(any(target_os = "linux", test))]
+const fn owner_of(recorded: RecordedPid) -> Option<ProcessId> {
+    match recorded {
+        RecordedPid::Owner(pid) => Some(pid),
+        RecordedPid::NoOwner => None,
+    }
+}
+
+/// Reads the byte range, which is always two tokens.
+///
+/// A record that stops after the start offset is not one this parser can
+/// report faithfully.
+#[cfg(any(target_os = "linux", test))]
+fn parse_range<'a>(fields: &mut impl Iterator<Item = &'a str>) -> Option<String> {
+    let start = fields.next()?;
+    let end = fields.next()?;
+    Some(format!("{start} {end}"))
 }
 
 /// Parses the pid column, mapping the kernel's `-1` to no owner.

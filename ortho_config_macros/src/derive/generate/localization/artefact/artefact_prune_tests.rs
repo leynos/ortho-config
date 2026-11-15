@@ -22,27 +22,65 @@ fn rendered(name: &str) -> ArtefactFile {
 /// Verifies the rendered-file predicate matches the three published shapes.
 #[test]
 fn rendered_artefact_predicate_matches_published_names() -> Result<()> {
+    ensure_classified(
+        &[
+            "cli-identifiers.json",
+            "cli-identifiers.index.json",
+            "cli-identifiers.0.json",
+            "cli-identifiers.12.json",
+        ],
+        true,
+    )?;
+    // Fragments live in a subdirectory and the lock is not JSON, so neither is
+    // rendered output. A near-miss name must not be pruned either.
+    ensure_classified(
+        &[
+            "cli-identifiers.lock",
+            "cli-identifiers",
+            "cli-identifiers.0.txt",
+            "cli-identifiers.abc.json",
+            "cli-identifiers.extra.json",
+            "other.json",
+        ],
+        false,
+    )
+}
+
+/// Requires every name to be classified as rendered output, or none of them.
+fn ensure_classified(names: &[&str], expected: bool) -> Result<()> {
+    for name in names {
+        ensure!(
+            is_rendered_artefact(name) == expected,
+            "{name} must{} be treated as rendered output",
+            if expected { "" } else { " not" }
+        );
+    }
+    Ok(())
+}
+
+/// Writes the split layout, a fragment and the lock into `root`.
+fn write_split_layout(root: &std::path::Path) -> Result<()> {
     for name in [
         "cli-identifiers.json",
         "cli-identifiers.index.json",
         "cli-identifiers.0.json",
-        "cli-identifiers.12.json",
+        "cli-identifiers.1.json",
     ] {
-        ensure!(is_rendered_artefact(name), "{name} must be rendered output");
+        fs::write(root.join(name), b"{}").context("write rendered fixture")?;
     }
-    // Fragments live in a subdirectory and the lock is not JSON, so neither is
-    // rendered output. A near-miss name must not be pruned either.
-    for name in [
-        "cli-identifiers.lock",
-        "cli-identifiers",
-        "cli-identifiers.0.txt",
-        "cli-identifiers.abc.json",
-        "cli-identifiers.extra.json",
-        "other.json",
-    ] {
+    fs::create_dir_all(root.join(FRAGMENT_DIR)).context("create fragment directory")?;
+    fs::write(root.join(FRAGMENT_DIR).join("kept.json"), b"{}")
+        .context("write fragment fixture")?;
+    fs::write(root.join("cli-identifiers.lock"), b"").context("write lock fixture")?;
+    Ok(())
+}
+
+/// Requires each named file to be gone from `root`.
+fn ensure_pruned(root: &std::path::Path, names: &[&str]) -> Result<()> {
+    for name in names {
         ensure!(
-            !is_rendered_artefact(name),
-            "{name} must not be treated as rendered output"
+            !root.join(name).exists(),
+            "superseded {name} must be pruned"
         );
     }
     Ok(())
@@ -57,18 +95,7 @@ fn rendered_artefact_predicate_matches_published_names() -> Result<()> {
 #[test]
 fn prune_removes_parts_superseded_by_single_file() -> Result<()> {
     let root = TempRoot::new()?;
-    for name in [
-        "cli-identifiers.json",
-        "cli-identifiers.index.json",
-        "cli-identifiers.0.json",
-        "cli-identifiers.1.json",
-    ] {
-        fs::write(root.path().join(name), b"{}").context("write rendered fixture")?;
-    }
-    fs::create_dir_all(root.path().join(FRAGMENT_DIR)).context("create fragment directory")?;
-    fs::write(root.path().join(FRAGMENT_DIR).join("kept.json"), b"{}")
-        .context("write fragment fixture")?;
-    fs::write(root.path().join("cli-identifiers.lock"), b"").context("write lock fixture")?;
+    write_split_layout(root.path())?;
 
     prune_stale_rendered(root.path(), &[rendered("cli-identifiers.json")])
         .context("prune superseded renders")?;
@@ -77,16 +104,14 @@ fn prune_removes_parts_superseded_by_single_file() -> Result<()> {
         root.path().join("cli-identifiers.json").is_file(),
         "the current render must survive"
     );
-    for name in [
-        "cli-identifiers.index.json",
-        "cli-identifiers.0.json",
-        "cli-identifiers.1.json",
-    ] {
-        ensure!(
-            !root.path().join(name).exists(),
-            "superseded {name} must be pruned"
-        );
-    }
+    ensure_pruned(
+        root.path(),
+        &[
+            "cli-identifiers.index.json",
+            "cli-identifiers.0.json",
+            "cli-identifiers.1.json",
+        ],
+    )?;
     ensure!(
         root.path().join(FRAGMENT_DIR).join("kept.json").is_file(),
         "fragments must survive pruning"

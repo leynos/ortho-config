@@ -158,6 +158,12 @@ fn env_value_reports_missing_variable() {
 
 #[test]
 fn concurrent_mutations_restore_values() {
+    assert_workers_restore_their_own_keys();
+    assert_stacked_guards_on_one_key_restore_in_order();
+}
+
+/// Each worker mutates its own key repeatedly; every key ends as it began.
+fn assert_workers_restore_their_own_keys() {
     const THREADS: usize = 4;
     const ITERATIONS: usize = 8;
     let keys: Vec<_> = (0..THREADS)
@@ -176,14 +182,21 @@ fn concurrent_mutations_restore_values() {
         .collect();
 
     handles.into_iter().for_each(assert_join_success);
+    assert_keys_restored_and_cleaned(keys);
+}
 
+/// Requires each key to hold its original value again, then removes it.
+fn assert_keys_restored_and_cleaned(keys: Vec<String>) {
     for key in keys {
         let original =
             env_value(&key).expect("original worker environment value should be readable");
         assert_eq!(original, "original");
         cleanup_test_env(&key);
     }
+}
 
+/// Two guards stacked on one key restore the base value in last-in-first-out order.
+fn assert_stacked_guards_on_one_key_restore_in_order() {
     let same_key = "TEST_HELPERS_CONCURRENT_SAME_KEY";
     setup_test_env(same_key, "base");
     let guard1 = set_var(same_key, "v1");

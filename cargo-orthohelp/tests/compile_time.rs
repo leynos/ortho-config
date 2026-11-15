@@ -202,27 +202,21 @@ fn uncommented_config_lines() -> impl Iterator<Item = &'static str> {
         .filter(|line| !line.starts_with('#'))
 }
 
-fn rustflags_in_config_section(section: CargoConfigSection) -> Option<Vec<String>> {
-    let section_header = section.header();
-    let mut in_section = false;
-    let mut section_found = false;
-    let mut section_lines = Vec::new();
-    for trimmed in uncommented_config_lines() {
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            if section_found {
-                break;
-            }
-            in_section = trimmed == section_header;
-            section_found |= in_section;
-        } else if in_section {
-            section_lines.push(trimmed);
-        }
-    }
-    if !section_found {
-        return None;
-    }
+/// The body lines of the first `header` table, or `None` when it is absent.
+///
+/// The body ends at the next table header.
+fn config_section_lines(header: &str) -> Option<Vec<&'static str>> {
+    let mut lines = uncommented_config_lines().skip_while(|line| *line != header);
+    lines.next()?;
+    Some(
+        lines
+            .take_while(|line| !(line.starts_with('[') && line.ends_with(']')))
+            .collect(),
+    )
+}
 
-    let section_text = section_lines.join("\n");
+fn rustflags_in_config_section(section: CargoConfigSection) -> Option<Vec<String>> {
+    let section_text = config_section_lines(section.header())?.join("\n");
     let list = section_text
         .split_once("rustflags = [")?
         .1

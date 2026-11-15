@@ -172,21 +172,32 @@ fn build_packaged_set(budget: Budget) -> Result<Vec<PackagedCrate>> {
     let target = repository.join(BOUNDARY_ROOT).join("packaging-target");
     Dir::create_ambient_dir_all(&target, cap_std::ambient_authority())
         .with_context(|| format!("create packaging target {target}"))?;
+    run_packaging_invocations(&repository, &target, budget)?;
+    Ok(packaged_roots(&target.join(PACKAGE_DIRECTORY)))
+}
 
+/// Run each packaging invocation, in order, into `target`.
+fn run_packaging_invocations(
+    repository: &camino::Utf8Path,
+    target: &camino::Utf8Path,
+    budget: Budget,
+) -> Result<()> {
     for invocation in &PACKAGING_INVOCATIONS {
-        package_sources(&repository, &target, invocation, budget)?;
+        package_sources(repository, target, invocation, budget)?;
     }
+    Ok(())
+}
 
-    let package_directory = target.join(PACKAGE_DIRECTORY);
-    let mut roots = Vec::new();
-    for (name, version) in PACKAGED_CRATES {
-        roots.push(PackagedCrate {
+/// The unpacked root of every packaged crate beneath `package_directory`.
+fn packaged_roots(package_directory: &camino::Utf8Path) -> Vec<PackagedCrate> {
+    PACKAGED_CRATES
+        .into_iter()
+        .map(|(name, version)| PackagedCrate {
             name,
             version,
             root: package_directory.join(format!("{name}-{version}")),
-        });
-    }
-    Ok(roots)
+        })
+        .collect()
 }
 
 /// Assert every packaged root and archive exists.

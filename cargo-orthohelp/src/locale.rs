@@ -60,46 +60,57 @@ pub fn load_consumer_resources(
         return Ok(Vec::new());
     };
 
-    let mut files = Vec::new();
-    for entry_result in dir.read_dir(".").map_err(|err| OrthohelpError::Io {
-        path: locale_dir.clone(),
-        source: err,
-    })? {
-        let entry = entry_result.map_err(|err| OrthohelpError::Io {
-            path: locale_dir.clone(),
-            source: err,
-        })?;
-        let file_name = entry.file_name().map_err(|err| OrthohelpError::Io {
-            path: locale_dir.clone(),
-            source: err,
-        })?;
-        if !Utf8Path::new(&file_name)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("ftl"))
-        {
-            continue;
-        }
-        files.push(Utf8PathBuf::from(file_name));
-    }
-
+    let mut files = ftl_file_names(&dir, &locale_dir)?;
     files.sort();
-    let mut resources = Vec::new();
-    for file in files {
-        let mut handle = dir.open(&file).map_err(|err| OrthohelpError::Io {
-            path: locale_dir.clone(),
-            source: err,
-        })?;
-        let mut buffer = String::new();
-        handle
-            .read_to_string(&mut buffer)
-            .map_err(|err| OrthohelpError::Io {
-                path: locale_dir.clone(),
-                source: err,
-            })?;
-        resources.push(buffer);
-    }
+    files
+        .iter()
+        .map(|file| read_resource(&dir, file, &locale_dir))
+        .collect()
+}
 
-    Ok(resources)
+/// List the `.ftl` files directly inside `dir`, ignoring other entries.
+///
+/// Every failure is reported against `locale_dir`, the directory being listed.
+fn ftl_file_names(
+    dir: &cap_std::fs_utf8::Dir,
+    locale_dir: &Utf8Path,
+) -> Result<Vec<Utf8PathBuf>, OrthohelpError> {
+    let io_error = |source: std::io::Error| OrthohelpError::Io {
+        path: locale_dir.to_path_buf(),
+        source,
+    };
+    let mut files = Vec::new();
+    for entry_result in dir.read_dir(".").map_err(io_error)? {
+        let file_name = entry_result
+            .map_err(io_error)?
+            .file_name()
+            .map_err(io_error)?;
+        let is_ftl = Utf8Path::new(&file_name)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("ftl"));
+        if is_ftl {
+            files.push(Utf8PathBuf::from(file_name));
+        }
+    }
+    Ok(files)
+}
+
+/// Read one Fluent resource, reporting failures against `locale_dir`.
+fn read_resource(
+    dir: &cap_std::fs_utf8::Dir,
+    file: &Utf8Path,
+    locale_dir: &Utf8Path,
+) -> Result<String, OrthohelpError> {
+    let io_error = |source: std::io::Error| OrthohelpError::Io {
+        path: locale_dir.to_path_buf(),
+        source,
+    };
+    let mut buffer = String::new();
+    dir.open(file)
+        .map_err(io_error)?
+        .read_to_string(&mut buffer)
+        .map_err(io_error)?;
+    Ok(buffer)
 }
 
 /// Parses locale names and keeps the first occurrence of each normalized identifier.
