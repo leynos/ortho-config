@@ -2,20 +2,25 @@
 //!
 //! The variant count must come from the source Cargo actually built, not from
 //! a guessed registry path or a hard-coded file name. The gate therefore walks
-//! the resolved package's `src/` tree, parses every Rust file, and requires
-//! exactly one top-level `enum ErrorKind`. Anything the count cannot see
-//! safely — a conditional variant, a duplicate definition, a parse failure, a
-//! file or module the compiler may exclude — fails the gate instead of
-//! producing a count that does not describe the resolved build.
+//! the tree below the crate root Cargo reports, parses every Rust file, and
+//! requires exactly one top-level `enum ErrorKind`. Anything the count cannot
+//! see safely — a conditional variant, a duplicate definition, a parse
+//! failure, a file or module the compiler may exclude — fails the gate instead
+//! of producing a count that does not describe the resolved build.
 //!
-//! A declaration inside `src/` is not by itself evidence that the compiler
-//! sees it: `#[cfg]` on a `mod` declaration, a condition applied through a
-//! nested `cfg_attr`, or an inner `#![cfg]` at the top of a module file can
-//! make the declaring file unreachable. A `#[path]` is the opposite hazard: it
-//! can make the compiler load a file this walk would not follow. The walk
-//! therefore follows `mod` declarations from `lib.rs`, certifies the declaring
-//! file only when every hop is unconditional, and refuses a declaration whose
-//! compiled file it cannot establish.
+//! A declaration inside the source tree is not by itself evidence that the
+//! compiler sees it: `#[cfg]` on a `mod` declaration, a condition applied
+//! through a nested `cfg_attr`, or an inner `#![cfg]` at the top of a module
+//! file can make the declaring file unreachable. A `#[path]` is the opposite
+//! hazard: it can make the compiler load a file this walk would not follow.
+//! The walk therefore follows `mod` declarations from the crate root, certifies
+//! the declaring file only when every hop is unconditional, and refuses a
+//! declaration whose compiled file it cannot establish.
+//!
+//! The crate root is the one Cargo reports for the resolved package's library
+//! target, not `src/lib.rs` by convention: [`library_crate_root`] settles that
+//! first, because a package may keep an unused `src/lib.rs` beside the file it
+//! really compiles.
 
 use std::collections::BTreeSet;
 
@@ -27,15 +32,22 @@ use cargo_metadata::Package;
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Item, ItemEnum, ItemMod, Meta, MetaList, Token};
 
-/// The crate root a library package compiles first.
+use super::library::library_crate_root;
+
+/// The crate root a library package compiles first when it declares no path.
 const CRATE_ROOT: &str = "lib.rs";
 
 /// Count the `ErrorKind` variants declared by `package`'s resolved source.
+///
+/// The walk starts at the crate root Cargo reports for the package's library
+/// target, so a package that moves its root with `[lib] path` is counted from
+/// the file the compiler builds rather than from the default location.
 pub(crate) fn count_resolved_error_kinds(package: &Package) -> Result<usize> {
-    let source_root = package_source_root(package)?;
-    let directory = Dir::open_ambient_dir(&source_root, ambient_authority())
-        .with_context(|| format!("open {source_root} to inventory ErrorKind"))?;
-    count_under(&directory, &source_root)
+    let crate_root = library_crate_root(package)?;
+    let (Some(source_root), Some(name)) = (crate_root.parent(), crate_root.file_name()) else {
+        bail!("{crate_root} should sit in a source directory and name a file");
+    };
+    count_error_kinds_from(source_root, Utf8Path::new(name))
 }
 
 /// Count the `ErrorKind` variants declared by a source tree rooted at `root`.
@@ -43,13 +55,18 @@ pub(crate) fn count_resolved_error_kinds(package: &Package) -> Result<usize> {
 /// The fixture controls use this directly, so a committed tree can prove each
 /// refusal without touching the real registry cache.
 pub(super) fn count_error_kinds_under(root: &Utf8Path) -> Result<usize> {
+    count_error_kinds_from(root, Utf8Path::new(CRATE_ROOT))
+}
+
+/// Count from `root`, starting at `crate_root` rather than the default name.
+pub(super) fn count_error_kinds_from(root: &Utf8Path, crate_root: &Utf8Path) -> Result<usize> {
     let directory = Dir::open_ambient_dir(root, ambient_authority())
         .with_context(|| format!("open {root} to inventory ErrorKind"))?;
-    count_under(&directory, root)
+    count_from(&directory, root, crate_root)
 }
 
 /// Count the one unconditional `ErrorKind` declared below `directory`.
-fn count_under(directory: &Dir, source_root: &Utf8Path) -> Result<usize> {
+fn count_from(directory: &Dir, source_root: &Utf8Path, crate_root: &Utf8Path) -> Result<usize> {
     let sources = rust_sources(directory, Utf8Path::new(""))?;
     let mut definitions = Vec::new();
     for relative in &sources {
@@ -69,7 +86,7 @@ fn count_under(directory: &Dir, source_root: &Utf8Path) -> Result<usize> {
                 .collect::<Vec<_>>(),
         );
     };
-    ensure_unconditional(directory, &sources, declaring)?;
+    ensure_unconditional(directory, &sources, declaring, crate_root)?;
     Ok(*count)
 }
 
@@ -80,20 +97,6 @@ fn count_under(directory: &Dir, source_root: &Utf8Path) -> Result<usize> {
 pub(super) fn count_error_kind_variants(source: &str, origin: &Utf8Path) -> Result<usize> {
     analyze_error_kind(source, origin)?
         .with_context(|| format!("{origin} declares no top-level ErrorKind enum to inventory"))
-}
-
-/// The `<package>/src` directory containing the package's Rust sources.
-fn package_source_root(package: &Package) -> Result<Utf8PathBuf> {
-    package
-        .manifest_path
-        .parent()
-        .map(|root| root.join("src"))
-        .with_context(|| {
-            format!(
-                "{} should sit in a package directory",
-                package.manifest_path
-            )
-        })
 }
 
 /// Every `.rs` file below `directory`, as paths relative to the root.
@@ -241,18 +244,19 @@ fn ensure_unconditional(
     directory: &Dir,
     sources: &[Utf8PathBuf],
     declaring: &Utf8Path,
+    crate_root: &Utf8Path,
 ) -> Result<()> {
-    let reachable = unconditionally_compiled(directory, sources)?;
+    let reachable = unconditionally_compiled(directory, sources, crate_root)?;
     ensure!(
         reachable.contains(declaring),
         "{declaring} declares ErrorKind but the compiler does not unconditionally compile it \
-         from {CRATE_ROOT}; a conditional `mod` hop or an inner `#![cfg]` makes the inventory \
+         from {crate_root}; a conditional `mod` hop or an inner `#![cfg]` makes the inventory \
          unprovable, so the gate fails closed",
     );
     Ok(())
 }
 
-/// Every file the compiler compiles whenever it compiles `lib.rs`.
+/// Every file the compiler compiles whenever it compiles `crate_root`.
 ///
 /// Only unconditional module declarations are followed, and a file whose own
 /// inner attributes can remove it from the build certifies nothing. A
@@ -261,17 +265,19 @@ fn ensure_unconditional(
 fn unconditionally_compiled(
     directory: &Dir,
     sources: &[Utf8PathBuf],
+    crate_root: &Utf8Path,
 ) -> Result<BTreeSet<Utf8PathBuf>> {
     ensure!(
-        sources.contains(&Utf8PathBuf::from(CRATE_ROOT)),
-        "expected a crate root {CRATE_ROOT} to locate ErrorKind from",
+        sources.contains(&crate_root.to_path_buf()),
+        "expected a crate root {crate_root} to locate ErrorKind from",
     );
     let mut walker = Reachability {
         directory,
         sources,
+        crate_root,
         reachable: BTreeSet::new(),
     };
-    walker.visit_file(Utf8Path::new(CRATE_ROOT), 0)?;
+    walker.visit_file(crate_root, 0)?;
     Ok(walker.reachable)
 }
 
@@ -281,6 +287,8 @@ struct Reachability<'a> {
     directory: &'a Dir,
     /// Every `.rs` file in the tree, so a hop is only followed when it resolves.
     sources: &'a [Utf8PathBuf],
+    /// The root Cargo reports, which keeps its modules beside itself.
+    crate_root: &'a Utf8Path,
     /// Files certified as compiled unconditionally.
     reachable: BTreeSet<Utf8PathBuf>,
 }
@@ -305,7 +313,7 @@ impl Reachability<'_> {
             self.reachable.remove(file);
             return Ok(());
         }
-        let prefix = module_directory(file);
+        let prefix = module_directory(file, self.crate_root);
         self.visit_items(&parsed.items, &prefix, depth)
     }
 
@@ -370,11 +378,13 @@ fn module_files(prefix: &Utf8Path, module: &ItemMod, sources: &[Utf8PathBuf]) ->
 
 /// The directory a `mod name;` declared in `file` resolves within.
 ///
-/// A crate root (`lib.rs`, `main.rs`) and a `mod.rs` keep their modules beside
-/// themselves; any other `foo.rs` keeps them below `foo/`.
-fn module_directory(file: &Utf8Path) -> Utf8PathBuf {
+/// The crate root Cargo reports and a `mod.rs` keep their modules beside
+/// themselves; any other `foo.rs` keeps them below `foo/`. The root is
+/// compared by path, not by file name: a package may compile `lib/entry.rs`,
+/// and a nested `lib.rs` of its own is then an ordinary module file.
+fn module_directory(file: &Utf8Path, crate_root: &Utf8Path) -> Utf8PathBuf {
     let parent = file.parent().unwrap_or_else(|| Utf8Path::new(""));
-    let is_crate_root = matches!(file.file_name(), Some("mod.rs" | "lib.rs" | "main.rs"));
+    let is_crate_root = file == crate_root || file.file_name() == Some("mod.rs");
     if is_crate_root {
         return parent.to_path_buf();
     }

@@ -7,16 +7,18 @@
 //! that a failure happened: a gate that refused everything would still fail the
 //! supportive cases above them.
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
+use cargo_metadata::Target;
 
 use super::compare_count;
 use super::files::read_text;
 use super::identity::{
     REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, verify_lock_edge, verify_lock_identity,
 };
+use super::library::unique_library_root;
 use super::lock::{Lockfile, select_unique};
-use super::source::{count_error_kind_variants, count_error_kinds_under};
+use super::source::{count_error_kind_variants, count_error_kinds_from, count_error_kinds_under};
 use crate::clap_reviewed::CLAP_ERROR_KIND_COUNT;
 
 /// The directory holding the committed gate fixtures.
@@ -27,6 +29,12 @@ fn fixture_root() -> Utf8PathBuf {
 /// Read one fixture as UTF-8 text.
 fn read_fixture(relative: &str) -> Result<String> {
     read_text(&fixture_root().join(relative))
+}
+
+/// Deserialise one committed `cargo metadata` target list.
+fn read_targets(relative: &str) -> Result<Vec<Target>> {
+    serde_json::from_str(&read_fixture(relative)?)
+        .with_context(|| format!("parse {relative} as cargo metadata targets"))
 }
 
 /// The refusal message, or an empty string when the check passed.
@@ -276,4 +284,62 @@ fn tree_without_a_crate_root_is_refused() -> Result<()> {
 
     let error = refusal(count_error_kinds_under(&root).map(|_| ()));
     ensure_refusal(&error, "expected a crate root lib.rs")
+}
+
+/// The crate root comes from the reported targets, not from their shape.
+///
+/// The fixture also lists a `custom-build` and a `proc-macro` target, so this
+/// distinguishes the library filter from "take the last target" as well as from
+/// the `src/lib.rs` default.
+#[test]
+fn reported_library_root_is_selected_from_the_targets() -> Result<()> {
+    let targets = read_targets("targets/library_beside_other_targets.json")?;
+
+    let root = unique_library_root(&targets)?;
+    ensure!(
+        root == Utf8Path::new("lib/entry.rs"),
+        "{root} should be the reported library root",
+    );
+    Ok(())
+}
+
+/// A package that reports no library target is refused, not counted.
+#[test]
+fn package_without_a_library_target_is_refused() -> Result<()> {
+    let targets = read_targets("targets/no_library.json")?;
+
+    let error = refusal(unique_library_root(&targets).map(|_| ()));
+    ensure_refusal(&error, "no library target")
+}
+
+/// Two library targets are refused, whichever library kinds they use.
+#[test]
+fn two_library_targets_are_refused() -> Result<()> {
+    let targets = read_targets("targets/two_libraries.json")?;
+
+    let error = refusal(unique_library_root(&targets).map(|_| ()));
+    ensure_refusal(&error, "2 library targets")
+}
+
+/// The count follows the reported root, not the default one beside it.
+///
+/// `[lib] path` moves the crate root to `lib/entry.rs`, whose `mod kind;` sits
+/// beside it. The unused `src/lib.rs` declares seventeen variants, so a walk
+/// that started at the default location would report a total for source the
+/// build never compiles.
+#[test]
+fn count_follows_the_reported_library_root() -> Result<()> {
+    let root = fixture_root().join("module_tree/custom_library_root");
+
+    let counted = count_error_kinds_from(&root.join("lib"), Utf8Path::new("entry.rs"))?;
+    ensure!(
+        counted == 3,
+        "the reported root should count three variants, found {counted}",
+    );
+    let decoy = count_error_kinds_from(&root.join("src"), Utf8Path::new("lib.rs"))?;
+    ensure!(
+        decoy == 17,
+        "the unused default root should count seventeen variants, found {decoy}",
+    );
+    Ok(())
 }
