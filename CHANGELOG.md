@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [0.11.0] - 2026-11-15
 
 ### Deprecated (test helpers)
 
@@ -395,6 +395,7 @@ also records changes first published in 0.8.0 and earlier._
 - Add doc comments to generated `OrthoConfig` support structs so crates with
   strict `missing_docs` linting build without broad suppressions (closes #253).
 
+[0.11.0]: https://github.com/leynos/ortho-config/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/leynos/ortho-config/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/leynos/ortho-config/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/leynos/ortho-config/compare/v0.8.0...v0.9.0

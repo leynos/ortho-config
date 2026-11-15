@@ -6,7 +6,7 @@ merging, configuration derives, Figment, or Clap.
 
 ```toml
 [dependencies]
-ortho_l10n = "0.10.0"
+ortho_l10n = "0.11.0"
 ```
 
 ## Load and format a catalogue

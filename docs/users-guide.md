@@ -5,7 +5,7 @@ application. OrthoConfig describes settings as a Rust struct, then loads that
 struct from defaults, a configuration file, environment variables, and
 command-line arguments.
 
-This guide is for application authors using OrthoConfig v0.10.0. It starts with
+This guide is for application authors using OrthoConfig v0.11.0. It starts with
 a small working CLI and grows it one practical task at a time. Each section
 builds on the ones before it, so reading in order works well, but every section
 also stands on its own. Stop as soon as the application has what it needs.
@@ -50,7 +50,7 @@ subcommand parser:
 ```toml
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
-ortho_config = "0.10.0"
+ortho_config = "0.11.0"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -656,7 +656,7 @@ already work in that format:
 <!-- tested-example: guide-yaml-install -->
 ```toml
 [dependencies]
-ortho_config = { version = "0.10.0", features = ["yaml"] }
+ortho_config = { version = "0.11.0", features = ["yaml"] }
 ```
 
 YAML uses YAML 1.2 semantics: legacy words such as `yes` and `on` remain
@@ -1564,7 +1564,7 @@ recorder:
 <!-- tested-example: guide-metrics-install -->
 ```toml
 [dependencies]
-ortho_config = { version = "0.10.0", features = ["metrics"] }
+ortho_config = { version = "0.11.0", features = ["metrics"] }
 ```
 
 The feature emits bounded counters for discovery, merging, and subcommand path
@@ -1585,7 +1585,7 @@ that alias, which is useful in workspaces that reserve the canonical crate name:
 <!-- tested-example: guide-alias-install -->
 ```toml
 [dependencies]
-config_layer = { package = "ortho_config", version = "0.10.0" }
+config_layer = { package = "ortho_config", version = "0.11.0" }
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -1668,7 +1668,7 @@ directly.
 
 The optional `metrics` feature enables a counter for `cargo-orthohelp` bridge
 cache outcomes. It is new in v0.11.0, and the published v0.10.0 package does
-not carry it, so install from a source checkout until that release ships:
+not carry it. Install it from a source checkout:
 
 <!-- tested-example: guide-orthohelp-bridge-cache-metrics -->
 ```console
@@ -2029,6 +2029,9 @@ adopting the toolchain. Configure the policy under
 
 <!-- tested-example: guide-policy-config -->
 ```toml
+[package]
+version = "0.11.0"
+
 [package.metadata.ortho_config.policy]
 mode = "warn"
 
