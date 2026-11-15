@@ -3586,12 +3586,19 @@ is what observes the runner the arithmetic assumes.
 The choosers publish through `GITHUB_ENV`, which records intent. The two
 `Verify the … coverage target root` steps read it back after the second
 coverage action and require the chosen directory to exist, so a chooser that is
-shadowed by an `env` block, reordered, or left with an empty value fails the
-leg that owns it instead of surfacing later as a refused command line. Each
-step recomputes its expected root from the chooser's own expression — the
-Windows step re-derives the drive root from `RUNNER_TEMP`, the Linux step
-rebuilds `$RUNNER_TEMP/llvm-cov-target` — so there is no second copy of the
-path to drift.
+reordered after the actions, or left with an empty value, fails the leg that
+owns it instead of surfacing later as a refused command line. Each step
+recomputes its expected root from the chooser's own expression — the Windows
+step re-derives the drive root from `RUNNER_TEMP`, the Linux step rebuilds
+`$RUNNER_TEMP/llvm-cov-target` — so there is no second copy of the path to
+drift.
+
+A step-level `env` block declaring either variable is a different case, and the
+steps cannot see it: the block applies only to its own step, so the check still
+reads the chooser's value and passes when either pass created the expected
+directory. `coverage_target_root_verification_test.py` rejects such a block at
+workflow, job and step level, so that edit fails in the contract suite rather
+than in the lane.
 
 The Linux step is plain Bash, and `coverage_target_root_behaviour_test.py`
 exercises its acceptance and rejection paths on every host. The Windows step

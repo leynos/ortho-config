@@ -19,12 +19,18 @@ now set `CARGO_TARGET_DIR` and `CARGO_LLVM_COV_TARGET_DIR` to
 `$RUNNER_TEMP/llvm-cov-target` on Linux.
 
 Those steps publish a root to `GITHUB_ENV`. Publishing is not receipt. A later
-edit that adds a step-level `env`, that reorders a chooser after the actions,
-or that lets a platform's value arrive empty would leave the chooser looking
-correct while the coverage processes built somewhere else — and the first
-evidence would again be a refused command line on one leg. Reading the
-variables back, and requiring the derived directory to exist, turns that class
-of edit into a failure where it happens.
+edit that reorders a chooser after the actions, or that lets a platform's value
+arrive empty, would leave the chooser looking correct while the coverage
+processes built somewhere else — and the first evidence would again be a
+refused command line on one leg. Reading the variables back, and requiring the
+chosen directory to exist, turns those edits into a failure where they happen.
+
+A step-level `env` block is the third way to shadow the chooser, and reading
+the variables back cannot see it: the block applies only to its own step, so
+the verification still reads the value the chooser published, and it passes if
+either pass created the expected directory.
+`coverage_target_root_verification_test.py` rejects any workflow, job or step
+`env` block that declares either variable, which is where that edit is caught.
 
 ## Decision Drivers
 
