@@ -1,6 +1,5 @@
 //! Unit tests for requirement schema composition and collection.
 
-use rstest::rstest;
 use serde_json::json;
 
 use super::collect::collect_missing;
@@ -211,65 +210,10 @@ fn cli_hints_apply_only_to_top_level_leaves() {
     )));
 }
 
-#[test]
-fn environment_routes_uppercase_and_nest_segments() {
-    let fields = vec![required_object("database", vec![required_leaf("host")])];
-    let hints = RouteHints {
-        prefix: Some(String::from("DEMO_")),
-        cli_flags: Vec::new(),
-    };
-    let report =
-        collect_missing(&fields, &json!({}), &hints, None).expect("the nested leaf is absent");
-    let item = report
-        .items()
-        .first()
-        .expect("the nested leaf is the only reported requirement");
-    let variables: Vec<&str> = item
-        .routes()
-        .iter()
-        .filter_map(|route| match route {
-            SupplyRoute::Environment { variable } => Some(variable.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(variables, vec!["DEMO_DATABASE__HOST"]);
-}
-
-/// Assert the sole reported requirement for `key` has no environment route.
-///
-/// `environment_routes_uppercase_and_nest_segments` is the positive control:
-/// the same collection passes over an expressible key and does advertise a
-/// variable, so a rejection here is a property of the key and not of the
-/// harness.
-fn assert_no_environment_route(key: &str, reason: &str) {
-    let fields = vec![required_leaf(key)];
-    let report = collect_missing(&fields, &json!({}), &RouteHints::default(), None)
-        .expect("the leaf is absent");
-    let item = report
-        .items()
-        .first()
-        .expect("the leaf is the only reported requirement");
-    assert!(
-        item.routes()
-            .iter()
-            .all(|route| !matches!(route, SupplyRoute::Environment { .. })),
-        "`{key}` must not advertise an environment route: {reason}"
-    );
-}
-
-#[rstest]
-#[case::dotted("a.b", "a literal dot nests instead of naming one key")]
-#[case::split("a__b", "an embedded `__` splits into two segments")]
-#[case::trimmed(" a", "surrounding whitespace is trimmed away")]
-#[case::uppercase("aB", "the final transform lowercases the key")]
-#[case::equals("a=b", "`=` separates a variable's name from its value")]
-#[case::nul("a\0b", "a NUL terminates the name the platform call receives")]
-fn keys_the_provider_cannot_express_have_no_environment_route(
-    #[case] key: &str,
-    #[case] reason: &str,
-) {
-    assert_no_environment_route(key, reason);
-}
+// The route tests live in their own file so both stay within the
+// repository's 400-line ceiling.
+#[path = "tests_routes.rs"]
+mod routes;
 
 /// A schema type whose composition refuses to terminate.
 struct Recursive;

@@ -276,19 +276,39 @@ fn routes_for(
 /// only when those transformations leave the key path unchanged; otherwise the
 /// advertised variable would populate a different key and the suggestion would
 /// be false.
+///
+/// Both the segments and the path they form are checked, because the provider
+/// splits the *joined* name: a segment edge can merge with the separator and
+/// produce a path no individual segment check can predict.
 fn environment_variable(path: &ConfigPath, prefix: Option<&str>) -> Option<String> {
-    if !path
-        .segments()
-        .iter()
-        .all(|segment| is_expressible(segment))
-    {
+    let segments = path.segments();
+    if !segments.iter().all(|segment| is_expressible(segment)) {
         return None;
     }
-    let joined = path.segments().join("__").to_ascii_uppercase();
+    let joined = segments.join("__");
+    if !provider_reads_the_same_path(&joined, segments) {
+        return None;
+    }
+    let variable = joined.to_ascii_uppercase();
     Some(match prefix {
-        Some(configured) => format!("{configured}{joined}"),
-        None => joined,
+        Some(configured) => format!("{configured}{variable}"),
+        None => variable,
     })
+}
+
+/// Replay the provider's split transform and require it to reproduce `path`.
+///
+/// The injected provider replaces *every* `__` in the joined name with a dot,
+/// then lowercases. An underscore at a segment edge therefore merges with the
+/// separator: joining `database_` and `host` gives `database___host`, which the
+/// provider reads as `database` plus `_host`. Advertising `APP_DATABASE___HOST`
+/// for `database_.host` would send the user to a variable that supplies a
+/// different key, so such a path gets no environment route at all.
+fn provider_reads_the_same_path(joined: &str, segments: &[String]) -> bool {
+    joined
+        .replace("__", ".")
+        .split('.')
+        .eq(segments.iter().map(String::as_str))
 }
 
 /// Report whether one path segment survives the provider's key transforms.

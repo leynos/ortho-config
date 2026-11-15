@@ -124,9 +124,12 @@ the spelling: a non-identifier canonical key has no CLI flag, and a path
 segment containing a literal dot has no environment variable. A segment
 containing `=` or a NUL has no variable at all — every process environment
 treats `=` as the separator between name and value, and a NUL terminates the
-name — so only the configuration-file route remains. That route quotes any
-segment outside TOML's bare-key alphabet, which keeps the advertised spelling
-one the file can actually express.
+name — so only the configuration-file route remains. The test is applied to the
+whole path, not to each segment alone: the provider splits the joined name, so
+`database_.host` becomes a variable it reads back as `database._host`, and an
+edge underscore therefore also loses the environment route. That route quotes
+any segment outside TOML's bare-key alphabet, which keeps the advertised
+spelling one the file can actually express.
 
 ## 3. Implementation design
 

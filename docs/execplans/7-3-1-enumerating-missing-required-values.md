@@ -340,6 +340,25 @@ with a compatibility probe rather than an assumption.
     is rendered, and then recovers `host` and `port` from the advertised table.
     ADR-0022 gains a third amendment; the design document and the
     improved-error design record the same rules.
+- [x] (2026-11-15) Fifth completeness assessment (round c5,
+  `7-3-1-completeness-2026-11-15-c5`) found one environment-route defect against
+  `3dbd552b`. Repaired in this round:
+  - `environment_variable` now validates the whole path, not each segment
+    alone. The provider replaces every `__` in the *joined* name with a dot, so
+    a segment edge merges with the separator: `database_` plus `host` gives
+    `database___HOST`, which the provider reads as `database` plus `_host`.
+    The advertised variable named a different key and would have repaired
+    nothing. `provider_reads_the_same_path` replays that split and offers a
+    route only when it reproduces the canonical path.
+  - New evidence: a `required_values` unit table pairing the expressible and
+    leading-underscore paths (both routable) with the trailing-underscore path
+    (not routable), and the generated-loader case
+    `a_trailing_underscore_parent_has_no_environment_route` in
+    `tests/support/missing_required_keys.rs`. It reports `database_.host` with
+    no `env:` route, keeps the `file:database_.host` route, recovers from a
+    `[database_]` table, and uses a separator-free root as the positive control
+    by recovering `MRT_DATABASE__HOST`. ADR-0022 gains a fourth amendment; the
+    design document and the improved-error design record the whole-path rule.
 
 ## Surprises & discoveries
 
@@ -560,6 +579,20 @@ them expressible; the file route therefore carries the whole advertising duty,
 and it quotes and escapes whatever a TOML bare key cannot spell. Rejecting the
 combination outright was considered for the nested case and rejected: it would
 turn existing user code into a compile error for a diagnostic limitation.
+
+D10 (2026-11-15, accepted, refining D9): decide an environment route from the
+whole path. D9 checked each segment against the provider's transforms, but the
+provider does not transform segments: it joins them with `__` and then replaces
+every `__` in the joined name with a dot. A segment edge therefore merges with
+the separator, and `database_.host` was advertised as `APP_DATABASE___HOST` — a
+variable the provider reads back as `database._host`, so supplying it repaired
+nothing. The collector now replays the split on the joined name and offers a
+route only when the replay reproduces the path exactly. A leading underscore
+keeps its route, because the prefix strip exposes it rather than absorbing it,
+so the rule rejects the overlap rather than any underscore. The alternative —
+changing the separator or escaping underscores in the provider — would alter
+the variable names of existing configurations, which is a wider behavioural
+change than this plan covers.
 
 ## Outcomes & retrospective
 

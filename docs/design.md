@@ -219,7 +219,11 @@ extends that contract to selected subcommands.
 - An environment route is offered only when the provider's transforms leave the
   spelling unchanged and the spelling can name a variable at all. A segment
   containing `=` or a NUL can never do so: every process environment treats `=`
-  as the separator between name and value, and a NUL terminates the name.
+  as the separator between name and value, and a NUL terminates the name. The
+  check covers the whole path, not each segment alone, because the provider
+  splits the joined name: an edge underscore merges with the `__` separator, so
+  `database_.host` would be advertised as a variable the provider reads back as
+  `database._host`.
 - Configuration-file routes render every key as TOML accepts it, emitting a
   quoted and escaped basic string for any segment a bare key cannot express.
 

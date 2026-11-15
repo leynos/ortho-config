@@ -392,6 +392,19 @@ The configuration-file route remains, and it now quotes and escapes any segment
 outside TOML's bare-key alphabet, so the advertised spelling is one the file
 can express.
 
+### 2026-11-15 — the whole path decides an environment route
+
+**Segment checks are not enough.** The provider joins the path with `__` and
+then replaces _every_ `__` in the joined name with a dot, so a segment edge
+merges with the separator. `database_` joined to `host` gives
+`database___host`, which the provider reads as `database` plus `_host`;
+advertising `APP_DATABASE___HOST` would populate a different key and repair
+nothing. The collector therefore replays the provider's split on the joined
+name and offers an environment route only when the replay reproduces the
+canonical path exactly. A leading underscore keeps its route, because the
+prefix strip exposes it rather than absorbing it: `_database.host` is reached
+through `APP__DATABASE__HOST`.
+
 ## References
 
 - [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).

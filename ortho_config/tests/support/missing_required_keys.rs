@@ -12,7 +12,9 @@
 //! - a key that no bare TOML key can express is recovered from a configuration
 //!   file through the quoted spelling the report advertises;
 //! - a defaulted flatten composes every child leaf, so supplying one still
-//!   exposes the other.
+//!   exposes the other;
+//! - a nested parent ending in `_` merges with the provider's `__` separator,
+//!   so it must not advertise an environment route.
 //!
 //! Fields read through a custom deserializer are covered separately in
 //! `missing_required_deserializers.rs`.
@@ -98,6 +100,32 @@ struct TwoLeafFlattenRoot {
     extra: TwoLeafChild,
     /// A sibling that keeps a partial report observable.
     region: String,
+}
+
+/// A required leaf reached through a renamed parent.
+#[derive(Debug, Deserialize, Serialize, ortho_config::RequiredConfigSchema)]
+struct ParentedLeaf {
+    /// The leaf every case must still name.
+    host: String,
+}
+
+/// A root whose nested parent ends in the provider's separator character.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRU_")]
+struct TrailingUnderscoreParentRoot {
+    /// Joined to its child with `__`, `database_` reads back as `database._host`.
+    #[serde(rename = "database_")]
+    #[ortho_config(nested, skip_cli)]
+    database: ParentedLeaf,
+}
+
+/// A root with the same shape and a parent that leaves the separator intact.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRT_")]
+struct NestedParentRoot {
+    /// An ordinary nested parent, kept as the positive control.
+    #[ortho_config(nested, skip_cli)]
+    database: ParentedLeaf,
 }
 
 /// Write `contents` into a discoverable configuration file.
@@ -249,6 +277,59 @@ fn supplying_one_flattened_leaf_exposes_the_other() -> Result<()> {
         config.extra.host,
         config.extra.port,
         config.region
+    );
+    Ok(())
+}
+
+/// A parent ending in `_` must not advertise a variable it cannot own.
+///
+/// The provider splits the joined name rather than the segments, so
+/// `database_` plus `__` becomes `database___HOST`, which it reads as
+/// `database._host`. The advertised variable would repair nothing. The
+/// separator-free root beside it is the positive control: same shape, same
+/// leaf, and its advertised variable really does recover the value.
+#[test]
+fn a_trailing_underscore_parent_has_no_environment_route() -> Result<()> {
+    let missing = report(load::<TrailingUnderscoreParentRoot>(&[PROGRAM], &[]))?;
+    ensure!(
+        paths(&missing) == ["database_.host"],
+        "the leaf keeps its canonical path, got {:?}",
+        paths(&missing)
+    );
+    let routes = routes_for(&missing, "database_.host")?;
+    ensure!(
+        !routes.iter().any(|route| route.starts_with("env:")),
+        "`database_` merges with the separator, so no variable can name it: {routes:?}"
+    );
+    ensure!(
+        routes.iter().any(|route| route == "file:database_.host"),
+        "the file route remains truthful, got {routes:?}"
+    );
+
+    let control = report(load::<NestedParentRoot>(&[PROGRAM], &[]))?;
+    let control_routes = routes_for(&control, "database.host")?;
+    ensure!(
+        control_routes
+            .iter()
+            .any(|route| route == "env:MRT_DATABASE__HOST"),
+        "an expressible nested path must advertise its variable, got {control_routes:?}"
+    );
+
+    let (_dir, path) = config_file("[database_]\nhost = \"db\"\n")?;
+    let from_file = load::<TrailingUnderscoreParentRoot>(&[PROGRAM], &[("MRU_CONFIG_PATH", &path)])
+        .map_err(|error| anyhow!("the advertised file route must recover: {error}"))?;
+    ensure!(
+        from_file.database.host == "db",
+        "the table must supply the leaf, got {}",
+        from_file.database.host
+    );
+
+    let from_env = load::<NestedParentRoot>(&[PROGRAM], &[("MRT_DATABASE__HOST", "db")])
+        .map_err(|error| anyhow!("the advertised variable must recover: {error}"))?;
+    ensure!(
+        from_env.database.host == "db",
+        "the advertised variable must supply the leaf, got {}",
+        from_env.database.host
     );
     Ok(())
 }
