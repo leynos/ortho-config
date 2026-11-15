@@ -295,6 +295,18 @@ stopping and reporting.
       that panics in its else block. `make lint` then passed with
       `docstring-coverage` at 100.0%, and the `clap_error_translations` suite
       passed 21 of 21.
+- [x] (2026-11-15) Hosted workflow-contract repair. `build-test (linux)` on
+      `4cbce31f` failed its "Workflow contract tests" step:
+      `child_cargo_tier_test.py` reads child-cargo binaries from the Rust
+      sources and found `clap_error_cli` and `clap_error_coverage` each on the
+      profile's 600 s base allowance. Both now take the class's 960 s entry in
+      `.config/nextest.toml`. They stay out of the `orthohelp_cache` group
+      because neither clears `target/orthohelp` nor builds against
+      `target/documentation-examples/v2`, so the developers' guide records the
+      class as wider than the group instead of claiming the two coincide.
+      Lesson for the gate brief: `make test-workflow-contracts` is a
+      `build-test` step that no target in the seven-gate certificate ran, so a
+      green local `make test` could not see this class of failure.
 
 ## Surprises & discoveries
 
