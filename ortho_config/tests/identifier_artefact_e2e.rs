@@ -79,6 +79,13 @@ fn assert_entries_are_well_formed(entries: &[Value]) -> Result<()> {
 /// Verifies command entries carry no field and argument entries carry three
 /// distinct suffixes each.
 fn assert_entry_ownership(entries: &[Value]) -> Result<()> {
+    ensure_three_suffixes_per_field(&suffixes_by_field(entries)?)
+}
+
+/// Groups the entry kinds by the field that owns them.
+///
+/// An entry with no field must be a command entry, not an argument one.
+fn suffixes_by_field(entries: &[Value]) -> Result<BTreeMap<String, BTreeSet<String>>> {
     let mut suffixes_per_field: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for entry in entries {
         let id = string_field(entry, "id", "<unknown>")?;
@@ -96,12 +103,18 @@ fn assert_entry_ownership(entries: &[Value]) -> Result<()> {
             }
         }
     }
+    Ok(suffixes_per_field)
+}
 
+/// Requires every field to expose exactly `help`, `long_help` and `value_name`.
+fn ensure_three_suffixes_per_field(
+    suffixes_per_field: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<()> {
     ensure!(
         !suffixes_per_field.is_empty(),
         "fixture must contribute at least one argument",
     );
-    for (field, kinds) in &suffixes_per_field {
+    for (field, kinds) in suffixes_per_field {
         let expected = ["help", "long_help", "value_name"]
             .into_iter()
             .map(str::to_owned)

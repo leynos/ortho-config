@@ -58,6 +58,14 @@ pub fn prepare(
             .map_err(|err| setup_error(format!("profile scenario file failed: {err}")))?;
         environment = environment.with_var("APP_CONFIG_PATH", directory.path().join(".app.toml"));
     }
+    // The working directory and the XDG bases name nonexistent subdirectories
+    // of the fixture, so neither the process's directory nor the host's
+    // `/etc/xdg` can supply a file; the scenario file is reached only through
+    // `APP_CONFIG_PATH`.
+    let environment = environment
+        .with_current_dir(directory.path().join("empty-cwd"))
+        .with_var("XDG_CONFIG_HOME", directory.path().join("empty-xdg-home"))
+        .with_var("XDG_CONFIG_DIRS", directory.path().join("empty-xdg-dirs"));
     Ok(ScenarioSources {
         _directory: directory,
         environment: Arc::new(environment),

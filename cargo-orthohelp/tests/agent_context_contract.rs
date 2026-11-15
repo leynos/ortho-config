@@ -146,6 +146,12 @@ fn assert_first_command(
         .and_then(Value::as_array)
         .ok_or("commands should be an array")?;
     let command = commands.first().ok_or("commands should not be empty")?;
+    assert_command_path(command, expected_path)?;
+    assert_string_field(command, "summary", expected_summary)?;
+    assert_first_input(command)
+}
+
+fn assert_command_path(command: &Value, expected_path: &[&str]) -> TestResult {
     let path = command
         .get("path")
         .and_then(Value::as_array)
@@ -161,7 +167,10 @@ fn assert_first_command(
     if actual_path != expected_path {
         return Err(format!("expected command path {expected_path:?}, got {actual_path:?}").into());
     }
-    assert_string_field(command, "summary", expected_summary)?;
+    Ok(())
+}
+
+fn assert_first_input(command: &Value) -> TestResult {
     let inputs = command
         .get("inputs")
         .and_then(Value::as_array)

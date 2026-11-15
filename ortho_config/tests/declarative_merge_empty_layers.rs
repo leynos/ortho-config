@@ -12,11 +12,17 @@
 //! no layer, so nothing ever seats the accumulator. Unprefixed structs masked
 //! the defect because `CsvEnv::raw()` always yields a non-empty object.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::{MapEnv, MergeLayer, OrthoConfig};
 use rstest::rstest;
 use serde::Deserialize;
 use std::sync::Arc;
+
+#[path = "support/hermetic_env.rs"]
+mod hermetic_env;
+
+use hermetic_env::hermetic;
 
 /// Every field may legitimately be absent, so a merge that supplies nothing
 /// still has a well-defined result: all fields `None`.
@@ -67,18 +73,36 @@ fn no_layers_yields_all_absent_fields() -> Result<()> {
 /// and no configuration file to read.
 #[rstest]
 fn load_without_any_source_leaves_every_field_absent() -> Result<()> {
-    // Closed-set sources keep the host's environment and configuration
-    // directories out of the load.
-    let config = AllOptional::load_from_iter_with_sources(
-        ["prog"],
-        Arc::new(MapEnv::new()),
-        Arc::new(MapEnv::new()),
-    )
-    .map_err(|err| anyhow!(err))?;
+    // A hermetic source pins the working directory and the XDG bases to an
+    // empty root, so neither the host's files nor the process's directory can
+    // join the load.
+    let root = tempfile::tempdir().context("create the empty root")?;
+    let env = Arc::new(hermetic(MapEnv::new(), root.path()));
+    let config = AllOptional::load_from_iter_with_env(["prog"], env).map_err(|err| anyhow!(err))?;
     ensure!(
         config.flag.is_none() && config.name.is_none(),
         "expected every field absent, got {config:?}"
     );
+    Ok(())
+}
+
+/// A matching project file in *another* directory must not be found.
+///
+/// The working directory is pinned to an empty root while a file the loader
+/// would read sits elsewhere, so only the pin keeps it out of the load.
+#[rstest]
+fn a_project_file_outside_the_pinned_directory_is_ignored() -> Result<()> {
+    let elsewhere = tempfile::tempdir().context("create the directory holding the file")?;
+    Dir::open_ambient_dir(elsewhere.path(), ambient_authority())
+        .context("open the directory holding the file")?
+        .write(".emptylayer.toml", "flag = true\n")
+        .context("write the decoy")?;
+    let root = tempfile::tempdir().context("create the empty root")?;
+    let env = Arc::new(hermetic(MapEnv::new(), root.path()));
+
+    let config = AllOptional::load_from_iter_with_env(["prog"], env).map_err(|err| anyhow!(err))?;
+
+    ensure!(config.flag.is_none(), "the decoy file was read: {config:?}");
     Ok(())
 }
 

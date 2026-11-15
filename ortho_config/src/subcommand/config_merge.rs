@@ -8,14 +8,19 @@
 //! helper. The trait adds no behaviour of its own; it exists so call sites can
 //! write `cli.load_and_merge()?` instead of naming the helper and the prefix.
 
+use std::sync::Arc;
+
 use clap::{ArgMatches, CommandFactory};
 
+use super::injected_env::{load_and_merge_for_with_env, load_and_merge_for_with_matches_with_env};
 use super::{
     load_and_merge_subcommand_for, load_and_merge_subcommand_for_with_matches,
     load_and_merge_subcommand_for_with_matches_with_sources,
     load_and_merge_subcommand_for_with_sources,
 };
-use crate::{CliValueExtractor, OrthoConfig, OrthoResult, SharedScanEnvSource};
+use crate::{
+    CliValueExtractor, EnvSource, OrthoConfig, OrthoResult, ScanEnvSource, SharedScanEnvSource,
+};
 
 /// Trait adding a convenience [`SubcmdConfigMerge::load_and_merge`] method to subcommand structs.
 ///
@@ -110,6 +115,50 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
         Self: serde::Serialize + Default + CliValueExtractor,
     {
         load_and_merge_subcommand_for_with_matches_with_sources(self, matches, merge_source)
+    }
+
+    /// Merge configuration defaults from one injected environment.
+    ///
+    /// The environment answers the named lookups that locate configuration
+    /// files, supplies the working directory and backs the
+    /// `<PREFIX>_CMDS_<NAME>_*` variable layer. The load reads nothing from the
+    /// process once the source pins a working directory
+    /// ([`crate::MapEnv::with_current_dir`]); an unpinned `MapEnv` still reports
+    /// the process's. Name `HOME` and the XDG variables too when host
+    /// configuration directories must stay out; an empty `HOME` counts as unset.
+    ///
+    /// A source whose `current_dir` fails makes the load return
+    /// [`crate::OrthoError::Validation`] rather than fall back to `.`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or
+    /// the merged defaults cannot be deserialised.
+    fn load_and_merge_with_env<E>(&self, env: Arc<E>) -> OrthoResult<Self>
+    where
+        Self: serde::Serialize + Default,
+        E: EnvSource + ScanEnvSource + 'static,
+    {
+        load_and_merge_for_with_env(self, &env)
+    }
+
+    /// Merge configuration defaults from one injected environment, respecting
+    /// `cli_default_as_absent` fields.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or
+    /// the merged defaults cannot be deserialised.
+    fn load_and_merge_with_matches_with_env<E>(
+        &self,
+        matches: &ArgMatches,
+        env: Arc<E>,
+    ) -> OrthoResult<Self>
+    where
+        Self: serde::Serialize + Default + CliValueExtractor,
+        E: EnvSource + ScanEnvSource + 'static,
+    {
+        load_and_merge_for_with_matches_with_env(self, matches, &env)
     }
 }
 

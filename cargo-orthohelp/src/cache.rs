@@ -209,43 +209,56 @@ fn hash_directory_recursive(
     base: &Utf8Path,
     hasher: &mut Sha256,
 ) -> Result<(), OrthohelpError> {
-    let mut entries = Vec::new();
-    for entry_result in dir.read_dir(".").map_err(|err| OrthohelpError::Io {
-        path: base.to_path_buf(),
-        source: err,
-    })? {
-        let entry = entry_result.map_err(|err| OrthohelpError::Io {
-            path: base.to_path_buf(),
-            source: err,
-        })?;
-        let entry_name = entry.file_name().map_err(|err| OrthohelpError::Io {
-            path: base.to_path_buf(),
-            source: err,
-        })?;
-        let file_name = Utf8PathBuf::from(entry_name);
-        let file_type = entry.file_type().map_err(|err| OrthohelpError::Io {
-            path: base.to_path_buf(),
-            source: err,
-        })?;
-        entries.push((file_name, file_type));
-    }
-
+    let mut entries = list_entries(dir, base)?;
     entries.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-    for (name, file_type) in entries {
-        let rel = base.join(&name);
-        if file_type.is_dir() {
-            let subdir = dir.open_dir(&name).map_err(|err| OrthohelpError::Io {
-                path: rel.clone(),
-                source: err,
-            })?;
-            hash_directory_recursive(&subdir, &rel, hasher)?;
-        } else if file_type.is_file() {
-            hash_file_if_present(dir, &name, &rel, hasher)?;
-        }
+    for entry in &entries {
+        hash_entry(dir, base, entry, hasher)?;
     }
-
     Ok(())
+}
+
+/// Read a directory's entries as names paired with their file types.
+///
+/// Every failure is reported against `base`, the directory being listed.
+fn list_entries(
+    dir: &Dir,
+    base: &Utf8Path,
+) -> Result<Vec<(Utf8PathBuf, cap_std::fs::FileType)>, OrthohelpError> {
+    let io_error = |source: std::io::Error| OrthohelpError::Io {
+        path: base.to_path_buf(),
+        source,
+    };
+    let mut entries = Vec::new();
+    for entry_result in dir.read_dir(".").map_err(io_error)? {
+        let entry = entry_result.map_err(io_error)?;
+        let name = entry.file_name().map_err(io_error)?;
+        let file_type = entry.file_type().map_err(io_error)?;
+        entries.push((Utf8PathBuf::from(name), file_type));
+    }
+    Ok(entries)
+}
+
+/// Hash one directory entry: recurse into directories, hash regular files and
+/// skip every other kind.
+fn hash_entry(
+    dir: &Dir,
+    base: &Utf8Path,
+    (name, file_type): &(Utf8PathBuf, cap_std::fs::FileType),
+    hasher: &mut Sha256,
+) -> Result<(), OrthohelpError> {
+    let rel = base.join(name);
+    if file_type.is_dir() {
+        let subdir = dir.open_dir(name).map_err(|err| OrthohelpError::Io {
+            path: rel.clone(),
+            source: err,
+        })?;
+        hash_directory_recursive(&subdir, &rel, hasher)
+    } else if file_type.is_file() {
+        hash_file_if_present(dir, name, &rel, hasher)
+    } else {
+        Ok(())
+    }
 }
 
 /// Open a directory relative to `dir`, distinguishing absence from I/O failure.

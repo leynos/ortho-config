@@ -22,6 +22,8 @@ pub mod merge_error_steps;
 pub mod nested_docs_steps;
 
 #[cfg(feature = "serde_json")]
+mod profile_file;
+#[cfg(feature = "serde_json")]
 mod profile_placeholders;
 #[cfg(feature = "serde_json")]
 mod profile_sources;

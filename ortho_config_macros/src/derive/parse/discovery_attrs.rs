@@ -95,13 +95,15 @@ impl MergeStrategy {
 /// The attribute value `"APP"` becomes `"APP_"`; an empty string stays empty.
 pub(crate) fn parse_prefix(meta: &ParseNestedMeta) -> syn::Result<String> {
     match meta.value()?.parse::<Lit>()? {
-        Lit::Str(string) => {
-            let mut value = string.value();
-            if !value.is_empty() && !value.ends_with('_') {
-                value.push('_');
-            }
-            Ok(value)
-        }
+        Lit::Str(string) => Ok(with_trailing_underscore(string.value())),
         other => Err(syn::Error::new(other.span(), "prefix must be a string")),
     }
+}
+
+/// Appends `_` to a non-empty prefix that does not already end with one.
+fn with_trailing_underscore(mut prefix: String) -> String {
+    if !prefix.is_empty() && !prefix.ends_with('_') {
+        prefix.push('_');
+    }
+    prefix
 }

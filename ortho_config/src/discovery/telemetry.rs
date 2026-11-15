@@ -46,6 +46,9 @@ pub(super) const SELECTOR_UNSET: &str = "unset";
 pub(super) const SELECTOR_EMPTY: &str = "empty";
 /// The selector named a path, which now leads the candidate list.
 pub(super) const SELECTOR_ACCEPTED: &str = "accepted";
+/// The selector named a relative path and the source reported no working
+/// directory to resolve it against, so it contributed nothing.
+pub(super) const SELECTOR_DROPPED: &str = "dropped";
 
 /// The variable is unset.
 pub(super) const PRESENCE_ABSENT: &str = "absent";

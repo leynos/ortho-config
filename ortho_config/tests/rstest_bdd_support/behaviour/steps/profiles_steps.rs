@@ -12,13 +12,12 @@ use anyhow::{Result, ensure};
 use ortho_config::{OrthoError, OrthoResult};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, when};
-use serde_json::{Map, Value};
 
+use super::profile_file::build_file_value;
 use super::profile_placeholders::{
     BareFlagName, ConfigKey, ConfigValue, FlagSpec, ProfileName, TABLE_SENTINEL,
 };
 use super::profile_sources::{self, ScenarioEnvironment};
-use super::value_parsing::unquote;
 
 /// Appends one `(key, value)` pair to a slot that accumulates them.
 ///
@@ -324,37 +323,6 @@ fn build_cli_args(flags: &[(String, String)]) -> Vec<String> {
     args
 }
 
-/// Builds the file value from the accumulated base keys and profile tables.
-fn build_file_value(profiles_context: &ProfilesContext) -> Value {
-    let mut file = Map::new();
-    let base_keys = profiles_context.base_keys.get().unwrap_or_default();
-    for (key, value) in base_keys {
-        file.insert(key, scalar_value(&value));
-    }
-    let profile_keys = profiles_context.profile_keys.get().unwrap_or_default();
-    if !profile_keys.is_empty() {
-        let mut profiles = Map::new();
-        for (profile, key, value) in profile_keys {
-            let table = profiles
-                .entry(profile)
-                .or_insert_with(|| Value::Object(Map::new()));
-            let Value::Object(table_map) = table else {
-                continue;
-            };
-            if key.is_empty() {
-                continue;
-            }
-            if value == TABLE_SENTINEL {
-                table_map.insert(key, Value::Object(Map::new()));
-            } else {
-                table_map.insert(key, scalar_value(&value));
-            }
-        }
-        file.insert("profile".to_owned(), Value::Object(profiles));
-    }
-    Value::Object(file)
-}
-
 /// Parses a whitespace-separated flag string into `(name, value)` pairs.
 ///
 /// A token beginning with `--` starts a pair; the token after it is its value
@@ -374,21 +342,4 @@ fn parse_flags(flags: &str) -> Vec<(String, String)> {
         }
     }
     parsed
-}
-
-/// Converts a scalar placeholder to a JSON value, preserving its type.
-///
-/// Numbers and booleans become their native JSON forms so the file written for
-/// a scenario deserializes into the field's declared type; a bool written as a
-/// TOML string would fail to deserialize rather than exercising precedence.
-fn scalar_value(value: &str) -> Value {
-    let value = unquote(value);
-    if let Ok(number) = value.parse::<u64>() {
-        return Value::from(number);
-    }
-    match value {
-        "true" => Value::Bool(true),
-        "false" => Value::Bool(false),
-        _ => Value::String(value.to_owned()),
-    }
 }

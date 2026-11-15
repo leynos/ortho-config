@@ -62,8 +62,10 @@ pub struct ConfigDiscoveryBuilder {
     required_explicit_paths: Vec<PathBuf>,
     /// Injected source, or `None` to use the live process environment.
     env_source: Option<SharedEnvSource>,
-    /// Deferred current-directory lookup, skipped when roots were supplied.
-    project_root_resolver: ProjectRootResolver,
+    /// Test-only replacement for the source's working-directory lookup.
+    ///
+    /// `None` defers to [`EnvSource::current_dir`], which is the public seam.
+    project_root_resolver: Option<ProjectRootResolver>,
 }
 
 /// Debug output omits the environment source and every path.
@@ -108,7 +110,7 @@ impl ConfigDiscoveryBuilder {
             explicit_paths: Vec::new(),
             required_explicit_paths: Vec::new(),
             env_source: None,
-            project_root_resolver: Arc::new(std::env::current_dir),
+            project_root_resolver: None,
         }
     }
 
@@ -120,7 +122,7 @@ impl ConfigDiscoveryBuilder {
     /// [`ConfigDiscoveryBuilder::add_project_root`].
     #[cfg(test)]
     pub(crate) fn with_project_root_resolver(mut self, resolver: ProjectRootResolver) -> Self {
-        self.project_root_resolver = resolver;
+        self.project_root_resolver = Some(resolver);
         self
     }
 
@@ -277,16 +279,22 @@ impl ConfigDiscoveryBuilder {
             telemetry::SOURCE_PROCESS
         });
 
+        let env_source = self.env_source.unwrap_or_else(process_env_source);
         let mut project_roots = self.project_roots;
-        // Explicit roots suppress the resolver entirely: a caller who named
-        // roots has taken responsibility for them, and invoking the resolver
-        // anyway would reintroduce the ambient read the seam exists to avoid.
+        // Explicit roots suppress the lookup entirely: a caller who named
+        // roots has taken responsibility for them, and asking the source for
+        // its working directory anyway would reintroduce the ambient read the
+        // seam exists to avoid.
         if project_roots.is_empty() {
             // A missing working directory (deleted cwd, permission denial) is
             // survivable — discovery simply has no default project root — but
             // it must not be survivable *silently*, so the decision is
             // recorded in bounded telemetry rather than discarded with `.ok()`.
-            match (self.project_root_resolver)() {
+            let resolved = self
+                .project_root_resolver
+                .as_ref()
+                .map_or_else(|| env_source.current_dir(), |resolver| resolver());
+            match resolved {
                 Ok(dir) => project_roots.push(dir),
                 Err(_) => telemetry::project_root_cwd_unavailable(),
             }
@@ -301,7 +309,7 @@ impl ConfigDiscoveryBuilder {
             dotfile_name,
             project_file_name,
             project_roots,
-            env_source: self.env_source.unwrap_or_else(process_env_source),
+            env_source,
         }
     }
 }

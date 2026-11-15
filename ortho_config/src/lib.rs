@@ -283,6 +283,53 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
         Self::load_from_iter(iter)
     }
 
+    /// Loads configuration from one injected environment backing both the
+    /// discovery and merge layers.
+    ///
+    /// This is the common test shape: a single [`MapEnv`] carries the
+    /// variables, the configuration-path selector, and the working directory
+    /// ([`MapEnv::with_current_dir`]), so nothing reads the process. It is a
+    /// thin wrapper over [`Self::load_from_iter_with_sources`] and shares its
+    /// contract for manual implementations.
+    ///
+    /// ```rust
+    /// use ortho_config::{MapEnv, OrthoConfig, OrthoResult};
+    /// use serde::Deserialize;
+    /// use std::sync::Arc;
+    ///
+    /// #[derive(Deserialize, OrthoConfig)]
+    /// #[ortho_config(prefix = "APP_")]
+    /// struct AppConfig {
+    ///     port: u16,
+    /// }
+    ///
+    /// # fn main() -> OrthoResult<()> {
+    /// // Pinning the directory keeps the load off the process's own; an
+    /// // unpinned map still reports the process working directory.
+    /// let env = Arc::new(
+    ///     MapEnv::new()
+    ///         .with_current_dir("/nonexistent/app-project")
+    ///         .with_var("APP_PORT", "8080"),
+    /// );
+    /// let cfg = AppConfig::load_from_iter_with_env(["app"], env)?;
+    /// assert_eq!(cfg.port, 8080);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`crate::OrthoError`] if parsing command-line arguments,
+    /// reading files, or deserializing configuration fails.
+    fn load_from_iter_with_env<I, T, E>(iter: I, env: Arc<E>) -> OrthoResult<Self>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+        E: EnvSource + ScanEnvSource + 'static,
+    {
+        Self::load_from_iter_with_sources(iter, env.clone(), env)
+    }
+
     /// Prefix used for environment variables and subcommand configuration.
     #[must_use]
     // Intentionally non-const so implementations can read runtime information.

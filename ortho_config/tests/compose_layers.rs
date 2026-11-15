@@ -10,8 +10,12 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
 
+#[path = "support/hermetic_env.rs"]
+mod hermetic_env;
 #[path = "support/layer_assertions.rs"]
 mod layer_assertions;
+
+use hermetic_env::hermetic;
 #[path = "support/scoped_fixtures.rs"]
 #[expect(dead_code, reason = "write_config serves sibling suites")]
 mod scoped_fixtures;
@@ -466,16 +470,17 @@ struct CliLayerCase {
     expected_excited: true,
 })]
 fn compose_layers_tracks_cli_layer_presence(#[case] case: CliLayerCase) -> Result<()> {
-    // Both sources are closed sets: the host's environment and configuration
-    // directories cannot reach the composition.
-    let discovery_source: SharedEnvSource = Arc::new(MapEnv::new());
-    let merge_source: SharedScanEnvSource = Arc::new(MapEnv::new().with_var("APP_EXCITED", "true"));
+    // One hermetic source backs both layers: the working directory and the XDG
+    // bases are pinned to an empty root, so nothing on the host or in the
+    // process's directory can reach the composition.
+    let root = tempfile::tempdir().context("create the empty root")?;
+    let env = Arc::new(hermetic(
+        MapEnv::new().with_var("APP_EXCITED", "true"),
+        root.path(),
+    ));
 
-    let composition = SingleFieldConfig::compose_layers_from_iter_with_sources(
-        case.cli_args.iter().copied(),
-        discovery_source,
-        merge_source,
-    );
+    let composition =
+        SingleFieldConfig::compose_layers_from_iter_with_env(case.cli_args.iter().copied(), env);
     let (layers, errors) = composition.into_parts();
 
     ensure!(errors.is_empty(), "expected composition without errors");

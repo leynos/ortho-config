@@ -41,6 +41,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-first-cli",
     "guide-hermetic-discovery",
     "guide-identifier-artefact",
+    "guide-injected-working-directory",
     "guide-install",
     "guide-load-first-outcomes",
     "guide-localization",

@@ -93,17 +93,23 @@ pub(super) fn run_orthohelp(
     })
 }
 
-/// Copy a Cargo-owned executable without rebuilding its shared output path.
-fn snapshot_cli(executable: &Path, private_bin: &Path) -> Result<()> {
-    let source = Dir::open_ambient_dir(
-        executable
-            .parent()
-            .context("Cargo executable has no directory")?,
-        ambient_authority(),
-    )?;
+/// Open the directory holding `executable` and name the file within it.
+fn open_executable_directory(executable: &Path) -> Result<(Dir, &std::ffi::OsStr)> {
+    let directory = executable
+        .parent()
+        .context("Cargo executable has no directory")?;
     let binary_name = executable
         .file_name()
         .context("Cargo executable has no filename")?;
+    Ok((
+        Dir::open_ambient_dir(directory, ambient_authority())?,
+        binary_name,
+    ))
+}
+
+/// Copy a Cargo-owned executable without rebuilding its shared output path.
+fn snapshot_cli(executable: &Path, private_bin: &Path) -> Result<()> {
+    let (source, binary_name) = open_executable_directory(executable)?;
     Dir::create_ambient_dir_all(private_bin, ambient_authority())?;
     let snapshot = Dir::open_ambient_dir(private_bin, ambient_authority())?;
     source.copy(binary_name, &snapshot, binary_name)?;

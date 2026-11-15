@@ -22,6 +22,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::artefact_lock::{create_lock, is_free, lock_path};
 use super::fragment_tests::TempRoot;
+use super::lock_diagnostics::ensure_settles_free;
 use super::lock_support::{
     SENTINEL_RELEASED, VARIANT_CRATES, sentinel, spawn_helper, spawn_variant, wait_for,
     wait_for_holder,
@@ -82,13 +83,24 @@ fn artefact_lock_is_released_after_publication_returns() -> Result<()> {
 #[test]
 fn each_publication_merges_the_fragments_already_published() -> Result<()> {
     let root = TempRoot::new()?;
-    for variant in VARIANT_CRATES {
-        let writer = spawn_variant(root.path(), "publish-variant", Some(variant))?;
-        wait_for(writer, &format!("{variant} publishing helper"))?;
-    }
+    publish_each_variant_in_sequence(root.path())?;
 
     let combined = fs::read_to_string(root.path().join("cli-identifiers.json"))
         .context("read the merged inventory published by both children")?;
+    ensure_every_publisher_retained(&combined)
+}
+
+/// Runs one publishing child per variant crate, each after the last has exited.
+fn publish_each_variant_in_sequence(root: &std::path::Path) -> Result<()> {
+    for variant in VARIANT_CRATES {
+        let writer = spawn_variant(root, "publish-variant", Some(variant))?;
+        wait_for(writer, &format!("{variant} publishing helper"))?;
+    }
+    Ok(())
+}
+
+/// Requires the merged inventory to name every publisher's entries.
+fn ensure_every_publisher_retained(combined: &str) -> Result<()> {
     for variant in VARIANT_CRATES {
         ensure!(
             combined.contains(&format!("{variant}::Config")),
@@ -135,16 +147,14 @@ fn probing_releases_the_lock_it_takes() -> Result<()> {
     let root = TempRoot::new()?;
     create_lock(root.path()).context("create the lock file for the probe")?;
 
-    ensure!(
-        is_free(root.path()).context("probe a free lock")?,
-        "an unheld lock must be reported free",
-    );
-    ensure!(
-        is_free(root.path()).context("probe the lock a second time")?,
-        "a probe must release the lock it took, so a second probe still finds \
-         it free",
-    );
-    Ok(())
+    ensure_settles_free(root.path(), "an unheld lock must be reported free")?;
+    ensure_settles_free(
+        root.path(),
+        concat!(
+            "a probe must release the lock it took, so a second probe still finds ",
+            "it free",
+        ),
+    )
 }
 
 /// Verifies the probe reports a held lock as held.
@@ -164,9 +174,8 @@ fn probing_reports_a_held_lock_as_held() -> Result<()> {
         "a lock held by this process must be reported as held",
     );
     drop(held);
-    ensure!(
-        is_free(root.path()).context("probe after releasing the lock")?,
+    ensure_settles_free(
+        root.path(),
         "releasing the guard must make the lock free again",
-    );
-    Ok(())
+    )
 }

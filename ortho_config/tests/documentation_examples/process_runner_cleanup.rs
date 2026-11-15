@@ -24,6 +24,18 @@ struct CleanupObservation {
     evidence: Vec<String>,
 }
 
+impl CleanupObservation {
+    /// Record the first failed wait; later failures add nothing new.
+    fn record_wait_error(&mut self, wait_error: &io::Error) {
+        if self.wait_error_seen {
+            return;
+        }
+        self.wait_error_seen = true;
+        self.evidence
+            .push(format!("cleanup wait failed: {wait_error}"));
+    }
+}
+
 pub(super) fn finish_failure<Kill>(primary: Error, mut process: CleanupProcess<'_, Kill>) -> Error
 where
     Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
@@ -136,14 +148,7 @@ fn observe_cleanup_state<Kill>(
     match process.child.try_wait() {
         Ok(Some(_)) => observation.tree_completed = true,
         Ok(None) => {}
-        Err(wait_error) => {
-            if !observation.wait_error_seen {
-                observation.wait_error_seen = true;
-                observation
-                    .evidence
-                    .push(format!("cleanup wait failed: {wait_error}"));
-            }
-        }
+        Err(wait_error) => observation.record_wait_error(&wait_error),
     }
     for reader in process.readers.iter_mut() {
         reader.refresh();

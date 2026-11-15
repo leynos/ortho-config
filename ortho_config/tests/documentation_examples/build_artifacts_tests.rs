@@ -18,6 +18,18 @@ fn executable_records_survive_chunk_boundaries_and_large_output() -> Result<()> 
         "executable": source.path().join("same-name"),
     })
     .to_string();
+    let mut artifacts = consume_after_large_output(&artifact);
+    let copied = artifacts.snapshot(destination.path())?;
+    ensure!(copied.get("same-name") == Some(&destination.path().join("same-name")));
+    ensure!(
+        Dir::open_ambient_dir(destination.path(), ambient_authority())?.read("same-name")?
+            == b"owned executable"
+    );
+    Ok(())
+}
+
+/// Feed `artifact` one byte at a time, after a long run of unrelated records.
+fn consume_after_large_output(artifact: &str) -> Artifacts {
     let mut artifacts = Artifacts::default();
     for _ in 0..50_000 {
         artifacts.consume(b"{\"reason\":\"build-script-executed\"}\n");
@@ -26,13 +38,7 @@ fn executable_records_survive_chunk_boundaries_and_large_output() -> Result<()> 
         artifacts.consume(&[*byte]);
     }
     artifacts.consume(b"\n");
-    let copied = artifacts.snapshot(destination.path())?;
-    ensure!(copied.get("same-name") == Some(&destination.path().join("same-name")));
-    ensure!(
-        Dir::open_ambient_dir(destination.path(), ambient_authority())?.read("same-name")?
-            == b"owned executable"
-    );
-    Ok(())
+    artifacts
 }
 
 #[test]

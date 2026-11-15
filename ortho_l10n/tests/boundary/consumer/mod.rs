@@ -20,11 +20,10 @@
 
 mod library;
 
-use super::fixture_cargo::{absolute_member, repository_root, toml_string};
+use super::fixture_cargo::{absolute_member, manifest_text, repository_root, toml_string};
 use super::package_set::PACKAGED_VERSION;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use std::fmt::Write as _;
 
 /// The package name every rendered consumer root uses.
 pub(crate) const CONSUMER_PACKAGE: &str = "boundary-consumer";
@@ -133,23 +132,26 @@ impl Consumer {
 
 /// Render the whole manifest.
 fn manifest_for(dependency: Dependency, source: &DependencySource) -> Result<String> {
-    let mut manifest = String::new();
-    writeln!(manifest, "[package]")?;
-    writeln!(manifest, "name = \"{CONSUMER_PACKAGE}\"")?;
-    writeln!(manifest, "version = \"0.0.0\"")?;
-    writeln!(manifest, "edition = \"2024\"")?;
-    writeln!(manifest)?;
-    writeln!(manifest, "# A consumer root is a workspace of its own.")?;
-    writeln!(manifest, "[workspace]")?;
-    writeln!(manifest)?;
-    writeln!(manifest, "[dependencies]")?;
-    match source {
-        DependencySource::Workspace => write_workspace_dependencies(&mut manifest, dependency)?,
-        DependencySource::Packaged { unpacked } => {
-            write_packaged_dependencies(&mut manifest, dependency, unpacked)?;
-        }
-    }
-    Ok(manifest)
+    let dependencies = match source {
+        DependencySource::Workspace => workspace_dependencies(dependency)?,
+        DependencySource::Packaged { unpacked } => packaged_dependencies(dependency, unpacked)?,
+    };
+    Ok(manifest_header() + &dependencies)
+}
+
+/// The package, workspace and `[dependencies]` heading every consumer starts with.
+fn manifest_header() -> String {
+    manifest_text([
+        "[package]".to_owned(),
+        format!("name = \"{CONSUMER_PACKAGE}\""),
+        "version = \"0.0.0\"".to_owned(),
+        "edition = \"2024\"".to_owned(),
+        String::new(),
+        "# A consumer root is a workspace of its own.".to_owned(),
+        "[workspace]".to_owned(),
+        String::new(),
+        "[dependencies]".to_owned(),
+    ])
 }
 
 /// Spell the required crates as path dependencies into this workspace.
@@ -159,17 +161,17 @@ fn manifest_for(dependency: Dependency, source: &DependencySource) -> Result<Str
 /// `ortho_l10n` would be looked for beside the fixture instead of in the
 /// worktree. Absolute paths also keep the two source shapes symmetric: the
 /// packaged root is patched at an absolute unpacked path for the same reason.
-fn write_workspace_dependencies(manifest: &mut String, dependency: Dependency) -> Result<()> {
+fn workspace_dependencies(dependency: Dependency) -> Result<String> {
     let repository = repository_root()?;
+    let mut lines = Vec::new();
     for crate_name in dependency.crates() {
         let member = absolute_member(&repository, Utf8Path::new(crate_name))?;
-        writeln!(
-            manifest,
+        lines.push(format!(
             "{crate_name} = {{ path = {} }}",
             toml_string(&member)
-        )?;
+        ));
     }
-    Ok(())
+    Ok(manifest_text(lines))
 }
 
 /// Spell the required crates by version, patched to unpacked package roots.
@@ -180,28 +182,24 @@ fn write_workspace_dependencies(manifest: &mut String, dependency: Dependency) -
 /// consumer would be resolving them from the registry. Only the crates this
 /// shape actually reaches are patched, so a runtime-only consumer does not
 /// silently acquire a derive-macro root it never asked for.
-fn write_packaged_dependencies(
-    manifest: &mut String,
-    dependency: Dependency,
-    unpacked: &Utf8Path,
-) -> Result<()> {
-    for crate_name in dependency.crates() {
-        writeln!(manifest, "{crate_name} = \"{PACKAGED_VERSION}\"")?;
-    }
-    writeln!(manifest)?;
-    writeln!(
-        manifest,
-        "# Point every same-version internal edge at the unpacked package roots."
-    )?;
-    writeln!(manifest, "[patch.crates-io]")?;
+fn packaged_dependencies(dependency: Dependency, unpacked: &Utf8Path) -> Result<String> {
+    let mut lines: Vec<String> = dependency
+        .crates()
+        .iter()
+        .map(|crate_name| format!("{crate_name} = \"{PACKAGED_VERSION}\""))
+        .collect();
+    lines.push(String::new());
+    lines
+        .push("# Point every same-version internal edge at the unpacked package roots.".to_owned());
+    lines.push("[patch.crates-io]".to_owned());
     for crate_name in dependency.patched_crates() {
-        write_patch_entry(manifest, unpacked, crate_name)?;
+        lines.push(patch_entry(unpacked, crate_name)?);
     }
-    Ok(())
+    Ok(manifest_text(lines))
 }
 
-/// Write one `[patch.crates-io]` entry pointing at an unpacked package root.
-fn write_patch_entry(manifest: &mut String, unpacked: &Utf8Path, crate_name: &str) -> Result<()> {
+/// One `[patch.crates-io]` entry pointing at an unpacked package root.
+fn patch_entry(unpacked: &Utf8Path, crate_name: &str) -> Result<String> {
     let crate_root = unpacked.join(format!("{crate_name}-{PACKAGED_VERSION}"));
     let absolute = crate_root
         .canonicalize_utf8()
@@ -210,10 +208,8 @@ fn write_patch_entry(manifest: &mut String, unpacked: &Utf8Path, crate_name: &st
         absolute.join("Cargo.toml").is_file(),
         "{absolute} is not an unpacked package root",
     );
-    writeln!(
-        manifest,
+    Ok(format!(
         "{crate_name} = {{ path = {} }}",
         toml_string(absolute.as_str()),
-    )?;
-    Ok(())
+    ))
 }
