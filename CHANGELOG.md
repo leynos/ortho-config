@@ -96,6 +96,17 @@ All notable changes to this project will be documented in this file.
   No diagnostic field carries them; a positive `summary.deny` count
   distinguishes a policy denial from any other failure.
 
+### Changed (missing required values)
+
+- **Enumerated missing-value errors replace Serde's first-missing-field error
+  (roadmap 7.3.1).** A derived load that previously failed with a merge or
+  deserialization error naming one field now returns
+  `OrthoError::MissingRequiredValues`. Code that matched a deserialization
+  error to detect absence must match the new variant. Presence semantics are
+  unchanged: a present `null`, an empty collection, and an explicit value all
+  still count as supplied. See
+  [the migration guide](docs/v0-11-0-migration-guide.md#12-match-the-enumerated-missing-value-error).
+
 ### Added (missing required values)
 
 - **Enumerated missing-value diagnostics (roadmap 7.3.1).** A load that reaches
@@ -109,9 +120,13 @@ All notable changes to this project will be documented in this file.
   file table. The payload carries key paths and routes, never configuration
   values, so rendering it cannot leak a secret. Child types opt into nested
   composition with `#[ortho_config(nested)]` plus `skip_cli`, or derive
-  `RequiredConfigSchema` directly. The library never exits; callers decide how
-  to present the report. See
-  [ADR-0020](docs/adrs/adr-0020-enumerate-missing-required-values.md) and
+  `RequiredConfigSchema` directly. A selected subcommand is covered as well,
+  and its report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
+  `[cmds.<name>]` file paths, so the advertised spellings are the ones the
+  loader really reads; only the selected variant contributes requirements. The
+  library never exits; callers decide how to present the report. See
+  [ADR-0020](docs/adrs/adr-0020-enumerate-missing-required-values.md), [ADR-0021](docs/adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md),
+  and
   [the user's guide](docs/users-guide.md#recover-from-missing-required-values).
 
 ### Changed (source compatibility)

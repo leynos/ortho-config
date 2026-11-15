@@ -4,6 +4,10 @@
 
 Accepted for implementation.
 
+Amended by
+[ADR-0021](adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+(2026-11-15).
+
 Date: 2026-11-09.
 
 ## Context and problem statement
@@ -302,6 +306,26 @@ absent leaves inside a supplied opaque value remain Serde errors.
   carry the schema; their missing values keep the existing error shape.
 - A cyclic schema aborts diagnostics with a validation error instead of
   enumerating requirements; the alternative would be unbounded traversal.
+
+## Amendments
+
+### 2026-11-15 — selected-subcommand enumeration
+
+[ADR-0021](adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+removes the coverage contract's exclusion of selected-subcommand merges. A
+selected subcommand now collects through a loader-specific `RouteScope` before
+deserialization, so its report names `PREFIX_CMDS_<NAME>_key` variables and
+`[cmds.<name>]` file paths — the spellings that loader really reads — instead
+of the type's own prefix and file root.
+
+The consequence is a widened bound: the four `load_and_merge_subcommand_for*`
+helpers and the matching `SubcmdConfigMerge` methods now require
+`RequiredConfigSchema`, which every type deriving `OrthoConfig` already
+satisfies.
+
+The coverage contract above and the matching risk bullet are retained as
+history. Read both as superseded on this point only; every other limitation
+still applies.
 
 ## References
 

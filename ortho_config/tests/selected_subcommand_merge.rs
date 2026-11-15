@@ -18,6 +18,9 @@ struct Cli {
     cmd: Commands,
 }
 
+#[path = "support/selected_subcommand_required.rs"]
+mod required;
+
 #[derive(Debug, Subcommand, ortho_config::SelectedSubcommandMerge)]
 enum Commands {
     #[command(name = "run")]
@@ -25,6 +28,8 @@ enum Commands {
     #[command(name = "greet")]
     #[ortho_subcommand(with_matches)]
     Greet(GreetArgs),
+    #[command(name = "serve")]
+    Serve(ServeArgs),
 }
 
 #[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, PartialEq, Eq)]
@@ -46,6 +51,22 @@ struct GreetArgs {
 
 fn default_punctuation() -> String {
     String::from("!")
+}
+
+/// A subcommand whose only declared value no CLI layer can supply.
+///
+/// `#[arg(skip)]` keeps the field out of clap and `skip_cli` keeps it out of
+/// the generated parser, so the value can only arrive from a file or the
+/// environment. `skip_serializing` stops the `Default` empty string clap
+/// leaves behind from being merged as if the user had supplied it.
+#[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, PartialEq, Eq)]
+#[command(name = "serve")]
+#[ortho_config(prefix = "APP_")]
+struct ServeArgs {
+    #[arg(skip)]
+    #[ortho_config(skip_cli)]
+    #[serde(skip_serializing)]
+    reference: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

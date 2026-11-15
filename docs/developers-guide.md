@@ -470,13 +470,13 @@ consumes its ordered paragraphs; XML structure and escaping remain in
 
 ### Required-value schema ownership
 
-`ortho_config_macros/src/derive/generate/required_schema.rs` owns the emitted
-`RequiredConfigSchema` implementation for both the `OrthoConfig` derive and the
-standalone `RequiredConfigSchema` derive. The generator records only what the
-derive already knows: deserialization keys, aliases, the requiredness the
-attribute grammar decides, and CLI hints for leaves the generated parser can
-actually populate. It never reads a configuration value, the environment, or
-the process arguments at macro time.
+`ortho_config_macros/src/derive/generate/required_schema/mod.rs` owns the
+emitted `RequiredConfigSchema` implementation for both the `OrthoConfig` derive
+and the standalone `RequiredConfigSchema` derive. The generator records only
+what the derive already knows: deserialization keys, aliases, the requiredness
+the attribute grammar decides, and CLI hints for leaves the generated parser
+can actually populate. It never reads a configuration value, the environment,
+or the process arguments at macro time.
 
 Nested child types opt in with `#[ortho_config(nested)]` and must also carry
 `skip_cli`, because the CLI builder cannot parse an object type. The generated
@@ -490,12 +490,23 @@ the model, `collect.rs` is the pure collector, and `mod.rs` exposes
 collector walks the merged JSON value, not the deserialized configuration, so
 it can report every requirement in schema declaration order before Serde stops
 at the first missing field. Display lives in
-`ortho_config/src/error/missing.rs` and must not discover requirements or
+`ortho_config/src/error/missing/mod.rs` and must not discover requirements or
 consult process state.
 
 New supply routes belong in `SupplyRoute` only when a generated loader accepts
 them for the requirement in question. A route advertised for a key the parser
 cannot populate would send an agent down a path that never succeeds.
+
+Route construction takes a `collect::RouteScope`, because the namespace a
+loader reads is not always the type's own prefix and file root. An ordinary
+load derives its scope from the type's `RouteHints`. A selected subcommand reads
+`PREFIX_CMDS_<NAME>_*` variables and the `[cmds.<name>]` file section instead,
+so `sources::finish_with_required_values` builds a subcommand scope before
+collecting. `subcommand_env_prefix` in `ortho_config/src/subcommand/mod.rs` is
+the single source of that environment prefix, shared by the provider and the
+diagnostic, so the advertised spelling and the read spelling cannot drift. The
+raw `DeserializeOwned` subcommand helpers keep the plain Figment finish and
+collect nothing, because they never know which type's schema to compose.
 
 ## CLI long-flag validation ownership
 

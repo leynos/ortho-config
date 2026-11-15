@@ -303,7 +303,7 @@ fn an_all_missing_schema_reports_declaration_order() {
 }
 
 #[test]
-fn seeded_omission_inversion_and_reorder_fail_the_comparison() {
+fn seeded_omission_insertion_inversion_and_reorder_fail_the_comparison() {
     let cases = vec![(true, false), (true, true), (true, false), (false, false)];
     let actual = observed_flat(&cases).unwrap_or_default();
     assert_eq!(
@@ -312,6 +312,16 @@ fn seeded_omission_inversion_and_reorder_fail_the_comparison() {
         "the fixture must expose the faulted assertions below"
     );
     assert_ne!(actual, vec![String::from("f0")], "omission must differ");
+    assert_ne!(
+        actual,
+        vec![String::from("f0"), String::from("f1"), String::from("f2")],
+        "inserting a present requirement must differ"
+    );
+    assert_ne!(
+        actual,
+        vec![String::from("f0"), String::from("f2"), String::from("f3")],
+        "inserting an optional requirement must differ"
+    );
     assert_ne!(
         actual,
         vec![String::from("f1"), String::from("f2")],

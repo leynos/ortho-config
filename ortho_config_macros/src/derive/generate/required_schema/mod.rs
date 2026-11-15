@@ -142,7 +142,6 @@ pub(crate) fn generate_required_schema_impl(
 
 /// Build one statement per field that participates in the schema.
 fn field_statements(args: &RequiredSchemaArgs<'_>) -> syn::Result<Vec<TokenStream>> {
-    let krate = args.krate;
     let mut statements = Vec::new();
     for (field, attrs) in args.fields.iter().zip(args.field_attrs) {
         if !participates(field, attrs)? {
@@ -150,17 +149,44 @@ fn field_statements(args: &RequiredSchemaArgs<'_>) -> syn::Result<Vec<TokenStrea
         }
         let key = serde_deserialized_field_key(field, args.deserialize_rename_all)?;
         if serde_field_is_flattened(&field.attrs)? {
-            let ty = nested_schema_type(&field.ty);
-            statements.push(quote! {
-                fields.extend(
-                    <#ty as #krate::RequiredConfigSchema>::collect_required_schema(stack)?,
-                );
-            });
+            statements.push(flatten_statement(args, field, attrs)?);
             continue;
         }
         statements.push(push_statement(args, field, attrs, &key)?);
     }
     Ok(statements)
+}
+
+/// Build the statement that appends one flattened composition.
+///
+/// A flattened field has no key of its own, so its activation cannot gate
+/// anything at this level; Serde decides whether the child exists at all. When
+/// the field tolerates absence (`Option` or a default), Serde resolves an
+/// all-absent child to that absence rather than to missing required leaves.
+/// Composing the child's requirements unchanged would therefore invent an
+/// error the loader never raises, so they all become optional. Partially
+/// supplied input stays a Serde error, which is outside this diagnostic's
+/// promise.
+fn flatten_statement(
+    args: &RequiredSchemaArgs<'_>,
+    field: &Field,
+    attrs: &FieldAttrs,
+) -> syn::Result<TokenStream> {
+    let krate = args.krate;
+    let ty = nested_schema_type(&field.ty);
+    let composed = quote! {
+        <#ty as #krate::RequiredConfigSchema>::collect_required_schema(stack)?
+    };
+    let is_optional = is_optional(field, attrs, args.container_default)?;
+    if is_optional {
+        return Ok(quote! {
+            fields.extend(#composed.into_iter().map(|mut field| {
+                field.activation = #krate::Activation::Optional;
+                field
+            }));
+        });
+    }
+    Ok(quote! { fields.extend(#composed); })
 }
 
 /// Build the statement that appends one leaf or nested requirement.

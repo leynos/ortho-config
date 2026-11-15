@@ -230,6 +230,27 @@ with a compatibility probe rather than an assumption.
   failed only the spelling stage, on one British verb form and one hyphenated
   compound; both corrections landed in `1fbf28cf`, and the whole suite re-ran
   green.
+- [x] (2026-11-15) Assessment repair round on PR #589. The completeness
+  assessment returned "not yet complete or correct against the approved plan",
+  and each gap is now closed against executable evidence:
+  - Three `rstest-bdd` scenarios load a combined tree with a nested requirement,
+    an optional parent, and a scalar where an object is required; all eight
+    scenarios in `missing_required_values.feature` pass.
+  - `prop_tests.rs` gained insertion controls beside the existing omission one,
+    so the comparison fails for both false-negative directions.
+  - `an_indirect_cycle_is_detected_at_the_repeated_type` pins a mutually
+    recursive schema, asserting the chain repeats exactly the entry type.
+  - `tests/missing_required_evaluation.rs` instruments a custom `Deserialize`
+    and a `#[ortho_config(default = ...)]` expression and measures `(0, 1)`,
+    `(1, 1)`, and `(0, 0)` evaluations across the missing, successful, and
+    compose-only paths, which is the plan's no-double-evaluation evidence.
+  - Two trybuild fixtures with committed `.stderr` files pin the
+    `RequiredConfigSchema` bound for a nested field and the rejection of
+    `#[command(subcommand)]` combined with `#[ortho_config(nested)]`.
+  - [ADR-0021](../adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+    records selected-subcommand enumeration; ADR-0020 gains an amendment
+    banner and `## Amendments` section, and the design document, users' guide,
+    developers' guide, migration guide, changelog, and contents index follow.
 - [x] M1: establish exact schema and source contracts with executable evidence
   (ADR-0020, characterization evidence, and the recorded red reproducer).
 - [x] M2: implement and property-test collection with typed diagnostics.
@@ -299,6 +320,30 @@ The M1 audit found three facts that shape the implementation.
    classification sites; the compiler locates the third when the variant is
    added.
 
+The 2026-11-15 assessment repair round produced four findings worth keeping.
+
+1. `rstest-bdd` step texts are registered globally, not per feature. The plan's
+   `When the configuration is loaded` already belongs to
+   `tests/rstest_bdd_support/behaviour/steps/env_steps.rs`, so each new
+   scenario names its own load (`the combined configuration is loaded`, and so
+   on). This is a deliberate departure from the plan's step wording, recorded
+   in the new steps module's doc comment.
+2. `scenarios!` binds fixture names, not types, and Cargo does not track the
+   `.feature` file. Editing the feature without touching `scenarios.rs` leaves
+   a stale test binary that silently keeps running the old scenarios.
+3. A load that stops at a missing value evaluates a
+   `#[ortho_config(default = ...)]` expression exactly once and never runs a
+   custom deserializer, and compose-plus-collect alone touches neither. The
+   evaluation test therefore asserts those counts directly rather than
+   inferring them from the code.
+4. The subcommand loaders cannot reuse the type's own `RouteHints`: their
+   environment variable is `PREFIX_CMDS_<NAME>_<FIELD>` and their file root is
+   `[cmds.<name>]`. Advertising the type's prefix and file root would name
+   spellings the loader never reads, which is exactly the false-route failure
+   the design forbids. ADR-0021 records the loader-scope decision and the
+   widened `RequiredConfigSchema` bound it forces on the four
+   `load_and_merge_subcommand_for*` helpers and the `SubcmdConfigMerge` methods.
+
 ## Decision log
 
 D1 (2026-10-14, proposed): add structured missing-value data rather than the
@@ -347,6 +392,18 @@ Propose Verus only if a stable pure kernel needs a guarantee without a bound.
 Either verdict triggers the tolerance above and a dedicated, approved
 milestone, following the conditions under "Proof sketch before implementation".
 
+D6 (2026-11-15, accepted): extend enumeration to selected subcommands through a
+loader-scoped `RouteScope` rather than by widening `RouteHints`, and record the
+decision in
+[ADR-0021](../adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md).
+`RouteHints` is a statement about the type; the subcommand loaders read a
+different prefix and file root, so the scope has to travel with the loader. The
+consequence is accepted deliberately: `load_and_merge_subcommand_for*` and
+`SubcmdConfigMerge` now require `RequiredConfigSchema`, which every type
+deriving `OrthoConfig` already satisfies. The verdict above is unchanged — the
+subcommand path adds a scope parameter, not new logical structure, so the
+sampled matrix and the seeded controls still exercise every branch.
+
 ## Outcomes & retrospective
 
 The Wyvern team established the current merge boundary. Pandalump/Wafflecat
@@ -378,6 +435,20 @@ passed `make check-fmt`, `make lint`, `make typecheck`, `make test`,
 `make markdownlint`, and `make nixie` sequentially. Per the D5 verdict, no
 proof or prover inventory entry was added. What remains is delivery: publish
 the rebased branch and carry PR #589 through review.
+
+Assessment repair outcome (2026-11-15): the hosted completeness assessment
+reported the plan not yet complete, naming gaps that were real rather than
+stylistic — the combined-load behavioural scenarios were absent, the
+no-double-evaluation claim had no measurement behind it, the macro bound and
+the subcommand conflict had no compile-fail pin, and selected-subcommand
+coverage was neither implemented nor recorded as a decision. Every one is now
+closed with the evidence listed in Progress, and ADR-0021 records the loader
+scope and the widened bound it forces. The round also retired an assumption the
+earlier plan carried: that the subcommand helpers could report through the
+type's own route hints. They cannot, and saying so in an ADR is the honest
+outcome rather than leaving the exclusion in place. The D5 verdict stands: the
+added scope parameter is not new logical structure, so the sampled matrix and
+seeded controls still discharge the invariant rule.
 
 ## Context and orientation
 
@@ -826,11 +897,25 @@ unit/macro/e2e coverage for selected versus unselected subcommands and preserve
 existing invalid-input and help/version regressions. An assertion must prove
 all required paths appear, not merely that the message contains “missing”.
 
+The implemented feature file departs from this block in one respect. Step texts
+are registered globally across the `rstest_bdd` target, and
+`behaviour/steps/env_steps.rs` already owns `the configuration is loaded`, so
+each scenario names its own load: `the combined configuration is loaded`,
+`the configuration with an optional parent is loaded`, and
+`the configuration with a scalar parent is loaded`. Do not "restore" the plan's
+single wording; it collides.
+
 Acceptance E3 is V3–V5 passing, all standard gates passing, and E2 property
-tests rerun if its kernel or representation changes. R1–R4 are now delivered
-within the explicit schema coverage contract. Commit this integrated plateau;
-no private compatibility adapters are necessary. Remaining gap: final public
-guidance and roadmap closeout.
+tests rerun if its kernel or representation changes. Commit this integrated
+plateau; no private compatibility adapters are necessary. Remaining gap: final
+public guidance and roadmap closeout.
+
+Amendment (2026-11-15): M3 also delivered selected-subcommand enumeration,
+which this milestone originally left inside the ADR-0020 coverage exclusion. A
+loader-scoped `RouteScope` now carries the `PREFIX_CMDS_<NAME>_` environment
+prefix and the `[cmds.<name>]` file section, and
+[ADR-0021](../adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+supersedes that exclusion. R1–R4 are delivered with no coverage exclusion.
 
 ### M4 — documentation and final conformance
 

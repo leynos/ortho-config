@@ -1153,6 +1153,17 @@ rendered as a file table. Supplying a value through any advertised route clears
 that entry and leaves the rest of the report intact, so a caller can correct
 the configuration one step at a time.
 
+A selected subcommand is covered too, and its routes name that command's
+namespace rather than the struct's own prefix and file root. For the `serve`
+command in
+[Give each subcommand its own settings](#give-each-subcommand-its-own-settings),
+a missing required value is advertised as `ACME_SERVE_CMDS_SERVE_<FIELD>` and
+`cmds.serve.<field>`, which is exactly what that loader reads. Only the
+selected variant contributes requirements; the other variants are never
+consulted. The raw `DeserializeOwned` subcommand helpers, and their
+`_with_sources` forms, keep the earlier behaviour and produce no report,
+because they never learn which type's schema to walk.
+
 The payload carries key paths and routes, never configuration values, so
 rendering the error cannot leak a secret. Match the variant when an application
 wants to present the report itself:

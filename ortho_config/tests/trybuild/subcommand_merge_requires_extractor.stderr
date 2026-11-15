@@ -16,7 +16,7 @@ note: required by a bound in `load_and_merge_with_matches`
 ...
    |     fn load_and_merge_with_matches(&self, matches: &ArgMatches) -> OrthoResult<Self>
    |     where
-   |         Self: serde::Serialize + Default + CliValueExtractor,
+   |         Self: serde::Serialize + Default + CliValueExtractor + RequiredConfigSchema,
    |                                            ^^^^^^^^^^^^^^^^^ required by this bound in `SubcmdConfigMerge::load_and_merge_with_matches`
 
 error[E0277]: the trait bound `NoExtractorArgs: CliValueExtractor` is not satisfied
@@ -37,5 +37,5 @@ note: required by a bound in `load_and_merge_with_matches_with_sources`
 ...
    |     fn load_and_merge_with_matches_with_sources(
 ...
-   |         Self: serde::Serialize + Default + CliValueExtractor,
+   |         Self: serde::Serialize + Default + CliValueExtractor + RequiredConfigSchema,
    |                                            ^^^^^^^^^^^^^^^^^ required by this bound in `SubcmdConfigMerge::load_and_merge_with_matches_with_sources`

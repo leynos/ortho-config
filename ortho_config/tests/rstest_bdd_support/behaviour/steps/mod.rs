@@ -19,6 +19,7 @@ pub mod localizer_steps;
 pub mod merge_composer_steps;
 #[cfg(feature = "serde_json")]
 pub mod merge_error_steps;
+pub mod missing_required_recovery_steps;
 pub mod missing_required_steps;
 pub mod nested_docs_steps;
 

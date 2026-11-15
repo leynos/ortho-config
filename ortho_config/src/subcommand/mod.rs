@@ -24,13 +24,18 @@ use uncased::Uncased;
 
 #[cfg(feature = "serde_json")]
 mod config_merge;
+
 #[cfg(feature = "serde_json")]
 mod injected_env;
+
 mod paths;
+
 #[cfg(feature = "serde_json")]
 mod selected;
+
 #[cfg(feature = "serde_json")]
 mod sources;
+
 mod types;
 
 #[cfg(feature = "serde_json")]
@@ -79,6 +84,17 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
     Ok(fig)
 }
 
+/// Render the environment namespace a selected subcommand's provider reads.
+///
+/// The suffix underscore separates the command name from the first key
+/// segment, and a configured prefix keeps at most one trailing underscore so
+/// the namespace is stable however the prefix was written.
+pub(super) fn subcommand_env_prefix(prefix: &Prefix, name: &CmdName) -> String {
+    let raw = prefix.raw();
+    let raw_without_suffix = raw.strip_suffix('_').unwrap_or(raw);
+    format!("{raw_without_suffix}_CMDS_{}_", name.env_key())
+}
+
 /// Gather file defaults and the selected subcommand environment layer.
 ///
 /// A supplied scanning source changes only the environment provider; file
@@ -123,10 +139,7 @@ where
     let paths = candidate_paths_at(prefix, files.base, files.discovery)?;
     let mut fig = load_from_files(&paths, &name)?;
 
-    let env_name = name.env_key();
-    let raw = prefix.raw();
-    let raw_without_suffix = raw.strip_suffix('_').unwrap_or(raw);
-    let env_prefix = format!("{raw_without_suffix}_CMDS_{env_name}_");
+    let env_prefix = subcommand_env_prefix(prefix, &name);
     fig = match merge_source {
         Some(source) => fig.merge(sources::env_provider(&env_prefix, source)),
         None => fig.merge(
@@ -189,17 +202,20 @@ where
         .into_ortho_merge()
 }
 
-/// Wrapper around [`load_and_merge_subcommand`] using the struct's configured
-/// prefix.
+/// Merge subcommand defaults using the struct's configured prefix.
 ///
 /// Loads default configuration values for the subcommand from files and
 /// environment variables, then merges CLI-provided values over these defaults.
 /// The prefix is determined by the `OrthoConfig` implementation of the type.
+/// Because the type carries a derived [`crate::RequiredConfigSchema`], absent
+/// requirements are enumerated in one diagnostic rather than left for Serde to
+/// report one at a time.
 ///
 /// # Errors
 ///
-/// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialization fails.
+/// Returns [`crate::OrthoError::MissingRequiredValues`] when a declared
+/// requirement is absent, or [`crate::OrthoError::Merge`] if CLI values cannot
+/// be merged or deserialization fails.
 ///
 /// # Examples
 ///
@@ -224,9 +240,15 @@ where
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> OrthoResult<T>
 where
-    T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
+    T: crate::OrthoConfig
+        + serde::Serialize
+        + Default
+        + CommandFactory
+        + crate::RequiredConfigSchema,
 {
-    load_and_merge_subcommand(&Prefix::new(T::prefix()), cli)
+    let prefix = Prefix::new(T::prefix());
+    let fig = load_file_and_env_defaults::<T>(&prefix, None)?.merge(sanitized_provider(cli)?);
+    sources::finish_with_required_values(&fig, &prefix)
 }
 
 /// Loads defaults for a subcommand, respecting `cli_default_as_absent` fields.
@@ -289,12 +311,13 @@ where
 }
 
 /// Wrapper around [`load_and_merge_subcommand_with_matches`] using the struct's
-/// configured prefix.
+/// configured prefix, enumerating absent required values.
 ///
 /// # Errors
 ///
-/// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialisation fails.
+/// Returns [`crate::OrthoError::MissingRequiredValues`] when a declared
+/// requirement is absent, or [`crate::OrthoError::Merge`] if CLI values cannot
+/// be merged or deserialisation fails.
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_for_with_matches<T>(
@@ -302,7 +325,16 @@ pub fn load_and_merge_subcommand_for_with_matches<T>(
     matches: &ArgMatches,
 ) -> OrthoResult<T>
 where
-    T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory + CliValueExtractor,
+    T: crate::OrthoConfig
+        + serde::Serialize
+        + Default
+        + CommandFactory
+        + CliValueExtractor
+        + crate::RequiredConfigSchema,
 {
-    load_and_merge_subcommand_with_matches(&Prefix::new(T::prefix()), cli, matches)
+    let prefix = Prefix::new(T::prefix());
+    let fig = Figment::from(Serialized::defaults(T::default()))
+        .merge(load_file_and_env_defaults::<T>(&prefix, None)?);
+    let cli_value = cli.extract_user_provided(matches)?;
+    sources::finish_with_required_values(&fig.merge(Serialized::defaults(cli_value)), &prefix)
 }

@@ -11,6 +11,63 @@ use crate::error::{ConfigPath, MissingRequiredValue, MissingRequiredValues, Supp
 
 use super::schema::{Activation, CliFlagHint, RouteHints, SchemaChildren, SchemaField};
 
+/// The loader namespaces every route is expressed through.
+///
+/// A top-level load reads `PREFIX_key` variables and keys at the file root,
+/// which is the default. A subcommand load reads `PREFIX_CMDS_<NAME>_key`
+/// variables and the `[cmds.<name>]` file section instead, so its routes must
+/// be expressed through that scope or they would name values the loader never
+/// reads.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct RouteScope {
+    /// Environment prefix prepended verbatim to every variable name.
+    pub(crate) env_prefix: Option<String>,
+    /// File section every configuration-file route is nested under.
+    pub(crate) file_section: Vec<String>,
+}
+
+impl RouteScope {
+    /// Build the scope implied by the type's own route hints.
+    pub(crate) fn from_hints(hints: &RouteHints) -> Self {
+        Self {
+            env_prefix: hints.prefix.clone(),
+            file_section: Vec::new(),
+        }
+    }
+
+    /// Build the scope one selected subcommand's loader reads.
+    pub(crate) fn subcommand(env_prefix: String, name: &str) -> Self {
+        Self {
+            env_prefix: Some(env_prefix),
+            file_section: vec![String::from("cmds"), name.to_owned()],
+        }
+    }
+
+    /// Render the configuration-file path for one observed key path.
+    fn file_path(&self, route_path: &ConfigPath) -> ConfigPath {
+        ConfigPath::new(
+            self.file_section
+                .iter()
+                .cloned()
+                .chain(route_path.segments().iter().cloned()),
+        )
+    }
+}
+
+/// The two route sources one collection pass reads through.
+///
+/// The hints describe the type — container flags and their arity — while the
+/// scope describes the loader that will consume them. They are always
+/// consulted together for every reported path, so they travel together rather
+/// than as two parallel arguments.
+#[derive(Clone, Copy)]
+pub(crate) struct RouteContext<'a> {
+    /// Container CLI hints applied to every reported path.
+    pub(crate) hints: &'a RouteHints,
+    /// Namespaces the loader reads those routes through.
+    pub(crate) scope: &'a RouteScope,
+}
+
 /// Collect every absent required value, or `None` when none is missing.
 ///
 /// A root that is not a JSON object is left to the deserializer: it produces a
@@ -22,8 +79,27 @@ pub(crate) fn collect_missing(
     hints: &RouteHints,
     program: Option<String>,
 ) -> Option<MissingRequiredValues> {
+    let scope = RouteScope::from_hints(hints);
+    collect_missing_scoped(
+        fields,
+        root,
+        RouteContext {
+            hints,
+            scope: &scope,
+        },
+        program,
+    )
+}
+
+/// Collect every absent required value through an explicit route scope.
+pub(crate) fn collect_missing_scoped(
+    fields: &[SchemaField],
+    root: &Value,
+    routes: RouteContext<'_>,
+    program: Option<String>,
+) -> Option<MissingRequiredValues> {
     let object = root.as_object()?;
-    let mut collector = Collector::new(hints);
+    let mut collector = Collector::new(routes);
     collector.collect_level(fields, object);
     MissingRequiredValues::try_new(program, collector.missing)
 }
@@ -33,20 +109,29 @@ pub(crate) fn collect_missing(
 /// The current path and the accumulating report travel together, so each step
 /// only has to name the node it visits.
 struct Collector<'a> {
-    /// Container routes and CLI hints applied to every reported path.
-    hints: &'a RouteHints,
-    /// Path of the node currently being visited.
+    /// Route sources applied to every reported path.
+    routes: RouteContext<'a>,
+    /// Canonical path of the node currently being visited.
     path: ConfigPath,
+    /// Key spellings the merged value actually holds for the same node.
+    ///
+    /// The canonical path names the requirement; these segments spell the
+    /// keys an accepted alias actually used. Routes must follow the observed
+    /// spelling, because a file or environment key that repeats the merged
+    /// object under a second spelling makes the loader reject the result as a
+    /// duplicate field instead of repairing the absence.
+    route_path: ConfigPath,
     /// Requirements reported so far, in declaration order.
     missing: Vec<MissingRequiredValue>,
 }
 
 impl<'a> Collector<'a> {
     /// Start a pass at the root path with no requirements reported yet.
-    const fn new(hints: &'a RouteHints) -> Self {
+    const fn new(routes: RouteContext<'a>) -> Self {
         Self {
-            hints,
+            routes,
             path: ConfigPath::root(),
+            route_path: ConfigPath::root(),
             missing: Vec::new(),
         }
     }
@@ -56,14 +141,14 @@ impl<'a> Collector<'a> {
     fn collect_level(&mut self, fields: &[SchemaField], object: &Map<String, Value>) {
         for field in fields {
             match lookup(object, field) {
-                Some(value) => self.collect_present(field, value),
+                Some((key, value)) => self.collect_present(field, key, value),
                 None => self.collect_absent(field),
             }
         }
     }
 
     /// Descend into a present value when the node declares nested requirements.
-    fn collect_present(&mut self, field: &SchemaField, value: &Value) {
+    fn collect_present(&mut self, field: &SchemaField, key: &str, value: &Value) {
         let SchemaChildren::Nested(children) = &field.children else {
             return;
         };
@@ -73,8 +158,10 @@ impl<'a> Collector<'a> {
             return;
         };
         self.path.push(&field.key);
+        self.route_path.push(key);
         self.collect_level(children, object);
         self.path.pop();
+        self.route_path.pop();
     }
 
     /// Report an absent node when its absence is an error.
@@ -83,8 +170,10 @@ impl<'a> Collector<'a> {
             return;
         }
         self.path.push(&field.key);
+        self.route_path.push(&field.key);
         self.report_absent_node(field);
         self.path.pop();
+        self.route_path.pop();
     }
 
     /// Report an absent required node, descending into required descendants.
@@ -103,8 +192,10 @@ impl<'a> Collector<'a> {
             .filter(|child| child.activation == Activation::Required)
         {
             self.path.push(&child.key);
+            self.route_path.push(&child.key);
             self.report_absent_node(child);
             self.path.pop();
+            self.route_path.pop();
         }
         if self.missing.len() == before {
             self.push_report(true);
@@ -114,7 +205,7 @@ impl<'a> Collector<'a> {
     /// Append one report entry for the current path, with the routes the loader
     /// accepts.
     fn push_report(&mut self, expects_object: bool) {
-        let routes = routes_for(&self.path, expects_object, self.hints);
+        let routes = routes_for(&self.path, &self.route_path, expects_object, self.routes);
         self.missing.push(MissingRequiredValue::new(
             self.path.clone(),
             routes,
@@ -123,11 +214,15 @@ impl<'a> Collector<'a> {
     }
 }
 
-/// Find the first key the loader accepts for `field`.
-fn lookup<'a>(object: &'a Map<String, Value>, field: &SchemaField) -> Option<&'a Value> {
-    std::iter::once(&field.key)
-        .chain(field.aliases.iter())
-        .find_map(|key| object.get(key))
+/// Find the first key the loader accepts for `field`, with that spelling.
+fn lookup<'a>(object: &'a Map<String, Value>, field: &SchemaField) -> Option<(&'a str, &'a Value)> {
+    std::iter::once(field.key.as_str())
+        .chain(field.aliases.iter().map(String::as_str))
+        .find_map(|key| {
+            object
+                .get_key_value(key)
+                .map(|(matched, value)| (matched.as_str(), value))
+        })
 }
 
 /// Find the CLI hint for a reported path, when the parser can consume it.
@@ -147,30 +242,46 @@ fn cli_hint_for<'a>(
 }
 
 /// Build the truthful route list for one missing requirement.
-fn routes_for(path: &ConfigPath, expects_object: bool, hints: &RouteHints) -> Vec<SupplyRoute> {
-    let mut routes = Vec::new();
-    if let Some(hint) = cli_hint_for(path, expects_object, hints) {
-        routes.push(SupplyRoute::CommandLine {
+///
+/// `path` is the canonical identity used for the report and the CLI hint;
+/// `route_path` is the spelling the merged value actually uses, which the
+/// environment and file routes must repeat.
+fn routes_for(
+    path: &ConfigPath,
+    route_path: &ConfigPath,
+    expects_object: bool,
+    routes: RouteContext<'_>,
+) -> Vec<SupplyRoute> {
+    let mut report = Vec::new();
+    if let Some(hint) = cli_hint_for(path, expects_object, routes.hints) {
+        report.push(SupplyRoute::CommandLine {
             flag: hint.flag.clone(),
             takes_value: hint.takes_value,
         });
     }
-    if let Some(variable) = environment_variable(path, hints.prefix.as_deref()) {
-        routes.push(SupplyRoute::Environment { variable });
+    if let Some(variable) = environment_variable(route_path, routes.scope.env_prefix.as_deref()) {
+        report.push(SupplyRoute::Environment { variable });
     }
-    routes.push(SupplyRoute::ConfigurationFile {
-        path: path.clone(),
+    report.push(SupplyRoute::ConfigurationFile {
+        path: routes.scope.file_path(route_path),
         expects_object,
     });
-    routes
+    report
 }
 
 /// Render the environment variable the configured provider reads, if any.
 ///
-/// The provider nests dotted keys, so a segment containing a literal dot has
-/// no expressible variable and the route is withheld rather than guessed.
+/// The provider trims each variable name, strips the prefix, uppercases the
+/// remainder, splits it on `__`, and lowercases every part. A route is offered
+/// only when those transformations leave the key path unchanged; otherwise the
+/// advertised variable would populate a different key and the suggestion would
+/// be false.
 fn environment_variable(path: &ConfigPath, prefix: Option<&str>) -> Option<String> {
-    if path.segments().iter().any(|segment| segment.contains('.')) {
+    if !path
+        .segments()
+        .iter()
+        .all(|segment| is_expressible(segment))
+    {
         return None;
     }
     let joined = path.segments().join("__").to_ascii_uppercase();
@@ -178,4 +289,17 @@ fn environment_variable(path: &ConfigPath, prefix: Option<&str>) -> Option<Strin
         Some(configured) => format!("{configured}{joined}"),
         None => joined,
     })
+}
+
+/// Report whether one path segment survives the provider's key transforms.
+///
+/// A literal dot nests instead of naming one key, an embedded `__` splits into
+/// two segments, surrounding whitespace is trimmed, and the final lowercase
+/// transform rewrites any ASCII uppercase letter.
+fn is_expressible(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment == segment.trim()
+        && !segment.contains('.')
+        && !segment.contains("__")
+        && !segment.bytes().any(|byte| byte.is_ascii_uppercase())
 }

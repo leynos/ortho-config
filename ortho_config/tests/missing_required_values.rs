@@ -11,6 +11,9 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+#[path = "support/missing_required_supply.rs"]
+mod supply;
+
 /// The invoked program name every case uses.
 const PROGRAM: &str = "missing-required-values";
 
@@ -162,7 +165,11 @@ fn routes_for(report: &MissingRequiredValues, path: &str) -> Result<Vec<String>>
         .map(|route| match route {
             SupplyRoute::CommandLine { flag, .. } => format!("cli:{flag}"),
             SupplyRoute::Environment { variable } => format!("env:{variable}"),
-            SupplyRoute::ConfigurationFile { .. } => String::from("file"),
+            SupplyRoute::ConfigurationFile {
+                path: file_path, ..
+            } => {
+                format!("file:{}", file_path.render())
+            }
             _ => String::from("other"),
         })
         .collect())

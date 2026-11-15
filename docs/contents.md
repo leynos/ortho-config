@@ -102,6 +102,9 @@
   review the `ProcFs` and `Clock` traits that make the report's failure
   branches and its settle deadline directly testable, and the rejected
   single-read and mock-crate alternatives.
+- [ADR-0021: Enumerate missing required values for selected subcommands](adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md):
+  review the loader-scoped supply routes and the widened subcommand merge
+  bounds that extend ADR-0020 to selected subcommands.
 - [ADR-0022: Verify the coverage target root in use](adrs/adr-0022-verify-the-coverage-target-root.md):
   review the steps that read the chosen root back after both coverage passes,
   the rejection paths their contract suite executes, and the acceptance path

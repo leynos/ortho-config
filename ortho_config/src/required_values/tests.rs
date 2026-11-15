@@ -276,6 +276,55 @@ fn a_recursive_schema_reports_a_validation_error_instead_of_overflowing() {
     );
 }
 
+/// One half of a cycle that only closes through another type.
+struct IndirectA;
+
+/// The other half of the same cycle.
+struct IndirectB;
+
+impl RequiredConfigSchema for IndirectA {
+    fn collect_required_schema(
+        stack: &mut RequiredSchemaStack,
+    ) -> Result<Vec<SchemaField>, RequiredSchemaError> {
+        stack.enter::<Self>()?;
+        let composed = IndirectB::collect_required_schema(stack);
+        stack.leave::<Self>();
+        Ok(vec![required_object("b", composed?)])
+    }
+}
+
+impl RequiredConfigSchema for IndirectB {
+    fn collect_required_schema(
+        stack: &mut RequiredSchemaStack,
+    ) -> Result<Vec<SchemaField>, RequiredSchemaError> {
+        stack.enter::<Self>()?;
+        let composed = IndirectA::collect_required_schema(stack);
+        stack.leave::<Self>();
+        composed
+    }
+}
+
+#[test]
+fn an_indirect_cycle_is_detected_at_the_repeated_type() {
+    let error = ensure_no_missing_required_values::<IndirectA>(&json!({}), "demo")
+        .expect_err("a mutually recursive schema cannot be composed");
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains("recursive required-value schema"),
+        "unexpected error: {rendered}"
+    );
+    assert_eq!(
+        rendered.matches("IndirectA").count(),
+        2,
+        "the chain must end at the repeated type: {rendered}"
+    );
+    assert_eq!(
+        rendered.matches("IndirectB").count(),
+        1,
+        "the intermediate type must appear once: {rendered}"
+    );
+}
+
 #[test]
 fn enter_and_leave_allow_a_type_at_two_sibling_depths() {
     let mut stack = RequiredSchemaStack::new();

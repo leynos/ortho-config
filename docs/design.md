@@ -173,7 +173,8 @@ to read without hiding the semantics of error mapping.
 Missing required configuration values are reported through a typed error rather
 than the deserializer's first failure; the decision, requiredness matrix, and
 coverage limits are recorded in
-[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md).
+[ADR-0020](adrs/adr-0020-enumerate-missing-required-values.md). [ADR-0021](adrs/adr-0021-enumerate-missing-values-for-selected-subcommands.md)
+extends that contract to selected subcommands.
 
 - `ortho_config/src/required_values/` owns schema declarations, the recursion
   stack, the pure absence collector, and the route computation. Its public
@@ -186,6 +187,10 @@ coverage limits are recorded in
   and before final deserialization. The raw generic `from_value_merge<T>` keeps
   its existing behaviour because `T` there is only `DeserializeOwned` and
   carries no schema.
+- Route construction takes a loader scope. An ordinary load derives it from the
+  type's route hints; a selected subcommand passes the `PREFIX_CMDS_<NAME>_`
+  prefix and the `[cmds.<name>]` section its loader reads, so a diagnostic
+  cannot name a value that loader never consults.
 
 ### 4.3. Declarative configuration merging
 

@@ -19,5 +19,4 @@ Please provide them using one of the following methods, in order of precedence:
   3. Configuration File:
      reference = "<value>"
      [database]
-     [database]
      host = "<value>"

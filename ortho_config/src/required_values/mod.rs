@@ -45,6 +45,8 @@
 mod collect;
 mod schema;
 
+pub(crate) use collect::RouteScope;
+
 pub use schema::{
     Activation, CliFlagHint, RequiredConfigSchema, RequiredSchemaError, RequiredSchemaStack,
     RouteHints, SchemaChildren, SchemaField,
@@ -109,11 +111,38 @@ pub fn ensure_no_missing_required_values<T: RequiredConfigSchema>(
     value: &Value,
     program: &str,
 ) -> OrthoResult<()> {
-    let mut stack = RequiredSchemaStack::new();
-    let fields = T::collect_required_schema(&mut stack).map_err(|error| schema_failure(&error))?;
+    let fields = schema_of::<T>()?;
     let hints = T::required_route_hints();
     collect::collect_missing(&fields, value, &hints, Some(program.to_owned()))
         .map_or_else(|| Ok(()), |report| Err(missing_values_failure(report)))
+}
+
+/// Report every absent required value through a loader-specific route scope.
+///
+/// A selected subcommand reads `PREFIX_CMDS_<NAME>_*` variables and the
+/// `[cmds.<name>]` file section rather than the struct's own prefix and root.
+/// Its scope keeps the advertised routes reproducible with the loader that
+/// raised the error; the CLI hints still come from the derived schema.
+pub(crate) fn ensure_no_missing_required_values_scoped<T: RequiredConfigSchema>(
+    value: &Value,
+    program: &str,
+    scope: &RouteScope,
+) -> OrthoResult<()> {
+    let fields = schema_of::<T>()?;
+    let hints = T::required_route_hints();
+    let routes = collect::RouteContext {
+        hints: &hints,
+        scope,
+    };
+    collect::collect_missing_scoped(&fields, value, routes, Some(program.to_owned()))
+        .map_or_else(|| Ok(()), |report| Err(missing_values_failure(report)))
+}
+
+/// Compose `T`'s requirement schema, reporting a cyclic composition as a
+/// validation error.
+fn schema_of<T: RequiredConfigSchema>() -> Result<Vec<SchemaField>, Arc<OrthoError>> {
+    let mut stack = RequiredSchemaStack::new();
+    T::collect_required_schema(&mut stack).map_err(|error| schema_failure(&error))
 }
 
 /// Build the public error for an enumerated missing-value report.

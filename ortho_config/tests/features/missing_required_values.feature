@@ -1,6 +1,25 @@
-Feature: Missing required value diagnostics
+Feature: Recover all missing configuration from one diagnostic
   The loader names every absent required value once, with the routes that can
   supply it, and recovers when a value arrives through any supported source.
+
+  Scenario: Correct a root value and two nested required values together
+    Given a schema-enabled configuration with reference, database.host and database.port required
+    And no source supplies those values
+    When the combined configuration is loaded
+    Then one missing-values error names all three paths exactly once
+    And every suggested route is accepted by its provider
+    When valid values are supplied using the reported routes
+    Then the next load succeeds without another missing-values error
+
+  Scenario: Optional and supplied values are not reported
+    Given an absent optional parent and a supplied required value
+    When the configuration with an optional parent is loaded
+    Then neither value nor the optional parent's children are reported
+
+  Scenario: Invalid nested input is not absence
+    Given a scalar where a nested configuration object is required
+    When the configuration with a scalar parent is loaded
+    Then the existing invalid-value error is retained
 
   Scenario: A missing top-level value is diagnosed and recovered from the command line
     Given a configuration requiring a reference

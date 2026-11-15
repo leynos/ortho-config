@@ -12,6 +12,28 @@ fn object(path: &[&str], routes: Vec<SupplyRoute>) -> MissingRequiredValue {
     MissingRequiredValue::new(ConfigPath::new(path.iter().copied()), routes, true)
 }
 
+/// Build a configuration-file route for one canonical path.
+#[cfg(feature = "toml")]
+fn file(path: &[&str], expects_object: bool) -> SupplyRoute {
+    SupplyRoute::ConfigurationFile {
+        path: ConfigPath::new(path.iter().copied()),
+        expects_object,
+    }
+}
+
+/// Extract the Configuration File section body from a rendered report.
+#[cfg(feature = "toml")]
+fn configuration_file_body(rendered: &str) -> String {
+    rendered
+        .lines()
+        .skip_while(|line| !line.ends_with("Configuration File:"))
+        .skip(1)
+        .take_while(|line| line.starts_with("     "))
+        .map(|line| line.strip_prefix("     ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Report the routes a demo program really accepts for two absent values.
 fn demo_report() -> MissingRequiredValues {
     MissingRequiredValues::try_new(
@@ -71,6 +93,63 @@ fn display_groups_routes_by_supply_method() {
         "     host = \"<value>\"\n",
     );
     assert_eq!(demo_report().to_string(), expected);
+}
+
+#[cfg(feature = "toml")]
+#[test]
+fn the_rendered_file_section_is_one_valid_toml_document() {
+    // Report order puts a nested route before the root key and repeats a table,
+    // which a naive per-route rendering would write as a root key inside a
+    // table and a duplicate header. Grouping must keep the section parseable.
+    let report = MissingRequiredValues::try_new(
+        None,
+        vec![
+            leaf(
+                &["database", "port"],
+                vec![file(&["database", "port"], false)],
+            ),
+            leaf(
+                &["server", "api.key"],
+                vec![file(&["server", "api.key"], false)],
+            ),
+            leaf(&["reference"], vec![file(&["reference"], false)]),
+            leaf(
+                &["database", "host"],
+                vec![file(&["database", "host"], false)],
+            ),
+        ],
+    )
+    .expect("four entries form a non-empty report");
+
+    let body = configuration_file_body(&report.to_string());
+    let parsed: toml::Table =
+        toml::from_str(&body).expect("the Configuration File section must be valid TOML");
+
+    assert!(
+        parsed.contains_key("reference"),
+        "a root key must stay at the document root: {body}"
+    );
+    let database = parsed
+        .get("database")
+        .and_then(toml::Value::as_table)
+        .expect("the database table must exist");
+    assert!(
+        database.contains_key("host") && database.contains_key("port"),
+        "both database keys must share one table: {body}"
+    );
+    let server = parsed
+        .get("server")
+        .and_then(toml::Value::as_table)
+        .expect("the server table must exist");
+    assert!(
+        server.contains_key("api.key"),
+        "a quoted table key must survive parsing: {body}"
+    );
+    assert_eq!(
+        body.matches("[database]").count(),
+        1,
+        "a table header must appear once: {body}"
+    );
 }
 
 #[test]

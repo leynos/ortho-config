@@ -138,6 +138,50 @@ fn optional_nested_parent_strips_wrappers_for_the_child_schema() -> Result<()> {
 }
 
 #[test]
+fn required_flatten_composes_the_child_requirements_unchanged() -> Result<()> {
+    let input: DeriveInput = syn::parse_quote! {
+        struct Root {
+            #[serde(flatten)]
+            #[ortho_config(nested, skip_cli)]
+            extra: Extra,
+        }
+    };
+    let tokens = emit_plain(&input)?;
+    ensure!(
+        tokens.contains(
+            "fields.extend(<Extraasortho_config::RequiredConfigSchema>::collect_required_schema(stack)?);"
+        ),
+        "a required flatten keeps the child's activation: {tokens}"
+    );
+    ensure!(
+        !tokens.contains("Activation::Optional"),
+        "no child requirement is rewritten: {tokens}"
+    );
+    Ok(())
+}
+
+#[test]
+fn optional_flatten_downgrades_the_child_requirements() -> Result<()> {
+    let input: DeriveInput = syn::parse_quote! {
+        struct Root {
+            #[serde(flatten)]
+            #[ortho_config(nested, skip_cli)]
+            extra: Option<Extra>,
+        }
+    };
+    let tokens = emit_plain(&input)?;
+    ensure!(
+        tokens.contains("field.activation=ortho_config::Activation::Optional"),
+        "an absent optional flatten must not report required leaves: {tokens}"
+    );
+    ensure!(
+        tokens.contains("fields.extend("),
+        "the composed requirements are still emitted: {tokens}"
+    );
+    Ok(())
+}
+
+#[test]
 fn serde_naming_controls_keys_and_aliases() -> Result<()> {
     let input: DeriveInput = syn::parse_quote! {
         #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
