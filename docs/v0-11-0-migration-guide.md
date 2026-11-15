@@ -47,6 +47,7 @@ undeclared.
 | **Required if used**   | Subcommand merge helpers   | The `_for_*` helpers now also require `RequiredConfigSchema`.                        |
 | **Optional**           | Nested requirement schemas | Mark a child `nested` and derive `RequiredConfigSchema` on it.                       |
 | **Optional if used**   | Clap error overrides       | Re-check an override of `clap-error-missing-subcommand`; see §14.            |
+| **Optional**           | Clap error inventory       | Iterate `CLAP_ERROR_IDS` instead of hard-coding identifiers; see §15.        |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -566,3 +567,25 @@ No other catalogue entry changes meaning: the three display identifiers are
 never looked up, and every translated identifier in the
 [user's guide](users-guide.md#translate-or-override-clap-parse-errors) keeps
 its earlier behaviour.
+
+## 15. Enumerate the translated clap error kinds
+
+v0.11.0 publishes its clap error inventory as data.
+`ortho_config::CLAP_ERROR_IDS` lists every `clap::error::ErrorKind` this
+release classifies, paired with an `ortho_config::ClapErrorTranslation` that is
+either `Translated(identifier)` — the Fluent identifier a consumer override
+targets — or `DisplayOnly`, the three kinds `clap` renders itself. Both are
+exported from `ortho_config` and from `ortho_config::localizer`, so either path
+works.
+
+`ClapErrorTranslation` is `#[non_exhaustive]`: a match over it needs a wildcard
+arm, so a later release can add an outcome without breaking your build.
+Enumerate `CLAP_ERROR_IDS` rather than hard-coding identifiers when you build a
+coverage test or a translator brief.
+
+The inventory describes `clap_builder` 4.6.7, the version this workspace
+resolves. A consumer that resolves a different `clap` release keeps this matrix
+and relies on the untranslated fallback for kinds it does not list. See the
+[pre-publication coverage gate](developers-guide.md#the-pre-publication-clap-coverage-gate)
+and [ADR-0022](adrs/adr-0022-pre-publication-clap-coverage-gate.md) for how
+the table stays bound to that version.

@@ -7,6 +7,7 @@
 //! identity; the pre-publication gate cross-checks it against the resolved
 //! source.
 
+use anyhow::{Result, ensure};
 use clap::error::ErrorKind;
 use ortho_config::{CLAP_ERROR_IDS, ClapErrorTranslation};
 use rstest::rstest;
@@ -14,6 +15,8 @@ use std::collections::BTreeSet;
 
 #[path = "support/clap_reviewed.rs"]
 mod clap_reviewed;
+#[path = "fixtures/clap_matrix/drifted_rows.rs"]
+mod drifted_rows;
 
 use clap_reviewed::CLAP_ERROR_KIND_COUNT;
 
@@ -80,62 +83,141 @@ fn reviewed_kind_has_the_reviewed_outcome(
     );
 }
 
-/// The matrix length equals the reviewed variant count for the identity.
-#[test]
-fn matrix_length_equals_the_reviewed_kind_count() {
-    assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
+/// One matrix row: the kind and the outcome the matrix registers for it.
+type Row = (ErrorKind, ClapErrorTranslation);
+
+/// Fail unless `rows` has one entry per reviewed `clap_builder` variant.
+fn ensure_reviewed_length(rows: &[Row], reviewed: usize) -> Result<()> {
+    let listed = rows.len();
+    ensure!(
+        listed == reviewed,
+        "the matrix lists {listed} rows but the reviewed total is {reviewed}",
+    );
+    Ok(())
 }
 
-/// No kind is listed twice, so a duplicate cannot mask an omission.
-#[test]
-fn matrix_kinds_are_unique() {
-    for (index, (kind, _)) in CLAP_ERROR_IDS.iter().enumerate() {
-        let repeats = CLAP_ERROR_IDS
+/// Fail unless each kind appears at most once.
+fn ensure_unique_kinds(rows: &[Row]) -> Result<()> {
+    for (index, (kind, _)) in rows.iter().enumerate() {
+        let repeats = rows
             .iter()
             .skip(index + 1)
             .filter(|(other, _)| other == kind)
             .count();
-        assert_eq!(repeats, 0, "{kind:?} is listed more than once");
+        ensure!(repeats == 0, "{kind:?} is listed more than once");
     }
+    Ok(())
 }
 
-/// Translated identifiers are unique and live in the clap-error namespace.
-#[test]
-fn translated_identifiers_are_unique_and_namespaced() {
+/// Fail unless every translated identifier is unique and namespaced.
+fn ensure_identifiers_are_namespaced(rows: &[Row]) -> Result<()> {
     let mut seen = BTreeSet::new();
-    for (kind, translation) in CLAP_ERROR_IDS {
+    for (kind, translation) in rows {
         let ClapErrorTranslation::Translated(identifier) = translation else {
             continue;
         };
-        assert!(
+        ensure!(
             identifier.starts_with("clap-error-"),
-            "{kind:?} uses {identifier:?}, outside the clap-error namespace"
+            "{kind:?} uses {identifier:?}, outside the clap-error namespace",
         );
-        assert!(
+        ensure!(
             seen.insert(*identifier),
-            "{identifier:?} is used by more than one kind"
+            "{identifier:?} is used by more than one kind",
         );
     }
-    assert_eq!(seen.len(), TRANSLATED_ROW_COUNT);
+    let translated = seen.len();
+    ensure!(
+        translated == TRANSLATED_ROW_COUNT,
+        "the matrix translates {translated} kinds, but {TRANSLATED_ROW_COUNT} are reviewed",
+    );
+    Ok(())
 }
 
-/// Exactly the three render-it-yourself kinds carry the sentinel.
-#[test]
-fn display_only_rows_are_the_three_render_variants() {
-    let display_only: BTreeSet<String> = CLAP_ERROR_IDS
+/// Fail unless exactly the three render-it-yourself kinds carry the sentinel.
+fn ensure_display_only_rows(rows: &[Row]) -> Result<()> {
+    let display_only: BTreeSet<String> = rows
         .iter()
         .filter(|(_, translation)| matches!(translation, ClapErrorTranslation::DisplayOnly))
         .map(|(kind, _)| format!("{kind:?}"))
         .collect();
+    let expected = BTreeSet::from([
+        "DisplayHelp".to_owned(),
+        "DisplayHelpOnMissingArgumentOrSubcommand".to_owned(),
+        "DisplayVersion".to_owned(),
+    ]);
 
-    assert_eq!(
-        display_only,
-        BTreeSet::from([
-            "DisplayHelp".to_owned(),
-            "DisplayHelpOnMissingArgumentOrSubcommand".to_owned(),
-            "DisplayVersion".to_owned(),
-        ])
+    ensure!(
+        display_only == expected,
+        "the display-only rows are {display_only:?}, not {expected:?}",
     );
+    Ok(())
+}
+
+/// The refusal message, or an empty string when the check passed.
+fn refusal(result: Result<()>) -> String {
+    match result {
+        Ok(()) => String::new(),
+        Err(error) => error.to_string(),
+    }
+}
+
+/// The matrix length equals the reviewed variant count for the identity.
+#[test]
+fn matrix_length_equals_the_reviewed_kind_count() -> Result<()> {
+    ensure_reviewed_length(CLAP_ERROR_IDS, CLAP_ERROR_KIND_COUNT)
+}
+
+/// No kind is listed twice, so a duplicate cannot mask an omission.
+#[test]
+fn matrix_kinds_are_unique() -> Result<()> {
+    ensure_unique_kinds(CLAP_ERROR_IDS)
+}
+
+/// Translated identifiers are unique and live in the clap-error namespace.
+#[test]
+fn translated_identifiers_are_unique_and_namespaced() -> Result<()> {
+    ensure_identifiers_are_namespaced(CLAP_ERROR_IDS)
+}
+
+/// Exactly the three render-it-yourself kinds carry the sentinel.
+#[test]
+fn display_only_rows_are_the_three_render_variants() -> Result<()> {
+    ensure_display_only_rows(CLAP_ERROR_IDS)
+}
+
+/// A committed sixteen-row table fails the length check, naming both counts.
+///
+/// The fixture is independent of the live matrix, so this control keeps
+/// proving the check even if the published table changes.
+#[test]
+fn a_short_matrix_fails_the_length_check() -> Result<()> {
+    let message = refusal(ensure_reviewed_length(
+        drifted_rows::MISSING_A_ROW,
+        CLAP_ERROR_KIND_COUNT,
+    ));
+
+    ensure!(
+        message.contains("16 rows") && message.contains("17"),
+        "{message:?} should name sixteen rows and the reviewed seventeen",
+    );
+    Ok(())
+}
+
+/// A duplicate that replaces an omitted kind keeps the reviewed length.
+///
+/// Only the uniqueness check catches this shape, so the control first proves
+/// the fixture passes the length check and then requires the refusal.
+#[test]
+fn duplicate_plus_omission_fails_the_uniqueness_check() -> Result<()> {
+    let rows = drifted_rows::DUPLICATE_PLUS_OMISSION;
+
+    ensure_reviewed_length(rows, CLAP_ERROR_KIND_COUNT)?;
+    let message = refusal(ensure_unique_kinds(rows));
+    ensure!(
+        message.contains("listed more than once"),
+        "{message:?} should name the repeated kind",
+    );
+    Ok(())
 }
 
 /// The matrix is reachable through the crate root and the localizer module.
