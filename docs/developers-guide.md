@@ -1428,7 +1428,8 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   declaration nested inside an inline module is refused too: the count is a
   file-level scan, so it cannot bind a nested declaration to the inventory the
   crate exports, and a compiled file-level decoy would otherwise let the count
-  describe the wrong enum.
+  describe the wrong enum. A condition on the module does not exempt it — the
+  compiler decides whether the module is present, and a condition can hold.
 - `ortho_config/tests/support/clap_reviewed.rs` holds
   `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
   `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
@@ -1440,9 +1441,12 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   `module_tree/custom_library_root/` pairs a moved crate root with an unused
   default-root decoy, and `module_tree/nested_definition/` pairs a compiled
   seventeen-variant decoy with an eighteen-variant inventory declared in an
-  inline module. Its `targets/` files are `cargo metadata` target lists, so
-  crate-root selection and both of its refusals are proved against the shape
-  metadata actually emits.
+  inline module. Two more pair the same decoy with the inventory behind a
+  condition: `module_tree/conditional_nested_definition/` uses `#[cfg(all())]`,
+  which always holds, and `module_tree/cfg_attr_nested_definition/` applies it
+  through `#[cfg_attr(all(), cfg(all()))]`. Its `targets/` files are
+  `cargo metadata` target lists, so crate-root selection and both of its
+  refusals are proved against the shape metadata actually emits.
 - `ortho_config/tests/fixtures/clap_matrix/drifted_rows.rs` holds the matrix
   drift fixtures. It is a committed module rather than loose data because the
   checks it exercises are typed over `ErrorKind` and `ClapErrorTranslation`;

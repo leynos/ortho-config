@@ -86,7 +86,9 @@ It does not run for consumers and makes no claim about their resolutions.
    must sit at file level: an `ErrorKind` declared inside an inline module is
    refused, because the file-level scan cannot bind it to the inventory the
    crate exports, and a compiled file-level decoy beside it would otherwise let
-   the count describe the wrong enum.
+   the count describe the wrong enum. A condition on the module does not exempt
+   it: the compiler decides whether the module is present, a condition can
+   hold, and the gate cannot evaluate it.
 7. Compare the parsed count with the reviewed `CLAP_ERROR_KIND_COUNT` test
    constant.
 8. In the matrix test, assert the matrix length against the same constant at

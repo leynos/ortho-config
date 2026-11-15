@@ -480,20 +480,54 @@ stopping and reporting.
         the control failed with an empty refusal message, and the line was
         restored before further work.
       - V4 gap, generator acceptance and classification were claimed but not
-        recorded. `support/clap_publication/classes.rs` is a thirteen-case
-        `rstest` table that asserts, on every run, how each declaration shape
-        the gate can meet is classified: unit, tuple, struct, doc-commented,
-        explicitly discriminated, reordered, and empty enums are counted;
-        `cfg` and nested `cfg_attr` variants, a nested module, malformed source,
-        duplicate declarations, and a file declaring no `ErrorKind` are refused
-        with a named reason. Deterministic witnesses replace the drawn-sample
-        record the assessor offered as an alternative.
+        recorded. `support/clap_publication/classes.rs` is a `rstest` table
+        that asserts, on every run, how each declaration shape the gate can
+        meet is classified: unit, tuple, struct, doc-commented, explicitly
+        discriminated, reordered, and empty enums are counted; `cfg`-gated and
+        `cfg_attr`-gated variants, a nested module, malformed source, duplicate
+        declarations, and a file declaring no `ErrorKind` are refused with a
+        named reason. Deterministic witnesses replace the drawn-sample record
+        the assessor offered as an alternative.
       - Documentation: the design's §6.1.1, ADR-0022 item 6, and the
         developers' guide's module split, contract, fixtures, and
         troubleshooting row all state the nested-declaration refusal. The
         decision log records that the crate root Cargo reports supersedes the
         plan's `manifest_path` wording, and why the nested shape is refused
         rather than counted.
+
+- [x] (2026-11-15) Fifth whole-plan assessment (Assessment-ID
+      `EP-11-2-1-whole-plan-0669051f-20261115T1334Z`, head `0669051f`)
+      returned "not yet complete" with one finding and two evidence
+      corrections. All three are repaired.
+      - F5, a conditional inline module was exempted from the nested-declaration
+        refusal. The round-4 rule skipped a module whose presence was
+        conditional, on the reasoning that its contents are not compiled — but
+        a condition can hold, and `#[cfg(all())]` always does. A file-level
+        decoy with the reviewed total beside
+        `#[cfg(all())] pub mod error { pub enum ErrorKind { … } }` was therefore
+        counted from the decoy and passed. The exemption is removed:
+        `nested_error_kind` now searches every inline module, conditional or
+        not, because the condition decides what the compiler sees and the gate
+        cannot decide the condition. Two fixtures isolate the shapes —
+        `module_tree/conditional_nested_definition` with `#[cfg(all())]` and
+        `module_tree/cfg_attr_nested_definition` with
+        `#[cfg_attr(all(), cfg(all()))]` — and
+        `conditional_nested_definition_is_refused` and
+        `cfg_attr_nested_definition_is_refused` require the refusal. Both were
+        proved non-vacuous by restoring the exemption: the two controls failed
+        with an empty refusal, and both new class cases failed with the
+        no-declaration message, which is the gate accepting the decoy's count.
+        The file was restored to a `cmp`-identical copy before further work.
+      - The round-4 V4 record described the classification table imprecisely:
+        it said "nested `cfg_attr`" for what was a plain `cfg_attr`-gated
+        variant. The table now carries both a `cfg_attr`-gated variant and a
+        `cfg_attr`-gated inline module, so the record names exactly what is
+        tested, and the table stands at fifteen cases.
+      - The Outcomes section still described the M3-era tree `529721bb` and said
+        no feature code existed. It now describes this head, the five
+        assessment rounds and the rules each removed, and the two delivery
+        blockers; the M0 narrative is retained in past tense as the record it
+        was written from.
 
 ## Surprises & discoveries
 
@@ -636,6 +670,16 @@ writes the fixture to `target/debug/`. It passed only because the stale path
 happened to resolve in earlier runs. Reading the executable back from Cargo's
 JSON artefact stream removes the assumption entirely.
 
+A `cfg` condition is the compiler's decision, not a fact the gate can read.
+Skipping conditionally present items is fail-closed only when the skipped item
+cannot matter; for a declaration the gate is trying to bind to an export, it is
+fail-open, because a condition that holds makes the skipped item the real one.
+The fifth assessment round found exactly that: the nested-declaration refusal
+exempted conditional modules, and `#[cfg(all())]` — always true — hid an
+eighteen-variant inventory behind it. The repair refuses every nested
+declaration and leaves condition evaluation to the compiler that will perform
+it.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -697,16 +741,32 @@ JSON artefact stream removes the assumption entirely.
 
 ## Outcomes & retrospective
 
-M3 closed the implementation on 2026-11-15. The users' guide enumerates the
+The implementation is complete on head `0669051f` and delivery is not.
+Acceptance criteria E1–E4 are met and evidenced in Progress; none is
+outstanding as an implementation obligation. The users' guide enumerates the
 matrix, names the override identifiers, and documents the display-only and
 missing-input behaviour; the developers' guide owns the gate's troubleshooting
 procedure and its variant-intake steps; the roadmap records 11.2.1 as done with
-its finding and validation notes. A seven-gate certificate on frozen tree
-`529721bb` is green, and it includes the two documentation-example targets that
-execute the new example instead of only listing it. The only remaining work is
-delivery: publish the branch, refresh the draft pull request, and take it
-through review. Acceptance criteria E1–E4 are met and evidenced in Progress;
-none is outstanding.
+its finding and validation notes; and ADR-0022 records the mechanism.
+
+The gate reached its final shape over five whole-plan assessment rounds, and
+each round removed a way for the count to describe a build the compiler does
+not make: a conditional `mod` hop or file-level `#![cfg]`, a condition applied
+through a nested `cfg_attr`, a `#[path]` redirect, an assumed `src/lib.rs`, and
+finally a declaration nested in an inline module — conditional or not, because a
+`cfg` condition can hold and the gate cannot evaluate it. A compiling or
+counted shape the gate cannot prove now fails closed.
+
+Two delivery blockers remain, both outside the acceptance criteria. The hosted
+`build-test (linux)` job is red on its `Lint` step for the
+`bumpy-road-function` rule that Whitaker's rolling suite introduced at
+`880939d1`; the rule fires only in files byte-identical to `origin/main`, so
+its owner is the base layer, and the Linux coverage and packaging steps
+sequenced behind Lint are uncertified until it is cleared. Locally,
+`make boundary` and `make test` exhaust wall-clock allowances while the host's
+compile-admission pool is saturated by unrelated work; no assertion or output
+mismatch has been observed in either, and the same suites pass on hosted
+Windows. Both are recorded rather than papered over.
 
 The plan incorporates the merged prover tooling from PR #651, and the nested
 Cargo timeout fix that blocked validation on main has since landed from
@@ -719,10 +779,11 @@ checks also passed.
 The earlier plan was approved on 2026-11-09, and M0 ran immediately. M0 ended
 with a no-go for the original build-time identity binding: the evidence showed
 that a dependency build script cannot reliably establish an external consumer's
-governing Clap resolution. At the user's request, this revision selects the
-recommended pre-publication workspace gate. The governing design and roadmap
-wording still need reconciliation, and the mechanism decision must be recorded
-in an ADR before implementation. No feature code exists yet.
+governing Clap resolution. At the user's request, this revision selected the
+pre-publication workspace gate. At that point the design and roadmap wording
+needed reconciliation, the mechanism decision had no ADR, and no feature code
+existed yet; all three were completed in M1–M3, and the paragraphs below keep
+the validation record they were written from.
 
 Earlier validation on main hit inherited 240-second packaging and 300-second
 consumer deadlines. On the initial PR #664 parent (`26275a4e`), the ordinary
