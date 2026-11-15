@@ -20,75 +20,103 @@ use std::sync::Arc;
 /// comparisons. `Io` and `Format` have no argv reproducer and are constructed
 /// with [`ClapError::raw`] by the callers that need them.
 fn parse_error(kind: ErrorKind) -> ClapError {
-    let outcome = match kind {
-        ErrorKind::InvalidValue => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(Arg::new("speed").value_parser(["fast", "slow"]))
-            .try_get_matches_from(["prog", "other"]),
-        ErrorKind::UnknownArgument => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
-            .try_get_matches_from(["prog", "--other"]),
-        ErrorKind::InvalidSubcommand => Command::new("prog")
-            .color(ColorChoice::Never)
-            .subcommand(Command::new("config").about("Used for configuration"))
-            .try_get_matches_from(["prog", "confi"]),
-        ErrorKind::NoEquals => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(
+    let (command, argv) = reproducer(kind);
+    match command.try_get_matches_from(argv) {
+        Err(error) => error,
+        Ok(_) => panic!("the synthetic argv for {kind:?} should be rejected by clap"),
+    }
+}
+
+/// The command and argv that reproduce `kind`.
+fn reproducer(kind: ErrorKind) -> (Command, &'static [&'static str]) {
+    let Some(reproducer) = value_reproducer(kind).or_else(|| structure_reproducer(kind)) else {
+        panic!("no parser reproducer for {kind:?}");
+    };
+    reproducer
+}
+
+/// A colour-disabled command with the fixture program name.
+fn base_command() -> Command {
+    Command::new("prog").color(ColorChoice::Never)
+}
+
+/// Reproducers for failures in a value's shape, arity, or separator.
+fn value_reproducer(kind: ErrorKind) -> Option<(Command, &'static [&'static str])> {
+    let reproducer = match kind {
+        ErrorKind::InvalidValue => (
+            base_command().arg(Arg::new("speed").value_parser(["fast", "slow"])),
+            &["prog", "other"][..],
+        ),
+        ErrorKind::NoEquals => (
+            base_command().arg(
                 Arg::new("color")
                     .long("color")
                     .action(ArgAction::Set)
                     .require_equals(true),
-            )
-            .try_get_matches_from(["prog", "--color", "red"]),
-        ErrorKind::ValueValidation => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(Arg::new("num").value_parser(value_parser!(u8)))
-            .try_get_matches_from(["prog", "NotANumber"]),
-        ErrorKind::TooManyValues => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(Arg::new("arg").num_args(1..=2))
-            .try_get_matches_from(["prog", "too", "many", "values"]),
-        ErrorKind::TooFewValues => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(Arg::new("some_opt").long("opt").num_args(3..))
-            .try_get_matches_from(["prog", "--opt", "too", "few"]),
-        ErrorKind::WrongNumberOfValues => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(
+            ),
+            &["prog", "--color", "red"][..],
+        ),
+        ErrorKind::ValueValidation => (
+            base_command().arg(Arg::new("num").value_parser(value_parser!(u8))),
+            &["prog", "NotANumber"][..],
+        ),
+        ErrorKind::TooManyValues => (
+            base_command().arg(Arg::new("arg").num_args(1..=2)),
+            &["prog", "too", "many", "values"][..],
+        ),
+        ErrorKind::TooFewValues => (
+            base_command().arg(Arg::new("some_opt").long("opt").num_args(3..)),
+            &["prog", "--opt", "too", "few"][..],
+        ),
+        ErrorKind::WrongNumberOfValues => (
+            base_command().arg(
                 Arg::new("some_opt")
                     .long("opt")
                     .action(ArgAction::Set)
                     .num_args(2),
-            )
-            .try_get_matches_from(["prog", "--opt", "wrong"]),
-        ErrorKind::ArgumentConflict => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(
-                Arg::new("debug")
-                    .long("debug")
-                    .action(ArgAction::SetTrue)
-                    .conflicts_with("color"),
-            )
-            .arg(Arg::new("color").long("color").action(ArgAction::SetTrue))
-            .try_get_matches_from(["prog", "--debug", "--color"]),
-        ErrorKind::MissingRequiredArgument => Command::new("prog")
-            .color(ColorChoice::Never)
-            .arg(Arg::new("debug").required(true))
-            .try_get_matches_from(["prog"]),
-        ErrorKind::MissingSubcommand => Command::new("prog")
-            .color(ColorChoice::Never)
-            .subcommand_required(true)
-            .subcommand(Command::new("test"))
-            .try_get_matches_from(["prog"]),
-        other => panic!("no parser reproducer for {other:?}"),
+            ),
+            &["prog", "--opt", "wrong"][..],
+        ),
+        _ => return None,
     };
+    Some(reproducer)
+}
 
-    match outcome {
-        Err(error) => error,
-        Ok(_) => panic!("the synthetic argv for {kind:?} should be rejected by clap"),
-    }
+/// Reproducers for failures in the argument or subcommand structure.
+fn structure_reproducer(kind: ErrorKind) -> Option<(Command, &'static [&'static str])> {
+    let reproducer = match kind {
+        ErrorKind::UnknownArgument => (
+            base_command().arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue)),
+            &["prog", "--other"][..],
+        ),
+        ErrorKind::InvalidSubcommand => (
+            base_command().subcommand(Command::new("config").about("Used for configuration")),
+            &["prog", "confi"][..],
+        ),
+        ErrorKind::ArgumentConflict => (
+            base_command()
+                .arg(
+                    Arg::new("debug")
+                        .long("debug")
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with("color"),
+                )
+                .arg(Arg::new("color").long("color").action(ArgAction::SetTrue)),
+            &["prog", "--debug", "--color"][..],
+        ),
+        ErrorKind::MissingRequiredArgument => (
+            base_command().arg(Arg::new("debug").required(true)),
+            &["prog"][..],
+        ),
+        ErrorKind::MissingSubcommand => (
+            base_command()
+                .subcommand_required(true)
+                .subcommand(Command::new("test")),
+            &["prog"][..],
+        ),
+        _ => return None,
+    };
+    Some(reproducer)
 }
 
 /// Builds one stock error per translated kind for snapshot rendering.

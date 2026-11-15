@@ -73,25 +73,49 @@ fn render_enum(
 ) -> std::result::Result<String, fmt::Error> {
     let mut source = String::from("pub enum ErrorKind {\n");
     for (index, variant) in variants.iter().enumerate() {
-        if let Some((gated, attribute)) = gate
-            && index == gated
-        {
-            writeln!(source, "    {attribute}")?;
-        }
+        write_gate(&mut source, gate, index)?;
         if variant.documented {
             writeln!(source, "    /// Generated variant")?;
         }
-        match variant.shape {
-            Shape::Unit => match variant.discriminant {
-                Some(value) => writeln!(source, "    {} = {value},", variant.name)?,
-                None => writeln!(source, "    {},", variant.name)?,
-            },
-            Shape::Tuple => writeln!(source, "    {}(u8),", variant.name)?,
-            Shape::Struct => writeln!(source, "    {} {{ code: u8 }},", variant.name)?,
-        }
+        write_variant(&mut source, variant)?;
     }
     source.push_str("}\n");
     Ok(source)
+}
+
+/// Writes the gated attribute when `index` is the variant it annotates.
+fn write_gate(
+    source: &mut String,
+    gate: Option<(usize, &str)>,
+    index: usize,
+) -> std::result::Result<(), fmt::Error> {
+    match gate {
+        Some((gated, attribute)) if gated == index => writeln!(source, "    {attribute}"),
+        _ => Ok(()),
+    }
+}
+
+/// Writes the declaration line for one generated variant.
+fn write_variant(
+    source: &mut String,
+    variant: &VariantSpec,
+) -> std::result::Result<(), fmt::Error> {
+    match variant.shape {
+        Shape::Unit => write_unit_variant(source, variant),
+        Shape::Tuple => writeln!(source, "    {}(u8),", variant.name),
+        Shape::Struct => writeln!(source, "    {} {{ code: u8 }},", variant.name),
+    }
+}
+
+/// Writes a unit variant, with its discriminant when it has one.
+fn write_unit_variant(
+    source: &mut String,
+    variant: &VariantSpec,
+) -> std::result::Result<(), fmt::Error> {
+    match variant.discriminant {
+        Some(value) => writeln!(source, "    {} = {value},", variant.name),
+        None => writeln!(source, "    {},", variant.name),
+    }
 }
 
 /// The origin named in refusals raised by these properties.
