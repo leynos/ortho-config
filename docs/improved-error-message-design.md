@@ -102,6 +102,15 @@ Serde always deserializes the field from the unmatched keys, so the default
 applies only to a field it never saw and never rescues the child. A flattened
 child therefore resolves to absence exactly when its type is `Option`.
 
+A field's own deserializer is consulted after both defaults, and it changes one
+answer in that table. Serde raises a missing-field error instead of calling the
+helper that turns absence into `None`, so an `Option<T>` field read through
+`#[serde(deserialize_with = "...")]` or `#[serde(with = "...")]` is required. A
+Serde default at either level keeps it optional. The same replacement means the
+child's declared type no longer describes what the loader reads, so a
+`#[ortho_config(nested)]` field with a custom deserializer is reported as an
+opaque leaf under its own key rather than as an object with composed children.
+
 Nested enumeration is opt-in: only a field marked `#[ortho_config(nested)]`
 composes the child's schema. `#[serde(flatten)]` composes at the current level
 only when paired with that marker. An arbitrary custom `Deserialize`
@@ -112,7 +121,12 @@ contract and keep their existing error behaviour.
 Supply routes are computed for reported entries only, in CLI, environment, and
 configuration-file order. A route is omitted when its provider cannot consume
 the spelling: a non-identifier canonical key has no CLI flag, and a path
-segment containing a literal dot has no environment variable.
+segment containing a literal dot has no environment variable. A segment
+containing `=` or a NUL has no variable at all — every process environment
+treats `=` as the separator between name and value, and a NUL terminates the
+name — so only the configuration-file route remains. That route quotes any
+segment outside TOML's bare-key alphabet, which keeps the advertised spelling
+one the file can actually express.
 
 ## 3. Implementation design
 

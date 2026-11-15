@@ -11,6 +11,8 @@
 //!   transforms gets no environment route, while a plain sibling still does;
 //! - a nested requirement reached through an alias repeats the observed
 //!   spelling, so supplying the advertised variable or file key succeeds;
+//! - an observed spelling that no variable name can carry keeps only the file
+//!   route, and that route is quoted so the file can express it;
 //! - a partially supplied optional flatten still reports nothing, because one
 //!   failing descendant makes Serde resolve the whole child to absence;
 //! - a default that the loader never reads does not hide a requirement, while
@@ -108,6 +110,17 @@ struct AliasDatabase {
 struct AliasNestedRoot {
     /// The merged value may spell this key `db`, which Serde accepts.
     #[serde(alias = "db")]
+    #[ortho_config(nested, skip_cli)]
+    database: AliasDatabase,
+}
+
+/// A root whose alias spelling no environment variable can carry.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRV_")]
+struct EqualsAliasRoot {
+    /// `=` separates a variable's name from its value, so only a file can
+    /// spell the alias the merged value used.
+    #[serde(alias = "Host=Name")]
     #[ortho_config(nested, skip_cli)]
     database: AliasDatabase,
 }
@@ -251,23 +264,70 @@ fn the_alias_route_recovers_the_missing_value() -> Result<()> {
 /// route names a key this loader really reads.
 #[test]
 fn the_alias_file_route_recovers_the_missing_value() -> Result<()> {
-    let dir = tempfile::tempdir().context("create temp dir")?;
-    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
-    cap.write("config.toml", b"[db]\nhost = \"db\"\n")
-        .context("write config file")?;
-    let file = dir.path().join("config.toml");
-    let path = file
-        .to_str()
-        .ok_or_else(|| anyhow!("temporary path is not valid UTF-8: {}", file.display()))?;
-
+    let (_dir, path) = config_file(b"[db]\nhost = \"db\"\n")?;
     let config = load::<AliasNestedRoot>(
         &[PROGRAM],
-        &[("MRA_DB__PORT", "1"), ("MRA_CONFIG_PATH", path)],
+        &[("MRA_DB__PORT", "1"), ("MRA_CONFIG_PATH", path.as_str())],
     )
     .map_err(|error| anyhow::anyhow!("the advertised file route must recover: {error}"))?;
     ensure!(
         config.database.host == "db" && config.database.port == 1,
         "the file route must supply the required leaf beside the environment value, got {:?}",
+        config.database
+    );
+    Ok(())
+}
+
+/// Write `contents` to a fresh discovery file and return the temporary
+/// directory beside its path, so the file outlives the load that reads it.
+fn config_file(contents: &'static [u8]) -> Result<(tempfile::TempDir, String)> {
+    let dir = tempfile::tempdir().context("create temp dir")?;
+    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
+    cap.write("config.toml", contents)
+        .context("write config file")?;
+    let file = dir.path().join("config.toml");
+    let path = file
+        .to_str()
+        .ok_or_else(|| anyhow!("temporary path is not valid UTF-8: {}", file.display()))?;
+    Ok((dir, path.to_owned()))
+}
+
+/// A key containing `=` can be supplied only by a quoted TOML table.
+///
+/// The alias spelling is observed from a configuration file, so the report
+/// repeats it for the file route. A variable name cannot contain `=`, so no
+/// environment route may be advertised beside it.
+#[test]
+fn an_alias_spelling_no_variable_can_carry_gets_no_environment_route() -> Result<()> {
+    let (_dir, path) = config_file(b"[\"Host=Name\"]\nport = 1\n")?;
+    let missing = report(load::<EqualsAliasRoot>(
+        &[PROGRAM],
+        &[("MRV_CONFIG_PATH", &path)],
+    ))?;
+    ensure!(
+        paths(&missing) == ["database.host"],
+        "the canonical identity stays stable, got {:?}",
+        paths(&missing)
+    );
+    let routes = routes_for(&missing, "database.host")?;
+    ensure!(
+        !routes.iter().any(|route| route.starts_with("env:")),
+        "`=` cannot appear in a variable name, got {routes:?}"
+    );
+    ensure!(
+        routes
+            .iter()
+            .any(|route| route == r#"file:"Host=Name".host"#),
+        "the file route must quote the observed spelling, got {routes:?}"
+    );
+
+    let (_recovery_dir, recovery_path) =
+        config_file(b"[\"Host=Name\"]\nhost = \"db\"\nport = 1\n")?;
+    let config = load::<EqualsAliasRoot>(&[PROGRAM], &[("MRV_CONFIG_PATH", &recovery_path)])
+        .map_err(|error| anyhow!("the advertised file route must recover: {error}"))?;
+    ensure!(
+        config.database.host == "db" && config.database.port == 1,
+        "the quoted table must supply both leaves, got {:?}",
         config.database
     );
     Ok(())

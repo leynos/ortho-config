@@ -59,9 +59,10 @@ pub(crate) use literals::lit_crate_path;
 pub(crate) use output_attrs::parse_output_meta;
 pub(crate) use renderer_attrs::parse_renderer_meta;
 pub(crate) use serde_attrs::{
-    SerdeRenameAll, serde_deserialized_field_key, serde_field_aliases, serde_field_is_flattened,
-    serde_field_rename, serde_field_skips_deserialization, serde_has_default, serde_rename_all,
-    serde_rename_rules, serde_serialized_field_key,
+    SerdeRenameAll, serde_deserialized_field_key, serde_field_aliases,
+    serde_field_has_custom_deserializer, serde_field_is_flattened, serde_field_rename,
+    serde_field_skips_deserialization, serde_has_default, serde_rename_all, serde_rename_rules,
+    serde_serialized_field_key,
 };
 pub(crate) use struct_attrs::{discard_unknown, parse_ortho_config, parse_struct_attrs};
 pub(crate) use type_utils::{

@@ -301,6 +301,40 @@ with a compatibility probe rather than an assumption.
     serialize-direction `rename_all` trybuild fixture, the alias file route
     replayed beside the environment value that produced the report, and a unit
     table covering all eight rename rules on a mixed-case identifier.
+- [x] (2026-11-15) Fourth completeness assessment (round c4,
+  `7-3-1-completeness-2026-11-15-c4`) found four correctness defects against
+  `dc8e7d2d`. Repaired in this round:
+  - A field-level custom deserializer outranks the declared type. Serde's
+    `expr_is_missing` checks the field default, then the container default, and
+    only then `deserialize_with`; when a deserializer is installed the missing
+    branch returns `missing_field` instead of the helper that yields `None` for
+    an `Option`. `serde_field_has_custom_deserializer` recognizes both
+    `deserialize_with` and `with`, and `is_optional` treats such a field as
+    required unless a Serde default applies.
+  - `#[ortho_config(nested)]` combined with a custom deserializer becomes an
+    opaque leaf under its own key, because the child's `Deserialize` may never
+    run; a flattened one contributes no requirement at all, having no key of
+    its own. `composes_children` carries that decision for both the composed
+    and the reported shape.
+  - `is_expressible` rejects a segment containing `=` or a NUL. Every process
+    environment separates name from value at `=`, and a NUL terminates the
+    platform call's C string, so neither can name a variable whatever the
+    provider's case and separator transforms do. `render_segment` now quotes
+    and escapes any segment outside TOML's bare-key alphabet, so the file route
+    that remains is a spelling the file can carry.
+  - The defaulted flatten gained a two-leaf child: supplying one leaf still
+    reports the other, which separates "the flatten is inspected" from "one
+    supplied value silences the whole composition".
+  - New evidence: a macro unit table over both deserializer spellings, a
+    defaulted custom-deserialized `Option`, an opaque nested child, a flattened
+    custom-deserialized field, a real-loader module
+    (`tests/support/missing_required_deserializers.rs`) proving requiredness,
+    the default escape, and the opaque-leaf recovery through `MCX_DATABASE`, a
+    provider-expressibility unit table over six rejected spellings beside the
+    positive control, a rendering case for quoting and escaping, and a real
+    alias replica of a `=` key that keeps only its quoted file route and then
+    recovers from that file. ADR-0022 gains a third amendment; the design
+    document and the improved-error design record the same rules.
 
 ## Surprises & discoveries
 
@@ -408,6 +442,18 @@ deserialized from the unmatched keys and a missing leaf propagates. And Serde's
 underscore-separated word without lowering the rest. The earlier converter
 matched Serde for snake_case identifiers and diverged for every other shape.
 
+The c4 round closed the deserializer gap and, while doing so, found that a `=`
+key is reachable only through an alias. The derive validates every *serialized*
+file key path against the alphanumeric, `_`, and `-` alphabet, so
+`#[serde(rename = "Host=Name")]` fails to compile as an `OrthoConfig`
+implementation; `#[serde(alias = "Host=Name")]` is accepted, because the
+validation never looks at aliases. The quoting and escaping in `render_segment`
+is still required, since an alias and a schema-only child can both produce such
+a segment, and the real-loader case therefore drives the alias route rather
+than the rename one. The environment-route exclusion for `=` and NUL is
+likewise a platform property, not a provider setting: no configuration could
+make either spelling expressible.
+
 ## Decision log
 
 D1 (2026-10-14, proposed): add structured missing-value data rather than the
@@ -492,6 +538,23 @@ unchanged, and `PascalCase` only capitalizes each underscore-separated word
 without lowering the rest. A general converter matched Serde for snake_case
 identifiers and diverged for every other shape — the same class of defect,
 where the schema names a key the loader never reads.
+
+D9 (2026-11-15, accepted): let an installed deserializer outrank the declared
+type, and treat a segment outside the variable-name alphabet as having no
+environment route. Both follow D7's rule that the report describes the loader.
+`Option<T>` is optional only because `de::missing_field` yields `None` for it,
+and installing `deserialize_with` or `with` replaces that call with
+`missing_field`, so the field is required unless a Serde default intercepts it
+first. For the same reason the child's `Deserialize` may never run, so a
+`nested` marker on such a field cannot promise that the composed keys are the
+ones read: the field becomes an opaque leaf under its own key, which is the one
+route the deserializer is guaranteed to receive, and a flattened equivalent
+contributes nothing. On the route side, `=` and NUL are excluded by the
+platform rather than by any provider setting, so no configuration could make
+them expressible; the file route therefore carries the whole advertising duty,
+and it quotes and escapes whatever a TOML bare key cannot spell. Rejecting the
+combination outright was considered for the nested case and rejected: it would
+turn existing user code into a compile error for a diagnostic limitation.
 
 ## Outcomes & retrospective
 

@@ -294,12 +294,20 @@ fn environment_variable(path: &ConfigPath, prefix: Option<&str>) -> Option<Strin
 /// Report whether one path segment survives the provider's key transforms.
 ///
 /// A literal dot nests instead of naming one key, an embedded `__` splits into
-/// two segments, surrounding whitespace is trimmed, and the final lowercase
+/// two segments, and surrounding whitespace is trimmed. The final lowercase
 /// transform rewrites any ASCII uppercase letter.
+///
+/// Two byte values are rejected for a different reason: they cannot appear in
+/// a variable *name* at all. Every process environment treats `=` as the
+/// separator between name and value, so `APP_A=B` names `APP_A` and carries
+/// `B`; a NUL terminates the C string the platform call receives. Advertising
+/// either spelling would name a variable no loader can ever observe.
 fn is_expressible(segment: &str) -> bool {
     !segment.is_empty()
         && segment == segment.trim()
         && !segment.contains('.')
         && !segment.contains("__")
-        && !segment.bytes().any(|byte| byte.is_ascii_uppercase())
+        && !segment
+            .bytes()
+            .any(|byte| byte.is_ascii_uppercase() || byte == b'=' || byte == 0)
 }

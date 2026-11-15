@@ -13,8 +13,9 @@ use syn::{Field, Ident};
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::parse::{
     FieldAttrs, SerdeRenameAll, StructAttrs, nested_schema_type, option_inner,
-    serde_deserialized_field_key, serde_field_aliases, serde_field_is_flattened,
-    serde_field_skips_deserialization, serde_has_default, serde_rename_rules,
+    serde_deserialized_field_key, serde_field_aliases, serde_field_has_custom_deserializer,
+    serde_field_is_flattened, serde_field_skips_deserialization, serde_has_default,
+    serde_rename_rules,
 };
 
 /// Parsed inputs needed to emit one required-value schema implementation.
@@ -205,7 +206,7 @@ fn push_statement(
     } else {
         quote! { #krate::Activation::Required }
     };
-    let children = if attrs.nested {
+    let children = if composes_children(field, attrs)? {
         let ty = nested_schema_type(&field.ty);
         quote! {
             #krate::SchemaChildren::Nested(
@@ -232,13 +233,26 @@ fn push_statement(
 ///
 /// A subcommand selector is not a configuration value, a skipped field is never
 /// deserialized, and an unmarked flattened field has no readable key of its
-/// own.
+/// own. A flattened field can only contribute the requirements it composes, so
+/// it participates exactly when composition is possible.
 fn participates(field: &Field, attrs: &FieldAttrs) -> syn::Result<bool> {
     if attrs.cli.is_subcommand() || serde_field_skips_deserialization(&field.attrs)? {
         return Ok(false);
     }
     let is_flattened = serde_field_is_flattened(&field.attrs)?;
-    Ok(!is_flattened || attrs.nested)
+    Ok(!is_flattened || composes_children(field, attrs)?)
+}
+
+/// Decide whether the field's declared type describes the child requirements.
+///
+/// A custom deserializer replaces the function Serde uses to read the value,
+/// so the child's own `Deserialize` implementation — and the key model the
+/// schema derives from it — may never run. Composing those requirements would
+/// report leaves the deserializer is free to ignore, so such a field is
+/// reported as an opaque leaf: its own key remains the route that supplies it,
+/// and no requirement is invented beneath it.
+fn composes_children(field: &Field, attrs: &FieldAttrs) -> syn::Result<bool> {
+    Ok(attrs.nested && !serde_field_has_custom_deserializer(&field.attrs)?)
 }
 
 /// The declared facts that decide whether a field's absence is an error.
@@ -263,16 +277,23 @@ struct ActivationFacts<'a> {
 /// identifier, so it only supplies the value when the loader reads that
 /// identifier; a renamed field whose identifier is not an alias stays required
 /// even though it declares a default.
+///
+/// An `Option` type is optional only because Serde's `missing_field` helper
+/// yields `None` for it — and `expr_is_missing` consults a field's custom
+/// deserializer *instead* of that helper, returning `missing_field` directly.
+/// A default is checked before the deserializer, so it still makes the field
+/// optional. Without one, `Option<T>` is required.
 fn is_optional(
     field: &Field,
     attrs: &FieldAttrs,
     facts: &ActivationFacts<'_>,
 ) -> syn::Result<bool> {
-    let is_optional_by_type = option_inner(&field.ty).is_some();
     let is_optional_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
     let default_reaches = default_reaches_field(field, facts.key, facts.aliases);
     let is_optional_by_default =
         (attrs.default.is_some() || attrs.inferred_clap_default.is_some()) && default_reaches;
+    let is_optional_by_type =
+        option_inner(&field.ty).is_some() && !serde_field_has_custom_deserializer(&field.attrs)?;
     Ok(is_optional_by_type || is_optional_by_serde || is_optional_by_default)
 }
 

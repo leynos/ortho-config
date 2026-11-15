@@ -65,9 +65,10 @@ impl ConfigPath {
 
     /// Render the path using dots, quoting segments that need it.
     ///
-    /// A segment is quoted when it is empty, contains a dot, or contains
-    /// whitespace. The quoted form keeps a literal dotted key visibly distinct
-    /// from a nested path with the same spelling.
+    /// A segment is quoted whenever TOML would not read it as a bare key. The
+    /// quoted form keeps a literal dotted key visibly distinct from a nested
+    /// path with the same spelling, and it is the only spelling that names a
+    /// key outside TOML's bare-key alphabet — such as one containing `=`.
     #[must_use]
     pub fn render(&self) -> String {
         self.0
@@ -86,13 +87,23 @@ impl fmt::Display for ConfigPath {
 
 /// Render one path segment, quoting it when a bare spelling would be ambiguous.
 fn render_segment(segment: &str) -> String {
-    let needs_quotes =
-        segment.is_empty() || segment.contains('.') || segment.chars().any(char::is_whitespace);
-    if needs_quotes {
-        format!("\"{segment}\"")
-    } else {
-        segment.to_owned()
+    if is_bare_key(segment) {
+        return segment.to_owned();
     }
+    let escaped = segment.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
+
+/// Report whether TOML reads `segment` as a key without quotes.
+///
+/// An empty segment, a dot, whitespace, and any character outside
+/// `A-Za-z0-9_-` all require the quoted form, so this one predicate replaces
+/// the case-by-case list of characters that happened to be considered.
+fn is_bare_key(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
 }
 
 /// A real way a missing value can be supplied.

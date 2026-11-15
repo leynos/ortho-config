@@ -10,7 +10,12 @@
 //! - Serde's `lowercase` field rule leaves an identifier untouched, so the
 //!   schema must not apply a general-purpose case conversion;
 //! - a key that no bare TOML key can express is recovered from a configuration
-//!   file through the quoted spelling the report advertises.
+//!   file through the quoted spelling the report advertises;
+//! - a defaulted flatten composes every child leaf, so supplying one still
+//!   exposes the other.
+//!
+//! Fields read through a custom deserializer are covered separately in
+//! `missing_required_deserializers.rs`.
 
 use anyhow::{Context, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
@@ -72,6 +77,27 @@ struct QuotedKeyRoot {
     /// A dot inside the key itself, which a bare TOML key cannot express.
     #[serde(rename = "Host.Name")]
     host_name: String,
+}
+
+/// A flattened child with two required leaves.
+#[derive(Debug, Deserialize, Serialize, ortho_config::RequiredConfigSchema)]
+struct TwoLeafChild {
+    /// First required leaf.
+    host: String,
+    /// Second required leaf.
+    port: u16,
+}
+
+/// A root whose defaulted flatten composes both child leaves.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRL_")]
+struct TwoLeafFlattenRoot {
+    /// Serde still deserializes this child from the unmatched keys.
+    #[serde(flatten, default)]
+    #[ortho_config(nested, skip_cli)]
+    extra: TwoLeafChild,
+    /// A sibling that keeps a partial report observable.
+    region: String,
 }
 
 /// Write `contents` into a discoverable configuration file.
@@ -184,6 +210,45 @@ fn a_quoted_file_key_recovers_the_missing_value() -> Result<()> {
         config.host_name == "set",
         "the quoted key must supply the leaf, got {}",
         config.host_name
+    );
+    Ok(())
+}
+
+/// A defaulted flatten keeps both child leaves and exposes each one alone.
+#[test]
+fn supplying_one_flattened_leaf_exposes_the_other() -> Result<()> {
+    let missing = report(load::<TwoLeafFlattenRoot>(&[PROGRAM], &[]))?;
+    ensure!(
+        paths(&missing) == ["host", "port", "region"],
+        "both child leaves compose before the sibling, got {:?}",
+        paths(&missing)
+    );
+
+    let missing_after_host = report(load::<TwoLeafFlattenRoot>(
+        &[PROGRAM],
+        &[("MRL_HOST", "db")],
+    ))?;
+    ensure!(
+        paths(&missing_after_host) == ["port", "region"],
+        "supplying one child leaf must not hide the other, got {:?}",
+        paths(&missing_after_host)
+    );
+
+    let config = load::<TwoLeafFlattenRoot>(
+        &[PROGRAM],
+        &[
+            ("MRL_HOST", "db"),
+            ("MRL_PORT", "5432"),
+            ("MRL_REGION", "eu"),
+        ],
+    )
+    .map_err(|error| anyhow!("the composed routes must recover: {error}"))?;
+    ensure!(
+        config.extra.host == "db" && config.extra.port == 5432 && config.region == "eu",
+        "every route must supply its value, got host={} port={} region={}",
+        config.extra.host,
+        config.extra.port,
+        config.region
     );
     Ok(())
 }

@@ -17,6 +17,9 @@ mod supply;
 #[path = "support/missing_required_keys.rs"]
 mod keys;
 
+#[path = "support/missing_required_deserializers.rs"]
+mod deserializers;
+
 /// The invoked program name every case uses.
 const PROGRAM: &str = "missing-required-values";
 

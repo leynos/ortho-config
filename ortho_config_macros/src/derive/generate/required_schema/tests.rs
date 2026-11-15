@@ -13,6 +13,9 @@ use syn::DeriveInput;
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::generate::required_schema::RequiredSchemaSource;
 
+#[path = "tests_deserializers.rs"]
+mod deserializers;
+
 /// Normalize token spacing so assertions can use readable fragments.
 fn normalize(tokens: &proc_macro2::TokenStream) -> String {
     tokens.to_string().replace(" :: ", "::").replace(' ', "")

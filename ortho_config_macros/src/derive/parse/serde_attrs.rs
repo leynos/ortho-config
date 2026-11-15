@@ -241,6 +241,30 @@ pub(crate) fn serde_field_is_flattened(attrs: &[Attribute]) -> syn::Result<bool>
     serde_field_has_bare_flag(attrs, &["flatten"])
 }
 
+/// Returns true if Serde replaces the field's deserialization function.
+///
+/// `#[serde(with = "...")]` is shorthand for `serialize_with` plus
+/// `deserialize_with` on the same module, so either spelling installs a
+/// deserializer. Requirement enumeration cannot replay it, which makes the
+/// field's declared type an unreliable description of what Serde will accept.
+pub(crate) fn serde_field_has_custom_deserializer(attrs: &[Attribute]) -> syn::Result<bool> {
+    let mut found = false;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
+        attr.parse_nested_meta(|meta| {
+            let is_custom = meta.path.is_ident("deserialize_with") || meta.path.is_ident("with");
+            if !is_custom {
+                return super::discard_unknown(&meta);
+            }
+            // Consume the module path so nested parsing stays positioned at the
+            // next Serde option, exactly as `parse_default_meta` does.
+            meta.value()?.parse::<LitStr>()?;
+            found = true;
+            Ok(())
+        })?;
+    }
+    Ok(found)
+}
+
 /// Detects whether any of `flags` appears as a bare Serde field option.
 fn serde_field_has_bare_flag(attrs: &[Attribute], flags: &[&str]) -> syn::Result<bool> {
     let mut found = false;

@@ -198,6 +198,16 @@ extends that contract to selected subcommands.
   deserialized from the unmatched keys. The composed subtree of an `Option`
   child is therefore demoted as a whole, including any nested object, while
   every other flatten keeps its requirements.
+- A field-level custom deserializer outranks the declared type. Serde consults
+  a field default, then a container default, and only then the field's
+  deserializer; when one is installed it raises a missing-field error instead
+  of calling the helper that turns absence into `None`. An `Option<T>` field
+  read through `#[serde(deserialize_with = "...")]` or `#[serde(with = "...")]`
+  is therefore required unless a default applies. The replacement also means
+  the child's `Deserialize` implementation may never run, so a
+  `#[ortho_config(nested)]` field with a custom deserializer is reported as an
+  opaque leaf under its own key, and a flattened one contributes no composed
+  requirement at all.
 - Field keys follow Serde's own field rules rather than a general case
   conversion. `lowercase` and `snake_case` leave a struct field unchanged, and
   `PascalCase` only capitalizes the first letter of each underscore-separated
@@ -206,6 +216,10 @@ extends that contract to selected subcommands.
 - A `#[ortho_config(default = ...)]` value is materialized under the Rust
   identifier. It supplies a renamed field only when that identifier is also an
   accepted `#[serde(alias = "...")]`; otherwise the field stays required.
+- An environment route is offered only when the provider's transforms leave the
+  spelling unchanged and the spelling can name a variable at all. A segment
+  containing `=` or a NUL can never do so: every process environment treats `=`
+  as the separator between name and value, and a NUL terminates the name.
 - Configuration-file routes render every key as TOML accepts it, emitting a
   quoted and escaped basic string for any segment a bare key cannot express.
 

@@ -165,6 +165,7 @@ A field is required unless its declared shape or attributes guarantee a value:
 | Declared shape or attribute                   | Requiredness  |
 | --------------------------------------------- | ------------- |
 | `Option<T>` (one outer layer)                 | Optional      |
+| `Option<T>` with a custom deserializer        | Required      |
 | `#[ortho_config(default = ...)]`              | Optional      |
 | Inferred clap default (`default_value`, `_t`) | Optional      |
 | `#[serde(default)]` on the field              | Optional      |
@@ -183,6 +184,16 @@ its keys do not appear under its own name, so any report would name a key the
 loader never reads. With both `#[serde(flatten)]` and
 `#[ortho_config(nested)]`, the child's fields compose at the current level,
 which is exactly Serde's flatten contract.
+
+A field-level `#[serde(deserialize_with = "...")]` or `#[serde(with = "...")]`
+outranks the declared type, because `expr_is_missing` checks the field default,
+then the container default, and only then the field's deserializer — which,
+when present, raises a missing-field error instead of calling the helper that
+yields `None` for an `Option`. `Option<T>` is therefore required unless a
+default applies. The replacement also means the child's `Deserialize`
+implementation may never run, so `#[ortho_config(nested)]` cannot promise that
+the child's keys are the ones read: such a field is reported as an opaque leaf
+under its own key, and a flattened one contributes no composed requirement.
 
 ### Canonical keys and aliases
 
@@ -230,8 +241,11 @@ configuration-file order.
   identifier the generated CLI layer emits. The flag and value arity come from
   the generated clap field.
 - **Environment** only when no path segment contains a literal dot, because the
-  provider splits on `__` and then nests on `.`. The variable is the prefix
-  followed by the uppercased segments joined with `__`, matching
+  provider splits on `__` and then nests on `.`, and only when every segment
+  can name a variable at all. A segment containing `=` or a NUL cannot: every
+  process environment treats `=` as the separator between name and value, and a
+  NUL terminates the name. The variable is the prefix followed by the
+  uppercased segments joined with `__`, matching
   `CsvEnv::prefixed(prefix).uppercase(true).split("__")`, or the unprefixed
   spelling for a raw provider.
 - **Configuration file** always, rendered as `key = value` for a leaf or a
@@ -251,9 +265,10 @@ of
 expects_object: bool }`,
 built through a fallible constructor. `ConfigPath` keeps its segments
 separately, so a literal dotted key is distinct from a nested path; rendering
-quotes a segment that contains a dot or whitespace. Display renders the program
-label, the ordered missing paths, and the grouped routes. The initial contract
-is English and does not consult a localizer.
+quotes and escapes any segment a TOML bare key cannot express, which is what
+makes a configuration-file route a spelling the file can actually carry.
+Display renders the program label, the ordered missing paths, and the grouped
+routes. The initial contract is English and does not consult a localizer.
 
 A cyclic opt-in schema is a declaration defect, not a user input error. The
 collector detects it with a type-identity stack and returns
@@ -264,12 +279,12 @@ in sibling fields is allowed and does not trip the cycle check.
 ### Coverage contract
 
 Full enumeration covers top-level fields and nested types that opt in with
-`#[ortho_config(nested)]`. It does not cover: fields whose requirement lives
-inside an arbitrary custom `Deserialize` implementation, `#[serde(flatten)]`
-without the nested marker, enum payloads, or selected-subcommand values merged
-through the Figment extraction helpers. Those paths keep their existing error
-behaviour. An opaque field can still be reported absent as a direct value;
-absent leaves inside a supplied opaque value remain Serde errors.
+`#[ortho_config(nested)]`. It does not cover: requirements that live inside an
+arbitrary custom `Deserialize` implementation, `#[serde(flatten)]` without the
+nested marker, enum payloads, or selected-subcommand values merged through the
+Figment extraction helpers. Those paths keep their existing error behaviour. A
+field with a custom deserializer is reported as an opaque leaf when absent as a
+direct value; absent leaves inside a supplied opaque value remain Serde errors.
 
 ## Goals and non-goals
 
@@ -347,6 +362,35 @@ unchanged for `lowercase` and `snake_case` and, for `PascalCase`, `camelCase`,
 first letter. General-purpose case conversion would rename an identifier Serde
 still reads under its declared spelling, so the schema would name a key no
 loader consumes. The canonical key follows that table exactly.
+
+### 2026-11-15 — custom deserializers and the variable-name alphabet
+
+**A custom deserializer outranks the declared type.** `expr_is_missing` checks
+the field default, then the container default, and only then
+`field.attrs.deserialize_with()`. When a deserializer is installed, the missing
+branch returns `missing_field` rather than calling `de::missing_field`, the
+helper that yields `None` for an `Option`. `#[serde(with = "...")]` installs
+the same deserializer through `m::deserialize`, so both spellings are
+recognized. An `Option<T>` field is required under either unless a Serde
+default applies, and an `ortho_config` default keeps its existing
+identifier-and-alias rule.
+
+**An opaque child has no enumerable keys.** The same replacement means the
+child's `Deserialize` implementation may never run, so
+`#[ortho_config(nested)]` cannot promise that the child's key model is what the
+loader reads. Composing it would report leaves the deserializer is free to
+ignore. Such a field is reported as an opaque leaf under its own key, which is
+the one route the deserializer is guaranteed to receive; a flattened field with
+a custom deserializer contributes no requirement at all, because it has no key
+of its own to report.
+
+**A variable name excludes two byte values.** Every process environment treats
+`=` as the separator between name and value, and a NUL terminates the C string
+the platform call receives. A path segment containing either therefore has no
+environment route, whatever the provider's case and separator transforms do.
+The configuration-file route remains, and it now quotes and escapes any segment
+outside TOML's bare-key alphabet, so the advertised spelling is one the file
+can express.
 
 ## References
 

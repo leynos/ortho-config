@@ -302,6 +302,25 @@ fn dotted_segments_are_quoted_to_keep_paths_unambiguous() {
 }
 
 #[test]
+fn keys_outside_the_bare_alphabet_are_quoted_and_escaped() {
+    assert_eq!(
+        ConfigPath::new(["Host=Name"]).render(),
+        "\"Host=Name\"",
+        "`=` is outside TOML's bare-key alphabet, so the key needs quotes"
+    );
+    assert_eq!(
+        ConfigPath::new(["say \"hi\""]).render(),
+        "\"say \\\"hi\\\"\"",
+        "a quote inside a quoted key must be escaped"
+    );
+    assert_eq!(
+        ConfigPath::new(["a_b-c9"]).render(),
+        "a_b-c9",
+        "the bare alphabet must stay unquoted"
+    );
+}
+
+#[test]
 fn parts_round_trip_through_into_parts() {
     let program = Some(String::from("demo"));
     let missing = vec![leaf(&["url"], Vec::new())];
