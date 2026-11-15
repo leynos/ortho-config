@@ -25,7 +25,7 @@ The deliverable of this branch is the feature, its pre-publication gate, and
 the governing documents that describe them. M0 established that the approved
 build-time mechanism cannot bind consumers to their governing Clap resolution.
 At the user's request the pre-publication workspace gate replaced it, and M0.1
-amended the design, recorded ADR-0020, and reconciled the roadmap and the
+amended the design, recorded ADR-0022, and reconciled the roadmap and the
 developers' guide. M1 onward implements the matrix, strings, runtime
 integration, and gate.
 
@@ -147,7 +147,7 @@ stopping and reporting.
       feasibility; original build-time mechanism reached its stop condition.
 - [x] (2026-11-09) Select the pre-publication workspace gate after M0.
 - [x] (2026-11-09) M0.1: amended design §6.1.1, §6.1, and §12; recorded
-      [ADR-0020](../adrs/adr-0020-pre-publication-clap-coverage-gate.md);
+      [ADR-0022](../adrs/adr-0022-pre-publication-clap-coverage-gate.md);
       reconciled roadmap 11.2.1 and the developers' guide; indexed the ADR.
 - [x] (2026-11-10) M1: implemented the canonical matrix, the ten new en-US
       strings, runtime consultation, and the V1–V3 tests. The matrix,
@@ -236,8 +236,8 @@ stopping and reporting.
       rebased onto `origin/main` (`959dbd7e`, containing PR #664 as squash
       `eaf4c028`); the four timeout-fix commits were dropped as already
       squashed. The rebase exposed an ADR number collision — main had taken
-      0018 and 0019 — so this branch's ADR moved to
-      `docs/adrs/adr-0020-pre-publication-clap-coverage-gate.md` and every
+      0018 and 0019 — so this branch's ADR moved to `adr-0020-pre-publication-
+      clap-coverage-gate.md` (since 0022, per the rebase entry below) and every
       reference was renumbered in the same commits. The first full certificate
       on the rebased candidate (`89613ae2`) was green on six gates and red on
       `make lint`: Whitaker's `conditional-max-n-branches` rejected the
@@ -307,6 +307,22 @@ stopping and reporting.
       Lesson for the gate brief: `make test-workflow-contracts` is a
       `build-test` step that no target in the seven-gate certificate ran, so a
       green local `make test` could not see this class of failure.
+- [x] (2026-11-15) Rebase onto `f086edc9` and the second ADR renumber. The
+      `0dffb908` certificate went stale for hosting reasons rather than a
+      defect: PR #615 merged as `f086edc9` after that head was published, the
+      PR turned `mergeable=false`, and GitHub creates no `pull_request` run for
+      a conflicting PR, so the "Workflow contract tests" step could not be
+      confirmed on the branch head. The 15 commits were replayed onto
+      `f086edc9`; the only conflict was `docs/contents.md`, where main's new
+      ADR-0020 (lock evidence newtypes) and ADR-0021 (test seams) entries
+      collided with this branch's ADR-0020. Both sides were kept, and the gate
+      ADR then moved to `adr-0022-pre-publication-clap-coverage-gate.md` with
+      its heading and every inbound reference renumbered in one commit — the
+      design, `docs/contents.md`, the developers' guide, the `CHANGELOG`, the
+      `ortho_config` manifest comment, the gate and fixture module docs, and
+      this plan. The lock-evidence references in `evidence_trybuild.rs` and
+      ADR-0021 keep 0020, so the sweep was by exact filename and by the
+      documents that name the gate, not by number alone.
 
 ## Surprises & discoveries
 
@@ -469,7 +485,7 @@ JSON artefact stream removes the assumption entirely.
   compile time. No build-script fixture or generated build output is needed.
 - 2026-11-09: M0.1 complete. Design §6.1.1 is retitled "Pre-publication
   coverage gate" and states the workspace-only limit; §6.1 and §12 point at it;
-  ADR-0020 records the decision and the rejected alternatives; roadmap 11.2.1
+  ADR-0022 records the decision and the rejected alternatives; roadmap 11.2.1
   and the developers' guide no longer claim a build script or a consumer
   guarantee; `docs/contents.md` indexes the ADR.
 - 2026-10-14: include `InvalidSubcommand` and all three sentinels, following the
@@ -636,7 +652,7 @@ Trace the three requirements as follows:
 - R2, design §6.2 exhaustive public matrix: M1, independent inventory,
   uniqueness, public-import, override, and pass-through tests.
 - R3, design §6.1.1 total-count mechanism, as amended by
-  [ADR-0020](../adrs/adr-0020-pre-publication-clap-coverage-gate.md): M0
+  [ADR-0022](../adrs/adr-0022-pre-publication-clap-coverage-gate.md): M0
   evidence and selected deviation; M0.1, design/ADR/roadmap reconciliation; M2,
   workspace identity gate, source count comparison, matrix const assertion, and
   deliberate drift controls.
@@ -664,7 +680,7 @@ Read these references before implementation; they own the surrounding rules:
 - [ADR 0015](../adrs/adr-0015-localization-runtime-boundary.md) and the
   [users' guide](../users-guide.md) describe the extracted runtime boundary;
   keep Clap-specific APIs in `ortho_config`.
-- [ADR 0020](../adrs/adr-0020-pre-publication-clap-coverage-gate.md) owns the
+- [ADR 0022](../adrs/adr-0022-pre-publication-clap-coverage-gate.md) owns the
   pre-publication coverage gate and supersedes the build-time identity
   mechanism design §6.1.1 previously proposed.
 - [ADR 0017](../adrs/adr-0017-consumer-side-prover-tooling.md), the

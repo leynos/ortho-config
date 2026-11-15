@@ -469,7 +469,7 @@ pre-publication check in this repository. It is not a build script, and it
 makes no claim about consumer builds. A dependency's build script cannot
 observe its dependent's dependency resolution, so the build-time variant
 originally proposed here cannot be implemented; see
-[ADR-0020](adrs/adr-0020-pre-publication-clap-coverage-gate.md) for the
+[ADR-0022](adrs/adr-0022-pre-publication-clap-coverage-gate.md) for the
 evidence and the rejected alternatives.
 
 The check reads the root workspace `Cargo.lock` and selects the unique locked
