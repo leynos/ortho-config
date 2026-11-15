@@ -329,7 +329,14 @@ mod tests {
         )
         .expect("one entry forms a non-empty report");
         let error = OrthoError::MissingRequiredValues(Box::new(report));
-        assert_eq!(error_category(&error), CATEGORY_MISSING_REQUIRED_VALUES);
-        assert_eq!(CATEGORY_MISSING_REQUIRED_VALUES, "missing_required_values");
+        assert_eq!(
+            error_category(&error),
+            CATEGORY_MISSING_REQUIRED_VALUES,
+            "the discovery vocabulary must name a missing-values report"
+        );
+        assert_eq!(
+            CATEGORY_MISSING_REQUIRED_VALUES, "missing_required_values",
+            "the category label is a dashboard contract"
+        );
     }
 }

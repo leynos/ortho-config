@@ -68,7 +68,11 @@ fn error_category_covers_every_variant() {
         )
         .expect("one entry forms a non-empty report"),
     ));
-    assert_eq!(error_category(&missing), CATEGORY_OTHER);
+    assert_eq!(
+        error_category(&missing),
+        CATEGORY_OTHER,
+        "discovery must not claim a category for a report it cannot raise"
+    );
 }
 
 /// `Captured::field` returns an empty string for a missing field, so
