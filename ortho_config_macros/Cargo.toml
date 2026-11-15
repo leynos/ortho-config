@@ -38,6 +38,10 @@ rstest = "0.28.0"
 serde = { version = "1", features = ["derive"] }
 figment = { version = "0.10", default-features = false, features = ["test"] }
 proptest = "1.11.0"
+# Compile-fail coverage for the artefact-lock evidence newtypes. This crate is
+# `proc-macro = true`, so the fixtures cannot name the types through it; they
+# `#[path]`-include the real source instead. See `tests/evidence_trybuild.rs`.
+trybuild = "1"
 # `extra-traits` provides `Debug`/`PartialEq` for `syn::Type`, which the parser
 # unit tests rely on when asserting on parsed types and failed cases.
 syn = { version = "3", features = ["extra-traits"] }

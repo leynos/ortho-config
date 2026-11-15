@@ -1,0 +1,18 @@
+error[E0308]: arguments to this function are incorrect
+  --> tests/ui/transposed_pid_and_descriptor.rs:34:13
+   |
+34 |     let _ = describe(Descriptor::new(3), ProcessId::new(1234));
+   |             ^^^^^^^^ ------------------  -------------------- expected `Descriptor`, found `ProcessId`
+   |                      |
+   |                      expected `ProcessId`, found `Descriptor`
+   |
+note: function defined here
+  --> tests/ui/transposed_pid_and_descriptor.rs:23:4
+   |
+23 | fn describe(pid: ProcessId, descriptor: Descriptor) -> String {
+   |    ^^^^^^^^
+help: swap these arguments
+   |
+34 -     let _ = describe(Descriptor::new(3), ProcessId::new(1234));
+34 +     let _ = describe(ProcessId::new(1234), Descriptor::new(3));
+   |
