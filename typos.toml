@@ -70,6 +70,7 @@ extend-ignore-re = [
     "`color`",
     "`compiler-artifact`",
     "`env\\(allias = …\\)`",
+    "`flate2`",
     "`install-mold: 'true'`",
     "`install-mold`",
     "`ld.mold`",

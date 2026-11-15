@@ -20,7 +20,9 @@ use crate::boundary::fixture_cargo::{
     Budget, FixtureCargo, Metadata, cargo_binary, describe_edges, inherited_toolchain,
     repository_root, run_with_deadline,
 };
-use crate::boundary::package_set::{ConsumerFixture, prepare_packaged_set, unpacked_directory};
+use crate::boundary::package_set::{
+    ConsumerFixture, assert_packaged_set_complete, prepare_packaged_set, unpacked_directory,
+};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use rstest::rstest;
@@ -58,6 +60,9 @@ fn workspace_runtime_consumer_has_no_facade_closure() -> Result<()> {
 fn packaged_runtime_consumer_has_no_facade_closure() -> Result<()> {
     let budget = Budget::new();
     prepare_packaged_set(budget)?;
+    // `prepare` reuses this run's roots when another process already built
+    // them, so it no longer implies they are on disk. Say so explicitly.
+    assert_packaged_set_complete()?;
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
     };

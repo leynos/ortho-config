@@ -8,6 +8,21 @@ excluded_paths = [
     # API, so this one module uses std::fs; the only file it touches is the
     # probe's own lock file in the scratch directory its parent supplied.
     "boundary::boundary::fixture_cargo::process::probe_support::descendant_lock",
+    # Packaging lease: `cargo package --verify` is expensive enough that each
+    # nextest test process re-running it turns one packaged set into twelve
+    # sequential invocations. The lease is an exclusive operating-system file
+    # lock taken for the packaging step, which cap-std cannot express; the only
+    # file it touches is its own lease inside the boundary's private packaging
+    # target, and the only thing it protects is that target.
+    "boundary::boundary::package_set::lease",
+    # Boundary run guard: the second half of the same problem. The lease is
+    # released before a contract reads the roots, so a second boundary run could
+    # replace them mid-read; this guard excludes overlapping runs by holding an
+    # exclusive operating-system file lock for a process's whole life, which
+    # cap-std cannot express. Same terms as the lease: the only file it touches
+    # is its own guard in the boundary's private tree, and the only thing it
+    # protects is that checkout.
+    "boundary::boundary::package_set::run_guard",
     # Identifier-artefact whole-test lease: a fixed fixture target is shared
     # state, so the test must hold an exclusive operating-system file lock for
     # its whole lifetime to keep another test process from cleaning the target

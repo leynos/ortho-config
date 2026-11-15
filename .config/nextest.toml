@@ -208,6 +208,13 @@ slow-timeout = { period = "120s", terminate-after = 8 }
 # root is removed and unpacked, so one process can replace a root another is
 # reading. Serialize the binary.
 #
+# Serialization removes the *concurrent* race; it does not deduplicate the
+# work. The package-set lease (`ortho_l10n/tests/boundary/package_set/lease.rs`)
+# does: one contract locks the packaging target for the whole step and records
+# the roots complete for this `NEXTEST_RUN_ID`, so the others read them without
+# packaging. That turns the six sequential invocations a run used to make into
+# one pair, which is what this allowance has to cover.
+#
 # The allowance is 960 s, eight warning periods of 120 s, the same tier as the
 # trybuild and documentation scenarios. Two packaging invocations share one
 # test, and each is bounded at 440 s

@@ -35,13 +35,20 @@
 //! and manifest contract reads. `--no-verify` skips the unpacking along with
 //! the compile, so the archives would be written and nothing would unpack them.
 //!
-//! # Cost
+//! # Cost, and why the result is shared within one run
 //!
-//! The two invocations verify what they package, so they compile the closure:
-//! about 35 seconds from warm caches on this host, and a few hundred megabytes
-//! of target directory. The result is shared across the contract tests and
-//! reused between runs, because the validation is a property of the sources,
-//! not of the test that reads it.
+//! The two invocations verify what they package, so they compile each
+//! packaged crate's dependency table from its own unpacked root. On a shared
+//! host under compile admission that is not a small cost and it is not a fixed
+//! one: a single verification has been measured at 216 s with every compiler
+//! slot queued, and the bound has to leave room for it.
+//!
+//! The result is therefore shared, but only within one test run. `roots`
+//! caches it per process, and `lease` extends that to every process nextest
+//! starts for the same run, so six packaged contracts perform one packaging
+//! pair between them rather than six. It is deliberately *not* shared between
+//! runs: a later run may be reading different sources, and nothing here can
+//! cheaply prove that it is not. See [`lease`] for that reasoning in full.
 //!
 //! # Why the patch list is per invocation
 //!
@@ -65,21 +72,30 @@ use std::time::Duration;
 /// Each invocation is bounded on its own, and every entry in
 /// [`PACKAGING_INVOCATIONS`] shares one test, so all of them have to fit
 /// inside nextest's per-test allowance with room for the root checks around
-/// them: 2 x 440 s is 880 s of the 960 s the `boundary_packaging` override
-/// grants, leaving 80 s. The figure is derived from the allowance rather than
-/// chosen for comfort, because a bound that does not fit never fires: nextest
-/// stops the test first, and the error naming the invocation that hung is
-/// never printed.
+/// them. The figure is derived from the allowance rather than chosen for
+/// comfort, because a bound that does not fit never fires: nextest stops the
+/// test first, and the error naming the invocation that hung is never printed.
 ///
-/// The second invocation reuses the first's target directory and is much
-/// shorter. The pair took 244 s on this host with the packaging target removed,
-/// which is an upper bound rather than a build time: it includes waiting for
+/// The pair took 244 s on this host with the packaging target removed, which is
+/// an upper bound rather than a build time: it includes waiting for
 /// compile-admission slots, which the child inherits. The bounds were 240 s
 /// when six packaged contracts timed out on a shared host with 340 compile
 /// requests queued behind them; the failure named the deadline but discarded
 /// the queue lines the child had printed, so the wait could not be told apart
-/// from a hang. The tail is now reported with the error, and the bound leaves
-/// room for the admission queue that a shared host produces.
+/// from a hang. The tail is now reported with the error.
+///
+/// # Why one invocation needs most of the allowance
+///
+/// The first invocation verifies two crates in sequence, and a single
+/// verification has been measured at 216 s on a host whose every compiler slot
+/// was queued. Two of those plus their packaging step is the pair, and the
+/// pair is one *test*, so the bound on a single invocation has to be most of
+/// the nextest allowance rather than a share of it. The serialization lease
+/// means the pair now runs once per run rather than once per contract, so this
+/// is the cost of the whole suite's packaging and not a cost paid six times.
+///
+/// `boundary_packaging_test.py` reads this figure and the invocation count, and
+/// fails if the pair no longer fits the allowance the override grants.
 const PACKAGE_DEADLINE: Duration = Duration::from_secs(440);
 
 /// The `cargo package` invocations that together produce all three roots.
@@ -141,7 +157,14 @@ const ORTHO_CONFIG_DEPENDENCIES: &[(&str, &str)] = &[
     ("ortho_config_test_helpers", "test_helpers"),
 ];
 
+mod lease;
+mod record;
 mod roots;
+mod run_guard;
+
+#[cfg(test)]
+#[path = "scratch.rs"]
+mod scratch;
 
 // Re-exported so the contracts keep naming one module for the packaged set.
 pub(crate) use roots::{
