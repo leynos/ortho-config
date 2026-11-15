@@ -456,6 +456,11 @@ original constraint text is left as written.
   guarantee the row also names cannot be expressed as a trybuild case: the
   guarantee is that the crate compiles. The developers' guide records the rule
   and both fixtures. No production code changed.
+- [x] (2026-11-15) Corrected the Interfaces sentence that called 7.1.3
+  complete. Roadmap 7.1.3 is still open, and the decision log already records
+  that this change publishes the glossary data while 7.1.3 keeps its bridge-IR
+  lint wiring. The Interfaces section now says exactly that, so it no longer
+  contradicts the Constraints addendum.
 
 ## Surprises & discoveries
 
@@ -1316,12 +1321,14 @@ and normalized examples. Each normalized example carries manifest ID,
 positionals, example source ordinal, and option source ordinals.
 `EffectiveCommandSurface` explicitly associates each path with the effective
 inputs resolved by its consumer or bridge adapter. It rejects duplicate paths
-and ambiguous option metadata. It does not infer inheritance. The completed
-7.1.3 policy/glossary supplies canonical vocabulary and global-option rules;
-`ResolvedAgentPolicy` contains the exact mode and exception list; per-rule
-levels are deferred with roadmap 7.1.2. Results separate structural from policy
-findings. Names and visibility may change during approved reconciliation;
-ownership, scoping, and non-I/O boundaries may not.
+and ambiguous option metadata. It does not infer inheritance. The 7.1.3
+policy/glossary contract supplies canonical vocabulary and global-option rules;
+this change publishes the glossary data that contract names, and roadmap 7.1.3
+stays open for its bridge-IR lint wiring. `ResolvedAgentPolicy` contains the
+exact mode and exception list; per-rule levels are deferred with roadmap 7.1.2.
+Results separate structural from policy findings. Names and visibility may
+change during approved reconciliation; ownership, scoping, and non-I/O
+boundaries may not.
 
 No runtime dependency is proposed. Verify existing workspace test dependencies
 at EP-M1; add the authorized `googletest` and `pretty_assertions` as
@@ -1433,6 +1440,11 @@ OrthoConfig format mandate.
   crate-private `CommandPath` and `OptionName` wrappers have no expressible
   trybuild case, so their guarantee stays structural. Test and documentation
   only; scope and design are unchanged.
+
+- 2026-11-15: Corrected the Interfaces claim that 7.1.3 was complete. The
+  glossary data ships with this change; the roadmap item stays open for its
+  bridge-IR lint wiring, which is what the decision log already recorded.
+  Wording only; scope, evidence, and acceptance are unchanged.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
