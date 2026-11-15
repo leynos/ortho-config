@@ -156,6 +156,40 @@ fn exit_classes_keep_author_order_and_text() {
     );
 }
 
+/// Shapes the derive rejects are still transported verbatim.
+///
+/// A repeated class name and a whitespace-only meaning are hard errors in the
+/// derive, so a well-formed document never carries them. The bridge is not a
+/// validator, though: it must not drop, merge, or rewrite what the IR holds,
+/// because a lossy bridge would hide a malformed block instead of exposing it.
+#[test]
+fn rejected_class_shapes_are_transported_verbatim() {
+    let output = bridge_single(Some(IrOutput {
+        exit_classes: vec![
+            class("usage", "The invocation was invalid"),
+            class("usage", "The invocation was invalid"),
+            class("success", "   "),
+        ],
+        ..IrOutput::default()
+    }))
+    .expect("the block was declared");
+
+    let transported = output
+        .exit_classes
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry.meaning.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        transported,
+        [
+            ("usage", "The invocation was invalid"),
+            ("usage", "The invocation was invalid"),
+            ("success", "   "),
+        ],
+        "the bridge must neither deduplicate nor rewrite a rejected shape"
+    );
+}
+
 /// A localizer resolves text elsewhere but never touches output metadata.
 #[test]
 fn localizer_does_not_alter_output_metadata() {

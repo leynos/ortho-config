@@ -112,6 +112,37 @@ proptest! {
     }
 }
 
+/// The name pool stays inside the grammar the derive accepts.
+///
+/// E1 samples declarations an author can actually write, so a pooled name with
+/// an uppercase letter, a leading digit, or a hyphen would quietly move the
+/// property onto input the parser rejects. Distinctness matters for the same
+/// reason: the pool is what makes a repeated name unreachable.
+#[test]
+fn class_name_pool_matches_the_derive_grammar() {
+    let is_valid = |name: &&str| {
+        name.chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_lowercase())
+            && name
+                .chars()
+                .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    };
+
+    assert!(
+        CLASS_NAME_POOL.iter().all(is_valid),
+        "every pooled name must match [a-z][a-z0-9_]*: {CLASS_NAME_POOL:?}"
+    );
+    let distinct = CLASS_NAME_POOL
+        .iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        distinct.len(),
+        CLASS_NAME_POOL.len(),
+        "a repeated pooled name would make the generator's deduplication mask it"
+    );
+}
+
 /// Counts the members a contract should serialize for its declared leaves.
 ///
 /// An empty contract has no members at all, which is the `{}` case rather than
@@ -236,7 +267,7 @@ fn any_output() -> impl Strategy<Value = Option<IrOutput>> {
         prop::option::of(any::<bool>()),
         prop::option::of(any_stdout()),
         prop::option::of(any::<bool>()),
-        prop::collection::vec(any_class(), 0..3),
+        any_classes(),
     ))
     .prop_map(|declared| {
         declared.map(
@@ -260,22 +291,53 @@ fn any_stdout() -> impl Strategy<Value = IrStdoutPurpose> {
     ]
 }
 
-/// Generates a class with a stable-token name and a nonblank meaning.
+/// Exit-class names the derive accepts, in its `[a-z][a-z0-9_]*` grammar.
 ///
-/// Names are drawn from a small pool so duplicate names are reachable: the
-/// bridge must preserve what the derive would only accept by rejecting, and it
-/// must not deduplicate on the way through.
+/// The pool is deliberately not in alphabetical order, so a projection that
+/// sorted the classes would reorder a declaration rather than passing.
+const CLASS_NAME_POOL: [&str; 8] = [
+    "success",
+    "usage",
+    "failure",
+    "not_found",
+    "denied",
+    "retry_later",
+    "partial",
+    "aborted",
+];
+
+/// Generates a well-formed class: an accepted name and a nonblank meaning.
 fn any_class() -> impl Strategy<Value = IrExitClass> {
-    (0_u8..3, "\\PC{1,20}").prop_map(|(slot, meaning)| {
-        let name = match slot {
-            0 => "success",
-            1 => "usage",
-            _ => "failure",
-        };
-        IrExitClass {
-            name: name.to_owned(),
+    (
+        0_usize..CLASS_NAME_POOL.len(),
+        "[A-Za-z][A-Za-z0-9 ,.'-]{0,19}",
+    )
+        .prop_map(|(slot, meaning)| IrExitClass {
+            name: CLASS_NAME_POOL
+                .get(slot)
+                .copied()
+                .unwrap_or("success")
+                .to_owned(),
             meaning,
+        })
+}
+
+/// Generates a declaration of up to three classes with distinct names.
+///
+/// E1 samples the declarations an author can actually write, and the derive
+/// rejects a repeated name, so uniqueness is enforced here by keeping the first
+/// occurrence of each name. The malformed shapes the parser rejects — repeated
+/// names and blank meanings — are covered by explicit robustness tests in
+/// [`super::output_tests`], where they cannot be mistaken for valid input.
+fn any_classes() -> impl Strategy<Value = Vec<IrExitClass>> {
+    prop::collection::vec(any_class(), 0..3).prop_map(|classes| {
+        let mut unique: Vec<IrExitClass> = Vec::new();
+        for class in classes {
+            if unique.iter().all(|seen| seen.name != class.name) {
+                unique.push(class);
+            }
         }
+        unique
     })
 }
 
