@@ -363,6 +363,29 @@ all possible public values are validated.
   documentation and this plan updated. `git range-diff` shows every replayed
   commit identical apart from that rename, and the net diff against the
   pre-rebase head contains only main's own work plus the renumbering.
+- [x] (2026-11-15) Assessment reply `ep-7-2-3-20261115-a3` found no runtime
+  defect and two remaining gaps, both repaired. E1 now generates class names
+  from the grammar itself, `[a-z][a-z0-9_]{0,9}`, rather than eight literals,
+  and meanings as optional whitespace around a required letter or number
+  followed by letters, numbers, separators and punctuation, so digits, Unicode
+  and leading whitespace are reachable while `trim()` can never empty the text.
+  `generated_declarations_are_well_formed` holds the generator to that grammar,
+  to a nonblank meaning, and to distinct names in one declaration. The
+  preservation property now compares the sorted generated command paths with
+  the emitted ones before matching declarations, so a dropped subtree fails.
+  Both guards were shown to be non-vacuous by mutation: an uppercase first
+  letter in the name generator failed the generator check, and one extra path
+  failed the path assertion. The four remaining structured-output ADR
+  references — the changelog and migration-guide links, the developers' guide
+  heading, and the outcomes section of this plan — now point at ADR-0022;
+  entries that explain the renumbering keep naming 0020.
+- [x] (2026-11-15) Hosted `build-test (linux)` is red at `b2188834` with eleven
+  Whitaker `Multiple clusters of nested conditional logic` errors, and the same
+  eleven errors appear in the Linux job for main's own head `f086edc9` (run
+  43679542090). The flagged functions are in `ortho_config_macros` parse
+  modules that neither main's recent commits nor this branch modify, and the
+  local `make lint` passes with the locally installed Whitaker. The failure is
+  therefore a hosted-lint baseline change, not a defect in this candidate.
 
 ## Surprises & discoveries
 
