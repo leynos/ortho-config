@@ -600,15 +600,21 @@ repeated leaf are all hard errors with spans. Two groups may contribute
 distinct leaves, so `output(supports_json = true)` followed by
 `output(stdout = "data")` is accepted while a repeated `stdout` is rejected.
 
-Unlike the renderer block, no member is defaulted anywhere. `supports_json`,
-`stdout`, and `stderr_diagnostics` are `Option` at every layer, so an author's
-refusal (`Some(false)`) stays distinct from silence, and `map_output` maps an
-absent block to `None` instead of inventing `supports_json: false`. Only the
-wire enum carries a tolerant fallback: an unrecognized future stdout token
-reads as `unknown`, which establishes no data-returning status. IR decoding
-stays strict. A present block with every member absent is representable as `{}`
-and makes the same claim as no block at all, so do not add production code that
-treats it as a defaulted record.
+Unlike the renderer block, no capability claim is defaulted anywhere.
+`supports_json`, `stdout`, and `stderr_diagnostics` are `Option` at every
+layer, so an author's refusal (`Some(false)`) stays distinct from silence, and
+`map_output` maps an absent block to `None` instead of inventing
+`supports_json: false`. Decoding does have defaults, and every one of them
+expresses absence rather than a claim: a missing scalar member decodes to
+`None`, and a missing `exit_classes` member decodes to an empty vector, which
+documents no class instead of asserting that the command cannot fail. Both
+layers also skip those defaulted values when serializing, so a decoded leaf
+compares equal to one the author never wrote. Only the wire enum carries a
+tolerant fallback: an unrecognized future stdout token reads as `unknown`,
+which establishes no data-returning status. IR decoding stays strict. A present
+block with every member absent is representable as `{}` and makes the same
+claim as no block at all, so do not add production code that treats it as a
+defaulted record.
 
 The policy rule lives in `cargo-orthohelp/src/policy/rules/output.rs` and is
 exposed only as the library call
