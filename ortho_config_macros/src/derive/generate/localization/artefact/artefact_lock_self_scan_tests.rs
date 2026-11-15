@@ -16,86 +16,83 @@
 //! the flakiness this PR exists to remove.
 //!
 //! What *is* deterministic is the rule that makes the self-scan safe: the
-//! listing hands back the open iterator it was read through, and that iterator
-//! owns a descriptor the instant it is dropped. The tests below assert that
-//! property directly, on this thread's own descriptors, where no peer's churn
-//! can be mistaken for it.
+//! listing hands back the open iterator it was read through, so the descriptor
+//! that iterator owns outlives the entries read beside it. The tests below
+//! assert that property without ever counting a table a peer also writes to.
 
 use anyhow::Result;
+use std::path::Path;
 
-/// Returns the descriptors of this process open on its own descriptor table.
+/// Returns the descriptors of this process open on `directory`.
 ///
-/// `/proc/self` resolves to `/proc/<pid>` when a link is read, so the target is
-/// matched by *shape* — `/proc/<digits>/fd` — rather than against the literal
-/// `/proc/self/fd`, which never appears.
+/// Matched by device and inode rather than by link text: a descriptor's target
+/// is the path it was opened through, so a directory reached under two names
+/// would compare unequal to itself.
 #[cfg(target_os = "linux")]
-fn descriptors_on_the_listing() -> std::collections::BTreeSet<u32> {
-    use std::path::Path;
+fn descriptors_on(directory: &Path) -> Result<std::collections::BTreeSet<u32>> {
+    use anyhow::Context;
+    use std::os::unix::fs::MetadataExt;
 
-    /// Whether `target` names a process's descriptor-table directory.
-    fn is_a_descriptor_table(target: &Path) -> bool {
-        let is_fd_directory = target.file_name().is_some_and(|name| name == "fd");
-        let parent = target.parent().and_then(Path::file_name);
-        is_fd_directory
-            && parent.is_some_and(|name| {
-                name.to_string_lossy()
-                    .chars()
-                    .all(|character| character.is_ascii_digit())
-            })
-    }
-
-    std::fs::read_dir("/proc/self/fd")
-        .into_iter()
-        .flatten()
+    let target = std::fs::metadata(directory).context("read the directory's identity")?;
+    let wanted = (target.dev(), target.ino());
+    let found = std::fs::read_dir("/proc/self/fd")
+        .context("list this process's descriptors")?
         .filter_map(Result::ok)
-        .filter(|entry| std::fs::read_link(entry.path()).is_ok_and(|t| is_a_descriptor_table(&t)))
-        .filter_map(|entry| entry.file_name().into_string().ok()?.parse().ok())
-        .collect()
+        .filter_map(|entry| {
+            let descriptor = entry.file_name().into_string().ok()?.parse::<u32>().ok()?;
+            let meta = std::fs::metadata(entry.path()).ok()?;
+            ((meta.dev(), meta.ino()) == wanted).then_some(descriptor)
+        })
+        .collect();
+    Ok(found)
 }
 
 /// Verifies the listing hands back a *live* registry, and that dropping it
-/// closes the descriptor a self-scan would otherwise find.
+/// closes the descriptor it owns.
 ///
-/// The registry is the only handle whose lifetime decides whether the scan's
-/// own entry is readable. Asserting that it is open while held — and gone once
-/// dropped — pins both halves of the rule: a `read_listing` that returned
-/// `None`, or one that had already let the iterator fall, could not satisfy
-/// the first, and a caller that kept the handle alive past its use would still
-/// satisfy both but is a leak, not a wrong answer.
+/// The rule is that the iterator is returned rather than dropped, because the
+/// descriptor it holds is one a self-scan of the same table would otherwise
+/// find closed. Proving it against `/proc/self/fd` itself would mean counting
+/// the whole process's descriptor table, which every other test thread adds to
+/// and removes from — the count would then fail for reasons that have nothing
+/// to do with the code under test, which is how the count-based version of
+/// this test failed intermittently.
 ///
-/// Counted by target rather than by descriptor number: the number is not
-/// exposed (and `ReadDir` offers no accessor), but every handle open on
-/// `/proc/self/fd` resolves to that same path, so the open ones can be counted
-/// from procfs itself. Only this thread opens such handles, so a peer test
-/// cannot perturb the count.
+/// A directory unique to this test has no such peers. The registry's descriptor
+/// is the only one this process holds on it, so exactly one is visible while
+/// the registry is held and none is once it is dropped.
 #[cfg(target_os = "linux")]
 #[test]
 fn the_listing_hands_back_the_registry_it_was_read_through() -> Result<()> {
+    use super::fragment_tests::TempRoot;
     use super::lock_procfs::read_listing;
-    use anyhow::ensure;
-    use std::path::Path;
+    use anyhow::{Context, ensure};
 
-    let listing = read_listing(Path::new("/proc/self/fd"))
-        .expect("this process's own descriptor table must be listable");
+    let root = TempRoot::new()?;
+    std::fs::write(root.path().join("entry"), b"").context("write one entry to be listed")?;
+
+    let listing = read_listing(root.path())
+        .map_err(|reason| anyhow::anyhow!("read the test's own directory: {reason}"))?;
     let registry = listing
         .registry
         .expect("the listing must hand back the iterator it was read through");
 
-    // The counting helper opens a handle of its own, so the absolute numbers
-    // mean nothing; only the difference across the drop does, and the helper
-    // is present on both sides.
-    let is_held = descriptors_on_the_listing();
+    let is_held = descriptors_on(root.path())?;
     drop(registry);
-    let is_dropped = descriptors_on_the_listing();
+    let is_dropped = descriptors_on(root.path())?;
 
     ensure!(
-        is_held.len() == is_dropped.len().saturating_add(1),
-        "the registry must own exactly one descriptor while held and release \
-         it on drop; held {} descriptors on /proc/self/fd, after the drop {} \
-         — a registry that had already closed would show no difference, and \
-         one still open here would be a leak",
-        is_held.len(),
-        is_dropped.len(),
+        is_held.len() == 1,
+        "the registry must own exactly one descriptor on the directory while \
+         held, so that a scan of the same table still finds it open; saw \
+         {is_held:?} — no descriptor means the listing had already let the \
+         iterator fall, and more than one means this test is counting a handle \
+         some other part of the process opened",
+    );
+    ensure!(
+        is_dropped.is_empty(),
+        "dropping the registry must release the descriptor it owned; still open \
+         after the drop: {is_dropped:?}",
     );
     Ok(())
 }

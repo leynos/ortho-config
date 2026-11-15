@@ -217,6 +217,28 @@ mod holder_tests {
             reason.contains("could not be read"),
             "the enumeration fault itself must reach the report: {reason}",
         );
+
+        // The same fake again, driven through `append_owner_lines` rather than
+        // the scan. This is the one place the scan's `Err((matched, reason))`
+        // is turned into an `Incomplete` scan carrying those same matches, and
+        // neither test above reaches it: the scan test asserts on the `Err`
+        // directly, and the report test hands `append_owner` an `Incomplete` it
+        // built itself. A report layer that discarded `matched` here therefore
+        // passed both, so the descriptor and the fault are re-asserted on the
+        // rendered report.
+        let mut lines = Vec::new();
+        append_owner_lines(&mut lines, &[pid], identity(), &procfs);
+        let rendered = lines.join("\n");
+        ensure!(
+            rendered.contains("holds the lock file open as fd 7"),
+            "the report must name the descriptor matched before the fault; a \
+             report that dropped it would leave the hold unexplained: {rendered}",
+        );
+        ensure!(
+            rendered.contains("could not be read"),
+            "the enumeration fault must reach the report, not only the scan's \
+             `Err`: {rendered}",
+        );
         Ok(())
     }
 

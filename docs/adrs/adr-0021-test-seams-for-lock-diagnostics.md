@@ -115,6 +115,13 @@ which is what makes the distinction the diagnostics exist to draw assertable:
   partial, so a mutant that discarded the entries before a fault survived every
   test that drove `FakeProcFs`. Testing the rule where it is decided is what
   makes it evidence.
+- Retention has a second seam, one layer up: the scan keeping its matches and
+  the *report* keeping them are different claims. The scan returns
+  `Err((matched, reason))` and `append_owner_lines` converts that into an
+  `Incomplete` scan; a converter that dropped `matched` passed the scan-level
+  test, which asserts on the `Err`, and the report-level test, which built its
+  own `Incomplete`. A partial listing is now also driven end to end, and the
+  rendered report is asserted to name the descriptor and the fault.
 - Two sentences the report can write had no direct assertion, and a plausible
   mutant of each survived the suite: reading `/proc/<pid>/stat` from the first
   `)` rather than the last, and mapping every known parent to "child of this

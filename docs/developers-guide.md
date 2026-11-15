@@ -832,10 +832,19 @@ process, `/proc/self/fd` lists the iterator's own descriptor, so the second
 failure makes every self-scan report an incomplete scan with no application
 descriptor having changed. `inspect_descriptors` therefore holds the iterator
 until every identity has been read, and
-`a_self_scan_is_not_made_incomplete_by_its_own_listing` asserts that against a
-real `/proc/self/fd` rather than a fake, which has no descriptor to leak. The
-enumeration fault is a fault in its own right, and the self-scan test fails if
-the iterator is released early.
+`the_listing_hands_back_the_registry_it_was_read_through` asserts that against
+a real directory rather than a fake, which has no descriptor to leak. It lists
+a directory unique to the test and counts the descriptors open on *that*
+directory, because the count over `/proc/self/fd` as a whole is process-wide: a
+test thread that opens or closes any descriptor moves it. That is not
+hypothetical — an earlier version of this test counted the whole table and
+failed about one run in five under the full suite, with and without the code it
+was testing. The directory-scoped count has no such peers, and the test still
+fails when `read_listing` returns `registry: None` or drops the iterator before
+returning. `a_self_scan_keeps_the_descriptor_this_process_holds` is the
+churn-tolerant half: it requires the scan to name the descriptor it is holding,
+whatever unrelated fault a peer thread causes, rather than requiring the scan
+to report no fault at all.
 
 The retention rule is decided by `collect_until_fault`, not by
 `inspect_descriptors`, and it is tested there. A fake hands over a listing that
@@ -847,6 +856,15 @@ made a generic function of its own. `a_fault_keeps_every_entry_read_before_it`
 drives it with two names and a synthetic error, and fails if the entries are
 cleared; `a_listing_that_finishes_reports_no_fault` is its counterpart, so a
 reader that reported a fault unconditionally cannot pass both.
+
+The same test also drives the *report* from a partial listing, because the scan
+keeping its matches is not the same claim as the report keeping them. The scan
+returns `Err((matched, reason))`; `append_owner_lines` is what turns that into
+an `Incomplete` scan, and a version of it that discarded `matched` while
+building the `Incomplete` passed every test that asserted on the scan's `Err`
+or handed `append_owner` an `Incomplete` it had built itself. The test now
+asserts the descriptor and the fault on the rendered report, and a mutant that
+drops the matches there fails it.
 
 `Clock` is two methods — `now` and `sleep` — and nothing else. `Boundaries`
 groups the pair because every entry point that takes one takes the other: a
