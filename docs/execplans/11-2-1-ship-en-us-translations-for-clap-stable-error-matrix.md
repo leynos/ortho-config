@@ -25,7 +25,7 @@ The deliverable of this branch is the feature, its pre-publication gate, and
 the governing documents that describe them. M0 established that the approved
 build-time mechanism cannot bind consumers to their governing Clap resolution.
 At the user's request the pre-publication workspace gate replaced it, and M0.1
-amended the design, recorded ADR-0022, and reconciled the roadmap and the
+amended the design, recorded ADR-0023, and reconciled the roadmap and the
 developers' guide. M1 onward implements the matrix, strings, runtime
 integration, and gate.
 
@@ -147,7 +147,7 @@ stopping and reporting.
       feasibility; original build-time mechanism reached its stop condition.
 - [x] (2026-11-09) Select the pre-publication workspace gate after M0.
 - [x] (2026-11-09) M0.1: amended design §6.1.1, §6.1, and §12; recorded
-      [ADR-0022](../adrs/adr-0022-pre-publication-clap-coverage-gate.md);
+      [ADR-0023](../adrs/adr-0023-pre-publication-clap-coverage-gate.md);
       reconciled roadmap 11.2.1 and the developers' guide; indexed the ADR.
 - [x] (2026-11-10) M1: implemented the canonical matrix, the ten new en-US
       strings, runtime consultation, and the V1–V3 tests. The matrix,
@@ -488,7 +488,7 @@ stopping and reporting.
         declarations, and a file declaring no `ErrorKind` are refused with a
         named reason. Deterministic witnesses replace the drawn-sample record
         the assessor offered as an alternative.
-      - Documentation: the design's §6.1.1, ADR-0022 item 6, and the
+      - Documentation: the design's §6.1.1, ADR-0023 item 6, and the
         developers' guide's module split, contract, fixtures, and
         troubleshooting row all state the nested-declaration refusal. The
         decision log records that the crate root Cargo reports supersedes the
@@ -616,6 +616,38 @@ stopping and reporting.
         This is host saturation of the shared admission pool, which the
         repository's guidance says to expect and not to treat as a slow
         gate's verdict.
+- [x] (2026-11-15) Main published v0.11.0 while the gates ran, so the
+      branch's notes were re-versioned and the merge was redone.
+      - `origin/main` moved to `b1ee6974`: `239f53cd` prepares and tags
+        v0.11.0, `ed09e7ef` bumps `toml`, and `b1ee6974` is #625. The remote
+        tag `v0.11.0` points at `239f53cd`, whose `CHANGELOG.md` turns
+        `## Unreleased` into `## [0.11.0] - 2026-11-15`. That release does not
+        contain this branch.
+      - A plain merge would therefore have placed this branch's two clap
+        sections inside the published 0.11.0 block, and left its clap
+        migration sections inside the shipped
+        `docs/v0-11-0-migration-guide.md`. Both would have claimed behaviour
+        v0.11.0 does not have.
+      - `6761e1ab` merges `b1ee6974`. The changelog's clap sections move to a
+        fresh `## Unreleased`; the released guide returns to main's text and
+        keeps only this branch's "Two areas" to "Three areas" correction; the
+        clap sections become `docs/v0-12-0-migration-guide.md`, describing
+        v0.11.0 to v0.12.0 and indexed from `docs/contents.md` and the user's
+        guide's upgrade list.
+      - The merge also collided ADR numbers. Main's #625 added
+        `adr-0022-verify-the-coverage-target-root.md`; this branch's gate ADR
+        was 0022. Main's is published, so the gate becomes
+        `adr-0023-pre-publication-clap-coverage-gate.md`, and the workspace
+        manifest, the design, the developers' guide, both migration guides,
+        `docs/contents.md`, and the five test-support module headers follow it.
+        Progress above keeps its own historical mentions of 0022, because
+        they record what happened before the release.
+      - The gate run on `a70764ad` reached its seventh gate. Formatting,
+        typecheck, lint, and the workflow contracts passed; `make boundary`
+        failed nineteen of forty-four contracts, all of them nested-Cargo
+        deadline or allowance kills, and `ortho_l10n/tests/` is byte-identical
+        to main. The run was stopped once the release made the candidate
+        stale rather than spending the remaining gates on it.
 
 ## Surprises & discoveries
 
@@ -817,6 +849,16 @@ compiler slot, and the fixture directory held no binary. The repair is to wait
 for the queue to shorten and rerun, not to widen a bound whose purpose is to
 fail early.
 
+A release is a fact that arrives without a merge conflict. `v0.11.0` was tagged
+on main while the candidate's gates ran, and this branch held new sections under
+`## Unreleased`. Git merged the changelog cleanly, because the only textual
+change on the other side was the heading, and the result put the branch's
+entries inside a released version. Nothing conflicted; the document was simply
+false, and so was a migration guide describing sections the tag does not
+contain. A branch that documents an unreleased change has to re-read the
+release block it is writing into at merge time, and treat a new tag as a reason
+to re-version even when `git merge` reports no conflict.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -837,7 +879,7 @@ fail early.
   compile time. No build-script fixture or generated build output is needed.
 - 2026-11-09: M0.1 complete. Design §6.1.1 is retitled "Pre-publication
   coverage gate" and states the workspace-only limit; §6.1 and §12 point at it;
-  ADR-0022 records the decision and the rejected alternatives; roadmap 11.2.1
+  ADR-0023 records the decision and the rejected alternatives; roadmap 11.2.1
   and the developers' guide no longer claim a build script or a consumer
   guarantee; `docs/contents.md` indexes the ADR.
 - 2026-10-14: include `InvalidSubcommand` and all three sentinels, following the
@@ -875,6 +917,12 @@ fail early.
   beside it would let the count describe the wrong enum. The declaration must
   also be the crate's only one; both conditions fail closed rather than
   choosing between declarations the gate can see.
+- 2026-11-15: re-version this branch's notes to the release after v0.11.0.
+  Main tagged v0.11.0 without these changes, so the clap entries stay under
+  `## Unreleased` and the migration sections move to a new
+  `docs/v0-12-0-migration-guide.md`. The published v0.11.0 guide is left as
+  released apart from its own miscount, and ADR-0022 is left to main's
+  coverage-root decision, renumbering this branch's gate to 0023.
 
 ## Outcomes & retrospective
 
@@ -885,7 +933,7 @@ users' guide enumerates the matrix, names the override identifiers, and
 documents the display-only and missing-input behaviour; the developers' guide
 owns the gate's troubleshooting procedure and its variant-intake steps; the
 roadmap records 11.2.1 as done with its finding and validation notes; and
-ADR-0022 records the mechanism.
+ADR-0023 records the mechanism.
 
 The gate reached its final shape over five whole-plan assessment rounds, and
 each round removed a way for the count to describe a build the compiler does
@@ -1040,7 +1088,7 @@ Trace the three requirements as follows:
 - R2, design §6.2 exhaustive public matrix: M1, independent inventory,
   uniqueness, public-import, override, and pass-through tests.
 - R3, design §6.1.1 total-count mechanism, as amended by
-  [ADR-0022](../adrs/adr-0022-pre-publication-clap-coverage-gate.md): M0
+  [ADR-0023](../adrs/adr-0023-pre-publication-clap-coverage-gate.md): M0
   evidence and selected deviation; M0.1, design/ADR/roadmap reconciliation; M2,
   workspace identity gate, source count comparison, matrix const assertion, and
   deliberate drift controls.
@@ -1068,7 +1116,7 @@ Read these references before implementation; they own the surrounding rules:
 - [ADR 0015](../adrs/adr-0015-localization-runtime-boundary.md) and the
   [users' guide](../users-guide.md) describe the extracted runtime boundary;
   keep Clap-specific APIs in `ortho_config`.
-- [ADR 0022](../adrs/adr-0022-pre-publication-clap-coverage-gate.md) owns the
+- [ADR 0023](../adrs/adr-0023-pre-publication-clap-coverage-gate.md) owns the
   pre-publication coverage gate and supersedes the build-time identity
   mechanism design §6.1.1 previously proposed.
 - [ADR 0017](../adrs/adr-0017-consumer-side-prover-tooling.md), the
