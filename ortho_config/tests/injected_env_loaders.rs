@@ -7,7 +7,7 @@
 
 use anyhow::{Context as _, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{MapEnv, MergeLayer, MergeProvenance, OrthoConfig};
+use ortho_config::{MapEnv, MergeLayer, MergeProvenance, OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -113,7 +113,7 @@ fn compose_with_env_reads_the_file_or_falls_back_to_the_default(
     Ok(())
 }
 
-/// An unknown profile name is reported, not silently treated as the base.
+/// An unknown profile name fails the load with a structured `UnknownProfile`.
 #[test]
 fn profile_load_with_env_reports_an_unknown_profile() -> Result<()> {
     let dir = tempfile::tempdir().context("create the fixture directory")?;
@@ -128,10 +128,15 @@ fn profile_load_with_env_reports_an_unknown_profile() -> Result<()> {
         Arc::new(env_in(dir.path()).with_var("CWDENVP_PROFILE", "missing")),
     );
 
-    let config = outcome.map(|loaded| loaded.config().retries);
+    let error = outcome
+        .err()
+        .ok_or_else(|| anyhow!("an unknown profile must fail the load"))?;
     ensure!(
-        config.is_err() || config.as_ref().is_ok_and(|retries| *retries == 3),
-        "an unknown profile must fail or fall back to the base, got {config:?}"
+        matches!(
+            error.as_ref(),
+            OrthoError::UnknownProfile { selected, .. } if selected == "missing"
+        ),
+        "expected UnknownProfile naming `missing`, got {error:?}"
     );
     Ok(())
 }
