@@ -9,7 +9,6 @@ This crate provides:
 
 - RAII guards for process-global environment variable mutation.
 - RAII guards for current working directory mutation.
-- Helpers for `figment::Jail` setup and error conversion.
 - Shared text normalization functions for behavioural tests.
 
 ## Intended usage

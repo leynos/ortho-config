@@ -4,13 +4,11 @@
 //! environment source. Two of the rungs that discovery walks reach outside
 //! it, and the derive macro offers no attribute that redirects either:
 //!
-//! - The project rung resolves its root from `std::env::current_dir` and
-//!   cannot be redirected: `project_file_name` names a *file*, and
-//!   `ConfigDiscoveryBuilder::project_roots`/`clear_project_roots` are only
-//!   reachable when a test builds the discovery itself. A stray
-//!   `.config.toml` beside the test binary's working directory would
-//!   therefore be loaded. This helper does not close that gap, and the
-//!   limitation is inherited from the injected-source migration.
+//! - The project rung resolves its root from the injected source's working
+//!   directory (`EnvSource::current_dir`). An unpinned source reports the
+//!   process's directory, so a stray `.config.toml` beside the test binary
+//!   would be loaded. `support/hermetic_env.rs` pins the directory to an empty
+//!   fixture root, which closes this rung.
 //! - The XDG rung falls back to the platform default `/etc/xdg` whenever the
 //!   injected source has no `XDG_CONFIG_DIRS`, so a system-wide file could be
 //!   discovered ahead of a fixture. [`with_host_overrides`] closes this one:

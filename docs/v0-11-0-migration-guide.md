@@ -10,7 +10,9 @@ contract stays additive.
 Two areas deserve a review before release:
 
 - Rust code that builds documentation IR or an `AgentCommand` with a struct
-  literal must name the new `renderer` field; and
+  literal must name the new `renderer` field;
+- test code that imports `ortho_config_test_helpers::figment` must move to
+  injected sources; and
 - authors who want to describe how a command renders can now adopt a
   `renderer(...)` declaration.
 
@@ -29,6 +31,7 @@ omitted when undeclared.
 | **Optional**         | Agent-native policy checks | Read the projected `renderer` block from agent context.                      |
 | **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.     |
 | **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.          |
+| **Required if used** | Figment Jail test helpers  | Replace `figment::with_jail` and `figment_error` with injected sources.      |
 | **Optional**         | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.     |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
@@ -203,6 +206,26 @@ implementation in tests. See the
 [user's guide](users-guide.md#run-test-subprocesses-under-a-deadline) for the
 contract and the [developer's guide](developers-guide.md) for why the
 repository routes Cargo, host-tool, and documented-binary commands through it.
+
+## 8. Replace the Figment Jail helpers with injected sources
+
+`ortho_config_test_helpers::figment` (`with_jail` and `figment_error`) is
+removed, and the crate no longer depends on `figment`. A test that used a jail
+to supply configuration files and environment variables now injects them:
+
+- write the file into a temporary directory through a `cap_std` handle;
+- build a `MapEnv` that names it with an absolute `CONFIG_PATH` selector (use
+  the struct's own prefix, such as `APP_CONFIG_PATH`) and carries the variables
+  the test needs; and
+- call the derive-generated `load_from_iter_with_sources`,
+  `compose_layers_from_iter_with_sources`, or
+  `load_with_profile_from_iter_with_sources` with that map as both the
+  discovery and merge source.
+
+No jail, working-directory change, or process-environment write is then needed,
+so the test no longer has to run serially. See the
+[user's guide](users-guide.md#resolve-discovery-and-merging-without-process-state)
+for the full pattern.
 
 ## 10. Load with one injected environment
 

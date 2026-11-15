@@ -340,22 +340,19 @@ pub fn merge_error_context() -> MergeErrorContext {
 /// # Examples
 /// Load from environment variable `DDLINT_PORT`:
 /// ```
-/// figment::Jail::expect_with(|jail| {
-///     jail.set_env("DDLINT_PORT", "8080");
-///     let cfg = ErrorConfig::load().expect("load ErrorConfig");
-///     assert_eq!(cfg.port, Some(8080));
-///     Ok(())
-/// });
+/// let env = std::sync::Arc::new(ortho_config::MapEnv::new().with_var("DDLINT_PORT", "8080"));
+/// let cfg = ErrorConfig::load_from_iter_with_sources(["prog"], env.clone(), env)
+///     .expect("load ErrorConfig");
+/// assert_eq!(cfg.port, Some(8080));
 /// ```
 ///
 /// Invalid values contribute to an aggregated error:
 /// ```
-/// figment::Jail::expect_with(|jail| {
-///     jail.set_env("DDLINT_PORT", "not-a-number");
-///     let err = ErrorConfig::load().expect_err("expect aggregated error");
-///     assert!(matches!(err, ortho_config::OrthoError::Aggregate(_)));
-///     Ok(())
-/// });
+/// let env =
+///     std::sync::Arc::new(ortho_config::MapEnv::new().with_var("DDLINT_PORT", "not-a-number"));
+/// let err = ErrorConfig::load_from_iter_with_sources(["prog"], env.clone(), env)
+///     .expect_err("expect aggregated error");
+/// assert!(matches!(err.as_ref(), ortho_config::OrthoError::Aggregate(_)));
 /// ```
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
 #[ortho_config(prefix = "DDLINT_")]

@@ -5,16 +5,22 @@
 //! that leaves the profile tier relative to the file tiers.
 
 use anyhow::{Result, anyhow, ensure};
-use figment::Jail;
-use ortho_config::OrthoConfig;
 use ortho_config::declarative::MergeProvenance;
+use ortho_config::{MapEnv, OrthoConfig};
 use serde::{Deserialize, Serialize};
 
+#[path = "support/extends_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "create_dir and load serve the sibling extends suite"
+)]
+mod extends_fixture;
 #[path = "support/profile_chain_assertions.rs"]
 mod profile_chain_assertions;
 
+use extends_fixture::ConfigFixture;
 use profile_chain_assertions::ensure_eq;
-use test_helpers::figment::{figment_error, with_jail};
+use std::sync::Arc;
 
 /// An `extends` chain that defines the same profile in both files.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -35,15 +41,8 @@ struct ProfiledExtendsCfg {
 /// configuration files and the environment.
 #[test]
 fn extends_chain_profile_layers_in_chain_order() -> Result<()> {
-    with_jail(|jail| assert_chain_layers_in_chain_order(jail).map_err(figment_error))
-}
-
-/// Write the two-file chain into `jail` and assert the selected profile layers.
-///
-/// The body uses `anyhow` diagnostics, which [`with_jail`] cannot carry; its
-/// caller bridges the error through [`figment_error`].
-fn assert_chain_layers_in_chain_order(jail: &mut Jail) -> Result<()> {
-    jail.create_file(
+    let fixture = ConfigFixture::new()?;
+    fixture.create_file(
         "base.toml",
         concat!(
             "app_name = \"base\"\n",
@@ -54,7 +53,7 @@ fn assert_chain_layers_in_chain_order(jail: &mut Jail) -> Result<()> {
             "notes = \"base-ci\"\n",
         ),
     )?;
-    jail.create_file(
+    fixture.create_file(
         ".config.toml",
         concat!(
             "extends = \"base.toml\"\n",
@@ -65,8 +64,12 @@ fn assert_chain_layers_in_chain_order(jail: &mut Jail) -> Result<()> {
         ),
     )?;
 
-    let outcome = ProfiledExtendsCfg::load_with_profile_from_iter(["prog", "--profile", "ci"])
-        .map_err(|err| anyhow!(err))?;
+    let outcome = ProfiledExtendsCfg::load_with_profile_from_iter_with_sources(
+        fixture.cli_args(["prog", "--profile", "ci"]),
+        fixture.discovery_source(),
+        Arc::new(MapEnv::new()),
+    )
+    .map_err(|err| anyhow!(err))?;
     let selection = outcome.selection();
     let [selected] = selection else {
         return Err(anyhow!(
@@ -92,15 +95,8 @@ fn assert_chain_layers_in_chain_order(jail: &mut Jail) -> Result<()> {
 /// Profile layers are ordered after file layers and carry their source paths.
 #[test]
 fn extends_chain_profile_layers_follow_every_file_layer() -> Result<()> {
-    with_jail(|jail| assert_profile_layers_follow_every_file_layer(jail).map_err(figment_error))
-}
-
-/// Write the two-file chain into `jail` and assert the composed layer order.
-///
-/// The body uses `anyhow` diagnostics, which [`with_jail`] cannot carry; its
-/// caller bridges the error through [`figment_error`].
-fn assert_profile_layers_follow_every_file_layer(jail: &mut Jail) -> Result<()> {
-    jail.create_file(
+    let fixture = ConfigFixture::new()?;
+    fixture.create_file(
         "base.toml",
         concat!(
             "app_name = \"base\"\n",
@@ -110,7 +106,7 @@ fn assert_profile_layers_follow_every_file_layer(jail: &mut Jail) -> Result<()> 
             "retries = 5\n",
         ),
     )?;
-    jail.create_file(
+    fixture.create_file(
         ".config.toml",
         concat!(
             "extends = \"base.toml\"\n",
@@ -121,11 +117,11 @@ fn assert_profile_layers_follow_every_file_layer(jail: &mut Jail) -> Result<()> 
         ),
     )?;
 
-    let composition = ProfiledExtendsCfg::compose_layers_from_iter([
-        "prog".to_owned(),
-        "--profile".to_owned(),
-        "ci".to_owned(),
-    ]);
+    let composition = ProfiledExtendsCfg::compose_layers_from_iter_with_sources(
+        fixture.cli_args(["prog", "--profile", "ci"]),
+        fixture.discovery_source(),
+        Arc::new(MapEnv::new()),
+    );
     let (layers, errors) = composition.into_parts();
     ensure!(
         errors.is_empty(),

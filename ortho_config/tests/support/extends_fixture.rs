@@ -71,11 +71,27 @@ impl ConfigFixture {
         I: IntoIterator<Item = U>,
         U: Into<OsString>,
     {
+        T::load_from_iter_with_sources(
+            self.cli_args(args),
+            self.discovery_source(),
+            Arc::new(merge),
+        )
+    }
+
+    /// Append the required `--config-path` selector to `args`.
+    pub fn cli_args<I, U>(&self, args: I) -> Vec<OsString>
+    where
+        I: IntoIterator<Item = U>,
+        U: Into<OsString>,
+    {
         let mut cli_args: Vec<OsString> = args.into_iter().map(Into::into).collect();
         cli_args.push(OsString::from("--config-path"));
         cli_args.push(self.path(".config.toml").into_os_string());
-        let discovery =
-            ortho_config::MapEnv::new().with_var("CONFIG_PATH", self.path(".config.toml"));
-        T::load_from_iter_with_sources(cli_args, Arc::new(discovery), Arc::new(merge))
+        cli_args
+    }
+
+    /// Discovery source that names the fixture's `.config.toml` as the file.
+    pub fn discovery_source(&self) -> ortho_config::SharedEnvSource {
+        Arc::new(ortho_config::MapEnv::new().with_var("CONFIG_PATH", self.path(".config.toml")))
     }
 }
