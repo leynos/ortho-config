@@ -441,6 +441,15 @@ original constraint text is left as written.
   exact mode, rule levels, and exceptions"; it carries the mode and the
   exception list, and per-rule levels are deferred with 7.1.2, so the sentence
   now says so.
+- [x] (2026-11-15) Actioned the Compile-Time/UI pre-merge row. The row asked
+  for trybuild coverage of the `#[must_use]` API this milestone adds, and the
+  repository already answers that question the same way twice: the policy
+  evaluator and the IR bridge each carry a `tests/ui/must_use_*` pair. The
+  report is the only product of a validation run, so
+  `must_use_skill_validation` calls `is_complete` and `has_structural_findings`
+  with an ignored result under `#![deny(unused_must_use)]`, and its `.stderr`
+  was emitted by the compiler rather than written by hand. The developers'
+  guide records the rule and the fixture. No production code changed.
 
 ## Surprises & discoveries
 
@@ -1405,6 +1414,12 @@ OrthoConfig format mandate.
   support rather than duplicating them. Corrected the Interfaces sentence that
   gave `ResolvedAgentPolicy` rule levels it does not carry; per-rule levels
   remain deferred with 7.1.2. Scope and design are unchanged.
+
+- 2026-11-15: Added the compile-time fixture the saved Compile-Time/UI
+  pre-merge row asked for, following the two must-use cases the repository
+  already keeps in `cargo-orthohelp/tests/ui/`, and recorded the convention in
+  the developers' guide. Test and documentation only; scope and design are
+  unchanged.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md

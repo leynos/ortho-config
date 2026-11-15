@@ -1378,6 +1378,14 @@ IR fixture builders rather than a second copy. Coverage counts extraction
 `ValidationStatus::Complete` requires the two to agree with no unsupported
 examples.
 
+The report is the only product of a validation run, so its queries are
+`#[must_use]`: a caller who discards `is_complete` or `has_structural_findings`
+has thrown the result away. Each public must-use function that matters this way
+gets a `cargo-orthohelp/tests/ui/` case, as the policy evaluator and the IR
+bridge already have, with its `.stderr` emitted by the compiler rather than
+written by hand. `must_use_skill_validation` covers both report queries in one
+fixture.
+
 The consumer fixtures in `cargo-orthohelp/tests/fixtures/skills/` are ordinary
 skill directories: one `SKILL.md` per skill, plus the `command-surface.json`
 that a consumer would supply. They carry no Weaver or Netsuke semantics, so a
