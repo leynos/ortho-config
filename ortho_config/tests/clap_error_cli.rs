@@ -107,10 +107,16 @@ fn target_is_binary(record: &Value) -> bool {
 }
 
 /// Runs the fixture with `args`, injecting `locale` and disabling colour.
+///
+/// The child starts with an empty environment so the only inputs are the ones
+/// named here: a variable inherited from the developer's shell cannot change
+/// the rendering under test. The mutation is confined to the child process,
+/// which is the sole exemption to this repository's injection rule.
 fn run_fixture(locale: &str, args: &[&str]) -> Result<Output> {
     let mut command = Command::new(fixture_binary()?);
     command
         .args(args)
+        .env_clear()
         .env("CLAP_ERROR_FIXTURE_LOCALE", locale)
         .env("NO_COLOR", "1");
     run_with_deadline(command, FIXTURE_RUN_DEADLINE, "clap error fixture run")
