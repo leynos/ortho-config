@@ -173,6 +173,74 @@ fn an_identical_body_matches_without_overreading() {
     );
 }
 
+/// A FIFO at the cache path is rejected instead of stalling the publish.
+///
+/// A read-only open of a FIFO with no writer waits for one, so a cache entry
+/// replaced by a FIFO would hang the bridge build rather than report the fault.
+/// The publish therefore opens non-blockingly on Unix and rejects the handle
+/// because it is not a regular file. The wait bound turns a regression into a
+/// failure here instead of a hung suite, and the survivor check proves the FIFO
+/// was reported rather than replaced.
+#[cfg(unix)]
+#[rstest]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions report the blocked-publish regression more clearly than errors"
+)]
+fn write_ir_cache_rejects_a_fifo_without_blocking(
+    cache_fixture: Result<CacheFixture, Box<dyn std::error::Error>>,
+) -> TestResult {
+    use std::sync::mpsc;
+    use std::thread;
+
+    use nix::sys::stat::Mode;
+    use nix::unistd::mkfifo;
+
+    const CONTENT: &str = r#"{"ir_version":"1.0.0"}"#;
+    const PUBLISH_TIMEOUT: Duration = Duration::from_secs(5);
+
+    let fixture = cache_fixture?;
+    mkfifo(
+        fixture.paths.ir_path.as_std_path(),
+        Mode::S_IRUSR | Mode::S_IWUSR,
+    )?;
+
+    let paths = BridgeCache {
+        cache_dir: fixture.paths.cache_dir.clone(),
+        target_dir: fixture.paths.target_dir.clone(),
+        ir_path: fixture.paths.ir_path.clone(),
+    };
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let stage = write_ir_cache(&paths, CONTENT)
+            .map(|_| ())
+            .map_err(|error| error.stage());
+        // A send failure means the receiver is gone because the wait below
+        // already timed out; there is no observer left to report the stage to.
+        let _send_result = sender.send(stage);
+    });
+
+    let stage = receiver
+        .recv_timeout(PUBLISH_TIMEOUT)
+        .map_err(|error| {
+            io::Error::other(format!(
+                "publishing to a FIFO cache entry did not return: {error}"
+            ))
+        })?
+        .expect_err("a FIFO cache entry must be rejected rather than matched");
+
+    assert_eq!(
+        stage,
+        PublishStage::Read,
+        "a FIFO cache entry must be reported as a read failure"
+    );
+    assert!(
+        !fixture.dir.metadata("ir.json")?.is_file(),
+        "the FIFO must be left in place rather than replaced by the publish"
+    );
+    Ok(())
+}
+
 /// An unreadable cache entry fails the publish instead of being overwritten.
 ///
 /// The cache path is a directory rather than a regular file. Opening it may

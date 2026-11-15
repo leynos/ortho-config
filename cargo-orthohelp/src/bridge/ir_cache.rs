@@ -80,6 +80,37 @@ pub(super) fn read_cached_ir(paths: &BridgeCache) -> Result<Option<String>, Orth
     Ok(Some(buffer))
 }
 
+/// Opens the cached IR without blocking on a special file.
+///
+/// A read-only open of a FIFO waits for a writer, so an `ir.json` replaced by
+/// one would stall the bridge build before any type check could run. On Unix
+/// the open therefore carries `O_NONBLOCK`, which returns immediately; the
+/// caller then rejects the opened handle because it is not a regular file.
+/// The check inspects the handle rather than the path, so an entry that changes
+/// between the open and the check cannot substitute a special file for a
+/// regular one.
+#[cfg(unix)]
+fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<cap_std::fs_utf8::File> {
+    use cap_std::fs_utf8::OpenOptionsExt;
+
+    let nonblock = i32::try_from(rustix::fs::OFlags::NONBLOCK.bits())
+        .map_err(|_| std::io::Error::other("O_NONBLOCK does not fit in the open flags word"))?;
+    let mut options = cap_std::fs_utf8::OpenOptions::new();
+    options.read(true).custom_flags(nonblock);
+
+    dir.open_with("ir.json", &options)
+}
+
+/// Opens the cached IR without blocking on a special file.
+///
+/// Windows places named pipes in their own namespace, which a
+/// directory-relative open cannot reach, so the hazard that motivates the
+/// non-blocking Unix open has no equivalent here.
+#[cfg(not(unix))]
+fn open_cache_entry(dir: &cap_std::fs_utf8::Dir) -> std::io::Result<cap_std::fs_utf8::File> {
+    dir.open("ir.json")
+}
+
 /// Reports whether the cached IR is byte-for-byte identical to `json`.
 ///
 /// The comparison is bounded by `json`'s length: the cache file's size is
@@ -96,13 +127,14 @@ pub(super) fn read_cached_ir(paths: &BridgeCache) -> Result<Option<String>, Orth
 /// Read failures are propagated rather than treated as misses, so unreadable
 /// cache state cannot be overwritten without inspection. An entry that is not
 /// a regular file is rejected for the same reason: a directory has no body to
-/// compare, and reading any other special file could block instead of
-/// returning, so neither can be reported as a harmless content mismatch.
+/// compare, and reading or blocking in the open of any other special file
+/// would stall the build, so neither can be reported as a harmless content
+/// mismatch.
 fn cached_ir_matches(paths: &BridgeCache, json: &str) -> Result<bool, OrthohelpError> {
     let Some(dir) = open_optional_dir(paths.cache_dir.as_path())? else {
         return Ok(false);
     };
-    let file = match dir.open("ir.json") {
+    let file = match open_cache_entry(&dir) {
         Ok(file) => file,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(err) => {
