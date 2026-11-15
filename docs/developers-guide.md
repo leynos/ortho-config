@@ -1812,7 +1812,11 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
 - The root `Cargo.lock` must describe the resolution under review and be
   committed. The gate runs `cargo metadata --locked --offline`, so a stale
   lock, an unlocked change, or a missing registry source fails the gate rather
-  than silently checking a different identity.
+  than silently checking a different identity. It also passes
+  `--filter-platform host-tuple`, so an offline resolve covers only the
+  platform under test and dependencies of other platforms are neither required
+  nor fetched. The facade declares `clap` without a target predicate, so the
+  filter cannot hide the edge the gate follows.
 - The test-only dev-dependencies `cargo_metadata`, `syn` (with `full`),
   `toml`, and `static_assertions` must be available.
 - The gate reads `ortho_config`'s configured target and feature selection.
@@ -1832,8 +1836,10 @@ matrix, the reviewed identity, or the resolved `clap` version.
 The gate's `cargo metadata` call and the CLI suite's one-time fixture build are
 nested Cargo invocations, so both run through
 `test_helpers::process::run_with_deadline` with an explicit deadline. A wedged
-Cargo call then fails the suite within a known budget instead of hanging it,
-and the shared runner owns process-tree cleanup and output bounding.
+Cargo call then fails the suite within a known budget instead of hanging it.
+The shared runner owns process-tree cleanup and stream draining, and it retains
+the complete output of each stream; the deadline bounds time, not bytes, so the
+captured memory grows with whatever the child writes.
 
 ### Troubleshooting a refusal
 

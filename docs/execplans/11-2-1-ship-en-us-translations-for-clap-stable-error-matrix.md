@@ -246,6 +246,24 @@ stopping and reporting.
       through `filter_map`/`filter`/`find_map` so no redundant closure remains
       for Clippy. `lint-clippy`, `lint-whitaker`, `docstring-coverage`, and the
       five-case CLI suite all pass on the repair. Full re-gating follows.
+- [x] (2026-11-15) Second local review round and its dispositions. A second
+      `coderabbit review --agent` pass over `959dbd7e..8b1761e6` (62 files, CLI
+      0.9.5, exit 0, 408 s) raised four findings. Three were actioned. The
+      gate's `cargo metadata` call gained `--filter-platform host-tuple`: an
+      unfiltered resolve includes every target, and an offline run fails when a
+      dependency for another platform was never fetched, which the Linux CI
+      cache cannot guarantee. The shared runner's documentation no longer
+      claims output bounding — the runner retains each stream's complete
+      output, so its deadline bounds time rather than bytes. The matrix test
+      dropped `googletest`/`pretty_assertions` in favour of the standard
+      `assert_eq!`, matching the developers' guide's scoping of those crates to
+      the profile tests. One finding was declined: it read "an incomplete
+      locale and the embedded en-US catalogue" as a non-en-US locale, but the
+      scenario is titled "An unavailable override retains usable English" and
+      asserts that a missing consumer override falls back to the embedded en-US
+      message; the non-en-US path is covered by
+      `unavailable_locale_retains_the_stock_diagnostic` and by the translation
+      suite.
 
 ## Surprises & discoveries
 
@@ -426,8 +444,9 @@ JSON artefact stream removes the assumption entirely.
 - 2026-11-15: run both nested Cargo invocations in this work — the fixture
   build and `cargo metadata` — through
   `test_helpers::process::run_with_deadline`, with explicit deadlines. The
-  shared runner already owns process-tree cleanup and bounded output
-  collection, so the gate does not carry a second copy of that logic.
+  shared runner already owns process-tree cleanup and stream draining, and
+  retains each stream's complete output, so the gate does not carry a second
+  copy of that logic. Its deadline bounds time, not captured bytes.
 - 2026-11-15: resolve the fixture executable from Cargo's JSON artefact stream
   rather than from the test executable's own directory. The nested build's
   profile and target directory are its own, so a derived path is an assumption
@@ -679,8 +698,9 @@ key uniqueness, identifier uniqueness, exact expected kind membership, and the
 sentinel partition. Compare the table length with the reviewed identity count
 using the compile-time assertion; the publication gate independently counts
 source variants. Compile imports through both `ortho_config` and
-`ortho_config::localizer`. Use `googletest` matchers for variants and
-collections and `pretty_assertions` for equality.
+`ortho_config::localizer`. Use the standard `assert_eq!` macros, following the
+developers' guide's scoping of `googletest` and `pretty_assertions` to the
+profile test modules rather than to new tests elsewhere.
 
 The witnesses include every supported real kind and all three sentinels.
 Replace a row with a duplicate while keeping length unchanged: the
