@@ -551,6 +551,31 @@ stopping and reporting.
         installed suite is older than the rolling one hosted CI installs, so
         only a hosted run can confirm the repair.
 
+- [x] (2026-11-15) The branch was merged up to main so the inherited rolling
+      lint finding is answered by upstream's own refactor.
+      - The dispatched run `43740038649` on `f891f86b` failed `Lint` with seven
+        `ortho_config_macros/src/derive/parse/` files, roughly forty minutes
+        after the pull-request run `43732128431` passed the same step on the
+        same head. The branch has no commit that touches those files; they were
+        inherited verbatim from base `f086edc9`.
+      - Main had already answered that finding: `1f4a5775` (#698) refactors the
+        functions the tip suite flags as bumpy roads, and it lands in exactly
+        those seven files. Duplicating that work here would conflict with main
+        at the next integration, so the branch takes main's version instead.
+      - `eadd38c3` merges main `2117f1a3` into the branch. The only textual
+        conflict was `docs/v0-11-0-migration-guide.md`, where both sides
+        appended sections: main's Figment-Jail section stays at 8, this
+        branch's clap sections become 9 and 10, and main's injected-environment
+        section becomes 11, so the guide has no numbering gap. The "Two areas"
+        lead-in main left above three bullets is corrected to "Three areas".
+      - The merge was audited rather than assumed. All seventy-five paths main
+        changed and this branch did not are byte-identical to main at the merge
+        commit; every deletion against main in a branch-touched file maps to a
+        branch change (a reworded paragraph, a superseded design paragraph, a
+        renumbered heading, or the localizer re-export list); and the
+        repeated-block scan found only a closing-brace window that a second
+        `impl` block explains.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -711,6 +736,26 @@ give each published stage its own function, which is also the shape the
 developers' guide asks for. The installed suite lags the rolling release, so
 `make lint` passing locally says nothing about this rule — only a hosted `Lint`
 step can.
+
+A rolling suite makes a hosted result time-stamped, not durable. Two runs on
+the same commit can disagree: `43732128431` passed `Lint` and `43740038649`,
+dispatched about forty minutes later on the identical head, failed it on seven
+files the branch never touched. The second failure was not a regression and not
+this branch's to repair: it named base-layer macro code that main refactored in
+`1f4a5775` once the suite began flagging it. The lesson is to read an inherited
+`Lint` failure against the current main tip before repairing it locally, and to
+merge rather than duplicate an upstream fix.
+
+The dispatched run also showed that `Publish dry run` fails for a reason this
+branch cannot own. The step is dispatch-only, so no pull-request run exercises
+it, and on Windows it fails with `E0432` while `cargo-orthohelp` verifies
+against the registry's published `ortho_config` 0.10.0, which predates the
+agent-context policy types. `cargo-orthohelp/Cargo.toml` and the failing
+renderer are main-identical, so the code the branch carries is not what breaks
+the step. The defect is release ordering: a crate can only verify against a
+published dependency, so an `ortho_config` release carrying those types has to
+exist before `cargo-orthohelp` can pass its own publish dry run. This change
+cannot supply it, and main has not either as of `2117f1a3`.
 
 ## Decision log
 
