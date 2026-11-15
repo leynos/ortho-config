@@ -405,6 +405,24 @@ canonical path exactly. A leading underscore keeps its route, because the
 prefix strip exposes it rather than absorbing it: `_database.host` is reached
 through `APP__DATABASE__HOST`.
 
+### 2026-11-15 — a node spelled two accepted ways is left to the deserializer
+
+**A duplicate spelling is not an absence.** A canonical key and an accepted
+alias name the same value, so a merged configuration holding both is ambiguous.
+Serde raises a duplicate-field error on the second spelling, but only after the
+first one has deserialized; when that first value is incomplete, its
+missing-field error surfaces first. Either way the failure is the
+deserializer's, and neither can be repaired by supplying the leaf a report
+would have advertised, because the second spelling remains.
+
+The collector therefore classifies each node before visiting it: no accepted
+spelling present is absence, exactly one is the node to inspect, and more than
+one is `Conflicting`. A conflicting node is neither reported nor descended
+into. Earlier rounds read only the canonical key first, which reported
+`database.host` for a value holding both `database` and `db` and advertised a
+route that could not repair the load. Distinct spellings are counted, not raw
+aliases, because a rename can leave the canonical key also listed as an alias.
+
 ## References
 
 - [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).

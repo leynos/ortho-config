@@ -1153,6 +1153,13 @@ rendered as a file table. Supplying a value through any advertised route clears
 that entry and leaves the rest of the report intact, so a caller can correct
 the configuration one step at a time.
 
+An accepted `#[serde(alias = ...)]` is honoured: the report repeats whichever
+spelling the merged configuration used, so the advertised route populates the
+key that is really read. When the same value arrives under both its canonical
+key and an alias, no entry is reported for it. Serde rejects the duplicate, or
+reports the incomplete value's own missing field, and that error is left as it
+is, because supplying the advertised leaf would leave both spellings in place.
+
 A selected subcommand is covered too, and its routes name that command's
 namespace rather than the struct's own prefix and file root. For the `serve`
 command in

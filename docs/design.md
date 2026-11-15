@@ -216,6 +216,13 @@ extends that contract to selected subcommands.
 - A `#[ortho_config(default = ...)]` value is materialized under the Rust
   identifier. It supplies a renamed field only when that identifier is also an
   accepted `#[serde(alias = "...")]`; otherwise the field stays required.
+- A node the merged value spells two accepted ways at once is neither reported
+  nor descended into. A canonical key and an accepted alias name the same
+  value, so Serde rejects the second spelling as a duplicate field, and an
+  incomplete first spelling fails with its own missing-field error before the
+  second is even reached. The absence is therefore the deserializer's to
+  report, and no advertised route could repair it: supplying the leaf leaves
+  both spellings in the merged value.
 - An environment route is offered only when the provider's transforms leave the
   spelling unchanged and the spelling can name a variable at all. A segment
   containing `=` or a NUL can never do so: every process environment treats `=`

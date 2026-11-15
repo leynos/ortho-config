@@ -3,7 +3,10 @@
 //! The collector never reports a key the loader cannot actually read, and
 //! never reports a value that is present. A present value — including `null`
 //! and an empty collection — counts as supplied, because the loader accepts it
-//! and any domain validation is a different error.
+//! and any domain validation is a different error. A node the merged value
+//! spells two accepted ways at once is left alone: the deserializer reports the
+//! duplication, or the incomplete value it meets first, and no child of that
+//! node is ever reached.
 
 use serde_json::{Map, Value};
 
@@ -140,9 +143,13 @@ impl<'a> Collector<'a> {
     /// satisfy.
     fn collect_level(&mut self, fields: &[SchemaField], object: &Map<String, Value>) {
         for field in fields {
-            match lookup(object, field) {
-                Some((key, value)) => self.collect_present(field, key, value),
-                None => self.collect_absent(field),
+            match presence(object, field) {
+                Presence::Unique(key, value) => self.collect_present(field, key, value),
+                Presence::Absent => self.collect_absent(field),
+                // Two spellings of the same node is not an absence, so there is
+                // nothing to report and nothing to descend into: Serde rejects
+                // the duplication before it deserializes any child.
+                Presence::Conflicting => {}
             }
         }
     }
@@ -214,15 +221,55 @@ impl<'a> Collector<'a> {
     }
 }
 
-/// Find the first key the loader accepts for `field`, with that spelling.
-fn lookup<'a>(object: &'a Map<String, Value>, field: &SchemaField) -> Option<(&'a str, &'a Value)> {
-    std::iter::once(field.key.as_str())
-        .chain(field.aliases.iter().map(String::as_str))
-        .find_map(|key| {
-            object
-                .get_key_value(key)
-                .map(|(matched, value)| (matched.as_str(), value))
-        })
+/// How many accepted spellings of one requirement the merged value holds.
+///
+/// A key and its aliases name the same value, so more than one of them being
+/// present is not a value to inspect: the deserializer rejects the duplication
+/// itself, or the incomplete value it meets first.
+enum Presence<'a> {
+    /// No accepted spelling is present, so the node is absent.
+    Absent,
+    /// Exactly one spelling is present, carrying the key it used and its value.
+    Unique(&'a str, &'a Value),
+    /// Several accepted spellings are present at once.
+    Conflicting,
+}
+
+/// Classify how the object spells `field`, if it spells it at all.
+///
+/// Distinct spellings are counted rather than the first one found, because a
+/// canonical key and an accepted alias can both be present. Descending into
+/// either would report absences the loader never reaches, and advertising a
+/// route for one of them would name an input that cannot repair the conflict.
+fn presence<'a>(object: &'a Map<String, Value>, field: &SchemaField) -> Presence<'a> {
+    let mut present = accepted_keys(field).into_iter().filter_map(|key| {
+        object
+            .get_key_value(key)
+            .map(|(matched, value)| (matched.as_str(), value))
+    });
+    let Some(first) = present.next() else {
+        return Presence::Absent;
+    };
+    match present.next() {
+        Some(_) => Presence::Conflicting,
+        None => Presence::Unique(first.0, first.1),
+    }
+}
+
+/// Return the distinct key spellings the loader accepts for `field`.
+///
+/// The canonical key comes first, then the aliases in declaration order. A
+/// rename can leave the canonical key also listed as an alias, and an alias can
+/// be repeated, so duplicates are removed; counting one spelling twice would
+/// make a single present key look like a conflict.
+fn accepted_keys(field: &SchemaField) -> Vec<&str> {
+    let mut keys: Vec<&str> = Vec::with_capacity(1 + field.aliases.len());
+    for key in std::iter::once(field.key.as_str()).chain(field.aliases.iter().map(String::as_str)) {
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    keys
 }
 
 /// Find the CLI hint for a reported path, when the parser can consume it.

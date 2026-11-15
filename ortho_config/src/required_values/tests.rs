@@ -141,6 +141,61 @@ fn aliases_satisfy_a_requirement() {
     );
 }
 
+/// A nested node spelled two accepted ways is the deserializer's error.
+///
+/// Serde raises a duplicate-field error before it deserializes any child of the
+/// node, so enumerating requirements below it would report absences the loader
+/// never reaches. The canonical-only and alias-only cases are the controls:
+/// each still reports the absent leaf, so the empty report above is a property
+/// of the duplication and not of the schema.
+#[test]
+fn a_node_spelled_two_accepted_ways_is_not_enumerated() {
+    let aliased_object = || {
+        SchemaField::new(
+            "database",
+            vec![String::from("db")],
+            Activation::Required,
+            SchemaChildren::Nested(vec![required_leaf("host")]),
+        )
+    };
+    for value in [
+        json!({"database": {"port": 1}, "db": {"host": "h"}}),
+        json!({"db": {"port": 1}, "database": {"host": "h"}}),
+    ] {
+        let reported = missing_paths(&[aliased_object()], &value);
+        assert!(
+            reported.is_empty(),
+            "a duplicate spelling belongs to the deserializer, got {reported:?}"
+        );
+    }
+    assert_eq!(
+        missing_paths(&[aliased_object()], &json!({"database": {"port": 1}})),
+        vec!["database.host"],
+        "the canonical-only control must still report the absent leaf"
+    );
+    assert_eq!(
+        missing_paths(&[aliased_object()], &json!({"db": {"port": 1}})),
+        vec!["database.host"],
+        "the alias-only control must still report the absent leaf"
+    );
+}
+
+/// One key listed under two spellings is one present key, not a conflict.
+#[test]
+fn a_repeated_alias_spelling_is_not_a_conflict() {
+    let field = SchemaField::new(
+        "database",
+        vec![String::from("database"), String::from("db")],
+        Activation::Required,
+        SchemaChildren::Nested(vec![required_leaf("host")]),
+    );
+    assert_eq!(
+        missing_paths(&[field], &json!({"database": {"port": 1}})),
+        vec!["database.host"],
+        "a canonical key repeated as an alias must not read as two spellings"
+    );
+}
+
 #[test]
 fn deep_objects_are_walked_to_the_declared_depth() {
     let fields = vec![required_object(

@@ -20,6 +20,12 @@ mod keys;
 #[path = "support/missing_required_deserializers.rs"]
 mod deserializers;
 
+#[path = "support/missing_required_conflicts.rs"]
+mod conflicts;
+
+#[path = "support/missing_required_declared.rs"]
+mod declared;
+
 /// The invoked program name every case uses.
 const PROGRAM: &str = "missing-required-values";
 

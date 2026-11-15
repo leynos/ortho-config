@@ -360,7 +360,54 @@ with a compatibility probe rather than an assumption.
     by recovering `MRT_DATABASE__HOST`. ADR-0022 gains a fourth amendment; the
     design document and the improved-error design record the whole-path rule.
 
+- [x] (2026-11-15) Sixth completeness assessment (round c6,
+  `7-3-1-completeness-2026-11-15-c6`) found one correctness defect and two
+  coverage gaps against `55454b31`. Repaired in this round:
+  - `lookup` selected the canonical key first and never noticed a second
+    accepted spelling. Supplying `MRA_DATABASE__PORT` beside `MRA_DB__HOST`
+    made the collector report `database.host` and advertise a route under
+    `database`; following it left both spellings in the merged value, so the
+    loader rejected the duplicate and the report had described an absence it
+    could not repair. `presence` now classifies each node as absent, uniquely
+    present, or conflicting, and `collect_level` skips a conflicting node
+    without descending. The deserializer's own error is preserved, which for an
+    incomplete first spelling is its missing-field error and for two complete
+    spellings is the duplicate-field error. Spellings are deduplicated before
+    counting, because a rename can leave the canonical key listed as its own
+    alias.
+  - New evidence: a `required_values` unit case over both orderings of the
+    duplicate plus the canonical-only and alias-only controls, a deduplication
+    control whose value is present once under a key that is also its alias, and
+    the real-loader module `tests/support/missing_required_conflicts.rs`. It
+    asserts the loader's missing-field error for the partial case, its
+    duplicate-field error for two complete spellings, and that either spelling
+    on its own still recovers the value. ADR-0022 gains a fifth amendment; the
+    design document and the improved-error design record the same rule.
+  - V1 real-loader gaps closed by `tests/support/missing_required_declared.rs`:
+    a container `#[serde(default)]` supplying every field, an explicit `null`
+    through a JSON5 file, an empty collection under `merge_strategy = "append"`
+    beside the absent-collection control, a `#[serde(skip)]` field that is
+    never inspected, and a `doc(required = false)` override that does not
+    relax a real requirement. The container-default and null cases were
+    previously covered only by macro and collector tests; the JSON5 case is
+    feature-gated because no TOML file can spell null.
+  - The round-c5 acceptance deviation is recorded under "Concrete steps and
+    acceptance commands". Issue #695 owns the prerequisite repair and now
+    carries the wider inventory in its evidence comment, so the follow-up issue
+    earlier rounds planned is unnecessary. The `apply_field_attr` diagnostic is
+    not this branch's: it appears identically on `main`'s `f086edc9`.
+
 ## Surprises & discoveries
+
+The `make lint` failure that began in round c5 is an estate-wide effect of a
+shared lint installation, not a property of any branch. The suite checkout at
+`~/.local/share/whitaker` is at `880939d1`, fourteen commits past the `v0.2.12`
+tag, and its macro-aware cognitive complexity rule lets a function cross the
+weighted threshold without any of its own lines changing. Hosted lint passed at
+03:40 UTC and failed at 05:05 UTC on 2026-11-15 for the same commit `f086edc9`.
+The local run reports 28 sites; the hosted job reports the eleven
+`ortho_config_macros` ones and aborts there. Since the repository must not
+modify the installed suite, the repair is a refactor tracked by #695.
 
 The historical proposal names `ortho_config_macros/src/derive/load_impl.rs` and
 a final Figment extraction. The current path is `derive/load_impl/source.rs` to
@@ -593,6 +640,20 @@ so the rule rejects the overlap rather than any underscore. The alternative —
 changing the separator or escaping underscores in the provider — would alter
 the variable names of existing configurations, which is a wider behavioural
 change than this plan covers.
+
+D11 (2026-11-15, accepted, refining D7 and D10): leave a node spelled two
+accepted ways to the deserializer. D7 promised that an accepted alias is never
+reported as missing, which held when exactly one spelling was present but not
+when a canonical key and an alias both were. M1's canonical-plus-alias row
+makes the merged value ambiguous, and Serde resolves it by erroring: a
+duplicate field when both values deserialize, and the first value's
+missing-field error when it does not. Reporting beneath the node was wrong in
+both directions — it invented a requirement the loader never reaches, and every
+route it advertised would have left both spellings in place. The collector
+therefore classifies presence before visiting a node and skips a conflicting
+one. Rejecting only the nested case was considered and rejected: a duplicated
+leaf is equally the deserializer's error, and a rule that depends on the node's
+shape would be harder to reason about than one that depends on the merged value.
 
 ## Outcomes & retrospective
 
@@ -1178,6 +1239,38 @@ For this documentation-only plan publication, run `make fmt`, `make check-fmt`,
 `make markdownlint`, and `make nixie`. No runtime code changes justify a new
 full Rust compilation during planning. Implementation milestones must run the
 four ordinary code gates listed above, and the Markdown gates for documentation.
+
+### Recorded acceptance deviation
+
+The round-c5 gate run continued after a red `make lint` instead of stopping
+there, so that the remaining gates could show whether the pre-existing failure
+masked any defect of this branch. It did not, and every later gate passed.
+
+This is a deviation, not the sequence above. `make lint` fails at its Whitaker
+stage on sites that are unchanged from `main`, and the prerequisite repair is
+outside this plan's authority. The cause is now established and is not this
+branch's. The shared suite checkout at `~/.local/share/whitaker` is at
+`880939d1`, which adds the macro-aware cognitive complexity rule described in
+its own `docs/v0-3-0-migration-guide.md`, and that rule lets a function cross
+the weighted threshold without any of its own lines changing. Commit `f086edc9`
+passed a hosted lint run at 03:40 UTC and failed one at 05:05 UTC on 2026-11-15
+with no repository change between them, and the eleven diagnostics are
+identical on `main` and on this branch's head.
+
+Issue #695 owns the repair and carries the full inventory. Its eleven listed
+functions are the diagnostics the hosted job reports. Its evidence comment
+records eleven further sites in `ortho_l10n/tests/boundary*` and
+`test_helpers/src/env/tests.rs`, plus six in the `ortho_config_macros` artefact
+test modules, which the hosted job does not report because `cargo check` aborts
+on that crate's library target first. Three of the wider sites are in files the
+artefact-lock PR (see #688) already modifies, so those two changes need
+coordinating. No separate follow-up issue is needed; #695 is the single tracker.
+
+A final ordered `make lint` run must follow that repair, or an approved change
+to this acceptance requirement; until then the lint gate is reported as an
+outstanding prerequisite rather than as a pass. The stages behind it are
+certified separately: `make lint-clippy` passes, and `make docstring-coverage`,
+which the abort never reached, is run on its own.
 
 ## Idempotence and recovery
 

@@ -153,6 +153,14 @@ nested enumeration happens only through `#[ortho_config(nested)]`.
 The collector also records whether an absent path expects an object, which lets
 the presentation render `[database]` instead of `database = "<value>"`.
 
+A node the merged value spells two accepted ways at once is skipped rather than
+inspected. A canonical key and an accepted alias name the same value, so Serde
+rejects the second spelling as a duplicate field, or reports the first
+spelling's missing field when that value is incomplete. Both diagnostics are
+the deserializer's, and a missing-value report written beneath the node would
+describe an absence the loader never reaches while advertising a route that
+cannot repair the duplication.
+
 ### 3.2. Generating the error message
 
 The collector produces `MissingRequiredValues`, which owns a non-empty ordered
