@@ -264,6 +264,20 @@ stopping and reporting.
       message; the non-en-US path is covered by
       `unavailable_locale_retains_the_stock_diagnostic` and by the translation
       suite.
+- [x] (2026-11-15) Third local review round and its dispositions. A third
+      `coderabbit review --agent` pass over `959dbd7e..984a25d1` (62 files, CLI
+      0.9.5, exit 0, 397 s) raised three findings. Two were actioned. The
+      renumber left the gate ADR's heading reading `ADR 0018` while its
+      filename and every inbound link said 0020; the heading now agrees.
+      `run_fixture` clears the child's environment before injecting the locale
+      and `NO_COLOR`, so a variable inherited from the developer's shell cannot
+      reach the rendering under test; the child-only mutation is the
+      repository's stated exemption. The third finding is declined as false:
+      it reports that no file under `tests/fixtures/clap_publication` is
+      tracked, while `git ls-files` lists all twelve at `984a25d1` and nothing
+      ignores them. That is the second round in which this reviewer reported
+      tracked fixtures as untracked, so the claim is a review-tool artefact
+      rather than a repository state.
 
 ## Surprises & discoveries
 

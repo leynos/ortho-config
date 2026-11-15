@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0018: Pre-publication clap coverage gate
+# Architectural decision record (ADR) 0020: Pre-publication clap coverage gate
 
 ## Status
 
