@@ -278,6 +278,23 @@ stopping and reporting.
       ignores them. That is the second round in which this reviewer reported
       tracked fixtures as untracked, so the claim is a review-tool artefact
       rather than a repository state.
+- [x] (2026-11-15) CodeScene repair before readiness. `cs delta 959dbd7e
+      4cbce31f` reported two introduced findings, both in new test modules:
+      `Large Method` on `parse_error` (70 lines against a 70-line threshold)
+      and `Bumpy Road Ahead` on `render_enum` (two nested conditional blocks).
+      The reproducer table split into value and structure families behind one
+      `reproducer` selector, and the enum renderer split into gate, variant,
+      and unit-variant writers. `cs review` now reports 10.0 with no findings
+      for both files, and the mutable working tree's delta is empty.
+- [x] (2026-11-15) Lint repair on the CodeScene commit. The refactor's
+      `reproducer` selector ended in `.unwrap_or_else(|| panic!(..))`, which
+      Whitaker's `no_unwrap_or_else_panic` denies, so `make lint` stopped
+      before `docstring-coverage`. Rewriting it as a `match` instead tripped
+      Clippy's `clippy::option-if-let-else`, which prescribes
+      `Option::map_or_else`; both lints are satisfied by a `let-else` binding
+      that panics in its else block. `make lint` then passed with
+      `docstring-coverage` at 100.0%, and the `clap_error_translations` suite
+      passed 21 of 21.
 
 ## Surprises & discoveries
 
