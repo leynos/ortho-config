@@ -161,12 +161,12 @@ fn field_statements(args: &RequiredSchemaArgs<'_>) -> syn::Result<Vec<TokenStrea
 ///
 /// A flattened field has no key of its own, so its activation cannot gate
 /// anything at this level; Serde decides whether the child exists at all. When
-/// the field tolerates absence (`Option` or a default), Serde resolves an
-/// all-absent child to that absence rather than to missing required leaves.
-/// Composing the child's requirements unchanged would therefore invent an
-/// error the loader never raises, so they all become optional. Partially
-/// supplied input stays a Serde error, which is outside this diagnostic's
-/// promise.
+/// the field tolerates absence (`Option` or a default), Serde resolves a child
+/// it cannot deserialize to that absence rather than to missing required
+/// leaves. Composing the child's requirements unchanged would therefore
+/// invent an error the loader never raises, so the whole composed subtree
+/// becomes optional — including the descendants of any nested object it
+/// contains, because a single failing leaf makes Serde fall back to `None`.
 fn flatten_statement(
     args: &RequiredSchemaArgs<'_>,
     field: &Field,
@@ -177,13 +177,20 @@ fn flatten_statement(
     let composed = quote! {
         <#ty as #krate::RequiredConfigSchema>::collect_required_schema(stack)?
     };
-    let is_optional = is_optional(field, attrs, args.container_default)?;
+    // A flattened field has no key of its own, so no default can be aimed at
+    // one at this level.
+    let is_optional = is_optional(
+        field,
+        attrs,
+        &ActivationFacts {
+            container_default: args.container_default,
+            key: None,
+            aliases: &[],
+        },
+    )?;
     if is_optional {
         return Ok(quote! {
-            fields.extend(#composed.into_iter().map(|mut field| {
-                field.activation = #krate::Activation::Optional;
-                field
-            }));
+            fields.extend(#composed.into_iter().map(#krate::SchemaField::optional_subtree));
         });
     }
     Ok(quote! { fields.extend(#composed); })
@@ -198,7 +205,15 @@ fn push_statement(
 ) -> syn::Result<TokenStream> {
     let krate = args.krate;
     let aliases = serde_field_aliases(&field.attrs)?;
-    let is_optional = is_optional(field, attrs, args.container_default)?;
+    let is_optional = is_optional(
+        field,
+        attrs,
+        &ActivationFacts {
+            container_default: args.container_default,
+            key: Some(key),
+            aliases: &aliases,
+        },
+    )?;
     let activation = if is_optional {
         quote! { #krate::Activation::Optional }
     } else {
@@ -240,20 +255,56 @@ fn participates(field: &Field, attrs: &FieldAttrs) -> syn::Result<bool> {
     Ok(!is_flattened || attrs.nested)
 }
 
+/// The declared facts that decide whether a field's absence is an error.
+///
+/// The key and aliases travel together with the container default because
+/// they answer one question: which merged keys can supply this field.
+struct ActivationFacts<'a> {
+    /// Whether the container carries `#[serde(default)]`.
+    container_default: bool,
+    /// The key the loader reads, or `None` when the field has no key of its
+    /// own.
+    key: Option<&'a str>,
+    /// Alternative spellings the loader accepts for the same value.
+    aliases: &'a [String],
+}
+
 /// Classify a field as optional or required.
 ///
 /// The checks mirror the layers that can supply a value: an `Option` type, an
 /// explicit or inferred default, or a Serde default at either level.
-fn is_optional(field: &Field, attrs: &FieldAttrs, container_default: bool) -> syn::Result<bool> {
+///
+/// A default that `ortho_config` materializes is serialized under the Rust
+/// identifier, so it only supplies the value when the loader reads that
+/// identifier; a renamed field whose identifier is not an alias stays required
+/// even though it declares a default.
+fn is_optional(
+    field: &Field,
+    attrs: &FieldAttrs,
+    facts: &ActivationFacts<'_>,
+) -> syn::Result<bool> {
     let is_optional_by_type = option_inner(&field.ty).is_some();
+    let is_optional_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
+    let default_reaches = facts
+        .key
+        .is_none_or(|read_key| default_reaches_field(field, read_key, facts.aliases));
     let is_optional_by_default =
-        attrs.default.is_some() || attrs.inferred_clap_default.is_some() || container_default;
-    let is_optional = if is_optional_by_type || is_optional_by_default {
-        true
-    } else {
-        serde_has_default(&field.attrs)?
+        (attrs.default.is_some() || attrs.inferred_clap_default.is_some()) && default_reaches;
+    Ok(is_optional_by_type || is_optional_by_serde || is_optional_by_default)
+}
+
+/// Report whether a materialized default reaches the key the loader reads.
+///
+/// The generated defaults struct serializes every field under its Rust
+/// identifier, while Serde reads the field under its renamed key. A default
+/// therefore supplies the value only when the identifier is the key itself or
+/// one of the field's accepted aliases.
+fn default_reaches_field(field: &Field, key: &str, aliases: &[String]) -> bool {
+    let Some(ident) = field.ident.as_ref() else {
+        return false;
     };
-    Ok(is_optional)
+    let identifier = ident.to_string();
+    identifier == key || aliases.contains(&identifier)
 }
 
 /// Decide whether a field is shaped so the parser can populate it from a flag.

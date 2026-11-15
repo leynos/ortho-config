@@ -256,6 +256,26 @@ with a compatibility probe rather than an assumption.
 - [x] M2: implement and property-test collection with typed diagnostics.
 - [x] M3: integrate all supported generated loading paths and recovery tests.
 - [x] M4: reconcile documentation, gates, and roadmap completion.
+- [x] (2026-11-15) Second completeness assessment (round c2,
+  `7-3-1-completeness-2026-11-15-c2`) found three correctness defects and three
+  verification gaps against `95e8e314`. Repaired in this round:
+  - `SchemaField::optional_subtree` demotes a whole flattened composition,
+    including nested objects, so a partially supplied `Option<Child>` no longer
+    invents a report Serde would never raise.
+  - `is_optional` now consults the key the loader reads, so a materialized
+    default counts only when the Rust identifier is that key or an alias.
+  - `toml_key` renders every configuration-file segment as TOML accepts it,
+    escaping quoted keys instead of emitting `api@key` unquoted.
+  - New oracles: an exact object-plus-leaf body compared with a parsed TOML
+    document, quoting and parsing for punctuation, quotes, and backslashes, a
+    file-route recovery through a discovered configuration file, a partially
+    supplied nested flatten, and a renamed default beside an unrelated
+    requirement.
+  - Two trybuild fixtures with generated `.stderr` files: an unsupported
+    directional `rename_all` value and a tuple-struct `OrthoConfig`.
+  - Recorded the renamed-default limitation in the design document and the
+    migration guide, and corrected the compound spelling the hosted word list
+    rejects in the module header of `missing_required_evaluation.rs`.
 
 ## Surprises & discoveries
 
@@ -344,6 +364,16 @@ The 2026-11-15 assessment repair round produced four findings worth keeping.
    widened `RequiredConfigSchema` bound it forces on the four
    `load_and_merge_subcommand_for*` helpers and the `SubcmdConfigMerge` methods.
 
+The c2 repair produced two findings worth keeping. First, a flattened `Option`
+absorbs *any* descendant failure, not just an entirely absent child, so the
+demotion has to reach nested objects; demoting only immediate fields still
+reported a leaf the loader never requires. Second,
+`derive/parse/struct_attrs.rs::discard_unknown` parsed an unrecognized value as
+a token stream, which runs to the end of the attribute. In
+`#[serde(rename = "ref", alias = "reference")]` that swallowed the alias, so
+the alias was invisible to both the schema and the key check. The value is now
+parsed as one expression, which stops at the comma.
+
 ## Decision log
 
 D1 (2026-10-14, proposed): add structured missing-value data rather than the
@@ -403,6 +433,18 @@ consequence is accepted deliberately: `load_and_merge_subcommand_for*` and
 deriving `OrthoConfig` already satisfies. The verdict above is unchanged — the
 subcommand path adds a scope parameter, not new logical structure, so the
 sampled matrix and the seeded controls still exercise every branch.
+
+D7 (2026-11-15, accepted): demote an optional flattened composition as a whole
+subtree rather than field by field, and classify a materialized default by the
+key the loader reads. Both follow one rule: the report must describe what the
+loader does. Serde converts any descendant failure inside a flattened `Option`
+into absence, so a partially supplied child raises no missing-value error and
+must not be reported. The generated defaults struct keys its values by the Rust
+identifier, so a default only supplies a renamed field when that identifier is
+also an accepted alias; otherwise the field stays required and the report says
+so. The alternative — teaching the defaults struct to serialize under the
+deserialized key — would change merge precedence for every renamed field, which
+is a wider behavioural change than this plan covers.
 
 ## Outcomes & retrospective
 

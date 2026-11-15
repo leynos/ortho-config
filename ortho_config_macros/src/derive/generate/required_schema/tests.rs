@@ -171,12 +171,12 @@ fn optional_flatten_downgrades_the_child_requirements() -> Result<()> {
     };
     let tokens = emit_plain(&input)?;
     ensure!(
-        tokens.contains("field.activation=ortho_config::Activation::Optional"),
-        "an absent optional flatten must not report required leaves: {tokens}"
-    );
-    ensure!(
-        tokens.contains("fields.extend("),
-        "the composed requirements are still emitted: {tokens}"
+        tokens.contains(concat!(
+            "fields.extend(<Extraasortho_config::RequiredConfigSchema>",
+            "::collect_required_schema(stack)?.into_iter().map(",
+            "ortho_config::SchemaField::optional_subtree));"
+        )),
+        "an absent optional flatten must demote every composed requirement: {tokens}"
     );
     Ok(())
 }

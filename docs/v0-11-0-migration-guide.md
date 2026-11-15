@@ -450,5 +450,8 @@ where
 Enumeration is best effort by design. It covers declared fields whose
 requiredness is decidable from attribute metadata, and does not predict a
 handwritten `Deserialize`, an unmarked `#[serde(flatten)]`, or an enum payload.
-Call `ortho_config::ensure_no_missing_required_values::<T>` directly to check a
+A `#[ortho_config(default = ...)]` is materialized under the Rust identifier,
+so it supplies a field renamed with `#[serde(rename = "...")]` only when that
+identifier is also an accepted `#[serde(alias = "...")]`. Call
+`ortho_config::ensure_no_missing_required_values::<T>` directly to check a
 value you have already merged yourself.

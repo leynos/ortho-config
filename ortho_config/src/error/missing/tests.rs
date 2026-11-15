@@ -34,6 +34,36 @@ fn configuration_file_body(rendered: &str) -> String {
         .join("\n")
 }
 
+/// Report an object route that arrives before the leaves sharing its table.
+fn report_object_before_its_leaves() -> MissingRequiredValues {
+    MissingRequiredValues::try_new(
+        None,
+        vec![
+            object(&["database"], vec![file(&["database"], true)]),
+            leaf(
+                &["database", "host"],
+                vec![file(&["database", "host"], false)],
+            ),
+            leaf(
+                &["database", "port"],
+                vec![file(&["database", "port"], false)],
+            ),
+            leaf(&["reference"], vec![file(&["reference"], false)]),
+        ],
+    )
+    .expect("four entries form a non-empty report")
+}
+
+/// Report keys whose spellings a TOML bare key cannot express.
+fn report_unconventional_keys() -> MissingRequiredValues {
+    let keys = [r"api@key", r#"he said "hi""#, r"back\slash", "tab\there"];
+    let items: Vec<MissingRequiredValue> = keys
+        .iter()
+        .map(|key| leaf(&[*key], vec![file(&[*key], false)]))
+        .collect();
+    MissingRequiredValues::try_new(None, items).expect("four entries form a non-empty report")
+}
+
 /// Report the routes a demo program really accepts for two absent values.
 fn demo_report() -> MissingRequiredValues {
     MissingRequiredValues::try_new(
@@ -150,6 +180,60 @@ fn the_rendered_file_section_is_one_valid_toml_document() {
         1,
         "a table header must appear once: {body}"
     );
+}
+
+/// An object route and the leaves inside it must cooperate.
+///
+/// The object route alone says "declare this table"; the leaf routes then add
+/// keys to it. Rendering them independently would emit the header twice. The
+/// assertion is independent of the snapshot: the expected body is written out
+/// and the parsed document is inspected for the same structure.
+#[cfg(feature = "toml")]
+#[test]
+fn an_object_route_and_its_nested_leaf_share_one_table() {
+    let report = report_object_before_its_leaves();
+    let body = configuration_file_body(&report.to_string());
+    assert_eq!(
+        body,
+        concat!(
+            "reference = \"<value>\"\n",
+            "[database]\n",
+            "host = \"<value>\"\n",
+            "port = \"<value>\"",
+        ),
+        "root assignments must precede the table and the table must open once"
+    );
+
+    let parsed: toml::Table =
+        toml::from_str(&body).expect("the Configuration File section must be valid TOML");
+    assert!(
+        parsed.contains_key("reference"),
+        "a root key must stay at the document root: {body}"
+    );
+    let database = parsed
+        .get("database")
+        .and_then(toml::Value::as_table)
+        .expect("the database table must exist");
+    assert!(
+        database.contains_key("host") && database.contains_key("port"),
+        "the nested leaves must land inside the object's table: {body}"
+    );
+}
+
+/// Every key spelling must survive a round trip through a TOML parser.
+#[cfg(feature = "toml")]
+#[test]
+fn keys_a_bare_toml_key_cannot_express_are_quoted_and_parse() {
+    let report = report_unconventional_keys();
+    let body = configuration_file_body(&report.to_string());
+    let parsed: toml::Table =
+        toml::from_str(&body).expect("the Configuration File section must be valid TOML");
+    for key in [r"api@key", r#"he said "hi""#, r"back\slash", "tab\there"] {
+        assert!(
+            parsed.contains_key(key),
+            "`{key}` must parse back under its exact spelling: {body}"
+        );
+    }
 }
 
 #[test]

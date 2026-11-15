@@ -66,6 +66,44 @@ impl SchemaField {
             children,
         }
     }
+
+    /// Mark this node and every descendant optional.
+    ///
+    /// A flattened `Option<Child>` is all-or-nothing to Serde: if any part of
+    /// the child fails to deserialize, the whole child resolves to `None`
+    /// instead of raising a missing-value error. Demoting only the child's
+    /// immediate fields would still report a missing leaf inside a nested
+    /// object, so the whole composed subtree is demoted.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{Activation, SchemaChildren, SchemaField};
+    ///
+    /// let child = SchemaField::new("host", Vec::new(), Activation::Required, SchemaChildren::Leaf);
+    /// let parent = SchemaField::new(
+    ///     "database",
+    ///     Vec::new(),
+    ///     Activation::Required,
+    ///     SchemaChildren::Nested(vec![child]),
+    /// );
+    /// let demoted = parent.optional_subtree();
+    /// assert_eq!(demoted.activation, Activation::Optional);
+    /// assert!(matches!(demoted.children, SchemaChildren::Nested(_)));
+    /// ```
+    #[must_use]
+    pub fn optional_subtree(mut self) -> Self {
+        self.activation = Activation::Optional;
+        if let SchemaChildren::Nested(children) = self.children {
+            self.children = SchemaChildren::Nested(
+                children
+                    .into_iter()
+                    .map(Self::optional_subtree)
+                    .collect::<Vec<_>>(),
+            );
+        }
+        self
+    }
 }
 
 /// Root-level facts needed to describe truthful supply routes.

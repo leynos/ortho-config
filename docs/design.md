@@ -191,6 +191,15 @@ extends that contract to selected subcommands.
   type's route hints; a selected subcommand passes the `PREFIX_CMDS_<NAME>_`
   prefix and the `[cmds.<name>]` section its loader reads, so a diagnostic
   cannot name a value that loader never consults.
+- A flattened child tolerates absence when its type is `Option` or carries a
+  default, because Serde resolves a child it cannot deserialize to that
+  absence. The composed subtree is therefore demoted as a whole, including any
+  nested object, rather than reporting leaves the loader never requires.
+- A `#[ortho_config(default = ...)]` value is materialized under the Rust
+  identifier. It supplies a renamed field only when that identifier is also an
+  accepted `#[serde(alias = "...")]`; otherwise the field stays required.
+- Configuration-file routes render every key as TOML accepts it, emitting a
+  quoted and escaped basic string for any segment a bare key cannot express.
 
 ### 4.3. Declarative configuration merging
 

@@ -1,0 +1,5 @@
+error: OrthoConfig requires named fields
+ --> tests/ui/required_schema_tuple_struct.rs:9:1
+  |
+9 | struct Root(String);
+  | ^^^^^^

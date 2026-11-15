@@ -10,9 +10,14 @@
 //! - a key that cannot survive the environment provider's case and separator
 //!   transforms gets no environment route, while a plain sibling still does;
 //! - a nested requirement reached through an alias repeats the observed
-//!   spelling, so supplying the advertised variable or file key succeeds.
+//!   spelling, so supplying the advertised variable or file key succeeds;
+//! - a partially supplied optional flatten still reports nothing, because one
+//!   failing descendant makes Serde resolve the whole child to absence;
+//! - a default that the loader never reads does not hide a requirement, while
+//!   one whose identifier is an accepted alias does supply the value.
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +48,34 @@ struct RequiredFlattenRoot {
     #[serde(flatten)]
     #[ortho_config(nested, skip_cli)]
     extra: FlattenedChild,
+}
+
+/// A nested object held by a flattened child.
+#[derive(Debug, Deserialize, Serialize, ortho_config::RequiredConfigSchema)]
+struct FlattenedDatabase {
+    /// Required leaf whose absence fails the whole flattened child.
+    host: String,
+    /// Optional leaf used to supply the object only partially.
+    #[serde(default)]
+    port: u16,
+}
+
+/// A flattened child whose requirement sits one level deeper.
+#[derive(Debug, Deserialize, Serialize, ortho_config::RequiredConfigSchema)]
+struct NestedFlattenedChild {
+    /// The object that holds the required leaf.
+    #[ortho_config(nested)]
+    database: FlattenedDatabase,
+}
+
+/// A root whose optional flatten nests its requirement one level down.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRH_")]
+struct OptionalNestedFlattenRoot {
+    /// A child that cannot deserialize is absence, not a missing leaf.
+    #[serde(flatten)]
+    #[ortho_config(nested, skip_cli)]
+    extra: Option<NestedFlattenedChild>,
 }
 
 /// A configuration whose key spellings cannot round-trip the provider.
@@ -77,6 +110,28 @@ struct AliasNestedRoot {
     #[serde(alias = "db")]
     #[ortho_config(nested, skip_cli)]
     database: AliasDatabase,
+}
+
+/// A root whose declared default is renamed away from the loaded key.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRD_")]
+struct RenamedDefaultRoot {
+    /// The default is serialized under `reference`, but the loader reads `ref`.
+    #[serde(rename = "ref")]
+    #[ortho_config(default = String::from("defaulted"))]
+    reference: String,
+    /// A second requirement, so the report must still enumerate siblings.
+    region: String,
+}
+
+/// A root whose identifier survives the rename as an accepted alias.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MRDA_")]
+struct RenamedAliasedDefaultRoot {
+    /// The default's spelling is an alias, so it really supplies the value.
+    #[serde(rename = "ref", alias = "reference")]
+    #[ortho_config(default = String::from("defaulted"))]
+    reference: String,
 }
 
 #[test]
@@ -185,6 +240,79 @@ fn the_alias_route_recovers_the_missing_value() -> Result<()> {
     ensure!(
         config.database.host == "db" && config.database.port == 1,
         "the advertised route must supply both leaves"
+    );
+    Ok(())
+}
+
+/// A file route must be replayed, not merely spelled correctly.
+///
+/// The alias report advertises `db.host`. Writing exactly that key into a
+/// discovered configuration file must recover the value, which proves the
+/// route names a key this loader really reads.
+#[test]
+fn the_alias_file_route_recovers_the_missing_value() -> Result<()> {
+    let dir = tempfile::tempdir().context("create temp dir")?;
+    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
+    cap.write("config.toml", b"[db]\nhost = \"db\"\n")
+        .context("write config file")?;
+    let file = dir.path().join("config.toml");
+    let path = file
+        .to_str()
+        .ok_or_else(|| anyhow!("temporary path is not valid UTF-8: {file:?}"))?;
+
+    let config = load::<AliasNestedRoot>(&[PROGRAM], &[("MRA_CONFIG_PATH", path)])
+        .map_err(|error| anyhow::anyhow!("the advertised file route must recover: {error}"))?;
+    ensure!(
+        config.database.host == "db",
+        "the file route must supply the required leaf, got {:?}",
+        config.database
+    );
+    Ok(())
+}
+
+/// A partially supplied optional flatten must not invent a report.
+///
+/// Serde converts any descendant failure into `None` for a flattened option.
+/// Supplying only the defaulted `port` leaves `host` absent, so the loader
+/// resolves the child to absence and never raises a missing-value error.
+#[test]
+fn a_partially_supplied_optional_flatten_reports_nothing() -> Result<()> {
+    let config = load::<OptionalNestedFlattenRoot>(&[PROGRAM], &[("MRH_DATABASE__PORT", "1")])
+        .map_err(|error| {
+            anyhow::anyhow!("a failed optional flatten must resolve to absence: {error}")
+        })?;
+    ensure!(
+        config.extra.is_none(),
+        "the partially supplied child must resolve to `None`"
+    );
+    Ok(())
+}
+
+/// A default the loader cannot read must not hide the requirement.
+///
+/// The generated defaults struct keys every value by its Rust identifier, so a
+/// renamed field without a matching alias never receives it. Reporting the
+/// renamed key beside an unrelated requirement keeps the report honest.
+#[test]
+fn a_renamed_default_is_reported_beside_another_missing_field() -> Result<()> {
+    let missing = report(load::<RenamedDefaultRoot>(&[PROGRAM], &[]))?;
+    ensure!(
+        paths(&missing) == ["ref", "region"],
+        "the unreachable default must not hide the requirement, got {:?}",
+        paths(&missing)
+    );
+    Ok(())
+}
+
+/// An identifier that remains an alias must still supply the default.
+#[test]
+fn a_default_reaches_a_renamed_key_through_an_alias() -> Result<()> {
+    let config = load::<RenamedAliasedDefaultRoot>(&[PROGRAM], &[])
+        .map_err(|error| anyhow::anyhow!("the default is accepted through the alias: {error}"))?;
+    ensure!(
+        config.reference == "defaulted",
+        "the default must reach the renamed field, got {:?}",
+        config.reference
     );
     Ok(())
 }

@@ -3,7 +3,7 @@
 //! The plan requires evidence that composing the requirement schema and
 //! collecting missing values read the already-merged value without replaying
 //! defaults or custom deserialization. Two instrumented hooks count their own
-//! evaluations: a hand-written `Deserialize` implementation and an
+//! evaluations: a handwritten `Deserialize` implementation and an
 //! `#[ortho_config(default = ...)]` expression.
 //!
 //! A load that stops at a missing requirement must not deserialize the
