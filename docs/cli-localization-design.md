@@ -483,11 +483,14 @@ override, multiple candidates, a missing or unexpected edge, or an unsupported
 identity fails the check before any count is compared.
 
 For the supported registry identity the check locates the source defining
-`ErrorKind` through metadata's `manifest_path` — never by inferring a path from
-registry directory names — parses it with `syn`, and counts every top-level
-variant without assigning meaning to any of them. Attributes and `cfg`
-conditions are audited for the supported source, and a declaration shape whose
-compiled inventory cannot be established exhaustively fails closed.
+`ErrorKind` through metadata: the crate root is the `src_path` reported for the
+package's unique library target — never a path inferred from registry directory
+names, and never the `src/lib.rs` default — and the walk starts there, follows
+unconditional `mod` declarations, parses every file it reaches with `syn`, and
+counts every top-level variant without assigning meaning to any of them.
+Attributes and `cfg` conditions are audited for the supported source, and a
+declaration shape whose compiled inventory cannot be established exhaustively
+fails closed.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

@@ -73,8 +73,12 @@ It does not run for consumers and makes no claim about their resolutions.
 4. Fail closed on lock/metadata disagreement, a source override, multiple
    candidates, a missing or unexpected edge, or an unsupported identity, before
    any count is compared.
-5. Locate the source defining `ErrorKind` through metadata's `manifest_path`.
-   Never infer it from registry directory names.
+5. Locate the source defining `ErrorKind` through metadata. The crate root is
+   the `src_path` metadata reports for the package's unique library target, so
+   a package that moves its root with `[lib] path` is counted from the file
+   Cargo compiles. Never infer it from registry directory names, and never
+   assume `src/lib.rs`, which is Cargo's default rather than a rule. A package
+   reporting no library target, or more than one, fails closed.
 6. Parse that source with `syn` and count every top-level variant without
    assigning meaning to any of them. Audit attributes and `cfg` conditions; a
    declaration shape whose compiled inventory cannot be established

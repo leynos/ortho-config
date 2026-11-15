@@ -1800,32 +1800,43 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
 - `ortho_config/tests/support/clap_publication/` holds the decisions as pure
   functions, split by subject. `lock` parses `Cargo.lock` and selects entries,
   `identity` holds the reviewed identities and the metadata cross-checks,
-  `source` locates and counts `ErrorKind`, and `files` confines reads to
-  capability handles. `controls` and `properties` are their unit and property
-  tests. `source` also walks `mod` declarations from `lib.rs` and certifies the
-  declaring file only when every hop is unconditional: a `cfg`-gated module, an
-  equivalent condition reached through a nested `cfg_attr`, or a module file
-  that gates its own contents, makes the count describe a build the gate cannot
-  see, so it refuses instead. A `#[path]` declaration is refused for the same
-  reason: the walk resolves default file names, and the compiler may load a
-  different file.
+  `library` selects the crate root Cargo reports, `source` locates and counts
+  `ErrorKind`, and `files` confines reads to capability handles. `controls` and
+  `properties` are their unit and property tests. `source` walks `mod`
+  declarations from that reported crate root and certifies the declaring file
+  only when every hop is unconditional: a `cfg`-gated module, an equivalent
+  condition reached through a nested `cfg_attr`, or a module file that gates
+  its own contents, makes the count describe a build the gate cannot see, so it
+  refuses instead. A `#[path]` declaration is refused for the same reason: the
+  walk resolves default file names, and the compiler may load a different file.
+  The root is the file metadata reports for the unique library target, not
+  `src/lib.rs`: a package may set `[lib] path` and keep an unused `src/lib.rs`
+  beside the file it really compiles. A package with no library target, or with
+  more than one, is refused rather than guessed at.
 - `ortho_config/tests/support/clap_reviewed.rs` holds
   `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
   `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
   matrix test's `const_assert_eq!` fails the build when the matrix length and
   the reviewed total disagree.
-- `ortho_config/tests/fixtures/clap_publication/` holds the lock and source
-  fixtures the negative controls consume. They are data, not compiled targets.
-  Its `module_tree/` trees each drive one refusal of the module walk.
+- `ortho_config/tests/fixtures/clap_publication/` holds the lock, target, and
+  source fixtures the controls consume. They are data, not compiled targets. Its
+  `module_tree/` trees each drive one refusal of the module walk, and
+  `module_tree/custom_library_root/` pairs a moved crate root with an unused
+  default-root decoy. Its `targets/` files are `cargo metadata` target lists,
+  so crate-root selection and both of its refusals are proved against the shape
+  metadata actually emits.
 - `ortho_config/tests/fixtures/clap_matrix/drifted_rows.rs` holds the matrix
   drift fixtures. It is a committed module rather than loose data because the
   checks it exercises are typed over `ErrorKind` and `ClapErrorTranslation`;
   `tests/clap_error_matrix.rs` includes it and runs the real invariants over
   both tables.
-- `ortho_config/tests/ui/clap_error_translation_non_exhaustive.rs` pins the
-  compile-time contract of the public API: `ClapErrorTranslation` is
-  `#[non_exhaustive]`, so a downstream match without a wildcard must not
-  compile. `tests/compile_fail.rs` builds it and compares the diagnostic.
+- `ortho_config/tests/ui/` pins the compile-time contracts of the public API.
+  `clap_error_translation_non_exhaustive.rs` relies on `ClapErrorTranslation`
+  being `#[non_exhaustive]`, so a downstream match without a wildcard must not
+  compile. `clap_error_matrix_length.rs` asserts `CLAP_ERROR_IDS` against a
+  drifted total, so the constant comparison the matrix suite depends on is
+  observed failing as `E0080` rather than assumed. `tests/compile_fail.rs`
+  builds both and compares the diagnostics.
 
 ### Prerequisites
 
@@ -1848,10 +1859,18 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
 ```bash
 cargo test -p ortho_config --test clap_error_coverage --locked --offline
 cargo test -p ortho_config --test clap_error_matrix --locked --offline
+cargo test -p ortho_config --test clap_error_translations --locked --offline
 ```
 
-`make test` runs both as part of the suite. Run them directly when changing the
-matrix, the reviewed identity, or the resolved `clap` version.
+`make test` runs all three as part of the suite. Run them directly when
+changing the matrix, the reviewed identity, or the resolved `clap` version.
+`clap_error_matrix` proves which identifiers exist and which kinds are
+display-only; `clap_error_translations` proves the other half of the contract,
+that every `Translated` identifier has an embedded en-US message, that the
+message renders without Fluent errors for the arguments `clap` supplies, that a
+consumer catalogue takes precedence, and that the stock diagnostic survives
+when no translation is available. Run the translations suite when changing a
+catalogue entry or the fallback path.
 
 The gate's `cargo metadata` call and the CLI suite's one-time fixture build are
 nested Cargo invocations, so both run through

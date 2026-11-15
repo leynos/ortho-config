@@ -423,6 +423,37 @@ stopping and reporting.
         without a wildcard must fail with E0004 — so the check is satisfied by
         a contract this change introduces, not by compiling unrelated code.
 
+- [x] (2026-11-15) Third whole-plan assessment (Assessment-ID
+      `EP-11-2-1-whole-plan-99f06955-20261115T1035Z`, head `99f06955`)
+      returned "not yet complete" with one finding against the gate and three
+      saved documentation checks. All four are repaired.
+      - F3, the walk assumed the crate root. It started at `lib.rs` and took
+        the source root from `<package>/src`, so a package that sets
+        `[lib] path` could be counted from an unused `src/lib.rs` decoy beside
+        the file Cargo really compiles. `support/clap_publication/library.rs`
+        now selects the crate root `cargo metadata` reports for the unique
+        library target, and refuses a package with none or with more than one
+        rather than guessing. The walk treats that path as the crate root by
+        comparison rather than by file name, so modules sitting beside it are
+        followed. `module_tree/custom_library_root` pairs a `lib/entry.rs` root
+        holding three variants with an unused seventeen-variant `src/lib.rs`;
+        `targets/` holds three `cargo metadata` target lists, so root
+        selection and both refusals are proved against the shape metadata
+        emits. The count control was proved non-vacuous: with root recognition
+        temporarily restored to the `lib.rs` name, it failed with the refusal
+        naming `kind.rs`, and the file was restored before further work.
+      - Documentation: the v0.11.0 migration guide's §9 now names the fourteen
+        kinds that ship translated en-US text, the four identifiers that keep
+        their earlier spelling, and the derived-identifier step that precedes
+        the stock-text fallback. The repository layout gains the
+        `clap_error_translations` target and its run command, and the
+        developers' guide gains the same command, the suite's contract, the
+        reported-crate-root rule, and the new fixtures.
+      - Compile-time check: `tests/ui/clap_error_matrix_length.rs` asserts
+        `CLAP_ERROR_IDS` against a drifted total of eighteen, so the constant
+        comparison the matrix suite depends on is observed failing as `E0080`
+        instead of resting on a recorded mutation.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at

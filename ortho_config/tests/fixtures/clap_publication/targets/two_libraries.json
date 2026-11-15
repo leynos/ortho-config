@@ -1,0 +1,12 @@
+[
+  {
+    "name": "clap_builder",
+    "kind": ["lib"],
+    "src_path": "src/lib.rs"
+  },
+  {
+    "name": "clap_builder_alt",
+    "kind": ["cdylib"],
+    "src_path": "alt/lib.rs"
+  }
+]

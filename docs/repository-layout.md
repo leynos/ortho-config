@@ -105,6 +105,12 @@ targets. Each directory-style suite needs its own `[[test]]` stanza in
   `CLAP_ERROR_IDS`. It holds the compile-time length assertion and the
   invariants the committed drift tables in `tests/fixtures/clap_matrix/` are
   run against.
+- `ortho_config/tests/clap_error_translations.rs` (target
+  `clap_error_translations`) proves the rendering half of that matrix: every
+  `Translated` identifier carries an embedded en-US message rather than relying
+  on fallback text, each message renders without Fluent errors for the arguments
+  `clap` supplies, an override catalogue takes precedence, and the stock
+  diagnostic survives when no translation is available.
 - `ortho_config/tests/clap_error_cli.rs` (target `clap_error_cli`) drives the
   `clap-error-fixture` binary as a subprocess. Its one-time fixture build is
   serialized across nextest's processes by the advisory lock in
@@ -114,7 +120,8 @@ Run any target independently with
 `cargo test -p ortho_config --test subcommand`,
 `cargo test -p ortho_config --test clap_integration`,
 `cargo test -p ortho_config --test clap_error_coverage`,
-`cargo test -p ortho_config --test clap_error_matrix`, or
+`cargo test -p ortho_config --test clap_error_matrix`,
+`cargo test -p ortho_config --test clap_error_translations`, or
 `cargo test -p ortho_config --test clap_error_cli`.
 
 ## Behavioural test inventory

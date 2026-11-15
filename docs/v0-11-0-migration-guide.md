@@ -584,8 +584,26 @@ Enumerate `CLAP_ERROR_IDS` rather than hard-coding identifiers when you build a
 coverage test or a translator brief.
 
 The inventory describes `clap_builder` 4.6.7, the version this workspace
-resolves. A consumer that resolves a different `clap` release keeps this matrix
-and relies on the untranslated fallback for kinds it does not list. See the
+resolves, and ships translated en-US text for 14 of its 17 kinds:
+`InvalidValue`, `UnknownArgument`, `InvalidSubcommand`, `NoEquals`,
+`ValueValidation`, `TooManyValues`, `TooFewValues`, `WrongNumberOfValues`,
+`ArgumentConflict`, `MissingRequiredArgument`, `MissingSubcommand`,
+`InvalidUtf8`, `Io`, and `Format`. The other three — `DisplayHelp`,
+`DisplayVersion`, and `DisplayHelpOnMissingArgumentOrSubcommand` — are
+display-only and are never looked up.
+
+Four identifiers predate this matrix and keep their earlier spelling, so an
+override catalogue written against an older release keeps resolving:
+`clap-error-invalid-value`, `clap-error-unknown-argument`,
+`clap-error-missing-argument` (for `MissingRequiredArgument`), and
+`clap-error-missing-subcommand`. Every other translated row uses the spelling
+that `clap-error-<kebab-cased kind>` derives.
+
+A consumer that resolves a different `clap` release keeps this matrix. When
+`clap` reports a kind the matrix does not list, localization first derives
+`clap-error-<kebab-cased kind>` and looks that up; only when no catalogue
+defines it — neither the embedded one nor an override — does the error keep
+`clap`'s own text, with a warning event. See the
 [pre-publication coverage gate](developers-guide.md#the-pre-publication-clap-coverage-gate)
 and [ADR-0022](adrs/adr-0022-pre-publication-clap-coverage-gate.md) for how
-the table stays bound to that version.
+the table stays bound to the resolved version.
