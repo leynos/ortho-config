@@ -21,6 +21,9 @@ ignore = [
   # These code spans name external APIs, identifiers, or deliberate spelling
   # fixtures. Keep inline-code spelling enabled for every other span.
   "`--color auto\\|always\\|never`",
+  # `NO_COLOR` is the upstream environment-variable name
+  # (https://no-color.org), so the span keeps its spelling.
+  "`NO_COLOR`",
   "`artifact_path`",
   "`compiler-artifact`",
   "`color`",
