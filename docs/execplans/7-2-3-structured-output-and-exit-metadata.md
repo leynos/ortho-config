@@ -535,35 +535,45 @@ migration guide before touching the candidate.
   ADR-0022 from its ownership section. `documentation_budget_test.py` still
   passes (5 passed), so the named subset and the `.config/nextest.toml` filter
   still agree at this head.
-- [ ] `make test` for the repair is not green yet, and both red targets are
-  nested-build deadline expiries. `cargo-orthohelp`'s `must_use_compile_tests`
-  passed this time after failing at its 900 s cap twice in the preceding run,
-  so the earlier red was admission load rather than the diff.
-  `ortho_l10n --test boundary` reported 33 passed, 11 failed and 10 ignored,
-  and a focused `make boundary` rerun reported 30 passed and 14 failed; every
-  failure reads "exceeded the … deadline; its process tree was killed" for a
-  child `cargo`, and the reported tail carries
+- [x] (2026-11-15) The `make test` red is host contention, and the item is
+  closed on that finding. Across four whole-suite runs the only red target was
+  `ortho_l10n --test boundary`, with 11, then 14, then 4 failing nodes, every
+  one a nested-Cargo wall-clock deadline expiry inside the contract's shared
+  allowance and every captured tail carrying
   `[build-limits] … waiting for a compile slot` and
-  `Blocking waiting for file lock on package cache`. The host ran at load
-  average 24–29 on six cores, admission held all four slots, and one child
-  built 17 crates in 440 s. No assertion failed, no compiler diagnostic
-  appeared, and the target builds `ortho_l10n` fixture consumers this branch
-  does not touch. The superseding certificate above records the same target
-  passing once load fell to about 9; the next action is to rerun `make test` in
-  that condition and record the result.
-- [ ] Blocked on the prerequisite lint repair, which an installation rollback
-  did not clear. Hosted `build-test (linux)` failed only at `lint-whitaker` on
-  runs 43686357368, 43696101238, 43697766275 and 43702602040, and the last two
-  installer logs show `whitaker-lints-880939d` downloaded from the suite's
-  default-branch tip, so the macro-aware rule is still what CI measures. Local
-  `make lint` greens track whichever suite the workstation happens to have
-  staged, not the one CI measures: one passed on the `00186d43` checkout,
-  another failed once that checkout moved forward, and the latest passed on
-  `00cf1a19`. A local green is evidence about the workstation, not about the
-  candidate CI builds. The next action is unchanged — the eleven flagged
-  functions (issue #695) or the configured threshold must be settled on `main`
-  first, then the branch is rebased and re-gated. If the suite tip is itself
-  reverted, re-run the hosted leg before repairing anything.
+  `Blocking waiting for file lock on package cache`. A focused `make boundary`
+  on the same tree passed 44 tests, 0 failed and 10 ignored in 328 s, and the
+  clean-tree certificate recorded the whole suite passing once host load fell
+  to about 9. `cargo-orthohelp`'s `must_use_compile_tests` failed at its 900 s
+  cap twice and passed unchanged on rerun. No assertion and no compiler
+  diagnostic failed in any run, and the target builds fixture consumers this
+  branch does not change. Issue #700 tracks moving that compilation out of the
+  timed run.
+- [x] (2026-11-15) The prerequisite lint blocker is cleared, and no branch
+  change was needed. Earlier hosted runs failed `build-test (linux)` at
+  `lint-whitaker` alone, on `whitaker-lints-880939d` downloaded from the
+  suite's default-branch tip. Main then took the `bumpy_road_function` refactor
+  `1f4a5775` (PR #698), and the rebased branch's hosted Lint stage is green on
+  the same suite. Local `make lint` greens still track whichever suite the
+  workstation stages (`00cf1a19` today), so they remain evidence about the
+  workstation; the hosted leg is what certifies this gate.
+- [x] (2026-11-15) Hosted results for the rebased head `d1bd72d8`. The PR was
+  behind main and so had no `pull_request` run, and the workflow was dispatched
+  by hand as run 43748989328, whose `head_sha` is that commit. Green: Check
+  formatting, Nixie, Markdown lint, Spelling, Workflow contract tests, both
+  `Test and Measure Coverage` steps, Lint, `msrv`, all three packaging dry runs
+  and both advisory Clippy legs. One step failed, `Publish dry run`, on
+  `cargo-orthohelp` alone: `E0432` for the renderer and output types it imports
+  from `ortho_config`. The step is gated on
+  `github.event_name == 'workflow_dispatch'`, so a PR run skips it — PR #591's
+  run 41390551918 records exactly that skip — and the failure is the
+  workspace-versus-registry drift issue #414 documents. The workspace is at
+  0.10.0 and crates.io carries 0.10.0, published 2026-10-25, so tarball
+  verification resolves the dependency to that release, which predates the
+  renderer and output APIs. Main reproduces it at `f086edc9` (run 43679542090,
+  both legs, the same twelve renderer imports, no output imports), so nothing
+  in this branch caused it. The remedy is the release bump #414 names, not a
+  feature-branch change.
 
 ## Surprises & discoveries
 
@@ -668,6 +678,14 @@ of 8.98 the same `make test` passed in 21 m 56 s with
 `ortho_l10n --test boundary` green, so the deadline failures track host load in
 both directions. The practical rule is that a boundary failure is evidence only
 once the load at the time is recorded beside it.
+
+A dispatched CI run is not the pull request's check set. `Publish dry run` is
+gated on `github.event_name == 'workflow_dispatch'`, so hand-dispatching a PR's
+workflow to recover a missing `pull_request` fan-out adds a step the PR gate
+never runs, and that step is red for a reason that predates the branch. The red
+is real but it is not the PR's: a recovery dispatch is a superset of the gate
+set, so each extra step has to be judged on its own evidence instead of being
+reported as a branch failure.
 
 ## Decision log
 
