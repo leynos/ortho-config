@@ -253,7 +253,7 @@ all possible public values are validated.
 - [x] (2026-11-15) M3 documentation: the users'-guide exit-status section with
   the registered `guide-policy-deny` recipe, design §6.1.1 and §9, the
   developers'-guide policy-API testing section, the agent-native design's
-  delivered/deferred boundary, ADR-0020's delivery note, and roadmap 7.2.3.
+  delivered/deferred boundary, ADR-0022's delivery note, and roadmap 7.2.3.
 - [x] (2026-11-15) M3 certificate: all seven gates green at `24c04193` with the
   head unchanged and `make fmt` mutating nothing — fmt, check-fmt, lint
   (rustdoc, Clippy, Whitaker, interrogate 100%), test (109 targets, 2871
@@ -866,7 +866,7 @@ Delivered in three milestones on `7-2-3-structured-output-and-exit-metadata`.
   optional `output` block from the derive through documentation IR, the
   tool-side schema mirror, the bridge, and agent context. Absence stays absent,
   `supports_json: false` stays distinct from undeclared, and a present empty
-  block round-trips as `{}`. ADR-0020 records the surface; the design and
+  block round-trips as `{}`. ADR-0022 records the surface; the design and
   users' guide describe it.
 - M2 (`946013b2`, documented in `4d698172`) added
   `policy::rules::output::check_output`. The complete 3 × 6 × 3 table, the
@@ -876,7 +876,7 @@ Delivered in three milestones on `7-2-3-structured-output-and-exit-metadata`.
 - M3 pinned the process statuses in `cli_dispatch.rs`,
   `policy_report_contract.rs`, and `documented_command.rs`, and documented
   0/1/2 in the users' guide, design §6.1.1, the agent-native design, and
-  ADR-0020. Roadmap 7.2.3 and its three bullets are checked.
+  ADR-0022. Roadmap 7.2.3 and its three bullets are checked.
 
 Proof inventory: not applicable. No Kani, Verus, CrossHair, LemmaScript, or
 comparable proof is introduced or affected. The one predicate is finite and is

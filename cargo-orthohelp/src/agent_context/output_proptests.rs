@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 use ortho_config::agent_context::{OutputContract, StdoutPurpose as AgentStdoutPurpose};
 use proptest::prelude::*;
+use proptest::strategy::ValueTree;
 use serde_json::Value;
 
 use super::bridge_ir_to_agent_context;
@@ -27,6 +28,21 @@ proptest! {
     fn declared_output_survives_the_bridge(tree in output_tree()) {
         let expected = expected_outputs(&tree);
         let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        // Walk every generated path, not only the ones that came back: a bridge
+        // that dropped a command would otherwise never be asked about it.
+        let mut generated = expected.keys().cloned().collect::<Vec<_>>();
+        let mut emitted = context
+            .commands
+            .iter()
+            .map(|command| command.path.clone())
+            .collect::<Vec<_>>();
+        generated.sort();
+        emitted.sort();
+        prop_assert_eq!(
+            &emitted,
+            &generated,
+            "the projection must emit exactly the generated command paths"
+        );
 
         for command in context.commands {
             let declared = expected.get(&command.path).copied().flatten();
@@ -112,35 +128,57 @@ proptest! {
     }
 }
 
-/// The name pool stays inside the grammar the derive accepts.
+/// Reports whether the derive would accept a class name.
 ///
-/// E1 samples declarations an author can actually write, so a pooled name with
-/// an uppercase letter, a leading digit, or a hyphen would quietly move the
-/// property onto input the parser rejects. Distinctness matters for the same
-/// reason: the pool is what makes a repeated name unreachable.
-#[test]
-fn class_name_pool_matches_the_derive_grammar() {
-    let is_valid = |name: &&str| {
-        name.chars()
-            .next()
-            .is_some_and(|first| first.is_ascii_lowercase())
-            && name
-                .chars()
-                .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
-    };
+/// This restates `validate_class_name` in `ortho_config_macros` rather than
+/// calling it: that parser lives in a different crate and is exercised by its
+/// own compile-fail fixtures. What matters here is that the generator's output
+/// satisfies the same grammar, so the E1 property cannot drift onto input an
+/// author could not write.
+fn is_derivable_name(name: &str) -> bool {
+    name.chars()
+        .next()
+        .is_some_and(|first| first.is_ascii_lowercase())
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+}
 
-    assert!(
-        CLASS_NAME_POOL.iter().all(is_valid),
-        "every pooled name must match [a-z][a-z0-9_]*: {CLASS_NAME_POOL:?}"
-    );
-    let distinct = CLASS_NAME_POOL
-        .iter()
-        .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(
-        distinct.len(),
-        CLASS_NAME_POOL.len(),
-        "a repeated pooled name would make the generator's deduplication mask it"
-    );
+/// The generator only produces declarations the derive would accept.
+///
+/// E1's whole claim rests on sampling valid input, so the generator is checked
+/// on its own terms: names in the accepted grammar, meanings that survive
+/// `trim()`, and no repeated name in one declaration.
+#[test]
+fn generated_declarations_are_well_formed() {
+    let mut runner = proptest::test_runner::TestRunner::deterministic();
+    let strategy = any_classes();
+
+    for _ in 0..64 {
+        let classes = strategy
+            .new_tree(&mut runner)
+            .expect("the class strategy builds a value")
+            .current();
+        let mut seen: Vec<&str> = Vec::new();
+        for class in &classes {
+            assert!(
+                is_derivable_name(&class.name),
+                "generated name must match [a-z][a-z0-9_]*: {:?}",
+                class.name
+            );
+            assert!(
+                !class.meaning.trim().is_empty(),
+                "generated meaning must survive trim: {:?}",
+                class.meaning
+            );
+            assert!(
+                !seen.contains(&class.name.as_str()),
+                "a declaration must not repeat a class name: {:?}",
+                class.name
+            );
+            seen.push(&class.name);
+        }
+    }
 }
 
 /// Counts the members a contract should serialize for its declared leaves.
@@ -291,35 +329,26 @@ fn any_stdout() -> impl Strategy<Value = IrStdoutPurpose> {
     ]
 }
 
-/// Exit-class names the derive accepts, in its `[a-z][a-z0-9_]*` grammar.
+/// Generates an exit-class name in the derive's `[a-z][a-z0-9_]*` grammar.
 ///
-/// The pool is deliberately not in alphabetical order, so a projection that
-/// sorted the classes would reorder a declaration rather than passing.
-const CLASS_NAME_POOL: [&str; 8] = [
-    "success",
-    "usage",
-    "failure",
-    "not_found",
-    "denied",
-    "retry_later",
-    "partial",
-    "aborted",
-];
+/// The regex is the grammar, so the sample varies in length and may contain
+/// digits and underscores rather than repeating a handful of literals.
+fn any_name() -> impl Strategy<Value = String> {
+    "[a-z][a-z0-9_]{0,9}"
+}
+
+/// Generates a meaning the derive accepts: any text that is not blank.
+///
+/// Leading and trailing whitespace, Unicode letters and numbers, and
+/// punctuation are all reachable, but a non-whitespace letter or number is
+/// always present, so `trim()` can never empty the result.
+fn any_meaning() -> impl Strategy<Value = String> {
+    "\\s{0,2}[\\p{L}\\p{N}][\\p{L}\\p{N}\\p{Zs}\\p{P}]{0,18}\\s{0,2}"
+}
 
 /// Generates a well-formed class: an accepted name and a nonblank meaning.
 fn any_class() -> impl Strategy<Value = IrExitClass> {
-    (
-        0_usize..CLASS_NAME_POOL.len(),
-        "[A-Za-z][A-Za-z0-9 ,.'-]{0,19}",
-    )
-        .prop_map(|(slot, meaning)| IrExitClass {
-            name: CLASS_NAME_POOL
-                .get(slot)
-                .copied()
-                .unwrap_or("success")
-                .to_owned(),
-            meaning,
-        })
+    (any_name(), any_meaning()).prop_map(|(name, meaning)| IrExitClass { name, meaning })
 }
 
 /// Generates a declaration of up to three classes with distinct names.
