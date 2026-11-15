@@ -1801,18 +1801,23 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   functions, split by subject. `lock` parses `Cargo.lock` and selects entries,
   `identity` holds the reviewed identities and the metadata cross-checks,
   `library` selects the crate root Cargo reports, `source` locates and counts
-  `ErrorKind`, and `files` confines reads to capability handles. `controls` and
-  `properties` are their unit and property tests. `source` walks `mod`
-  declarations from that reported crate root and certifies the declaring file
-  only when every hop is unconditional: a `cfg`-gated module, an equivalent
-  condition reached through a nested `cfg_attr`, or a module file that gates
-  its own contents, makes the count describe a build the gate cannot see, so it
-  refuses instead. A `#[path]` declaration is refused for the same reason: the
-  walk resolves default file names, and the compiler may load a different file.
-  The root is the file metadata reports for the unique library target, not
-  `src/lib.rs`: a package may set `[lib] path` and keep an unused `src/lib.rs`
-  beside the file it really compiles. A package with no library target, or with
-  more than one, is refused rather than guessed at.
+  `ErrorKind`, `audit` holds the attribute and declaration-shape refusals, and
+  `files` confines reads to capability handles. `controls`, `properties`, and
+  `classes` are their unit, property, and class-classification tests. `source`
+  walks `mod` declarations from that reported crate root and certifies the
+  declaring file only when every hop is unconditional: a `cfg`-gated module, an
+  equivalent condition reached through a nested `cfg_attr`, or a module file
+  that gates its own contents, makes the count describe a build the gate cannot
+  see, so it refuses instead. A `#[path]` declaration is refused for the same
+  reason: the walk resolves default file names, and the compiler may load a
+  different file. The root is the file metadata reports for the unique library
+  target, not `src/lib.rs`: a package may set `[lib] path` and keep an unused
+  `src/lib.rs` beside the file it really compiles. A package with no library
+  target, or with more than one, is refused rather than guessed at. A
+  declaration nested inside an inline module is refused too: the count is a
+  file-level scan, so it cannot bind a nested declaration to the inventory the
+  crate exports, and a compiled file-level decoy would otherwise let the count
+  describe the wrong enum.
 - `ortho_config/tests/support/clap_reviewed.rs` holds
   `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
   `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
@@ -1820,10 +1825,12 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   the reviewed total disagree.
 - `ortho_config/tests/fixtures/clap_publication/` holds the lock, target, and
   source fixtures the controls consume. They are data, not compiled targets. Its
-  `module_tree/` trees each drive one refusal of the module walk, and
+  `module_tree/` trees each drive one refusal of the module walk,
   `module_tree/custom_library_root/` pairs a moved crate root with an unused
-  default-root decoy. Its `targets/` files are `cargo metadata` target lists,
-  so crate-root selection and both of its refusals are proved against the shape
+  default-root decoy, and `module_tree/nested_definition/` pairs a compiled
+  seventeen-variant decoy with an eighteen-variant inventory declared in an
+  inline module. Its `targets/` files are `cargo metadata` target lists, so
+  crate-root selection and both of its refusals are proved against the shape
   metadata actually emits.
 - `ortho_config/tests/fixtures/clap_matrix/drifted_rows.rs` holds the matrix
   drift fixtures. It is a committed module rather than loose data because the
@@ -1923,6 +1930,7 @@ decision, never widening the gate.
 | `expected a crate root lib.rs ...`                                       | The resolved `src/` has no crate root to walk from                                                                    | Check the resolved package; a moved library entry point needs a reviewed locator |
 | `... should be valid Rust`                                               | `syn` could not parse the resolved source                                                                             | Inspect the file: a vendor patch or an unexpected `src/` file explains it        |
 | `declares more than one top-level ErrorKind enum`                        | The definition moved or split                                                                                         | Update the locator in `source` with a covered change                             |
+| `declares ErrorKind inside mod ...`                                      | The inventory sits in an inline module rather than at file level                                                      | Fail closed, or bind a nested declaration under a reviewed change                |
 | `declares no top-level ErrorKind enum to inventory`                      | The definition left the files the gate scans                                                                          | Update the locator in `source` with a covered change                             |
 
 The `conditionally compiles` refusal is deliberate. Counting a conditional

@@ -5,15 +5,20 @@
 //! gate's decisions out of the test body: `lock` parses and selects from
 //! `Cargo.lock`, `identity` holds the reviewed identities and the metadata
 //! cross-checks, `source` locates and counts `ErrorKind`, `library` settles
-//! which file Cargo compiles as the crate root, and `files` confines the reads
-//! to capability handles. `tests/clap_error_coverage.rs` wires them
-//! together in the published order: metadata, lock, identity, edge, count.
+//! which file Cargo compiles as the crate root, `audit` holds the attribute and
+//! declaration-shape refusals, and `files` confines the reads to capability
+//! handles. `tests/clap_error_coverage.rs` wires them together in the published
+//! order: metadata, lock, identity, edge, count.
 
+mod audit;
 mod files;
 mod identity;
 mod library;
 mod lock;
 mod source;
+
+#[cfg(test)]
+mod classes;
 
 #[cfg(test)]
 mod controls;

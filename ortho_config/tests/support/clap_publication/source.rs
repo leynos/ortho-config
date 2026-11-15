@@ -15,7 +15,10 @@
 //! hazard: it can make the compiler load a file this walk would not follow.
 //! The walk therefore follows `mod` declarations from the crate root, certifies
 //! the declaring file only when every hop is unconditional, and refuses a
-//! declaration whose compiled file it cannot establish.
+//! declaration whose compiled file it cannot establish. A declaration nested
+//! inside an inline module is refused as well: a file-level scan cannot bind it
+//! to the inventory the crate exports, and counting the file-level decoy beside
+//! it would report a number that describes the wrong enum.
 //!
 //! The crate root is the one Cargo reports for the resolved package's library
 //! target, not `src/lib.rs` by convention: [`library_crate_root`] settles that
@@ -29,9 +32,12 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use cargo_metadata::Package;
-use syn::punctuated::Punctuated;
-use syn::{Attribute, Item, ItemEnum, ItemMod, Meta, MetaList, Token};
+use syn::{Item, ItemMod};
 
+use super::audit::{
+    audit_definition, declares_module_path, has_presence_conditional_attribute,
+    refuse_nested_error_kinds, reject_cfg_attributes,
+};
 use super::library::library_crate_root;
 
 /// The crate root a library package compiles first when it declares no path.
@@ -140,9 +146,14 @@ fn collect_sources(
     Ok(())
 }
 
-/// Count one file's top-level `ErrorKind` variants, refusing conditional ones.
+/// Count one file's top-level `ErrorKind` variants, refusing other shapes.
+///
+/// A declaration nested in an inline module is refused before the file-level
+/// scan, because that scan could otherwise count a compiled decoy while the
+/// exported inventory sat in a module it never looked inside.
 fn analyze_error_kind(source: &str, origin: &Utf8Path) -> Result<Option<usize>> {
     let file = syn::parse_file(source).with_context(|| format!("{origin} should be valid Rust"))?;
+    refuse_nested_error_kinds(&file.items, origin)?;
     let mut definitions = file.items.iter().filter_map(|item| match item {
         Item::Enum(definition) if definition.ident == "ErrorKind" => Some(definition),
         _ => None,
@@ -157,86 +168,6 @@ fn analyze_error_kind(source: &str, origin: &Utf8Path) -> Result<Option<usize>> 
     reject_cfg_attributes(&file.attrs, "the whole file", origin)?;
     audit_definition(definition, origin)?;
     Ok(Some(definition.variants.len()))
-}
-
-/// Refuse an enum whose own or whose variants' compilation is conditional.
-fn audit_definition(definition: &ItemEnum, origin: &Utf8Path) -> Result<()> {
-    reject_cfg_attributes(&definition.attrs, "the ErrorKind enum", origin)?;
-    for variant in &definition.variants {
-        reject_cfg_attributes(&variant.attrs, &variant.ident.to_string(), origin)?;
-    }
-    Ok(())
-}
-
-/// Refuse `cfg`/`cfg_attr` on an inventory-relevant item.
-///
-/// A conditional variant would make the source count depend on features the
-/// gate does not model, so the gate fails closed rather than reporting a count
-/// that may not describe the resolved build.
-fn reject_cfg_attributes(attributes: &[Attribute], subject: &str, origin: &Utf8Path) -> Result<()> {
-    ensure!(
-        !attributes.iter().any(is_cfg_attribute),
-        "{origin} conditionally compiles {subject}; the gate counts unconditional variants only",
-    );
-    Ok(())
-}
-
-/// Whether an attribute is `cfg` or `cfg_attr`.
-fn is_cfg_attribute(attribute: &Attribute) -> bool {
-    attribute.path().is_ident("cfg") || attribute.path().is_ident("cfg_attr")
-}
-
-/// Whether any attribute can remove its item from the build.
-///
-/// `#[cfg(..)]` always can. `#[cfg_attr(cond, ..)]` cannot by itself — it only
-/// applies attributes — unless one of the attributes it applies is a `cfg`,
-/// directly or through a further `cfg_attr`, which Rust expands recursively.
-/// The distinction matters here: `clap_builder` conditions its crate root with
-/// `#![cfg_attr(docsrs, feature(doc_cfg))]`, which leaves the file in every
-/// build, so refusing every `cfg_attr` would fail the real package.
-fn has_presence_conditional_attribute(attributes: &[Attribute]) -> bool {
-    attributes
-        .iter()
-        .any(|attribute| meta_applies(&attribute.meta, "cfg"))
-}
-
-/// Whether a `mod` declaration names the file to load instead of the default.
-///
-/// This walk resolves default file names only. A `#[path]` — or a `cfg_attr`
-/// that applies one — can make the compiler load a different file, so the
-/// declaration is refused rather than followed as if the default held.
-fn declares_module_path(attributes: &[Attribute]) -> bool {
-    attributes
-        .iter()
-        .any(|attribute| meta_applies(&attribute.meta, "path"))
-}
-
-/// Whether `meta` names `name`, or a `cfg_attr` applies something that does.
-///
-/// A `cfg_attr` is expanded by the compiler, so the search has to recurse
-/// through it: `#[cfg_attr(all(), cfg_attr(all(), cfg(any())))]` can still
-/// remove its item even though no immediate attribute names `cfg`. Anything
-/// this cannot parse counts as a match, because an unreadable attribute must
-/// not be the reason a count is trusted.
-fn meta_applies(meta: &Meta, name: &str) -> bool {
-    match meta {
-        Meta::Path(path) => path.is_ident(name),
-        Meta::NameValue(entry) => entry.path.is_ident(name),
-        Meta::List(list) if list.path.is_ident("cfg_attr") => applies_through_cfg_attr(list, name),
-        Meta::List(list) => list.path.is_ident(name),
-    }
-}
-
-/// Whether a `cfg_attr` applies an attribute matching `name` at any depth.
-fn applies_through_cfg_attr(list: &MetaList, name: &str) -> bool {
-    let Ok(arguments) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-    else {
-        return true;
-    };
-    arguments
-        .iter()
-        .skip(1)
-        .any(|applied| meta_applies(applied, name))
 }
 
 /// Refuse a declaring file the compiler does not unconditionally compile.

@@ -277,6 +277,20 @@ fn inline_module_hop_is_followed() -> Result<()> {
     Ok(())
 }
 
+/// A compiled decoy beside an inline inventory is refused, not counted.
+///
+/// `decoy.rs` declares seventeen variants, which is exactly the reviewed total,
+/// while the exported inventory sits one module down and declares eighteen. A
+/// file-level scan would count the decoy and pass the comparison, so the gate
+/// must refuse the shape instead of reporting the decoy's total.
+#[test]
+fn nested_definition_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/nested_definition");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "inside `mod error`")
+}
+
 /// A tree with no crate root is refused rather than counted.
 #[test]
 fn tree_without_a_crate_root_is_refused() -> Result<()> {
