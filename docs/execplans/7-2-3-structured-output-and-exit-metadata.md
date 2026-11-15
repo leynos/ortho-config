@@ -490,14 +490,29 @@ migration guide before touching the candidate.
   reports the other 38 commits as identical text apart from context main added
   beneath them, and `git diff --check` is clean. The replay also left one line
   of `ortho_config_macros/src/derive/parse/doc_attrs.rs` wrong: main's refactor
-  moved the dispatcher's tail onto `recognised.map(|()| true)`, and the merge
-  kept that statement in front of the new `match` instead of after it, so the
-  module did not parse. Rustfmt reported the unparseable module, and the repair
-  moves the statement back while keeping the branch's `"output"` arm inside
-  main's `match`. That arm also had to lose a `?`: the old tail propagated each
-  arm's error and returned unit, while the new `match` yields `syn::Result<()>`
-  per arm, so `parse_output_meta` is the arm's value and `cargo check` rejected
-  the `?` as an arm of the wrong type.
+  moved the dispatcher's tail onto a `map` over the per-arm result, and the
+  merge kept that statement in front of the new `match` instead of after it, so
+  the module did not parse. Rustfmt reported the unparsable module, and the
+  repair moves the statement back while keeping the branch's `"output"` arm
+  inside main's `match`. That arm also had to lose a `?`: the old tail
+  propagated each arm's error and returned unit, while the new `match` yields
+  `syn::Result<()>` per arm, so `parse_output_meta` is the arm's value and
+  `cargo check` rejected the `?` as an arm of the wrong type.
+- [x] (2026-11-15) Gate certificate for the rebased tree at `ba049ec6`, with
+  `git status --porcelain` empty before and after each gate. `make fmt` mutated
+  nothing, `make check-fmt` left 104 files unchanged, `make typecheck` passed,
+  and `make lint` passed every stage: `cargo doc`, `cargo clippy`, a clean
+  `lint-whitaker`, then `docstring-coverage` at 1014/1014. `make test` reported
+  110 test-binary results and then failed only in `ortho_l10n --test boundary`:
+  40 passed, 4 failed, 10 ignored, where each failure says the contract's 900 s
+  shared allowance was exhausted waiting for a sibling nested Cargo invocation
+  and one child shows `Blocking waiting for file lock on package cache` with
+  75–86 compile requests queued ahead. The same target run on its own
+  (`make boundary`, tree unchanged) passed 44 tests with 0 failed and 10
+  ignored in 328 s, so the red is contention inside the whole-suite run rather
+  than the diff. pytest then passed 128 and skipped 5, `make markdownlint`
+  reported 0 issues in 104 files with a clean spelling gate, and `make nixie`
+  validated every diagram.
 - [x] (2026-11-15) Formal-review repair and its gates at head `51118715`, with
   eight modified files and no other change. The substantive finding was real:
   agent context read an explicit `null` for the output block, or for one of its
