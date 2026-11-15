@@ -1,5 +1,5 @@
 ---
-source: ortho_config/tests/clap_error_translations.rs
+source: ortho_config/tests/support/clap_error_rendering.rs
 expression: rendered
 ---
 --- InvalidValue
@@ -75,3 +75,17 @@ error: The provided value is not valid UTF-8
 error: An input/output error occurred while producing command-line diagnostics
 --- Format
 error: The command line could not be rendered
+--- DisplayHelp
+Usage: prog
+
+Options:
+  -h, --help  Print help
+
+--- DisplayHelpOnMissingArgumentOrSubcommand
+Usage: prog
+
+Options:
+  -h, --help  Print help
+
+--- DisplayVersion
+prog 1.0.0
