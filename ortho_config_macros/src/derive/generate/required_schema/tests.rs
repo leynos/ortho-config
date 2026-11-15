@@ -15,6 +15,8 @@ use crate::derive::generate::required_schema::RequiredSchemaSource;
 
 #[path = "tests_deserializers.rs"]
 mod deserializers;
+#[path = "tests_serde_keys.rs"]
+mod serde_keys;
 
 /// Normalize token spacing so assertions can use readable fragments.
 fn normalize(tokens: &proc_macro2::TokenStream) -> String {
@@ -140,27 +142,89 @@ fn optional_nested_parent_strips_wrappers_for_the_child_schema() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn required_flatten_composes_the_child_requirements_unchanged() -> Result<()> {
+/// A demotion a flatten spelling must not apply to the composed child.
+///
+/// The two variants name the two ways the generator can weaken a child's
+/// requirements, which is what distinguishes an unchanged child from a
+/// rewritten one.
+#[derive(Clone, Copy)]
+enum Demotion {
+    /// Marking the whole subtree optional.
+    Activation,
+    /// Rewriting each composed requirement as an optional subtree.
+    Subtree,
+}
+
+impl Demotion {
+    /// The normalized token text this demotion is spelled with.
+    const fn token(self) -> &'static str {
+        match self {
+            Self::Activation => "Activation::Optional",
+            Self::Subtree => "optional_subtree",
+        }
+    }
+
+    /// Describe the demotion for a failure message.
+    const fn description(self) -> &'static str {
+        match self {
+            Self::Activation => "an optional activation",
+            Self::Subtree => "a rewritten subtree",
+        }
+    }
+}
+
+/// Assert the child's requirements are composed without any demotion.
+fn assert_flatten_composes_unchanged(input: &DeriveInput, demotion: Demotion) -> Result<()> {
+    let tokens = emit_plain(input)?;
+    ensure!(
+        tokens.contains(concat!(
+            "fields.extend(<Extraasortho_config::RequiredConfigSchema>",
+            "::collect_required_schema(stack)?);"
+        )),
+        "a flatten must compose the child unchanged, not {}: {tokens}",
+        demotion.description()
+    );
+    ensure!(
+        !tokens.contains(demotion.token()),
+        "`{}` must not appear in a flatten's expansion: {tokens}",
+        demotion.token()
+    );
+    Ok(())
+}
+
+/// One flatten spelling and the demotion it must not apply.
+///
+/// The attribute list and the forbidden demotion travel together: a spelling
+/// without its expectation asserts nothing.
+struct FlattenCase {
+    /// The `#[serde(...)]` argument list on the flattened field.
+    rules: &'static str,
+    /// The demotion this spelling must not apply.
+    demotion: Demotion,
+}
+
+#[rstest]
+#[case::required(FlattenCase {
+    rules: "flatten",
+    demotion: Demotion::Activation,
+})]
+#[case::defaulted(FlattenCase {
+    rules: "flatten, default",
+    demotion: Demotion::Subtree,
+})]
+fn a_flatten_composes_the_child_requirements_unchanged(#[case] case: FlattenCase) -> Result<()> {
+    let rules: proc_macro2::TokenStream = case
+        .rules
+        .parse()
+        .map_err(|error| anyhow!("`{}` must parse as Serde rules: {error}", case.rules))?;
     let input: DeriveInput = syn::parse_quote! {
         struct Root {
-            #[serde(flatten)]
+            #[serde(#rules)]
             #[ortho_config(nested, skip_cli)]
             extra: Extra,
         }
     };
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        tokens.contains(
-            "fields.extend(<Extraasortho_config::RequiredConfigSchema>::collect_required_schema(stack)?);"
-        ),
-        "a required flatten keeps the child's activation: {tokens}"
-    );
-    ensure!(
-        !tokens.contains("Activation::Optional"),
-        "no child requirement is rewritten: {tokens}"
-    );
-    Ok(())
+    assert_flatten_composes_unchanged(&input, case.demotion)
 }
 
 #[test]
@@ -180,75 +244,6 @@ fn optional_flatten_downgrades_the_child_requirements() -> Result<()> {
             "ortho_config::SchemaField::optional_subtree));"
         )),
         "an absent optional flatten must demote every composed requirement: {tokens}"
-    );
-    Ok(())
-}
-
-#[test]
-fn defaulted_flatten_keeps_the_child_requirements() -> Result<()> {
-    let input: DeriveInput = syn::parse_quote! {
-        struct Root {
-            #[serde(flatten, default)]
-            #[ortho_config(nested, skip_cli)]
-            extra: Extra,
-        }
-    };
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        tokens.contains(concat!(
-            "fields.extend(<Extraasortho_config::RequiredConfigSchema>",
-            "::collect_required_schema(stack)?);"
-        )),
-        "a defaulted flatten still deserializes the child: {tokens}"
-    );
-    ensure!(
-        !tokens.contains("optional_subtree"),
-        "a field default never rescues a flattened child: {tokens}"
-    );
-    Ok(())
-}
-
-#[rstest]
-#[case("lowercase", "api_URL")]
-#[case("UPPERCASE", "API_URL")]
-#[case("PascalCase", "ApiURL")]
-#[case("camelCase", "apiURL")]
-#[case("snake_case", "api_URL")]
-#[case("SCREAMING_SNAKE_CASE", "API_URL")]
-#[case("kebab-case", "api-URL")]
-#[case("SCREAMING-KEBAB-CASE", "API-URL")]
-fn field_rename_rules_match_serde(#[case] rule: &str, #[case] expected: &str) -> Result<()> {
-    let input: DeriveInput = syn::parse_quote! {
-        #[serde(rename_all = #rule)]
-        struct Root {
-            api_URL: String,
-        }
-    };
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        tokens.contains(&format!("key:::std::string::String::from(\"{expected}\")")),
-        "`{rule}` must emit `{expected}` as Serde does: {tokens}"
-    );
-    Ok(())
-}
-
-#[test]
-fn serde_naming_controls_keys_and_aliases() -> Result<()> {
-    let input: DeriveInput = syn::parse_quote! {
-        #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-        struct Nested {
-            #[serde(alias = "alt_key")]
-            api_key: String,
-        }
-    };
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        tokens.contains(r#"key:::std::string::String::from("API_KEY")"#),
-        "expected the deserialization rename rule: {tokens}"
-    );
-    ensure!(
-        tokens.contains(r#"::std::string::String::from("alt_key")"#),
-        "expected the alias: {tokens}"
     );
     Ok(())
 }
@@ -289,31 +284,6 @@ fn container_default_makes_every_field_optional() -> Result<()> {
     ensure!(
         tokens.matches("Activation::Optional").count() == 2,
         "expected the container default to apply to every field: {tokens}"
-    );
-    Ok(())
-}
-
-#[rstest]
-#[case(
-    "#[serde(skip)] cache: String",
-    "cache",
-    "a skipped field is never deserialized"
-)]
-#[case(
-    "#[serde(flatten)] extra: Extra",
-    "extra",
-    "an unmarked flatten has no readable key"
-)]
-fn fields_serde_never_reads_are_not_inspected(
-    #[case] field: &str,
-    #[case] key: &str,
-    #[case] reason: &str,
-) -> Result<()> {
-    let input: DeriveInput = syn::parse_str(&format!("struct Nested {{ {field} }}"))?;
-    let tokens = emit_plain(&input)?;
-    ensure!(
-        !tokens.contains(&format!(r#"String::from("{key}")"#)),
-        "{reason}: {tokens}"
     );
     Ok(())
 }

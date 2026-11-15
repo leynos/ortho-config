@@ -119,13 +119,26 @@ struct CustomDeserializedNested {
     database: OpaqueChild,
 }
 
-/// Assert the only reported path is `host`.
-fn assert_only_host_is_reported<T: OrthoConfig>() -> Result<()> {
+/// Assert `T` reports only `host` and that `variable` recovers it.
+///
+/// Both the absence and the repair are checked together because a route that
+/// cannot supply the value is the defect this module is about: an empty report
+/// alone would not show that the advertised variable is read.
+fn assert_only_host_is_reported<T: OrthoConfig>(
+    variable: &str,
+    is_supplied: impl Fn(&T) -> bool,
+) -> Result<()> {
     let missing = report(load::<T>(&[PROGRAM], &[]))?;
     ensure!(
         paths(&missing) == ["host"],
         "a custom deserializer makes the `Option` field required, got {:?}",
         paths(&missing)
+    );
+    let config = load::<T>(&[PROGRAM], &[(variable, "db")])
+        .map_err(|error| anyhow!("the advertised route must recover: {error}"))?;
+    ensure!(
+        is_supplied(&config),
+        "the route `{variable}` must supply the leaf"
     );
     Ok(())
 }
@@ -133,29 +146,17 @@ fn assert_only_host_is_reported<T: OrthoConfig>() -> Result<()> {
 /// A custom deserializer makes an `Option` leaf required.
 #[test]
 fn a_custom_deserializer_makes_an_option_required() -> Result<()> {
-    assert_only_host_is_reported::<CustomDeserializerOption>()?;
-    let config = load::<CustomDeserializerOption>(&[PROGRAM], &[("MRC_HOST", "db")])
-        .map_err(|error| anyhow!("the advertised route must recover: {error}"))?;
-    ensure!(
-        config.host.as_deref() == Some("db"),
-        "the route must supply the leaf, got {:?}",
-        config.host
-    );
-    Ok(())
+    assert_only_host_is_reported::<CustomDeserializerOption>("MRC_HOST", |config| {
+        config.host.as_deref() == Some("db")
+    })
 }
 
 /// The `#[serde(with = "...")]` spelling is the same replacement.
 #[test]
 fn the_serde_with_spelling_is_also_a_custom_deserializer() -> Result<()> {
-    assert_only_host_is_reported::<WithDeserializerOption>()?;
-    let config = load::<WithDeserializerOption>(&[PROGRAM], &[("MRW_HOST", "db")])
-        .map_err(|error| anyhow!("the advertised route must recover: {error}"))?;
-    ensure!(
-        config.host.as_deref() == Some("db"),
-        "the route must supply the leaf, got {:?}",
-        config.host
-    );
-    Ok(())
+    assert_only_host_is_reported::<WithDeserializerOption>("MRW_HOST", |config| {
+        config.host.as_deref() == Some("db")
+    })
 }
 
 /// A Serde default is consulted before the deserializer, so it still applies.

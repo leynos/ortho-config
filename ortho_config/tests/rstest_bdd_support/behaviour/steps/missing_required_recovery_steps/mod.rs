@@ -110,23 +110,46 @@ fn outcome_of<T>(
     }
 }
 
+/// One configuration file a scenario supplies to a load.
+///
+/// The three names travel together because a load is meaningless without all
+/// of them, and grouping them keeps the loader's argument list about the load
+/// rather than about one file.
+struct FixtureFile<'a> {
+    /// File name the loader must discover.
+    name: &'a str,
+    /// Contents written into that file.
+    contents: &'a str,
+    /// Variable that tells the loader where the file is.
+    path_variable: &'a str,
+}
+
+impl<'a> FixtureFile<'a> {
+    /// Describe the file a load reads `contents` from.
+    const fn new(name: &'a str, contents: &'a str, path_variable: &'a str) -> Self {
+        Self {
+            name,
+            contents,
+            path_variable,
+        }
+    }
+}
+
 /// Load `T` from one fixture file plus explicit arguments and environment.
 ///
 /// The fixture directory is dropped once the load has read the file, so every
 /// call starts from the same contents and no earlier load can leak values into
 /// a later one.
 fn load_config<T>(
-    file_name: &str,
-    contents: &str,
-    config_path_variable: &str,
+    file: FixtureFile<'_>,
     args: &[String],
     assignments: &[(String, String)],
 ) -> Result<ortho_config::OrthoResult<T>>
 where
     T: OrthoConfig,
 {
-    let (_directory, path) = config_fixture(file_name, Some(contents))?;
-    let mut environment = MapEnv::new().with_var(config_path_variable, path);
+    let (_directory, path) = config_fixture(file.name, Some(file.contents))?;
+    let mut environment = MapEnv::new().with_var(file.path_variable, path);
     for (key, value) in assignments {
         environment = environment.with_var(key.clone(), value.clone());
     }
@@ -147,9 +170,7 @@ fn load_combined(
     assignments: &[(String, String)],
 ) -> Result<LoadOutcome> {
     let result = load_config::<CombinedConfig>(
-        "mrqc.toml",
-        contents,
-        "MRQC_CONFIG_PATH",
+        FixtureFile::new("mrqc.toml", contents, "MRQC_CONFIG_PATH"),
         args,
         assignments,
     )?;
@@ -241,35 +262,66 @@ fn apply_route(path: &ConfigPath, route: &SupplyRoute) -> Result<Option<MissingR
     }
 }
 
-/// Report whether `route` is of the kind named by `kind`.
-fn is_route_kind(route: &SupplyRoute, kind: &str) -> bool {
-    match kind {
-        "command-line" => matches!(route, SupplyRoute::CommandLine { .. }),
-        "environment" => matches!(route, SupplyRoute::Environment { .. }),
-        "configuration-file" => matches!(
-            route,
-            SupplyRoute::ConfigurationFile {
-                expects_object: false,
-                ..
-            }
-        ),
-        _ => false,
+/// The kind of supply route a scenario asks for.
+///
+/// The set is closed here rather than carried as an arbitrary string, so a
+/// scenario cannot ask for a kind that no route can ever have.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RouteKind {
+    /// A command-line flag.
+    CommandLine,
+    /// An environment variable.
+    Environment,
+    /// A configuration-file key.
+    ConfigurationFile,
+}
+
+impl RouteKind {
+    /// Report whether `route` is of this kind.
+    fn matches(self, route: &SupplyRoute) -> bool {
+        match self {
+            Self::CommandLine => matches!(route, SupplyRoute::CommandLine { .. }),
+            Self::Environment => matches!(route, SupplyRoute::Environment { .. }),
+            // An object-expecting file route supplies a whole table, which no
+            // single scenario value can stand in for.
+            Self::ConfigurationFile => matches!(
+                route,
+                SupplyRoute::ConfigurationFile {
+                    expects_object: false,
+                    ..
+                }
+            ),
+        }
+    }
+
+    /// Name the kind as the diagnostic's routes are described to a reader.
+    const fn name(self) -> &'static str {
+        match self {
+            Self::CommandLine => "command-line",
+            Self::Environment => "environment",
+            Self::ConfigurationFile => "configuration-file",
+        }
     }
 }
 
 /// Select the single reported route of `kind` for the rendered `path`.
-fn route_of(routes: &[(ConfigPath, SupplyRoute)], path: &str, kind: &str) -> Result<SupplyRoute> {
+fn route_of(
+    routes: &[(ConfigPath, SupplyRoute)],
+    path: &str,
+    kind: RouteKind,
+) -> Result<SupplyRoute> {
     let mut matching = routes
         .iter()
         .filter(|(reported, _)| reported.render() == path)
         .map(|(_, route)| route)
-        .filter(|route| is_route_kind(route, kind));
+        .filter(|route| kind.matches(route));
     let route = matching
         .next()
-        .ok_or_else(|| anyhow!("`{path}` advertises no {kind} route"))?;
+        .ok_or_else(|| anyhow!("`{path}` advertises no {} route", kind.name()))?;
     ensure!(
         matching.next().is_none(),
-        "`{path}` advertises more than one {kind} route"
+        "`{path}` advertises more than one {} route",
+        kind.name()
     );
     Ok(route.clone())
 }

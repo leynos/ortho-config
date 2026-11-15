@@ -82,18 +82,26 @@ fn the_selected_command_reports_its_own_requirements() -> Result<()> {
     Ok(())
 }
 
+/// Merge `serve` against one supplying layer and read back its reference.
+///
+/// A failure to select the variant is an error here, because a load that
+/// produced another command would not have read the layer under test at all.
+fn recovered_reference(contents: &str, environment: MapEnv) -> Result<String> {
+    let merged = merge_selected("serve", contents, environment)?;
+    let Commands::Serve(config) = merged.context("the advertised source must be read")? else {
+        bail!("expected serve command");
+    };
+    Ok(config.reference)
+}
+
 /// Recover the missing value through the advertised environment route.
 #[rstest]
 fn the_environment_route_recovers_the_missing_value() -> Result<()> {
     let environment = MapEnv::new().with_var("APP_CMDS_SERVE_REFERENCE", "env reference");
-    let merged = merge_selected("serve", "# no command defaults\n", environment)?;
-    let Commands::Serve(config) = merged.context("the advertised variable must be read")? else {
-        bail!("expected serve command");
-    };
+    let reference = recovered_reference("# no command defaults\n", environment)?;
     ensure!(
-        config.reference == "env reference",
-        "the environment route must populate the field, got {:?}",
-        config.reference
+        reference == "env reference",
+        "the environment route must populate the field, got {reference:?}"
     );
     Ok(())
 }
@@ -101,15 +109,13 @@ fn the_environment_route_recovers_the_missing_value() -> Result<()> {
 /// Recover the missing value through the advertised file section.
 #[rstest]
 fn the_file_route_recovers_the_missing_value() -> Result<()> {
-    let contents = "[cmds.serve]\nreference = \"file reference\"\n";
-    let merged = merge_selected("serve", contents, MapEnv::new())?;
-    let Commands::Serve(config) = merged.context("the advertised section must be read")? else {
-        bail!("expected serve command");
-    };
+    let reference = recovered_reference(
+        "[cmds.serve]\nreference = \"file reference\"\n",
+        MapEnv::new(),
+    )?;
     ensure!(
-        config.reference == "file reference",
-        "the file route must populate the field, got {:?}",
-        config.reference
+        reference == "file reference",
+        "the file route must populate the field, got {reference:?}"
     );
     Ok(())
 }

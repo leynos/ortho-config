@@ -10,8 +10,9 @@ use ortho_config::{RequiredConfigSchema, RequiredSchemaStack, SupplyRoute};
 use rstest_bdd_macros::{given, then, when};
 
 use super::{
-    CombinedConfig, LoadOutcome, LoadedValues, OptionalParentConfig, RecoveryContext, apply_route,
-    file_snippet, load_combined, load_config, outcome_of, route_of, schema_paths,
+    CombinedConfig, FixtureFile, LoadOutcome, LoadedValues, OptionalParentConfig, RecoveryContext,
+    RouteKind, apply_route, file_snippet, load_combined, load_config, outcome_of, route_of,
+    schema_paths,
 };
 
 #[given("a schema-enabled configuration with reference, database.host and database.port required")]
@@ -101,9 +102,9 @@ fn supply_using_reported_routes(recovery_context: &RecoveryContext) -> Result<()
         .routes
         .get()
         .ok_or_else(|| anyhow!("no routes were recorded"))?;
-    let cli = route_of(&routes, "reference", "command-line")?;
-    let environment = route_of(&routes, "database.host", "environment")?;
-    let file = route_of(&routes, "database.port", "configuration-file")?;
+    let cli = route_of(&routes, "reference", RouteKind::CommandLine)?;
+    let environment = route_of(&routes, "database.host", RouteKind::Environment)?;
+    let file = route_of(&routes, "database.port", RouteKind::ConfigurationFile)?;
     let (
         SupplyRoute::CommandLine { flag, .. },
         SupplyRoute::Environment { variable },
@@ -155,9 +156,7 @@ fn load_optional_parent(recovery_context: &RecoveryContext) -> Result<()> {
     let contents = recovery_context.file_contents.get().unwrap_or_default();
     let args = vec![String::from("--reference"), String::from("supplied")];
     let result = load_config::<OptionalParentConfig>(
-        "mrqd.toml",
-        &contents,
-        "MRQD_CONFIG_PATH",
+        FixtureFile::new("mrqd.toml", &contents, "MRQD_CONFIG_PATH"),
         &args,
         &[],
     )?;
