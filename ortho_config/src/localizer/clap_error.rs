@@ -78,39 +78,68 @@ pub fn localize_clap_error_with_command(
     let args_ref = (!args.is_empty()).then_some(&args);
 
     let rendered = error.to_string();
-    let mut lines = rendered.lines();
-    let first_line = lines.next().unwrap_or_default();
-    let tail = lines.collect::<Vec<_>>().join("\n");
-
-    let fallback = first_line
-        .strip_prefix("error: ")
-        .unwrap_or(first_line)
-        .to_owned();
+    let (first_line, tail) = split_rendered(&rendered);
+    let fallback = strip_error_prefix(first_line).to_owned();
 
     let translated = localizer.message(&id, args_ref, &fallback);
     if translated == fallback {
-        let locale = localizer
-            .locale()
-            .map_or_else(|| "unknown".to_owned(), std::string::ToString::to_string);
-        tracing::warn!(
-            identifier = %id,
-            error_kind = ?error.kind(),
-            locale = %locale,
-            "missing translation for clap error"
-        );
+        warn_missing_translation(&id, error.kind(), localizer);
         return error;
     }
 
-    let message = if tail.is_empty() {
-        translated
-    } else {
-        format!("{translated}\n{tail}")
-    };
+    let message = append_tail(translated, &tail);
 
     let _ = command; // preserved for API symmetry; context is not retained
     ClapError::raw(error.kind(), message)
 }
 
+/// Split a rendered `clap` error into its message line and its usage tail.
+///
+/// The first line is the text `clap` would show after `error: `, which is what
+/// gets translated; everything after it is `clap`'s rendered usage and help
+/// output, which is preserved verbatim because it is not catalogue text.
+fn split_rendered(rendered: &str) -> (&str, String) {
+    let mut lines = rendered.lines();
+    let first_line = lines.next().unwrap_or_default();
+    let tail = lines.collect::<Vec<_>>().join("\n");
+    (first_line, tail)
+}
+
+/// Remove the stock `error: ` prefix `clap` puts in front of its message.
+fn strip_error_prefix(line: &str) -> &str {
+    line.strip_prefix("error: ").unwrap_or(line)
+}
+
+/// Warn about a catalogue gap before returning the untranslated error.
+///
+/// Extracted so the emission is a single `tracing` call: under feature-unified
+/// `tracing/log` the macro expands into a branch cluster, and keeping that
+/// cluster out of the caller preserves its readability.
+fn warn_missing_translation(id: &str, kind: ErrorKind, localizer: &dyn Localizer) {
+    let locale = localizer
+        .locale()
+        .map_or_else(|| "unknown".to_owned(), std::string::ToString::to_string);
+    tracing::warn!(
+        identifier = %id,
+        error_kind = ?kind,
+        locale = %locale,
+        "missing translation for clap error"
+    );
+}
+
+/// Reattach `clap`'s rendered usage tail to the translated message.
+fn append_tail(translated: String, tail: &str) -> String {
+    if tail.is_empty() {
+        translated
+    } else {
+        format!("{translated}\n{tail}")
+    }
+}
+
+/// Maps `clap` error kinds to the stable `clap-error-<kind>` catalogue namespace.
+///
+/// Common missing-argument and missing-subcommand cases use the established
+/// catalogue keys; remaining kinds derive their suffix from the enum variant.
 fn message_id(kind: ErrorKind) -> String {
     match kind {
         ErrorKind::MissingRequiredArgument => "clap-error-missing-argument".to_owned(),
@@ -122,6 +151,10 @@ fn message_id(kind: ErrorKind) -> String {
     }
 }
 
+/// Copies supported `clap` context into the placeholder keys used by error catalogues.
+///
+/// If `clap` does not supply valid subcommands, command metadata supplies that list
+/// when available; an empty list is omitted so a translation can use its own fallback.
 fn localization_args(
     error: &ClapError,
     command: Option<&ClapCommand>,
@@ -170,6 +203,7 @@ fn localization_args(
     args
 }
 
+/// Adds one non-empty context value, leaving absent and unsupported values out of the map.
 fn insert_context(
     args: &mut LocalizationArgs<'static>,
     key: &'static str,
@@ -185,6 +219,7 @@ fn insert_context(
     args.insert(key, text.into());
 }
 
+/// Converts displayable `clap` context to interpolation text and logs unknown value kinds.
 fn stringify_context(context: &ContextValue) -> String {
     match context {
         ContextValue::Bool(flag) => flag.to_string(),
@@ -204,6 +239,8 @@ fn stringify_context(context: &ContextValue) -> String {
     }
 }
 
+/// Converts `clap`'s `PascalCase` error-kind debug name into a lower-case
+/// catalogue suffix.
 fn to_kebab_case(kind: ErrorKind) -> String {
     let debug = format!("{kind:?}");
     let mut kebab = String::with_capacity(debug.len());

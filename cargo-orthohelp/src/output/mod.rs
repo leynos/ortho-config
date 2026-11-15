@@ -1,0 +1,389 @@
+//! Output writers for `cargo-orthohelp`.
+
+mod agent_context;
+
+pub use agent_context::{write_agent_context, write_agent_context_stdout};
+
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::{Dir, File, OpenOptions};
+use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use crate::error::OrthohelpError;
+use crate::ir::LocalizedDocMetadata;
+use crate::policy::PolicyReport;
+use serde::Serialize;
+
+// Process-wide suffix for atomic JSON artefact temp names. `Relaxed` ordering
+// hands out distinct values; the `create_new` and rename operations provide
+// the actual synchronization, so any collision is a hard failure.
+/// Supplies process-unique suffixes; file creation and rename provide write synchronization.
+static JSON_ARTEFACT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Writes the localized IR JSON for a single locale.
+///
+/// # Errors
+/// Returns an I/O error when preparing or writing the file, or a JSON error
+/// on serialization.
+pub fn write_localized_ir(
+    out_dir: &Utf8Path,
+    locale: &str,
+    payload: &LocalizedDocMetadata,
+) -> Result<Utf8PathBuf, OrthohelpError> {
+    let dir = ensure_dir(out_dir)?;
+    dir.create_dir_all("ir")
+        .map_err(|io_err| OrthohelpError::Io {
+            path: out_dir.to_path_buf(),
+            source: io_err,
+        })?;
+
+    let ir_dir = out_dir.join("ir");
+    let ir_dir_handle = dir.open_dir("ir").map_err(|io_err| OrthohelpError::Io {
+        path: ir_dir.clone(),
+        source: io_err,
+    })?;
+    let filename = format!("{locale}.json");
+    let mut file = ir_dir_handle
+        .open_with(
+            &filename,
+            OpenOptions::new().write(true).create(true).truncate(true),
+        )
+        .map_err(|io_err| OrthohelpError::Io {
+            path: ir_dir.join(&filename),
+            source: io_err,
+        })?;
+
+    let content = serde_json::to_string_pretty(payload)?;
+    file.write_all(content.as_bytes())
+        .map_err(|io_err| OrthohelpError::Io {
+            path: ir_dir.join(&filename),
+            source: io_err,
+        })?;
+
+    Ok(ir_dir.join(filename))
+}
+
+/// Writes the machine-readable policy-report JSON document.
+///
+/// # Errors
+/// Returns a JSON error on serialization or an I/O error on the atomic write.
+pub fn write_policy_report(
+    out_dir: &Utf8Path,
+    payload: &PolicyReport,
+) -> Result<Utf8PathBuf, OrthohelpError> {
+    let content = serde_json::to_string_pretty(payload).map_err(OrthohelpError::IrJson)?;
+    write_atomic_json(out_dir, "policy-report.json", &content, "policy-report")
+}
+
+/// Writes one compact policy-report JSON document to standard output.
+///
+/// The document is followed by a newline. For example, an empty report in
+/// `warn` mode has no results and zero summary counters.
+///
+/// # Examples
+///
+/// ```no_run
+/// use cargo_orthohelp::output::write_policy_report_stdout;
+/// use cargo_orthohelp::policy::{PolicyMode, PolicyReport};
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     write_policy_report_stdout(&PolicyReport::empty(PolicyMode::Warn))?;
+///     Ok(())
+/// }
+/// ```
+///
+/// # Errors
+/// Returns a JSON error on serialization or an I/O error when writing stdout.
+pub fn write_policy_report_stdout(payload: &PolicyReport) -> Result<(), OrthohelpError> {
+    write_json_stdout("policy-report", payload)
+}
+
+/// Serializes an agent-native payload before taking the stdout lock so a
+/// serialization failure cannot leave a partial JSON document in the stream.
+fn write_json_stdout<T: Serialize>(
+    artefact: &'static str,
+    payload: &T,
+) -> Result<(), OrthohelpError> {
+    let mut content = serde_json::to_vec(payload).map_err(OrthohelpError::IrJson)?;
+    content.push(b'\n');
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    handle
+        .write_all(&content)
+        .and_then(|()| handle.flush())
+        .map_err(OrthohelpError::StdoutIo)?;
+    tracing::debug!(
+        artefact,
+        bytes = content.len(),
+        "JSON document written to stdout"
+    );
+    Ok(())
+}
+
+/// Atomically writes one JSON artefact via temp file, rename, and fsync,
+/// satisfying Decision D5's atomicity requirement for `policy-report.json`.
+fn write_atomic_json(
+    out_dir: &Utf8Path,
+    filename: &'static str,
+    content: &str,
+    artefact: &str,
+) -> Result<Utf8PathBuf, OrthohelpError> {
+    log_atomic_write_start(artefact, out_dir);
+    let target = JsonArtefactWriteTarget::new(out_dir, filename);
+    let dir = prepare_output_dir(out_dir, artefact)?;
+    let mut file = open_json_temp_file(&dir, &target, artefact)?;
+    write_and_sync_json_temp_file(&mut file, &target, content, artefact)?;
+    drop(file);
+
+    replace_json_file(&dir, &target, artefact)?;
+    sync_output_parent_dir(&dir, out_dir, artefact)?;
+    log_atomic_write_complete(artefact, &target.path, content.len());
+
+    Ok(target.path)
+}
+
+/// Announce the start of an atomic artefact write.
+///
+/// Each emission lives in its own function so that [`write_atomic_json`] holds
+/// at most one `tracing` call: when a dependent crate enables `tracing`'s
+/// `log` bridge, Cargo's feature unification expands every event into a
+/// branch ladder that counts against the workspace's cognitive-complexity
+/// ceiling.
+fn log_atomic_write_start(artefact: &str, out_dir: &Utf8Path) {
+    tracing::debug!(artefact, out_dir = %out_dir, "starting atomic JSON write");
+}
+
+/// Announce a completed atomic artefact write with its size.
+fn log_atomic_write_complete(artefact: &str, path: &Utf8Path, bytes: usize) {
+    tracing::debug!(artefact, path = %path, bytes, "atomic JSON write complete");
+}
+
+/// Create the output directory, reporting why it could not be prepared.
+fn prepare_output_dir(out_dir: &Utf8Path, artefact: &str) -> Result<Dir, OrthohelpError> {
+    ensure_dir(out_dir).inspect_err(|error| {
+        log_output_directory_failure(DirectoryStage::Prepare, artefact, out_dir, error);
+    })
+}
+
+/// Flush the parent directory entry, reporting a failure.
+fn sync_output_parent_dir(
+    dir: &Dir,
+    out_dir: &Utf8Path,
+    artefact: &str,
+) -> Result<(), OrthohelpError> {
+    sync_parent_dir(dir, out_dir).inspect_err(|error| {
+        log_output_directory_failure(DirectoryStage::Sync, artefact, out_dir, error);
+    })
+}
+
+/// The directory stage whose failure is being reported.
+///
+/// Both stages log the same fields and differ only in the verb, so they share
+/// one emitter. A stage that is not listed here has no diagnostic, which is
+/// what the closed enum is for.
+#[derive(Clone, Copy)]
+enum DirectoryStage {
+    /// Creating or opening the output directory.
+    Prepare,
+    /// Flushing the parent directory entry after the rename.
+    Sync,
+}
+
+impl DirectoryStage {
+    /// The verb the diagnostic uses for this stage.
+    const fn verb(self) -> &'static str {
+        match self {
+            Self::Prepare => "prepare",
+            Self::Sync => "sync",
+        }
+    }
+}
+
+/// Report that the JSON output directory could not be prepared or synced.
+fn log_output_directory_failure(
+    stage: DirectoryStage,
+    artefact: &str,
+    out_dir: &Utf8Path,
+    error: &OrthohelpError,
+) {
+    tracing::debug!(
+        artefact,
+        path = %out_dir,
+        error = %error,
+        "failed to {} JSON output directory",
+        stage.verb(),
+    );
+}
+
+/// Holds final and temporary names together so every write stage uses matching paths.
+struct JsonArtefactWriteTarget {
+    /// Final filename used for the directory-relative rename.
+    filename: &'static str,
+    /// User-visible destination used in logs and returned paths.
+    path: Utf8PathBuf,
+    /// Unique temporary filename opened with `create_new` before replacement.
+    temp_filename: String,
+    /// Full temporary path attached to I/O errors and diagnostics.
+    temp_path: Utf8PathBuf,
+}
+
+impl JsonArtefactWriteTarget {
+    /// Derives a temporary name from process ID and counter without touching the filesystem.
+    fn new(out_dir: &Utf8Path, filename: &'static str) -> Self {
+        let temp_id = JSON_ARTEFACT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temp_filename = format!("{filename}.{}.{}.tmp", std::process::id(), temp_id);
+        Self {
+            filename,
+            path: out_dir.join(filename),
+            temp_path: out_dir.join(&temp_filename),
+            temp_filename,
+        }
+    }
+}
+
+/// Creates a new temporary artefact exclusively, so a collision fails without truncation.
+fn open_json_temp_file(
+    dir: &Dir,
+    target: &JsonArtefactWriteTarget,
+    artefact: &str,
+) -> Result<File, OrthohelpError> {
+    dir.open_with(
+        &target.temp_filename,
+        OpenOptions::new().write(true).create_new(true),
+    )
+    .map_err(|io_err| {
+        tracing::debug!(
+            artefact,
+            path = %target.temp_path,
+            error = %io_err,
+            "failed to open JSON artefact for writing",
+        );
+        OrthohelpError::Io {
+            path: target.temp_path.to_path_buf(),
+            source: io_err,
+        }
+    })
+}
+
+/// Writes all bytes and syncs the temporary file before it can replace the destination.
+fn write_and_sync_json_temp_file(
+    file: &mut File,
+    target: &JsonArtefactWriteTarget,
+    content: &str,
+    artefact: &str,
+) -> Result<(), OrthohelpError> {
+    file.write_all(content.as_bytes()).map_err(|io_err| {
+        tracing::debug!(
+            artefact,
+            path = %target.temp_path,
+            bytes = content.len(),
+            error = %io_err,
+            "failed to write JSON artefact",
+        );
+        OrthohelpError::Io {
+            path: target.temp_path.to_path_buf(),
+            source: io_err,
+        }
+    })?;
+    file.flush().map_err(|io_err| {
+        tracing::debug!(
+            artefact,
+            path = %target.temp_path,
+            bytes = content.len(),
+            error = %io_err,
+            "failed to flush JSON artefact",
+        );
+        OrthohelpError::Io {
+            path: target.temp_path.to_path_buf(),
+            source: io_err,
+        }
+    })?;
+    file.sync_all().map_err(|io_err| {
+        tracing::debug!(
+            artefact,
+            path = %target.temp_path,
+            bytes = content.len(),
+            error = %io_err,
+            "failed to sync JSON artefact",
+        );
+        OrthohelpError::Io {
+            path: target.temp_path.to_path_buf(),
+            source: io_err,
+        }
+    })
+}
+
+/// Renames the completed temporary file over the final name within the same directory.
+fn replace_json_file(
+    dir: &Dir,
+    target: &JsonArtefactWriteTarget,
+    artefact: &str,
+) -> Result<(), OrthohelpError> {
+    dir.rename(&target.temp_filename, dir, target.filename)
+        .map_err(|io_err| {
+            tracing::debug!(
+                artefact,
+                source = %target.temp_path,
+                destination = %target.path,
+                error = %io_err,
+                "failed to replace JSON artefact",
+            );
+            OrthohelpError::Io {
+                path: target.path.clone(),
+                source: io_err,
+            }
+        })
+}
+
+/// Persists a rename by syncing its containing directory after replacement.
+/// Directory-open and sync failures are returned to the caller.
+#[cfg(unix)]
+fn sync_parent_dir(dir: &Dir, path: &Utf8Path) -> Result<(), OrthohelpError> {
+    let dir_file = dir.open(".").map_err(|io_err| OrthohelpError::Io {
+        path: path.to_path_buf(),
+        source: io_err,
+    })?;
+    dir_file.sync_all().map_err(|io_err| OrthohelpError::Io {
+        path: path.to_path_buf(),
+        source: io_err,
+    })
+}
+
+/// Skips directory syncing where the platform cannot use this descriptor path.
+/// The common write flow receives success with weaker directory durability.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "non-Unix stub mirrors the Unix fn signature so call sites \
+              compile uniformly across platforms"
+)]
+#[cfg(not(unix))]
+const fn sync_parent_dir(_dir: &Dir, _path: &Utf8Path) -> Result<(), OrthohelpError> {
+    Ok(())
+}
+
+/// Opens an output directory, creating it only when it is absent and preserving path errors.
+fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
+    match Dir::open_ambient_dir(path, ambient_authority()) {
+        Ok(dir) => Ok(dir),
+        Err(open_err) if open_err.kind() == std::io::ErrorKind::NotFound => {
+            Dir::create_ambient_dir_all(path, ambient_authority()).map_err(|io_err| {
+                OrthohelpError::Io {
+                    path: path.to_path_buf(),
+                    source: io_err,
+                }
+            })?;
+            Dir::open_ambient_dir(path, ambient_authority()).map_err(|io_err| OrthohelpError::Io {
+                path: path.to_path_buf(),
+                source: io_err,
+            })
+        }
+        Err(open_err) => Err(OrthohelpError::Io {
+            path: path.to_path_buf(),
+            source: open_err,
+        }),
+    }
+}
+
+#[cfg(test)]
+mod tests;

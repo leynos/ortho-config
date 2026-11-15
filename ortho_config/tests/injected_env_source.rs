@@ -317,6 +317,11 @@ fn the_injected_selector_names_the_file_that_loads() {
         Some(selected.as_path()),
         "the selected file must precede every fallback, got {candidates:?}"
     );
+    // Stated pairwise as well, so a failure names the fallback that overtook
+    // the selector rather than dumping the whole list.
+    for fallback in sequence([default_xdg_group(), project_group()]) {
+        assert_precedes(&candidates, selected.as_path(), &fallback);
+    }
 
     let figment = discovery
         .load_first()
@@ -336,6 +341,11 @@ fn the_injected_selector_composes_a_layer() {
         .expect("the fixture should be written");
 
     let discovery = discovery_with(MapEnv::new().with_var(SELECTOR, &selected));
+    let candidates = discovery.candidates();
+    for fallback in sequence([default_xdg_group(), project_group()]) {
+        assert_precedes(&candidates, selected.as_path(), &fallback);
+    }
+
     let outcome = discovery.compose_layer();
 
     assert!(

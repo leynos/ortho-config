@@ -9,7 +9,7 @@
 #[cfg(all(feature = "yaml", not(feature = "serde_json")))]
 compile_error!("The `serde_json` feature must be enabled when `yaml` support is active.");
 
-pub use ortho_config_macros::{OrthoConfig, OrthoConfigSubcommandDocs};
+pub use ortho_config_macros::{OrthoConfig, OrthoConfigSubcommandDocs, SelectedSubcommandMerge};
 
 /// Re-export used by derive-generated code (`ortho_config::figment::...`).
 ///
@@ -56,6 +56,7 @@ mod localizer;
 mod merge;
 mod merge_telemetry;
 mod post_merge;
+pub mod profile;
 mod result_ext;
 pub mod subcommand;
 #[cfg(feature = "serde_json")]
@@ -65,10 +66,13 @@ pub use crate::subcommand::SubcmdConfigMerge;
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use agent_context::json::{serialize_agent_context, serialize_agent_context_pretty};
 pub use agent_context::{
-    AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, AgentExample, AgentInput, AgentPolicy,
-    AsyncSubmission, AsyncSubmissionMode, DeliveryRoute, InteractionMode, MutationEffect,
-    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PaginationContract, PolicyMode, SkillCommandRef,
-    SkillManifest, SupportDeclaration, agent_context_kind,
+    AGENT_CONTEXT_KIND_SUFFIX, AccessibilityPolicy, AgentCommand, AgentContext, AgentExample,
+    AgentInput, AgentPolicy, AsyncSubmission, AsyncSubmissionMode, ClosedStdinPolicy,
+    DeliveryRoute, InheritancePolicy, InteractionMode, MutationEffect,
+    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PaginationContract, PlainPolicy, PolicyMode,
+    ProfileSelectionContract, ProfilesDeclaration, RenderWidth, RendererContract, RendererField,
+    RendererFieldLocalization, RendererRecord, SkillCommandRef, SkillManifest, StreamContent,
+    SupportDeclaration, TogglePolicy, TtyPolicy, agent_context_kind,
 };
 pub use docs::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
@@ -124,8 +128,9 @@ pub use csv_env::CsvEnv;
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenance};
 pub use discovery::{
-    ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryLoadOutcome,
-    LayerDiscoveryOutcome,
+    AutomaticMode, ConfigDiscovery, ConfigDiscoveryBuilder, ConfigFilePolicy, ConfigPathSelector,
+    DiscoveryLayersOutcome, DiscoveryLoadOutcome, DiscoveryScope, ExplicitMode, FileLayerOutcome,
+    LayerDiscoveryOutcome, ResolvedSelection,
 };
 pub use env_source::{
     EnvSource, MapEnv, ProcessEnv, ScanEnvSource, SharedEnvSource, SharedScanEnvSource,
@@ -134,10 +139,11 @@ pub use env_source::{
 pub use error::{OrthoError, is_display_request};
 pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};
 pub use localizer::{
-    FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError,
-    FormattingIssue, LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer,
-    WithBase, clap_error_formatter, localize_clap_error, localize_clap_error_with_command,
-    message_id_for, parse_localized_command,
+    ArgLocalizationIds, FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder,
+    FluentLocalizerError, FluentValue, FormattingIssue, FormattingIssueReporter, LocalizationArgs,
+    LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer, OrthoConfigLocalization, WithBase,
+    clap_error_formatter, localize_clap_error, localize_clap_error_with_command, message_id_for,
+    parse_localized_command,
 };
 /// Re-export sanitization helpers used to strip `None` fields and produce a
 /// Figment provider.
@@ -159,9 +165,10 @@ pub use localizer::{
 /// ```
 #[cfg(feature = "serde_json")]
 pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_without_nones};
+pub use ortho_l10n::{LanguageIdentifier, langid};
 pub use post_merge::{PostMergeContext, PostMergeHook};
+pub use profile::{ProfileLoadOutcome, ProfileName, ProfileSource, SelectedProfile};
 use std::sync::Arc;
-pub use unic_langid::{LanguageIdentifier, langid};
 
 #[doc(hidden)]
 pub mod __private {
@@ -178,6 +185,26 @@ pub mod __private {
     /// Record a derived injected-load result using its bounded error category.
     pub fn source_aware_derived_load_finished<T>(result: &crate::OrthoResult<T>) {
         crate::merge_telemetry::source_aware_derived_load_finished(result);
+    }
+
+    /// Record the start of a profile-aware derived load.
+    pub fn profile_load_started() {
+        crate::merge_telemetry::profile_load_started();
+    }
+
+    /// Record a profile-aware derived-load result using its bounded category.
+    pub fn profile_load_finished<T>(result: &crate::OrthoResult<T>) {
+        crate::merge_telemetry::profile_load_finished(result);
+    }
+
+    /// Record the start of an injected profile-aware derived load.
+    pub fn profile_load_injected_started() {
+        crate::merge_telemetry::profile_load_injected_started();
+    }
+
+    /// Record an injected profile-aware result using its bounded category.
+    pub fn profile_load_injected_finished<T>(result: &crate::OrthoResult<T>) {
+        crate::merge_telemetry::profile_load_injected_finished(result);
     }
 }
 

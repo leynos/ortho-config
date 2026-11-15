@@ -2,25 +2,26 @@
 //!
 //! The binary accepts Cargo's external-subcommand dispatch shape through
 //! [`cli::Cli`], then delegates to the metadata, locale, cache, bridge, and
-//! output modules to build localized documentation artefacts. `main` keeps the
-//! process boundary thin by forwarding all fallible work through `run`, where
-//! parsed `orthohelp` arguments are converted into package selection, bridge
-//! configuration, localized IR, and renderer-specific outputs.
+//! output modules to build localized documentation artefacts.
 
 pub mod agent_context;
 mod bridge;
+mod bridge_observability;
 mod cache;
 mod cli;
 mod error;
 mod fs_helpers;
+mod generation;
 mod hex;
 mod ir;
 mod locale;
 mod metadata;
+#[cfg(feature = "metrics")]
+mod metrics_recorder;
 mod output;
+pub mod policy;
 pub mod powershell;
 pub mod roff;
-mod rustflags;
 pub mod schema;
 #[cfg(test)]
 mod test_support;
@@ -28,42 +29,58 @@ use crate::bridge::BridgeConfig;
 use crate::cache::CacheKey;
 use crate::cli::{Args, CargoSubcommand, Cli, OutputFormat};
 use crate::error::OrthohelpError;
+use crate::generation::{
+    GenerationContext, build_agent_context_localizer_if_requested, build_powershell_config,
+    default_out_dir, generate_agent_context_if_requested, generate_ir, generate_man,
+    generate_powershell, localize_docs_if_requested, resolve_out_dir,
+};
 use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
-use camino::Utf8PathBuf;
-use clap::{Error as ClapError, Parser, error::ErrorKind};
-use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
+use clap::parser::ValueSource;
+use clap::{CommandFactory, Error as ClapError, FromArgMatches, error::ErrorKind};
 use std::io::Write;
-use std::str::FromStr;
 use tracing_subscriber::EnvFilter;
-
-/// Run-scoped inputs borrowed by the output-generation phases.
-struct GenerationContext<'a> {
-    selection: &'a PackageSelection,
-    doc_metadata: &'a DocMetadata,
-    out_dir: &'a Utf8PathBuf,
-    en_us_localizer: Option<&'a (LanguageIdentifier, FluentLocalizer)>,
-}
 
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
-    let cli = match parse_cli() {
-        Ok(cli) => cli,
+    // The `metrics` facade discards updates until a recorder is installed, so
+    // the CLI installs its export path before it can emit any counter.
+    #[cfg(feature = "metrics")]
+    metrics_recorder::install();
+    let (cli, format_was_explicit) = match parse_cli() {
+        Ok(parsed) => parsed,
         Err(error) => exit_for_clap_error(&error),
     };
-    run(cli)
+    run(cli, format_was_explicit)
 }
 
+/// Installs the environment-filtered formatter when no global tracing subscriber exists.
+///
+/// Initialization failure is intentionally non-fatal because another embedding context
+/// may already own the process-wide subscriber.
 fn init_tracing() {
     let _result = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
         .try_init();
 }
 
-fn parse_cli() -> Result<Cli, ClapError> {
-    Cli::try_parse()
+/// Parses `clap` arguments and records whether `--format` came explicitly from the command line.
+///
+/// The explicitness bit lets policy-only mode distinguish its default format from a
+/// caller-requested generation format.
+fn parse_cli() -> Result<(Cli, bool), ClapError> {
+    let matches = Cli::command().try_get_matches()?;
+    let cli = Cli::from_arg_matches(&matches)?;
+    let format_was_explicit = matches
+        .subcommand_matches("orthohelp")
+        .is_some_and(|sub| sub.value_source("format") == Some(ValueSource::CommandLine));
+    Ok((cli, format_was_explicit))
 }
 
+/// Preserves `clap`'s exit code, adding Cargo invocation guidance for dispatch mistakes.
+///
+/// Errors other than unknown arguments and a missing subcommand use `clap`'s own exit path.
 fn exit_for_clap_error(error: &ClapError) -> ! {
     let kind = error.kind();
     let exit_code = error.exit_code();
@@ -77,6 +94,9 @@ fn exit_for_clap_error(error: &ClapError) -> ! {
     error.exit();
 }
 
+/// Writes `clap`'s diagnostic and the Cargo external-subcommand invocation hint to stderr.
+///
+/// A write failure is returned to the caller, which keeps the original Clap exit status.
 fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
     let mut stderr = std::io::stderr().lock();
     write!(stderr, "{error}")?;
@@ -86,15 +106,40 @@ fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
     )
 }
 
-fn run(cli: Cli) -> Result<(), OrthohelpError> {
+/// Runs the agent-native policy check when requested and reports whether the
+/// generator pipeline should be skipped (Decision D11's `--format` rule).
+fn run_policy_check_if_requested(
+    args: &Args,
+    metadata: &cargo_metadata::Metadata,
+    format_was_explicit: bool,
+) -> Result<bool, OrthohelpError> {
+    if !args.check_agent_native {
+        return Ok(false);
+    }
+    let out_dir = args
+        .out_dir
+        .clone()
+        .unwrap_or_else(|| default_out_dir(&metadata.target_directory));
+    let package = metadata::select_policy_package(metadata, args)?;
+    policy::check::run_policy_check(package, args.policy_mode.map(Into::into), &out_dir)?;
+    Ok(!format_was_explicit)
+}
+
+/// Runs policy checking, bridge discovery, localization, and the requested output writers.
+///
+/// An enabled policy-only request may return after its report is written; otherwise the
+/// selected format controls which IR, man-page, and `PowerShell` artefacts are generated.
+/// Failures from each stage propagate as `OrthohelpError` and stop later output work.
+fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let Cli {
         command: CargoSubcommand::Orthohelp(args),
     } = cli;
-    tracing::debug!(
-        "cargo-orthohelp dispatched via Cargo external-subcommand (orthohelp token present)"
-    );
+    log_dispatched();
 
     let metadata = metadata::load_metadata()?;
+    if run_policy_check_if_requested(&args, &metadata, format_was_explicit)? {
+        return Ok(());
+    }
     let selection = metadata::select_package(&metadata, &args)?;
 
     let out_dir = resolve_out_dir(args.out_dir.clone(), &selection);
@@ -109,8 +154,8 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
         lockfile_hash,
     };
 
-    let paths = bridge::prepare_paths(&selection, &cache_key);
-    let config = build_bridge_config(&selection);
+    let paths = bridge::prepare_cache(&selection, &cache_key);
+    let config = build_bridge_config(&selection, &metadata.workspace_root);
 
     let should_use_cache = args.cache.should_cache;
     let should_skip_build = args.cache.should_skip_build;
@@ -160,219 +205,23 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     Ok(())
 }
 
-fn generate_agent_context_if_requested(
-    args: &Args,
-    context: &GenerationContext<'_>,
-) -> Result<(), OrthohelpError> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
-        tracing::debug!(
-            package = %context.selection.package_name,
-            format = ?args.format,
-            "agent-context generation skipped for requested format",
-        );
-        return Ok(());
-    }
-    tracing::debug!(
-        package = %context.selection.package_name,
-        format = "agent-context",
-        "starting agent-context transformation",
-    );
-    let summary_localizer = context
-        .en_us_localizer
-        .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
-    let agent_context = agent_context::bridge_ir_to_agent_context(
-        context.doc_metadata,
-        &context.selection.package_name,
-        summary_localizer,
-    );
-    tracing::debug!(
-        package = %agent_context.package,
-        command_count = agent_context.commands.len(),
-        "agent-context transformation complete",
-    );
-    output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
-    Ok(())
+/// Report that the binary ran as a Cargo external subcommand.
+///
+/// Kept out of [`run`] so that function holds a single `tracing` call: when a
+/// dependent crate enables `tracing`'s `log` bridge, Cargo's feature
+/// unification expands every event into a branch ladder that counts against
+/// the workspace's cognitive-complexity ceiling.
+fn log_dispatched() {
+    tracing::debug!("cargo-orthohelp dispatched via Cargo external-subcommand");
 }
 
-/// Builds the optional en-US localizer shared by agent-context and localized output.
-fn build_agent_context_localizer_if_requested(
-    args: &Args,
+/// Copies the selected package identity and dependency details into bridge-owned config.
+fn build_bridge_config(
     selection: &PackageSelection,
-) -> Option<(LanguageIdentifier, FluentLocalizer)> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
-        return None;
-    }
-    match build_en_us_localizer(&selection.package_root) {
-        Ok(localizer) => Some(localizer),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "no en-US localizer available; agent-context summaries will be omitted",
-            );
-            None
-        }
-    }
-}
-
-fn build_en_us_localizer(
-    package_root: &Utf8PathBuf,
-) -> Result<(LanguageIdentifier, FluentLocalizer), OrthohelpError> {
-    let locale =
-        LanguageIdentifier::from_str("en-US").map_err(|err| OrthohelpError::InvalidLocale {
-            value: "en-US".to_owned(),
-            message: err.to_string(),
-        })?;
-    let resources = locale::load_consumer_resources(package_root, &locale)?;
-    let localizer = locale::build_localizer(&locale, resources)?;
-    Ok((locale, localizer))
-}
-
-fn localize_docs_if_requested(
-    should_generate_localized_docs: bool,
-    context: &GenerationContext<'_>,
-    locales: &[ortho_config::LanguageIdentifier],
-) -> Result<Vec<ir::LocalizedDocMetadata>, OrthohelpError> {
-    if should_generate_localized_docs {
-        localize_docs(
-            &context.selection.package_root,
-            context.doc_metadata,
-            locales,
-            context.en_us_localizer,
-        )
-    } else {
-        Ok(Vec::new())
-    }
-}
-
-fn localize_docs(
-    package_root: &Utf8PathBuf,
-    doc_metadata: &DocMetadata,
-    locales: &[ortho_config::LanguageIdentifier],
-    en_us_localizer: Option<&(LanguageIdentifier, FluentLocalizer)>,
-) -> Result<Vec<ir::LocalizedDocMetadata>, OrthohelpError> {
-    let mut localized_docs = Vec::new();
-    for locale in locales {
-        if let Some((cached_locale, cached_localizer)) = en_us_localizer
-            && locale == cached_locale
-        {
-            localized_docs.push(ir::localize_doc(doc_metadata, locale, cached_localizer));
-            continue;
-        }
-        let resources = locale::load_consumer_resources(package_root, locale)?;
-        let doc_localizer = locale::build_localizer(locale, resources)?;
-        localized_docs.push(ir::localize_doc(doc_metadata, locale, &doc_localizer));
-    }
-    Ok(localized_docs)
-}
-
-fn build_powershell_config(
-    args: &Args,
-    selection: &PackageSelection,
-    doc_metadata: &DocMetadata,
-    out_dir: &Utf8PathBuf,
-) -> powershell::PowerShellConfig {
-    let base_windows = selection.windows.as_ref().map_or_else(
-        || {
-            doc_metadata
-                .windows
-                .clone()
-                .map(metadata::ResolvedWindowsMetadata::from)
-                .unwrap_or_default()
-        },
-        |metadata| metadata.resolve(doc_metadata.windows.as_ref()),
-    );
-    let mut windows = base_windows;
-
-    let bin_name = doc_metadata
-        .bin_name
-        .as_ref()
-        .unwrap_or(&doc_metadata.app_name)
-        .clone();
-    let module_name = args
-        .powershell
-        .module_name
-        .clone()
-        .map(Into::into)
-        .or_else(|| windows.module_name.clone())
-        .unwrap_or_else(|| bin_name.as_str().into());
-
-    if let Some(split_subcommands) = args.powershell.should_split_subcommands {
-        windows.should_split_subcommands_into_functions = split_subcommands;
-    }
-    if let Some(include_common_parameters) = args.powershell.should_include_common_parameters {
-        windows.should_include_common_parameters = include_common_parameters;
-    }
-    if let Some(help_info_uri) = args.powershell.help_info_uri.clone() {
-        windows.help_info_uri = Some(help_info_uri.into());
-    }
-
-    powershell::PowerShellConfig {
-        out_dir: out_dir.clone(),
-        module_name,
-        module_version: selection.package_version.clone().into(),
-        bin_name: bin_name.into(),
-        export_aliases: windows.export_aliases.clone(),
-        should_include_common_parameters: windows.should_include_common_parameters,
-        should_split_subcommands: windows.should_split_subcommands_into_functions,
-        help_info_uri: windows.help_info_uri.clone(),
-        should_ensure_en_us: args.powershell.should_ensure_en_us,
-    }
-}
-
-fn generate_ir(
-    localized_docs: &[ir::LocalizedDocMetadata],
-    out_dir: &Utf8PathBuf,
-) -> Result<(), OrthohelpError> {
-    for doc in localized_docs {
-        output::write_localized_ir(out_dir.as_path(), &doc.locale, doc)?;
-    }
-    Ok(())
-}
-
-fn generate_man(
-    localized_docs: &[ir::LocalizedDocMetadata],
-    out_dir: &Utf8PathBuf,
-    man_args: &cli::ManArgs,
-) -> Result<(), OrthohelpError> {
-    let has_multiple_locales = localized_docs.len() > 1;
-    for doc in localized_docs {
-        let section = roff::ManSection::new(man_args.section)?;
-        // Use locale-specific subdirectory when generating for multiple locales
-        // to prevent overwrites (e.g., out/en-US/man/man1/ vs out/ja/man/man1/).
-        let man_out_dir = if has_multiple_locales {
-            out_dir.join(&doc.locale)
-        } else {
-            out_dir.clone()
-        };
-        let roff_config = roff::RoffConfig {
-            out_dir: man_out_dir,
-            section,
-            date: man_args.date.clone(),
-            should_split_subcommands: man_args.should_split_subcommands,
-            source: None,
-            manual: None,
-        };
-        roff::generate(doc, &roff_config)?;
-    }
-    Ok(())
-}
-
-fn generate_powershell(
-    localized_docs: &[ir::LocalizedDocMetadata],
-    ps_config: &powershell::PowerShellConfig,
-) -> Result<(), OrthohelpError> {
-    // Keep the generated artefact list available for future CLI reporting while
-    // the command currently only signals success/failure via exit status.
-    let _generated_output = powershell::generate(localized_docs, ps_config)?;
-    Ok(())
-}
-
-fn resolve_out_dir(out_dir: Option<Utf8PathBuf>, selection: &PackageSelection) -> Utf8PathBuf {
-    out_dir.unwrap_or_else(|| selection.target_directory.join("orthohelp").join("out"))
-}
-
-fn build_bridge_config(selection: &PackageSelection) -> BridgeConfig {
+    workspace_root: &camino::Utf8Path,
+) -> BridgeConfig {
     BridgeConfig {
+        workspace_root: workspace_root.to_path_buf(),
         package_root: selection.package_root.clone(),
         package_name: selection.package_name.clone(),
         root_type: selection.root_type.clone(),

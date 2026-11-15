@@ -102,6 +102,11 @@ pub fn load_consumer_resources(
     Ok(resources)
 }
 
+/// Parses locale names and keeps the first occurrence of each normalized identifier.
+///
+/// Parsing happens before duplicate comparison, so equivalent spellings resolve
+/// to one `LanguageIdentifier` while preserving the caller's requested order.
+/// An invalid value fails the whole selection rather than being skipped.
 fn parse_locales(values: &[String]) -> Result<Vec<LanguageIdentifier>, OrthohelpError> {
     let mut output = Vec::new();
     for value in values {
@@ -118,6 +123,11 @@ fn parse_locales(values: &[String]) -> Result<Vec<LanguageIdentifier>, Orthohelp
     Ok(output)
 }
 
+/// Lists package locale subdirectories in sorted order for `--all-locales` fallback.
+///
+/// A missing `locales` directory means no locales were discovered; directory
+/// enumeration and entry-inspection errors retain the directory path in the
+/// returned error.
 fn discover_locale_dirs(package_root: &Utf8Path) -> Result<Vec<String>, OrthohelpError> {
     let locales_root = package_root.join("locales");
     let Some(dir) = open_optional_dir(locales_root.as_path())? else {
@@ -151,6 +161,11 @@ fn discover_locale_dirs(package_root: &Utf8Path) -> Result<Vec<String>, Orthohel
     Ok(locales)
 }
 
+/// Gives resource strings the process-lifetime references required by Fluent.
+///
+/// The allocations are intentionally leaked because the builder accepts only
+/// `&'static str`; `cargo-orthohelp` is a short-lived command-line process, so
+/// those strings are reclaimed when the process exits.
 fn leak_resources(resources: Vec<String>) -> Vec<&'static str> {
     // Fluent requires resource strings with a `'static` lifetime; `cargo-orthohelp`
     // is a short-lived CLI, so leaking these allocations is acceptable here.
@@ -160,6 +175,12 @@ fn leak_resources(resources: Vec<String>) -> Vec<&'static str> {
         .collect()
 }
 
+/// Builds with embedded defaults, retrying consumer-only resources if needed.
+///
+/// The retry is limited to `UnsupportedLocale` when consumer resources exist:
+/// this permits a package-specific locale absent from the embedded defaults
+/// while preserving all other builder failures. If consumer resources are
+/// absent, or the retry fails, the error is returned with the locale context.
 fn build_localizer_with_fallback(
     locale: &LanguageIdentifier,
     leaked: &[&'static str],
@@ -293,6 +314,8 @@ mod tests {
                 help_info_uri: None,
                 should_ensure_en_us: true,
             },
+            check_agent_native: false,
+            policy_mode: None,
         }
     }
 
@@ -308,6 +331,7 @@ mod tests {
             root_type: "demo::Config".to_owned(),
             locales,
             windows: None,
+            policy: None,
             ortho_config_dependency: crate::metadata::OrthoConfigDependency {
                 requirement: "^0.7.0".to_owned(),
                 path: None,

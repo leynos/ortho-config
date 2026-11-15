@@ -11,7 +11,7 @@ use std::io::Read;
 
 #[fixture]
 fn minimal_doc() -> LocalizedDocMetadata {
-    powershell_fixture::minimal_doc()
+    super::powershell_fixture::minimal_doc()
 }
 
 fn doc_for_locale(locale: &str, template: &LocalizedDocMetadata) -> LocalizedDocMetadata {
@@ -19,9 +19,6 @@ fn doc_for_locale(locale: &str, template: &LocalizedDocMetadata) -> LocalizedDoc
     locale.clone_into(&mut doc.locale);
     doc
 }
-
-#[path = "../fixtures/powershell_fixture.rs"]
-mod powershell_fixture;
 
 #[fixture]
 fn ps_setup(

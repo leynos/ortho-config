@@ -121,6 +121,8 @@ pub trait IntoFigmentError {
     fn into_figment(self) -> figment::Error;
 }
 
+/// Reconstructs a cloneable Figment error from shared ownership, preserving
+/// structured details for merge and gathering failures when available.
 fn clone_figment(shared: &Arc<OrthoError>) -> figment::Error {
     match shared.as_ref() {
         OrthoError::Merge { source } | OrthoError::Gathering(source) => source.as_ref().clone(),
@@ -147,10 +149,6 @@ impl IntoFigmentError for &Arc<OrthoError> {
 }
 
 /// Extension to convert `Result<T, Arc<OrthoError>>` into `Result<T, figment::Error>`.
-#[expect(
-    clippy::result_large_err,
-    reason = "figment::Error is inherently large and this adapter serves only tests."
-)]
 pub trait ResultIntoFigment<T> {
     /// Map the `Arc<OrthoError>` error into a `figment::Error` using
     /// [`IntoFigmentError`].

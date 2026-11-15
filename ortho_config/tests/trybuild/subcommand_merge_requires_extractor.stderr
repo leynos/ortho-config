@@ -1,0 +1,41 @@
+error[E0277]: the trait bound `NoExtractorArgs: CliValueExtractor` is not satisfied
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:36:17
+   |
+36 |     let _ = cli.load_and_merge_with_matches(&matches);
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:20:1
+   |
+20 | struct NoExtractorArgs {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `load_and_merge_with_matches`
+  --> src/subcommand/config_merge.rs
+   |
+   | pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
+...
+   |     fn load_and_merge_with_matches(&self, matches: &ArgMatches) -> OrthoResult<Self>
+   |     where
+   |         Self: serde::Serialize + Default + CliValueExtractor,
+   |                                            ^^^^^^^^^^^^^^^^^ required by this bound in `SubcmdConfigMerge::load_and_merge_with_matches`
+
+error[E0277]: the trait bound `NoExtractorArgs: CliValueExtractor` is not satisfied
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:37:17
+   |
+37 |     let _ = cli.load_and_merge_with_matches_with_sources(&matches, source);
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `CliValueExtractor` is not implemented for `NoExtractorArgs`
+  --> tests/trybuild/subcommand_merge_requires_extractor.rs:20:1
+   |
+20 | struct NoExtractorArgs {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+note: required by a bound in `load_and_merge_with_matches_with_sources`
+  --> src/subcommand/config_merge.rs
+   |
+   | pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
+...
+   |     fn load_and_merge_with_matches_with_sources(
+...
+   |         Self: serde::Serialize + Default + CliValueExtractor,
+   |                                            ^^^^^^^^^^^^^^^^^ required by this bound in `SubcmdConfigMerge::load_and_merge_with_matches_with_sources`

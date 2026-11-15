@@ -1,16 +1,27 @@
 //! Capability-scoped fixtures for the configuration inheritance tests.
+//!
+//! [`ConfigFixture`] owns a temporary configuration tree and writes to it
+//! through a [`cap_std`] directory capability rather than process-wide paths.
+//! Tests select their configuration file with a required `--config-path` so
+//! unrelated host configuration cannot change the outcome.
+//!
+//! Loading keeps discovery and merge independent: the fixture injects a
+//! discovery source that supplies `CONFIG_PATH`, while each test passes the
+//! merge environment it wants to exercise. That separation lets a test prove
+//! where a value came from instead of relying on the ambient environment.
 
-use anyhow::Result;
-use cap_std::{ambient_authority, fs::Dir};
+use anyhow::{Result, anyhow};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use std::ffi::OsString;
-use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
 
 /// Owns a temporary configuration tree and selects its file through an
 /// injected discovery source. Tests can supply a separate merge environment.
 pub struct ConfigFixture {
-    root: TempDir,
+    _temporary_directory: TempDir,
+    root_path: Utf8PathBuf,
     directory: Dir,
 }
 
@@ -18,23 +29,33 @@ impl ConfigFixture {
     /// Create a fresh configuration tree.
     pub fn new() -> Result<Self> {
         let root = tempfile::tempdir()?;
-        let directory = Dir::open_ambient_dir(root.path(), ambient_authority())?;
-        Ok(Self { root, directory })
+        let root_path = Utf8PathBuf::from_path_buf(root.path().to_path_buf()).map_err(|path| {
+            anyhow!(
+                "temporary configuration path is not UTF-8: {}",
+                path.display()
+            )
+        })?;
+        let directory = Dir::open_ambient_dir(&root_path, ambient_authority())?;
+        Ok(Self {
+            _temporary_directory: root,
+            root_path,
+            directory,
+        })
     }
 
     /// Resolve a fixture name to an absolute path without reading process cwd.
-    pub fn path(&self, name: &str) -> std::path::PathBuf {
-        self.root.path().join(name)
+    pub fn path(&self, name: &str) -> Utf8PathBuf {
+        self.root_path.join(name)
     }
 
     /// Write a fixture beneath the temporary directory capability.
-    pub fn create_file(&self, name: impl AsRef<Path>, content: &str) -> Result<()> {
+    pub fn create_file(&self, name: impl AsRef<Utf8Path>, content: &str) -> Result<()> {
         self.directory.write(name, content)?;
         Ok(())
     }
 
     /// Create a directory beneath the temporary directory capability.
-    pub fn create_dir(&self, name: impl AsRef<Path>) -> Result<()> {
+    pub fn create_dir(&self, name: impl AsRef<Utf8Path>) -> Result<()> {
         self.directory.create_dir(name)?;
         Ok(())
     }
@@ -50,11 +71,27 @@ impl ConfigFixture {
         I: IntoIterator<Item = U>,
         U: Into<OsString>,
     {
+        T::load_from_iter_with_sources(
+            self.cli_args(args),
+            self.discovery_source(),
+            Arc::new(merge),
+        )
+    }
+
+    /// Append the required `--config-path` selector to `args`.
+    pub fn cli_args<I, U>(&self, args: I) -> Vec<OsString>
+    where
+        I: IntoIterator<Item = U>,
+        U: Into<OsString>,
+    {
         let mut cli_args: Vec<OsString> = args.into_iter().map(Into::into).collect();
         cli_args.push(OsString::from("--config-path"));
         cli_args.push(self.path(".config.toml").into_os_string());
-        let discovery =
-            ortho_config::MapEnv::new().with_var("CONFIG_PATH", self.path(".config.toml"));
-        T::load_from_iter_with_sources(cli_args, Arc::new(discovery), Arc::new(merge))
+        cli_args
+    }
+
+    /// Discovery source that names the fixture's `.config.toml` as the file.
+    pub fn discovery_source(&self) -> ortho_config::SharedEnvSource {
+        Arc::new(ortho_config::MapEnv::new().with_var("CONFIG_PATH", self.path(".config.toml")))
     }
 }

@@ -67,8 +67,12 @@ roadmap boundary:
 3. `cargo-orthohelp` becomes the reference CLI for table-stakes agent-native
    behaviour: `--json`, stdout/stderr separation, enumerating errors, stable
    result summaries, and atomic artefact writes.
-4. Agent-native linting is added as a future `cargo-orthohelp` responsibility,
-   with strict policy defined in
+4. Agent-native linting is now a `cargo-orthohelp` responsibility: the
+   `--check-agent-native` flag (with the `--policy-mode <off|warn|deny>`
+   override) evaluates the package's policy configuration, writes
+   `policy-report.json` atomically to the output directory, and writes a
+   one-line summary to stderr. Strict policy, the bridge-driven behaviour
+   rules, and future extensions are defined in
    [agent-native-cli-design.md](agent-native-cli-design.md).
 5. Consumer applications such as Weaver and Netsuke depend on the same generic
    metadata for renderer policy, JSON mode contracts, exit-code classes, skill
@@ -161,19 +165,19 @@ Key choices:
   documentation IR, while the future agent-context schema version governs
   compact agent-facing output.
 - Ownership boundary:
-  [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md)
+  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
   keeps documentation IR in `ortho_config::docs`, reusable agent context in
   `ortho_config::agent_context`, and policy reports in
   `cargo_orthohelp::policy` until a later extraction is approved.
 
-## 2. Documentation IR (schema v1.1)
+## 2. Documentation IR (schema v2.0)
 
 ### 2.1 Top-level metadata
 
 ```rust
 #[derive(Debug, Serialize)]
 pub struct DocMetadata {
-    pub ir_version: String,            // e.g., "1.1"
+    pub ir_version: String,            // e.g., "2.0"
     pub app_name: String,              // binary or display name
     pub bin_name: Option<String>,      // override for man page or wrapper name
     pub about_id: String,              // Fluent ID for app description
@@ -182,6 +186,8 @@ pub struct DocMetadata {
     pub fields: Vec<FieldMetadata>,    // flattened fields for this command
     pub subcommands: Vec<DocMetadata>, // recursively the same schema
     pub windows: Option<WindowsMetadata>, // Windows-only generator hints
+    pub behaviour: Option<BehaviourMetadata>, // declared execution behaviour
+    pub renderer: Option<RendererMetadata>, // declared human/machine rendering
 }
 ```
 
@@ -222,6 +228,19 @@ Every identifier in `HeadingIds` resolves against the library heading catalogue
 described in §4.2. A consumer that ships no Fluent catalogue of its own still
 renders complete headings; a consumer that ships one overrides only the
 headings it cares about.
+
+`renderer` is absent when the command declares no `renderer(...)` group. It is
+an `Option` rather than a defaulted struct because absence and "declared to be
+unsupported" are different claims, and the tool must not turn an undeclared
+command into a reassuring one. The block holds independent `human` and
+`machine` records covering support, TTY sensitivity, closed-stdin behaviour,
+colour, emoji, progress, pager, width (a tagged `terminal`/`unbounded`/`fixed`
+object), accessibility, plain-output availability, the stdout and stderr
+content categories, and the localization classification of named output fields.
+Renderer data contains no translatable text, so localization copies it verbatim
+into each per-locale artefact; a localizer must never alter it. See
+[ADR-0016](adrs/adr-0016-dual-renderer-metadata-surface.md) for the vocabulary
+and the reason each meaning is declared rather than inferred.
 
 ### 2.2 Field-level metadata
 
@@ -516,6 +535,13 @@ Namespace: `#[ortho_config(…)]`. Selected keys:
 - Windows (optional, generator hints):
   `windows(module_name = "…", include_common_parameters = true,`
   `split_subcommands = false)`.
+- Rendering (optional, per command): a sibling
+  `renderer(human(…), machine(…))` group. Each record accepts `supported`,
+  `tty`, `closed_stdin`, `colour`, `emoji`, `progress`, `pager`, `width`,
+  `accessibility`, `plain`, `stdout`, `stderr`, and repeated
+  `field("…", localization = "localized|non_localized")` entries. Values are
+  checked against a closed vocabulary at macro time, so a typo is a compile
+  error rather than a silently absent claim.
 
 ### 3.3 Diagnostics
 
@@ -620,7 +646,7 @@ the target locale.
 ### 4.2 Catalogues
 
 ```plaintext
-ortho_config/locales/
+ortho_l10n/locales/
   en-US/messages.ftl             # canonical English library catalogue
   ja/messages.ftl                # other shipped library catalogue
 consumer-package/locales/
@@ -639,12 +665,19 @@ PowerShell culture probing strongly prefers `en-US` presence.
 
 #### 4.2.1 Default heading catalogue
 
-`ortho_config` ships the complete `ortho.headings.*` catalogue in the canonical
-`ortho_config/locales/en-US/messages.ftl` resource. A consumer that has
-authored no Fluent catalogue renders correct headings from the first generator
-run; a consumer that adds a locale translates the headings it wants and
-inherits the rest. English locale tags such as `en-GB` use these same embedded
-`en-US` resources through language-only matching.
+`ortho_l10n` owns the complete `ortho.headings.*` catalogue, and `ortho_config`
+reaches it through its runtime re-exports. A consumer that has authored no
+Fluent catalogue renders correct headings from the first generator run; a
+consumer that adds a locale translates the headings it wants and inherits the
+rest. English locale tags such as `en-GB` use the same embedded `en-US`
+resources through language-only matching.
+
+The catalogue is not yet in `ortho_l10n/locales/en-US/messages.ftl`. That
+resource holds the compatibility copy for the legacy CLI, Clap error, and
+profile-error paths; the heading strings are still the hardcoded table in
+`cargo-orthohelp/src/ir.rs` described below. The ownership statement above is
+the intended end state of the move, which this design's §4.2 layout is the
+first step towards.
 
 The catalogue is the fallback of record. `cargo-orthohelp` currently carries a
 hardcoded English table for the standard heading identifiers, which keeps raw
@@ -700,18 +733,18 @@ cargo orthohelp \
   [--ps-module-name <Name>] [--ps-split-subcommands <BOOL>] \
   [--ps-include-common-parameters <BOOL>] [--ps-help-info-uri <URI>] \
   [--ensure-en-us <BOOL>] [--check-agent-native] \
+  [--policy-mode <off|warn|deny>] \
   [--cache] [--no-build]
 ```
 
 `ir`, `man`, `ps`, `agent-context`, and `all` are the currently implemented
 formats. The current default is `ir`; unsupported format values fail during
-Clap parsing before generation begins. `--json` and `--check-agent-native` are
-planned agent-native additions. Until they are implemented, generated artefacts
-continue to report success or failure through process exit status. When
-`--json` is provided in a future migration, success must emit exactly one JSON
-result document to stdout and nothing to stderr. Failure must emit no stdout,
-unless a non-JSON artefact was explicitly delivered earlier, and exactly one
-JSON diagnostic document to stderr.
+Clap parsing before generation begins. `--check-agent-native` is implemented as
+the early policy pipeline stage described in §6.3.2, and generated artefacts
+continue to report success or failure through process exit status.
+`--policy-mode <off|warn|deny>` overrides the report mode and requires
+`--check-agent-native`. `--json` remains planned for general command results
+and diagnostics; the agent-native formats have dedicated stdout contracts.
 
 The existing format behaviours are compatibility contracts until a versioned
 migration is explicitly approved:
@@ -726,17 +759,23 @@ migration is explicitly approved:
   help, about topics, and default `en-US` support unless `--ensure-en-us false`
   is supplied.
 - `--format agent-context` writes one compact JSON document at
-  `<out>/agent-context.json`.
+  `<out>/agent-context.json` and emits the same document to stdout, followed by
+  a newline.
 - `--format all` generates the agent-context document, IR, man pages, and
-  PowerShell artefacts in a single invocation. It reports success or failure
-  through process exit status.
+  PowerShell artefacts in a single invocation. It also emits the agent-context
+  JSON to stdout and reports success or failure through process exit status.
 
-Agent-context output is added beside the human documentation formats. Policy
-output and JSON status output must also be added beside these contracts when
-implemented. They may not change the accepted `ir`, `man`, `ps`,
-`agent-context`, or `all` spellings, the default format, the generated file
-paths, or the process success/failure contract without a separate approved
-migration.
+Agent-context stdout and policy-report stdout are additive machine-readable
+channels; the existing artefact paths and process success/failure contracts
+remain unchanged. `--check-agent-native` emits one compact policy-report JSON
+document to stdout and retains the atomic `<out>/policy-report.json` artefact.
+If an explicit generator format is also requested, the policy report owns
+stdout so the invocation never concatenates multiple JSON documents;
+AgentContext JSON is suppressed from stdout while policy checking is enabled.
+Successful checks continue into generation and retain the selected artefacts,
+including `<out>/agent-context.json` for `agent-context` and `all`. A deny-mode
+finding is reported before the command fails, so generator artefacts are not
+created. Other formats do not emit JSON to stdout.
 
 `Cargo.toml` defaults:
 
@@ -758,7 +797,8 @@ help_info_uri = "https://example.com/help/MyApp"
 1. Discover the package with `cargo metadata`.
 2. Determine the root type from CLI or metadata. If missing, emit an error
    with remediation guidance.
-3. Build the ephemeral bridge under `target/orthohelp/<hash>/`:
+3. Select the ephemeral bridge's IR cache entry under
+   `target/orthohelp/<hash>/`, then create invocation-private bridge inputs:
    - Dependencies: `user_crate`, `ortho_config`.
    - `main.rs` invokes
      `<root_type as OrthoConfigDocs>::get_doc_metadata()` and serializes the
@@ -766,6 +806,11 @@ help_info_uri = "https://example.com/help/MyApp"
    - `cargo-orthohelp` keeps a local copy of the IR schema (mirroring
      `ortho_config::docs`) so publish checks can build against the latest
      crates.io release while the workspace evolves.
+   - The generated manifest, source, copied workspace `Cargo.lock` when
+     present, and executable snapshot live in an invocation-owned temporary
+     directory beneath the stable IR cache entry.
+   - Cargo builds into the selected package's Cargo-resolved target directory,
+     reusing compiler artefacts across bridge invocations.
 4. Run the bridge and capture the IR.
 5. For each locale, instantiate `FluentLocalizer` and resolve IDs to strings.
 6. Emit the requested outputs into `--out-dir`.
@@ -774,21 +819,26 @@ help_info_uri = "https://example.com/help/MyApp"
 ### 6.3 Caching
 
 Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint,
-macro version, tool version, and the workspace `Cargo.lock` hash (when present).
-`--cache` reuses it when valid; `--no-build` trusts the existing IR.
+the root type, the tool version, the IR schema version, and the workspace
+`Cargo.lock` hash (when present). A macro-version change is not a direct input;
+it can affect the key only indirectly, through the `Cargo.lock` hash. The
+directory name is `v1-` followed by 32 lowercase hexadecimal digits from the
+leading 16 bytes of the SHA-256 digest. The prefix versions the key encoding;
+changing it creates a fresh cache namespace. `--cache` reuses an entry when
+valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
 cache.
 
-Digests are SHA-256 and are rendered as 64 lowercase hexadecimal digits by the
-crate-internal `cargo-orthohelp/src/hex.rs` helper. `sha2` 0.11 returns
+Digests are SHA-256 and the crate-internal `cargo-orthohelp/src/hex.rs` helper
+renders full digests as 64 lowercase hexadecimal digits. `sha2` 0.11 returns
 `hybrid_array::Array<u8, _>` from `finalize`, and that type does not implement
 `core::fmt::LowerHex`, so the previous `{:x}` formatting no longer compiles.
-The helper keeps the rendered form byte-for-byte identical to the earlier
-output, so existing cache directories remain addressable. See the
-digest-rendering section of [developers' guide](developers-guide.md) for the
-helper's re-use policy.
+The helper keeps full-digest rendering byte-for-byte identical to the earlier
+output. `CacheKey::hash` uses a 16-byte prefix and adds the `v1-` directory
+format tag described above. See the digest-rendering section of
+[developers' guide](developers-guide.md) for the helper's re-use policy.
 
 ### 6.3.1 Agent-context pipeline additions
 
@@ -832,8 +882,10 @@ help structures. The adapter emits a positional input only when
 `CliMetadata.positional.index` and leaving `AgentInput.long` absent. A field
 with CLI metadata but no flag spelling or `positional` metadata is
 non-invocable configuration surface and is not emitted. The output is written
-as exactly one file at `<out>/agent-context.json`. `--format all` includes the
-same agent-context document beside IR, man pages, and PowerShell artefacts.
+as exactly one file at `<out>/agent-context.json` and is also emitted as one
+compact JSON document to stdout, followed by a newline. `--format all` includes
+the same agent-context document beside IR, man pages, and PowerShell artefacts
+and emits that JSON to stdout.
 
 `AgentInput.default` is a best-effort display string, not a normative or
 machine-parseable value. The generator normalizes unstable Rust token spacing
@@ -843,14 +895,152 @@ and character literal contents are preserved verbatim, and lifetime syntax is
 not treated as a path separator.
 
 `--format agent-context` is the generator format and remains unchanged by
-[ADR-007](adr-007-downstream-context-command-naming.md). The downstream
+[ADR-0007](adrs/adr-0007-downstream-context-command-naming.md). The downstream
 application command convention is `<tool> context --json`; the `context` name
 is reserved for application surfaces, and `cargo-orthohelp` does not add a
-public `context` or `agent-context` subcommand or alias.
+public `context` or `agent-context` subcommand or alias. The agent-context
+output must not be scraped from rendered man pages or PowerShell help.
+Rendering surfaces may consume agent metadata for examples or warnings, but
+they are not the source of truth for agents.
 
-The agent-context output must not be scraped from rendered man pages or
-PowerShell help. Rendering surfaces may consume agent metadata for examples or
-warnings, but they are not the source of truth for agents.
+### 6.3.2 Agent-native policy pipeline stage
+
+`--check-agent-native` runs as an early pipeline stage that does not build the
+bridge crate (Decision D11). It resolves the target package and parses
+`[package.metadata.ortho_config]` only, applies the `--policy-mode` override to
+the report's effective mode, evaluates the resolved
+`cargo_orthohelp::policy::PolicyConfig`, writes `policy-report.json` atomically
+to the output directory, emits the same compact JSON report to stdout followed
+by a newline, and prints a one-line summary to standard error. In `deny` mode,
+deny-level findings return a policy-violation error after the report has been
+written and emitted. When an explicit generator `--format` is also requested,
+the policy report remains the sole JSON document on stdout, and AgentContext
+JSON is suppressed. A successful check proceeds to generation and retains the
+selected generator artefacts; a deny-mode finding leaves the policy report
+available but fails before generator artefacts are created.
+
+The evaluation uses the `evaluate(config, inputs) -> PolicyReport` seam; in
+7.1.1 `PolicyInputs` is empty, and roadmap 7.1.2 passes the bridge IR through
+that struct additively. The report embeds the configured exceptions (full shape
+including `reason`) and the canonical vocabulary block. When a generator
+`--format` is explicitly requested in the same invocation, a successful check
+runs first and the generator pipeline follows; when it is not explicit, the
+check alone writes `policy-report.json` and exits. This mirrors the
+`--format agent-context` stage's placement under §6.2 without requiring
+generator preconditions (`root_type`, a library target, or an `ortho_config`
+dependency).
+
+### 6.3.3 Bridge build ownership and recovery
+
+The `target/orthohelp/<hash>/` directory remains the stable identity for cached
+IR. It is not a Cargo target directory. Each uncached bridge generation creates
+private inputs and a private executable run directory beneath that entry, then
+builds those inputs using the selected package's Cargo-resolved target
+directory. In ordinary use this is the target chosen for the selected CLI
+package. In the documentation-test caller, Cargo's resolved parent target is
+also reused. The bridge does not create a new dependency target for each IR
+cache key.
+
+When the selected workspace has a `Cargo.lock`, the bridge copies it into its
+private generated crate before Cargo resolves dependencies. Cargo may update
+that copy for the generated root package; it does not edit the selected
+workspace's lockfile. Each invocation owns its generated manifest, source,
+copied lockfile, and executable snapshot. Cargo compiler artefacts remain in
+the target it selected, and the bridge binary runs from its private snapshot.
+Cargo JSON `compiler-artifact` records provide the generated bridge executable
+path; bridge code must not infer it from `target/debug` or another
+target-layout assumption. The documentation integration test gets the
+`cargo-orthohelp` executable from Cargo's `CARGO_BIN_EXE_cargo-orthohelp`
+variable and snapshots that binary into its private run directory. It does not
+rebuild the CLI binary as part of the test; only the generated bridge uses the
+JSON build-and-snapshot path described here.
+
+The generated manifest disables automatic binary discovery and names its
+explicit bridge target from the selected package root and unique invocation
+directory. This keeps the executable path private to that invocation, even when
+an ordinary workspace target is named `orthohelp_bridge`, while preserving the
+selected target directory and shared dependency cache.
+
+A bridge-only build helper holds an operating-system file lock in the selected
+Cargo target directory across the Cargo build and executable snapshot. Cargo's
+own build lock ends before the bridge can copy its output. The generated binary
+name includes the unique invocation directory, so an ordinary workspace build
+cannot replace the reported executable during that interval. The additional
+lock serializes bridge invocations sharing the selected target and protects
+their marker lifecycle. This helper is private to the production bridge
+pipeline. The documentation-test `BuildState` helper is test-only and shared by
+the Rust-example and CLI documentation test targets; compilation and artefact
+extraction stay with the Rust-example helper. Neither helper is a general
+application subprocess API.
+
+Test-only commands that start a process run through the shared
+`ortho_config_test_helpers::process` module, which owns the deadline, the
+drained per-stream capture, and descendant cleanup on every supported platform.
+A crate that cannot depend on the helper package includes the module by source
+path instead of copying it. The `ortho_l10n` boundary fixture is the one
+deliberate exception: it keeps its own implementation in
+`tests/boundary/fixture_cargo/process.rs`, because its calls are already
+bounded by a scenario-wide budget and a process-wide serialization lock that
+the shared runner does not model, and the package bans the workspace
+test-helper package in its resolved graph and packaged manifest. No other
+package may add a test-side process-tree implementation. That shared capture
+retains the complete output of each stream because callers report compiler
+diagnostics in full; it drains continuously so a full pipe cannot deadlock a
+child, and memory grows with the output a child produces. The
+documentation-test runner owns its own diagnostics policy instead, so it caps
+each stream at 1 MiB and reports truncation. Production bridge code keeps its
+own ownership rules, because a bridge build holds the target-directory lock and
+a fail-closed recovery marker that test supervision has no part in.
+
+The bridge build retains Cargo's configured compiler and documentation
+wrappers, wrapper settings, job limits, warning flags, and coverage
+instrumentation. Metadata discovery maps `cargo llvm-cov show-env`'s
+`CARGO_LLVM_COV_TARGET_DIR` value to `CARGO_TARGET_DIR`; the former is the
+tool-selected target even though `show-env` does not export the latter. This
+keeps nested metadata on the instrumented parent target. A nested build does
+not forward the coverage CLI as `RUSTC_WRAPPER`, because that CLI cannot act as
+the compiler wrapper for a second Cargo process. Coverage flags and profile
+output remain enabled, and configured Cargo wrappers continue to apply. The
+bridge does not sanitize Rust flags to force a separate compiler fingerprint or
+change the default shared Cargo cache. The Cargo JSON reader retains at most 1
+MiB of rendered compiler diagnostics and records when it truncates output. It
+has no presentation sink; `run_cargo` forwards the retained diagnostics to
+stderr after draining the JSON stream and emits a truncation notice when
+needed. IR cache publication remains atomic and skips replacement when the
+existing cache already contains identical content, preserving the established
+path and idempotent-write behaviour. The private `bridge/ir_cache.rs` module
+owns cache-file reads and publication; only bridge orchestration and its
+crate-local tests call it, and it is not a general-purpose filesystem or cache
+abstraction. The unit reports what it did through a closed publish outcome and
+a stage-tagged publish error rather than recording anything itself, so
+persistence and observability are tested at their own boundaries. The
+orchestration boundary in `bridge/mod.rs` names the outcome in tracing, with
+the operation, the outcome, and the write size where applicable, and never
+exposes cache paths.
+
+The bridge cache lookup, target lock, Cargo build, executable snapshot, bridge
+execution, and IR publication emit named tracing spans or events. Outcome
+events use a closed operation and outcome vocabulary and include elapsed time;
+they omit paths, cache keys, error strings, and child output. This tracing
+boundary is recorded in
+[ADR-014](adrs/adr-0014-documentation-build-ownership.md#decision-outcome).
+
+With the optional `metrics` feature enabled, bridge cache outcomes also
+increment `cargo_orthohelp.bridge_cache.events`. Its only labels are `operation`
+(`lookup` or `publish`) and `outcome` (`hit`, `miss`, `read_failed`,
+`unchanged`, `updated`, or `write_failed`). The standalone binary installs a
+`tracing`-backed recorder before any bridge work, so the CLI's counters reach
+the operator's existing diagnostics pipeline; a host that installs its own
+recorder first keeps it, because the CLI claims the process-wide slot only when
+it is free. Metric contract tests capture every lookup and publish outcome with
+a thread-local recorder, reject extra label keys or values, and drive one real
+emission through the installed CLI recorder to prove the export path.
+
+An interrupted build whose writer lifetime cannot be confirmed leaves a
+fail-closed ownership marker. A later invocation must not treat that marker as
+stale automatically. Recovery requires confirming that the bridge's Cargo and
+compiler processes have exited before removing it; unrelated processes and
+shared cache services are outside the bridge's ownership.
 
 ## 6.4 Localized IR JSON output
 
@@ -867,7 +1057,7 @@ sentinel so generators can surface gaps during development.
 
 ```json
 {
-  "ir_version": "1.1",
+  "ir_version": "2.0",
   "locale": "en-US",
   "app_name": "my-app",
   "bin_name": "my-app",
@@ -900,7 +1090,11 @@ sentinel so generators can surface gaps during development.
       "about": "Run the app",
       "fields": []
     }
-  ]
+  ],
+  "renderer": {
+    "human": { "supported": true, "tty": "adapts" },
+    "machine": { "supported": true, "stdout": "structured" }
+  }
 }
 ```
 
@@ -912,6 +1106,14 @@ localized IR:
 - `headings_ids` -> `headings`
 - `help_id`/`long_help_id` -> `help`/`long_help`
 - `note_id`/`title_id`/`text_id` -> `note`/`title`/`text`
+
+The `renderer` block is the exception: it is copied verbatim, never renamed and
+never localized. Its leaf values are closed policy tokens and opaque
+application-defined field identifiers, so translating any of them would corrupt
+a protocol contract. Dropping the block is equally a bug, because a per-locale
+artefact would then contradict the agent context generated from the same
+metadata; both faces carry it, and the behavioural suite compares them across
+locales.
 
 ### 6.4.2 Locale resource discovery
 
@@ -1082,8 +1284,13 @@ installs the executable in a different location.
 
 ## 12. Versioning and compatibility
 
-- IR: `ir_version = "1.1"` (Windows metadata added). Future breaking schema
-  changes bump the major version.
+- IR: `ir_version = "2.0"`. Generated default identifiers now use mounted
+  command paths rather than dotted ones, so 2.0 is a major bump for consumers
+  keyed on the old identifier values; the optional `profiles` metadata rides
+  the same version. `1.2` added optional `behaviour` metadata and `1.1` added
+  Windows metadata, both additive minor bumps. Additive optional fields bump
+  the minor version; future breaking schema changes bump the major version. All
+  three versions are unreleased: `v0.9.1` still carries `"1.1"`.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 
@@ -1100,6 +1307,13 @@ PowerShell artefacts without adopting agent-context metadata. Consumers that
 parse localized IR directly should tolerate additive optional fields and should
 not require future agent-context or policy-report fields unless they opt into
 those formats.
+
+The policy-report schema (`cargo_orthohelp::policy`,
+`ORTHO_POLICY_REPORT_SCHEMA_VERSION = "1"`) grows additively only. The
+`exceptions` and `vocabulary` fields added for 7.1.1 are serde-defaulted, so
+consumers that ignore unknown fields continue to work. Roadmap 7.1.2 plans
+further additive fields (`PolicyInputs` bridge-IR input and a
+`replacement: Option<String>` on results) without bumping the schema version.
 
 ### 12.1 Rust API compatibility
 
@@ -1140,11 +1354,11 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
 
 ## 13. Worked example (abridged)
 
-### 13.1 IR JSON (excerpt, 1.1)
+### 13.1 IR JSON (excerpt, 2.0)
 
 ```json
 {
-  "ir_version": "1.1",
+  "ir_version": "2.0",
   "app_name": "my-app",
   "bin_name": "my-app",
   "about_id": "my-app.about",
@@ -1191,14 +1405,14 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
   },
   "subcommands": [
     {
-      "ir_version": "1.1",
+      "ir_version": "2.0",
       "app_name": "run",
       "about_id": "run.about",
       "fields": [],
       "windows": null,
       "subcommands": [
         {
-          "ir_version": "1.1",
+          "ir_version": "2.0",
           "app_name": "audit",
           "about_id": "audit.about",
           "fields": [],

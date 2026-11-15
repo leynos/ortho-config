@@ -32,6 +32,19 @@ pub fn agent_context_kind(package: &str) -> String {
     format!("{package}.{AGENT_CONTEXT_KIND_SUFFIX}")
 }
 
+mod profiles;
+
+pub use profiles::{ProfileSelectionContract, ProfilesDeclaration};
+
+mod renderer;
+mod renderer_wire;
+
+pub use renderer::{
+    AccessibilityPolicy, ClosedStdinPolicy, InheritancePolicy, PlainPolicy, RenderWidth,
+    RendererContract, RendererField, RendererFieldLocalization, RendererRecord, StreamContent,
+    TogglePolicy, TtyPolicy,
+};
+
 /// Top-level agent-context document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentContext {
@@ -45,7 +58,7 @@ pub struct AgentContext {
     pub commands: Vec<AgentCommand>,
     /// Profile support declared by the application.
     #[serde(default)]
-    pub profiles: SupportDeclaration,
+    pub profiles: ProfilesDeclaration,
     /// Feedback support declared by the application.
     #[serde(default)]
     pub feedback: SupportDeclaration,
@@ -84,7 +97,7 @@ impl AgentContext {
             kind: agent_context_kind(&package_name),
             package: package_name,
             commands: Vec::new(),
-            profiles: SupportDeclaration::default(),
+            profiles: ProfilesDeclaration::unsupported(),
             feedback: SupportDeclaration::default(),
             policy: AgentPolicy::default(),
             skill_manifests: Vec::new(),
@@ -115,6 +128,18 @@ pub struct AgentCommand {
     /// Mutation boundary declared for the command.
     #[serde(default)]
     pub mutation_effect: MutationEffect,
+    /// Confirmation or prompt bypass flag, for example `--force`.
+    ///
+    /// Serialized as explicit `null` when absent, matching the schema-v1
+    /// optional-field convention.
+    #[serde(default)]
+    pub bypass_flag: Option<String>,
+    /// Dry-run flag name, for example `--dry-run`.
+    ///
+    /// Serialized as explicit `null` when absent, matching the schema-v1
+    /// optional-field convention.
+    #[serde(default)]
+    pub dry_run_flag: Option<String>,
     /// Asynchronous submission contract for commands that enqueue work.
     #[serde(default)]
     pub async_submission: Option<AsyncSubmission>,
@@ -127,6 +152,14 @@ pub struct AgentCommand {
     /// Short examples suitable for agent prompt context.
     #[serde(default)]
     pub examples: Vec<AgentExample>,
+    /// Declared human and machine rendering for this command.
+    ///
+    /// Defaults to the documented legacy compatibility values: human support
+    /// `true`, machine support `false`. Those are not observed runtime
+    /// capability, and undeclared policy stays absent rather than becoming an
+    /// affirmative promise.
+    #[serde(default)]
+    pub renderer: RendererContract,
 }
 
 /// Asynchronous submission metadata for a command.
@@ -199,18 +232,43 @@ pub struct SupportDeclaration {
 }
 
 /// Agent-native policy mode advertised by a command surface.
+///
+/// The `exceptions` list records the invocation-shape exceptions the project
+/// has committed to. It carries only the exception's identity (`kind`, `name`,
+/// scope); the human-facing `reason` published in `policy-report.json` is
+/// deliberately not copied into this agent-distributed artefact.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentPolicy {
     /// `off`, `warn`, or `deny`.
     pub agent_native: PolicyMode,
+    /// Explicit project exceptions committed to by the command surface.
+    #[serde(default)]
+    pub exceptions: Vec<PolicyException>,
 }
 
 impl Default for AgentPolicy {
     fn default() -> Self {
         Self {
             agent_native: PolicyMode::Warn,
+            exceptions: Vec::new(),
         }
     }
+}
+
+/// One policy exception advertised in agent context.
+///
+/// `kind` is string-typed on the wire for forward tolerance: a consumer that
+/// does not recognize a future kind ignores it rather than failing. There is
+/// no `reason` field here (see [`AgentPolicy`]).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PolicyException {
+    /// Whether the exception names a verb or a flag.
+    pub kind: String,
+    /// Verb or flag name, written the way it appears on the command line.
+    pub name: String,
+    /// Optional command path the exception is scoped to.
+    #[serde(default)]
+    pub command_path: Option<String>,
 }
 
 /// Enforcement mode for agent-native policy.

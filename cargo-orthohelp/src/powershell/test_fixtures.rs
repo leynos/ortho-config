@@ -4,7 +4,7 @@ use crate::ir::{LocalizedDocMetadata, LocalizedHeadings, LocalizedSectionsMetada
 
 pub(super) fn minimal_doc(locale: &str, about: &str) -> LocalizedDocMetadata {
     LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: crate::schema::ORTHO_DOCS_IR_VERSION.to_owned(),
         locale: locale.to_owned(),
         app_name: "fixture".to_owned(),
         bin_name: None,
@@ -33,6 +33,7 @@ pub(super) fn minimal_doc(locale: &str, about: &str) -> LocalizedDocMetadata {
         fields: vec![],
         subcommands: vec![],
         windows: None,
+        renderer: None,
     }
 }
 

@@ -16,12 +16,18 @@ accepted = [
 
 [patterns]
 ignore = [
+  # The requested branch slug determines this execution-plan filename.
+  "issue-566-extract-reusable-localisation-runtime-into-ortho-l10n\\.md",
   # These code spans name external APIs, identifiers, or deliberate spelling
   # fixtures. Keep inline-code spelling enabled for every other span.
   "`--color auto\\|always\\|never`",
   "`artifact_path`",
+  "`compiler-artifact`",
   "`color`",
   "`behavior`",
+  "`behavior\\(\\.\\.\\.\\)`",
+  "`behaviour\\(interation = \\.\\.\\.\\)`",
+  "`normalisation`",
   "`analyzed`",
   "`env\\(allias = …\\)`",
   "`#\\[tokio::test\\(flavor = \"current_thread\"\\)\\]`",
@@ -29,12 +35,40 @@ ignore = [
   "`PSScriptAnalyzer`",
   "`[^`\\n]*localised_help[^`\\n]*`",
   "`Artifacts`",
+  # "mold" names the linker (https://github.com/rui314/mold), not a fungus.
+  "`mold`",
+  "`install-mold`",
   "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",
   "`[^`\\n]*cli::tests::localisation[^`\\n]*`",
   "`skill_manifest_serialises_with_camino_path`",
+  "`var\\.iamge_id` instead of `var\\.image_id`",
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",
+  # Commit hashes are written in inline code throughout the plans. Hex letters
+  # can begin a token that reads as a misspelling, so a backticked hash is
+  # ignored rather than corrected. The 7-to-40 span bound keeps that exemption
+  # narrow: a shorter all-hex span, such as a one- or two-character token, is
+  # still checked. Requiring a digit as well cannot be expressed here: the
+  # pinned regex engine has no lookaround, so length and digit presence cannot
+  # be conjoined, and a digit-bearing shape drops the total-length bound. Every
+  # excerpt in the corpus is 7 to 40 characters, and an all-letter abbreviation
+  # is legitimate, so the bound alone is what keeps the exemption narrow.
+  "`[0-9a-f]{7,40}`",
+  # `mold` is the upstream linker name and is absent from the shared dictionary.
+  # Exempt only the exact code spans used by this repository so a nearby typo
+  # in the same span is still checked.
+  "`mold`",
+  "`ld.mold`",
+  "`-Clink-arg=-fuse-ld=mold`",
+  "`-fuse-ld=mold`",
+  "`RUSTFLAGS=\"-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold\"`",
+  "`install-mold: 'true'`",
+  "`install-mold`",
+  "`mold-version`",
+  "`tools/mold/SHA256SUMS`",
+  "`tools/mold/VERSION`",
+  "`tools/mold/`",
 ]
 
 [files]

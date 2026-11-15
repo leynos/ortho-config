@@ -7,6 +7,16 @@
 
 mod fixtures;
 
+// Declared here rather than inside `fixtures` so targets that never read
+// renderer metadata do not carry these helpers as dead code.
+#[path = "fixtures/renderer_assertions.rs"]
+mod renderer_assertions;
+
+// Declared here rather than inside `fixtures` so the other end-to-end targets,
+// which never audit identifiers, do not carry dead code.
+#[path = "fixtures/ir_identifier_audit.rs"]
+mod ir_identifier_audit;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
@@ -56,6 +66,21 @@ static BRIDGE_BUILD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
         "true",
     ],
     assert_powershell_contains_subcommand_functions
+)]
+#[case::all(
+    "all formats",
+    &[
+        "--format",
+        "all",
+        "--man-date",
+        "2026-06-04",
+        "--man-split-subcommands",
+        "--ps-split-subcommands",
+        "true",
+        "--ensure-en-us",
+        "true",
+    ],
+    assert_all_outputs_carry_renderer_and_human_artefacts
 )]
 fn nested_subcommand_tree_survives_bridge_outputs(
     #[case] name: &str,
@@ -144,6 +169,7 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
     let value: Value = serde_json::from_str(&ir)?;
     let subcommands = array_field(&value, "subcommands")?;
     assert_app_names(subcommands, &["greet", "version", "admin"])?;
+    assert_ir_greet_renderer(subcommands)?;
 
     let admin = subcommands
         .iter()
@@ -151,9 +177,31 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
         .ok_or("admin subcommand missing from IR")?;
     assert_app_names(
         array_field(admin, "subcommands")?,
-        &["audit", "grant-access"],
+        &["audit", "grant-access", "purge", "prune"],
     )?;
+    ir_identifier_audit::assert_no_respelled_identifier_misses(&value, FIXTURE_PACKAGE)?;
     Ok(())
+}
+
+/// Requires the `greet` IR entry to carry the complete declared renderer block.
+///
+/// The IR is the artefact every other output is rendered from, so a leaf that
+/// code generation dropped is caught here before it can be reported as present
+/// in agent context.
+fn assert_ir_greet_renderer(subcommands: &[Value]) -> Result<(), TestError> {
+    let greet = subcommands
+        .iter()
+        .find(|command| command.get("app_name").and_then(Value::as_str) == Some("greet"))
+        .ok_or("greet subcommand missing from IR")?;
+    let renderer = greet
+        .get("renderer")
+        .ok_or("greet subcommand carries no renderer block in IR")?;
+    let declared = renderer_assertions::expected_greet_renderer();
+    if *renderer == declared {
+        Ok(())
+    } else {
+        Err(format!("IR greet renderer should be {declared}, got {renderer}").into())
+    }
 }
 
 /// Asserts that split man pages include the nested admin command sections.
@@ -167,6 +215,8 @@ fn assert_man_contains_nested_pages(out_dir: &Utf8PathBuf) -> Result<(), TestErr
     ensure_contains(artefact, ".SH COMMANDS")?;
     ensure_contains(artefact, ".SS audit")?;
     ensure_contains(artefact, ".SS grant-access")?;
+    ensure_contains(artefact, ".SS purge")?;
+    ensure_contains(artefact, ".SS prune")?;
     Ok(())
 }
 
@@ -189,6 +239,23 @@ fn assert_powershell_contains_subcommand_functions(out_dir: &Utf8PathBuf) -> Res
     ensure_excludes(artefact, "function nested_fixture_admin_audit")?;
     ensure_excludes(artefact, "function nested_fixture_admin_grant_access")?;
     Ok(())
+}
+
+/// Asserts that `--format all` writes every artefact the formats promise.
+///
+/// The agent context is the one artefact the per-format cases cannot cover, so
+/// this case pins that the combined format keeps it — with the declared
+/// renderer metadata — alongside the human-facing IR, man, and PowerShell
+/// outputs.
+fn assert_all_outputs_carry_renderer_and_human_artefacts(
+    out_dir: &Utf8PathBuf,
+) -> Result<(), TestError> {
+    assert_ir_contains_nested_tree(out_dir)?;
+    assert_man_contains_nested_pages(out_dir)?;
+    assert_powershell_contains_subcommand_functions(out_dir)?;
+    let context: Value =
+        serde_json::from_str(&read_output(out_dir, Utf8Path::new("agent-context.json"))?)?;
+    renderer_assertions::assert_greet_renderer(&context, "agent-context.json")
 }
 
 #[derive(Clone, Copy)]

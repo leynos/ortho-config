@@ -3,6 +3,8 @@
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
+#[cfg(any(unix, target_os = "redox"))]
+use ortho_config::OrthoError;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
     EnvSource, MapEnv, ProcessEnv, SubcommandFileContext, load_and_merge_subcommand,
@@ -13,8 +15,13 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
+use test_helpers::coverage::resolve_profile_path;
+
+use super::fixtures::close_discovery;
+use super::to_anyhow::ToAnyhow as _;
 
 const PROCESS_PROBE_MARKER: &str = "ORTHO_SUBCOMMAND_PROCESS_PROBE_OK";
+const PROCESS_PROFILE_EXPECTED: &str = "ORTHO_SUBCOMMAND_EXPECTED_PROFILE_FILE";
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -28,6 +35,10 @@ struct CmdCfg {
 }
 
 /// Write one fixture below `root` through an explicitly scoped capability.
+///
+/// Paths here are nested (`home/.app.toml`, `xdg/app/config.toml`), so the
+/// parent directories are created first; `cap_std::fs::Dir::write` opens with
+/// `O_CREAT` but never creates intermediate components.
 ///
 /// This stays private to the baseline-loading module: its callers need the
 /// same simple file shape, while the other subcommand suites exercise distinct
@@ -49,19 +60,52 @@ fn write_config(root: &Path, relative: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
-/// Return a closed discovery source with the Unix global rung pinned to `root`.
-#[cfg(any(unix, target_os = "redox"))]
-fn isolated_discovery(root: &Path) -> MapEnv {
-    MapEnv::new().with_var("XDG_CONFIG_DIRS", root)
+/// Load and merge `CmdCfg` from `base`, `discovery`, and `merge_env`.
+///
+/// Every case in this module loads through the same prefix and the same
+/// default CLI value, so those stay here rather than being restated at each
+/// call site. What varies — the file base, the discovery source, and the
+/// values merged on top — stays with the caller.
+///
+/// The conversion through [`ToAnyhow`] happens here rather than at each call
+/// site so the tests can keep attaching their own scenario-specific
+/// `.context(...)` while still reporting through `anyhow`.
+fn load_cfg(base: &Path, discovery: &MapEnv, merge_env: MapEnv) -> Result<CmdCfg> {
+    load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
+        &CmdCfg::default(),
+        SubcommandFileContext::new(base, discovery),
+        Arc::new(merge_env),
+    )
+    .to_anyhow()
 }
 
-/// Return a closed discovery source on non-Unix and non-Redox targets.
-#[cfg(not(any(unix, target_os = "redox")))]
-fn isolated_discovery(_root: &Path) -> MapEnv {
-    MapEnv::new()
+/// Merge file defaults with an explicit discovery source and no merge values.
+///
+/// This helper is private to the file-focused scenarios in this module. Tests
+/// that need injected merge values continue to use [`load_cfg`].
+///
+/// # Examples
+///
+/// `merge_file_defaults(base, &discovery)` returns the command values loaded
+/// from the discovered file, without consulting the process environment.
+fn merge_file_defaults(base: &Path, discovery: &MapEnv) -> Result<CmdCfg> {
+    load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
+        &CmdCfg::default(),
+        SubcommandFileContext::new(base, discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .to_anyhow()
 }
 
 /// Check the process-backed default entrypoint without mutating the test process.
+///
+/// The child's environment is cleared so the host cannot supply values, then
+/// rebuilt from the fixture: the shim value to merge, the XDG base to discover,
+/// and `HOME` inside the fixture. `HOME` matters because the real process
+/// environment backs the child's loader, and an absent or host `HOME` would
+/// otherwise add host home candidates ahead of the fixture's local file.
 #[test]
 fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
     let root = tempfile::tempdir().context("create process-backed subcommand fixture")?;
@@ -81,10 +125,15 @@ fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
         ])
         .current_dir(root.path())
         .env_clear()
+        .env("HOME", root.path())
         .env("APP_CMDS_TEST_FOO", "env")
         .env("XDG_CONFIG_DIRS", root.path());
     if let Some(profile_file) = ProcessEnv.get("LLVM_PROFILE_FILE") {
-        child.env("LLVM_PROFILE_FILE", profile_file);
+        let parent_dir = std::env::current_dir()?;
+        let profile_path = resolve_profile_path(&profile_file, &parent_dir);
+        child
+            .env("LLVM_PROFILE_FILE", &profile_path)
+            .env(PROCESS_PROFILE_EXPECTED, &profile_path);
     }
     let output = child
         .output()
@@ -103,9 +152,17 @@ fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
     Ok(())
 }
 
+/// Probe the process-backed loader and report its merged values to the parent.
 #[test]
 #[ignore = "run by the isolated process-backed wrapper test"]
 fn process_backed_probe() -> Result<()> {
+    let expected_profile = ProcessEnv.get(PROCESS_PROFILE_EXPECTED);
+    let actual_profile = ProcessEnv.get("LLVM_PROFILE_FILE");
+    ensure!(
+        actual_profile == expected_profile,
+        "expected forwarded LLVM_PROFILE_FILE {expected_profile:?}, got {actual_profile:?}"
+    );
+
     let cfg = load_and_merge_subcommand(&Prefix::new("APP_"), &CmdCfg::default())
         .context("merge process-backed subcommand defaults")?;
     ensure!(
@@ -132,12 +189,11 @@ fn file_and_env_loading() -> Result<()> {
         Path::new(".app.toml"),
         "[cmds.test]\nfoo = \"file\"\nbar = true",
     )?;
-    let discovery = isolated_discovery(root.path());
-    let cfg = load_and_merge_subcommand_with_sources_at(
-        &Prefix::new("APP_"),
-        &CmdCfg::default(),
-        SubcommandFileContext::new(root.path(), &discovery),
-        Arc::new(MapEnv::new().with_var("APP_CMDS_TEST_FOO", "env")),
+    let discovery = close_discovery(root.path());
+    let cfg = load_cfg(
+        root.path(),
+        &discovery,
+        MapEnv::new().with_var("APP_CMDS_TEST_FOO", "env"),
     )
     .context("merge file and injected environment defaults")?;
     ensure!(
@@ -149,6 +205,7 @@ fn file_and_env_loading() -> Result<()> {
     Ok(())
 }
 
+/// Loads the configuration file under the injected home directory.
 #[test]
 fn loads_from_home() -> Result<()> {
     let root = tempfile::tempdir().context("create home fixture")?;
@@ -159,14 +216,9 @@ fn loads_from_home() -> Result<()> {
         Path::new("home/.app.toml"),
         "[cmds.test]\nfoo = \"home\"",
     )?;
-    let discovery = isolated_discovery(root.path()).with_var("HOME", &home);
-    let cfg = load_and_merge_subcommand_with_sources_at(
-        &Prefix::new("APP_"),
-        &CmdCfg::default(),
-        SubcommandFileContext::new(&base, &discovery),
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge home defaults from injected source")?;
+    let discovery = close_discovery(root.path()).with_var("HOME", &home);
+    let cfg = merge_file_defaults(&base, &discovery)
+        .context("merge home defaults from injected source")?;
     ensure!(
         cfg.foo.as_deref() == Some("home"),
         "expected home, got {:?}",
@@ -175,6 +227,7 @@ fn loads_from_home() -> Result<()> {
     Ok(())
 }
 
+/// Confirms a local configuration file takes precedence over the home file.
 #[test]
 fn local_overrides_home() -> Result<()> {
     let root = tempfile::tempdir().context("create local-overrides-home fixture")?;
@@ -190,14 +243,9 @@ fn local_overrides_home() -> Result<()> {
         Path::new("base/.app.toml"),
         "[cmds.test]\nfoo = \"local\"",
     )?;
-    let discovery = isolated_discovery(root.path()).with_var("HOME", &home);
-    let cfg = load_and_merge_subcommand_with_sources_at(
-        &Prefix::new("APP_"),
-        &CmdCfg::default(),
-        SubcommandFileContext::new(&base, &discovery),
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge local defaults after injected home defaults")?;
+    let discovery = close_discovery(root.path()).with_var("HOME", &home);
+    let cfg = merge_file_defaults(&base, &discovery)
+        .context("merge local defaults after injected home defaults")?;
     ensure!(
         cfg.foo.as_deref() == Some("local"),
         "expected local, got {:?}",
@@ -207,6 +255,7 @@ fn local_overrides_home() -> Result<()> {
 }
 
 // Windows lacks XDG support.
+/// Loads the configuration file from the injected XDG config directory.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() -> Result<()> {
@@ -218,14 +267,9 @@ fn loads_from_xdg_config() -> Result<()> {
         Path::new("xdg/app/config.toml"),
         "[cmds.test]\nfoo = \"xdg\"",
     )?;
-    let discovery = isolated_discovery(root.path()).with_var("XDG_CONFIG_HOME", &xdg);
-    let cfg = load_and_merge_subcommand_with_sources_at(
-        &Prefix::new("APP_"),
-        &CmdCfg::default(),
-        SubcommandFileContext::new(&base, &discovery),
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge XDG defaults from injected source")?;
+    let discovery = close_discovery(root.path()).with_var("XDG_CONFIG_HOME", &xdg);
+    let cfg = merge_file_defaults(&base, &discovery)
+        .context("merge XDG defaults from injected source")?;
     ensure!(
         cfg.foo.as_deref() == Some("xdg"),
         "expected xdg, got {:?}",
@@ -234,6 +278,45 @@ fn loads_from_xdg_config() -> Result<()> {
     Ok(())
 }
 
+/// The public loader returns non-missing XDG metadata failures with their path.
+#[cfg(any(unix, target_os = "redox"))]
+#[test]
+fn xdg_metadata_error_reaches_public_subcommand_loader() -> Result<()> {
+    let root = tempfile::tempdir().context("create XDG error fixture")?;
+    write_config(root.path(), Path::new("not-a-directory"), "")?;
+    let not_a_directory = root.path().join("not-a-directory");
+    let candidate = not_a_directory.join("app/config.toml");
+    let discovery = close_discovery(root.path()).with_var("XDG_CONFIG_HOME", &not_a_directory);
+
+    let error = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
+        &CmdCfg::default(),
+        SubcommandFileContext::new(root.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .expect_err("a failed XDG metadata probe must reach the public loader");
+    let OrthoError::File {
+        path,
+        source: error_source,
+    } = error.as_ref()
+    else {
+        anyhow::bail!("expected a file error, got {error:?}");
+    };
+    ensure!(
+        path == &candidate,
+        "reported candidate path differs: {path:?}"
+    );
+    let io_error = error_source
+        .downcast_ref::<std::io::Error>()
+        .context("metadata error source was not an I/O error")?;
+    ensure!(
+        io_error.kind() != std::io::ErrorKind::NotFound,
+        "a non-directory parent must not be treated as a missing candidate"
+    );
+    Ok(())
+}
+
+/// Loads YAML configuration from the explicit discovery base.
 #[cfg(feature = "yaml")]
 #[test]
 fn loads_yaml_file() -> Result<()> {
@@ -243,14 +326,9 @@ fn loads_yaml_file() -> Result<()> {
         Path::new(".app.yml"),
         "cmds:\n  test:\n    foo: yaml",
     )?;
-    let discovery = isolated_discovery(root.path());
-    let cfg = load_and_merge_subcommand_with_sources_at(
-        &Prefix::new("APP_"),
-        &CmdCfg::default(),
-        SubcommandFileContext::new(root.path(), &discovery),
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge YAML defaults from explicit base")?;
+    let discovery = close_discovery(root.path());
+    let cfg = merge_file_defaults(root.path(), &discovery)
+        .context("merge YAML defaults from explicit base")?;
     ensure!(
         cfg.foo.as_deref() == Some("yaml"),
         "expected yaml, got {:?}",

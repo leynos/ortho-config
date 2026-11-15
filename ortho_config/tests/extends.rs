@@ -1,12 +1,24 @@
 //! Tests for configuration inheritance using the `extends` key.
 use anyhow::{Result, anyhow, ensure};
+use camino::Utf8PathBuf;
 use ortho_config::{MapEnv, OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 #[path = "support/extends_fixture.rs"]
 mod extends_fixture;
+
+#[path = "support/profile_chain_assertions.rs"]
+mod profile_chain_assertions;
+use profile_chain_assertions::ensure_eq;
+
+// Replacement semantics live beside these cases rather than inside them: this
+// file is held to the repository's 400-line cap, and the replace-strategy
+// table is a self-contained slice that does not share state with the
+// precedence, cycle, and validation cases.
+#[path = "extends/replace_strategy.rs"]
+mod replace_strategy;
+
 use extends_fixture::ConfigFixture;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -71,6 +83,8 @@ struct InheritanceCase {
     expected: &'static str,
 }
 
+/// Verify that the CLI, environment, and file layers resolve in precedence
+/// order, with the base file supplying only the fallback value.
 #[rstest]
 #[case(
     InheritanceCase {
@@ -88,6 +102,15 @@ struct InheritanceCase {
         cli_args: &["--foo", "cli"],
         env_value: Some("env"),
         expected: "cli",
+    }
+)]
+#[case(
+    InheritanceCase {
+        base_value: "base",
+        config_value: "file",
+        cli_args: &[] as &[&str],
+        env_value: Some("env"),
+        expected: "env",
     }
 )]
 fn inheritance_precedence(#[case] case: InheritanceCase) -> Result<()> {
@@ -112,6 +135,8 @@ fn inheritance_precedence(#[case] case: InheritanceCase) -> Result<()> {
     Ok(())
 }
 
+/// Verify that a three-level chain merges scalars, vectors, and nested tables
+/// in parent-first order.
 #[rstest]
 fn multi_level_inheritance_merges_in_order() -> Result<()> {
     let fixture = ConfigFixture::new()?;
@@ -122,6 +147,7 @@ fn multi_level_inheritance_merges_in_order() -> Result<()> {
     verify_multi_level_config(&cfg)
 }
 
+/// Write the grandparent, parent, and child files for the multi-level chain.
 fn setup_multi_level_test_files(fixture: &ConfigFixture) -> Result<()> {
     fixture.create_file("grandparent.toml", GRANDPARENT_TOML)?;
     fixture.create_file("parent.toml", PARENT_TOML)?;
@@ -129,17 +155,7 @@ fn setup_multi_level_test_files(fixture: &ConfigFixture) -> Result<()> {
     Ok(())
 }
 
-fn ensure_eq<T>(actual: &T, expected: &T, label: &str) -> Result<()>
-where
-    T: PartialEq + std::fmt::Debug,
-{
-    ensure!(
-        actual == expected,
-        "unexpected {label} {actual:?}; expected {expected:?}"
-    );
-    Ok(())
-}
-
+/// Assert the merged values expected from the multi-level chain.
 fn verify_multi_level_config(cfg: &MultiLevelCfg) -> Result<()> {
     ensure_eq(&cfg.app_name.as_str(), &"base", "app_name")?;
     ensure_eq(&cfg.retries, &2, "retries")?;
@@ -159,6 +175,8 @@ fn verify_multi_level_config(cfg: &MultiLevelCfg) -> Result<()> {
     Ok(())
 }
 
+/// Verify that a cycle between two extended files raises `CyclicExtends`
+/// rather than iterating forever.
 #[rstest]
 fn cyclic_inheritance_is_detected() -> Result<()> {
     let fixture = ConfigFixture::new()?;
@@ -178,6 +196,8 @@ fn cyclic_inheritance_is_detected() -> Result<()> {
     Ok(())
 }
 
+/// Verify that case-variant names still form a cycle on case-insensitive
+/// filesystems.
 #[rstest]
 #[cfg_attr(
     not(any(windows, target_os = "macos")),
@@ -209,6 +229,8 @@ fn cyclic_inheritance_detects_case_variants() -> Result<()> {
     Ok(())
 }
 
+/// Verify that a missing extended file reports the resolved names for both
+/// relative and absolute `extends` values.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
@@ -216,7 +238,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
     let fixture = ConfigFixture::new()?;
     let expected_base = fixture.path("missing.toml");
     let extends_value = if is_abs {
-        expected_base.display().to_string()
+        expected_base.as_str().to_owned()
     } else {
         String::from("missing.toml")
     };
@@ -251,6 +273,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
     Ok(())
 }
 
+/// Verify that non-string `extends` values report the offending type and file.
 #[rstest]
 #[case::integer("extends = 1", "number")]
 #[case::boolean("extends = true", "bool")]
@@ -282,6 +305,8 @@ fn non_string_extends_errors(
     Ok(())
 }
 
+/// Load a configuration whose `extends` value is the setup's target and assert
+/// that the error mentions `expected_msg`.
 fn assert_extends_error<F>(
     setup: F,
     extends_value: &str,
@@ -307,19 +332,21 @@ where
 }
 
 enum SetupType {
-    EmptyFile(PathBuf),
-    Directory(PathBuf),
+    EmptyFile(Utf8PathBuf),
+    Directory(Utf8PathBuf),
 }
 
+/// Verify that an empty `extends` value and one naming a directory are both
+/// rejected with a descriptive message.
 #[rstest]
 #[case::empty_extends(
-    SetupType::EmptyFile(PathBuf::from("base.toml")),
+    SetupType::EmptyFile(Utf8PathBuf::from("base.toml")),
     "",
     "non-empty",
     "empty extends"
 )]
 #[case::directory_extends(
-    SetupType::Directory(PathBuf::from("dir")),
+    SetupType::Directory(Utf8PathBuf::from("dir")),
     "dir",
     "not a regular file",
     "directory extends"
@@ -345,54 +372,4 @@ fn extends_validation_errors(
         expected_msg,
         error_desc,
     )
-}
-
-/// Config struct with explicit replace strategy for the tags field.
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-struct ReplaceTagsCfg {
-    #[serde(default)]
-    #[ortho_config(merge_strategy = "replace")]
-    tags: Vec<String>,
-}
-
-#[derive(Debug)]
-struct ReplaceStrategyCase {
-    files: Vec<(&'static str, &'static str)>,
-    expected_tags: Vec<&'static str>,
-}
-
-/// Verifies that `merge_strategy = "replace"` works correctly with extends.
-#[rstest]
-#[case::single_level(ReplaceStrategyCase {
-    files: vec![
-        ("parent.toml", "tags = [\"parent\"]"),
-        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
-    ],
-    expected_tags: vec!["child"],
-})]
-#[case::multi_level_chain(ReplaceStrategyCase {
-    files: vec![
-        ("grandparent.toml", "tags = [\"grandparent\"]"),
-        ("parent.toml", "extends = \"grandparent.toml\"\ntags = [\"parent\"]"),
-        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
-    ],
-    expected_tags: vec!["child"],
-})]
-#[case::empty_array(ReplaceStrategyCase {
-    files: vec![
-        ("parent.toml", "tags = [\"parent\"]"),
-        (".config.toml", "extends = \"parent.toml\"\ntags = []"),
-    ],
-    expected_tags: vec![],
-})]
-fn extends_with_replace_strategy_behaviour(#[case] case: ReplaceStrategyCase) -> Result<()> {
-    let fixture = ConfigFixture::new()?;
-    for (filename, content) in case.files {
-        fixture.create_file(filename, content)?;
-    }
-    let cfg: ReplaceTagsCfg = fixture
-        .load(["prog"], MapEnv::new())
-        .map_err(|err| anyhow!(err))?;
-    let expected: Vec<String> = case.expected_tags.into_iter().map(String::from).collect();
-    ensure_eq(&cfg.tags, &expected, "tags")
 }

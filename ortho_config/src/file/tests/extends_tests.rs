@@ -82,6 +82,13 @@ fn get_extends_reports_error_with_file_variant(
     Ok(())
 }
 
+/// Drive one failing `extends` case: stage fixtures, then assert the error.
+///
+/// `setup` receives the isolation root's [`Dir`] and returns the
+/// `extends` document to load, so each case describes only the filesystem
+/// state that provokes its failure. Asserting on an error *fragment* rather
+/// than an exact string keeps the case coupled to the diagnosis, not to
+/// incidental wording around it.
 fn expect_process_extends_failure<F>(
     setup: F,
     failure_message: &str,
@@ -106,6 +113,13 @@ where
     })
 }
 
+/// Assert both spellings of `extends` resolve to the same parent document.
+///
+/// A relative base is resolved against the *current file's* directory, while
+/// an absolute base is taken as given. Both must land on the fixture written
+/// under the isolation root, so the merged `foo` is visible either way; if
+/// the relative branch ever resolved against the process working directory,
+/// only the absolute case would still pass.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
@@ -130,6 +144,11 @@ fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) -> Result
     })
 }
 
+/// Assert a parentless current path is rejected before any filesystem work.
+///
+/// An empty path has no parent, so a relative `extends` cannot be anchored.
+/// The loader must report that as a diagnosis rather than silently resolving
+/// against the working directory or panicking on the unwrap.
 #[test]
 fn process_extends_errors_when_no_parent() -> Result<()> {
     let figment = Figment::from(Toml::string("extends = \"base.toml\""));
@@ -148,6 +167,13 @@ fn process_extends_errors_when_no_parent() -> Result<()> {
     Ok(())
 }
 
+/// Table of `extends` values that must be rejected, each with its own fixture.
+///
+/// Both cases exercise a base that is *not* a readable regular file — a
+/// directory, and an empty `extends` value. They are separate rows because
+/// they fail at different stages: the first reaches the filesystem and is
+/// refused for the file kind, the second is rejected on the value before any
+/// read is attempted.
 #[rstest]
 #[case::not_regular_file(
     |root: &Dir| {

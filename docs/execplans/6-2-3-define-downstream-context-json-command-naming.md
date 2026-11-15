@@ -54,7 +54,7 @@ escalation, not a workaround.
   convention flows one way: the library defines it; the generator and
   downstream applications consume it. No circular crate dependency may be
   introduced (see `docs/developers-guide.md` schema-ownership notes and
-  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`).
+  `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`).
 - The agent-context wire contract is owned by
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` (currently `"1"`). This plan must not
   change the schema version, rename fields, alter serde renames, or change the
@@ -114,7 +114,7 @@ escalation, not a workaround.
   Pandalump in design review.)
 - Risk: agents key off the `kind` string instead of `schema_version`, turning an
   unversioned string into a de facto contract. Severity: medium. Likelihood:
-  medium. Mitigation: ADR-007 states that `kind` shape is governed by the
+  medium. Mitigation: ADR-0007 states that `kind` shape is governed by the
   schema version and the suffix constant, and that compatibility detection uses
   `schema_version`. The users' guide repeats this. (Raised by Telefono.)
 - Risk: the `context` command, if modelled as a normal merged subcommand in the
@@ -167,7 +167,7 @@ escalation, not a workaround.
   help copy, and updated help snapshots.
 - [x] (2026-06-24 14:35Z) Milestone 3 CodeRabbit review completed with zero
   findings after commit `15b4d39`.
-- [x] (2026-06-24 14:55Z) Milestone 4 — documentation: ADR-007, normative
+- [x] (2026-06-24 14:55Z) Milestone 4 — documentation: ADR-0007, normative
   promotion of `agent-native-cli-design.md` §3.2, users' guide subsection,
   developers' guide note, design-doc decision-log entry,
   `cargo-orthohelp-design.md` clarification, `contents.md` registration.
@@ -204,7 +204,7 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   `mycli agent-context | jq ...`; Cloudflare's Wrangler standardizes `--json`
   (never `--format=json`). Impact: OrthoConfig deliberately diverges on the
   command name (`context`) while keeping `--json` canonical. This divergence
-  and its justification are the substance of ADR-007.
+  and its justification are the substance of ADR-0007.
 - Observation: the example's subcommands flow through
   `load_globals_and_merge_selected_subcommand`. Evidence:
   `examples/hello_world/src/main.rs:24-39`. Impact: `context` should
@@ -291,11 +291,11 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   short-circuit in `examples/hello_world/src/main.rs`. Date/Author: 2026-06-14,
   planning synthesis.
 
-- Decision D4: Record the decision as ADR-007 (next free number), referenced
+- Decision D4: Record the decision as ADR-0007 (next free number), referenced
   from `design.md` and `agent-native-cli-design.md`, rather than recording it
   in the design doc only. Rationale: a narrow, hard-to-reverse naming/contract
   decision with explicit prior-art divergence is exactly the ADR threshold in
-  `docs/documentation-style-guide.md`; it mirrors ADR-003 owning the schema
+  `docs/documentation-style-guide.md`; it mirrors ADR-0003 owning the schema
   split. Date/Author: 2026-06-14, docs-planning agent.
 
 - Decision D5: Add `proptest` as an `ortho_config` dev-dependency for one
@@ -354,7 +354,7 @@ help snapshot updates. Standard workspace gates passed after adding localized
 context command copy and accepting the intended help snapshot drift. CodeRabbit
 reviewed commit `15b4d39` with zero findings.
 
-Milestone 4 outcome (2026-06-24): ADR-007 records the downstream
+Milestone 4 outcome (2026-06-24): ADR-0007 records the downstream
 `context --json` naming decision, the accepted Y-Statement, the rejected
 alternatives, the `schema_version` compatibility rule, and prior-art
 references. The agent-native design now treats `context --json` as the
@@ -365,7 +365,7 @@ contents index now all reference the convention. CodeRabbit reviewed commit
 `393b54c` with zero findings after the required rate-limit wait and retry.
 
 Milestone 5 outcome (2026-06-24): `docs/roadmap.md` now marks 6.2.3 and its
-three subrequirements complete, with ADR-007 added to the item's references.
+three subrequirements complete, with ADR-0007 added to the item's references.
 The final deterministic gate set passed before the closeout commit:
 `make markdownlint`, `make check-fmt`, `make typecheck`, `make lint`, and
 `make test`. CodeRabbit reviewed commit `173507f` with zero findings after the
@@ -415,11 +415,11 @@ The reader is assumed to know nothing about this repository. Key locations:
   (`examples/hello_world/tests/rstest_bdd/behaviour/harness/process.rs`).
 - `docs/agent-native-cli-design.md` §3.2 (lines ~145-218) and §5 (lines
   ~335-381) — the prose preference for `context --json` and the canonical-flag
-  vocabulary. `docs/adr-003-...md`, `docs/cargo-orthohelp-design.md` §6.3.1,
-  `docs/users-guide.md` (§"Documentation and agent contracts", ~196-220),
-  `docs/developers-guide.md` (§"Schema ownership" ~52-113, §"Generating
-  agent-context output" ~114-193), `docs/contents.md`, `docs/roadmap.md` (item
-  6.2.3 at lines 159-166).
+  vocabulary. `docs/adrs/adr-0003-...md`, `docs/cargo-orthohelp-design.md`
+  §6.3.1, `docs/users-guide.md` (§"Documentation and agent contracts",
+  ~196-220), `docs/developers-guide.md` (§"Schema ownership" ~52-113,
+  §"Generating agent-context output" ~114-193), `docs/contents.md`,
+  `docs/roadmap.md` (item 6.2.3 at lines 159-166).
 
 Terms of art:
 
@@ -534,8 +534,8 @@ Validation.
 
 ### Milestone 4 — documentation and ADR
 
-1. New `docs/adr-007-downstream-context-command-naming.md` in the existing
-   `docs/adr-NNN-*.md` house format (use ADR-006 as the structural template;
+1. New `docs/adrs/adr-0007-downstream-context-command-naming.md` in the existing
+   `docs/adr-NNN-*.md` house format (use ADR-0006 as the structural template;
    load the `arch-decision-records` skill). Sections: Status (`Accepted.`, date
    2026-06-14), Context and problem statement (including the prior-art
    tension), Decision drivers, Options considered (Option A: follow prior art
@@ -545,35 +545,35 @@ Validation.
    Goals and non-goals, Known risks and limitations (including the
    `kind`-is-not-a-version warning), References (links to
    `agent-native-cli-design.md` §3.2/§5, `cargo-orthohelp-design.md` §6.3.1,
-   ADR-003, and external prior art: Chow's "10 Principles", Cloudflare
+   ADR-0003, and external prior art: Chow's "10 Principles", Cloudflare
    Wrangler, the Kubernetes `kind` convention, Dapr reverse-DNS kinds).
 2. `docs/agent-native-cli-design.md`: promote the §3.2 prose (lines ~176-193)
    from "should prefer" to a normative rule (downstream surfaces *expose*
    `context --json`; payload *identifies* via `kind`; aliases avoided
    pre-release; generator *retains* `--format agent-context`), add the
-   prior-art citation and a "see ADR-007" link; in §5 note `--json` stays
-   canonical and the `context` command name is fixed by ADR-007.
+   prior-art citation and a "see ADR-0007" link; in §5 note `--json` stays
+   canonical and the `context` command name is fixed by ADR-0007.
 3. `docs/users-guide.md`: new subsection under "Documentation and agent
    contracts" giving downstream authors a worked `context --json` example built
    with `AgentContext::new`, stating plainly that applications expose `context`
    (not `agent-context`) and that compatibility is detected via
-   `schema_version`, not by parsing `kind`. Link ADR-007.
+   `schema_version`, not by parsing `kind`. Link ADR-0007.
 4. `docs/developers-guide.md`: in "Schema ownership", note
    `AGENT_CONTEXT_KIND_SUFFIX` + `agent_context_kind` as the single source for
    the `kind` discriminator (no hand-formatting); in "Generating agent-context
    output", add one sentence distinguishing generator format from the downstream
-   `context --json` command, citing ADR-007.
-5. `docs/design.md`: add a dated decision-log bullet linking ADR-007 and
+   `context --json` command, citing ADR-0007.
+5. `docs/design.md`: add a dated decision-log bullet linking ADR-0007 and
    `agent-native-cli-design.md` §3.2 (motivation + link only).
 6. `docs/cargo-orthohelp-design.md` §6.3.1: add a sentence clarifying that
-   `--format agent-context` is the generator format, unchanged by ADR-007, and
+   `--format agent-context` is the generator format, unchanged by ADR-0007, and
    that `context --json` applies only to downstream application surfaces.
-7. `docs/contents.md`: register the ADR-007 entry under the decisions section.
+7. `docs/contents.md`: register the ADR-0007 entry under the decisions section.
 
 ### Milestone 5 — finalize
 
 Mark `docs/roadmap.md` item 6.2.3 (and its three sub-bullets) done, adding the
-ADR-007 reference to its `See` line. Run the full gate. Clear CodeRabbit.
+ADR-0007 reference to its `See` line. Run the full gate. Clear CodeRabbit.
 
 ## Concrete steps
 
@@ -741,24 +741,24 @@ Acceptance evidence (2026-06-24):
 
 Acceptance: `make check-fmt` passes (covers Markdown formatting); the ADR
 follows the house format with a non-empty Y-Statement (named alternative, named
-downside); all cross-links resolve; `contents.md` lists ADR-007. A manual read
-confirms the `kind`-is-not-a-version warning appears in both ADR-007 and the
+downside); all cross-links resolve; `contents.md` lists ADR-0007. A manual read
+confirms the `kind`-is-not-a-version warning appears in both ADR-0007 and the
 users' guide, and that en-GB Oxford spelling holds in prose while code/JSON
 identifiers are untouched.
 
 Acceptance evidence (2026-06-24):
 
 - ADR shape:
-  `docs/adr-007-downstream-context-command-naming.md` contains a non-empty
-  Y-Statement, three considered options, a captioned comparison table, known
-  risks, consequences, and external prior-art references.
+  `docs/adrs/adr-0007-downstream-context-command-naming.md` contains a
+  non-empty Y-Statement, three considered options, a captioned comparison
+  table, known risks, consequences, and external prior-art references.
 - Cross-links:
-  `docs/contents.md` registers ADR-007; `docs/design.md`,
+  `docs/contents.md` registers ADR-0007; `docs/design.md`,
   `docs/agent-native-cli-design.md`, `docs/users-guide.md`,
   `docs/developers-guide.md`, and `docs/cargo-orthohelp-design.md` link or
   refer to the accepted convention.
 - Compatibility wording:
-  ADR-007 and the users' guide state that consumers compare `schema_version`
+  ADR-0007 and the users' guide state that consumers compare `schema_version`
   rather than parsing `kind`.
 - Formatting caveat:
   `make fmt` was attempted and failed on unrelated line-length findings in
@@ -785,7 +785,7 @@ Final acceptance evidence (2026-06-24):
 
 - Roadmap:
   `docs/roadmap.md` marks item 6.2.3 and its three subrequirements complete and
-  references ADR-007.
+  references ADR-0007.
 - Final documentation gate:
   `make markdownlint` passed with zero errors.
 - Final standard gates:
@@ -854,9 +854,9 @@ dev-dependency.
 
 - Design and rationale: `docs/agent-native-cli-design.md` §3.2 and §5;
   `docs/design.md`; `docs/cargo-orthohelp-design.md` §6.3.1;
-  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`.
+  `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`.
 - Style and decisions: `docs/documentation-style-guide.md`; skills
-  `arch-decision-records` (ADR-007), `en-gb-oxendict` (prose),
+  `arch-decision-records` (ADR-0007), `en-gb-oxendict` (prose),
   `arch-crate-design` and `arch-supply-chain` (public-API/SemVer boundary).
 - Testing: `docs/rust-testing-with-rstest-fixtures.md`,
   `docs/rust-doctest-dry-guide.md`,
@@ -909,7 +909,7 @@ dev-dependency.
   workspace gates.
 - Milestone 3 review update (2026-06-24): recorded CodeRabbit's zero-finding
   review of commit `15b4d39`. Milestone 4 may proceed after this checkpoint.
-- Milestone 4 update (2026-06-24): recorded ADR-007 and the supporting
+- Milestone 4 update (2026-06-24): recorded ADR-0007 and the supporting
   documentation updates, the `make fmt` caveat, and green Markdown and standard
   workspace gates.
 - Milestone 4 review update (2026-06-24): recorded CodeRabbit's rate-limit
@@ -924,7 +924,7 @@ dev-dependency.
 - Rebase update (2026-06-24): rebased the branch onto `origin/main`. Conflicts
   were resolved by keeping both the upstream command-localization parser path
   and this branch's `hello_world context --json` short-circuit, combining
-  crate-root agent-context exports, and merging the documentation so ADR-007's
+  crate-root agent-context exports, and merging the documentation so ADR-0007's
   downstream command naming guidance coexists with the skill-manifest schema
   notes. Post-rebase validation required restoring dropped `AgentContext`
   derives and rstest attributes, updating the `hello_world` snapshot for the

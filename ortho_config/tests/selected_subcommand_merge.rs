@@ -18,7 +18,7 @@ struct Cli {
     cmd: Commands,
 }
 
-#[derive(Debug, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
+#[derive(Debug, Subcommand, ortho_config::SelectedSubcommandMerge)]
 enum Commands {
     #[command(name = "run")]
     Run(RunArgs),
@@ -67,6 +67,7 @@ fn selected_file(contents: &str) -> Result<tempfile::TempDir> {
     Ok(root)
 }
 
+/// Confirms that a file value overrides a clap default marked as absent.
 #[rstest]
 fn selected_subcommand_merge_respects_cli_default_as_absent() -> Result<()> {
     let root = selected_file("[cmds.greet]\npunctuation = \"??\"")?;
@@ -89,6 +90,7 @@ fn selected_subcommand_merge_respects_cli_default_as_absent() -> Result<()> {
     Ok(())
 }
 
+/// Confirms that the unified helper returns globals and the merged command.
 #[rstest]
 fn unified_helper_returns_globals_and_merged_command() -> Result<()> {
     let root = selected_file("[cmds.run]\noption = \"file\"")?;
@@ -118,6 +120,7 @@ fn unified_helper_returns_globals_and_merged_command() -> Result<()> {
     Ok(())
 }
 
+/// Confirms that the selected merge reads values from its injected environment.
 #[rstest]
 fn selected_subcommand_merge_uses_injected_environment() -> Result<()> {
     let root = selected_file("# no command defaults\n")?;
@@ -142,6 +145,31 @@ fn selected_subcommand_merge_uses_injected_environment() -> Result<()> {
     Ok(())
 }
 
+/// Confirms that a matches-aware selected merge reads its injected environment.
+#[rstest]
+fn selected_subcommand_with_matches_uses_injected_environment() -> Result<()> {
+    let root = selected_file("# no command defaults\n")?;
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    let files = SubcommandFileContext::new(root.path(), &discovery);
+    let matches = Cli::command()
+        .try_get_matches_from(["prog", "greet"])
+        .context("parse greet arguments")?;
+    let cli = Cli::from_arg_matches(&matches).context("decode greet arguments")?;
+    let environment = Arc::new(MapEnv::new().with_var("APP_CMDS_GREET_PUNCTUATION", "injected"));
+    let merged = cli
+        .cmd
+        .load_and_merge_selected_with_sources(&matches, files, environment)?;
+
+    let Commands::Greet(config) = merged else {
+        anyhow::bail!("expected greet command");
+    };
+    ensure!(
+        config.punctuation == "injected",
+        "matches-aware selected merge should read the injected environment"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn selected_subcommand_merge_errors_when_missing_subcommand_matches() {
     let matches = clap::ArgMatches::default();
@@ -162,6 +190,7 @@ fn selected_subcommand_merge_errors_when_missing_subcommand_matches() {
     );
 }
 
+/// Confirms that a global configuration loading error is returned to the caller.
 #[rstest]
 fn unified_helper_surfaces_globals_error() -> Result<()> {
     let root = selected_file("# no command defaults\n")?;
@@ -187,6 +216,7 @@ fn unified_helper_surfaces_globals_error() -> Result<()> {
     Ok(())
 }
 
+/// Confirms that selected-subcommand configuration merge errors are surfaced.
 #[rstest]
 fn selected_subcommand_merge_surfaces_merge_error() -> Result<()> {
     let root = selected_file("[cmds.greet]\npunctuation = 123")?;

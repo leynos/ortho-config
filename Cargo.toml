@@ -3,14 +3,19 @@ members = [
     "cargo-orthohelp",
     "examples/hello_world",
     "ortho_config",
+    "ortho_l10n",
     "ortho_config_macros",
     "test_helpers",
-    "tests/fixtures/orthohelp_fixture"
+    "tests/fixtures/orthohelp_fixture",
+    "tests/fixtures/orthohelp_policy_adoption_fixture",
+    "tests/fixtures/orthohelp_policy_off_fixture",
+    "tests/fixtures/orthohelp_policy_warn_fixture",
+    "tests/fixtures/orthohelp_policy_deny_fixture"
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Payton McIntosh <pmcintosh@df12.net>"]
 edition = "2024"
 rust-version = "1.89.0"
@@ -22,12 +27,20 @@ keywords = ["config", "configuration", "cli", "env", "settings"]
 categories = ["config", "command-line-interface"]
 
 [workspace.dependencies]
-rstest-bdd = "0.5.0"
-rstest-bdd-macros = "0.5.0"
+rstest-bdd = "0.6.0"
+rstest-bdd-macros = "0.6.0"
+rstest = "0.28.0"
+proptest = "1.11.0"
+# Test-only matcher crates for the new profile test modules (decision D9 of
+# docs/execplans/9-1-1-profile-metadata.md). Scoped to ortho_config's
+# dev-dependencies; not an invitation to migrate existing tests.
+googletest = "0.14.3"
+pretty_assertions = "1.4.1"
 
 # `cargo clippy` lints configuration
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
+missing_docs_in_private_items = "deny"
 
 # 1. hygiene
 allow_attributes                    = "deny"
@@ -92,6 +105,11 @@ result_large_err                    = "deny"
 unknown_lints                       = "deny"
 renamed_and_removed_lints           = "deny"
 missing_docs                        = "deny"
+# Whitaker replaces RUSTFLAGS, so register the test cfg outside `.cargo/config`.
+
+[workspace.lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = ["cfg(ortho_config_dev_fast)"]
 
 [workspace.lints.rustdoc]
 missing_crate_level_docs            = "deny"
@@ -101,3 +119,7 @@ bare_urls                           = "deny"
 invalid_html_tags                   = "deny"
 invalid_codeblock_attributes        = "deny"
 unescaped_backticks                 = "deny"
+
+[profile.dev]
+incremental = false
+debug = 0

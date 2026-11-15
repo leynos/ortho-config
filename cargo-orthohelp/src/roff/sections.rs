@@ -10,7 +10,7 @@ use crate::ir::{
 use crate::schema::{FileMetadata, SourceKind};
 
 use super::entry;
-use super::escape::{bold, escape_macro_arg, escape_text, format_flag, format_flag_with_value};
+use super::escape::{bold, escape_macro_arg, escape_text};
 use super::types::ManSection;
 
 /// Metadata for the man page title header.
@@ -86,24 +86,16 @@ pub fn synopsis_section(
     output
 }
 
+/// Formats a synopsis flag and brackets it unless the corresponding field is required.
 fn format_synopsis_option(
     field: &LocalizedFieldMetadata,
     cli: &crate::schema::CliMetadata,
 ) -> String {
-    let flag = if cli.takes_value {
-        let placeholder = field
-            .value
-            .as_ref()
-            .map(super::escape::value_type_placeholder);
-        let value_name = cli
-            .value_name
-            .as_deref()
-            .or(placeholder.as_deref())
-            .unwrap_or("VALUE");
-        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
-    } else {
-        format_flag(cli.long.as_deref(), cli.short)
-    };
+    let placeholder = field
+        .value
+        .as_ref()
+        .map(super::escape::value_type_placeholder);
+    let flag = super::escape::format_option(cli, placeholder.as_deref(), "VALUE");
 
     if field.required {
         format!("{flag}\n")
@@ -191,6 +183,7 @@ pub fn files_section(
     output
 }
 
+/// Appends configuration keys after discovery details, omitting the block when there are none.
 fn render_file_keys(output: &mut String, file_fields: &[(&LocalizedFieldMetadata, &FileMetadata)]) {
     if file_fields.is_empty() {
         return;
@@ -245,10 +238,12 @@ pub fn precedence_section(
     output
 }
 
+/// Maps each precedence source to a reader-facing label; the caller preserves source order.
 const fn format_source_kind(kind: &SourceKind) -> &'static str {
     match kind {
         SourceKind::Defaults => "Built-in defaults",
         SourceKind::File => "Configuration files",
+        SourceKind::Profile => "Profile overlays",
         SourceKind::Env => "Environment variables",
         SourceKind::Cli => "Command-line arguments",
     }
@@ -336,62 +331,5 @@ pub fn exit_status_section(headings: &LocalizedHeadings) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for roff section rendering.
-
-    use super::*;
-    use rstest::{fixture, rstest};
-
-    #[fixture]
-    fn headings() -> LocalizedHeadings {
-        LocalizedHeadings {
-            name: "NAME".to_owned(),
-            synopsis: "SYNOPSIS".to_owned(),
-            description: "DESCRIPTION".to_owned(),
-            options: "OPTIONS".to_owned(),
-            environment: "ENVIRONMENT".to_owned(),
-            files: "FILES".to_owned(),
-            precedence: "PRECEDENCE".to_owned(),
-            exit_status: "EXIT STATUS".to_owned(),
-            examples: "EXAMPLES".to_owned(),
-            see_also: "SEE ALSO".to_owned(),
-            commands: "COMMANDS".to_owned(),
-        }
-    }
-
-    #[test]
-    fn title_header_formats_correctly() {
-        let metadata = TitleMetadata::new(Some("2026-01-31"), Some("v1.0"), Some("User Commands"));
-        let section = ManSection::new(1).expect("valid section");
-        let result = title_header("my-app", section, &metadata);
-        assert!(result.starts_with(".TH \"MY-APP\" \"1\""));
-        assert!(result.contains("2026-01-31"));
-        assert!(result.contains("v1.0"));
-        assert!(result.contains("User Commands"));
-    }
-
-    #[rstest]
-    fn name_section_escapes_description(headings: LocalizedHeadings) {
-        let result = name_section(&headings, "my-app", "A -test application");
-        assert!(result.contains("my-app \\- A -test application"));
-
-        let leading_dash_result = name_section(&headings, "my-app", "-starts with dash");
-        assert!(leading_dash_result.contains("my-app \\- \\-starts with dash"));
-    }
-
-    #[rstest]
-    fn precedence_section_orders_sources(headings: LocalizedHeadings) {
-        let prec = LocalizedPrecedenceMeta {
-            order: vec![
-                SourceKind::Defaults,
-                SourceKind::File,
-                SourceKind::Env,
-                SourceKind::Cli,
-            ],
-            rationale: None,
-        };
-        let result = precedence_section(&headings, Some(&prec));
-        assert!(result.contains(".IP 1. 4\nBuilt-in defaults"));
-        assert!(result.contains(".IP 4. 4\nCommand-line arguments"));
-    }
-}
+#[path = "sections_tests.rs"]
+mod tests;

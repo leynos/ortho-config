@@ -6,7 +6,7 @@
 use crate::ir::{LocalizedConfigDiscoveryMeta, LocalizedFieldMetadata};
 use crate::schema::{CliMetadata, ConfigFormat};
 
-use super::escape::{bold, escape_text, format_flag, format_flag_with_value, italic};
+use super::escape::{bold, escape_text, italic};
 
 /// Formats a CLI option entry for the OPTIONS section.
 pub fn format_option_entry(field: &LocalizedFieldMetadata, cli: &CliMetadata) -> String {
@@ -51,20 +51,11 @@ pub fn format_option_entry(field: &LocalizedFieldMetadata, cli: &CliMetadata) ->
 
 /// Formats the flag line for an option entry.
 fn format_option_flag_line(field: &LocalizedFieldMetadata, cli: &CliMetadata) -> String {
-    if cli.takes_value {
-        let placeholder = field
-            .value
-            .as_ref()
-            .map(super::escape::value_type_placeholder);
-        let value_name = cli
-            .value_name
-            .as_deref()
-            .or(placeholder.as_deref())
-            .unwrap_or("VALUE");
-        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
-    } else {
-        format_flag(cli.long.as_deref(), cli.short)
-    }
+    let placeholder = field
+        .value
+        .as_ref()
+        .map(super::escape::value_type_placeholder);
+    super::escape::format_option(cli, placeholder.as_deref(), "VALUE")
 }
 
 /// Formats an environment variable entry for the ENVIRONMENT section.
@@ -119,6 +110,7 @@ pub fn render_discovery_section(disc: &LocalizedConfigDiscoveryMeta) -> String {
     output
 }
 
+/// Emits each configured search pattern and its optional localized explanatory note.
 fn render_search_paths(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     for path in &disc.search_paths {
         output.push_str(".TP\n");
@@ -131,6 +123,7 @@ fn render_search_paths(output: &mut String, disc: &LocalizedConfigDiscoveryMeta)
     }
 }
 
+/// Adds the supported-format sentence only when discovery metadata names a format.
 fn render_supported_formats(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     if disc.formats.is_empty() {
         return;
@@ -142,6 +135,7 @@ fn render_supported_formats(output: &mut String, disc: &LocalizedConfigDiscovery
     output.push_str(".\n");
 }
 
+/// States XDG compliance only when the metadata confirms that platform behaviour.
 fn render_xdg_compliance(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     if disc.xdg_compliant {
         output.push_str(".PP\n");
@@ -149,6 +143,7 @@ fn render_xdg_compliance(output: &mut String, disc: &LocalizedConfigDiscoveryMet
     }
 }
 
+/// Converts schema format variants to the stable labels used in man-page prose.
 const fn format_config_format(format: &ConfigFormat) -> &'static str {
     match format {
         ConfigFormat::Toml => "TOML",
@@ -156,3 +151,7 @@ const fn format_config_format(format: &ConfigFormat) -> &'static str {
         ConfigFormat::Json => "JSON",
     }
 }
+
+#[cfg(test)]
+#[path = "entry_tests.rs"]
+mod tests;

@@ -1,0 +1,36 @@
+//! Behavioural step modules registered with `rstest-bdd`.
+
+pub mod cargo_steps;
+#[cfg(feature = "serde_json")]
+pub mod cli_default_as_absent_steps;
+pub mod cli_steps;
+pub mod collection_steps;
+mod common;
+pub mod config_path_steps;
+pub mod docs_steps;
+pub mod env_steps;
+pub mod error_steps;
+pub mod extends_steps;
+#[cfg(feature = "serde_json")]
+pub mod flatten_steps;
+pub mod ignore_steps;
+pub mod localizer_steps;
+#[cfg(feature = "serde_json")]
+pub mod merge_composer_steps;
+#[cfg(feature = "serde_json")]
+pub mod merge_error_steps;
+pub mod nested_docs_steps;
+
+#[cfg(feature = "serde_json")]
+mod profile_placeholders;
+#[cfg(feature = "serde_json")]
+mod profile_sources;
+
+#[cfg(feature = "serde_json")]
+pub mod profiles_steps;
+
+#[cfg(feature = "serde_json")]
+pub mod profiles_steps_assertions;
+#[cfg(feature = "serde_json")]
+pub mod subcommand_steps;
+mod value_parsing;

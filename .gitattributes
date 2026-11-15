@@ -1,1 +1,7 @@
 ortho_config/src/agent_context/fixtures/*.json text eol=lf
+# The build-tools scripts run under bash on every platform that reaches the
+# preflight, the Windows leg included, and a CRLF checkout would make bash read
+# every command as `command\r`. The pin files are read by those scripts too.
+*.sh text eol=lf
+tools/mold/VERSION text eol=lf
+tools/mold/SHA256SUMS text eol=lf

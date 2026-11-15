@@ -10,6 +10,12 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
 
+#[path = "support/layer_assertions.rs"]
+mod layer_assertions;
+#[path = "support/scoped_fixtures.rs"]
+#[expect(dead_code, reason = "write_config serves sibling suites")]
+mod scoped_fixtures;
+
 mod discovery_compose_layers {
     //! `ConfigDiscovery::compose_layers` pinned at its own API.
     //!
@@ -23,9 +29,12 @@ mod discovery_compose_layers {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
-    use anyhow::{Context as _, Result, ensure};
+    use anyhow::{Context as _, Result, anyhow, ensure};
     use cap_std::{ambient_authority, fs::Dir};
-    use ortho_config::{ConfigDiscovery, MapEnv};
+    use ortho_config::{AutomaticMode, ConfigDiscovery, DiscoveryScope, MapEnv};
+
+    use crate::layer_assertions::{assert_layer_path, merge_layers};
+    use crate::scoped_fixtures::write_body;
 
     /// Write a fixture through a capability handle, per the repository's
     /// filesystem policy: the handle names the directory it may touch.
@@ -148,12 +157,77 @@ mod discovery_compose_layers {
         );
         Ok(())
     }
+
+    #[test]
+    fn scoped_first_wins_keeps_only_the_preferred_candidate() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let home = dir.path().join("home");
+        // Two candidates in one scope, both loadable: the XDG location the
+        // candidate list prefers, and the dotfile fallback behind it. A mode
+        // that loaded every applicable file would return both layers and let
+        // the fallback's value override, so the layer count and the merged
+        // value together are what distinguish first-wins from stacking here.
+        let preferred = home.join(".config/demo/config.toml");
+        let fallback = home.join(".demo.toml");
+        write_body(&preferred, "value = 1\n")?;
+        write_body(&fallback, "value = 2\n")?;
+
+        // `env_source` replaces rather than merges, so the isolation variable
+        // has to travel in the same map as `HOME`; a second `env_source` call
+        // would drop it and let a host's `/etc/xdg/demo/config.toml` load
+        // ahead of the fixtures.
+        let outcome = ConfigDiscovery::builder("demo")
+            .clear_project_roots()
+            .env_source(Arc::new(
+                MapEnv::new()
+                    .with_var("XDG_CONFIG_DIRS", "/nonexistent/ortho-config-test-xdg")
+                    .with_var("HOME", &home),
+            ))
+            .build()
+            .compose_scoped_layers(AutomaticMode::FirstWins, &[DiscoveryScope::User]);
+
+        ensure!(
+            outcome.required_errors.is_empty() && outcome.optional_errors.is_empty(),
+            "composing should not fail: {:?} / {:?}",
+            outcome.required_errors,
+            outcome.optional_errors,
+        );
+        let names = layer_file_names(&outcome.value);
+        ensure!(
+            names == ["config.toml"],
+            "first-wins must contribute exactly the preferred candidate: {names:?}",
+        );
+        let only = outcome
+            .value
+            .first()
+            .ok_or_else(|| anyhow!("first-wins must still return the one layer it loaded"))?;
+        assert_layer_path(only, &preferred)?;
+        let merged = merge_layers(outcome.value);
+        ensure!(
+            merged.get("value") == Some(&serde_json::json!(1)),
+            "the preferred candidate's value must win, not the fallback's: {merged:?}",
+        );
+        // Guard the case itself: with only one candidate on disk the
+        // assertions above would hold for a reader that never consulted the
+        // candidate list at all.
+        ensure!(
+            preferred.exists() && fallback.exists(),
+            "both candidates must be loadable, or the case proves nothing",
+        );
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
 struct BuilderConfig {
     #[ortho_config(default = 7)]
+    port: u16,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, OrthoConfig, PartialEq)]
+#[ortho_config(prefix = "SOURCE_AWARE_")]
+struct SourceAwareConfig {
     port: u16,
 }
 
@@ -213,6 +287,65 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
     Ok(())
 }
 
+/// Exercise generated source-aware composition through its merged config value.
+#[rstest]
+fn source_aware_composition_uses_distinct_discovery_and_merge_sources() -> Result<()> {
+    let directory = tempfile::tempdir().context("create the configuration directory")?;
+    Dir::open_ambient_dir(directory.path(), ambient_authority())
+        .context("open the configuration directory")?
+        .write("selected.toml", "port = 3030")
+        .context("write the selected file")?;
+
+    // The injected XDG value prevents discovery from reaching the host's
+    // /etc/xdg; the selector is absolute so no working directory is involved.
+    let discovery_source: SharedEnvSource = Arc::new(
+        MapEnv::new()
+            .with_var(
+                "SOURCE_AWARE_CONFIG_PATH",
+                directory.path().join("selected.toml"),
+            )
+            .with_var("XDG_CONFIG_DIRS", "/nonexistent/ortho-config-test-xdg"),
+    );
+    let merge_source: SharedScanEnvSource =
+        Arc::new(MapEnv::new().with_var("SOURCE_AWARE_PORT", "9000"));
+
+    let composition = SourceAwareConfig::compose_layers_from_iter_with_sources(
+        ["source-aware"],
+        discovery_source,
+        merge_source,
+    );
+    let (layers, errors) = composition.into_parts();
+    ensure!(errors.is_empty(), "composition errors: {errors:?}");
+
+    let file_layer_count = layers
+        .iter()
+        .filter(|layer| layer.provenance() == MergeProvenance::File)
+        .count();
+    ensure!(
+        file_layer_count == 1,
+        "the explicit selector should be the only file layer, got {file_layer_count}"
+    );
+    let selected_file = layers
+        .iter()
+        .find(|layer| layer.provenance() == MergeProvenance::File)
+        .and_then(|layer| layer.path())
+        .and_then(|path| path.file_name());
+    ensure!(
+        selected_file == Some("selected.toml"),
+        "discovery should select the injected file, got {selected_file:?}"
+    );
+
+    let merged = SourceAwareConfig::merge_from_layers(layers)
+        .map_err(|err| anyhow::anyhow!(err))
+        .context("merge the composed layers")?;
+    ensure!(
+        merged.port == 9000,
+        "the distinct merge source should override the file value, got {}",
+        merged.port
+    );
+    Ok(())
+}
+
 #[rstest]
 fn compose_layers_collects_cli_parse_errors() -> Result<()> {
     let fixture = tempfile::tempdir().context("create invalid CLI fixture root")?;
@@ -234,15 +367,43 @@ fn compose_layers_collects_cli_parse_errors() -> Result<()> {
 }
 
 #[rstest]
-fn compose_layers_collects_env_and_file_errors() -> Result<()> {
+#[case::invalid_file(
+    Some("port = \"file-not-a-number\""),
+    None,
+    [MergeProvenance::Defaults, MergeProvenance::File],
+)]
+#[case::invalid_environment(
+    None,
+    Some("env-not-a-number"),
+    [MergeProvenance::Defaults, MergeProvenance::Environment],
+)]
+fn compose_layers_collects_env_and_file_errors(
+    #[case] file_contents: Option<&str>,
+    #[case] environment_port: Option<&str>,
+    #[case] expected_provenance: [MergeProvenance; 2],
+) -> Result<()> {
     let fixture = tempfile::tempdir().context("create invalid layers fixture root")?;
-    let file = selected_file(fixture.path(), "port = \"file-not-a-number\"")?;
-    let discovery: SharedEnvSource = Arc::new(MapEnv::new().with_var("APP_CONFIG_PATH", &file));
-    let merge: SharedScanEnvSource =
-        Arc::new(MapEnv::new().with_var("APP_PORT", "env-not-a-number"));
-    let composition =
-        BuilderConfig::compose_layers_from_iter_with_sources(["prog"], discovery, merge);
+    let discovery_map = if let Some(contents) = file_contents {
+        let file = selected_file(fixture.path(), contents)?;
+        MapEnv::new().with_var("APP_CONFIG_PATH", &file)
+    } else {
+        MapEnv::new()
+    };
+    let merge_map =
+        environment_port.map_or_else(MapEnv::new, |port| MapEnv::new().with_var("APP_PORT", port));
+    let discovery_source: SharedEnvSource = Arc::new(discovery_map);
+    let merge_source: SharedScanEnvSource = Arc::new(merge_map);
+    let composition = BuilderConfig::compose_layers_from_iter_with_sources(
+        ["prog"],
+        discovery_source,
+        merge_source,
+    );
     let (layers, errors) = composition.into_parts();
+    let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+    ensure!(
+        provenances.starts_with(&expected_provenance),
+        "unexpected provenance prefix: {provenances:?}"
+    );
     let merged = BuilderConfig::merge_from_layers(layers.clone());
     ensure!(merged.is_err(), "expected malformed layer merge to fail");
     let aggregated = ortho_config::declarative::LayerComposition::new(layers, errors)
@@ -250,6 +411,88 @@ fn compose_layers_collects_env_and_file_errors() -> Result<()> {
     ensure!(
         aggregated.is_err(),
         "expected aggregated malformed merge to fail"
+    );
+    Ok(())
+}
+
+/// A configuration with exactly one field.
+///
+/// The single field is what makes this a regression test rather than a
+/// duplicate of `compose_layers_collects_cli_env_and_file`: the defect it pins
+/// only appears when the sanitized CLI object can equal the defaults object
+/// field for field, which a one-field struct reaches as soon as the user
+/// restates the default.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct SingleFieldConfig {
+    #[ortho_config(default = false)]
+    excited: bool,
+}
+
+/// One row of the CLI-layer presence matrix for [`SingleFieldConfig`].
+///
+/// `cli_args` supplies the command line; `expected_provenances` is the layer
+/// stack the composition must produce, and `expected_excited` the merged
+/// boolean. The case name records which rung is expected to win.
+struct CliLayerCase {
+    cli_args: &'static [&'static str],
+    expected_provenances: &'static [MergeProvenance],
+    expected_excited: bool,
+}
+
+/// An explicit CLI value that happens to equal the struct default must still
+/// produce a CLI layer, while an absent argument must not.
+///
+/// The generated guard used to compare the whole sanitized CLI object against
+/// the whole defaults object and skip `composer.push_cli` when they matched.
+/// Restating a default on the command line therefore discarded the entire CLI
+/// layer, and a lower-precedence environment value silently won. The layer
+/// stack is asserted directly so the regression is named at its source rather
+/// than surfacing as a distant merge mismatch, and the absent row pins the
+/// contrapositive: the fix must not make the CLI layer unconditional.
+#[rstest]
+#[case::explicit_false(CliLayerCase {
+    cli_args: &["prog", "--excited=false"],
+    expected_provenances: &[
+        MergeProvenance::Defaults,
+        MergeProvenance::Environment,
+        MergeProvenance::Cli,
+    ],
+    expected_excited: false,
+})]
+#[case::absent(CliLayerCase {
+    cli_args: &["prog"],
+    expected_provenances: &[MergeProvenance::Defaults, MergeProvenance::Environment],
+    expected_excited: true,
+})]
+fn compose_layers_tracks_cli_layer_presence(#[case] case: CliLayerCase) -> Result<()> {
+    // Both sources are closed sets: the host's environment and configuration
+    // directories cannot reach the composition.
+    let discovery_source: SharedEnvSource = Arc::new(MapEnv::new());
+    let merge_source: SharedScanEnvSource = Arc::new(MapEnv::new().with_var("APP_EXCITED", "true"));
+
+    let composition = SingleFieldConfig::compose_layers_from_iter_with_sources(
+        case.cli_args.iter().copied(),
+        discovery_source,
+        merge_source,
+    );
+    let (layers, errors) = composition.into_parts();
+
+    ensure!(errors.is_empty(), "expected composition without errors");
+    let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+    ensure!(
+        provenances == case.expected_provenances,
+        "unexpected provenance stack: {provenances:?}"
+    );
+
+    let merged = SingleFieldConfig::merge_from_layers(layers)
+        .map_err(|err| anyhow::anyhow!(err))
+        .context("merge the composed layers")?;
+    ensure!(
+        merged.excited == case.expected_excited,
+        "expected excited {}, got {}",
+        case.expected_excited,
+        merged.excited
     );
     Ok(())
 }

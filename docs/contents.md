@@ -10,6 +10,9 @@
   documentation metadata, and error handling.
 - [Developer's guide](developers-guide.md): maintain and extend this
   repository, including build, test, lint, release, and contribution workflows.
+- [cargo-orthohelp policy and agent-context API guide](cargo-orthohelp-api-guide.md):
+  construct and serialize the agent-native policy-report and command-context
+  contracts.
 - [Repository layout](repository-layout.md): understand where source code,
   tests, fixtures, generated artefacts, plans, and long-lived references live.
 
@@ -30,39 +33,81 @@
 
 ## Decisions and archives
 
-- [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md):
+- [ADR-0001: Replace `serde_yaml` with `serde-saphyr`](adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md):
   review the accepted YAML parser replacement and migration consequences.
-- [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md):
+- [ADR-0002: Replace `cucumber-rs` with `rstest-bdd`](adrs/adr-0002-replace-cucumber-with-rstest-bdd.md):
   review the accepted behavioural testing migration and expected workflow.
-- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md):
+- [ADR-0003: Define schema ownership for agent-native contracts](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md):
   review the accepted ownership split for documentation IR, agent context, and
   policy reports.
-- [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md):
+- [ADR-0004: Cargo external-subcommand entry-point architecture](adrs/adr-0004-cargo-external-subcommand-entry-point.md):
   review the accepted Cargo dispatch boundary and wrapper shape.
-- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md):
+- [ADR-0005: Subcommand docs companion trait](adrs/adr-0005-subcommand-docs-companion-trait.md):
   review the accepted companion trait for recursive subcommand documentation
   metadata.
-- [ADR-006: Identifier-derivation panics](adr-006-identifier-derivation-panics.md):
+- [ADR-0006: Identifier-derivation panics](adrs/adr-0006-identifier-derivation-panics.md):
   review the accepted panic-on-collision and panic-on-unrepresentable-segment
   contract for `message_id_for` and `LocalizeCmd::localize`.
-- [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md):
+- [ADR-0007: Downstream context command naming](adrs/adr-0007-downstream-context-command-naming.md):
   review the accepted `context --json` downstream command convention and `kind`
   discriminator rule for agent-context payloads.
+- [ADR-0008: Opt-in agent-native policy configuration][adr-0008]:
+  review the accepted 7.1.1 policy configuration surface, the enforcement and
+  advertisement defaults, the report contract, and the reserved 7.1.2 seam.
+- [ADR-0009: Place the Linux build-test leg on Ubicloud][adr-0009]:
+  review the accepted runner size, fork fallback, platform-based check names,
+  and pre-coverage disk discard for the Linux `build-test` leg.
+- [ADR-0010: Behavioural metadata attribute surface](adrs/adr-0010-behavioural-metadata-attribute-surface.md):
+  review the accepted 7.2.1 `behaviour(...)` derive attribute, the no-inference
+  rule, the pinned bypass and dry-run flag grammar, and the
+  `agent-native.behaviour.*` rule set.
+- [ADR-0011: Opt-in identifier artefact emission](adrs/adr-0011-opt-in-identifier-artefact-emission.md):
+  review the guarded build-time export for derived CLI identifiers.
+- [ADR-0012: Profile selection and layering](adrs/adr-0012-profile-selection-and-layering.md):
+  review the decision for optional profile overlays, the five-tier merge order,
+  stateless selection, and the opt-in profile contract.
+- [ADR-0013: Optional-value boolean CLI metadata](adrs/adr-0013-optional-value-boolean-cli-metadata.md):
+  review the accepted `value_optional` marker, the documentation IR version
+  bump, and the rejected alternatives for expressing the new boolean flag
+  surface.
+- [ADR-0014: Documentation build and process ownership](adrs/adr-0014-documentation-build-ownership.md):
+  review the test-only build-cache ownership, process supervision, and timeout
+  policy for executable documentation.
+- [ADR-0015: Reusable localization runtime](adrs/adr-0015-localization-runtime-boundary.md):
+  review the reusable localization boundary, compatibility defaults, and shared
+  identifier owner.
+- [ADR-0016: Dual-renderer metadata surface](adrs/adr-0016-dual-renderer-metadata-surface.md):
+  review the accepted `renderer(...)` derive group, the per-command human and
+  machine records, the role-specific legacy support defaults, and the width
+  encoding.
+- [ADR-0017: Import consumer-side prover tooling](adrs/adr-0017-consumer-side-prover-tooling.md):
+  review the pinned Kani and Verus boundary, the bundled-solver decision, the
+  opt-in integration evidence, and the limits of a fixture proof.
+- [ADR-0018: Adopt a dated nightly and the development build standard](adrs/adr-0018-adopt-a-dated-nightly-and-the-development-build-standard.md):
+  review the pinned dated nightly, the Cargo defaults restated in Make recipes,
+  the routes kept outside the standard, and build-tool provisioning.
+- [ADR-0019: Use Cranelift for development builds](adrs/adr-0019-use-cranelift-for-development-builds.md):
+  review the dev-fast backend, `-Zthreads=8`, the unwind-dependent test route,
+  and the LLVM coverage exception.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
 
 ## Requests for comments (RFCs)
 
-- [RFC 0001: Field-level environment aliases](rfcs/0001-field-level-environment-aliases.md):
+- [RFC 0001: Field-level environment aliases](rfcs/rfc-0001-field-level-environment-aliases.md):
   review the proposal to add first-class field-level environment-variable
   aliases and projections, with deterministic intra-environment precedence,
   empty-value handling, and secret-redaction metadata, motivated by the `vk` and
   `podbot` use cases.
-- [RFC 0002: Customizable configuration layering policy](rfcs/0002-config-layer-resolution-policy.md):
+- [RFC 0002: Customizable configuration layering policy](rfcs/rfc-0002-config-layer-resolution-policy.md):
   review the proposed generic file-layer resolution policy — ordered explicit
   selectors, multi-scope stacking, and a reusable resolver — with Netsuke as
   the proof case.
+- [RFC 0003: Trust-aware policy composition](rfcs/rfc-0003-trust-aware-policy-composition.md):
+  review the proposed separation of preference precedence from
+  application-defined policy authority, with monotonic policy families,
+  explicit delegation, and bounded provenance diagnostics.
 
 ## Feature and migration notes
 
@@ -86,8 +131,13 @@
 - [v0.9.0 migration guide](v0-9-0-migration-guide.md): identify required,
   recommended, and optional changes when upgrading from v0.8.0.
 - [v0.10.0 migration guide](v0-10-0-migration-guide.md): adopt injected
-  environment sources, parser-faithful clap defaults, or the Cargo
-  external-subcommand helper while preserving process-backed defaults.
+  environment sources, parser-faithful clap defaults, optional profile
+  overlays, or the Cargo external-subcommand helper while preserving
+  process-backed defaults.
+- [v0.11.0 migration guide](v0-11-0-migration-guide.md): name the new
+  `renderer` field when building documentation IR or `AgentCommand` literals,
+  optionally declare how a command renders, collect bridge-cache metrics from
+  the CLI, and adopt the shared test subprocess helpers.
 
 ## Testing and documentation references
 
@@ -96,6 +146,9 @@
   historical reference.
 - [Behavioural tests](behavioural-tests.md): understand the current behavioural
   test organization and expectations.
+- [Boundary allowance finding](BOUNDARY-ALLOWANCE-FINDING.md): review the
+  recorded evidence that the localization boundary contract fails on wall-clock
+  deadlines rather than on the dependency closure it asserts.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md):
   identify common complexity smells and refactoring responses.
 - [Documentation style guide](documentation-style-guide.md): follow the house
@@ -111,17 +164,31 @@
   apply dependency injection patterns in tests.
 - [Rstest BDD users guide](rstest-bdd-users-guide.md): use the current
   `rstest-bdd` testing workflow.
+- [Rstest BDD v0.6.0 migration guide](rstest-bdd-v0-6-0-migration-guide.md):
+  migrate to `rstest-bdd` v0.6.0.
 - [Rstest BDD v0.5.0 migration guide](rstest-bdd-v0-5-0-migration-guide.md):
   migrate to `rstest-bdd` v0.5.0.
+- [Provenance of the imported
+  documents](rstest-bdd-doc-provenance.md): the upstream revision behind the
+  imported guides, their checksums, and the link mapping for upstream siblings
+  that are not vendored here.
 - [Rust doctest dry guide](rust-doctest-dry-guide.md): write maintainable Rust
   doctests.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md):
   structure shared fixtures and parameterized Rust tests.
+- [Scripting standards](scripting-standards.md): write project scripts with
+  Cyclopts, cuprum, and `pathlib`.
 - [Whitaker user's guide](whitaker-users-guide.md):
   usage of the Whitaker lint suite
 
 ## Execution plans
 
+- [Import Kani and Verus tooling](execplans/import-prover-tools.md): review
+  the proposed pinned prover integration and its feature-adoption boundary.
+
+- [Reusable localization runtime][l10n-runtime-plan]:
+  extract `ortho_l10n`, preserve compatibility, and verify consumer dependency
+  boundaries.
 - [ExecPlans directory](execplans/): review living and historical execution
   plans for substantial work.
   - [PowerShell generator with wrapper](execplans/4-1-1-4-power-shell-generator-with-wrapper.md):
@@ -155,11 +222,28 @@
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
+  - [Dual-renderer metadata](execplans/7-2-2-dual-renderer-metadata.md):
+    review the approval-gated plan for renderer support, presentation policies,
+    and stable protocol fields in roadmap 7.2.2.
+  - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
+    item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Prepare the v0.9.0 user documentation](execplans/prepare-v0-9-0-user-documentation.md):
     plan for the public guides and executable documentation-example contract.
   - [Cargo helper for hand-built clap commands](execplans/8-3-1-ortho-config-cargo-helper-for-hand-built-clap-commands.md):
     plan and implementation record for the Cargo external-subcommand helper.
+  - [Address review findings on PR #509](execplans/harden-lint-subcommand-environment-replay-r2-20260923.md):
+    plan and review record for the injected subcommand file-discovery sources
+    and their documentation.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
+  - [Boolean CLI overrides](execplans/issue-444-allow-generated-boolean-cli-options-to-override-with-false.md):
+    plan for the optional-value boolean flag, the `value_optional` IR marker,
+    and the explicit-false override.
+
+[adr-0008]: adrs/adr-0008-agent-native-policy-configuration.md
+[adr-0009]: adrs/adr-0009-linux-build-test-runner-placement.md
+
+[l10n-runtime-plan]:
+  execplans/issue-566-extract-reusable-localisation-runtime-into-ortho-l10n.md

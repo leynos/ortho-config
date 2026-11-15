@@ -4,13 +4,17 @@ use syn::meta::ParseNestedMeta;
 use syn::spanned::Spanned;
 use syn::{LitBool, Token};
 
+use super::doc_attrs_common::{parse_example_meta, parse_link_meta, parse_note_meta};
 use super::doc_types::{
-    DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
-    PrecedenceAttrs, WindowsAttrs,
+    DocFieldAttrs, DocStructAttrs, HeadingOverrides, PrecedenceAttrs, WindowsAttrs,
 };
 use super::literals::{lit_char, lit_str};
-use super::{FieldAttrs, discard_unknown};
+use super::{FieldAttrs, discard_unknown, parse_behaviour_meta, parse_renderer_meta};
 
+/// Applies one documentation setting to the struct model.
+///
+/// Returns `false` without changing `out` when the key belongs to another
+/// attribute family; recognized keys propagate malformed-value errors.
 pub(crate) fn apply_struct_doc_attr(
     meta: &ParseNestedMeta,
     out: &mut DocStructAttrs,
@@ -32,18 +36,6 @@ pub(crate) fn apply_struct_doc_attr(
             out.bin_name = Some(lit_str(meta, "bin_name")?.value());
             Ok(true)
         }
-        "headings" => {
-            let mut headings = out.headings.clone();
-            parse_headings_meta(meta, &mut headings)?;
-            out.headings = headings;
-            Ok(true)
-        }
-        "precedence" => {
-            let mut precedence = out.precedence.take().unwrap_or_default();
-            parse_precedence_meta(meta, &mut precedence)?;
-            out.precedence = Some(precedence);
-            Ok(true)
-        }
         "example" => {
             out.examples.push(parse_example_meta(meta)?);
             Ok(true)
@@ -56,15 +48,56 @@ pub(crate) fn apply_struct_doc_attr(
             out.notes.push(parse_note_meta(meta)?);
             Ok(true)
         }
+        "behavior" => Err(syn::Error::new(
+            meta.path.span(),
+            concat!(
+                "unknown attribute `behavior`; use the en-GB spelling `behaviour` ",
+                "(declares non-interactive execution and mutation-boundary metadata)"
+            ),
+        )),
+        _ => apply_nested_struct_attr(meta, key.as_str(), out),
+    }
+}
+
+/// Applies one attribute whose value is a nested group.
+///
+/// Each group may be declared more than once, so an earlier declaration is
+/// carried into the parse and only replaced once the new group is valid.
+fn apply_nested_struct_attr(
+    meta: &ParseNestedMeta,
+    key: &str,
+    out: &mut DocStructAttrs,
+) -> syn::Result<bool> {
+    match key {
+        "headings" => {
+            let mut headings = out.headings.clone();
+            parse_headings_meta(meta, &mut headings)?;
+            out.headings = headings;
+        }
+        "precedence" => {
+            let mut precedence = out.precedence.take().unwrap_or_default();
+            parse_precedence_meta(meta, &mut precedence)?;
+            out.precedence = Some(precedence);
+        }
         "windows" => {
             let mut windows = out.windows.take().unwrap_or_default();
             parse_windows_meta(meta, &mut windows)?;
             out.windows = Some(windows);
-            Ok(true)
         }
-        _ => Ok(false),
+        "behaviour" => {
+            let mut behaviour = out.behaviour.take().unwrap_or_default();
+            parse_behaviour_meta(meta, &mut behaviour)?;
+            out.behaviour = Some(behaviour);
+        }
+        "renderer" => parse_renderer_meta(meta, out.renderer.get_or_insert_default())?,
+        _ => return Ok(false),
     }
+    Ok(true)
 }
+/// Applies one documentation setting to a field's parsed attribute model.
+///
+/// Unknown keys are left for the caller to route to other attribute parsers,
+/// while recognized keys either update `out` or return a syntax error.
 pub(crate) fn apply_field_doc_attr(
     meta: &ParseNestedMeta,
     out: &mut FieldAttrs,
@@ -118,9 +151,15 @@ pub(crate) fn apply_field_doc_attr(
             out.doc.notes.push(parse_note_meta(meta)?);
             Ok(true)
         }
+        "behaviour" | "behavior" => Err(syn::Error::new(
+            meta.path.span(),
+            "behaviour(...) is a struct-level attribute",
+        )),
         _ => Ok(false),
     }
 }
+/// Parses heading overrides while retaining the caller's earlier values for
+/// headings omitted by this attribute.
 fn parse_headings_meta(meta: &ParseNestedMeta, headings: &mut HeadingOverrides) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| set_heading_field(&nested, headings))
 }
@@ -147,6 +186,8 @@ fn set_heading_field(nested: &ParseNestedMeta, headings: &mut HeadingOverrides) 
     *field_ref = Some(lit_str(nested, &key)?.value());
     Ok(())
 }
+/// Parses precedence ordering and its localized rationale identifier without
+/// changing the order supplied by the author.
 fn parse_precedence_meta(
     meta: &ParseNestedMeta,
     precedence: &mut PrecedenceAttrs,
@@ -163,6 +204,8 @@ fn parse_precedence_meta(
         discard_unknown(&nested)
     })
 }
+/// Parses PowerShell-specific metadata, leaving unspecified options unset so
+/// the downstream generator can apply its defaults.
 fn parse_windows_meta(meta: &ParseNestedMeta, windows: &mut WindowsAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| {
         if nested.path.is_ident("module_name") {
@@ -188,68 +231,7 @@ fn parse_windows_meta(meta: &ParseNestedMeta, windows: &mut WindowsAttrs) -> syn
         discard_unknown(&nested)
     })
 }
-fn parse_example_meta(meta: &ParseNestedMeta) -> syn::Result<DocExampleAttr> {
-    let mut title_id = None;
-    let mut code = None;
-    let mut body_id = None;
-    meta.parse_nested_meta(|nested| {
-        if nested.path.is_ident("title_id") {
-            title_id = Some(lit_str(&nested, "title_id")?.value());
-            return Ok(());
-        }
-        if nested.path.is_ident("code") {
-            code = Some(lit_str(&nested, "code")?.value());
-            return Ok(());
-        }
-        if nested.path.is_ident("body_id") {
-            body_id = Some(lit_str(&nested, "body_id")?.value());
-            return Ok(());
-        }
-        discard_unknown(&nested)
-    })?;
-    let code_value =
-        code.ok_or_else(|| syn::Error::new(meta.path.span(), "example requires code"))?;
-    Ok(DocExampleAttr {
-        title_id,
-        code: code_value,
-        body_id,
-    })
-}
-fn parse_link_meta(meta: &ParseNestedMeta) -> syn::Result<DocLinkAttr> {
-    let mut text_id = None;
-    let mut uri = None;
-    meta.parse_nested_meta(|nested| {
-        if nested.path.is_ident("text_id") {
-            text_id = Some(lit_str(&nested, "text_id")?.value());
-            return Ok(());
-        }
-        if nested.path.is_ident("uri") {
-            uri = Some(lit_str(&nested, "uri")?.value());
-            return Ok(());
-        }
-        discard_unknown(&nested)
-    })?;
-    let uri_value = uri.ok_or_else(|| syn::Error::new(meta.path.span(), "link requires uri"))?;
-    Ok(DocLinkAttr {
-        text_id,
-        uri: uri_value,
-    })
-}
-fn parse_note_meta(meta: &ParseNestedMeta) -> syn::Result<DocNoteAttr> {
-    let mut text_id = None;
-    meta.parse_nested_meta(|nested| {
-        if nested.path.is_ident("text_id") {
-            text_id = Some(lit_str(&nested, "text_id")?.value());
-            return Ok(());
-        }
-        discard_unknown(&nested)
-    })?;
-    let text_id_value =
-        text_id.ok_or_else(|| syn::Error::new(meta.path.span(), "note requires text_id"))?;
-    Ok(DocNoteAttr {
-        text_id: text_id_value,
-    })
-}
+/// Reads the explicit documentation value-type override for a field.
 fn parse_value_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| {
         if nested.path.is_ident("type") {
@@ -259,6 +241,7 @@ fn parse_value_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn::Res
         discard_unknown(&nested)
     })
 }
+/// Associates a deprecation notice with the localized note that explains it.
 fn parse_deprecated_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| {
         if nested.path.is_ident("note_id") {
@@ -268,6 +251,7 @@ fn parse_deprecated_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn
         discard_unknown(&nested)
     })
 }
+/// Records an explicit environment-variable name for generated field docs.
 fn parse_env_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| {
         if nested.path.is_ident("name") {
@@ -277,6 +261,7 @@ fn parse_env_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn::Resul
         discard_unknown(&nested)
     })
 }
+/// Records a dotted configuration-file key path for generated field docs.
 fn parse_file_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| {
         if nested.path.is_ident("key_path") {
@@ -286,6 +271,8 @@ fn parse_file_meta(meta: &ParseNestedMeta, out: &mut DocFieldAttrs) -> syn::Resu
         discard_unknown(&nested)
     })
 }
+/// Captures CLI naming and help-visibility overrides used by both parsing and
+/// documentation generation.
 fn parse_cli_meta(meta: &ParseNestedMeta, out: &mut FieldAttrs) -> syn::Result<()> {
     meta.parse_nested_meta(|nested| {
         if nested.path.is_ident("long") {
@@ -307,6 +294,10 @@ fn parse_cli_meta(meta: &ParseNestedMeta, out: &mut FieldAttrs) -> syn::Result<(
         discard_unknown(&nested)
     })
 }
+/// Parses a Rust array expression containing only string literals.
+///
+/// Preserving source order keeps precedence lists and `PowerShell` aliases
+/// deterministic; other expression forms produce an error at the bad value.
 fn parse_string_array(meta: &ParseNestedMeta, key: &str) -> syn::Result<Vec<String>> {
     let expr_value = meta.value()?.parse::<syn::Expr>()?;
     let expr_array = match expr_value {
@@ -341,6 +332,7 @@ fn parse_string_array(meta: &ParseNestedMeta, key: &str) -> syn::Result<Vec<Stri
     }
     Ok(values)
 }
+/// Parses a bare boolean attribute as `true`, or its explicit literal value.
 fn parse_bool(meta: &ParseNestedMeta) -> syn::Result<bool> {
     if meta.input.peek(Token![=]) {
         return Ok(meta.value()?.parse::<LitBool>()?.value);

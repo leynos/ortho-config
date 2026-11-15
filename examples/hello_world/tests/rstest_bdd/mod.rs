@@ -4,7 +4,7 @@
 //! suite, and a canary scenario so coverage runs under the stock `cargo test`
 //! harness.
 
+mod behaviour;
+mod canary;
 mod fixtures;
 mod steps;
-mod canary;
-mod behaviour;

@@ -6,12 +6,14 @@
 
 use super::*;
 
+/// A lookup for a key that was never inserted reports the variable as unset.
 #[test]
 fn map_env_reports_unset_variables_as_none() {
     let env = MapEnv::new().with_var("PRESENT", "yes");
     assert!(env.get("ABSENT").is_none());
 }
 
+/// `FromIterator` builds a source whose entries are visible through `get`.
 #[test]
 fn map_env_collects_from_an_iterator() {
     let env: MapEnv = [("APP_HOST", "localhost"), ("APP_PORT", "8080")]
@@ -20,6 +22,7 @@ fn map_env_collects_from_an_iterator() {
     assert_eq!(env.get("APP_PORT").as_deref(), Some("8080".as_ref()));
 }
 
+/// `remove` unsets a variable rather than leaving an empty value behind.
 #[test]
 fn map_env_remove_makes_a_variable_unset() {
     let mut env = MapEnv::new().with_var("APP_HOST", "localhost");

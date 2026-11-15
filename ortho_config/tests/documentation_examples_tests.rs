@@ -1,28 +1,38 @@
-//! Executable contracts for examples in the README and user's guide.
+//! Executable contracts for examples in public documentation.
 
-#[path = "documentation_examples/cargo_runner.rs"]
-mod cargo_runner;
 mod documentation_examples;
-#[path = "documentation_examples/process_runner.rs"]
-mod process_runner;
+
+#[path = "documentation_examples/format_all.rs"]
+mod format_all;
+
+#[path = "documentation_examples/static_contracts.rs"]
+mod static_contracts;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use documentation_examples::{documented_example, load_documented_examples};
 use ortho_config::{AgentContext, toml};
-use process_runner::Operation;
 use std::collections::BTreeSet;
-use tempfile::TempDir;
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
+    "api-guide-agent-context-constructor",
+    "api-guide-agent-context-json",
+    "api-guide-policy-report-constructors",
+    "api-guide-policy-report-json",
     "guide-agent-context",
     "guide-alias-derive",
     "guide-alias-install",
+    "guide-behaviour-metadata",
+    "guide-boolean-override",
     "guide-cargo-error-hints",
     "guide-cargo-external-subcommand",
+    "guide-check-command",
+    "guide-check-report",
     "guide-clap-only-parse",
     "guide-collection-file",
+    "guide-collections",
+    "guide-compose-layers-with-sources",
     "guide-csv-env-with-source",
     "guide-discovery",
     "guide-errors",
@@ -30,35 +40,112 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-file-run",
     "guide-first-cli",
     "guide-hermetic-discovery",
+    "guide-identifier-artefact",
     "guide-install",
     "guide-load-first-outcomes",
     "guide-localization",
+    "guide-localization-ids",
+    "guide-localization-ids-output",
     "guide-metrics-install",
     "guide-orthohelp-command",
+    "guide-orthohelp-bridge-cache-metrics",
+    "guide-orthohelp-format-all",
+    "guide-orthohelp-format-all-tree",
     "guide-orthohelp-metadata",
+    "guide-policy-check",
+    "guide-policy-ci",
+    "guide-policy-config",
+    "guide-profile-metadata",
+    "guide-profiles",
+    "guide-profiles-file",
+    "guide-profiles-run",
+    "guide-renderer-metadata",
+    "guide-scoped-discovery",
+    "guide-selected-subcommand-sources",
     "guide-source-aware-load",
     "guide-subcommand",
+    "guide-subcommand-merge-sources",
+    "guide-subcommand-sources",
     "guide-tracing",
     "guide-tracing-install",
     "guide-yaml",
+    "guide-yaml-install",
+    "migration-agent-context-profiles",
+    "migration-boolean-file",
+    "migration-boolean-run",
+    "migration-cli-default-after",
+    "migration-cli-default-before",
+    "migration-cli-default-run",
+    "migration-dependencies-after",
+    "migration-dependencies-before",
+    "migration-explicit-cli",
+    "migration-explicit-cli-run",
+    "migration-l10n-dependency",
+    "migration-l10n-runtime",
+    "migration-profile-precedence",
     "readme-binstall",
     "readme-install",
     "readme-main",
     "readme-run",
 ];
 
+/// The crate packages the repository README directly, so there is no copy to
+/// keep in step. `cargo package` copies a readme from outside the package
+/// into the crate root, and a second `ortho_config/README.md` would collide
+/// with it.
 #[test]
-fn published_crate_readme_matches_repository_readme() -> Result<()> {
+fn published_crate_packages_the_repository_readme() -> Result<()> {
     let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
-    let repository_readme = repository.read_to_string("README.md")?;
-    let crate_readme = repository.read_to_string("ortho_config/README.md")?;
+    let manifest: toml::Value =
+        toml::from_str(&repository.read_to_string("ortho_config/Cargo.toml")?)
+            .context("parse the ortho_config manifest")?;
+    let readme = manifest
+        .get("package")
+        .and_then(|package| package.get("readme"))
+        .and_then(toml::Value::as_str);
     ensure!(
-        crate_readme == repository_readme,
-        "the packaged ortho_config README should match the repository README"
+        readme == Some("../README.md"),
+        "ortho_config should package the repository README, got {readme:?}"
+    );
+    ensure!(
+        !repository.exists("ortho_config/README.md"),
+        "remove ortho_config/README.md; the crate packages the repository README"
     );
     Ok(())
 }
 
+/// crates.io and docs.rs render the README away from the repository, so a
+/// relative link would resolve against the wrong base.
+#[test]
+fn repository_readme_links_are_absolute() -> Result<()> {
+    let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
+    let readme = repository.read_to_string("README.md")?;
+    let relative: Vec<&str> = link_targets(&readme)
+        .filter(|target| !(target.starts_with("https://") || target.starts_with('#')))
+        .collect();
+    ensure!(
+        relative.is_empty(),
+        "README links must be absolute: {relative:?}"
+    );
+    Ok(())
+}
+
+/// Targets of inline links (`](target)`) and reference definitions
+/// (`[label]: target`), ignoring any link title.
+fn link_targets(markdown: &str) -> impl Iterator<Item = &str> {
+    let inline = markdown
+        .split("](")
+        .skip(1)
+        .filter_map(|rest| rest.split([')', ' ']).next());
+    let references = markdown.lines().filter_map(|line| {
+        let (label, target) = line.strip_prefix('[')?.split_once("]: ")?;
+        (!label.is_empty()).then(|| target.split(' ').next().unwrap_or_default())
+    });
+    inline.chain(references)
+}
+
+/// Every fenced block in the public documents carries a registered,
+/// unique `tested-example` identifier, so no example escapes the contracts.
 #[test]
 fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
     let examples = load_documented_examples()?;
@@ -74,88 +161,6 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
         actual == expected,
         "documented example registry drifted\nexpected: {expected:#?}\nactual: {actual:#?}"
     );
-    Ok(())
-}
-#[test]
-fn installation_manifests_select_the_documented_release() -> Result<()> {
-    let readme = parse_toml("readme-install")?;
-    assert_dependency_version(&readme, "ortho_config", "0.9.0")?;
-    assert_dependency_version(&readme, "serde", "1.0")?;
-
-    let guide = parse_toml("guide-install")?;
-    assert_dependency_version(&guide, "ortho_config", "0.9.0")?;
-    assert_dependency_version(&guide, "clap", "4.5")?;
-    assert_dependency_version(&guide, "serde", "1.0")?;
-
-    let tracing = parse_toml("guide-tracing-install")?;
-    let subscriber = dependency(&tracing, "tracing-subscriber")?;
-    ensure!(subscriber["version"].as_str() == Some("0.3"));
-    ensure!(
-        subscriber["features"]
-            .as_array()
-            .is_some_and(|features| features
-                .iter()
-                .any(|value| value.as_str() == Some("env-filter"))),
-        "tracing-subscriber manifest should enable env-filter"
-    );
-    Ok(())
-}
-
-#[test]
-fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
-    let example = documented_example("readme-binstall")?;
-    ensure!(example.language == "console");
-    ensure!(
-        example.body == "cargo binstall --disable-strategies compile cargo-orthohelp\n",
-        "documented cargo-binstall command drifted"
-    );
-
-    // The command only avoids a source build if the named crate publishes the
-    // binstall metadata that resolves its release archives.
-    let repository = Dir::open_ambient_dir(repository_root(), ambient_authority())
-        .context("open the repository root")?;
-    let manifest: toml::Value = toml::from_str(
-        &repository
-            .read_to_string("cargo-orthohelp/Cargo.toml")
-            .context("read the cargo-orthohelp manifest")?,
-    )
-    .context("parse the cargo-orthohelp manifest")?;
-    let package = manifest
-        .get("package")
-        .context("cargo-orthohelp should declare [package]")?;
-    ensure!(package.get("name").and_then(toml::Value::as_str) == Some("cargo-orthohelp"));
-    let binstall = package
-        .get("metadata")
-        .and_then(|metadata| metadata.get("binstall"))
-        .context("cargo-orthohelp should declare [package.metadata.binstall]")?;
-    ensure!(binstall.get("pkg-fmt").and_then(toml::Value::as_str) == Some("tgz"));
-    for key in ["pkg-url", "bin-dir"] {
-        ensure!(
-            binstall.get(key).and_then(toml::Value::as_str).is_some(),
-            "binstall metadata should declare {key}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn optional_and_aliased_manifests_preserve_the_intended_contract() -> Result<()> {
-    let metrics = parse_toml("guide-metrics-install")?;
-    let metrics_dependency = dependency(&metrics, "ortho_config")?;
-    ensure!(metrics_dependency["version"].as_str() == Some("0.9.0"));
-    ensure!(
-        metrics_dependency["features"]
-            .as_array()
-            .is_some_and(|features| features
-                .iter()
-                .any(|value| value.as_str() == Some("metrics"))),
-        "metrics manifest should enable the metrics feature"
-    );
-
-    let alias = parse_toml("guide-alias-install")?;
-    let aliased_dependency = dependency(&alias, "config_layer")?;
-    ensure!(aliased_dependency["package"].as_str() == Some("ortho_config"));
-    ensure!(aliased_dependency["version"].as_str() == Some("0.9.0"));
     Ok(())
 }
 
@@ -204,8 +209,18 @@ fn yaml_example_uses_yaml_1_2_string_semantics() -> Result<()> {
     let provider = ortho_config::file::SaphyrYaml::string("guide.yaml", &example.body);
     let value = ortho_config::figment::Figment::from(provider)
         .extract::<ortho_config::serde_json::Value>()?;
-    ensure!(value.get("enabled").and_then(serde_json_value_as_str) == Some("yes"));
-    ensure!(value.get("mode").and_then(serde_json_value_as_str) == Some("on"));
+    ensure!(
+        value
+            .get("enabled")
+            .and_then(ortho_config::serde_json::Value::as_str)
+            == Some("yes")
+    );
+    ensure!(
+        value
+            .get("mode")
+            .and_then(ortho_config::serde_json::Value::as_str)
+            == Some("on")
+    );
     ensure!(
         value
             .get("port")
@@ -216,7 +231,7 @@ fn yaml_example_uses_yaml_1_2_string_semantics() -> Result<()> {
 }
 
 #[test]
-fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
+fn documented_orthohelp_command_matches_cli_contract() -> Result<()> {
     let example = documented_example("guide-orthohelp-command")?;
     ensure!(example.language == "console");
     ensure!(
@@ -224,46 +239,6 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
         "cargo-orthohelp command contract drifted"
     );
 
-    let output_directory = TempDir::new().context("create orthohelp output directory")?;
-    let cargo_state = TempDir::new().context("create isolated Cargo state directory")?;
-    let repository_root = repository_root();
-    let mut command =
-        cargo_runner::prepare_cargo_command(repository_root.as_std_path(), cargo_state.path())?;
-    command
-        .args([
-            "run",
-            "--offline",
-            "--quiet",
-            "-p",
-            "cargo-orthohelp",
-            "--",
-            "orthohelp",
-            "--package",
-            "hello_world",
-            "--format",
-            "agent-context",
-            "--out-dir",
-        ])
-        .arg(output_directory.path());
-    let output = process_runner::run_command(
-        &mut command,
-        Operation("run documented cargo-orthohelp flow"),
-    )?;
-    ensure!(
-        output.status.success(),
-        "cargo-orthohelp failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let output_dir = Dir::open_ambient_dir(output_directory.path(), ambient_authority())?;
-    let json = output_dir
-        .read_to_string("agent-context.json")
-        .context("read generated agent context")?;
-    let payload: ortho_config::serde_json::Value = ortho_config::serde_json::from_str(&json)?;
-    ensure!(payload.get("package").and_then(serde_json_value_as_str) == Some("hello_world"));
-    ensure!(
-        payload.get("kind").and_then(serde_json_value_as_str) == Some("hello_world.agent_context")
-    );
     Ok(())
 }
 
@@ -273,29 +248,6 @@ fn parse_toml(id: &str) -> Result<toml::Value> {
     toml::from_str(&example.body).with_context(|| format!("parse {id}"))
 }
 
-fn dependency<'a>(manifest: &'a toml::Value, name: &str) -> Result<&'a toml::Value> {
-    manifest
-        .get("dependencies")
-        .and_then(|dependencies| dependencies.get(name))
-        .with_context(|| format!("manifest should declare {name}"))
-}
-
-fn assert_dependency_version(manifest: &toml::Value, name: &str, version: &str) -> Result<()> {
-    let value = dependency(manifest, name)?;
-    let actual = value
-        .as_str()
-        .or_else(|| value.get("version").and_then(toml::Value::as_str));
-    ensure!(
-        actual == Some(version),
-        "expected {name} version {version}, got {actual:?}"
-    );
-    Ok(())
-}
-
 fn repository_root() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
-}
-
-fn serde_json_value_as_str(value: &ortho_config::serde_json::Value) -> Option<&str> {
-    value.as_str()
 }

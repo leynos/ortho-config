@@ -13,6 +13,8 @@ pub enum MergeProvenance {
     Defaults,
     /// Values loaded from configuration files.
     File,
+    /// Values overlaid by a selected profile (roadmap 9.1.1).
+    Profile,
     /// Values collected from environment variables.
     Environment,
     /// Values supplied on the command line.
@@ -22,8 +24,11 @@ pub enum MergeProvenance {
 /// Representation of a configuration layer.
 #[derive(Clone, Debug)]
 pub struct MergeLayer<'a> {
+    /// Identifies the source for diagnostics and source-sensitive merging.
     provenance: MergeProvenance,
+    /// Layer data may be borrowed until a consumer explicitly needs ownership.
     value: Cow<'a, Value>,
+    /// Present for file layers so errors and hooks can report their origin.
     path: Option<Utf8PathBuf>,
 }
 
@@ -43,6 +48,16 @@ impl<'a> MergeLayer<'a> {
     pub const fn file(value: Cow<'a, Value>, path: Option<Utf8PathBuf>) -> Self {
         Self {
             provenance: MergeProvenance::File,
+            value,
+            path,
+        }
+    }
+
+    /// Construct a layer originating from a selected profile table.
+    #[must_use]
+    pub const fn profile(value: Cow<'a, Value>, path: Option<Utf8PathBuf>) -> Self {
+        Self {
+            provenance: MergeProvenance::Profile,
             value,
             path,
         }
@@ -78,6 +93,18 @@ impl<'a> MergeLayer<'a> {
     #[must_use]
     pub fn path(&self) -> Option<&Utf8Path> {
         self.path.as_deref()
+    }
+
+    /// Borrows the JSON value carried by the layer.
+    ///
+    /// Unlike [`MergeLayer::into_value`], this does not consume the layer, so
+    /// the value can be inspected while the layer stays owned. It is currently
+    /// used only by tests asserting on composed layers; profile-table
+    /// extraction consumes layers with [`MergeLayer::into_value`] instead,
+    /// because it must rewrite each file layer's value before pushing it back.
+    #[must_use]
+    pub fn value(&self) -> &Value {
+        &self.value
     }
 
     /// Returns an owned JSON value representing the layer.

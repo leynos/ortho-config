@@ -15,10 +15,11 @@ The source documents for this roadmap are:
 - [Improved error message design](improved-error-message-design.md);
 - [CLI localization surface design](cli-localization-design.md);
 - [DDLint gap analysis](ddlint-gap-analysis.md);
-- [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
-- [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md);
-- [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md);
-- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md).
+- [ADR-0001: Replace `serde_yaml` with `serde-saphyr`](adrs/adr-0001-replace-serde-yaml-with-serde-saphyr.md);
+- [ADR-0002: Replace `cucumber-rs` with `rstest-bdd`](adrs/adr-0002-replace-cucumber-with-rstest-bdd.md);
+- [ADR-0004: Cargo external-subcommand entry-point architecture](adrs/adr-0004-cargo-external-subcommand-entry-point.md);
+- [ADR-0005: Subcommand docs companion trait](adrs/adr-0005-subcommand-docs-companion-trait.md);
+- [RFC 0003: Trust-aware policy composition](rfcs/rfc-0003-trust-aware-policy-composition.md).
 
 The first downstream consumers for the expanded agent-native contract are
 Weaver and Netsuke. Their plans make several generic requirements explicit:
@@ -100,7 +101,7 @@ responsibilities and downstream application responsibilities.
 - [x] 5.2.3. Record consumer dependency boundaries for Weaver and Netsuke.
   - Requires 5.2.1 and 5.2.2.
   - See agent-native-cli-design.md §2.1 and
-    adr-003-define-schema-ownership-for-agent-native-contracts.md.
+    adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md.
   - [x] Document that OrthoConfig owns reusable command-contract machinery,
     while Weaver owns semantic code-edit execution and Netsuke owns build and
     package execution.
@@ -152,7 +153,7 @@ fields.
 - [x] 6.2.2. Version and validate the agent-context schema.
   - Requires 6.2.1.
   - See agent-native-cli-design.md §3.2 and §8;
-    adr-003-define-schema-ownership-for-agent-native-contracts.md.
+    adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md.
   - [x] Add schema-version tests that fail on accidental shape changes.
   - [x] Add golden fixtures for a simple CLI, a nested CLI, and a CLI with enum
     values.
@@ -162,7 +163,7 @@ fields.
 - [x] 6.2.3. Define downstream `context --json` command naming.
   - Requires 6.2.1.
   - See agent-native-cli-design.md §3.2 and §5;
-    adr-007-downstream-context-command-naming.md.
+    adrs/adr-0007-downstream-context-command-naming.md.
   - [x] Prefer `<tool> context --json` for application command surfaces while
     keeping `cargo orthohelp --format agent-context` as the generator format.
   - [x] Include a payload `kind` such as `<tool>.agent_context`.
@@ -195,15 +196,15 @@ unsafe mutation surfaces before release.
 
 ### 7.1. Implement vocabulary policy
 
-- [ ] 7.1.1. Add an opt-in agent-native policy configuration.
+- [x] 7.1.1. Add an opt-in agent-native policy configuration.
   - Requires step 6.2.
   - See agent-native-cli-design.md §3.3 and §5.
-  - [ ] Support `off`, `warn`, and `deny` modes.
-  - [ ] Provide canonical defaults for verbs and flags: `get`, `list`,
+  - [x] Support `off`, `warn`, and `deny` modes.
+  - [x] Provide canonical defaults for verbs and flags: `get`, `list`,
     `create`, `update`, `delete`, `--json`, `--no-input`, `--force`,
     `--dry-run`, `--limit`, `--cursor`, `--wait`, `--profile`, and
     `--deliver`.
-  - [ ] Allow explicit project exceptions that are visible in policy output.
+  - [x] Allow explicit project exceptions that are visible in policy output.
 
 - [ ] 7.1.2. Lint off-policy verbs and flags.
   - Requires 7.1.1.
@@ -227,23 +228,23 @@ unsafe mutation surfaces before release.
 
 ### 7.2. Model behavioural semantics
 
-- [ ] 7.2.1. Add metadata for non-interactive execution and mutation
+- [x] 7.2.1. Add metadata for non-interactive execution and mutation
   boundaries.
   - Requires step 6.2.
   - See agent-native-cli-design.md §6.1 and §6.4.
-  - [ ] Represent whether a command is non-interactive, may prompt, or needs a
+  - [x] Represent whether a command is non-interactive, may prompt, or needs a
     bypass flag.
-  - [ ] Represent whether a command reads, writes, deletes, or submits work.
-  - [ ] Lint destructive commands that lack `--force` or equivalent approved
+  - [x] Represent whether a command reads, writes, deletes, or submits work.
+  - [x] Lint destructive commands that lack `--force` or equivalent approved
     metadata.
 
-- [ ] 7.2.2. Add dual-renderer metadata.
+- [x] 7.2.2. Add dual-renderer metadata.
   - Requires 7.2.1.
   - See agent-native-cli-design.md §6.2 and §6.2.1.
-  - [ ] Model human renderer support and machine renderer support separately.
-  - [ ] Model TTY sensitivity, closed-stdin behaviour, colour, emoji,
+  - [x] Model human renderer support and machine renderer support separately.
+  - [x] Model TTY sensitivity, closed-stdin behaviour, colour, emoji,
     progress, pager, width, accessibility, and plain-output policy.
-  - [ ] Model localized versus non-localized fields so protocol identifiers do
+  - [x] Model localized versus non-localized fields so protocol identifiers do
     not drift with human language.
 
 - [ ] 7.2.3. Add metadata for structured output and exit classes.
@@ -355,7 +356,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [x] 8.3.1. Add a small `ortho_config::cargo` helper for hand-built clap
   commands.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [x] Provide an `external_subcommand` helper that accepts the installed
     binary name, injected Cargo subcommand name, and an existing
     `clap::Command`.
@@ -363,7 +365,7 @@ from carrying a bespoke pattern that other crates copy by hand. See
     subcommand. Usage renders the Cargo dispatch form (parent
     `bin_name("cargo")`); the installed binary name is carried as the inner
     command's `display_name`. This deviates from the literal
-    `bin_name("cargo-<name>")` wording here; see the ADR-004 amendment
+    `bin_name("cargo-<name>")` wording here; see the ADR-0004 amendment
     (2026-08-09).
   - [x] Preserve the existing options on the inner command rather than
     introducing another configuration-loading pathway.
@@ -373,7 +375,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [ ] 8.3.2. Document the derive-friendly Cargo subcommand template.
   - Requires 8.3.1.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [ ] Add user-guide and README examples showing a `Cli` wrapper with
     `#[command(name = "cargo", bin_name = "cargo-<name>")]`, a
     `#[command(subcommand)]` field, and an enum variant wrapping the existing
@@ -388,7 +391,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 - [ ] 8.3.3. Evaluate an optional macro attribute for Cargo subcommand
   wrappers.
   - Requires 8.3.2.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [ ] Prototype the candidate `cargo_subcommand` and `cargo_bin` attribute
     syntax from `docs/design.md` §4.17.
   - [ ] Decide whether the macro should generate a companion wrapper parser,
@@ -402,7 +406,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [ ] 8.3.4. Add regression fixtures for Cargo-dispatched binaries.
   - Requires 8.3.1.
-  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
+  - See design.md §4.17 and
+    adrs/adr-0004-cargo-external-subcommand-entry-point.md.
   - [ ] Add a small workspace fixture or shared test helper that runs
     `cargo-<name> <name> --help`.
   - [ ] Add a companion assertion for `cargo <name> --help` with the fixture
@@ -420,15 +425,22 @@ helpers, while downstream applications own domain behaviour.
 
 ### 9.1. Profile contracts
 
-- [ ] 9.1.1. Design and implement optional profile metadata.
+- [x] 9.1.1. Design and implement optional profile metadata.
   - Requires step 6.2.
   - See agent-native-cli-design.md §6.7.
-  - [ ] Standardize `--profile <name>` as the root selection flag.
-  - [ ] Document the precedence
+  - See [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md) for the
+    approved design: named overlays inside configuration files, stateless
+    `--profile` selection, and the five-tier merge order.
+  - [x] Standardize `--profile <name>` as the root selection flag.
+  - [x] Document the precedence
     `built-in defaults < config files < selected profile < environment <
     flags`.
-  - [ ] Expose profile support, profile listing commands, and selected-profile
-    semantics in agent context.
+  - [x] Expose profile support, the selection mechanism (flag and environment
+    variable names), and the profile listing command in agent context. The
+    `list_command` contract field ships in 9.1.1; populating it waits on the
+    9.1.3 store helpers. Active selection is *not* agent-context metadata:
+    `ProfileLoadOutcome` reports the selected profile at runtime, keeping the
+    static contract free of per-invocation state.
 
 - [ ] 9.1.2. Add profile redaction metadata.
   - Requires 9.1.1.
@@ -573,7 +585,7 @@ later progressively add opinion.
     compares every runtime lookup with `message_id_for` over a fixture
     `#[derive(clap::Parser)]` command tree.
   - Finding: the promoted parser helpers inherit `LocalizeCmd::localize`
-    panics for invalid Fluent roots or colliding identifiers; ADR-006 records
+    panics for invalid Fluent roots or colliding identifiers; ADR-0006 records
     that widened panic surface until 11.1.3 adds derive-time guards.
   - Progress: `examples/hello_world` now calls `parse_localized_command` and
     no longer carries `ParsedCommandLine` or inherent
@@ -584,20 +596,54 @@ later progressively add opinion.
     `preparing_sandbox` with no findings or rate-limit message; this is
     recorded in the 11.1.2 execplan.
 
-- [ ] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
+- [x] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
   - Requires 11.1.2.
   - See cli-localization-design.md §8.1 and §8.2.
-  - [ ] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
+  - [x] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
     `USAGE_ID`, and per-argument `ARG_IDS` constants.
-  - [ ] Extend the `OrthoConfig` derive to emit `OrthoConfigLocalization`
-    impls. Generate identifiers from command path and field `id` (or
-    kebab-cased field name).
-  - [ ] Add a blanket `OrthoConfigDocs` impl that delegates to
-    `OrthoConfigLocalization` so the docs IR picks up the same identifiers.
-  - [ ] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB
+  - [x] Extend the `OrthoConfig` derive to emit `OrthoConfigLocalization`
+    impls. Generate identifiers from command path and field `id` (or the raw
+    Rust field name, matching clap's derived argument id).
+  - [x] Add generated path-aware `OrthoConfigDocs` delegation so the docs IR
+    picks up the same identifiers.
+  - [x] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB
     cap and split-file behaviour for larger trees.
-  - [ ] Add a compile-time `compile_error!` for fields whose normalized
+  - [x] Add a compile-time `compile_error!` for fields whose normalized
     identifiers collide.
+  - [x] Validate forced refresh, stale-output isolation, pure renderer
+    lifecycle behaviour, and documentation reconciliation before completion.
+  - Decision: the `OrthoConfigDocs` "blanket impl" is realized as generated
+    path-aware delegation, because a literal blanket impl conflicts with the
+    derive-emitted impls under coherence rules and cannot supply per-field
+    metadata.
+  - Decision: artefact emission is opt-in behind
+    `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` (ADR-0011); ambient proc-macro writes are
+    rejected per Cargo team guidance. Refreshing requires a forced
+    recompilation, because Cargo does not fingerprint proc-macro environment
+    reads; see ADR-0011 for the exact invocation.
+  - Decision: the trait is wider than the design §8.1 sketch — it carries
+    every command-level suffix the runtime walker requests, and `ARG_IDS`
+    entries are a named `ArgLocalizationIds` struct rather than positional
+    tuples.
+  - Decision: `localized_default` is recognized and rejected with a deferral
+    diagnostic; `embedded_default` is always `null`. Embedding is deferred to
+    11.5.1 rather than delivered here.
+  - Finding: JSON artefact entries are standalone per-struct declarations
+    (`path_scope: "standalone"`), not a mounted-tree inventory; mounted ids
+    come from the path-aware compiled docs IR.
+  - Finding: forced refresh and stale-output isolation are locked by
+    `ortho_config/tests/identifier_artefact_e2e.rs`; fragment pruning by
+    `merge_fragments_prunes_removed_sources`; and renderer ordering, splitting,
+    the 1 MiB boundary, one oversized entry, and split round-tripping by
+    `artefact_tests.rs` (including a `proptest` property).
+  - Limitation: a rename within one source file leaves an unpruned fragment
+    until the next forced refresh. Accepted in Decision D-11 and documented in
+    ADR-0011.
+  - Follow-up: flattened fields are excluded from `ARG_IDS` for now; their
+    arguments surface at runtime under the parent command. Item 11.6.2 covers
+    closing that gap.
+  - Validation: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+    `make markdownlint`, and `make nixie` passed on 2026-09-20.
 
 ### 11.2. Widen clap-error coverage and preserve clap's rich context
 
@@ -738,6 +784,10 @@ later progressively add opinion.
 - [ ] 11.5.1. Add per-field `localized_default` attribute support.
   - Requires 11.1.3.
   - See cli-localization-design.md §8.2.
+  - Note: 11.1.3 shipped only the guard rail — the derive recognizes
+    `localized_default` and rejects it with a deferral diagnostic, and artefact
+    entries always carry `embedded_default: null`. This item delivers the
+    embedding behaviour itself.
   - [ ] Accept values `none`, `help`, `long_help`, `value_name`,
     `help+long_help`, and `all` on field-level
     `#[ortho_config(localized_default = "...")]`.
@@ -774,6 +824,18 @@ later progressively add opinion.
     `target/orthohelp/missing-translations/<locale>.json`.
   - [ ] Document the reporter API in the developers' guide alongside the
     existing `FormattingIssueReporter`.
+
+- [ ] 11.6.2. Derive localization constants for flattened argument groups.
+  - Requires 11.1.3.
+  - See cli-localization-design.md §8.1 and §8.2.
+  - Follow-up to 11.1.3, which excludes `#[clap(flatten)]` /
+    `#[command(flatten)]` fields from `ARG_IDS` because a deriving struct
+    cannot enumerate another type's fields.
+  - [ ] Surface the flattened type's `OrthoConfigLocalization::ARG_IDS` under
+    the parent command so flattened arguments stop being a documented gap in
+    the constants-equal-coverage contract.
+  - [ ] Extend the `localized_parse.rs` subset-with-remainder fixture so the
+    flattened group's ids are asserted rather than listed as an exception.
 
 ### 11.7. Migrate the example and downstream guidance
 
@@ -833,11 +895,11 @@ named-field variants without changing the trait contract or the IR envelope.
 The outcome decides whether service-style command sets and three-level command
 trees can be documented at all, and it establishes how far the field-metadata
 pipeline generalizes beyond struct fields. See cargo-orthohelp-design.md §3.1
-and adr-005-subcommand-docs-companion-trait.md §Subsequent amendments.
+and adrs/adr-0005-subcommand-docs-companion-trait.md §Subsequent amendments.
 
 - [ ] 12.1.1. Support unit subcommand variants in `OrthoConfigSubcommandDocs`.
   - See cargo-orthohelp-design.md §3.1;
-    adr-005-subcommand-docs-companion-trait.md.
+    adrs/adr-0005-subcommand-docs-companion-trait.md.
   - [ ] Emit a minimal `DocMetadata` node per unit variant: clap command label,
     generated `about_id`, default heading identifiers, and empty `fields` and
     `subcommands`.
@@ -904,8 +966,8 @@ cargo-orthohelp-design.md §2.2.
     document's versioning section.
   - [ ] Skip-serialize `CliMetadata.positional` when absent, using
     `#[serde(skip_serializing_if = "Option::is_none")]` in both
-    hand-maintained copies of the type, `ortho_config/src/docs/ir.rs` and
-    `cargo-orthohelp/src/schema/mod.rs`, so flags-only IR omits the
+    hand-maintained copies of the type, `ortho_config/src/docs/ir/field.rs` and
+    `cargo-orthohelp/src/schema/field.rs`, so flags-only IR omits the
     `positional` key rather than emitting `null`.
   - [ ] Success: `git clone <url>` and `cp <src> <dst>` shapes round-trip
     through `--format ir` with correct indices, while a flags-only command
@@ -1107,9 +1169,9 @@ reimplementing all eleven identifiers. See cargo-orthohelp-design.md §4.2.1.
   - See cargo-orthohelp-design.md §4.2.1.
   - [ ] Add the full `ortho.headings.*` set — name, synopsis, description,
     options, environment, files, precedence, exit status, examples, see also,
-    and commands — to the canonical `ortho_config/locales/en-US/messages.ftl`
+    and commands — to the canonical `ortho_l10n/locales/en-US/messages.ftl`
     resource and the other currently shipped resource,
-    `ortho_config/locales/ja/messages.ftl`.
+    `ortho_l10n/locales/ja/messages.ftl`.
   - [ ] Keep `en-US/messages.ftl` as the library's canonical English resource;
     there is no library `en-GB` catalogue to alias. Language-only matching
     makes English tags including `en-GB` reuse the embedded `en-US` resources.
@@ -1127,3 +1189,242 @@ reimplementing all eleven identifiers. See cargo-orthohelp-design.md §4.2.1.
   - [ ] Success: a fixture crate with no Fluent catalogue renders a complete man
     page in English and a complete man page in a second shipped locale, and
     neither output contains a raw identifier.
+
+## 14. Separate configuration precedence from policy authority
+
+Idea: if OrthoConfig treats source authority as an application-defined
+dimension separate from preference order, lower-authority configuration can
+strengthen operator policy without gaining an accidental capability-granting
+path. If it cannot, every downstream application must rebuild the same trust
+engine and later project layers remain able to widen security boundaries.
+
+This phase depends on the scope and origin foundation from RFC 0002, but may
+proceed independently of phases 11-13. It delivers an opt-in runtime contract
+before derive syntax, preserves existing field strategies for unprotected
+fields, and uses Netsuke's fetch, shell, interpreter, and resource boundaries
+as downstream proof cases. See RFC 0003.
+
+### 14.1. Define the authority model before stabilizing policy APIs
+
+This step answers whether applications can describe authority, source identity,
+anchors, and bounded delegation without path scope or preference order silently
+conferring trust. Its outcome fixes the contracts that the runtime algebra and
+diagnostics consume. See RFC 0003 §§5-6.3 and §6.8.
+
+- [ ] 14.1.1. Review and accept RFC 0003's authority and enforcement
+  decisions.
+  - Confirm the application-defined partial order, explicit anchors,
+    incomparable-authority behaviour, typed delegation, and fail-closed default.
+  - Resolve the deferred public naming and disclosure-default questions needed
+    by the runtime surface; leave derive spelling to 14.2.7.
+  - Success: RFC 0003 is accepted with no unresolved question that blocks the
+    runtime implementation.
+
+- [ ] 14.1.2. Split the accepted implementation into review-sized child
+  issues.
+  - Requires 14.1.1.
+  - Create one issue for each independently reviewable task in 14.1.3-14.4.4,
+    preserving dotted task references and cross-issue dependencies.
+  - Link every child issue back to RFC 0003 and issue #475.
+  - Success: no implementation issue combines runtime algebra, derive code,
+    diagnostics, and downstream adoption into one review.
+
+- [ ] 14.1.3. Implement validated application-defined authority classes and
+  partial orders.
+  - Requires 14.1.1.
+  - Add stable class identifiers, graph construction, dominance comparison,
+    and validation for duplicate identifiers, unknown classes, and cycles.
+  - Keep the graph inspectable data rather than an opaque comparison callback.
+  - Success: property tests cover reflexivity, transitivity, incomparability,
+    cycle rejection, and deterministic comparison. See RFC 0003 §§5.2 and 6.1.
+
+- [ ] 14.1.4. Attach deliberate authority metadata to every protected source
+  shape.
+  - Requires 14.1.3 and the scope/origin foundation from RFC 0002.
+  - Model defaults, explicit selectors, automatic scopes, inherited files,
+    environment, CLI, and named custom providers without deriving authority
+    from their path or preference position.
+  - Preserve the resolved class, stable source identifier, selection kind, and
+    disclosure-controlled source label in a sidecar to `MergeLayer`.
+  - Success: missing and ambiguous classifications fail only protected fields,
+    while unprotected fields retain existing merges. See RFC 0003 §6.2.
+
+- [ ] 14.1.5. Implement explicit policy anchors and typed bounded delegation
+  grants.
+  - Requires 14.1.3 and 14.1.4.
+  - Reject protected fields without a nominated anchor and validate delegation
+    issuer authority, delegate scope, exact field or family, and maximum bound.
+  - Keep grants out of ordinary delegated-layer keys and retain issuer and use
+    provenance.
+  - Success: a project source cannot create, broaden, or retarget its own grant,
+    and a valid grant cannot exceed its issuer's envelope. See RFC 0003 §§6.3
+    and 6.8.
+
+### 14.2. Deliver monotonic composition through the runtime API
+
+This step answers whether the built-in algebra and authority algorithm can
+compose real protected fields before macro syntax freezes the wrong
+abstraction. Its outcome supplies a standalone runtime path that derive support
+can reuse. See RFC 0003 §§6.4-6.9 and §6.11.
+
+- [ ] 14.2.1. Define the inspectable policy-family contract and capability-set
+  families.
+  - Requires 14.1.3.
+  - Add stable family descriptors, `Equal`/`Narrower`/`Wider`/`Mixed`
+    relationships, disclosure-safe summaries, and restrictive reduction.
+  - Implement allowed-capability intersection and denied-capability union with
+    set semantics over domain values.
+  - Success: law-based property tests prove deterministic, associative,
+    commutative, idempotent, and restrictive reduction. See RFC 0003 §§6.4-6.5.
+
+- [ ] 14.2.2. Implement resource-limit and boolean-protection families.
+  - Requires 14.2.1.
+  - Add maximum limits by minimum, minimum requirements by maximum, permissions
+    by logical AND, and required protections by logical OR.
+  - Keep permission and required-protection booleans semantically distinct in
+    public metadata and diagnostics.
+  - Success: lower-authority inputs can lower maxima, raise minima, remove
+    permissions, and add protections, but cannot perform the inverse. See
+    RFC 0003 §6.5.
+
+- [ ] 14.2.3. Implement keyed capability maps with declared value reducers.
+  - Requires 14.2.1.
+  - Intersect keys, reduce shared values through another policy family, and
+    reject maps without a declared reducer.
+  - Success: a lower-authority source cannot add a key or relax a retained
+    key's value, including in mixed add/remove requests. See RFC 0003 §6.6.
+
+- [ ] 14.2.4. Implement authority-aware runtime field composition.
+  - Requires 14.1.4, 14.1.5, and tasks 14.2.1-14.2.3.
+  - Track active constraints, let equal or dominant classes supersede the
+    constraints they are authorized to relax, and restrict incomparable
+    authorities.
+  - Accept delegated widening only within a matching grant and its typed bound.
+  - Success: ordered-layer and property tests cover narrowing, same-class
+    replacement, dominant widening, incomparable constraints, mixed requests,
+    and bounded delegation. See RFC 0003 §6.7.
+
+- [ ] 14.2.5. Add fail-closed rejection and explicit observable clamp modes.
+  - Requires 14.2.4.
+  - Make rejection the default semantic error and allow clamp mode only through
+    the application-owned policy plan.
+  - Return every clamped result with a mandatory non-empty policy report; do
+    not provide an API that silently discards it.
+  - Success: unauthorized widening never changes the effective envelope in
+    either mode, and no ordinary source can select clamp mode. See RFC 0003
+    §6.9.
+
+- [ ] 14.2.6. Integrate protected-field runtime composition with existing
+  ordered layers.
+  - Requires 14.2.5.
+  - Feed protected and ordinary fields from the same `MergeLayer` sequence,
+    while routing protected fields only through their semantic policy family.
+  - Support standalone domain-policy composition so adopters can migrate before
+    deriving a complete configuration.
+  - Success: existing `append`, `replace`, and `keyed` fixtures remain unchanged
+    for unprotected fields, and contradictory policy/ordinary strategies cannot
+    run on one field. See RFC 0003 §§6.11 and 9.1.
+
+- [ ] 14.2.7. Add declarative policy metadata after the runtime model settles.
+  - Requires 14.2.6 and step 14.3.
+  - Select semantic field attributes for built-in families, custom family
+    identifiers, keyed value reducers, and authority-plan requirements.
+  - Generate calls into the runtime implementation rather than a second macro
+    policy engine, and reject contradictory `merge_strategy` and `policy`
+    attributes at compile time.
+  - Success: derive and runtime paths produce equivalent decisions and
+    provenance, while a derive with no policy fields generates unchanged merge
+    behaviour. See RFC 0003 §6.12.
+
+### 14.3. Make every policy decision observable without exposing values
+
+This step answers whether operators and machine consumers can explain a
+rejection, clamp, authoritative widening, or delegated widening from bounded
+records rather than raw configuration. Its output makes enforcement auditable
+before downstream canaries adopt it. See RFC 0003 §6.10.
+
+- [ ] 14.3.1. Preserve active-constraint and delegation decision provenance.
+  - Requires 14.2.4.
+  - Record field and family identifiers, decision kind, requesting source and
+    authority, decisive boundary, relationship, and delegation issuer and
+    identifier when used.
+  - Preserve enough active constraints to explain incomparable authorities and
+    later supersession.
+  - Success: each runtime decision names its authority reason without
+    reconstructing it from the final value. See RFC 0003 §§6.7-6.10.
+
+- [ ] 14.3.2. Add bounded secret-safe summaries and structured diagnostics.
+  - Requires 14.2.5 and 14.3.1.
+  - Default set members, paths, interpreter names, provider parameters, and
+    custom values to opaque or cardinality-only summaries; force secret fields
+    opaque.
+  - Cap detailed violations per field and run, report omitted counts, and emit
+    human and JSON forms from the same typed record.
+  - Success: rejected and clamped requests identify the requesting and ceiling
+    sources and their relationship without logging protected values. See
+    RFC 0003 §6.10.
+
+- [ ] 14.3.3. Expose safe policy reports, tracing, and low-cardinality metrics.
+  - Requires 14.3.2.
+  - Add human and JSON report consumers plus structured events for accepted
+    delegation, rejection, and clamping.
+  - Keep field-family, decision, and authority labels bounded; exclude raw
+    paths, values, request identifiers, and error strings from metric labels.
+  - Success: applications can audit policy uptake and violations without
+    installing a recorder or subscriber in the library. See RFC 0003 §6.10.
+
+- [ ] 14.3.4. Document runtime adoption, migration, and custom-family laws.
+  - Requires 14.2.6 and 14.3.3.
+  - Update the users' and developers' guides with authority classification,
+    anchor selection, rejection versus clamp mode, delegation issuance,
+    redaction, and custom-family property-test requirements.
+  - Distinguish runtime policy composition from roadmap task 7.2.7's
+    agent-context metadata and from downstream enforcement.
+  - Success: an adopter can protect one runtime field without inferring trust
+    from RFC 0002 scope or rewriting an application policy engine. See RFC 0003
+    §§3.2-3.3, 6.13, and 9.2.
+
+### 14.4. Validate downstream canaries and layer combinations
+
+This step answers whether the generic model closes the Netsuke boundaries that
+motivated it and remains monotonic across interacting sources and families. The
+canaries decide whether derive support and downstream migration are safe to
+recommend. See RFC 0003 §7.
+
+- [ ] 14.4.1. Prove Netsuke project configuration cannot widen operator fetch
+  policy.
+  - Requires 14.2.6 and 14.3.2.
+  - Exercise explicit and automatic project sources against host, scheme,
+    redirect, timeout, network-permission, and transport-protection policies.
+  - Success: project configuration can narrow allowed endpoints and add blocks,
+    but cannot add metadata, internal, or alternative-scheme endpoints without
+    a bounded delegation. See RFC 0003 §7.1 and netsuke#644.
+
+- [ ] 14.4.2. Prove trusted shells, interpreters, executable roots, and
+  providers remain authority-bounded.
+  - Requires 14.2.6 and 14.3.2.
+  - Compose the policy envelope with Netsuke's structured-command shell
+    selection while keeping provider selection and execution downstream.
+  - Success: a project can remove trusted choices but cannot add a workspace
+    executable, arbitrary absolute path, interpreter, root, or provider key
+    without explicit delegation. See RFC 0003 §§7.2-7.3 and netsuke#638.
+
+- [ ] 14.4.3. Prove resource ceilings and required protections remain
+  monotonic.
+  - Requires 14.2.6 and 14.3.2.
+  - Cover render bytes, timeouts, recursion, redirects, file-read budgets,
+    process counts, permission booleans, and required-protection booleans.
+  - Success: project sources can reduce ceilings and permissions or strengthen
+    requirements, but cannot raise, enable, or weaken them without delegation.
+    See RFC 0003 §§7.4-7.5.
+
+- [ ] 14.4.4. Add an end-to-end combinatorial policy-layer matrix.
+  - Requires 14.4.1, 14.4.2, and 14.4.3.
+  - Cover defaults, RFC 0002 explicit selectors and automatic scopes,
+    environment, CLI, custom providers, equal, dominant, subordinate and
+    incomparable classes, rejection, clamping, and delegation.
+  - Assert blocklists and required protections across every supported layer
+    order, including mixed wider-and-narrower requests.
+  - Success: the matrix fails on silent widening, silent clamping, missing
+    provenance, secret disclosure, or changed unprotected-field semantics. See
+    RFC 0003 §§5.2, 6.7-6.10, and 8.2.

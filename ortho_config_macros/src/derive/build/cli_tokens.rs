@@ -6,8 +6,11 @@
 use crate::CliFieldInfo;
 use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
+    effective_config_cli_long, is_bool_type,
 };
-use crate::derive::parse::{SerdeRenameAll, clap_arg_id, serde_serialized_field_key};
+use crate::derive::parse::{SerdeRenameAll, clap_arg_id_or_field_name, serde_serialized_field_key};
+
+use super::profile_flag::{ProfileFlagBuildInputs, build_profile_flag_field};
 
 /// Result of building CLI struct tokens.
 pub(crate) struct CliStructBuildResult {
@@ -28,16 +31,15 @@ fn build_cli_field_info(
     attrs: &crate::derive::parse::FieldAttrs,
     serde_rename_all: Option<SerdeRenameAll>,
 ) -> syn::Result<CliFieldInfo> {
-    let name = field
-        .ident
-        .clone()
-        .ok_or_else(|| syn::Error::new_spanned(field, "unnamed fields are not supported"))?;
-    let field_name = name.to_string();
-    let arg_id = clap_arg_id(field)?.unwrap_or_else(|| field_name.clone());
+    // The arg id is resolved by the shared helper so `CliValueExtractor` looks
+    // the field up under the same id the generated `clap` attribute declares,
+    // including the `r#`-stripping fallback for raw identifiers.
+    let arg_id = clap_arg_id_or_field_name(field)?;
     let serialized_key = serde_serialized_field_key(field, serde_rename_all)?;
     Ok(CliFieldInfo {
         serialized_key,
         arg_id,
+        is_bool: is_bool_type(&field.ty),
         is_default_as_absent: attrs.cli_default_as_absent,
     })
 }
@@ -72,7 +74,27 @@ pub(crate) fn build_cli_struct_tokens(
             &cli_struct.used_longs,
             &cli_struct.field_names,
         )?;
+        // Claim the effective long before the profile flag is built so an
+        // opted-in struct whose `config_cli_long` is `profile` is rejected at
+        // compile time rather than emitted as duplicate `--profile` options.
+        cli_struct
+            .used_longs
+            .insert(effective_config_cli_long(struct_attrs));
         cli_struct.fields.push(config_field);
+    }
+    if let Some(profile_field) = build_profile_flag_field(
+        struct_attrs,
+        ProfileFlagBuildInputs {
+            fields,
+            field_attrs,
+            serde_rename_all,
+            used_longs: &cli_struct.used_longs,
+            field_names: &cli_struct.field_names,
+        },
+    )? {
+        cli_struct.fields.push(profile_field);
+        cli_struct.used_longs.insert(String::from("profile"));
+        cli_struct.field_names.insert(String::from("profile"));
     }
 
     let metadata = build_cli_field_metadata(fields, field_attrs)?;

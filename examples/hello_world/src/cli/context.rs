@@ -6,11 +6,13 @@
 use clap::Parser;
 use ortho_config::{
     AgentCommand, AgentContext, AgentExample, AgentInput, InteractionMode, MutationEffect,
-    OrthoConfig, serde_json, serialize_agent_context,
+    OrthoConfig, RendererContract, serde_json, serialize_agent_context,
 };
 use serde::{Deserialize, Serialize};
 
+/// Command spelling used in the human-readable JSON pointer.
 const CONTEXT_COMMAND: &str = "context";
+/// Long-option spelling used to request the serialized context payload.
 const CONTEXT_JSON_FLAG: &str = "json";
 
 /// Arguments for the `context` introspection command.
@@ -77,6 +79,10 @@ pub fn context_json_pointer() -> String {
     format!("Run `hello-world {CONTEXT_COMMAND} --{CONTEXT_JSON_FLAG}` for JSON agent context.\n")
 }
 
+/// Describes the `greet` CLI inputs using the agent-context schema.
+///
+/// This metadata is hand-authored and must track the command's user-facing
+/// options; it intentionally exposes only the preamble and punctuation inputs.
 fn greet_command_context() -> AgentCommand {
     AgentCommand {
         path: vec!["hello-world".to_owned(), "greet".to_owned()],
@@ -89,6 +95,8 @@ fn greet_command_context() -> AgentCommand {
         output_modes: vec!["text".to_owned()],
         interaction_mode: InteractionMode::NonInteractive,
         mutation_effect: MutationEffect::ReadOnly,
+        bypass_flag: None,
+        dry_run_flag: None,
         async_submission: None,
         delivery_route: None,
         pagination: None,
@@ -96,9 +104,14 @@ fn greet_command_context() -> AgentCommand {
             command: "hello-world greet --preamble \"Good morning\"".to_owned(),
             output_mode: Some("text".to_owned()),
         }],
+        renderer: RendererContract::default(),
     }
 }
 
+/// Describes `take-leave`, including enum and boolean input metadata.
+///
+/// Keep the serialized names and option spellings aligned with
+/// `TakeLeaveCommand`, since agents use this record to form valid invocations.
 fn take_leave_command_context() -> AgentCommand {
     AgentCommand {
         path: vec!["hello-world".to_owned(), "take-leave".to_owned()],
@@ -132,6 +145,8 @@ fn take_leave_command_context() -> AgentCommand {
         output_modes: vec!["text".to_owned()],
         interaction_mode: InteractionMode::NonInteractive,
         mutation_effect: MutationEffect::ReadOnly,
+        bypass_flag: None,
+        dry_run_flag: None,
         async_submission: None,
         delivery_route: None,
         pagination: None,
@@ -139,9 +154,14 @@ fn take_leave_command_context() -> AgentCommand {
             command: "hello-world take-leave --channel email".to_owned(),
             output_mode: Some("text".to_owned()),
         }],
+        renderer: RendererContract::default(),
     }
 }
 
+/// Constructs a non-required string input with optional default and choices.
+///
+/// The helper centralizes the shared schema shape; each call site supplies the
+/// command-specific name, long option, default text, and allowed values.
 fn string_input(
     name: &str,
     long: &str,

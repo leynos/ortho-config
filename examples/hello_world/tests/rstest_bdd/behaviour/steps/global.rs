@@ -68,8 +68,17 @@ pub fn stdout_contains(
     #[from(hello_world_harness)] harness: &mut Harness,
     expected_stdout: String,
 ) -> Result<()> {
-    let expected_stdout = normalize_step_scalar(&expected_stdout);
-    harness.assert_stdout_contains(&expected_stdout)
+    let normalized_stdout = normalize_step_scalar(&expected_stdout);
+    harness.assert_stdout_contains(&normalized_stdout)
+}
+
+#[then("stdout does not contain {unexpected_stdout}")]
+pub fn stdout_does_not_contain(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    unexpected_stdout: String,
+) -> Result<()> {
+    let normalized_stdout = normalize_step_scalar(&unexpected_stdout);
+    harness.assert_stdout_does_not_contain(&normalized_stdout)
 }
 
 /// Ensures the reported version matches the crate metadata.
@@ -85,8 +94,8 @@ pub fn stderr_contains(
     #[from(hello_world_harness)] harness: &mut Harness,
     expected_stderr: String,
 ) -> Result<()> {
-    let expected_stderr = normalize_step_scalar(&expected_stderr);
-    harness.assert_stderr_contains(&expected_stderr)
+    let normalized_stderr = normalize_step_scalar(&expected_stderr);
+    harness.assert_stderr_contains(&normalized_stderr)
 }
 
 #[given("the environment contains {env_key} = {env_value}")]
@@ -95,10 +104,10 @@ pub fn environment_contains(
     env_key: String,
     env_value: String,
 ) -> Result<()> {
-    let env_key = normalize_step_scalar(&env_key);
-    let env_value = normalize_step_scalar(&env_value);
-    validate_env_key(&env_key)?;
-    harness.set_env(&env_key, &env_value);
+    let normalized_key = normalize_step_scalar(&env_key);
+    let normalized_value = normalize_step_scalar(&env_value);
+    validate_env_key(&normalized_key)?;
+    harness.set_env(&normalized_key, &normalized_value);
     Ok(())
 }
 
@@ -107,9 +116,9 @@ pub fn environment_does_not_contain(
     #[from(hello_world_harness)] harness: &mut Harness,
     env_key: String,
 ) -> Result<()> {
-    let env_key = normalize_step_scalar(&env_key);
-    validate_env_key(&env_key)?;
-    harness.remove_env(&env_key);
+    let normalized_key = normalize_step_scalar(&env_key);
+    validate_env_key(&normalized_key)?;
+    harness.remove_env(&normalized_key);
     Ok(())
 }
 
@@ -129,8 +138,8 @@ pub fn named_file_contains(
     name: String,
     docstring: String,
 ) -> Result<()> {
-    let name = normalize_step_scalar(&name);
-    harness.write_named_file(&name, &docstring)
+    let normalized_name = normalize_step_scalar(&name);
+    harness.write_named_file(&normalized_name, &docstring)
 }
 
 /// Writes docstring contents to the XDG config home directory.
@@ -148,8 +157,8 @@ pub fn start_from_sample_config(
     #[from(hello_world_harness)] harness: &Harness,
     sample: String,
 ) -> Result<()> {
-    let sample = normalize_step_scalar(&sample);
-    harness.write_sample_config(&sample)
+    let normalized_sample = normalize_step_scalar(&sample);
+    harness.write_sample_config(&normalized_sample)
 }
 
 #[given("I start from a missing or invalid sample config {sample_name}")]
@@ -157,11 +166,11 @@ pub fn start_from_invalid_sample_config(
     #[from(hello_world_harness)] harness: &Harness,
     sample_name: String,
 ) -> Result<()> {
-    let sample_name = normalize_step_scalar(&sample_name);
-    match harness.try_write_sample_config(&sample_name) {
+    let normalized_sample_name = normalize_step_scalar(&sample_name);
+    match harness.try_write_sample_config(&normalized_sample_name) {
         Ok(()) => {
             return Err(anyhow!(
-                "expected sample config {sample_name:?} to be missing or invalid"
+                "expected sample config {normalized_sample_name:?} to be missing or invalid"
             ));
         }
         Err(
@@ -209,8 +218,8 @@ pub fn assert_declarative_recipient(
     #[from(hello_world_harness)] harness: &Harness,
     expected: String,
 ) -> Result<()> {
-    let expected = normalize_step_scalar(&expected);
-    harness.assert_declarative_recipient(&expected)
+    let normalized_expected = normalize_step_scalar(&expected);
+    harness.assert_declarative_recipient(&normalized_expected)
 }
 
 #[then("the declarative globals salutations are:")]

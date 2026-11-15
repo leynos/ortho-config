@@ -51,7 +51,7 @@ load-bearing decisions about the *exact* v1 shape are therefore recorded under
 - **Documentation IR (intermediate representation)**: the localized,
   human-documentation model in `ortho_config::docs` (`DocMetadata`,
   `OrthoConfigDocs`, `ORTHO_DOCS_IR_VERSION`). It is a *sibling* of the
-  agent-context schema, versioned independently (see ADR-003).
+  agent-context schema, versioned independently (see ADR-0003).
 - **Bridge IR**: the `DocMetadata` value that `cargo-orthohelp` obtains for a
   target package by generating an ephemeral crate, compiling it, and running it
   so it calls `<RootType as OrthoConfigDocs>::get_doc_metadata()`. The
@@ -74,7 +74,7 @@ load-bearing decisions about the *exact* v1 shape are therefore recorded under
 
 Hard invariants. Violation requires escalation, not a workaround.
 
-1. **Schema ownership (ADR-003).** The reusable agent-context schema and
+1. **Schema ownership (ADR-0003).** The reusable agent-context schema and
    `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` stay in `ortho_config::agent_context`.
    `ortho_config` must not gain a dependency on Cargo metadata loading, process
    I/O, filesystem writing, or renderer details. Schema-shape and version-pin
@@ -258,7 +258,7 @@ These decide the exact v1 wire shape that this plan ossifies.
       `agent-context.json` in addition to IR, man pages, and PowerShell
       artefacts; deterministic gates and CodeRabbit review passed.
 - [x] 2026-06-24: Milestone 5 complete — §8.2 policy, §8.1 reconciliation,
-      ADR-003 cross-reference, cargo-orthohelp design, users-guide,
+      ADR-0003 cross-reference, cargo-orthohelp design, users-guide,
       developers-guide, and roadmap updates are complete; deterministic gates
       and CodeRabbit review passed.
 - [x] 2026-07-22: Post-implementation CodeScene findings resolved without
@@ -508,7 +508,7 @@ cleared before the next milestone. Commit after each green milestone.
   version string, additive versus breaking changes, forward-compatible
   unknown-field handling, byte-exact snapshot review, prior-version fixture
   retention on bumps, snake_case enum strings, `summary` omission, and
-  display-only `AgentInput.default`. ADR-003 now points to §8.2 for the
+  display-only `AgentInput.default`. ADR-0003 now points to §8.2 for the
   mechanism; `docs/cargo-orthohelp-design.md`, `docs/developers-guide.md`, and
   `docs/users-guide.md` all state that `--format all` writes
   `agent-context.json`; `docs/roadmap.md` ticks 6.2.2. Impact: remaining
@@ -620,7 +620,7 @@ cleared before the next milestone. Commit after each green milestone.
   snapshot is strictly stronger than a permissive JSON Schema diff for
   detecting accidental shape changes (it catches null-vs-absent and enum-string
   renames). schemars' real value is a *publishable* artefact, which is a
-  different, deferred requirement; ADR-003 calls JSON Schema prior art, not a
+  different, deferred requirement; ADR-0003 calls JSON Schema prior art, not a
   compatibility target. Avoids Tolerance 1. Date/Author: 2026-06-14, planning.
 - Decision: Compatibility policy's primary guarantee is *forward* compatibility
   for pinned consumers; consumers must ignore unknown fields; producers must
@@ -720,8 +720,8 @@ Default rendering: defaults are turned into display strings in
 strings).
 
 Documentation homes: `docs/agent-native-cli-design.md` (§3.2 schema purpose, §8
-versioning/compatibility, §8.1 legacy defaulting), ADR-003
-(`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`),
+versioning/compatibility, §8.1 legacy defaulting), ADR-0003
+(`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`),
 `docs/users-guide.md` (consumer-facing note ~lines 204, 1297),
 `docs/developers-guide.md` (schema ownership ~line 107, agent-context
 generation ~line 114, Public API ~line 137).
@@ -918,7 +918,7 @@ still pass (except the intended additive change).
      as a dev-dependency or behind a non-default feature.
 2. **Reconcile §8.1 (D5).** Annotate each row as *realized in schema v1* or
    *planned for a later schema version*; do not delete forward-looking rows.
-3. **ADR-003 cross-reference.** Add a one-line pointer from ADR-003's
+3. **ADR-0003 cross-reference.** Add a one-line pointer from ADR-0003's
    "Consequences" to §8.2 for the compatibility mechanism. No decision change;
    no new ADR (per `arch-decision-records`, this is mechanism layered on the
    existing ownership decision, not a new hard-to-reverse choice).
@@ -1014,7 +1014,7 @@ Acceptance is behavioural and observable:
 6. **`--format all` (if D3).** `--format all` writes `agent-context.json`
    alongside the existing artefacts and existing `all` outputs are unchanged.
 7. **Docs.** §8.2 exists with the rules above; §8.1 rows are annotated;
-   ADR-003 links to §8.2; users-guide and developers-guide updated;
+   ADR-0003 links to §8.2; users-guide and developers-guide updated;
    `make markdownlint` and `make nixie` pass.
 
 Quality criteria ("done"):
@@ -1064,7 +1064,7 @@ Recommended new/changed files (final shape may refine during implementation):
 - `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` + steps —
   nested scenario.
 - `cargo-orthohelp/src/main.rs` (+ `all` coverage) — Milestone 4 (if D3).
-- `docs/agent-native-cli-design.md`, `docs/adr-003-...md`,
+- `docs/agent-native-cli-design.md`, `docs/adrs/adr-0003-...md`,
   `docs/users-guide.md`, `docs/developers-guide.md`,
   `docs/cargo-orthohelp-design.md` (if applicable), `docs/roadmap.md`.
 
@@ -1117,13 +1117,13 @@ Skills to load during implementation: `rust-router` first, then
 `rust-unit-testing` (assertion/fixture shape, `serial_test` if needed),
 `proptest` (determinism property), `nextest` (running/filtering tests),
 `arch-crate-design` (fixture root-type boundaries), `arch-decision-records`
-(the ADR-003 cross-reference judgement), `leta` (navigation/refactor), and
+(the ADR-0003 cross-reference judgement), `leta` (navigation/refactor), and
 `execplans` (keeping this document current). Use `rstest-bdd` guidance for the
 behavioural scenario. Study how 6.1.2 (PR #340) wired `NestedFixtureConfig` and
 its `--root-type` selection before adding `SimpleFixtureConfig`.
 
 Documentation to consult: `docs/agent-native-cli-design.md` (§3.2, §8, §8.1),
-`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`,
+`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`,
 `docs/cargo-orthohelp-design.md`, `docs/developers-guide.md`,
 `docs/users-guide.md`, `docs/rust-testing-with-rstest-fixtures.md`,
 `docs/rust-doctest-dry-guide.md`,

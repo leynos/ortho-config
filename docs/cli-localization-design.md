@@ -205,10 +205,13 @@ The identifier shape is a documented pure function of the command path:
 `<root>` is configurable via `LocalizeCmd::with_base("…")` (defaulting to the
 binary name normalized to a Fluent identifier) so applications can share one
 catalogue across multiple binaries by giving each a distinct prefix. The
-canonical function is exposed as
-`ortho_config::message_id_for(&command_path, suffix)` so applications, tests,
-and the IR pipeline can produce identical identifiers without re-implementing
-the convention (see [ADR-006](adr-006-identifier-derivation-panics.md)).
+canonical convention belongs to `ortho_l10n`. Its `message_id_for` and fallible
+`try_message_id_for` compose the same identifiers; `ortho_config` re-exports
+the actual runtime function. Derive diagnostics wrap the shared fallible
+normalizer, keeping application lookup, constants, and documentation metadata
+aligned without moving the IR into the runtime. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md) and
+[ADR-0006](adrs/adr-0006-identifier-derivation-panics.md).
 
 Identifier normalization is a documented function: lowercase American Standard
 Code for Information Interchange (ASCII) letters pass through, ASCII digits,
@@ -222,11 +225,18 @@ produces the same runtime id directly.
 
 Two segments that normalize to the same identifier are a build-time error in
 the macros crate and a runtime panic in `LocalizeCmd::localize` for hand-built
-command trees (see [ADR-006](adr-006-identifier-derivation-panics.md)). The
-derive's identifier-generation pass therefore enforces uniqueness at compile
-time, and ADR-006 records why the promoted runtime API panics rather than
-returning `Result` when a hand-built command tree cannot produce unique Fluent
-identifiers.
+command trees (see [ADR-0006](adrs/adr-0006-identifier-derivation-panics.md)).
+The derive's identifier-generation pass therefore enforces uniqueness at
+compile time, and ADR-0006 records why the promoted runtime API panics rather
+than returning `Result` when a hand-built command tree cannot produce unique
+Fluent identifiers.
+
+`OrthoConfigLocalization` exposes the localization base, all command-level
+identifiers, and named argument-id records. The derive also delegates docs IR
+through the mounted command path, so nested defaults agree with runtime lookup;
+flattened fields remain excluded. Artefact emission is opt-in and described by
+[ADR-0011](adrs/adr-0011-opt-in-identifier-artefact-emission.md);
+`localized_default` remains deliberately deferred.
 
 ### 4.2 `try_parse_localized` helpers
 
@@ -444,35 +454,49 @@ The crate ships en-US translations for every raisable variant in stable clap
 `InvalidUtf8`, `Io`, and `Format`. The three display-only variants
 (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`, `DisplayVersion`)
 are recorded but **not** translated — clap renders the help or version text
-itself, and the matrix marks them with a `DisplayOnly` sentinel so the
-mechanical gate (§6.1.1) can prove exhaustive coverage of `ErrorKind` without
-tying the assertion to a hand-maintained subset count.
+itself, and the matrix marks them with a `DisplayOnly` sentinel.
 
-The matrix is **exhaustive** over `ErrorKind`. Every declared variant appears
-exactly once, either with a translated Fluent identifier or with the
-`DisplayOnly` sentinel. In clap 4.5.60 (the version currently locked in
-`Cargo.lock`) that is 14 translated entries plus 3 sentinel entries, totalling
+For each supported `clap_builder` package identity, the intended matrix has one
+entry for every declared variant, either with a translated Fluent identifier or
+with the `DisplayOnly` sentinel. The matrix shape permits a single
+`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison once the gate's source
+identity contract below is enforced.
 
-1. The matrix shape lets the gate reduce to a single
-`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison without filtering or
-subtraction, which is the property the mechanical gate requires.
+#### 6.1.1 Proposed coverage gate
 
-#### 6.1.1 Mechanical coverage gate
+`clap::error::ErrorKind` is `#[non_exhaustive]`; the proposed gate is intended
+to detect coverage gaps rather than rely solely on a release-time audit. A
+checked-in or generated count manifest must bind each count to an explicitly
+supported `clap_builder` package identity: package version, registry or source
+identity, and checksum. `ErrorKind` is defined by `clap_builder` and
+re-exported by the `clap` facade. In this workspace, the lockfile identifies
+`clap_builder` `4.6.0` from
+`registry+https://github.com/rust-lang/crates.io-index` with checksum
+`714a53001bf66416adb0e2ef5ac857140e7dc3a0c48fb28b2f10762fc4b5069f`; this is an
+example supported identity, not proof of the dependency resolved for every
+consumer.
 
-`clap::error::ErrorKind` is `#[non_exhaustive]`; the crate must therefore
-detect coverage gaps automatically rather than relying on a release-time audit.
-The gate is a single mechanism, described once here and referenced from the
-roadmap:
+The implementation must obtain the identity of the `clap_builder` package
+actually used to compile OrthoConfig and verify that it exactly matches a
+supported manifest entry before emitting
+`cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`. It must also verify
+that the compiled `clap` facade exposes `ErrorKind` from that same resolved
+`clap_builder` package. The facade's resolved dependency edge is part of this
+check, not the source identity to which the variant count is bound. The count
+is the total declared variant count for that builder package, not only the
+raisable variants; classification as translated or `DisplayOnly` remains in
+`CLAP_ERROR_IDS`. The implementation must fail closed for unsupported package
+identities, source overrides, or resolutions whose identity cannot be
+established. Its mechanism must be deterministic and account for every
+supported Cargo source.
 
-1. A build script (`build.rs` in the `ortho_config` crate) inspects the
-   `clap::error::ErrorKind` enum exposed by the resolved clap dependency and
-   emits `cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`, where `<n>`
-   is the count of declared variants (all of them — the build script does
-   **not** classify variants as raisable or display-only). Cargo's resolver
-   picks the clap version from the workspace's `Cargo.lock`, so the build
-   script sees the same clap minor or patch the test will run against.
-2. A const-evaluated test reads that constant and compares it to the
-   length of the exhaustive `CLAP_ERROR_IDS`:
+The workspace's `Cargo.lock` does not prove this contract for downstream
+consumers, which resolve dependencies in their own workspaces and may apply
+source overrides. Until the implementation verifies that the count manifest
+entry describes the `clap_builder` source defining the compiled facade's
+`ErrorKind`, the following const assertion is not a mechanical coverage gate.
+Once the identity contract is enforced, a const-evaluated test can compare the
+matrix length with the count:
 
    ```rust
    // In ortho_config's test suite.
@@ -481,12 +505,11 @@ roadmap:
    const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
    ```
 
-When clap adds a variant in a minor or patch release, the lengths diverge and
-CI fails before publish. The fix is mechanical: add a new `CLAP_ERROR_IDS`
-entry that either points at a new Fluent identifier (for a raisable variant) or
-marks the variant `DisplayOnly` (for a new display shape). This replaces a
-maintenance ritual with a mechanical contract. Roadmap §11.2.1 references this
-section rather than restating the mechanism.
+When a supported Clap source adds a variant, its count manifest entry and the
+matrix must be updated together; the assertion detects a length mismatch. A new
+matrix entry points at a Fluent identifier for a raisable variant or marks the
+variant `DisplayOnly` for a new display shape. Roadmap §11.2.1 references this
+section rather than restating the proposed mechanism.
 
 ### 6.2 Canonical mapping constant
 
@@ -686,60 +709,65 @@ in §3) need identifiers without dragging in the docs surface:
 
 ```rust
 pub trait OrthoConfigLocalization {
+    /// The dotted catalogue base passed to `Command::with_base`.
+    const LOCALIZATION_BASE: &'static str;
     /// Identifier for the command's `about` text.
     const ABOUT_ID: &'static str;
     /// Identifier for `long_about`.
     const LONG_ABOUT_ID: &'static str;
     /// Identifier for the override usage string.
     const USAGE_ID: &'static str;
-    /// Identifier triples for every argument, in declaration order. Each
-    /// element is `(help_id, long_help_id, value_name_id)`.
-    const ARG_IDS: &'static [(&'static str, &'static str, &'static str)];
+    /// Identifier for `version`.
+    const VERSION_ID: &'static str;
+    /// Identifier for `long_version`.
+    const LONG_VERSION_ID: &'static str;
+    /// Identifier for `after_help`.
+    const AFTER_HELP_ID: &'static str;
+    /// Identifier for `after_long_help`.
+    const AFTER_LONG_HELP_ID: &'static str;
+    /// Named identifiers for every own argument, in declaration order.
+    const ARG_IDS: &'static [ArgLocalizationIds];
 }
 ```
 
-`OrthoConfigDocs::ABOUT_ID` (and friends) is implemented via a blanket impl
-that delegates to `OrthoConfigLocalization`, so the docs pipeline picks up the
-same identifiers without taking ownership of them.
+`ArgLocalizationIds` contains the Clap argument name and its `help_id`,
+`long_help_id`, and `value_name_id`. The `OrthoConfig` derive emits the trait
+implementation and all of these constants. It normalizes dotted base and
+argument segments using the §4.1 convention, then joins them with hyphens;
+normalized argument-id collisions are compile-time errors.
+
+The derive also emits the `OrthoConfigDocs` implementation. Its path-aware
+methods delegate default metadata to the same identifier convention, starting
+from `LOCALIZATION_BASE` and extending the accumulated path for nested
+subcommands. Handwritten docs implementations retain the provided fallback;
+this is generated delegation rather than a Rust blanket implementation.
 
 ### 8.2 Derive behaviour
 
 The extended derive:
 
 - Generates the localization identifier for each argument from the command
-  path and the field's `id` (or, when absent, the kebab-cased field name).
-  Identifiers are exposed as `OrthoConfigLocalization` associated constants so
-  application code can refer to them without string concatenation.
-- Optionally embeds the doc-comment-derived default English text into the
-  binary. The flag is **per-field**, not per-struct, because help strings
-  dominate binary size while value names are tiny and the cost should be paid
-  per field:
-
-  ```rust
-  #[derive(OrthoConfig)]
-  struct Cli {
-      /// Recipient of the greeting.
-      #[ortho_config(localized_default = "help")] // embed help, skip value_name
-      recipient: Option<String>,
-
-      /// Quiet mode.
-      #[ortho_config(localized_default = "all")] // embed everything for this field
-      is_quiet: bool,
-  }
-  ```
-
-  Permitted values are `none` (default), `help`, `long_help`, `value_name`,
-  `help+long_help`, and `all`. A struct-level
-  `#[ortho_config( localized_default = "...")]` sets the default that fields
-  inherit unless they override it.
+  path and the field's `id` (or, when absent, the raw Rust field name).
+  `clap_derive` emits `Name::Derived(ident)` as `ident.unraw().to_string()` and
+  only kebab-cases the long flag, so an underscored field keeps its underscore
+  in the identifier. Identifiers are exposed as `OrthoConfigLocalization`
+  associated constants so application code can refer to them without string
+  concatenation.
+- Recognizes `localized_default` but rejects it with a deferral diagnostic;
+  embedding localized defaults remains planned work. Consequently,
+  `embedded_default` is always `null` in emitted artefact entries.
 
 - Emits a build-time artefact at `${OUT_DIR}/ortho-config/cli-identifiers.json`
-  listing every generated identifier, its source span, and its embedded
-  default. The artefact is capped at 1 MiB; larger trees split across files
-  named `cli-identifiers.<n>.json` with an index file. `cargo-orthohelp`
-  consumes the artefact (see §11) so translators receive an authoritative
-  identifier inventory without scraping Fluent Translation List (FTL) files by
-  hand.
+  only when `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` is set. The artefact lists each
+  generated identifier and its source span, uses `path_scope: "standalone"`,
+  and is capped at 1 MiB; larger trees split across files named
+  `cli-identifiers.<n>.json` with an index file. It is a provisional
+  declaration inventory, not an authoritative mounted command-tree inventory:
+  path-aware compiled docs IR owns identifiers after command trees are mounted,
+  and future tooling must join that IR with standalone artefact entries. Because
+  `OUT_DIR` is package-scoped, concurrent compiler processes for one package
+  serialize their whole fragment-write, merge, and publication sequence behind
+  an exclusive `cli-identifiers.lock`.
 
 The convention matches §4.1 exactly so identifiers generated by the derive,
 emitted by `message_id_for`, and referenced in hand-authored FTL agree
@@ -794,9 +822,11 @@ error-localization path is the eager pipeline in §6.4; the
 that delegates to the eager path with a deprecation warning, and is removed in
 0.10.
 
-The derive change is opt-in via `localized_default` on fields (or as a
-struct-level default). Consumers that do not set the attribute see no
-behavioural change.
+The derive emits localization identifiers and delegates path-aware docs IR for
+derived configurations. Identifier artefact emission is separately opt-in via
+`ORTHO_CONFIG_EMIT_IDENTIFIERS=1`; builds without that variable do not write an
+artefact. `localized_default` is recognized and rejected as deferred work, so
+using it produces a diagnostic rather than embedding defaults.
 
 `FluentEmbedLocalizer` adds an optional dependency on `i18n-embed` behind a new
 `i18n-embed-bridge` cargo feature so the existing dependency footprint is
@@ -819,13 +849,25 @@ feed `cargo-orthohelp`. The reference CLI gains two subcommands:
 Both commands honour the agent-context output contracts already defined in
 [agent-native-cli-design.md](agent-native-cli-design.md) §6.2.
 
+Declared renderer metadata (ADR-0016) draws a boundary this surface must
+respect. A `renderer(...)` group classifies each output field as `localized` or
+`non_localized`, and that classification is protocol data: it tells a consumer
+which values may change with the human language and which are machine-readable
+identifiers. Localization therefore never rewrites the renderer block,
+translates its policy tokens, or renames a declared field id. Per-locale
+artefacts carry the block verbatim, so the same declaration appears in every
+locale while only the human-facing prose around it changes. A translator
+working through a Fluent catalogue is translating text the block *describes*,
+never the block itself.
+
 ## 12. Failure modes and risks
 
 - **clap patch releases adding `ErrorKind` variants.** `ErrorKind` is
-  `#[non_exhaustive]` and clap may add variants in a patch release. The §6.1
-  const assertion catches this in CI before publish; the §6.3 `warn`-level
-  tracing event catches it in production. The matrix is therefore mechanically
-  gated rather than ceremonially audited.
+  `#[non_exhaustive]` and clap may add variants in a patch release. Once the
+  §6.1.1 identity contract is implemented, its const assertion can catch a
+  matrix/count mismatch in CI; the §6.3 `warn`-level tracing event catches an
+  unmapped kind in production. Until then, the count comparison is not an
+  exhaustive gate.
 - **`BootHandle` non-finalization.** A consumer who drops a
   `BootHandle<Boot>` without calling `finalize` loses the merge-phase locale.
   The typestate prevents extraction of a long-lived `Arc<dyn Localizer>` for
@@ -837,9 +879,9 @@ Both commands honour the agent-context output contracts already defined in
   boundary. The §1.2 snapshot-per-parse contract names this responsibility
   explicitly so it is not surprise behaviour.
 - **Derive scope creep.** It is tempting to grow the derive into a general
-  IR for help text. The scope is held to identifier generation, optional
-  default embedding, and artefact emission. Anything beyond that belongs in the
-  documentation IR pipeline.
+  IR for help text. The scope is held to identifier generation and artefact
+  emission; optional default embedding remains deferred. Anything beyond that
+  belongs in the documentation IR pipeline.
 - **Fluent presence-method drift.** The adapter calls
   `FluentLanguageLoader::has` (the public API in `i18n-embed` 0.16). If a
   future release renames or removes the method, a build script in the

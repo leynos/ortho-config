@@ -1,0 +1,160 @@
+//! Shared nested-command documentation fixture for behavioural IR tests.
+
+use clap::{Args, Parser, Subcommand};
+use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs};
+use rstest::fixture;
+use rstest_bdd::Slot;
+use rstest_bdd_macros::ScenarioState;
+use serde::{Deserialize, Serialize};
+
+/// Scenario state for nested documentation IR scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct NestedDocsContext {
+    pub metadata: Slot<ortho_config::docs::DocMetadata>,
+}
+
+/// Provides a clean nested documentation context for IR scenarios.
+#[fixture]
+pub fn nested_docs_context() -> NestedDocsContext {
+    NestedDocsContext::default()
+}
+
+/// Root configuration for recursive documentation metadata assertions.
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_APP_",
+    discovery(app_name = "nested-app"),
+    windows(module_name = "Nested", include_common_parameters = true)
+)]
+pub struct NestedDocsConfig {
+    #[arg(long)]
+    pub global: String,
+    #[serde(skip)]
+    #[command(subcommand)]
+    pub command: NestedDocsCommand,
+}
+
+/// Top-level commands used by the nested documentation fixture.
+#[derive(Debug, Subcommand, OrthoConfigSubcommandDocs)]
+pub enum NestedDocsCommand {
+    Greet(NestedGreetArgs),
+    Version(NestedVersionArgs),
+    Admin(NestedAdminArgs),
+}
+
+impl Default for NestedDocsCommand {
+    fn default() -> Self {
+        Self::Greet(NestedGreetArgs::default())
+    }
+}
+
+/// Leaf command with options, defaults, and command-level examples.
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_APP_",
+    discovery(app_name = "greet"),
+    example(
+        code = "nested-app greet --recipient Ada",
+        title_id = "nested-app.examples.greet.title"
+    )
+)]
+pub struct NestedGreetArgs {
+    #[arg(long)]
+    pub excited: bool,
+    #[arg(long)]
+    #[ortho_config(default = String::from("World"))]
+    pub recipient: String,
+}
+
+/// Leaf command with no options.
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_APP_")]
+pub struct NestedVersionArgs {
+    // `OrthoConfig` introspects named fields to generate config, serde, and
+    // docs mappings. A no-options command must therefore use an empty braced
+    // struct here; unit or tuple structs are rejected by the derive parser.
+}
+
+/// Top-level command that contains its own subcommand selector.
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_APP_",
+    windows(module_name = "NestedAdmin", split_subcommands = true)
+)]
+pub struct NestedAdminArgs {
+    #[arg(long)]
+    #[ortho_config(example(
+        code = "nested-app admin --scope tenant-a audit --dry-run",
+        title_id = "nested-app.examples.admin.scope.title"
+    ))]
+    pub scope: Option<String>,
+    #[serde(skip)]
+    #[command(subcommand)]
+    pub command: NestedAdminCommand,
+}
+
+/// Second-level admin commands used to prove recursive command metadata.
+#[derive(Debug, Subcommand, OrthoConfigSubcommandDocs)]
+pub enum NestedAdminCommand {
+    Audit(NestedAuditArgs),
+    #[command(name = "grant-access")]
+    Grant(NestedGrantArgs),
+}
+
+impl Default for NestedAdminCommand {
+    fn default() -> Self {
+        Self::Audit(NestedAuditArgs::default())
+    }
+}
+
+/// Audit command that exposes a boolean option.
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_APP_", discovery(app_name = "audit"))]
+pub struct NestedAuditArgs {
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+/// Access-grant command that exercises `#[command(name = ...)]` overrides.
+///
+/// Each override is paired with a neighbouring identifier left unset, so a
+/// test in `nested_docs_ir` can assert both resolution branches at once: the
+/// literal value survives, and the derived one still reaches its generated id
+/// rather than being blanked, derived from the literal base, or resolved at a
+/// standalone path. Overriding every identifier in the command would leave
+/// only the first branch observable, which is exactly the vacuous case that
+/// pairing exists to rule out.
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_APP_",
+    about_id = "nested.grant.about",
+    synopsis_id = "nested.grant.usage"
+)]
+pub struct NestedGrantArgs {
+    /// Overrides both of its sibling's identifiers, and is the *only* field
+    /// here that does: `audit_note` below is the generated default it is
+    /// compared against.
+    #[arg(long)]
+    #[ortho_config(
+        help_id = "nested.grant.principal.help",
+        long_help_id = "nested.grant.principal.long_help"
+    )]
+    pub principal: String,
+    /// Carries no identifier override, so `help_id` and `long_help_id` must
+    /// both derive through the mounted `nested-app admin grant-access` path.
+    #[arg(long)]
+    pub audit_note: Option<String>,
+}
+
+/// Flat derived configuration struct used to prove that Fluent help text
+/// resolves through the derive-generated identifier constants (Milestone 3's
+/// behavioural contract: `LOCALIZATION_BASE`, `ABOUT_ID`, and the per-argument
+/// ids drive the runtime localizer).
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
+#[command(name = "localized-demo", bin_name = "localized-demo")]
+#[ortho_config(prefix = "L10N", localization_base = "l10n.demo")]
+pub struct LocalizedDemoArgs {
+    /// Recipient of the localised greeting.
+    #[arg(long)]
+    pub recipient: Option<String>,
+}

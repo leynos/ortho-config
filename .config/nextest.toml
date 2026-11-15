@@ -13,58 +13,222 @@
 # 301.8s on Linux (run 34120845807), so 600s is about 1.6 times the
 # worst seen and still catches a hang inside the whole-run budget.
 #
-# The whole-run budget is 30m. The longest nextest run in that sample
-# was 1,023.6s, on Windows with serde_saphyr; the other three runs
-# sampled took 648.2s, 620.0s and 417.7s. 1,800s is about 1.76 times the
-# worst, and sits inside the 2,700s cargo watchdog with the cold build
-# and nextest's termination procedure counted.
+# `must_use_compile_tests` has since left this set: it is a trybuild
+# binary and now takes the trybuild override below, which was raised for
+# it. The 364.8s above is what sized the base allowance, and it is kept
+# as the record of that sizing rather than as a current member.
+#
+# The whole-run budget is 2,300s. It was 1,800s, sized from the warm
+# sample above: the longest nextest run in that sample was 1,023.6s, on
+# Windows with serde_saphyr, and the other three took 648.2s, 620.0s and
+# 417.7s.
+#
+# Pinning the dated nightly invalidated that sample, and the budget is
+# now sized from a cold run instead. sccache keys its entries by
+# compiler, so the toolchain change cold-missed the whole Windows
+# dependency graph: that leg's hit rate fell from 89.00% (2,282 hits,
+# 282 misses) on the previous toolchain to 35.67% (824 hits, 1,486
+# misses) on this one. A cold cache does not merely move the build out
+# of the way. It lands inside nextest's clock, because the binaries
+# whose tests spawn their own `cargo` each pay for a fresh dependency
+# build, and `compile_time` went from 71.4s to 335.9s, `compile_fail`
+# from 45.2s to 195.8s and `boolean_cli_trybuild` from 37.7s to 178.0s
+# -- 4.3 to 4.7 times, against 1.2 to 1.5 times for the tests that
+# compile nothing. Over the same 2,070 tests and the same features the
+# Windows leg ran 1,044.1s on the old toolchain (run 39633413142) and
+# 1,810.1s on this one (run 39658769738), where nextest cancelled it
+# with two tests still running. Both were far inside their own 600s
+# allowance, so no per-test tier was what failed; the whole-run budget
+# was.
+#
+# 2,300s covers the run that was cancelled. The younger survivor had run
+# 157.3s when the timer fired, so it started at 1,652.8s and its own 600s
+# allowance reached 2,252.8s: no outcome of that run could have taken
+# longer, and 2,300s covers that bound with 47s to spare where 1,800s fell
+# 452.8s short of it. The margin is thin on purpose -- it is the argument
+# for fixing the cause rather than the figure. It also stays inside the
+# 3,300s cargo watchdog with the cold build and nextest's termination
+# procedure counted.
+#
+# None of the three runs on this budget (39681374732, 39690235953,
+# 39697737642) tested that bound: each was a later run on the pin and
+# inherited the cancelled run's sccache entries, at 88.77%, 89.04% and
+# 89.20% hit rates rather than the cold 35.67%. Their first passes ran
+# 1,519.9s, 1,507.4s and 1,186.5s. That spread is too wide to read as a
+# fixed toolchain cost, and none of it bounds the cold case, so the budget
+# still rests on the cold bound above.
+#
+# Raising this figure again would be the wrong repair. The lever is
+# letting the nested builds reach sccache at all, which cannot happen
+# while the documentation tests clear the environment and restore no
+# RUSTC_WRAPPER. Issue 614 records that, and a cold cache is inherent
+# to a dated nightly that Dependabot moves daily, so the budget has to
+# carry it rather than the sample that predates the pin.
 #
 # See "Test timeouts" in docs/developers-guide.md, which carries the
 # sample and the arithmetic.
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 10 }
-global-timeout = "30m"
+global-timeout = "2300s"
 
 # These trybuild binaries spawn child cargo processes in a separate target
 # directory, so they do not share cargo-llvm-cov's warmed llvm-cov target cache.
 # Windows run 35939051738 reached the 600s limit while crate_path_trybuild's
 # child cargo was still compiling beside other compile-heavy tests. Reserve
 # every nextest slot for each trybuild binary on Windows so their child builds
-# do not compete with other nextest tests. Keep the existing 600s ceiling.
+# do not compete with other nextest tests. This entry keeps the 600s
+# ceiling for the four binaries it names while it runs them alone; the
+# entry below is the file's largest allowance and covers the rest of the
+# trybuild class.
+#
+# The Windows failures that followed were all
+# cargo-orthohelp::compile_time's must_use_compile_tests at 600s (runs
+# 36127709137, 36127710357, 36127710423, 36127710779 and 36127709460). Its
+# cold child build overlapped those of ortho_config's compile_fail and
+# crate_path_trybuild. So the Windows exclusivity names every binary whose
+# test drives a cold trybuild build: the two above, compile_fail and
+# compile_time.
+#
+# A single-threaded test group for the four was tried instead (run
+# 36264533224). It saved no wall time (52.9 min against 53.5 min for this
+# shape on run 36195916343), and must_use_compile_tests, still competing
+# with the rest of the suite, took 523.5s of its 600s. With every slot
+# reserved it took 158.7s.
 [[profile.default.overrides]]
-filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
+filter = '''
+binary_id(ortho_config::crate_path_trybuild)
+| binary_id(ortho_config::declarative_merge_trybuild)
+| binary_id(ortho_config::compile_fail)
+| binary_id(cargo-orthohelp::compile_time)
+'''
 platform = 'cfg(windows)'
 threads-required = "num-test-threads"
 slow-timeout = { period = "120s", terminate-after = 5 }
 
+
+# Every trybuild binary, not two of them. These spawn child cargo processes
+# in a separate target directory, so they do not share cargo-llvm-cov's
+# warmed llvm-cov target cache and each pays a cold dependency build; they
+# also share one package cache, so they block on its lock while their
+# neighbours build.
+#
+# The names are listed rather than globbed. There is no single pattern for
+# them -- eight end in `trybuild` and `compile_fail` and `compile_time` do
+# not -- and only exact-name matching is proved against the pinned
+# `cargo-nextest@0.9.120` the coverage action installs, where the logs show
+# `binary(crate_path_trybuild)` taking this override and
+# `binary(compile_fail)` not. `trybuild_tier_test.py` reads this filter and
+# the Rust sources and fails when the two sets drift apart, so a new
+# trybuild binary cannot quietly land on the wrong tier as these five did.
+#
+# `subcommand_trybuild` was added here after `34a595ea` merged it upstream.
+# The filter enumerates the class by name, so a binary arriving on main is
+# not covered by it until it is named; `trybuild_tier_test.py` is what
+# reported the omission, on the first run that could reach it.
+#
+# `localization_trybuild` arrived from the localization-artefact branch
+# rather than from main, and was reported by the same contract on the same
+# terms: the branch added the binary and did not name it here, `build-test
+# (linux)` failed the workflow contract step, and no other step failed.
+#
+# `boolean_cli_trybuild` arrived the same way, from the optional-value
+# boolean CLI branch, and was reported by `trybuild_tier_test.py` on its
+# first local run. It is named here rather than left on the base allowance
+# because it drives a cold child build exactly as the rest do. It is not
+# added to the Windows exclusivity above: that entry names the four
+# binaries the reservation was measured on, and
+# `windows_trybuild_isolation_test.py` pins that set exactly.
+#
+# The allowance is 960s: eight warning periods of 120s. The worst this
+# binary class reached on a run that finished was 572.5s
+# (`crate_path_trybuild`, run 36068184976), which is 0.95 of the 600s it
+# used to get -- the old figure was not marginal, it was already too small,
+# and `must_use_compile_tests` was killed at 600.224s on run 36070786646
+# while still cold-compiling its first dependencies. 960s is 1.68 times
+# that worst case, the same headroom the base allowance was sized with.
+#
+# Keep below [profile.default]'s global-timeout, which the contract in
+# tests/workflow_contracts asserts.
 [[profile.default.overrides]]
-filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
-slow-timeout = { period = "120s", terminate-after = 5 }
+filter = 'binary(boolean_cli_trybuild) | binary(crate_path_trybuild) | binary(declarative_merge_trybuild) | binary(env_source_trybuild) | binary(generated_lint_trybuild) | binary(localization_trybuild) | binary(localized_parse_trybuild) | binary(subcommand_trybuild) | binary(compile_fail) | binary(compile_time)'
+slow-timeout = { period = "120s", terminate-after = 8 }
 
-# Serialise orthohelp BDD scenarios: each runs in its own nextest process,
-# so inter-process races on the shared orthohelp cache must be prevented
-# at the nextest level rather than with a process-local mutex.
-# Serialise powershell_windows cases: both cases write to the same bridge
-# directory under target/orthohelp/<hash>/ and Windows file-sharing semantics
-# prevent concurrent truncate+write while cargo holds a read lock on the manifest.
-# Serialise nested_subcommand_end_to_end: its rstest cases spawn concurrent
-# bridge builds that share the target/orthohelp/<hash>/ cache, and an
-# inter-process race on that shared Cargo.toml intermittently yields
-# BridgeBuildFailure ("manifest is missing either a [package] or a
-# [workspace]") under coverage runs.
+# The BDD cache scenarios remove `target/orthohelp` to verify a cold cache,
+# while documentation builds share `target/documentation-examples/v2`. Keep
+# every nextest binary that can clear either cache or build against those
+# ownership locks in one process-wide group. This prevents scenarios from
+# spending their own deadlines waiting behind peer tests. Production locks
+# still protect build-and-snapshot operations across separate processes.
+#
+# Membership is also every test binary that spawns a child `cargo`, which is
+# the class `child_cargo_tier_test.py` reads from the Rust sources. That
+# contract is what keeps this list from being a hand-maintained one: it
+# requires the class to be covered by the raised allowances below, and reports
+# a member that is not. `cli_dispatch` was absent from both, ran on the 600s
+# base allowance with a nested `cargo` on its clock, and no other assertion
+# could see the omission, because every other reading begins from this list.
+#
+# The group and class coincide today, but the class contract does not require
+# that: a binary can drive a child `cargo` without touching the shared caches
+# this group protects. `documentation_budget_test.py` separately pins a named
+# subset to an `orthohelp_cache` filter, so narrowing this group past those
+# names fails that assertion rather than this one.
 [test-groups]
-rstest_bdd = { max-threads = 1 }
-powershell_windows = { max-threads = 1 }
-nested_subcommand_end_to_end = { max-threads = 1 }
+orthohelp_cache = { max-threads = 1 }
+# Serialized because its members package and unpack one shared target
+# directory from separate processes; see the override below.
+boundary_packaging = { max-threads = 1 }
 
+# A documented-command run reached 595.9s with only Cargo package-cache lock
+# waits before its 596s operation deadline. The 956s scenario envelope is 1.60
+# times that measured lower bound; two seconds remain for cleanup and two for
+# nextest reporting. This includes lock and admission delays without guessing
+# how much time they added.
 [[profile.default.overrides]]
 filter = 'binary(rstest_bdd)'
-test-group = 'rstest_bdd'
+test-group = 'orthohelp_cache'
+slow-timeout = { period = "120s", terminate-after = 8 }
 
 [[profile.default.overrides]]
-filter = 'binary(powershell_windows)'
-test-group = 'powershell_windows'
+# `binary(cli_dispatch)` is named here rather than left to the base allowance.
+# Its tests load the built tool and drive it through `cargo orthohelp`, so a
+# child cargo is on their clock exactly as it is on the others'; measured on a
+# warm tree that dispatch is a 0.04s help path, but the allowance is sized for
+# the nested build the class can reach, not for the cheapest path it takes.
+# It was on the 600s base allowance until `child_cargo_tier_test.py` read the
+# class from the sources and reported it.
+filter = 'binary(powershell_windows) | binary(nested_subcommand_end_to_end) | binary(documented_command) | binary(documentation_examples_rust_tests) | binary(agent_context_contract) | binary(policy_report_contract) | binary(golden_tests) | binary(identifier_artefact_e2e) | binary(cli_dispatch) | binary(agent_context_renderer_end_to_end)'
+test-group = 'orthohelp_cache'
+slow-timeout = { period = "120s", terminate-after = 8 }
 
+# The boundary contracts materialize their packaged crates once per *process*,
+# and nextest runs each test in its own process. Several of them therefore run
+# `cargo package` and unpack the same target directory side by side. Cargo's
+# own lock does not cover that: it does not hold readers out while a package
+# root is removed and unpacked, so one process can replace a root another is
+# reading. Serialize the binary.
+#
+# The allowance is 960 s, eight warning periods of 120 s, the same tier as the
+# trybuild and documentation scenarios. Two packaging invocations share one
+# test, and each is bounded at 440 s
+# (`ortho_l10n/tests/boundary/package_set`), so the pair fits with 80 s for the
+# root checks around them. A bound that did not fit would never fire: nextest
+# would stop the test first, and the error naming the invocation that hung
+# would never be printed.
+#
+# The earlier 240 s bounds sat inside the 600 s base allowance, and six packaged
+# contracts still timed out on a shared host while their children queued behind
+# 340 compile requests. The bound fired before the invocation it named could
+# finish, and the tail of the child's output - the lines naming the admission
+# queue - was discarded, so the failure could not be attributed. The fixture now
+# reports that tail with the deadline error and serializes nested Cargo calls
+# within a process; this allowance is what those bounds are sized against.
+#
+# `cargo test` and `make boundary` run one process for the binary but its tests
+# as threads, so the fixture, not this entry, provides the in-process half of
+# the serialization. See "Nextest test-group serialization" in
+# docs/developers-guide.md.
 [[profile.default.overrides]]
-filter = 'binary(nested_subcommand_end_to_end)'
-test-group = 'nested_subcommand_end_to_end'
+filter = 'binary(boundary)'
+test-group = 'boundary_packaging'
+slow-timeout = { period = "120s", terminate-after = 8 }

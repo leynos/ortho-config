@@ -1,0 +1,5 @@
+error: unknown tty 'sometimes'; expected one of "independent", "adapts", "requires"
+ --> tests/ui/renderer_invalid_token.rs:7:39
+  |
+7 | #[ortho_config(renderer(machine(tty = "sometimes")))]
+  |                                       ^^^^^^^^^^^

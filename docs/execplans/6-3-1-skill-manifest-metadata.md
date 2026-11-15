@@ -112,8 +112,8 @@ workaround.
   `MutationEffect`, `AsyncSubmission`, `AsyncSubmissionMode`, `DeliveryRoute`,
   or `PaginationContract`.
 - Preserve the boundary established by
-  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`: the new
-  types belong to the agent-context contract owned by
+  `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`:
+  the new types belong to the agent-context contract owned by
   `ortho_config::agent_context`. They must not introduce any dependency on
   `cargo-orthohelp`, the bridge, the documentation IR, or policy reports.
 - Do not add code to `cargo-orthohelp/src/policy/`, `cargo-orthohelp/src/cli/`,
@@ -330,8 +330,8 @@ The implementation must review and keep aligned with:
 - `docs/developers-guide.md` "Schema ownership" (around line 51);
 - `docs/documentation-style-guide.md` for Markdown wrapping, fenced code
   block languages, and en-GB Oxford spelling;
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`, the
-  governing ownership boundary;
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`,
+  the governing ownership boundary;
 - `docs/execplans/5-2-1-define-ownership-models.md` for the pattern this
   plan extends (passive schema types, no CLI output, deferred behavioural
   coverage);
@@ -419,7 +419,7 @@ The relevant documents are:
 - `docs/users-guide.md` "Documentation and agent contracts" section
   (around line 196);
 - `docs/developers-guide.md` "Schema ownership" section
-  (around line 51, citing ADR-003);
+  (around line 51, citing ADR-0003);
 - `docs/roadmap.md` §6.3.1 (lines 157-162 of the roadmap as of this writing).
 
 `cargo-orthohelp/src/policy/`, `cargo-orthohelp/src/cli/`,
@@ -566,14 +566,14 @@ documentation updates and is logged in `Decision Log`.
 
 ### No new ADR (confirmed)
 
-`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` already
-authorizes additive evolution of the agent-context schema inside
-`ortho_config::agent_context`. This plan cites ADR-003 in the design overview
+`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
+already authorizes additive evolution of the agent-context schema inside
+`ortho_config::agent_context`. This plan cites ADR-0003 in the design overview
 and adds a single sentence to `docs/developers-guide.md` "Schema ownership"
 noting that skill manifest descriptors are part of the agent-context contract,
 not a sibling schema.
 
-The maintainer confirmed on 2026-06-12 that referencing ADR-003 is sufficient
+The maintainer confirmed on 2026-06-12 that referencing ADR-0003 is sufficient
 and that no new ADR is required for the wire-field rename. The open question is
 therefore closed; Milestone 0 no longer needs to ask it.
 
@@ -609,7 +609,7 @@ Steps:
    approval. Record the approval date in `Progress`. Update `Status:` to
    `APPROVED`.
 2. The ADR question is closed: the maintainer confirmed on 2026-06-12 that
-   referencing ADR-003 in `docs/developers-guide.md` is sufficient and that no
+   referencing ADR-0003 in `docs/developers-guide.md` is sufficient and that no
    new ADR is required for the wire-field rename. No ADR drafting is needed in
    this milestone.
 3. Add this ExecPlan to `docs/contents.md` next to the other phase-6
@@ -824,7 +824,7 @@ Steps:
    three child bullets done; add a single sentence noting "Modelling can land
    before 6.2.1; only generator output depends on 6.2.1."
 8. If a new ADR was drafted in Milestone 0, link it from
-   `docs/contents.md` alongside ADR-003 and ADR-005.
+   `docs/contents.md` alongside ADR-0003 and ADR-0005.
 
 Validation:
 
@@ -1018,7 +1018,7 @@ two.
   §"Recommended design".
 - [x] (2026-06-02) Drafted this ExecPlan for approval.
 - [x] (2026-06-12) Maintainer confirmed the ADR question: referencing
-  ADR-003 is sufficient, so no new ADR is required for the wire-field rename.
+  ADR-0003 is sufficient, so no new ADR is required for the wire-field rename.
 - [x] (2026-06-12) Received explicit maintainer approval to implement this
   ExecPlan via the request to proceed with implementation.
 - [x] (2026-06-12) Confirmed this ExecPlan is already linked from
@@ -1134,7 +1134,7 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   Rationale: the user explicitly required plan approval before implementation.
 - Decision: place the new types inside `ortho_config::agent_context` rather
   than a sibling `ortho_config::skill_manifest` module. Rationale: the audience
-  for skill manifest metadata is the agent-context consumer, and `ADR-003`
+  for skill manifest metadata is the agent-context consumer, and `ADR-0003`
   draws ownership boundaries at *contract audience*. A sibling module would
   create a redundant schema-version question and a second `pub use` block in
   `ortho_config/src/lib.rs` for what is effectively one field addition.
@@ -1166,12 +1166,12 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   6.3.2's validator will be asked about first; an empty vector is a meaningful
   "prose-only skill" value, not malformed data. Make `commands` defaulted at
   the wire level so legacy payloads remain readable.
-- Decision: do not write a new ADR for this work; reference ADR-003.
-  Rationale: ADR-003 already authorizes additive evolution of the agent-context
-  schema inside `ortho_config::agent_context`. Two new schema types fit that
-  authorization. The maintainer confirmed on 2026-06-12 that referencing
-  ADR-003 is sufficient and that no new ADR is required for the wire-field
-  rename, closing the only open question.
+- Decision: do not write a new ADR for this work; reference ADR-0003.
+  Rationale: ADR-0003 already authorizes additive evolution of the
+  agent-context schema inside `ortho_config::agent_context`. Two new schema
+  types fit that authorization. The maintainer confirmed on 2026-06-12 that
+  referencing ADR-0003 is sufficient and that no new ADR is required for the
+  wire-field rename, closing the only open question.
 - Decision: defer validation, parsing, and `cargo-orthohelp` integration
   to 6.3.2. Rationale: §3.4 of the design distinguishes "modelling" from
   "validation rules"; 6.3.1 is the modelling step and 6.3.2 is the validation

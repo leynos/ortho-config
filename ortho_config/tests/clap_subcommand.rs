@@ -135,10 +135,14 @@ fn merge_resolves_option_from_expected_layer(#[case] case: MergeCase) -> Result<
     env: Some(("APP_CMDS_RUN_COUNT", "not-a-number")),
 })]
 fn merge_errors_on_malformed_source(#[case] setup: SourceSetup) -> Result<()> {
-    let result = merge_from_sources(&setup, ["prog", "run"]);
+    let error = merge_from_sources(&setup, ["prog", "run"])
+        .err()
+        .context("expected the malformed source to fail the merge")?;
     ensure!(
-        result.is_err(),
-        "expected the malformed source to fail the merge"
+        error
+            .chain()
+            .any(|cause| cause.to_string() == "merge subcommand source layers"),
+        "expected merge-stage context in the error chain: {error:#}"
     );
     Ok(())
 }

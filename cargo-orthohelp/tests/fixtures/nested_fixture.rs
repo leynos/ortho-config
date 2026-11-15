@@ -6,6 +6,8 @@ use cargo_orthohelp::ir::{
     LocalizedDocMetadata, LocalizedExample, LocalizedFieldMetadata, LocalizedHeadings,
     LocalizedSectionsMetadata,
 };
-use cargo_orthohelp::schema::{CliMetadata, DefaultValue, EnvMetadata, ValueType, WindowsMetadata};
+use cargo_orthohelp::schema::{
+    CliMetadata, DefaultValue, EnvMetadata, ORTHO_DOCS_IR_VERSION, ValueType, WindowsMetadata,
+};
 
 nested_fixture_impl::define_nested_fixture!();

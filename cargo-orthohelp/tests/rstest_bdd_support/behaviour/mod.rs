@@ -1,0 +1,42 @@
+//! Behavioural test harness for `cargo-orthohelp`.
+//!
+//! This module is the root of the BDD step registry. It declares the
+//! submodules that together cover all Gherkin scenarios under
+//! `cargo-orthohelp/tests/features/`:
+//!
+//! - [`steps`] — shared scenario state ([`steps::OrthoHelpContext`]), the
+//!   rstest fixture, and target-directory helpers.
+//! - [`steps_cmd`] — `given`/`when` steps that invoke `cargo-orthohelp` and
+//!   manage the temporary output directory.
+//! - [`steps_cache`] — `then` steps that verify cache behaviour (identity,
+//!   schema version, missing-cache failure).
+//! - [`steps_ir`] — `then` steps that assert IR JSON content and locale
+//!   correctness.
+//! - [`steps_policy`] — `given`/`when`/`then` steps for the agent-native
+//!   policy check.
+//! - [`roff_steps`] — `when`/`then` steps for roff man-page generation.
+//! - [`powershell_steps`] — `when`/`then` steps for `PowerShell` help
+//!   generation.
+//! - [`steps_agent_context`] — `when`/`then` steps for agent-context JSON
+//!   generation.
+//! - [`steps_renderer`] — `when`/`then` steps for declared renderer metadata,
+//!   as reported in agent-context JSON.
+//! - [`steps_ir_renderer`] — `then` steps for declared renderer metadata in
+//!   per-locale IR artefacts.
+//! - [`steps_policy_report`] — `when`/`then` steps for policy-report JSON
+//!   generation.
+//! - [`scenarios`] — wires each feature file to the step registry via
+//!   `scenarios!`.
+
+mod powershell_steps;
+mod roff_steps;
+mod scenarios;
+pub mod steps;
+mod steps_agent_context;
+mod steps_cache;
+mod steps_cmd;
+mod steps_ir;
+mod steps_ir_renderer;
+mod steps_policy;
+mod steps_policy_report;
+mod steps_renderer;

@@ -7,6 +7,7 @@
 pub mod agent_context;
 pub mod error;
 pub mod ir;
+pub mod output;
 pub mod policy;
 pub mod powershell;
 pub mod roff;

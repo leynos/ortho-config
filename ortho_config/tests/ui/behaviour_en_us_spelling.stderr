@@ -1,0 +1,5 @@
+error: unknown attribute `behavior`; use the en-GB spelling `behaviour` (declares non-interactive execution and mutation-boundary metadata)
+ --> tests/ui/behaviour_en_us_spelling.rs:7:16
+  |
+7 | #[ortho_config(behavior(interaction = "interactive"))]
+  |                ^^^^^^^^

@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use super::{Prefix, load_file_and_env_defaults, load_file_and_env_defaults_at};
+use super::{Prefix, load_file_and_env_defaults_at};
 use crate::merge_telemetry;
 use crate::{
     CliValueExtractor, CsvEnv, EnvSource, OrthoMergeExt, OrthoResult, ProcessEnv,
@@ -22,7 +22,10 @@ use serde::de::DeserializeOwned;
 /// general environment service.
 #[derive(Debug, Clone, Copy)]
 pub struct SubcommandFileContext<'a> {
+    /// Base directory used to resolve file candidates.
     pub(super) base: &'a Path,
+    /// Named lookups for discovery values; this capability does not enumerate
+    /// environment keys.
     pub(super) discovery: &'a dyn EnvSource,
 }
 
@@ -37,7 +40,9 @@ impl<'a> SubcommandFileContext<'a> {
 /// Parsed CLI values paired with their clap match metadata.
 #[derive(Debug, Clone, Copy)]
 pub struct SubcommandCliMatches<'a, T> {
+    /// Parsed values merged after defaults and selected file layers.
     pub(super) cli: &'a T,
+    /// Clap's match tree, used to distinguish explicit values from defaults.
     pub(super) matches: &'a ArgMatches,
 }
 
@@ -185,7 +190,7 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_with_sources<T>(
     prefix: &Prefix,
@@ -210,7 +215,7 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_for_with_sources<T>(
     cli: &T,
@@ -225,10 +230,15 @@ where
 /// Loads defaults from files and an injected merge source, respecting fields
 /// marked `cli_default_as_absent`.
 ///
+/// File discovery keeps its established process-backed behaviour: the local
+/// base is the working directory and names are resolved through [`ProcessEnv`].
+/// Use [`load_and_merge_subcommand_with_matches_with_sources_at`] when the file
+/// search itself must be injected.
+///
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_with_matches_with_sources<T>(
     prefix: &Prefix,
@@ -239,17 +249,13 @@ pub fn load_and_merge_subcommand_with_matches_with_sources<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory + CliValueExtractor,
 {
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = (|| {
-        let fig = Figment::from(Serialized::defaults(T::default()))
-            .merge(load_file_and_env_defaults::<T>(prefix, Some(merge_source))?);
-        let cli_value = cli.extract_user_provided(matches)?;
-        fig.merge(Serialized::defaults(cli_value))
-            .extract()
-            .into_ortho_merge()
-    })();
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
+    let process_env = ProcessEnv;
+    load_and_merge_subcommand_with_matches_with_sources_at(
+        prefix,
+        &SubcommandCliMatches::new(cli, matches),
+        SubcommandFileContext::new(Path::new("."), &process_env),
+        merge_source,
+    )
 }
 
 /// Wrapper around [`load_and_merge_subcommand_with_matches_with_sources`]
@@ -258,7 +264,7 @@ where
 /// # Errors
 ///
 /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or the
-/// merged defaults cannot be deserialised.
+/// merged defaults cannot be deserialized.
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_for_with_matches_with_sources<T>(
     cli: &T,

@@ -23,8 +23,10 @@ use super::{ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome, Disc
 /// that decision in a single place is what stops the emitted event and the
 /// reported error disagreeing.
 #[derive(Debug, Default)]
-struct PartitionedErrors {
+pub(super) struct PartitionedErrors {
+    /// Failures from required candidates, retained even if a fallback succeeds.
     required: Vec<Arc<OrthoError>>,
+    /// Failures from optional candidates, kept separate for caller policy.
     optional: Vec<Arc<OrthoError>>,
 }
 
@@ -34,20 +36,36 @@ struct PartitionedErrors {
 /// four-argument ceiling and keeps the telemetry decision in one place: the
 /// error's category is derived from the error itself at the recording site,
 /// so the emitted event and the stored error cannot disagree.
-struct CandidateFailure {
-    operation: &'static str,
-    required: bool,
-    source: &'static str,
+///
+/// `scope` is the scope whose walk met the candidate. The flat first-wins walk
+/// has no scope concept and passes `None`, so the field is omitted from its
+/// events rather than rendered empty.
+pub(super) struct CandidateFailure {
+    /// Bounded operation label identifying which discovery action failed.
+    pub(super) operation: &'static str,
+    /// Whether absence or parse failure must be reported as required.
+    pub(super) required: bool,
+    /// Bounded candidate source label, never a path or user value.
+    pub(super) source: &'static str,
+    /// Scope label for scoped walks; absent for the flat first-wins walk.
+    pub(super) scope: Option<&'static str>,
 }
 
 impl PartitionedErrors {
-    fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
-        telemetry::candidate_failure(
-            failure.operation,
-            failure.required,
-            failure.source,
-            telemetry::error_category(&err),
-        );
+    /// Emits bounded failure telemetry and stores the error in its policy bucket.
+    ///
+    /// # Examples
+    ///
+    /// Recording an error with `required: true` appends it to
+    /// `required_errors`; an optional failure is retained separately.
+    pub(super) fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
+        telemetry::candidate_failure(&telemetry::CandidateFailureFields {
+            operation: failure.operation,
+            required: failure.required,
+            source: failure.source,
+            category: telemetry::error_category(&err),
+            scope: failure.scope,
+        });
         if failure.required {
             self.required.push(err);
         } else {
@@ -55,6 +73,7 @@ impl PartitionedErrors {
         }
     }
 
+    /// Transfers both error partitions into the generic single-value result.
     fn into_outcome<T>(self, value: Option<T>) -> DiscoveryOutcome<T> {
         DiscoveryOutcome {
             value,
@@ -63,12 +82,31 @@ impl PartitionedErrors {
         }
     }
 
-    fn into_layers_outcome(self, value: Vec<MergeLayer<'static>>) -> DiscoveryLayersOutcome {
+    /// Moves both error buckets into the result for a composed layer stack.
+    ///
+    /// # Examples
+    ///
+    /// Converting an empty partition with two layers preserves both layers and
+    /// returns empty required and optional error lists.
+    pub(super) fn into_layers_outcome(
+        self,
+        value: Vec<MergeLayer<'static>>,
+    ) -> DiscoveryLayersOutcome {
         DiscoveryLayersOutcome {
             value,
             required_errors: self.required,
             optional_errors: self.optional,
         }
+    }
+
+    /// Merge another partition into this one, preserving each bucket's order.
+    ///
+    /// Scope stacking accumulates diagnostics across scopes, and which bucket an
+    /// error lands in is the whole point of the split; appending here keeps the
+    /// caller from having to name the two fields and risk transposing them.
+    pub(super) fn append(&mut self, mut other: Self) {
+        self.required.append(&mut other.required);
+        self.optional.append(&mut other.optional);
     }
 }
 
@@ -116,6 +154,7 @@ impl ConfigDiscovery {
                         operation,
                         telemetry::OUTCOME_SUCCESS,
                         Some(candidate.source),
+                        None,
                     );
                     return (Some(value), errors);
                 }
@@ -125,15 +164,20 @@ impl ConfigDiscovery {
                         operation,
                         required,
                         source: candidate.source,
+                        scope: None,
                     },
                     err,
                 ),
             }
         }
-        telemetry::load_outcome(operation, telemetry::OUTCOME_NOT_FOUND, None);
+        telemetry::load_outcome(operation, telemetry::OUTCOME_NOT_FOUND, None, None);
         (None, errors)
     }
 
+    /// Runs the shared first-success traversal and maps its value and errors.
+    ///
+    /// The builder runs only for a parsed candidate. Required failures remain
+    /// in the outcome even when a later optional candidate produces a value.
     fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
     where
         F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
@@ -146,7 +190,10 @@ impl ConfigDiscovery {
     }
 
     /// Returns true if the candidate at `idx` is required.
-    const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
+    ///
+    /// Shared with [`ConfigDiscovery::compose_scoped_layers`], which walks the
+    /// same list and must partition its diagnostics identically.
+    pub(super) const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
         idx < required_bound
     }
 
@@ -239,7 +286,11 @@ impl ConfigDiscovery {
     }
 
     /// Load one candidate's `extends` chain as a layer stack.
-    fn chain_layers(
+    ///
+    /// Shared with [`ConfigDiscovery::compose_scoped_layers`]: both modes must
+    /// expand a chain identically, and the only difference between them is how
+    /// many candidates they apply it to.
+    pub(super) fn chain_layers(
         path: &Path,
         required: bool,
     ) -> Result<Option<Vec<MergeLayer<'static>>>, Arc<OrthoError>> {
@@ -270,7 +321,13 @@ impl ConfigDiscovery {
         (figment, required_errors)
     }
 
-    fn missing_required_error(path: &Path) -> Arc<OrthoError> {
+    /// Builds the not-found error used when a required candidate is absent.
+    ///
+    /// # Examples
+    ///
+    /// Passing `settings.toml` produces a file error carrying that path and a
+    /// not-found cause for the caller to aggregate or return.
+    pub(super) fn missing_required_error(path: &Path) -> Arc<OrthoError> {
         Arc::new(OrthoError::File {
             path: path.to_path_buf(),
             source: Box::new(io::Error::new(

@@ -6,6 +6,7 @@
 mod common;
 mod config_path;
 mod error_cases;
+mod help;
 mod option_cases;
 mod parsing;
 

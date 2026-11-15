@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e5ecedc74a9af028d6f63987ecaeb8b08bd561c3119e70964b2ea81f52e65cac # shrinks to (names, edges, root) = (["a"], [], "a"), missing = "b", package_is_registered = false
+cc ae36c8174b11b64f376b48d63801a786f2d2f94859e42a74e87f81937c6935a6 # shrinks to (names, edges, root) = (["a", "b"], [(1, 0)], "b")

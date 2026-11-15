@@ -41,6 +41,7 @@ struct DefaultParityArgs {
 }
 
 impl Default for DefaultParityArgs {
+    /// Mirrors the clap defaults so struct defaults and inferred defaults agree.
     fn default() -> Self {
         Self {
             count: 8,
@@ -51,6 +52,8 @@ impl Default for DefaultParityArgs {
     }
 }
 
+/// Inferred string defaults, file values, and explicit CLI values all pass
+/// through each field's clap parser and respect source precedence.
 #[rstest]
 #[serial]
 fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
@@ -60,6 +63,7 @@ fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
     Ok(())
 }
 
+/// Field values a parity case expects after loading or merging.
 #[derive(Clone, Copy)]
 struct DefaultParityExpected {
     count: u16,
@@ -68,6 +72,7 @@ struct DefaultParityExpected {
     label: &'static str,
 }
 
+/// Checks every parity field, naming the first mismatched field on failure.
 fn assert_default_parity(
     actual: &DefaultParityArgs,
     expected: DefaultParityExpected,
@@ -99,6 +104,7 @@ fn assert_default_parity(
     Ok(())
 }
 
+/// With no file or environment, the parsed clap defaults are loaded.
 fn assert_inferred_default_parity() -> Result<()> {
     let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
     let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
@@ -115,19 +121,39 @@ fn assert_inferred_default_parity() -> Result<()> {
     )
 }
 
-fn assert_file_overrides_inferred_default_parity() -> Result<()> {
-    let temp_dir = config_dir(
-        "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
-    )?;
-    let matches = DefaultParityArgs::command().get_matches_from(["default-parity"]);
-    let args = DefaultParityArgs::from_arg_matches(&matches).context("parse defaults")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
+/// Configuration file shared by the file-backed default parity cases.
+const DEFAULT_PARITY_FILE: &str =
+    "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n";
+
+/// Parses `cli_args` and merges them over [`DEFAULT_PARITY_FILE`].
+///
+/// The temporary directory lives until the merge completes and is passed as
+/// the explicit discovery base, so discovery always sees the shared
+/// configuration file.
+///
+/// # Examples
+///
+/// `merge_file_backed_default_parity(&["default-parity"])` returns the file's
+/// 5, `Safe`, 6, and `file` values when no CLI overrides are supplied.
+fn merge_file_backed_default_parity(cli_args: &[&str]) -> Result<DefaultParityArgs> {
+    let temp_dir = config_dir(DEFAULT_PARITY_FILE).context("create parity config fixture")?;
+    let discovery = isolated_discovery(temp_dir.path());
+    let matches = DefaultParityArgs::command().get_matches_from(cli_args);
+    let args = DefaultParityArgs::from_arg_matches(&matches)
+        .context("parse file-backed default parity CLI arguments")?;
+    load_and_merge_subcommand_with_matches_with_sources_at(
         &Prefix::new("APP_"),
         &SubcommandCliMatches::new(&args, &matches),
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &discovery),
         Arc::new(MapEnv::new()),
     )
-    .context("merge parser-faithful defaults")?;
+    .context("merge file-backed default parity values")
+}
+
+/// File values replace inferred clap defaults that the user did not supply.
+fn assert_file_overrides_inferred_default_parity() -> Result<()> {
+    let merged = merge_file_backed_default_parity(&["default-parity"])
+        .context("merge parser-faithful defaults")?;
     assert_default_parity(
         &merged,
         DefaultParityExpected {
@@ -139,11 +165,9 @@ fn assert_file_overrides_inferred_default_parity() -> Result<()> {
     )
 }
 
+/// Explicit CLI values win over file values and are parsed by clap.
 fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
-    let temp_dir = config_dir(
-        "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
-    )?;
-    let matches = DefaultParityArgs::command().get_matches_from([
+    let merged = merge_file_backed_default_parity(&[
         "default-parity",
         "--count",
         "9",
@@ -153,14 +177,7 @@ fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
         "tcp:10",
         "--label",
         "cli",
-    ]);
-    let args = DefaultParityArgs::from_arg_matches(&matches).context("parse explicit values")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
-        &Prefix::new("APP_"),
-        &SubcommandCliMatches::new(&args, &matches),
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
-        Arc::new(MapEnv::new()),
-    )
+    ])
     .context("merge explicit values")?;
     assert_default_parity(
         &merged,
@@ -173,6 +190,8 @@ fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
     )
 }
 
+/// The generated CLI applies the field's custom `value_parser` to explicit
+/// arguments.
 #[rstest]
 #[serial]
 fn generated_cli_uses_captured_value_parser() -> Result<()> {
@@ -199,11 +218,14 @@ struct BoolDefaultArgs {
 }
 
 impl Default for BoolDefaultArgs {
+    /// Matches the clap `default_value = "true"`.
     fn default() -> Self {
         Self { enabled: true }
     }
 }
 
+/// A `true` bool default is used only when no file, environment, or CLI value
+/// is supplied, and each higher-precedence source overrides the one below.
 #[rstest]
 #[serial]
 fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
@@ -260,21 +282,25 @@ struct ExplicitDefaultArgs {
 }
 
 impl Default for ExplicitDefaultArgs {
+    /// Matches the explicit `OrthoConfig` default rather than the clap default.
     fn default() -> Self {
         Self { count: 11 }
     }
 }
 
+/// An explicit `#[ortho_config(default = ...)]` takes precedence over the
+/// inferred clap `default_value`.
 #[rstest]
 fn explicit_ortho_default_overrides_inferred_default_value() -> Result<()> {
     let temp_dir = config_dir("")?;
     let prefix = Prefix::new("APP_");
     let matches = ExplicitDefaultArgs::command().get_matches_from(["explicit-default"]);
     let args = ExplicitDefaultArgs::from_arg_matches(&matches).context("parse defaults")?;
+    let discovery = isolated_discovery(temp_dir.path());
     let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &prefix,
         &SubcommandCliMatches::new(&args, &matches),
-        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        SubcommandFileContext::new(temp_dir.path(), &discovery),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit OrthoConfig default")?;
@@ -297,11 +323,14 @@ struct InvalidDefaultArgs {
 }
 
 impl Default for InvalidDefaultArgs {
+    /// Supplies a valid port so only the clap default is invalid.
     fn default() -> Self {
         Self { port: 7 }
     }
 }
 
+/// Reports whether `error`, or any entry of an aggregate, is a
+/// `DefaultValueConversion` failure.
 fn contains_default_value_conversion(error: &OrthoError) -> bool {
     match error {
         OrthoError::DefaultValueConversion { .. } => true,
@@ -312,6 +341,8 @@ fn contains_default_value_conversion(error: &OrthoError) -> bool {
     }
 }
 
+/// A clap default rejected by the field parser surfaces as a redacted
+/// `DefaultValueConversion` error instead of a panic.
 #[rstest]
 #[serial]
 fn invalid_inferred_default_is_reported_without_panicking() -> Result<()> {

@@ -3,9 +3,15 @@ updates:
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
     groups:
+      shared-actions:
+        patterns:
+          - 'leynos/shared-actions*'
       github-actions:
         patterns:
           - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
     # `/` covers `.github/workflows` and root action manifests.
     directory: "/"
     open-pull-requests-limit: 5
@@ -13,7 +19,7 @@ updates:
       - "dependencies"
       - "github-actions"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     cooldown:
       default-days: 7
 
@@ -21,6 +27,31 @@ updates:
   - package-ecosystem: "cargo"
     # The root manifest owns all six Cargo workspace members.
     directory: "/"
+    groups:
+      # The rstest-bdd crates release in lockstep and one bumped alone does not
+      # build. Cargo counts a 0.x minor as a major, which the catch-all leaves
+      # ungrouped, so this group keeps the family in one pull request. It must
+      # precede the catch-all: Dependabot uses the first group that matches.
+      rstest-bdd:
+        patterns:
+          - "rstest-bdd*"
+      # ortho_config and fluent-bundle share FluentValue types, so the two must
+      # resolve to one fluent-bundle (the dependency-family-contracts rule,
+      # family ortho-config-fluent-bundle). ortho_config is this repository's
+      # own workspace crate, so Dependabot never offers it; the group still
+      # names it so the pair is declared as a family wherever it is read, and
+      # it keeps fluent-bundle out of the catch-all. It must precede the
+      # catch-all: Dependabot uses the first group that matches.
+      ortho-config-fluent-bundle:
+        patterns:
+          - "ortho_config"
+          - "fluent-bundle"
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -34,6 +65,13 @@ updates:
   # Enable version updates for Python test requirements
   - package-ecosystem: "pip"
     directory: "/scripts"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -44,12 +82,27 @@ updates:
       default-days: 7
       semver-major-days: 14
 
-  # Keep the pinned Rust toolchain current independently of Cargo crates.
+  # Keep the pinned Rust toolchain current independently of Cargo crates
+  # (RT-024). The pin in rust-toolchain.toml is a dated nightly, which
+  # RT-023 requires to stay within 56 days of the audit date, and Dependabot's
+  # `rust-toolchain` ecosystem moves dated nightlies as well as numeric
+  # releases. The interval is daily because DB-005 requires it of every entry
+  # (RT-024 alone would also accept weekly), and the group is the catch-all
+  # `minor-and-patch` shape DB-005 demands last in each entry. No cooldown: no
+  # canon rule asks for one, and a nightly's age is its date, so a cooldown
+  # would spend part of that 56-day window before the bump even opens.
   - package-ecosystem: "rust-toolchain"
     directory: "/"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "rust-toolchain"
     schedule:
-      interval: "weekly"
+      interval: "daily"

@@ -17,6 +17,7 @@ fn load_config<T: OrthoConfig>(args: Vec<OsString>, env: MapEnv) -> Result<T> {
     T::load_from_iter_with_sources(args, source.clone(), source).map_err(|err| anyhow!(err))
 }
 
+/// Write `contents` to `config.toml` beneath `dir`, returning its full path.
 fn write_config(dir: &Path, contents: &str) -> Result<PathBuf> {
     let cap = Dir::open_ambient_dir(dir, ambient_authority())?;
     cap.write("config.toml", contents.as_bytes())?;
@@ -88,6 +89,9 @@ impl HasValues for ReplaceVec {
     }
 }
 
+/// Shared harness for vector-merge cases: stages the sources via the caller's
+/// setup, appends an explicit `--config-path` when a fixture file was written,
+/// loads, and checks the merged values against `expected`.
 fn run_vector_case<T, Setup>(
     args: &[&str],
     setup: Setup,
@@ -120,6 +124,11 @@ where
     Ok(())
 }
 
+/// Set up a file layer and an environment layer for a vector-merge case.
+///
+/// Returns the injected environment alongside the written file's path so the
+/// caller can pass it as an explicit selector, mirroring how the remaining
+/// cases order the file rung against the environment rung.
 fn configure_layered_sources(dir: &Path) -> Result<(MapEnv, Option<PathBuf>)> {
     let path = write_config(dir, "values = [\"file\"]")?;
     Ok((MapEnv::new().with_var("VALUES", "[\"env\"]"), Some(path)))
@@ -148,6 +157,8 @@ fn case_append_all_sources() -> Result<()> {
     )
 }
 
+/// An `append`-strategy vector with no contributing layer falls back to its
+/// empty default.
 fn case_append_empty() -> Result<()> {
     run_vector_case::<EmptyVec, _>(
         BASE_ARGS,
@@ -175,6 +186,8 @@ fn case_replace_latest_layer() -> Result<()> {
     )
 }
 
+/// A `replace`-strategy vector with no contributing layer falls back to its
+/// empty default.
 fn case_replace_empty_sources() -> Result<()> {
     run_vector_case::<ReplaceVec, _>(
         BASE_ARGS,
@@ -184,6 +197,7 @@ fn case_replace_empty_sources() -> Result<()> {
     )
 }
 
+/// A `replace` map keeps only the highest-precedence source's entries.
 #[rstest]
 fn replace_maps_drop_lower_precedence_entries() -> Result<()> {
     let temp_dir = tempfile::tempdir()?;

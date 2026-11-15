@@ -1,5 +1,6 @@
 //! Microsoft Assistance Markup Language (MAML) help rendering.
 
+mod paragraphs;
 mod render;
 #[cfg(test)]
 mod tests;

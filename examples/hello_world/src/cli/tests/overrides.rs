@@ -4,11 +4,12 @@ use super::helpers::*;
 #[cfg(unix)]
 use crate::cli::discovery::collect_config_candidates;
 use crate::cli::{
-    CommandOverrides, FileOverrides, GlobalArgs, GreetOverrides, apply_greet_overrides_with_source,
+    CommandOverrides, FileOverrides, GreetOverrides, apply_greet_overrides_with_source,
     load_config_overrides_from_discovery, load_global_config_with_sources,
-    load_greet_defaults_with_sources,
 };
-use anyhow::{Context, Result, anyhow, ensure};
+use crate::test_support::{SampleConfigFixture, sample_config};
+use anyhow::{Result, anyhow, ensure};
+#[cfg(unix)]
 use camino::Utf8PathBuf;
 use ortho_config::{MapEnv, SharedEnvSource};
 use rstest::rstest;
@@ -16,6 +17,7 @@ use std::sync::Arc;
 
 const PROGRAM_NAME: &str = "hello-world";
 
+/// Checks that merge environment values remain available with closed discovery.
 #[rstest]
 fn load_global_config_preserves_env_when_not_overridden() -> Result<()> {
     let cli = parse_command_line(&["greet"])?;
@@ -37,28 +39,10 @@ fn load_global_config_preserves_env_when_not_overridden() -> Result<()> {
     Ok(())
 }
 
+/// Checks merged values and greeting defaults from the shipped sample files.
 #[rstest]
-fn load_sample_configuration() -> Result<()> {
-    let fixture = ConfigFixture::new()?;
-    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let config_dir = cap_std::fs::Dir::open_ambient_dir(
-        manifest_dir.join("config").as_std_path(),
-        cap_std::ambient_authority(),
-    )
-    .context("open sample configuration")?;
-    let baseline = config_dir.read_to_string("baseline.toml")?;
-    let overrides = config_dir.read_to_string("overrides.toml")?;
-    fixture.write("baseline.toml", &baseline)?;
-    let selected = fixture.write(".hello_world.toml", &overrides)?;
-    let discovery = MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", selected);
-    let config = load_global_config_with_sources(
-        &GlobalArgs::default(),
-        None,
-        PROGRAM_NAME,
-        global_sources(discovery.clone(), MapEnv::new()),
-    )?;
-    let greet_defaults =
-        load_greet_defaults_with_sources(fixture.path(), global_sources(discovery, MapEnv::new()))?;
+fn load_sample_configuration(sample_config: SampleConfigFixture) -> Result<()> {
+    let (config, greet_defaults) = sample_config?;
     ensure!(config.recipient == "Excited crew", "unexpected recipient");
     // With declarative merge semantics, Vec<T> appends across defaults + extends chain
     ensure!(
@@ -75,6 +59,7 @@ fn load_sample_configuration() -> Result<()> {
     Ok(())
 }
 
+/// Checks that discovery returns no overrides when no candidate file exists.
 #[rstest]
 fn load_config_overrides_returns_none_without_files() -> Result<()> {
     let fixture = ConfigFixture::new()?;
@@ -85,6 +70,7 @@ fn load_config_overrides_returns_none_without_files() -> Result<()> {
     Ok(())
 }
 
+/// Checks that discovered overrides include the selected fixture path.
 #[rstest]
 fn load_config_overrides_returns_path() -> Result<()> {
     let fixture = ConfigFixture::new()?;
@@ -99,7 +85,7 @@ fn load_config_overrides_returns_path() -> Result<()> {
     let file_name = path
         .as_deref()
         .and_then(|p| p.file_name())
-        .map(std::string::ToString::to_string);
+        .map(str::to_owned);
     ensure!(
         file_name.as_deref() == Some(".hello_world.toml"),
         "expected returned path to match discovered file"
@@ -107,6 +93,7 @@ fn load_config_overrides_returns_path() -> Result<()> {
     Ok(())
 }
 
+/// Checks that the CLI excitement flag takes precedence over the file.
 #[rstest]
 fn load_global_config_prefers_cli_excited_flag() -> Result<()> {
     let cli = parse_command_line(&["--is-excited", "greet"])?;
@@ -126,6 +113,7 @@ fn load_global_config_prefers_cli_excited_flag() -> Result<()> {
     Ok(())
 }
 
+/// Checks that YAML configuration enables the excitement setting.
 #[cfg(feature = "yaml")]
 #[rstest]
 fn load_yaml_config_activates_excited_flag() -> Result<()> {
@@ -146,6 +134,7 @@ fn load_yaml_config_activates_excited_flag() -> Result<()> {
     Ok(())
 }
 
+/// Checks that an explicit override file takes precedence over discovery.
 #[rstest]
 fn load_global_config_uses_explicit_override_file() -> Result<()> {
     let cli = parse_command_line(&["greet"])?;
@@ -166,6 +155,7 @@ fn load_global_config_uses_explicit_override_file() -> Result<()> {
     Ok(())
 }
 
+/// Checks XDG fallback candidates and replacement by an injected directory.
 #[cfg(unix)]
 #[rstest]
 fn load_config_overrides_uses_xdg_fallback() -> Result<()> {
@@ -205,6 +195,7 @@ enum OverrideSource {
     LocalAppData,
 }
 
+/// Prepare the closed environment and fixture files for one override source.
 fn prepare_override_source(fixture: &ConfigFixture, source: OverrideSource) -> Result<MapEnv> {
     match source {
         OverrideSource::Explicit => prepare_explicit_override_source(fixture),
@@ -213,6 +204,7 @@ fn prepare_override_source(fixture: &ConfigFixture, source: OverrideSource) -> R
     }
 }
 
+/// Write the explicit override file and return its closed discovery environment.
 fn prepare_explicit_override_source(fixture: &ConfigFixture) -> Result<MapEnv> {
     let selected = fixture.write(
         "custom.toml",
@@ -226,6 +218,7 @@ punctuation = "?"
     Ok(MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", selected))
 }
 
+/// Write XDG and dotfile candidates and select the fixture's XDG home.
 fn prepare_xdg_override_source(fixture: &ConfigFixture) -> Result<MapEnv> {
     fixture.create_dir("xdg/hello_world")?;
     fixture.write(
@@ -236,6 +229,7 @@ fn prepare_xdg_override_source(fixture: &ConfigFixture) -> Result<MapEnv> {
     Ok(MapEnv::new().with_var("XDG_CONFIG_HOME", fixture.path().join("xdg")))
 }
 
+/// Write the local application-data candidate and select its fixture root.
 fn prepare_local_app_data_override_source(fixture: &ConfigFixture) -> Result<MapEnv> {
     fixture.create_dir("localdata/hello_world")?;
     fixture.write(
@@ -246,6 +240,7 @@ fn prepare_local_app_data_override_source(fixture: &ConfigFixture) -> Result<Map
     Ok(MapEnv::new().with_var("LOCALAPPDATA", fixture.path().join("localdata")))
 }
 
+/// Checks parsed overrides from explicit, XDG, and local app-data sources.
 #[rstest]
 #[case::explicit(
     OverrideSource::Explicit,
@@ -294,6 +289,7 @@ fn load_config_overrides_sources(
     Ok(())
 }
 
+/// Checks that source-aware file overrides are applied to a greeting command.
 #[rstest]
 fn apply_greet_overrides_updates_command(greet_command: GreetCommandFixture) -> Result<()> {
     let mut command = greet_command?;

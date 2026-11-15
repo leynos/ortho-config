@@ -5,7 +5,9 @@
 //! order promised in the design doc: defaults, discovered files, environment,
 //! then CLI.
 
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 
 use super::helpers::parse_command_line;
@@ -15,9 +17,12 @@ use crate::cli::{
 };
 use anyhow::{Context as _, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{ConfigDiscovery, MapEnv, SharedEnvSource, SharedScanEnvSource};
+use ortho_config::{
+    ConfigDiscovery, EnvSource as _, MapEnv, ProcessEnv, SharedEnvSource, SharedScanEnvSource,
+};
 use rstest::rstest;
 use tempfile::TempDir;
+use test_helpers::coverage::resolve_profile_path;
 
 /// A capability-scoped directory containing the global loader's test fixtures.
 ///
@@ -28,12 +33,14 @@ struct LayerFixture {
 }
 
 impl LayerFixture {
+    /// Create an isolated directory for configuration-layer test files.
     fn new() -> Result<Self> {
         Ok(Self {
             root: tempfile::tempdir().context("create global configuration fixture")?,
         })
     }
 
+    /// Write one fixture file and return its path.
     fn write(&self, name: &str, contents: &str) -> Result<PathBuf> {
         let directory = Dir::open_ambient_dir(self.root.path(), ambient_authority())
             .context("open global configuration fixture directory")?;
@@ -77,6 +84,7 @@ fn assert_selector_is_first(selected: &Path, discovery: &MapEnv) -> Result<()> {
     Ok(())
 }
 
+/// Convert an optional `KEY=value` assignment into a closed environment map.
 fn environment_from_assignment(assignment: Option<&str>) -> Result<MapEnv> {
     match assignment {
         Some(raw_assignment) => {
@@ -89,6 +97,7 @@ fn environment_from_assignment(assignment: Option<&str>) -> Result<MapEnv> {
     }
 }
 
+/// An explicit empty project root yields no discovered override.
 #[test]
 fn injected_discovery_has_no_file_in_an_explicit_empty_root() -> Result<()> {
     let fixture = LayerFixture::new()?;
@@ -108,6 +117,7 @@ fn injected_discovery_has_no_file_in_an_explicit_empty_root() -> Result<()> {
     Ok(())
 }
 
+/// Greeting defaults combine file values with values from the merge source.
 #[test]
 fn injected_greeting_defaults_use_file_and_merge_sources() -> Result<()> {
     let fixture = LayerFixture::new()?;
@@ -118,8 +128,11 @@ fn injected_greeting_defaults_use_file_and_merge_sources() -> Result<()> {
             .with_var("HELLO_WORLD_CONFIG_PATH", &selected)
             .with_var("XDG_CONFIG_DIRS", fixture.root.path()),
     );
-    let merge: SharedScanEnvSource =
-        Arc::new(MapEnv::new().with_var("HELLO_WORLD_CMDS_GREET_PREAMBLE", "From merge"));
+    let merge: SharedScanEnvSource = Arc::new(
+        MapEnv::new()
+            .with_var("HELLO_WORLD_CMDS_GREET_PREAMBLE", "From merge")
+            .with_var("HELLO_WORLD_CMDS_GREET_PUNCTUATION", "From merge"),
+    );
 
     let command = load_greet_defaults_with_sources(
         fixture.root.path(),
@@ -130,13 +143,92 @@ fn injected_greeting_defaults_use_file_and_merge_sources() -> Result<()> {
         "file greeting override should apply after the merge layer"
     );
     ensure!(
-        command.punctuation == "??",
-        "punctuation from the explicit file base: expected ??, got {:?}",
+        command.punctuation == "From merge",
+        "merge-only punctuation: expected From merge, got {:?}",
         command.punctuation
     );
     Ok(())
 }
 
+const WORKING_DIRECTORY_PROBE_MARKER: &str = "HELLO_WORLD_LAYERS_PROBE_OK";
+const WORKING_DIRECTORY_PROBE_BASE: &str = "HELLO_WORLD_LAYERS_PROBE_BASE";
+
+/// Explicit greeting discovery ignores a competing process working directory.
+///
+/// The competing file can only matter if the process working directory is the
+/// one under test, so the probe runs in a child process whose directory holds
+/// it. This keeps the case off `figment::Jail` without mutating this process.
+#[test]
+fn injected_greeting_defaults_ignore_working_directory_overrides() -> Result<()> {
+    let fixture = LayerFixture::new()?;
+    fixture.write(
+        ".hello_world.toml",
+        "[cmds.greet]\npreamble = \"From file base\"\n",
+    )?;
+    let working_directory = LayerFixture::new()?;
+    working_directory.write(
+        ".hello_world.toml",
+        "[cmds.greet]\npreamble = \"From working directory\"\n",
+    )?;
+    let executable = std::env::current_exe().context("locate the unit-test executable")?;
+    let mut command = Command::new(executable);
+    command
+        .args([
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "cli::tests::layers::working_directory_probe",
+        ])
+        .current_dir(working_directory.root.path())
+        .env_clear()
+        .env(WORKING_DIRECTORY_PROBE_BASE, fixture.root.path());
+    // Coverage runs need `LLVM_PROFILE_FILE`, which `.env_clear()` drops. The
+    // parent's working directory is the anchor for a relative profile path,
+    // because the child runs in the fixture directory this test removes.
+    if let Some(profile_file) = ProcessEnv.get("LLVM_PROFILE_FILE") {
+        let parent_dir = std::env::current_dir()?;
+        command.env(
+            "LLVM_PROFILE_FILE",
+            resolve_profile_path(&profile_file, &parent_dir),
+        );
+    }
+    let output = command
+        .output()
+        .context("run the working-directory probe")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    ensure!(
+        output.status.success(),
+        "working-directory probe failed: stdout={stdout}, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        stdout.contains(WORKING_DIRECTORY_PROBE_MARKER),
+        "working-directory probe did not execute: {stdout}"
+    );
+    Ok(())
+}
+
+/// Child half of the working-directory case; run only by its parent test.
+#[test]
+#[ignore = "run by the working-directory isolation test"]
+fn working_directory_probe() -> Result<()> {
+    let base = std::env::var_os(WORKING_DIRECTORY_PROBE_BASE)
+        .ok_or_else(|| anyhow!("probe base directory was not provided"))?;
+    let command = load_greet_defaults_with_sources(
+        Path::new(&base),
+        GlobalConfigSources::new(Arc::new(MapEnv::new()), Arc::new(MapEnv::new())),
+    )
+    .context("load greeting defaults in the probe")?;
+    ensure!(
+        command.preamble.as_deref() == Some("From file base"),
+        "file_base override should win over a working-directory override"
+    );
+    writeln!(std::io::stdout().lock(), "{WORKING_DIRECTORY_PROBE_MARKER}")
+        .context("signal probe completion")?;
+    Ok(())
+}
+
+/// CLI, environment, and file salutations follow the intended merge order.
 #[rstest]
 #[case::file_env_cli(
     &["-s", "CliSalutation", "greet"],
@@ -180,6 +272,7 @@ fn load_global_config_accumulates_salutations(
     Ok(())
 }
 
+/// Leading and trailing whitespace is removed from CLI salutations.
 #[rstest]
 fn load_global_config_trims_cli_salutations() -> Result<()> {
     let cli = parse_command_line(&["-s", "  Hello  ", "greet"])?;
@@ -194,6 +287,7 @@ fn load_global_config_trims_cli_salutations() -> Result<()> {
     Ok(())
 }
 
+/// A configured override path takes precedence over the discovered path.
 #[rstest]
 fn load_global_config_respects_explicit_override() -> Result<()> {
     let cli = GlobalArgs::default();

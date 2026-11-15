@@ -37,6 +37,8 @@ fn uses_custom_cli_long() -> Result<()> {
     Ok(())
 }
 
+/// The `prefix = "CFG_"` attribute exposes the `CFG_VALUE` environment
+/// variable, and a CLI argument still takes precedence over it.
 #[rstest]
 fn env_prefix_is_used() -> Result<()> {
     let source = Arc::new(MapEnv::new().with_var("CFG_VALUE", "env"));
@@ -62,4 +64,9 @@ fn default_value_applied() -> Result<()> {
 #[test]
 fn exposes_prefix() {
     assert_eq!(Prefixed::prefix(), "CFG_");
+}
+
+#[test]
+fn default_prefix_is_empty() {
+    assert_eq!(CustomCli::prefix(), "");
 }

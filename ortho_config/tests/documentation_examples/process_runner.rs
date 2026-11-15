@@ -1,255 +1,323 @@
 //! Bounded subprocess execution for executable documentation tests.
 //!
-//! This module owns time and capture limits only. Callers remain responsible
-//! for command construction, environment isolation, and exit-status policy.
+//! This module owns subprocess trees, operation deadlines, and output capture.
+//! Callers remain responsible for command construction and environment policy.
+
+#[path = "process_runner_cleanup.rs"]
+mod cleanup;
+
+#[path = "process_runner_diagnostics.rs"]
+mod diagnostics;
+
+#[path = "process_runner_policy.rs"]
+mod process_policy;
+
+#[path = "process_runner_wait.rs"]
+pub(crate) mod wait;
+
+pub(crate) use test_helpers::process::capture;
+pub(crate) use test_helpers::process::spawn_guard;
+#[cfg(any(unix, windows))]
+pub(crate) use test_helpers::process::tree;
+
+use diagnostics::{capture_snapshots, environment_evidence, stream_bytes, workspace_identity};
+pub(crate) use process_policy::Policy;
+use wait::{DeadlineExceeded, WaitProcess, wait_for_exit};
 
 use anyhow::{Context, Result, anyhow};
-use std::io::Read;
-use std::process::{Child, Command, ExitStatus, Output, Stdio};
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
-use wait_timeout::ChildExt;
+use capture::Reader;
+use process_wrap::std::{ChildWrapper, CommandWrap};
+use spawn_guard::SpawnGuard;
+use std::error::Error as StdError;
+use std::fmt;
+use std::io;
+use std::process::{Command, ExitStatus, Output, Stdio};
+use std::time::{Duration, Instant};
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
-const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
+pub(super) const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
-#[derive(Clone, Copy)]
-pub(super) struct Operation<'a>(pub(super) &'a str);
-
-#[derive(Clone, Copy)]
-enum OutputStream {
-    Stdout,
-    Stderr,
+struct RunContext {
+    operation: String,
+    workspace: String,
+    environment: String,
+    started: Instant,
+    deadline: Instant,
+    policy: Policy,
+    process_id: u32,
 }
 
-impl OutputStream {
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Stdout => "stdout",
-            Self::Stderr => "stderr",
-        }
+pub(crate) struct RunHooks<Observer, Poll, Kill> {
+    /// The standard input the child inherits, or the silent default.
+    ///
+    /// Only the identifier-artefact fixture supplies one: the target lease must
+    /// outlive an interrupted build, and an inherited handle is what keeps the
+    /// lock held by the compilers that survive the helper.
+    pub(crate) stdin: Option<Stdio>,
+    pub(crate) observer: Observer,
+    pub(crate) poll: Poll,
+    pub(crate) kill: Kill,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct Operation<'a>(pub(crate) &'a str);
+
+#[derive(Debug)]
+struct IncompleteCleanup;
+
+/// Identify deadline exhaustion without parsing a diagnostic string.
+pub(crate) fn deadline_exceeded(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<DeadlineExceeded>().is_some()
+}
+
+impl fmt::Display for IncompleteCleanup {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("owned subprocess cleanup incomplete")
     }
 }
 
-#[derive(Clone, Copy)]
-struct ProcessLimits {
-    timeout: Duration,
-    output_bytes: usize,
+impl StdError for IncompleteCleanup {}
+
+/// Report whether an error left owned subprocess cleanup unconfirmed.
+pub(crate) fn cleanup_incomplete(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<IncompleteCleanup>().is_some()
 }
 
-impl Default for ProcessLimits {
-    fn default() -> Self {
-        Self {
-            timeout: DEFAULT_TIMEOUT,
-            output_bytes: DEFAULT_OUTPUT_BYTES,
-        }
-    }
-}
-
-/// Run a command with the documentation-test timeout and output limits.
-pub(super) fn run_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
-    run_command_with_limits(command, operation, ProcessLimits::default())
-}
-
-fn run_command_with_limits(
+/// Run a command while applying an explicit operation and cleanup policy.
+pub(crate) fn run_with_policy(
     command: &mut Command,
     operation: Operation<'_>,
-    limits: ProcessLimits,
+    policy: Policy,
 ) -> Result<Output> {
-    let Operation(operation_name) = operation;
-    let mut child = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    run_with_observer(command, operation, policy, |_| {})
+}
+
+/// Run a command and observe stdout chunks while they are drained.
+///
+/// The observer sees all stdout bytes, including bytes beyond the retained
+/// capture limit. It must return promptly because it shares the drain thread.
+pub(crate) fn run_with_observer<Observer>(
+    command: &mut Command,
+    operation: Operation<'_>,
+    policy: Policy,
+    observer: Observer,
+) -> Result<Output>
+where
+    Observer: FnMut(&[u8]) + Send + 'static,
+{
+    run_with_hooks(
+        command,
+        operation,
+        policy,
+        RunHooks {
+            stdin: None,
+            observer,
+            poll: poll_child,
+            kill: kill_child,
+        },
+    )
+}
+
+/// Poll a wrapped child without reaping it.
+pub(crate) fn poll_child(child: &mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>> {
+    child.try_wait()
+}
+
+/// Terminate a wrapped child and everything it owns.
+pub(crate) fn kill_child(child: &mut dyn ChildWrapper) -> io::Result<()> {
+    child.start_kill()
+}
+
+/// Run a command with explicit hooks.
+///
+/// The child's standard input comes from the hooks: the silent default unless
+/// the caller supplied a handle to inherit. Only the identifier-artefact
+/// fixture does, because the target lease must outlive an interrupted build.
+pub(crate) fn run_with_hooks<Observer, Poll, Kill>(
+    command: &mut Command,
+    Operation(operation_name): Operation<'_>,
+    policy: Policy,
+    hooks: RunHooks<Observer, Poll, Kill>,
+) -> Result<Output>
+where
+    Observer: FnMut(&[u8]) + Send + 'static,
+    Poll: FnMut(&mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>>,
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
+    let RunHooks {
+        stdin,
+        observer,
+        poll,
+        mut kill,
+    } = hooks;
+    let started = Instant::now();
+    let deadline = started
+        .checked_add(policy.timeout())
+        .ok_or_else(|| anyhow!("{operation_name}: operation deadline is out of range"))?;
+    let workspace = workspace_identity(command, std::env::current_dir);
+    let environment = environment_evidence(command);
+
+    let child = spawn_captured(command, stdin)
         .with_context(|| format!("{operation_name}: start subprocess"))?;
-    let stdout_pipe = take_stdout(&mut child, operation)?;
-    let stderr_pipe = take_stderr(&mut child, operation)?;
-    let stdout_reader = spawn_bounded_reader(stdout_pipe, limits.output_bytes);
-    let stderr_reader = spawn_bounded_reader(stderr_pipe, limits.output_bytes);
-
-    let status = wait_for_exit(&mut child, operation, limits.timeout);
-    if status.is_err() {
-        terminate_child(&mut child, operation)?;
-    }
-    let captured_stdout = join_reader(stdout_reader, operation, OutputStream::Stdout)?;
-    let captured_stderr = join_reader(stderr_reader, operation, OutputStream::Stderr)?;
-
+    let process_id = child.id();
+    let context = RunContext {
+        operation: operation_name.to_owned(),
+        workspace,
+        environment,
+        started,
+        deadline,
+        policy,
+        process_id,
+    };
+    let mut process = start_captured_process(child, &context, observer, &mut kill)?;
+    let status = wait_for_captured_process(&mut process, &context, poll, &mut kill)?;
+    let captures = capture_snapshots(&process.readers);
     Ok(Output {
-        status: status?,
-        stdout: captured_stdout,
-        stderr: captured_stderr,
+        status,
+        stdout: stream_bytes(&captures, "stdout"),
+        stderr: stream_bytes(&captures, "stderr"),
     })
 }
 
-fn take_stdout(
-    child: &mut Child,
-    Operation(operation): Operation<'_>,
-) -> Result<std::process::ChildStdout> {
-    child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow!("{operation}: capture subprocess stdout"))
+struct CapturedProcess {
+    child: Box<dyn ChildWrapper>,
+    readers: Vec<Reader>,
 }
 
-fn take_stderr(
-    child: &mut Child,
-    Operation(operation): Operation<'_>,
-) -> Result<std::process::ChildStderr> {
-    child
-        .stderr
-        .take()
-        .ok_or_else(|| anyhow!("{operation}: capture subprocess stderr"))
-}
-
-fn spawn_bounded_reader(
-    mut pipe: impl Read + Send + 'static,
-    output_limit: usize,
-) -> JoinHandle<Result<Vec<u8>>> {
-    thread::spawn(move || {
-        let mut captured = Vec::with_capacity(output_limit.min(8192));
-        let mut buffer = [0_u8; 8192];
-        loop {
-            let bytes_read = pipe.read(&mut buffer).context("read subprocess output")?;
-            if bytes_read == 0 {
-                break;
-            }
-            let bytes_to_capture = output_limit.saturating_sub(captured.len()).min(bytes_read);
-            captured.extend(buffer.iter().take(bytes_to_capture).copied());
-        }
-        Ok(captured)
-    })
-}
-
-fn wait_for_exit(
-    child: &mut Child,
-    Operation(operation): Operation<'_>,
-    timeout: Duration,
-) -> Result<ExitStatus> {
-    child
-        .wait_timeout(timeout)
-        .with_context(|| format!("{operation}: wait for subprocess"))?
-        .ok_or_else(|| {
-            anyhow!(
-                "{operation}: subprocess timed out after {}s",
-                timeout.as_secs()
-            )
-        })
-}
-
-fn terminate_child(child: &mut Child, Operation(operation): Operation<'_>) -> Result<()> {
-    if child
-        .try_wait()
-        .with_context(|| format!("{operation}: poll timed-out subprocess"))?
-        .is_some()
-    {
-        return Ok(());
+fn start_captured_process<Observer, Kill>(
+    mut child: Box<dyn ChildWrapper>,
+    context: &RunContext,
+    observer: Observer,
+    kill: &mut Kill,
+) -> Result<CapturedProcess>
+where
+    Observer: FnMut(&[u8]) + Send + 'static,
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
+    let mut readers = Vec::with_capacity(2);
+    if let Err(error) = spawn_readers(
+        child.as_mut(),
+        &mut readers,
+        context.policy.output_limit(),
+        observer,
+    ) {
+        return Err(cleanup::finish_failure(
+            error.context(format!("{}: prepare output readers", context.operation)),
+            cleanup::CleanupProcess {
+                child: &mut child,
+                readers: &mut readers,
+                kill,
+                context,
+            },
+        ));
     }
-    child
-        .kill()
-        .with_context(|| format!("{operation}: kill timed-out subprocess"))?;
-    child
-        .wait()
-        .with_context(|| format!("{operation}: reap timed-out subprocess"))?;
+    Ok(CapturedProcess { child, readers })
+}
+
+fn wait_for_captured_process<Poll, Kill>(
+    process: &mut CapturedProcess,
+    context: &RunContext,
+    poll: Poll,
+    kill: &mut Kill,
+) -> Result<ExitStatus>
+where
+    Poll: FnMut(&mut dyn ChildWrapper) -> io::Result<Option<ExitStatus>>,
+    Kill: FnMut(&mut dyn ChildWrapper) -> io::Result<()>,
+{
+    match wait_for_exit(
+        WaitProcess {
+            child: process.child.as_mut(),
+            readers: &mut process.readers,
+            operation: &context.operation,
+            deadline: context.deadline,
+            timeout: context.policy.timeout(),
+            status: None,
+        },
+        poll,
+    ) {
+        Ok(status) => Ok(status),
+        Err(error) => Err(cleanup::finish_failure(
+            error,
+            cleanup::CleanupProcess {
+                child: &mut process.child,
+                readers: &mut process.readers,
+                kill,
+                context,
+            },
+        )),
+    }
+}
+
+fn spawn_captured(command: &mut Command, stdin: Option<Stdio>) -> Result<Box<dyn ChildWrapper>> {
+    // Transfer the configured command before installing subprocess ownership.
+    let mut owned_command = std::mem::replace(command, Command::new(""));
+    // A caller-supplied stdin is a deliberate part of the operation, not an
+    // oversight: the identifier-artefact build hands its nested Cargo a
+    // duplicate of the target lease so the lock outlives an orphaned compiler.
+    // Every other caller gets the silent default, because a subprocess that
+    // reads an inherited terminal would block the test.
+    owned_command.stdin(stdin.unwrap_or_else(Stdio::null));
+    owned_command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    spawn_owned(owned_command)
+}
+
+fn spawn_readers<Observer>(
+    child: &mut dyn ChildWrapper,
+    readers: &mut Vec<Reader>,
+    output_limit: usize,
+    observer: Observer,
+) -> Result<()>
+where
+    Observer: FnMut(&[u8]) + Send + 'static,
+{
+    let stdout = child
+        .stdout()
+        .take()
+        .ok_or_else(|| anyhow!("capture subprocess stdout"))?;
+    let stderr = child
+        .stderr()
+        .take()
+        .ok_or_else(|| anyhow!("capture subprocess stderr"))?;
+    readers.push(Reader::spawn("stdout", stdout, output_limit, observer)?);
+    readers.push(Reader::spawn("stderr", stderr, output_limit, |_| {})?);
     Ok(())
 }
 
-fn join_reader(
-    reader: JoinHandle<Result<Vec<u8>>>,
-    Operation(operation): Operation<'_>,
-    stream: OutputStream,
-) -> Result<Vec<u8>> {
-    let stream_name = stream.name();
-    reader
-        .join()
-        .map_err(|_| anyhow!("{operation}: {stream_name} reader thread panicked"))?
+pub(crate) fn spawn_owned(command: Command) -> Result<Box<dyn ChildWrapper>> {
+    let mut wrapped_command = CommandWrap::from(command);
+    let guard = SpawnGuard::new();
+    guard.install(&mut wrapped_command);
+    #[cfg(any(unix, windows))]
+    tree::configure(&mut wrapped_command);
+    #[cfg(not(any(unix, windows)))]
+    return Err(
+        io::Error::other("process-tree supervision is unsupported on this platform").into(),
+    );
+    #[cfg(any(unix, windows))]
+    finish_wrapped_spawn(&mut wrapped_command, &guard)
 }
 
-#[cfg(test)]
-mod tests {
-    //! Regression coverage for subprocess output and duration bounds.
-
-    use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
-    use anyhow::{Context, Result};
-    use rstest::rstest;
-    use std::io::Write;
-    use std::process::Command;
-    use std::time::Duration;
-
-    #[test]
-    fn output_capture_is_limited_per_stream() {
-        let mut command = probe_command("bounded_output_probe")
-            .expect("the bounded-output probe command should be available");
-        let output = run_command_with_limits(
-            &mut command,
-            Operation("capture bounded output"),
-            ProcessLimits {
-                timeout: Duration::from_secs(5),
-                output_bytes: 256,
-            },
-        )
-        .expect("bounded-output probe should run");
-        assert!(output.status.success(), "probe failed: {output:?}");
-        assert_eq!(output.stdout.len(), 256);
-        assert_eq!(output.stderr.len(), 256);
-    }
-
-    #[test]
-    fn stalled_process_is_terminated_at_the_deadline() {
-        let mut command = probe_command("bounded_timeout_probe")
-            .expect("the bounded-timeout probe command should be available");
-        let error = run_command_with_limits(
-            &mut command,
-            Operation("run timeout probe"),
-            ProcessLimits {
-                timeout: Duration::from_millis(100),
-                output_bytes: 256,
-            },
-        )
-        .expect_err("stalled probe should time out");
-        assert!(format!("{error:#}").contains("run timeout probe: subprocess timed out"));
-    }
-
-    #[rstest]
-    #[case::stdout(OutputStream::Stdout, "read probe: stdout reader thread panicked")]
-    #[case::stderr(OutputStream::Stderr, "read probe: stderr reader thread panicked")]
-    fn reader_thread_diagnostic_names_the_stream(
-        #[case] stream: OutputStream,
-        #[case] expected: &str,
-    ) {
-        let reader = std::thread::spawn(|| -> anyhow::Result<Vec<u8>> {
-            panic!("deliberate reader-thread failure")
-        });
-        let error = join_reader(reader, Operation("read probe"), stream)
-            .expect_err("panicked reader thread should return an error");
-        assert_eq!(format!("{error:#}"), expected);
-    }
-
-    fn probe_command(test_name: &str) -> Result<Command> {
-        let executable = std::env::current_exe()
-            .context("the integration-test executable should have a path")?;
-        let mut command = Command::new(executable);
-        command.args(["--ignored", "--nocapture", test_name]);
-        Ok(command)
-    }
-
-    #[test]
-    #[ignore = "executed as a high-output subprocess"]
-    fn bounded_output_probe() {
-        let output = [b'x'; 4096];
-        std::io::stdout()
-            .lock()
-            .write_all(&output)
-            .expect("write stdout probe data");
-        std::io::stderr()
-            .lock()
-            .write_all(&output)
-            .expect("write stderr probe data");
-    }
-
-    #[test]
-    #[ignore = "executed as a stalled subprocess"]
-    fn bounded_timeout_probe() {
-        std::thread::sleep(Duration::from_secs(30));
+pub(crate) fn finish_wrapped_spawn(
+    command: &mut CommandWrap,
+    guard: &SpawnGuard,
+) -> Result<Box<dyn ChildWrapper>> {
+    match command.spawn() {
+        Ok(child) => {
+            guard.disarm();
+            Ok(child)
+        }
+        Err(spawn_error) if guard.root_child_seen() => {
+            let contextual_spawn_error =
+                anyhow::Error::new(spawn_error).context("process-tree wrapper setup failed");
+            let evidence = guard.kill_error().map_or_else(
+                || "root child termination was requested; reaping is unconfirmed".to_owned(),
+                |kill_error| {
+                    format!("root child termination failed ({kill_error}); reaping is unconfirmed")
+                },
+            );
+            Err(contextual_spawn_error
+                .context(evidence)
+                .context(IncompleteCleanup))
+        }
+        Err(unwrapped_spawn_error) => Err(unwrapped_spawn_error.into()),
     }
 }

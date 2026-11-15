@@ -1,0 +1,106 @@
+//! Steps for scenarios involving flattened CLI structures.
+
+use super::common::{SlotTakeOrExt, config_fixture, set_scalar_once};
+use super::value_parsing::normalize_scalar;
+use crate::rstest_bdd_support::scenario_state::{FlatArgs, FlattenContext};
+use anyhow::{Result, anyhow, ensure};
+use clap::Parser;
+use figment::{Figment, providers::Serialized};
+use ortho_config::{
+    OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
+};
+use rstest_bdd_macros::{given, then, when};
+
+fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs>> {
+    let (_fixture_dir, config_path) = config_fixture(".flat.toml", file.as_deref())?;
+    let cli = FlatArgs::parse_from(args);
+    let mut fig = Figment::from(Serialized::defaults(&FlatArgs::default()));
+    if let Some(f) = load_config_file(&config_path).to_figment()? {
+        fig = fig.merge(f);
+    }
+    Ok(fig
+        .merge(sanitized_provider(&cli).to_figment()?)
+        .extract()
+        .into_ortho_merge())
+}
+
+/// Helper to initialise flat_file with given content.
+fn set_flat_file(flatten_context: &FlattenContext, content: impl Into<String>) -> Result<()> {
+    set_scalar_once(
+        &flatten_context.flat_file,
+        content,
+        "flattened configuration",
+    )
+}
+
+#[given("the flattened configuration file has value {value}")]
+fn flattened_file(flatten_context: &FlattenContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
+    set_flat_file(
+        flatten_context,
+        format!("nested = {{ value = \"{value}\" }}"),
+    )
+}
+
+#[given("a malformed flattened configuration file")]
+fn malformed_flat_file(flatten_context: &FlattenContext) -> Result<()> {
+    set_flat_file(flatten_context, "nested = 5")
+}
+
+#[given("a flattened configuration file with invalid value")]
+fn invalid_flat_file(flatten_context: &FlattenContext) -> Result<()> {
+    set_flat_file(flatten_context, "nested = { value = 5 }")
+}
+
+#[when("the flattened config is loaded without CLI overrides")]
+fn load_without_cli(flatten_context: &FlattenContext) -> Result<()> {
+    let file = flatten_context.flat_file.get();
+    let result = load_flat(file, &["prog"])?;
+    flatten_context.flat_result.set(result);
+    Ok(())
+}
+
+#[when("the flattened config is loaded with CLI value {value}")]
+fn load_with_cli(flatten_context: &FlattenContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
+    let file = flatten_context.flat_file.get();
+    let result = load_flat(file, &["prog", "--value", &value])?;
+    flatten_context.flat_result.set(result);
+    Ok(())
+}
+
+#[then("the flattened value is {expected}")]
+fn check_flattened(flatten_context: &FlattenContext, expected: String) -> Result<()> {
+    let expected = normalize_scalar(&expected);
+    let result = flatten_context
+        .flat_result
+        .take_or("flattened configuration result unavailable")?;
+    let cfg = result?;
+    let nested = cfg
+        .nested
+        .value
+        .as_deref()
+        .ok_or_else(|| anyhow!("expected nested value to be present"))?;
+    ensure!(
+        nested == expected.as_str(),
+        "unexpected flattened value {nested:?}; expected {expected:?}"
+    );
+    Ok(())
+}
+
+#[then("flattening fails with a merge error")]
+fn flattening_fails(flatten_context: &FlattenContext) -> Result<()> {
+    let result = flatten_context
+        .flat_result
+        .take_or("flattened configuration result unavailable")?;
+    match result {
+        Ok(_) => Err(anyhow!("expected merge error but configuration succeeded")),
+        Err(err) => {
+            ensure!(
+                matches!(err.as_ref(), OrthoError::Merge { .. }),
+                "unexpected error: {err:?}"
+            );
+            Ok(())
+        }
+    }
+}

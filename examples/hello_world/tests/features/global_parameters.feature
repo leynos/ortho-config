@@ -87,6 +87,21 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "Hello, World??"
 
+  Scenario: Greet command selects only its public configuration section
+    Given the hello world config file contains:
+      """
+      [cmds.greet]
+      preamble = "From greet settings"
+
+      [cmds.hello_world]
+      preamble = "From hello_world settings"
+      """
+    And the environment contains "HELLO_WORLD_CONFIG_PATH" = ".hello_world.toml"
+    When I run the hello world example with arguments "greet"
+    Then the command succeeds
+    And stdout contains "From greet settings"
+    And stdout does not contain "From hello_world settings"
+
   Scenario: Explicit config path overrides discovery order
     Given the file "custom.toml" contains:
       """

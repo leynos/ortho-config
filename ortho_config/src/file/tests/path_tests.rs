@@ -1,32 +1,35 @@
 //! Tests covering base path resolution and graph merging.
 
 use super::super::path::resolve_base_path;
-use super::to_anyhow;
+use super::{TestRoot, test_root};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Result, anyhow, ensure};
-use cap_std::ambient_authority;
-use cap_std::fs::Dir;
 use rstest::rstest;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
 
+/// Assert a resolvable base comes back canonical, either spelling.
+///
+/// The fixture writes `base.toml` under the isolation root while `current`
+/// lives at that same root, so the relative case must anchor on
+/// `current.parent()`. Success is asserted by comparing against the
+/// *canonical* root join, which also pins the symlink resolution: a path that
+/// merely concatenated the root would compare unequal on a host whose
+/// temporary directory is itself a symlink.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
-fn resolve_base_path_resolves(#[case] is_abs: bool) -> Result<()> {
-    let temp = TempDir::new()?;
-    let dir = Dir::open_ambient_dir(temp.path(), ambient_authority())?;
-    dir.write("base.toml", b"")?;
-    let root = to_anyhow(super::super::canonicalise(temp.path()))?;
-    let current = root.join("config.toml");
+fn resolve_base_path_resolves(#[case] is_abs: bool, test_root: Result<TestRoot>) -> Result<()> {
+    let root = test_root?;
+    root.dir.write("base.toml", b"")?;
+    let current = root.root.join("config.toml");
     let base_path = if is_abs {
-        root.join("base.toml")
+        root.root.join("base.toml")
     } else {
         PathBuf::from("base.toml")
     };
     let resolved = resolve_base_path(&current, base_path).to_figment()?;
     ensure!(
-        resolved == root.join("base.toml"),
+        resolved == root.root.join("base.toml"),
         "unexpected resolved path {resolved:?}"
     );
     Ok(())
@@ -50,14 +53,23 @@ fn resolve_base_path_errors_when_no_parent() -> Result<()> {
     Ok(())
 }
 
+/// Assert a missing base yields a diagnosable, correctly typed error.
+///
+/// The message must name both the base that was not found and the current
+/// file that referenced it, because `current_path` is interpolated exactly as
+/// supplied rather than canonicalized. The typed assertion then checks the
+/// error is `OrthoError::File` wrapping `io::ErrorKind::NotFound`, so a caller
+/// can distinguish "absent" from "unreadable" instead of matching on text.
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
-fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) -> Result<()> {
-    let temp = TempDir::new()?;
-    let root = to_anyhow(super::super::canonicalise(temp.path()))?;
-    let current = root.join("config.toml");
-    let expected_base = root.join("missing.toml");
+fn resolve_base_path_reports_missing_file(
+    #[case] is_abs: bool,
+    test_root: Result<TestRoot>,
+) -> Result<()> {
+    let root = test_root?;
+    let current = root.root.join("config.toml");
+    let expected_base = root.root.join("missing.toml");
     let base = if is_abs {
         expected_base.clone()
     } else {

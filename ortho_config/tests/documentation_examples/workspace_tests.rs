@@ -1,26 +1,84 @@
 //! Regression coverage for documented-example workspaces.
 
+use super::layout::{ManifestPaths, manifest, render_manifest, seed_lockfile};
 use super::{
     DependencyAlias, DocumentedExample, ExampleId, ExampleWorkspace, RunFile, cargo_dispatch_path,
-    render_manifest,
 };
 use anyhow::{Context, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use rstest::rstest;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+/// Verifies that a quoted Windows dependency path survives TOML serialization.
 #[test]
 fn windows_dependency_path_produces_valid_toml() {
     let windows_path = r#"D:\a\"quoted\"\ortho-config\ortho_config"#;
     let serialized_path = toml::Value::String(windows_path.to_owned()).to_string();
-    let generated = render_manifest("ortho_config", &serialized_path);
+    let generated = render_manifest(
+        "config_layer",
+        &ManifestPaths {
+            ortho_config: &serialized_path,
+            ortho_l10n: &serialized_path,
+            cargo_orthohelp: &serialized_path,
+        },
+    );
     let parsed = toml::from_str::<toml::Value>(&generated)
         .expect("serialized documentation manifest should parse as TOML");
-    let parsed_path = parsed
+    let dependencies = parsed
         .get("dependencies")
-        .and_then(|dependencies| dependencies.get("ortho_config"))
+        .expect("generated manifest should declare dependencies");
+    let parsed_path = dependencies
+        .get("config_layer")
         .and_then(|dependency| dependency.get("path"))
         .and_then(toml::Value::as_str);
     assert_eq!(parsed_path, Some(windows_path));
+    assert_eq!(
+        dependencies
+            .get("config_layer")
+            .and_then(|dependency| dependency.get("package"))
+            .and_then(toml::Value::as_str),
+        Some("ortho_config")
+    );
+    assert_eq!(
+        dependencies
+            .get("cargo_orthohelp")
+            .and_then(|dependency| dependency.get("package"))
+            .and_then(toml::Value::as_str),
+        Some("cargo-orthohelp")
+    );
+    assert_eq!(
+        dependencies.get("serde_json").and_then(toml::Value::as_str),
+        Some("1")
+    );
+}
+
+/// The example crate stands for a downstream application: it declares no
+/// features of its own and takes `ortho_config`'s default features.
+///
+/// That shape is what makes the compiled `cli_default_as_absent` examples a
+/// downstream regression test for that attribute. Derive output compiles in
+/// the caller's crate, so a `cfg(feature = "serde_json")` test in it would
+/// read this crate's features, which do not exist, while `ortho_config`'s
+/// `serde_json` default is enabled. A `[features]` table here, or disabled
+/// defaults, would hide that boundary.
+#[test]
+fn example_crate_has_no_features_and_default_ortho_config() {
+    let generated = manifest(DependencyAlias("ortho_config"));
+    let parsed = toml::from_str::<toml::Value>(&generated)
+        .expect("generated documentation manifest should parse as TOML");
+    assert!(
+        parsed.get("features").is_none(),
+        "the example crate must not declare features"
+    );
+    let ortho_config = parsed
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get("ortho_config"))
+        .expect("the example crate should depend on ortho_config");
+    assert!(
+        ortho_config.get("default-features").is_none() && ortho_config.get("features").is_none(),
+        "the example crate should take ortho_config's default features"
+    );
 }
 
 #[test]
@@ -56,6 +114,7 @@ fn cargo_dispatch_path_prepends_fixture_to_inherited_entries() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial(documentation_build)]
 fn independently_owned_workspaces_support_concurrent_interleavings() -> Result<()> {
     std::thread::scope(|scope| {
         let first = scope.spawn(|| exercise_workspace_interleavings("first", "updated-first"));
@@ -73,6 +132,14 @@ fn independently_owned_workspaces_support_concurrent_interleavings() -> Result<(
 
 fn exercise_workspace_interleavings(initial: &str, updated: &str) -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    // Ownership does not depend on any external crate; avoid two cold graphs.
+    workspace.directory.write(
+        "Cargo.toml",
+        concat!(
+            "[package]\nname = \"documented-examples\"\nversion = \"0.0.0\"\nedition = \"2024\"\n",
+            "[workspace]\n",
+        ),
+    )?;
     workspace.add_binary(&file_probe())?;
     workspace.build()?;
 
@@ -113,5 +180,26 @@ fn assert_probe_output(workspace: &mut ExampleWorkspace, expected: &str) -> Resu
     ensure!(output.status.success(), "workspace probe should succeed");
     let stdout = String::from_utf8(output.stdout).context("workspace probe output is UTF-8")?;
     ensure!(stdout == expected, "workspace probe output differed");
+    Ok(())
+}
+
+#[rstest]
+#[case::parent_lockfile(Some("version = 4\n"))]
+#[case::no_parent_lockfile(None)]
+fn documentation_lockfile_is_a_private_copy(#[case] contents: Option<&str>) -> Result<()> {
+    let repository = tempfile::tempdir()?;
+    let workspace = tempfile::tempdir()?;
+    let source = Dir::open_ambient_dir(repository.path(), ambient_authority())?;
+    let destination = Dir::open_ambient_dir(workspace.path(), ambient_authority())?;
+    if let Some(body) = contents {
+        source.write("Cargo.lock", body)?;
+    }
+    seed_lockfile(repository.path(), &destination)?;
+    ensure!(destination.try_exists("Cargo.lock")? == contents.is_some());
+    if let Some(body) = contents {
+        ensure!(destination.read_to_string("Cargo.lock")? == body);
+        destination.write("Cargo.lock", "private generated-root update")?;
+        ensure!(source.read_to_string("Cargo.lock")? == body);
+    }
     Ok(())
 }

@@ -4,6 +4,10 @@ use crate::ir::LocalizedDocMetadata;
 use crate::powershell::text::{CRLF, push_line, quote_single};
 use std::fmt;
 
+/// Define the shared owned-string API for internal wrapper identifiers.
+///
+/// The generated types keep binary, function and alias names distinct while
+/// retaining the conversions needed by rendering and `PowerShell` quoting.
 macro_rules! string_newtype {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +78,8 @@ pub fn render_wrapper(
     output
 }
 
+/// Render a wrapper function for each immediate subcommand when splitting
+/// is enabled.
 fn render_subcommand_functions(
     metadata: &LocalizedDocMetadata,
     bin_name: &BinName,
@@ -101,6 +107,7 @@ fn render_subcommand_functions(
     output
 }
 
+/// Emit aliases that resolve to the main binary wrapper function.
 fn render_aliases(bin_name: &BinName, export_aliases: &[Alias]) -> String {
     if export_aliases.is_empty() {
         return String::new();
@@ -122,6 +129,11 @@ fn render_aliases(bin_name: &BinName, export_aliases: &[Alias]) -> String {
     output
 }
 
+/// Render a wrapper that locates the executable and forwards supplied
+/// arguments.
+///
+/// `extra_args` contains the fixed subcommand prefix for split wrappers; the
+/// caller's remaining arguments are appended unchanged.
 fn render_function(
     function_name: &FunctionName,
     exe_name: &BinName,
@@ -186,6 +198,10 @@ fn render_function(
     output
 }
 
+/// Register placeholder completion for the executable using the available API.
+///
+/// `PowerShell` versions with native completion support use that registration
+/// mode; older versions receive the regular command-name registration.
 fn render_completion_block(command_name: &BinName) -> String {
     let mut output = String::new();
     push_line(&mut output, "$sb = {");

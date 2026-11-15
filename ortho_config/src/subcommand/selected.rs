@@ -67,7 +67,7 @@ pub enum SelectedSubcommandMergeError {
 ///     command: Commands,
 /// }
 ///
-/// #[derive(Debug, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
+/// #[derive(Debug, Subcommand, ortho_config::SelectedSubcommandMerge)]
 /// enum Commands {
 ///     Run(RunArgs),
 /// }
@@ -140,7 +140,9 @@ pub trait SelectedSubcommandMerge: Sized {
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub struct SelectedSubcommandSources<'a> {
+    /// Capability used only to resolve named files for the selected variant.
     files: SubcommandFileContext<'a>,
+    /// Capability used to scan environment values while merging that variant.
     merge_source: SharedScanEnvSource,
 }
 
@@ -280,6 +282,7 @@ mod tests {
         }
     }
 
+    /// Ensures a manual implementation rejects injection without process fallback.
     #[test]
     fn manual_implementation_rejects_injected_sources_without_process_fallback() {
         let legacy_called = Cell::new(false);

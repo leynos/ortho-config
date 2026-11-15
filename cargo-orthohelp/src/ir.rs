@@ -5,8 +5,8 @@ use serde::Serialize;
 
 use crate::schema::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, DocMetadata, EnvMetadata,
-    Example, FieldMetadata, FileMetadata, Link, Note, PrecedenceMeta, SectionsMetadata, SourceKind,
-    ValueType, WindowsMetadata,
+    Example, FieldMetadata, FileMetadata, Link, Note, PrecedenceMeta, RendererMetadata,
+    SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
 };
 
 /// Localized documentation metadata resolved for a single locale.
@@ -29,9 +29,17 @@ pub struct LocalizedDocMetadata {
     /// Configuration field definitions.
     pub fields: Vec<LocalizedFieldMetadata>,
     /// Subcommand definitions.
-    pub subcommands: Vec<LocalizedDocMetadata>,
+    pub subcommands: Vec<Self>,
     /// Windows-specific metadata.
     pub windows: Option<WindowsMetadata>,
+    /// Declared renderer metadata, cloned unchanged from the source document.
+    ///
+    /// The renderer block describes presentation rather than text, so
+    /// localization must copy it verbatim: dropping it here would remove the
+    /// declaration from every published per-locale artefact even though the
+    /// agent-context bridge still reported it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renderer: Option<RendererMetadata>,
 }
 
 /// Section metadata with resolved headings and content.
@@ -201,9 +209,11 @@ pub fn localize_doc(
             .map(|command| localize_doc(command, locale, localizer))
             .collect(),
         windows: metadata.windows.clone(),
+        renderer: metadata.renderer.clone(),
     }
 }
 
+/// Resolves section labels and optional content while cloning locale-independent metadata.
 fn localize_sections(
     sections: &SectionsMetadata,
     localizer: &dyn Localizer,
@@ -251,6 +261,7 @@ fn localize_sections(
     }
 }
 
+/// Resolves translated field text and retains the source field's typed configuration metadata.
 fn localize_field(field: &FieldMetadata, localizer: &dyn Localizer) -> LocalizedFieldMetadata {
     LocalizedFieldMetadata {
         name: field.name.clone(),
@@ -286,6 +297,7 @@ fn localize_field(field: &FieldMetadata, localizer: &dyn Localizer) -> Localized
     }
 }
 
+/// Copies discovery mechanics unchanged and resolves only path-pattern notes.
 fn localize_discovery(
     discovery: &ConfigDiscoveryMeta,
     localizer: &dyn Localizer,
@@ -306,6 +318,7 @@ fn localize_discovery(
     }
 }
 
+/// Preserves source order and resolves the optional explanation for that precedence.
 fn localize_precedence(
     precedence: &PrecedenceMeta,
     localizer: &dyn Localizer,
@@ -316,6 +329,7 @@ fn localize_precedence(
     }
 }
 
+/// Resolves optional example labels while preserving code verbatim for display.
 fn localize_example(example: &Example, localizer: &dyn Localizer) -> LocalizedExample {
     LocalizedExample {
         title: resolve_optional(localizer, example.title_id.as_deref()),
@@ -324,6 +338,7 @@ fn localize_example(example: &Example, localizer: &dyn Localizer) -> LocalizedEx
     }
 }
 
+/// Resolves an optional link label while retaining its destination URI unchanged.
 fn localize_link(link: &Link, localizer: &dyn Localizer) -> LocalizedLink {
     LocalizedLink {
         text: resolve_optional(localizer, link.text_id.as_deref()),
@@ -331,24 +346,28 @@ fn localize_link(link: &Link, localizer: &dyn Localizer) -> LocalizedLink {
     }
 }
 
+/// Resolves a required note ID, representing a missing translation with the standard marker.
 fn localize_note(note: &Note, localizer: &dyn Localizer) -> LocalizedNote {
     LocalizedNote {
         text: resolve_message(localizer, &note.text_id),
     }
 }
 
+/// Returns a translation or an explicit marker so unresolved required copy stays visible.
 fn resolve_message(localizer: &dyn Localizer, id: &str) -> String {
     localizer
         .lookup(id, None)
         .unwrap_or_else(|| format!("[missing: {id}]"))
 }
 
+/// Uses a translation, then a built-in standard heading, and marks other missing IDs.
 fn resolve_heading(localizer: &dyn Localizer, id: &str) -> String {
     localizer.lookup(id, None).unwrap_or_else(|| {
         standard_heading_fallback(id).map_or_else(|| format!("[missing: {id}]"), str::to_owned)
     })
 }
 
+/// Supplies English labels only for the recognized standard heading IDs.
 fn standard_heading_fallback(id: &str) -> Option<&'static str> {
     match id {
         "ortho.headings.name" => Some("NAME"),
@@ -366,6 +385,7 @@ fn standard_heading_fallback(id: &str) -> Option<&'static str> {
     }
 }
 
+/// Keeps absent optional IDs absent and resolves present IDs using the required-message policy.
 fn resolve_optional(localizer: &dyn Localizer, id: Option<&str>) -> Option<String> {
     id.map(|value| resolve_message(localizer, value))
 }

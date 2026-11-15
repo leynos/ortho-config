@@ -4,17 +4,23 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use clap::CommandFactory;
+use clap::{CommandFactory, Parser};
 use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_for_with_sources_at};
+use rstest::rstest;
 
-use crate::cli::GreetCommand;
+use crate::cli::{CommandLine, Commands, GreetCommand};
 
-#[test]
+#[rstest]
 fn greet_uses_its_public_name_for_file_and_environment_defaults() -> Result<()> {
     ensure!(
         GreetCommand::command().get_name() == "greet",
         "standalone command name must match the public CLI verb"
     );
+    let command_line = CommandLine::try_parse_from(["hello_world", "greet"])
+        .context("parse the public hello_world greet invocation")?;
+    let Commands::Greet(greet) = command_line.command else {
+        anyhow::bail!("the public greet invocation must select GreetCommand");
+    };
 
     let root = tempfile::tempdir().context("create greet configuration fixture")?;
     let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
@@ -34,19 +40,16 @@ fn greet_uses_its_public_name_for_file_and_environment_defaults() -> Result<()> 
 
     let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
     let files = SubcommandFileContext::new(root.path(), &discovery);
-    let from_file = load_and_merge_subcommand_for_with_sources_at(
-        &GreetCommand::default(),
-        files,
-        Arc::new(MapEnv::new()),
-    )
-    .context("load greet file section")?;
+    let from_file =
+        load_and_merge_subcommand_for_with_sources_at(&greet, files, Arc::new(MapEnv::new()))
+            .context("load greet file section")?;
     ensure!(
         from_file.preamble.as_deref() == Some("from greet file"),
         "generic loader must select [cmds.greet]"
     );
 
     let from_env = load_and_merge_subcommand_for_with_sources_at(
-        &GreetCommand::default(),
+        &greet,
         files,
         Arc::new(
             MapEnv::new()

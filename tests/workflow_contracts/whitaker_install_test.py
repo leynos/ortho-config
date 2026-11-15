@@ -1,144 +1,65 @@
-"""Contract tests for the binary-only Whitaker installer in Linux CI.
+"""Contract test: Whitaker is installed only through the shared action.
 
-The released archive is installed directly because cargo-binstall 1.19.1
-rejected the archive member that its own error named, even though that member
-exists. The shell helper verifies the GitHub API digests and the release
-sidecar before extracting that exact member. These tests pin the workflow
-boundary; ``scripts/tests/test_install_whitaker_binary.py`` drives the helper
-against a local release fixture.
+This repository once carried a hand-rolled install step, and a contract
+asserting its authentication and its refusal to let binstall compile
+`dylint-link`. The shared `install-whitaker` action now owns the install: it
+downloads a digest-verified release archive, passes `--no-source-fallback`,
+and takes `github.token` itself. Its own contract proves those properties, so
+this one asserts only what stays the repository's business: the Linux lint leg
+uses the action at a full commit SHA and carries no script of its own, so the
+hand-rolled route cannot return unnoticed.
+
+Run via ``make test-workflow-contracts``.
 """
 
 from __future__ import annotations
 
+import re
 import typing as typ
 from pathlib import Path
 
-import pytest
 import yaml
 
 WORKFLOW_PATH: typ.Final[Path] = (
     Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
 )
 STEP_NAME: typ.Final[str] = "Install Whitaker"
-TOKEN_CARRIER: typ.Final[str] = "INSTALL_TOKEN"
-TOKEN_EXPRESSION: typ.Final[str] = "${{ github.token }}"
-TOKEN_NAMES: typ.Final[frozenset[str]] = frozenset({"GH_TOKEN", "GITHUB_TOKEN"})
-HELPER_PATH: typ.Final[str] = "scripts/install_whitaker_binary.sh"
-CACHE_PATH: typ.Final[str] = "~/.cache/ortho-config/whitaker-installer"
-DYLINT_LINK_PACKAGE: typ.Final[str] = "dylint-link@6.0.1"
+ACTION_PIN: typ.Final[re.Pattern[str]] = re.compile(
+    r"leynos/shared-actions/\.github/actions/install-whitaker@[0-9a-f]{40}"
+)
+LINUX_ONLY: typ.Final[str] = "${{ matrix.platform == 'linux' }}"
 
 
-@pytest.fixture(scope="module")
-def ci_workflow() -> dict[str, typ.Any]:
-    """Return the parsed CI workflow."""
-    document = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
-    assert isinstance(document, dict), f"{WORKFLOW_PATH.name} must parse as a mapping"
-    return document
-
-
-@pytest.fixture(scope="module")
-def install_step(ci_workflow: dict[str, typ.Any]) -> dict[str, typ.Any]:
-    """Return the unique Whitaker installation step."""
-    jobs = ci_workflow.get("jobs")
-    assert isinstance(jobs, dict), f"{WORKFLOW_PATH.name} must declare jobs"
-    matches = [
+def _install_steps() -> list[dict[str, typ.Any]]:
+    """Return every step named like the Whitaker install, across all jobs."""
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    return [
         step
-        for job in jobs.values()
-        if isinstance(job, dict)
-        for step in job.get("steps") or []
-        if isinstance(step, dict) and step.get("name") == STEP_NAME
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("name") == STEP_NAME
     ]
-    assert len(matches) == 1, f"expected one {STEP_NAME!r} step, found {len(matches)}"
-    return matches[0]
 
 
-def _joined_shell_command(script: str, package: str) -> str:
-    """Return the continued shell command that installs exactly one package."""
-    lines = script.splitlines()
-    matches = [index for index, line in enumerate(lines) if package in line]
-    assert len(matches) == 1, f"expected one command for {package!r}, found {len(matches)}"
-    start = matches[0]
-    while start > 0 and lines[start - 1].rstrip().endswith("\\"):
-        start -= 1
-    end = matches[0]
-    while end < len(lines) - 1 and lines[end].rstrip().endswith("\\"):
-        end += 1
-    return " ".join(line.strip().removesuffix("\\").rstrip() for line in lines[start : end + 1])
+def test_whitaker_is_installed_through_the_pinned_shared_action() -> None:
+    """Exactly one step installs Whitaker, through the action at a full SHA.
 
-
-def test_the_step_carries_the_token_by_value(install_step: dict[str, typ.Any]) -> None:
-    """The helper receives the workflow token under its inert carrier name."""
-    environment = install_step.get("env") or {}
-    assert environment.get(TOKEN_CARRIER) == TOKEN_EXPRESSION, (
-        f"{STEP_NAME} must set {TOKEN_CARRIER} to the workflow token; "
-        f"it sets {environment.get(TOKEN_CARRIER)!r}"
+    Invariant: the step has a `uses` matching the action at a 40-hex commit,
+    and no `run` script. The count is asserted first, because a contract over
+    no steps is satisfied by deleting the install.
+    """
+    steps = _install_steps()
+    assert len(steps) == 1, f"expected one {STEP_NAME!r} step, found {len(steps)}"
+    (step,) = steps
+    assert ACTION_PIN.fullmatch(str(step.get("uses", ""))), (
+        f"{STEP_NAME!r} must use the shared action at a full commit SHA"
     )
+    assert "run" not in step, f"{STEP_NAME!r} must not carry a script of its own"
 
 
-@pytest.mark.parametrize("token_name", sorted(TOKEN_NAMES))
-def test_the_step_does_not_export_a_tool_token(
-    install_step: dict[str, typ.Any], token_name: str
-) -> None:
-    """Only commands that contact GitHub receive a tool-recognized token."""
-    environment = install_step.get("env") or {}
-    assert token_name not in environment, (
-        f"{STEP_NAME} must not export {token_name} to the helper or installed binary"
-    )
-
-
-def test_the_step_uses_the_verified_release_helper(
-    install_step: dict[str, typ.Any],
-) -> None:
-    """The installer is direct and cannot fall back to a source build."""
-    script = str(install_step.get("run", ""))
-    assert HELPER_PATH in script, f"{STEP_NAME} must run {HELPER_PATH}"
-    assert "cargo install" not in script, f"{STEP_NAME} must not build Whitaker from source"
-    assert script.count("cargo binstall") == 1, (
-        f"{STEP_NAME} may use cargo-binstall only for dylint-link: {script!r}"
-    )
-
-
-def test_the_release_asset_cache_is_verified(ci_workflow: dict[str, typ.Any]) -> None:
-    """The cache holds inputs that the helper verifies, never a bare binary."""
-    steps = ci_workflow["jobs"]["build-test"]["steps"]
-    cache_step = next(step for step in steps if step.get("name") == "Cache Whitaker installer")
-    cache_path = cache_step["with"]["path"]
-    assert cache_path == CACHE_PATH, (
-        f"Whitaker cache must hold verified release assets: {cache_path!r}"
-    )
-
-
-def test_dylint_link_remains_authenticated_and_binary_only(
-    install_step: dict[str, typ.Any],
-) -> None:
-    """The direct installer does not weaken the existing Dylint protection."""
-    script = str(install_step.get("run", ""))
-    dylint_command = _joined_shell_command(script, DYLINT_LINK_PACKAGE)
-    assert 'GH_TOKEN="${INSTALL_TOKEN}"' in dylint_command, (
-        "dylint-link must receive GH_TOKEN locally"
-    )
-    assert 'GITHUB_TOKEN="${INSTALL_TOKEN}"' in dylint_command, (
-        "dylint-link must receive GITHUB_TOKEN locally"
-    )
-    assert "--disable-strategies compile" in dylint_command, (
-        "dylint-link must not fall back to a source build"
-    )
-    assert DYLINT_LINK_PACKAGE in dylint_command, "the Dylint preinstall must name its package"
-
-
-def test_the_token_does_not_reach_the_whitaker_process_tree(
-    install_step: dict[str, typ.Any],
-) -> None:
-    """The release credential ends before the installed tool can run."""
-    script = str(install_step.get("run", ""))
-    dylint_position = script.index(DYLINT_LINK_PACKAGE)
-    token_boundary = f"unset {TOKEN_CARRIER}"
-    boundary_position = script.index(token_boundary)
-    installer_position = script.index("whitaker-installer", boundary_position)
-    assert dylint_position < boundary_position < installer_position, (
-        f"{TOKEN_CARRIER} must remain through authenticated Dylint installation "
-        "and be unset before Whitaker runs"
-    )
-    assert TOKEN_CARRIER not in script[boundary_position + len(token_boundary) :], (
-        f"{TOKEN_CARRIER} must not reach the Whitaker process tree"
+def test_the_install_runs_on_the_linux_leg_only() -> None:
+    """Whitaker lints on Linux; the Windows leg runs Clippy alone."""
+    (step,) = _install_steps()
+    assert step.get("if") == LINUX_ONLY, (
+        f"{STEP_NAME!r} must stay guarded to the Linux leg"
     )

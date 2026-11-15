@@ -155,7 +155,7 @@ do not force documentation IR migrations unless the same data is genuinely
 needed by both outputs.
 
 Schema ownership is defined in
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+[ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 Reusable agent-context types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
 context in later roadmap work, but it does not own the reusable context
@@ -169,8 +169,9 @@ The `cargo-orthohelp` generator interface is:
 cargo orthohelp --format agent-context
 ```
 
-This remains a generator format that writes an artefact. It is not the
-downstream application command name. Downstream applications expose the public
+This remains a generator format, not the downstream application command name.
+It writes `agent-context.json` and emits the same compact JSON document to
+stdout, followed by a newline. Downstream applications expose the public
 command surface `context --json`:
 
 ```console
@@ -191,7 +192,7 @@ This keeps the public command approachable while preserving an explicit machine
 schema. Downstream applications do not ship a public `agent-context` alias
 before the first public release, unless a migration explicitly requires one.
 Compatibility detection uses `schema_version`; consumers must not parse `kind`
-as a version. ADR-007 records the naming decision and prior-art divergence.
+as a version. ADR-0007 records the naming decision and prior-art divergence.
 
 The top-level shape should include:
 
@@ -220,9 +221,8 @@ directly.
 
 ### 3.3 Agent-native lint policy
 
-The lint policy is the enforcement layer. It should be exposed through
-`cargo-orthohelp` and should also be reusable by tests or continuous
-integration.
+The lint policy is the enforcement layer. It is exposed through
+`cargo-orthohelp` and is reusable by tests or continuous integration.
 
 The policy-report schema is initially owned by `cargo_orthohelp::policy`,
 including `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. This keeps warnings, hard
@@ -230,21 +230,31 @@ failures, source locations, rule identifiers, machine-readable codes, and mode
 handling close to the reference CLI that emits them. A later ADR can extract a
 shared report model if downstream libraries need to construct identical reports.
 
-The planned command shape is:
+The implemented command is:
 
 ```console
-cargo orthohelp --check-agent-native
+cargo orthohelp --check-agent-native [--policy-mode <off|warn|deny>]
 ```
 
-The policy should support `off`, `warn`, and `deny` modes. Early adoption
-should default to warnings so existing users can see the work required before
-turning on hard failures.
+The enforcement mode comes from `[package.metadata.ortho_config.policy]` and
+defaults to `off`; `--policy-mode` overrides it for the report and requires the
+check flag. The check resolves the package manifest without the bridge build,
+so it also runs for a package that has no `root_type` or library target.
 
-`cargo orthohelp --check-agent-native` must emit a machine-stable policy report
-when JSON output is requested. Tests and CI should parse `rule_id` and `code`
-for deterministic handling; prose in `message` is explanatory and may improve
-without changing the machine contract.
+`cargo orthohelp --check-agent-native` emits one compact, machine-stable policy
+report to stdout, followed by a newline, and writes the same report atomically
+to `policy-report.json` in the output directory. It also prints a short human
+summary to standard error. Tests and CI should parse `rule_id` and `code` for
+deterministic handling; prose in `message` is explanatory and may improve
+without changing the machine contract. If an explicit generator format is
+requested at the same time, the policy report owns stdout and remains the
+invocation's only JSON document. A successful check continues into generation
+and retains the selected artefacts, including `agent-context.json` for
+`--format agent-context` and `--format all`; AgentContext JSON is suppressed
+from stdout while policy checking is enabled. A deny-mode finding is reported
+before the command fails, so generator artefacts are not created.
 
+<!-- markdownlint-disable MD013 -->
 ```json
 {
   "version": "1",
@@ -252,21 +262,11 @@ without changing the machine contract.
   "mode": "warn",
   "results": [
     {
-      "rule_id": "agent-native.vocabulary.canonical-flag",
+      "rule_id": "agent-native.config.redundant-exception",
       "severity": "warn",
-      "code": "canonical_flag_missing",
-      "message": "Use --json for structured output instead of --format=json.",
-      "file": "Cargo.toml",
-      "range": {
-        "start": {
-          "line": 12,
-          "column": 1
-        },
-        "end": {
-          "line": 12,
-          "column": 20
-        }
-      }
+      "code": "redundant_exception",
+      "message": "exception for verb 'get' is redundant: the item is already canonical",
+      "location": null
     }
   ],
   "summary": {
@@ -274,9 +274,25 @@ without changing the machine contract.
     "warn": 1,
     "deny": 0,
     "total": 1
+  },
+  "exceptions": [
+    {
+      "kind": "verb",
+      "name": "get",
+      "reason": "redundant but part of the migration surface",
+      "command_path": null
+    }
+  ],
+  "vocabulary": {
+    "verbs": ["get", "list", "create", "update", "delete", "jobs", "profile", "feedback"],
+    "flags": [
+      "--json", "--no-input", "--force", "--dry-run", "--limit", "--cursor",
+      "--wait", "--profile", "--deliver"
+    ]
   }
 }
 ```
+<!-- markdownlint-enable MD013 -->
 
 Each result must contain:
 
@@ -284,12 +300,27 @@ Each result must contain:
 - `severity`: one of `off`, `warn`, or `deny`;
 - `code`: stable machine-readable finding code;
 - `message`: human-readable diagnostic text;
-- `file`: source file path when available;
-- `range` or `span`: optional source location metadata.
+- `location`: optional nested source location object whose `file` is the
+  repository-relative or package-relative path, and whose optional `range`
+  holds one-based `start`/`end` positions (matching the shipped
+  `cargo_orthohelp::policy` types rather than the draft's flat `file`/`range`
+  pair). The current evaluator carries no source spans, so its findings use
+  `null`.
 
 Mode handling is direct: `off` suppresses checks, `warn` emits findings without
-failing the command, and `deny` exits with a validation-class failure when any
-deny-level finding is present.
+failing the command, and `deny` returns a policy-validation failure with
+process status 1 when any deny-level finding is present. That status is shared
+with generic tool failures, so `summary.deny` is the authoritative CI signal.
+Clap usage errors keep exit code 2.
+
+The configuration surface is `[package.metadata.ortho_config.policy]` in the
+target package's `Cargo.toml` (see ADR-0008). The enforcement default is `off`
+(the check is opt-in and checks nothing without a policy table); the
+agent-context advertisement default remains the shipped `warn` value. Both
+defaults are distinct, and the transient `--policy-mode` override affects only
+the report's effective mode, never the generated agent context. Configured
+exceptions are visible in the report with their reasons and in agent context
+without reasons (see ADR-0008).
 
 ### 3.4 Long-form workflow material
 
@@ -360,8 +391,8 @@ The canonical flags are:
 - `--deliver` for routing generated artefacts.
 
 The canonical downstream introspection command is `context --json`, defined by
-[ADR-007](adr-007-downstream-context-command-naming.md). The `context` command
-name is reserved for application surfaces, while
+[ADR-0007](adrs/adr-0007-downstream-context-command-naming.md). The `context`
+command name is reserved for application surfaces, while
 `cargo-orthohelp --format agent-context` remains the build-time generator
 format.
 
@@ -402,6 +433,12 @@ agent-native lint.
 The preferred non-interactive flag is `--no-input`. The preferred destructive
 bypass flag is `--force`. If a project chooses a different convention, it must
 configure that convention once and expose it in agent context.
+
+This is realized in the derive attribute surface as
+`behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
+flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
+[ADR-0010](adrs/adr-0010-behavioural-metadata-attribute-surface.md) and the
+§8.1 table below for the defaulting and compatibility contract.
 
 ### 6.2 Structured output
 
@@ -456,6 +493,13 @@ renderer. The reusable contract should describe:
 This supports Weaver's dual human/machine output and Netsuke's human-first,
 agent-consistent presentation from the same metadata vocabulary.
 
+This is realized in the derive attribute surface as the sibling `renderer(...)`
+group, in documentation IR as `DocMetadata::renderer`, and in agent context as
+`AgentCommand::renderer`. See
+[ADR-0016](adrs/adr-0016-dual-renderer-metadata-surface.md) for the accepted
+vocabulary, the role-specific legacy support defaults, the width encoding, and
+the no-inference rule.
+
 ### 6.2.2 Exit-code taxonomy metadata
 
 OrthoConfig should model exit codes in documentation IR and agent context, but
@@ -495,6 +539,12 @@ Mutating commands should declare whether they are read-only, write, delete, or
 submit asynchronous work. Destructive commands should declare their
 confirmation bypass flag. Consequential commands should declare whether
 `--dry-run` exists.
+
+This is realized in the derive attribute surface as `behaviour(mutation = ...)`
+with the optional `behaviour(dry_run = ...)` flag, and in agent context as
+`mutation_effect` plus `dry_run_flag`. See
+[ADR-0010](adrs/adr-0010-behavioural-metadata-attribute-surface.md) for the
+attribute grammar and the no-inference rule.
 
 Create-like commands should prefer idempotency tokens or natural keys where the
 application domain supports them. OrthoConfig should model and lint the
@@ -553,6 +603,24 @@ built-in defaults < config files < selected profile < environment < flags
 If implementation work decides that profiles are named config overlays, the
 roadmap must document the exact merge order and migration impact before code is
 changed.
+
+That documentation requirement is satisfied by
+[ADR-0012](adrs/adr-0012-profile-selection-and-layering.md), recorded before
+any behavioural code under roadmap 9.1.1. Profiles are named config overlays:
+`[profile.<name>]` tables inside the resolved configuration file chain,
+selected statelessly by a `--profile <name>` flag with a `<PREFIX>PROFILE`
+environment-variable fallback. The exact merge order is:
+
+```text
+built-in defaults < config files < selected profile < environment < flags
+```
+
+Profile support is opt-in via `#[ortho_config(profiles)]`; derives that do not
+opt in keep the four-tier order and keep reporting
+`profiles: { "supported": false }`. An explicitly provided flag beats the
+selected profile even when the flag value equals the built-in default. The
+migration impact, including the Rust-level `AgentContext.profiles` retype and
+the rollback story, is recorded in ADR-0012's migration plan.
 
 Agent context should expose whether profiles are supported, how to list them,
 which flag selects one, and which profile fields are redacted or
@@ -615,7 +683,7 @@ table-stakes agent-native behaviours:
   policy modes;
 - stable exit classes documented in its README;
 - atomic writes for generated files;
-- agent-native lint and agent-context output once the metadata exists.
+- agent-native lint and agent-context output from the compiled metadata.
 
 This gives downstream users an executable reference rather than only a design
 document.
@@ -638,33 +706,34 @@ forward-looking fields planned for later schema versions. Readers for schema v1
 apply defaults only to realized fields; planned rows record the intended future
 contract and do not imply that those fields exist today.
 
-| Field                  | Default                  | Status  | Rationale                                                                  |
-| ---------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
-| `canonical_verb`       | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
-| `supports_json`        | `false`                  | planned | Structured output must be declared before tools rely on it.                |
-| `json_stdout_contract` | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
-| `json_stderr_contract` | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
-| `exit_classes`         | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
-| `interaction_mode`     | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
-| `mutation_effect`      | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
-| `pagination`           | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
-| `profiles.supported`   | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
-| `delivery_route`       | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
-| `feedback.supported`   | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
-| `execution_ledger`     | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifests`      | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
-| `capability_id`        | `null`                   | planned | Capability routing is optional downstream metadata.                        |
-| `provider_provenance`  | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
-| `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
-| `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
+| Field                   | Default                  | Status  | Rationale                                                                  |
+| ----------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
+| `canonical_verb`        | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
+| `supports_json`         | `false`                  | planned | Structured output must be declared before tools rely on it.                |
+| `json_stdout_contract`  | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
+| `json_stderr_contract`  | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
+| `exit_classes`          | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
+| `interaction_mode`      | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
+| `mutation_effect`       | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
+| `pagination`            | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
+| `profiles.supported`    | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
+| `profiles.selection`    | `null`                   | v1      | Selection contract exists only once a derive opts into profiles.           |
+| `profiles.list_command` | `null`                   | v1      | Profile listing commands arrive with the 9.1.3 store helpers.              |
+| `delivery_route`        | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
+| `feedback.supported`    | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
+| `execution_ledger`      | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
+| `skill_manifests`       | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
+| `capability_id`         | `null`                   | planned | Capability routing is optional downstream metadata.                        |
+| `provider_provenance`   | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
+| `renderer.human`        | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
+| `renderer.machine`      | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
 
-Lint behaviour for omitted metadata follows the selected mode. In `off` mode,
-the check is not run. In `warn` mode, omitted fields that block an agent-native
-guarantee emit warnings but do not fail the command. In `deny` mode, the same
-omitted fields fail CI with validation-class diagnostics. Projects should opt
-into warning mode first, fix emitted findings, then move to deny mode once the
-documentation IR, agent-context schema, and man-page generation are complete
-enough for their command surface.
+In roadmap 7.1.1, `PolicyInputs` is empty and the evaluator does not inspect
+bridge metadata. Omitted bridge metadata therefore produces no `warn` or `deny`
+findings. Bridge-metadata findings and their mode-dependent behaviour are
+planned for roadmap 7.1.2. Once those rules exist, omitted metadata will follow
+the selected mode: `off` suppresses checks, `warn` reports findings without
+failing the command, and `deny` fails CI with validation diagnostics.
 
 The first implementation phase should introduce agent-native support behind
 explicit formats, commands, or metadata attributes. Existing generated
@@ -688,9 +757,10 @@ declares a stronger contract.
 
 The existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`,
 `--format agent-context`, and `--format all` outputs are compatibility
-surfaces. JSON result streams and policy reports may be added beside them, but
-they must not alter those existing formats, output paths, stdout and stderr
-contracts, or exit-status behaviour without an approved versioned migration.
+surfaces. Issue #329 adds stdout JSON for the agent-native formats while
+preserving their generated artefact paths and exit-status behaviour; policy
+report output takes precedence when combined with an explicit generator format.
+Other output formats and their stdout/stderr contracts remain unchanged.
 
 Strict policy should begin as opt-in. Projects should be able to run the check
 in warning mode before enforcing it in CI.
@@ -699,7 +769,7 @@ in warning mode before enforcing it in CI.
 
 The agent-context schema is versioned independently of the documentation IR as
 recorded in
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+[ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md).
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` is a major-version string for the compact
 wire shape emitted by `cargo orthohelp --format agent-context` and by
 `--format all`. It is an integer-valued breaking-change counter, not SemVer:
@@ -728,9 +798,10 @@ wire-contract snapshot is byte-sensitive. Field or key reordering therefore
 requires a deliberate snapshot review even when the schema meaning does not
 change.
 
-`AgentCommand.summary` is intentionally omitted when absent. Other optional
-schema v1 fields serialize as explicit `null` when absent. This asymmetry is
-part of the wire contract; changing it is breaking.
+`AgentCommand.summary` is intentionally omitted when absent, as are the optional
+`ProfilesDeclaration` fields (`selection` and `list_command`) added by roadmap
+9.1.1. Other optional schema v1 fields serialize as explicit `null` when
+absent. This asymmetry is part of the wire contract; changing it is breaking.
 
 `AgentInput.default` is a best-effort human-readable display. It is useful for
 selection and review, but it is not normative, executable, or
@@ -751,12 +822,17 @@ Schema v1 history:
 - `1`: locked by roadmap item 6.2.2. The lock standardizes agent-context enum
   wire strings to snake_case, records the null-versus-omitted optional-field
   policy, and includes agent-context output in `cargo orthohelp --format all`.
+- `1` (extended by 9.1.1): `profiles` retyped to `ProfilesDeclaration` at the
+  Rust level (a pre-approved pre-1.0 break per
+  [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md)); the new
+  optional fields `selection` and `list_command` follow the omitted-when-absent
+  rule, and the unsupported case remains byte-identical to
+  `{ "supported": false }`.
 
 ## 9. Current gaps to resolve
 
 The design and roadmap updates must address these known gaps:
 
-- no agent-native lint command exists;
 - the improved `MissingRequiredValues` diagnostic is reconciled as proposed
   phase 7 work, but is not yet implemented;
 - `cargo-orthohelp` has no structured `--json` result mode;

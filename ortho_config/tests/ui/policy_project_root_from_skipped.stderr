@@ -1,0 +1,6 @@
+error: `project_root_from` must name a non-skipped `PathBuf` or `Option<PathBuf>` field
+  --> tests/ui/policy_project_root_from_skipped.rs:17:5
+   |
+17 | /     #[ortho_config(skip_cli)]
+18 | |     config_path: Option<PathBuf>,
+   | |________________________________^

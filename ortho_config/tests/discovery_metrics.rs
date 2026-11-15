@@ -143,3 +143,56 @@ fn discovery_increments_attempt_and_outcome_counters() {
         "one terminal not_found outcome should be counted, got {entries:?}"
     );
 }
+
+/// A policy resolution counts an attempt alongside its outcome.
+///
+/// Both branches of [`ConfigFilePolicy::resolve_layers`] report the same
+/// operation they are counted under, so a consumer comparing the two counters
+/// sees one attempt per resolution whichever branch ran. The explicit branch
+/// previously counted an outcome with no attempt, which is the disagreement
+/// this pins: an outcome counter that can climb while its attempt counter
+/// stays flat makes a dashboard read as though resolutions arrive from
+/// nowhere.
+#[test]
+fn a_policy_resolution_counts_an_attempt_and_an_outcome() {
+    use ortho_config::{ConfigDiscovery, ConfigFilePolicy, ConfigPathSelector};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        // The builder is taken directly rather than built first: `from_builder`
+        // is the constructor its own `ConfigDiscovery` is built by.
+        let policy = ConfigFilePolicy::from_builder(
+            ConfigDiscovery::builder("demo")
+                .clear_project_roots()
+                .env_source(Arc::new(MapEnv::new())),
+        )
+        .selectors([ConfigPathSelector::cli(Some(PathBuf::from(
+            "/nonexistent/selected.toml",
+        )))]);
+        drop(policy.resolve_layers());
+    });
+
+    let entries = counters(snapshotter.snapshot());
+    assert_eq!(
+        counter_for(
+            &entries,
+            "ortho_config.discovery.attempts",
+            ("operation", "policy_resolve")
+        ),
+        1,
+        "a policy resolution should count one attempt, got {entries:?}"
+    );
+    assert_eq!(
+        counter_for(
+            &entries,
+            "ortho_config.discovery.outcomes",
+            ("operation", "policy_resolve")
+        ),
+        1,
+        "the same resolution should count one outcome, got {entries:?}"
+    );
+}

@@ -3,6 +3,12 @@
 use camino::Utf8PathBuf;
 use std::fmt;
 
+/// Declare an owned string newtype with the common `PowerShell`
+/// configuration API.
+///
+/// The supplied documentation literal becomes the type's public contract; the
+/// generated conversions, `AsRef` and `Display` keep call sites explicit while
+/// allowing values to be rendered without exposing their tuple field.
 macro_rules! string_newtype {
     ($name:ident, $doc:literal) => {
         #[doc = $doc]

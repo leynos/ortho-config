@@ -3,9 +3,51 @@ use anyhow::{Context as _, Result, anyhow, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use ortho_config::{MapEnv, OrthoConfig, OrthoError, SharedEnvSource, SharedScanEnvSource};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde::Deserialize;
 use std::sync::Arc;
+
+#[path = "support/isolated_env.rs"]
+mod isolated_env;
+use isolated_env::with_host_overrides;
+
+/// One temporary root, its UTF-8 view, and a capability handle to it.
+///
+/// The `TempDir` field is never read; it is held so the directory outlives the
+/// test that consumes the fixture.
+struct Fixture {
+    /// Keeps the temporary directory alive for the test's duration.
+    _temp_dir: tempfile::TempDir,
+    root: camino::Utf8PathBuf,
+    dir: Dir,
+}
+
+/// Stage a fixture root for an aggregation case.
+///
+/// Consume `Result<Fixture>` with `?` so a failure to create the temporary
+/// directory reports through the test's own error rather than panicking.
+#[fixture]
+fn fixture() -> Result<Fixture> {
+    let guard = tempfile::tempdir().context("create aggregation fixture directory")?;
+    let root = Utf8Path::from_path(guard.path())
+        .ok_or_else(|| anyhow!("temporary fixture path is not UTF-8"))?
+        .to_owned();
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open aggregation fixture directory")?;
+    Ok(Fixture {
+        _temp_dir: guard,
+        root,
+        dir,
+    })
+}
+
+/// Start a `Fixture` root's environment with the XDG bases pinned to it.
+///
+/// Wrapping the entry point keeps the remaining `MapEnv` chain per test while
+/// guaranteeing no case silently falls back to `/etc/xdg`.
+fn fixture_env(root: &Utf8Path) -> MapEnv {
+    with_host_overrides(MapEnv::new(), root.as_std_path())
+}
 
 #[derive(Debug, Deserialize, OrthoConfig)]
 struct AggConfig {
@@ -30,19 +72,19 @@ struct DiscoveryErrorConfig {
     port: u32,
 }
 
+/// CLI, file, and environment faults are gathered into one aggregate error.
 #[rstest]
-fn aggregates_cli_file_env_errors() -> Result<()> {
-    let fixture = tempfile::tempdir().context("create aggregation fixture directory")?;
-    let fixture_root = Utf8Path::from_path(fixture.path())
-        .ok_or_else(|| anyhow!("temporary fixture path is not UTF-8"))?;
+fn aggregates_cli_file_env_errors(fixture: Result<Fixture>) -> Result<()> {
+    let staged = fixture?;
+    let fixture_root = &staged.root;
     let config_path = fixture_root.join(".config.toml");
-    let cap = Dir::open_ambient_dir(fixture_root, ambient_authority())
-        .context("open aggregation fixture directory")?;
-    cap.write(".config.toml", b"port = ")
+    staged
+        .dir
+        .write(".config.toml", b"port = ")
         .context("write invalid configuration fixture")?;
 
     let source = Arc::new(
-        MapEnv::new()
+        fixture_env(fixture_root)
             .with_var("CONFIG_PATH", config_path.as_os_str())
             .with_var("PORT", "notanumber"),
     );
@@ -75,21 +117,23 @@ fn aggregates_cli_file_env_errors() -> Result<()> {
     Ok(())
 }
 
+/// An invalid higher-ranked candidate is hidden when a fallback file loads.
 #[rstest]
-fn discovery_errors_hidden_when_fallback_succeeds() -> Result<()> {
-    let fixture = tempfile::tempdir().context("create discovery fixture directory")?;
-    let fixture_root = Utf8Path::from_path(fixture.path())
-        .ok_or_else(|| anyhow!("temporary fixture path is not UTF-8"))?;
+fn discovery_errors_hidden_when_fallback_succeeds(fixture: Result<Fixture>) -> Result<()> {
+    let staged = fixture?;
+    let fixture_root = &staged.root;
     let invalid_path = fixture_root.join("invalid.toml");
-    let cap = Dir::open_ambient_dir(fixture_root, ambient_authority())
-        .context("open discovery fixture directory")?;
-    cap.write("invalid.toml", b"port = ???")
+    staged
+        .dir
+        .write("invalid.toml", b"port = ???")
         .context("write invalid selector fixture")?;
-    cap.write(".agg.toml", b"port = 7000")
+    staged
+        .dir
+        .write(".agg.toml", b"port = 7000")
         .context("write fallback configuration fixture")?;
 
     let source = Arc::new(
-        MapEnv::new()
+        fixture_env(fixture_root)
             .with_var("AGG_CONFIG_PATH", invalid_path.as_os_str())
             .with_var("XDG_CONFIG_HOME", fixture_root.as_os_str()),
     );
@@ -102,18 +146,19 @@ fn discovery_errors_hidden_when_fallback_succeeds() -> Result<()> {
     Ok(())
 }
 
+/// A required `--config-path` that is absent fails despite a valid fallback.
 #[rstest]
-fn required_path_errors_surface_even_with_fallback() -> Result<()> {
-    let fixture = tempfile::tempdir().context("create required-path fixture directory")?;
-    let fixture_root = Utf8Path::from_path(fixture.path())
-        .ok_or_else(|| anyhow!("temporary fixture path is not UTF-8"))?;
+fn required_path_errors_surface_even_with_fallback(fixture: Result<Fixture>) -> Result<()> {
+    let staged = fixture?;
+    let fixture_root = &staged.root;
     let missing_path = fixture_root.join("missing.toml");
-    let cap = Dir::open_ambient_dir(fixture_root, ambient_authority())
-        .context("open required-path fixture directory")?;
-    cap.write(".agg.toml", b"port = 7000")
+    staged
+        .dir
+        .write(".agg.toml", b"port = 7000")
         .context("write fallback configuration fixture")?;
 
-    let source = Arc::new(MapEnv::new().with_var("XDG_CONFIG_HOME", fixture_root.as_os_str()));
+    let source =
+        Arc::new(fixture_env(fixture_root).with_var("XDG_CONFIG_HOME", fixture_root.as_os_str()));
     let discovery: SharedEnvSource = source.clone();
     let merge: SharedScanEnvSource = source;
     let err = match DiscoveryErrorConfig::load_from_iter_with_sources(
@@ -131,19 +176,19 @@ fn required_path_errors_surface_even_with_fallback() -> Result<()> {
     Ok(())
 }
 
+/// A discovery error surfaces when every candidate, including fallbacks, fails.
 #[rstest]
-fn discovery_errors_surface_when_all_candidates_fail() -> Result<()> {
-    let fixture = tempfile::tempdir().context("create failed-discovery fixture directory")?;
-    let fixture_root = Utf8Path::from_path(fixture.path())
-        .ok_or_else(|| anyhow!("temporary fixture path is not UTF-8"))?;
+fn discovery_errors_surface_when_all_candidates_fail(fixture: Result<Fixture>) -> Result<()> {
+    let staged = fixture?;
+    let fixture_root = &staged.root;
     let invalid_path = fixture_root.join("invalid.toml");
-    let cap = Dir::open_ambient_dir(fixture_root, ambient_authority())
-        .context("open failed-discovery fixture directory")?;
-    cap.write("invalid.toml", b"port = ???")
+    staged
+        .dir
+        .write("invalid.toml", b"port = ???")
         .context("write invalid selector fixture")?;
 
     let source = Arc::new(
-        MapEnv::new()
+        fixture_env(fixture_root)
             .with_var("AGG_CONFIG_PATH", invalid_path.as_os_str())
             .with_var("XDG_CONFIG_HOME", fixture_root.as_os_str())
             .with_var("XDG_CONFIG_DIRS", fixture_root.as_os_str()),

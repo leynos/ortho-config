@@ -30,6 +30,7 @@ pub fn render_about(metadata: &LocalizedDocMetadata, module_name: &str) -> Strin
     output
 }
 
+/// Add the synopsis section only when localized metadata provides its text.
 fn render_synopsis(output: &mut String, metadata: &LocalizedDocMetadata) {
     let Some(synopsis) = metadata.synopsis.as_ref() else {
         return;
@@ -39,6 +40,7 @@ fn render_synopsis(output: &mut String, metadata: &LocalizedDocMetadata) {
     push_line(output, &format!("      {synopsis}"));
 }
 
+/// Render discovery search paths, preserving an explicit empty-state marker.
 fn render_discovery(output: &mut String, discovery: Option<&LocalizedConfigDiscoveryMeta>) {
     let Some(discovery_meta) = discovery else {
         return;
@@ -54,6 +56,7 @@ fn render_discovery(output: &mut String, discovery: Option<&LocalizedConfigDisco
     }
 }
 
+/// Render source precedence in metadata order, then its optional rationale.
 fn render_precedence(output: &mut String, precedence: Option<&LocalizedPrecedenceMeta>) {
     let Some(precedence_meta) = precedence else {
         return;
@@ -69,6 +72,7 @@ fn render_precedence(output: &mut String, precedence: Option<&LocalizedPrecedenc
     }
 }
 
+/// Format one discovery pattern, including a non-empty explanatory note.
 fn format_discovery_path(path: &LocalizedPathPattern) -> String {
     path.note
         .as_deref()
@@ -79,11 +83,58 @@ fn format_discovery_path(path: &LocalizedPathPattern) -> String {
         )
 }
 
+/// Map each configuration source to the label used in the about topic.
 const fn source_label(source: &SourceKind) -> &'static str {
     match source {
         SourceKind::Defaults => "Defaults",
         SourceKind::File => "File",
+        SourceKind::Profile => "Profile",
         SourceKind::Env => "Environment",
         SourceKind::Cli => "CLI",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for `PowerShell` about-topic rendering.
+
+    use super::*;
+    use crate::powershell::test_fixtures;
+
+    /// The about topic is the only consumer of `source_label`, so an
+    /// unasserted arm would let a wrong label ship silently. A
+    /// profile-opted-in command lists the profile overlay immediately between
+    /// configuration files and the environment.
+    #[test]
+    fn precedence_block_places_profiles_between_files_and_environment() {
+        let mut metadata = test_fixtures::minimal_doc("en-US", "Fixture app");
+        metadata.sections.precedence = Some(LocalizedPrecedenceMeta {
+            order: vec![
+                SourceKind::Defaults,
+                SourceKind::File,
+                SourceKind::Profile,
+                SourceKind::Env,
+                SourceKind::Cli,
+            ],
+            rationale: None,
+        });
+
+        let rendered = render_about(&metadata, "Fixture");
+        let lines = rendered.lines().collect::<Vec<_>>();
+        let index_of = |label: &str| {
+            lines
+                .iter()
+                .position(|line| line.strip_prefix("      - ") == Some(label))
+                .unwrap_or_else(|| panic!("missing '{label}' row in:\n{rendered}"))
+        };
+
+        let expected = ["Defaults", "File", "Profile", "Environment", "CLI"];
+        for (label, next_label) in expected.iter().zip(expected.iter().skip(1)) {
+            assert_eq!(
+                index_of(next_label),
+                index_of(label) + 1,
+                "'{next_label}' must immediately follow '{label}' in:\n{rendered}",
+            );
+        }
     }
 }

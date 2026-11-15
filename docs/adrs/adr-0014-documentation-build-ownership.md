@@ -1,0 +1,604 @@
+# ADR-014: Documentation build and process ownership
+
+Status: Accepted.
+
+Date: 2026-10-19.
+
+## Context and problem statement
+
+Rust examples in the README and user's guide are compiled from their exact
+published source bodies. A CLI-package integration test exercises the documented
+`cargo-orthohelp` command. Cargo supplies that test with the already-built CLI
+executable; the test snapshots it into a private run directory instead of
+rebuilding the same executable. Rust example workspaces use isolated manifests
+and working directories, but compiling a fresh Cargo workspace for each test
+can rebuild a large dependency graph. Reusing compiler outputs introduces a
+separate race: Cargo may finish one build before its caller has copied a
+same-named executable, allowing another process to replace that executable
+between build and copy.
+
+The production `cargo-orthohelp` bridge had a related cache-boundary problem.
+Its IR cache key is stable, but assigning a new dependency target beneath each
+key forced another cold dependency build. Storing the generated manifest and
+source directly in the key directory also shared mutable inputs between
+invocations. The design needs to keep the IR cache identity stable while
+putting generated files in a private invocation directory and building into the
+selected package's Cargo-resolved target.
+
+The runner must also retain the machine's configured Rust compiler admission,
+warning flags, build parallelism, and shared Cargo package cache while
+preventing application secrets and cache credentials from reaching Cargo. It
+preserves the non-secret `SCCACHE_GHA_ENABLED` cache-mode setting but excludes
+`ACTIONS_RUNTIME_TOKEN`. A timeout must bound quiet compilation as well as
+noisy commands, and cleanup must remain within the subprocess tree owned by the
+test.
+
+Local validation previously reached 600-second timeouts in four documentation
+build subprocesses. Admission-wrapper children were queued or active, the
+configured capacity was full, and the managed sccache service was unreachable,
+so compilation ran uncached. No Rust source diagnostic was reported, but the
+available evidence does not establish how much elapsed time admission consumed.
+A controlled fresh-target build of the pre-transplant candidate completed in 66
+seconds; cache hit and miss state was unavailable, so this does not establish a
+cold-cache duration. The transplanted candidate has no hosted run yet.
+
+## Decision drivers
+
+- Preserve Cargo and compiler ownership of fingerprints, lock files, and the
+  configured shared package cache.
+- Separate stable IR cache identity from private production bridge inputs and
+  the selected package's Cargo target.
+- Seed each generated bridge's private lockfile from the selected workspace
+  when one exists.
+- Reuse safe build outputs without sharing mutable manifests, example inputs,
+  run directories, or executable snapshots between workspaces.
+- Protect the complete build-and-snapshot interval across separate OS
+  processes, including nextest workers.
+- Discover executable locations from Cargo's machine-readable output instead
+  of assuming a target directory layout.
+- Preserve compiler admission, warning enforcement, configured job limits,
+  and relevant Cargo configuration while excluding application secrets.
+- Bound the whole documentation scenario, each child operation, output
+  retention, and process-tree cleanup.
+- Remain compatible with Rust 1.89 and supported Unix and Windows hosts.
+
+## Options considered
+
+### Rebuild all dependencies for every workspace
+
+Give each temporary workspace a private Cargo target directory and compile the
+entire dependency graph for every scenario. This preserves executable
+ownership, but repeats expensive work and caused the observed long validation
+run. It is not the selected approach.
+
+### Share Cargo's target directory without a snapshot lock
+
+Cargo serializes its own build operations, but its build lock does not cover
+the caller's later executable copy. Another build of a binary with the same
+name can overwrite the source after one Cargo process exits and before the
+first caller copies it. Cargo JSON reports the path, but the path alone does
+not protect the file. This option does not provide snapshot ownership.
+
+### Protect build and snapshot with a process-local mutex
+
+A mutex prevents concurrent threads in one test process from copying during
+another build. It does not coordinate separate `cargo test` or nextest
+processes. This option leaves the inter-process race open.
+
+### Give each production IR key a separate Cargo target
+
+Place a fresh compiler target beneath every `target/orthohelp/<hash>/` entry.
+This treats the IR cache key as a compiler-cache identity too, so each source
+fingerprint creates another cold dependency build. It repeats work without
+being necessary for private generated inputs.
+
+### Share the selected target and the IR-key input directory
+
+Point every bridge at the selected package target while continuing to write its
+generated manifest and source into the stable IR cache entry. The shared target
+enables compiler reuse, but the key directory then becomes mutable input state
+shared by concurrent invocations. This option does not isolate the generated
+crate.
+
+### Use a separate documentation target and an OS-level lock
+
+Place documentation compiler output under
+`<parent-target>/documentation-examples/v1/target` and lock it from before
+Cargo starts until executables have been copied into the caller's private run
+directory. This isolates the documentation build, but duplicates the parent
+dependency graph. This option was initially selected, then superseded after
+Cargo 1.89's profile-lock behaviour was checked on the supported toolchain.
+
+## Decision outcome
+
+For documentation tests, use the parent target directory resolved by Cargo and
+place shared test-only ownership state under
+`<parent-target>/documentation-examples/v2`. `BuildState` owns metadata
+discovery, the OS-level lock, and recovery marker for both the Rust-example
+build helper and the CLI integration test. This sidecar directory is not a
+compiler target. Rust examples parse bounded Cargo JSON artefact records and
+snapshot reported binaries into their private workspaces while holding the
+lock. The CLI integration test instead snapshots the Cargo-provided
+`CARGO_BIN_EXE_cargo-orthohelp` executable into its private run directory. Its
+Cargo-dispatched command still compiles and runs the generated bridge through
+the production bridge helper.
+
+An observed Cargo 1.89 test run released the profile build lock before
+executing tests, allowing the sidecar lock to coordinate snapshot ownership
+without a parent/child Cargo lock cycle. A regression test now checks this
+contract directly from the running test process, without launching another
+Cargo workspace. It coordinates documentation snapshot owners and reports
+contention as an inconclusive observation because another Cargo process may
+hold the profile lock.
+
+Tests that build through this shared sidecar are serialized before their
+scenario deadlines start: direct `cargo test` uses a named in-process serial
+lock, while nextest assigns the affected binaries to one test group. The
+independent-workspace regression retains its concurrent workers inside that
+test, so it continues to exercise cross-process artefact ownership.
+
+The identifier-artefact integration test gives its fixture a private target
+nested under Cargo's configured workspace target. Its package clean can then
+force a fresh build without deleting test executables that the outer Cargo
+workspace has already built. The fixture continues to use Cargo's default
+shared package cache.
+
+The build cache is test infrastructure. It may reuse compiler output through
+Cargo's normal target and package-cache behaviour, but it must not relocate,
+clear, or repair the shared package cache. A unique run directory and exact
+documented source body remain owned by each workspace. Workspace setup copies
+the selected repository's `Cargo.lock`, when present, into the private example
+workspace to reuse dependency versions without editing the parent lockfile.
+This helper is private to the documentation layout, separate from production
+bridge seeding. The concurrent workspace-ownership tests must continue to
+demonstrate that same-named fixture binaries run from their own snapshots,
+including when independent OS processes build concurrently. The
+`cargo-orthohelp` documentation test invokes the actual Cargo
+external-subcommand path after taking its private executable snapshot; it does
+not rebuild the CLI executable from a JSON artefact path.
+
+For production bridge builds, keep `target/orthohelp/<hash>/` as the stable IR
+cache entry, but create a temporary invocation directory beneath it for the
+generated manifest, bridge source, copied workspace `Cargo.lock` when present,
+and executable snapshot. Build into the selected package's Cargo-resolved
+target directory to reuse compiler artefacts across IR cache keys. Cargo may
+update the private lockfile copy for the generated root package, but must not
+edit the selected workspace's lockfile. Run the JSON-reported executable from
+its private snapshot; do not assume a `target/debug` path.
+
+The generated manifest disables automatic binary discovery and names its
+explicit bridge target from both the selected package root and unique
+invocation directory. This keeps the artefact path private to the invocation,
+even when an ordinary workspace target uses the same conventional bridge name,
+while preserving the selected target directory and shared dependency cache.
+
+A production bridge helper holds a stable `fs4` operating-system lock across
+the Cargo JSON build, executable snapshot, and generated-output cleanup. It
+serializes bridge invocations that share the target directory. Cargo's own
+target lock does not cover the snapshot after Cargo exits, so the distinct
+generated target name also prevents an ordinary workspace build of
+`orthohelp_bridge` from replacing the reported executable in that interval.
+After the private snapshot succeeds, the helper removes only Cargo-reported
+files named for that invocation's generated binary. Missing files are already
+clean; other cleanup failures are warnings and do not discard the valid
+snapshot. Dependency outputs and shared Cargo caches remain owned by Cargo. On
+MSVC an uplifted `<binary_name>.pdb` is part of that same Cargo-reported output
+set, so the ownership rule covers it too. The helper is private to the
+production bridge build path and is not a general application subprocess API.
+The similar documentation-test helper remains test-only and cannot be imported
+by the binary.
+
+Production bridge builds retain the configured compiler and documentation
+wrappers, applicable wrapper configuration, job limits, warning enforcement,
+and coverage instrumentation. Rust flags are not sanitized to create a separate
+fingerprint, and the default shared Cargo cache is unchanged. The Cargo JSON
+reader retains at most 1 MiB of rendered compiler diagnostics and indicates
+when output is truncated; it has no presentation sink. The `run_cargo` boundary
+forwards that bounded output to stderr after draining the records and prints a
+truncation notice when needed. The nested build asks for Cargo's plain `json`
+message format so rustc's rendered diagnostics stay inside that bounded stream
+and the inherited stderr cannot bypass the bound. The stable IR cache entry and
+path are unchanged; publication remains atomic and skips replacement when the
+existing file already contains identical content.
+
+The production bridge emits tracing spans and outcome events for cache lookup,
+target-lock acquisition, Cargo build, snapshot, execution, and IR publication.
+Events contain stable operation and outcome values plus elapsed time; they omit
+paths, cache keys, error strings, and child output. `cargo-orthohelp` is a
+one-shot CLI that installs a tracing subscriber but no metrics recorder, so it
+reports per-invocation evidence through tracing instead of emitting metrics
+that the default invocation would silently discard.
+
+Build-tool environment preparation uses a narrow, explicit allow-list separate
+from application environment isolation. It preserves the configured Cargo home,
+shared package cache, Cargo configuration, toolchain selectors, `RUSTC_WRAPPER`,
+`RUSTC_WORKSPACE_WRAPPER`, `RUSTDOC`, applicable wrapper settings, warning
+flags, job limits, and platform requirements. It excludes unlisted application
+variables and secrets. A runner-supplied target-specific MSVC linker and SDK
+search paths are preserved and used directly; `vswhere` and `vcvars64.bat`
+provide the bounded fallback when those paths are incomplete. MSVC discovery
+command files belong to each caller's private workspace, separately from the
+shared compiler target and ownership state. Cargo continues to read
+configuration from the caller's working directory and configured Cargo home.
+`cargo llvm-cov show-env` supplies `CARGO_LLVM_COV_TARGET_DIR` rather than
+`CARGO_TARGET_DIR`; metadata preparation promotes that tool-selected target for
+Cargo metadata, so documentation builds reuse the instrumented parent target.
+Nested Cargo builds retain coverage flags and LLVM profile variables but omit
+`cargo-llvm-cov` from `RUSTC_WRAPPER`: that variable names the coverage CLI,
+which cannot serve as a compiler wrapper for a second Cargo process. Other
+configured wrappers remain available through Cargo configuration and the
+explicit wrapper settings. Their separate ownership state protects each
+build-and-snapshot interval. Documented application binaries continue to
+receive their smaller runtime allow-list. The bridge selector remains private to
+`BuildEnvironment` and accepts only named toolchain inputs, Cargo target
+linker or rustflags settings, and registry index URLs. Windows matching is
+ASCII case-insensitive while child processes receive the original environment
+key. Credential-bearing proxy and registry values are omitted with a warning
+that names the variable but never its value.
+
+One monotonic scenario deadline covers discovery, lock wait, build, snapshot,
+and execution; operation-specific build, execution, discovery, and cleanup
+budgets can only reduce the remaining time. Output never resets a deadline. The
+runner checks expiry before polling and before accepting completion; a
+completed poll observed after the deadline remains a timeout. Each output
+stream retains at most 1 MiB while continuing to drain. Success requires both
+process-root completion and confirmation that owned descendants have stopped
+and output streams have drained; root exit and EOF alone are not proof that the
+tree is complete. If tree completion cannot be confirmed within the cleanup
+bound, fail the operation and retain any cache ownership marker for owner
+recovery. Failure reports preserve captured output and truncation state, retain
+the primary error if cleanup also fails, and bound cleanup and reader
+completion. Supervision applies only to documentation-test subprocesses; it
+does not terminate unrelated processes or shared cache services.
+
+Linux checks process-group members through `/proc`, ignoring only terminated
+zombies. Windows queries the private job's active-process count. Other Unix
+hosts conservatively probe group existence after reaping the root; targets
+without non-reaping root observation return an unsupported-operation error.
+These checks never signal a Unix group after reaping its leader. Windows
+runtime validation remains separate from a cross-platform compilation check.
+
+Readers own their pipe handles and support cancellation independently of EOF.
+Unix uses nonblocking reads through test-only `nix`; Windows checks available
+bytes with `PeekNamedPipe` before reading. The Windows call has a narrow safety
+boundary around the reader-owned handle. Cleanup requests cancellation before
+its join allowance expires. A writer that escapes tree ownership cannot keep a
+reader blocked indefinitely, and unconfirmed writer or cleanup state remains
+explicit in the error.
+
+Each build helper's command factory is private to its owning boundary:
+documentation-test support or the production bridge. Regression tests inject
+controlled compiler-protocol fixtures through the documentation helper's lock,
+JSON observer, and snapshot path. They do not need a live compiler admission
+service. Real documented examples still compile their published source bodies,
+and the existing concurrent workspace assertions remain.
+
+An abruptly interrupted build or incomplete cleanup leaves an ownership marker.
+Every opaque nested CLI callback error retains the marker, including nonzero
+exits and preparation failures, because internal capture pipes prevent the
+outer runner from confirming nested compiler completion.
+
+A direct Cargo build error from the subprocess runner retains its marker even
+if OS-tree cleanup completes: an externally admitted compiler may outlive the
+cancelled Cargo process. A fully observed Cargo nonzero exit, and preparation
+or snapshot errors after the child lifetime is known, use the existing cleanup
+path and remove the marker only after owned-process completion is confirmed. If
+the runner cannot confirm that completion within its bound, recovery is
+explicit: verify the cache owner's compiler processes have drained, then remove
+the marker through the documented recovery path. Do not retry failed or
+interrupted builds automatically or infer that a cache service is safe to
+restart.
+
+For the production bridge, a build or snapshot error that cannot confirm the
+Cargo writer's lifetime also retains a fail-closed marker. A later invocation
+must not remove it automatically. Recovery requires confirming that the bridge
+Cargo and compiler processes have exited before removing the marker. The bridge
+helper may not terminate unrelated processes or restart shared cache services.
+
+## Timeout policy and validation status
+
+The values and recommendation in this section record the policy at the ADR's
+acceptance date. The 2026-10-26 addendum below supersedes its current-state
+limits and validation conclusion while preserving the original observations.
+
+The 600-second nextest per-test ceiling remains the default. The BDD target and
+the serialized documentation-scenario group have 960-second overrides. The
+1,800-second whole-run ceiling, 2,700-second Cargo watchdog, and workflow job
+ceilings remain in force. Documentation scenarios use a 956-second operation
+envelope, preserving two 2-second allowances within the 960-second per-test
+ceiling for child cleanup and test reporting. A subprocess receives the smaller
+of its operation budget and the scenario's remaining time. The 60-second
+execution and 30-second discovery policies remain independent of that build
+budget.
+
+The BDD scenario's 956-second envelope starts after its in-process ownership
+gate. A direct-Cargo run serialized those scenarios before starting each
+deadline, but one nested bridge build then spent 593.838 seconds waiting on
+Cargo's shared package-cache lock and produced no compiler progress. A later
+`documented_command` run reached its 595.791-second effective deadline with
+only repeated package-cache lock messages, no structured compiler progress, and
+no correlated admission telemetry. The 956-second envelope is 1.60 times that
+observed lower bound. It counts Cargo-cache and compiler-admission waits
+without estimating or subtracting them; the filesystem lease still bounds
+ownership across separate test processes.
+
+The attempted corrected cold build exceeded 600 seconds while admission slots
+were held and sccache was unavailable. The run did not produce a successful
+cold-cache duration. Queued children and full capacity confirm contention was
+present; they do not quantify the time it added to that build. A later
+fresh-target probe completed in 66 seconds, but cache hit and miss state was
+unavailable. The 956-second documentation envelope is sized from the observed
+package-cache wait, not inferred compiler-admission delay; the bound continues
+to include all queue time. Cache-service availability remains an
+environment-owner prerequisite when it causes uncached compilation.
+
+Validation exercises focused runner, workspace, documented-example, and
+Cargo-subcommand tests, followed by the repository's sequential gates and
+workflow contracts. Regression coverage includes allow-list preservation and
+exclusion of `ACTIONS_RUNTIME_TOKEN` and an application secret, policy
+selection, bounded timeout output, primary-error preservation, descendant-held
+pipes, same-named executable ownership, and separate-process concurrency. The
+workflow contract preserves ordering under the per-test, whole-run, watchdog,
+and job limits. A successful cold-cache duration remains unestablished: the
+attempted cold build exceeded its operation deadline while sccache was
+unavailable and admission slots were held, and a later fresh-target run did not
+report cache hit or miss state. Keep the build budget unchanged until a
+controlled run provides usable cold-build evidence.
+
+## Addendum (2026-10-26): Updated test and workflow budgets
+
+The adoption of the dated nightly in
+[ADR-0018](adr-0018-adopt-a-dated-nightly-and-the-development-build-standard.md)
+changed compiler cache keys and invalidated the warm sample used to set the
+whole-run budget. The current limits supersede the whole-run, watchdog and job
+ceilings above:
+
+- `.config/nextest.toml` sets a 2,300-second whole-run limit and, for the
+  boundary binary, the 960-second override it shares with the trybuild,
+  `rstest_bdd` and documentation scenarios. The packaged-consumer scenario runs
+  inside one shared 900-second allowance, with each packaging invocation and
+  each nested Cargo command capped at 440 seconds. The 2,200-second per-test
+  limit, 2,100-second scenario deadline, and 520- and 420-second caps recorded
+  here originally were superseded before this branch merged.
+- The coverage workflows set `RUN_RUST_CARGO_WAIT_TIMEOUT` to 3,300 seconds.
+  The CI coverage job has a 190-minute ceiling, and the coverage publisher has
+  a 140-minute ceiling.
+- Documentation scenarios retain their 956-second operation envelope within
+  the 960-second nextest allowance.
+
+The 2,300-second whole-run limit covers the bound from the cancelled Windows
+run: the younger remaining test had started at 1,652.8 seconds and had used
+157.3 seconds when cancellation was reported at about 1,810.1 seconds. Its
+600-second allowance therefore ended at 2,252.8 seconds. The new limit leaves
+47.2 seconds above that bound. The three later warm runs do not establish a
+cold-cache bound because they inherited cache entries from the cancelled run.
+The cold nested-build path still cannot reach `sccache` while the documentation
+runner clears the environment without restoring `RUSTC_WRAPPER`;
+[issue #614](https://github.com/leynos/ortho-config/issues/614) tracks that
+separate repair. Detailed timings and evidence limits are in the developers'
+guide's [cold-run budget account][cold-run-budget].
+
+## Addendum (2026-10-26): Bridge-cache metrics
+
+The bridge's intermediate-representation (IR) cache gained an optional metrics
+surface without changing its ownership. Persistence stays in the private
+`bridge/ir_cache.rs` unit, which returns a closed publish outcome and a
+stage-tagged publish error and records nothing itself; the bridge orchestration
+boundary names the outcome in tracing and, with the `metrics` feature enabled,
+in the counter `cargo_orthohelp.bridge_cache.events`. Both labels, `operation`
+and `outcome`, come from closed enums, so no path, cache key, or error string
+can become a label.
+
+The `metrics` facade discards updates until the process installs a recorder, so
+the standalone `cargo-orthohelp` binary now installs a `tracing`-backed
+recorder before any bridge work. A host that installs its own recorder first
+keeps it. The design is recorded in the [cargo-orthohelp design][bridge-design].
+
+## Addendum (2026-11-06): Persistent test-private fixture target
+
+The identifier-artefact fixture keeps a persistent target directory,
+`identifier-e2e`, under Cargo's configured workspace target, tagged with
+`CACHEDIR.TAG`, instead of creating one per run. Each run cleans only the
+`orthohelp_fixture` package within that directory before checking opt-out
+behaviour, so later runs reuse compiled dependencies. The guarantees above
+still hold: the outer workspace's test executables are never deleted, and the
+fixture still uses Cargo's default shared package cache. The original paragraph
+is retained as the record of the decision the fixture was introduced under.
+
+## Consequences
+
+- Documentation-test workspaces reuse compiler outputs through Cargo while
+  keeping source manifests and executed binaries private.
+- Separate locks protect documentation-test snapshots and production bridge
+  snapshots. The production bridge lock also owns cleanup of that invocation's
+  Cargo-reported binary outputs, but it does not own IR cache contents beyond
+  atomic publication.
+- Test-only subprocess supervision does not enter the public crate dependency
+  surface.
+- Production use of `fs4` is limited to bridge build-and-snapshot ownership.
+- Build timeouts remain bounded and evidence-rich while measured cold-build
+  data is unavailable.
+- Cache recovery requires ownership verification and cannot kill processes or
+  restart shared services.
+- Existing nextest serialization groups remain until their shared-state
+  assumptions are independently disproven.
+
+## Addendum (2026-11-10)
+
+The accepted outcome above is unchanged. This addendum records decisions taken
+after it and is authoritative where the two differ.
+
+### Identifier-artefact private target
+
+The identifier-artefact fixture now names its private target
+`identifier-artefact-target` and nests it beneath the workspace target that
+`cargo metadata` reports. This replaces per-run target ownership with reuse:
+the first phase pays the dependency build, and later phases reuse it. Only the
+phases that must force a rebuild start with `cargo clean -p orthohelp_fixture`,
+which rebuilds the fixture package and its build script while the dependency
+graph beneath them stays warm. The fixture still uses Cargo's default shared
+package cache.
+
+Reuse is asserted rather than inferred from elapsed time. Cargo's JSON message
+stream reports every compiler unit as fresh or rebuilt, and the forced-rebuild
+phase must report fresh dependency units while recompiling only the fixture
+package. A phase that rebuilt the whole graph therefore fails the contract
+instead of merely looking slow.
+
+The target is marked with a `CACHEDIR.TAG` carrying Cargo's cache-directory
+signature, so tools that honour the tag treat it as a cache. Because it is
+nested under the workspace target, a workspace `cargo clean` still removes it.
+
+A stable target is shared state. nextest's test group and `#[serial]`
+coordinate tests inside one runner; neither excludes a second test process from
+running its own `cargo clean -p orthohelp_fixture` inside this test's build or
+artefact read.
+
+### Whole-test lease over the target
+
+The fixture holds an exclusive operating-system file lease over the private
+target for the whole test. The lease file is `.identifier-artefact.lease`
+inside that target, so it shares the target's lifetime and its `CACHEDIR.TAG`
+marking. A waiting process re-checks the lock every 50 ms until the current
+holder releases it, and the wait is bounded by the scenario deadline; an
+exhausted wait fails with a message naming the lease file. Discovery runs
+first. It only reads workspace metadata and touches no build output, so it may
+run while another process holds the lease. The lease is acquired after
+discovery and before the first build, and it is held until the fixture is
+dropped.
+
+### Lease inherited by the build it protects
+
+The lease alone would leave an ordering hole. The runner gives every nested
+child its own process group (Unix) or Job Object (Windows), which is what lets
+it kill a whole build at its deadline. It also means that killing the *helper*
+reaches the helper alone: Cargo and its compilers keep running with nothing
+supervising them, and the helper's own lease handle closes with it. A
+replacement process could then acquire the target and clean it while those
+compilers are still writing.
+
+Each nested Cargo invocation therefore inherits a duplicate of the lease handle
+as its standard input. Cargo is the direct child and holds that handle open for
+as long as it lives, so the operating system keeps the lease held after the
+helper's own handle closes. On Unix, the duplicate shares the open file
+description that `flock` locks, so the lock is released only when Cargo closes
+it. On Windows, where `LockFileEx` locks belong to the locking process rather
+than the file object, the lease file is opened with an empty share mode
+instead: the inherited duplicate keeps a later open refused for Cargo's
+lifetime. The lease file is empty, so Cargo sees an empty standard input rather
+than a terminal it could block on.
+
+The handle does not reach Cargo's own children. Cargo gives build scripts and
+rustc a null standard input, so the lease stops at Cargo. The lease therefore
+covers only the interval in which Cargo lives; it says nothing about a compiler
+or build script that is still writing after Cargo has exited. Removing those
+descendants needs a supervising parent that records the tree before the helper
+dies and terminates it afterwards, which is what `Helper::drop` and the parent
+regression do. Terminating that tree, rather than the lease, is what stops the
+writes. Ownership must still be held until every writer has stopped, including
+while a supervisor is terminating the tree. The lease on its own cannot express
+that condition, and the parent regression and `Helper::drop` do not retain a
+lease during that termination.
+
+This is deliberately not `PR_SET_PDEATHSIG`: that signal is Linux-only and
+fires when the *immediate* parent dies, which is Cargo rather than the helper.
+The inherited handle is portable and reaches Cargo wherever it is in the tree.
+
+### Descendants of an interrupted helper
+
+Keeping the lease through an orphaned build makes the target safe, but not
+available: a test interrupted that way would leave the target refused until the
+orphans exit on their own. A regression therefore records the helper's
+descendants while their parent links still exist, kills the helper alone, and
+proves both halves: the orphan can still write to the target and a replacement
+is refused, and terminating the recorded descendants releases the lease and
+freezes the heartbeat.
+
+The snapshot walks the process table from the helper's process ID, because a
+killed process's children are re-parented and can no longer be found by
+following links afterwards. Termination sends `SIGKILL` to each recorded
+process, and to its process group when it leads one, so a compiler started
+after the snapshot cannot survive it. The wait is bounded and reports any
+survivors rather than claiming a clean teardown. A process that has been killed
+but not yet reaped is a zombie, which `kill(pid, 0)` still reports as present;
+the wait reads the process-table state and treats a stopped process as
+terminated, so a slow reaper does not turn a successful kill into a failure.
+
+Windows takes no snapshot. The runner's Job Object is created with
+`KILL_ON_JOB_CLOSE` and belongs to the helper, so the kernel terminates the
+whole tree when the helper dies.
+
+### One scenario envelope
+
+The scenario deadline is captured once, before the lease wait, and the lease
+wait, every nested Cargo call, and the artefact read that follows share that
+one envelope. Discovery's 30-second cap is charged to it too, so discovery and
+the wait cannot together outlast the per-test allowance. Starting a second
+envelope at the wait would leave the total unbounded and let nextest kill the
+test before the wait could name itself.
+
+The second process in the lease regression keeps its own envelope rather than
+sharing the parent's, because it is a separate test process with its own clock.
+It caps that envelope at 600 seconds, well inside the 900 seconds the parent
+waits before tearing it down. Only the helper supervises its nested Cargo
+calls, and each of those runs in its own process group, so a parent that killed
+the helper while a build was still running would leave Cargo and its compilers
+with nothing left to bound them. The helper's deadline therefore expires first:
+its supervised Cargo is killed and reaped by the runner that owns it, and the
+helper reports the failure and exits before the parent stops waiting. A
+workflow contract keeps that ordering from silently inverting. Should it invert
+anyway — the parent kills the helper before its own deadline — the inherited
+lease keeps the target refused, and the parent's descendant snapshot terminates
+the orphaned build before it re-acquires the target.
+
+### Diagnostic tail beside the retained head
+
+Each output stream still retains at most 1 MiB for callers that parse it, and
+now also retains a separate 64 KiB tail (`DIAGNOSTIC_TAIL_BYTES`) of the most
+recent bytes. The head cannot explain a stalled child: compile-admission queue
+lines and rustc heartbeats are printed repeatedly, and the last one names the
+wait that was in force. A timeout therefore reports both ends, with the bytes
+seen and whether the head was truncated, so an admission wait, a package-cache
+wait, and a hang are distinguishable.
+
+### Boundary-runner supervision
+
+Process supervision is no longer confined to documentation-test subprocesses.
+The `ortho_l10n` boundary runner (`fixture_cargo`) applies the same model to
+its nested Cargo children: on Unix the child leads its own process group and
+the group is killed at the deadline, and on Windows it runs in its own Job
+Object, whose termination covers every descendant. Reader collection is bounded
+in both outcomes, so a descendant that holds an inherited pipe cannot block the
+diagnostic, and each stream retains a 64 KiB diagnostic tail.
+
+A `SCENARIO_ALLOWANCE` of 900 seconds is shared by every nested Cargo call in
+one boundary contract and passed explicitly from the test, rather than kept in
+a thread-local that unrelated contracts would accumulate. Each packaging
+invocation and each nested fixture Cargo call is capped at 440 seconds
+(`PACKAGE_DEADLINE` and `CARGO_DEADLINE`). Each call is bounded by the smaller
+of its own cap and what the allowance has left; a call that starts with nothing
+left is refused, naming itself and the allowance. The in-process serialization
+wait is bounded by the same allowance, and each child's bound is computed after
+the wait, so queueing behind a sibling is charged to the allowance rather than
+hidden from it. The allowance sits inside the 960-second per-test boundary
+override, and the remaining 60 seconds cover rendering fixture roots, reading
+manifests, and reporting. Both runners remain test-only; neither is a general
+application subprocess API.
+
+## References
+
+- [Executable documentation-test design][design-infrastructure]
+- [Documentation-example implementation guidance][developer-guidance]
+- [Test timeout ordering][timeout-guidance]
+- [Cold-run budget account][cold-run-budget]
+- [Descriptor locking with `fs4`][file-lock]
+
+[design-infrastructure]:
+  ../design.md#419-executable-documentation-test-build-ownership
+[developer-guidance]: ../developers-guide.md#public-documentation-examples
+[timeout-guidance]:
+  ../developers-guide.md#test-timeouts-the-tiers-this-repository-sets
+[cold-run-budget]:
+  ../developers-guide.md#the-whole-run-budget-was-resized-from-a-cold-run
+[bridge-design]: ../cargo-orthohelp-design.md#633-bridge-build-ownership-and-recovery
+[file-lock]: https://docs.rs/fs4/1.1.0/fs4/trait.FileExt.html

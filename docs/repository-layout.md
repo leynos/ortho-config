@@ -9,29 +9,39 @@ layout and the critical subdirectories new contributors usually need first.
 
 ```plaintext
 .
+├── .cargo/
 ├── .github/
 │   └── workflows/
 ├── cargo-orthohelp/
 │   ├── src/
 │   └── tests/
 ├── docs/
+│   ├── adrs/
 │   ├── archive/
-│   └── execplans/
+│   ├── execplans/
+│   └── rfcs/
 ├── examples/
 │   └── hello_world/
 ├── ortho_config/
-│   ├── locales/
 │   ├── src/
 │   └── tests/
 ├── ortho_config_macros/
+│   └── src/
+├── ortho_l10n/
+│   ├── locales/
 │   └── src/
 ├── scripts/
 │   └── tests/
 ├── target/
 ├── test_helpers/
 │   └── src/
-└── tests/
-    └── fixtures/
+├── tests/
+│   ├── fixtures/
+│   └── workflow_contracts/
+└── tools/
+    ├── kani/
+    ├── mold/
+    └── verus/
 ```
 
 Diagram 1: compact repository tree.
@@ -40,23 +50,29 @@ Diagram 1: compact repository tree.
 
 Table 1 describes the repository paths that define the workspace shape.
 
-| Path                    | Responsibility and conventions                                                                                                                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.github/`              | GitHub automation. Workflow definitions live under `.github/workflows/`; keep workflow changes small and validate YAML when possible.                                                                                                                                                      |
-| `cargo-orthohelp/`      | Workspace binary crate for generating localized documentation artefacts from `OrthoConfigDocs` metadata. Source code lives in `cargo-orthohelp/src/`; integration and golden tests live in `cargo-orthohelp/tests/`.                                                                       |
-| `docs/`                 | Long-lived project documentation. Use `docs/contents.md` as the index, `docs/users-guide.md` as the user's guide, `docs/developers-guide.md` as the developer's guide, `docs/design.md` and focused design documents for architecture, and `docs/roadmap.md` for active delivery planning. |
-| `docs/archive/`         | Historical documentation that should remain available but is no longer the active source for future work. The archived v0.8.0 roadmap lives here.                                                                                                                                          |
-| `docs/execplans/`       | Living and historical execution plans for substantial tasks. Update an active ExecPlan as work proceeds so progress, decisions, and validation survive context loss.                                                                                                                       |
-| `examples/hello_world/` | Example application crate used to demonstrate layered configuration, subcommands, localization, generated docs metadata, and behavioural coverage.                                                                                                                                         |
-| `ortho_config/`         | Core runtime crate. This is where public configuration loading, merge logic, discovery, error types, documentation IR types, localization support, and user-facing APIs live.                                                                                                              |
-| `ortho_config/locales/` | Embedded Fluent resources used by localization support. Keep locale identifiers and message identifiers aligned with generated clap and documentation metadata.                                                                                                                            |
-| `ortho_config/src/`     | Runtime source modules for configuration discovery, file parsing, merge behaviour, docs metadata, error handling, localization, and supporting utilities. Every module should start with a module-level `//!` comment.                                                                     |
-| `ortho_config/tests/`   | Core crate integration and behavioural tests. Use shared helpers rather than direct environment mutation.                                                                                                                                                                                  |
-| `ortho_config_macros/`  | Procedural macro crate for deriving OrthoConfig-related implementations. Macro parsing, build, and generation code lives under `ortho_config_macros/src/`.                                                                                                                                 |
-| `scripts/`              | Python and shell-adjacent maintenance scripts for version bumping and release archives. Focused script tests live under `scripts/tests/`.                                                                                                                                                  |
-| `target/`               | Cargo build output, generated documentation, trybuild artefacts, and temporary build products. Do not edit or commit files from this directory.                                                                                                                                            |
-| `test_helpers/`         | Shared test helper crate. Put cross-crate fixtures, environment guards, and reusable assertions here rather than duplicating test infrastructure.                                                                                                                                          |
-| `tests/fixtures/`       | Workspace-level fixture crates and data used by integration, documentation, and generator tests. Fixtures should be minimal but representative.                                                                                                                                            |
+| Path                        | Responsibility and conventions                                                                                                                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.cargo/`                   | Cargo configuration carrying the dev-fast standard: the parallel `rustc` frontend everywhere (Cranelift is a disabled opt-in), plus the `mold` linker on Linux. The Makefile restates it where a recipe assigns `RUSTFLAGS`; see the developers' guide.                                    |
+| `.github/`                  | GitHub automation. Workflow definitions live under `.github/workflows/`, keep workflow changes small and validate YAML when possible.                                                                                                                                                      |
+| `.verus/`                   | Local Verus installation produced by `make install-verus`, including the solver bundled with the pinned release. Generated and ignored by Git; never edit or commit it.                                                                                                                    |
+| `cargo-orthohelp/`          | Workspace binary crate for generating localized documentation artefacts from `OrthoConfigDocs` metadata. Source code lives in `cargo-orthohelp/src/`; integration and golden tests live in `cargo-orthohelp/tests/`.                                                                       |
+| `docs/`                     | Long-lived project documentation. Use `docs/contents.md` as the index, `docs/users-guide.md` as the user's guide, `docs/developers-guide.md` as the developer's guide, `docs/design.md` and focused design documents for architecture, and `docs/roadmap.md` for active delivery planning. |
+| `docs/archive/`             | Historical documentation that should remain available but is no longer the active source for future work. The archived v0.8.0 roadmap lives here.                                                                                                                                          |
+| `docs/execplans/`           | Living and historical execution plans for substantial tasks. Update an active ExecPlan as work proceeds so progress, decisions, and validation survive context loss.                                                                                                                       |
+| `examples/hello_world/`     | Example application crate used to demonstrate layered configuration, subcommands, localization, generated docs metadata, and behavioural coverage.                                                                                                                                         |
+| `ortho_config/`             | Core runtime crate. This is where public configuration loading, merge logic, discovery, error types, documentation IR types, localization support, and user-facing APIs live.                                                                                                              |
+| `ortho_config/src/`         | Runtime source modules for configuration discovery, file parsing, merge behaviour, docs metadata, error handling, localization adapters, and supporting utilities. Every module should start with a module-level `//!` comment.                                                            |
+| `ortho_config/tests/`       | Core crate integration and behavioural tests. Use shared helpers rather than direct environment mutation.                                                                                                                                                                                  |
+| `ortho_config_macros/`      | Procedural macro crate for deriving OrthoConfig-related implementations. Macro parsing, build, and generation code lives under `ortho_config_macros/src/`.                                                                                                                                 |
+| `ortho_l10n/`               | Reusable localization runtime crate. Owns Fluent catalogue lookup, formatting reports, embedded default resources, and the shared message identifier convention. It must not depend on configuration or Clap.                                                                              |
+| `ortho_l10n/locales/`       | Embedded Fluent resources used by localization support. Keep locale identifiers and message identifiers aligned with generated clap and documentation metadata.                                                                                                                            |
+| `scripts/`                  | Python and shell maintenance scripts for version bumping, release archives, and build-tool provisioning. The build-tool scripts support `make install-build-tools` and `make check-build-tools`; focused script tests live under `scripts/tests/`.                                         |
+| `target/`                   | Cargo build output, generated documentation, trybuild artefacts, and temporary build products. Do not edit or commit files from this directory.                                                                                                                                            |
+| `test_helpers/`             | Shared test helper crate. Put cross-crate fixtures, environment guards, and reusable assertions here rather than duplicating test infrastructure.                                                                                                                                          |
+| `tests/fixtures/`           | Workspace-level fixture crates and data used by integration, documentation, and generator tests. Fixtures should be minimal but representative.                                                                                                                                            |
+| `tests/workflow_contracts/` | Workflow and Make-routing contract tests, run by `make test-workflow-contracts`. They hold the CI workflows and the build standard's Make routing to their contracts, with narrow readers for Make output and workflow shell goals.                                                        |
+| `tools/`                    | Repository-owned tool pins. `tools/kani/VERSION` and `tools/verus/VERSION` name the verifier releases, and `tools/verus/SHA256SUMS` pins the Verus archive. Change them only with the matching integration evidence.                                                                       |
+| `tools/mold/`               | The pinned `mold` linker release: `VERSION` names it and `SHA256SUMS` carries the digests that `make install-build-tools` verifies.                                                                                                                                                        |
 
 ## Integration test inventory
 
@@ -66,8 +82,9 @@ targets. Each directory-style suite needs its own `[[test]]` stanza in
 
 - `ortho_config/tests/subcommand/mod.rs` (target `subcommand`) contains tests
   for subcommand configuration helpers in the `basic`, `cli`, `merge`,
-  `nesting`, and `prefix` modules. It shares `../util.rs` and
-  `../support/to_anyhow.rs` through `#[path]` includes.
+  `nesting`, and `prefix` modules, plus the `fixtures` module that holds their
+  shared `isolated_root` fixture. It shares `../support/to_anyhow.rs` through a
+  `#[path]` include.
 - `ortho_config/tests/clap_integration/mod.rs` (target `clap_integration`)
   contains CLI parsing tests across configuration sources in the `common`,
   `config_path`, `error_cases`, `option_cases`, and `parsing` modules, plus
@@ -79,13 +96,24 @@ Run either target independently with
 
 ## Behavioural test inventory
 
-Behavioural suites use crate-local integration targets. Their feature files are
-kept alongside the targets that consume them:
+Behavioural suites use crate-local integration targets. The `ortho_config` and
+`cargo-orthohelp` targets have top-level `tests/rstest_bdd.rs` entry points and
+keep their support modules under `tests/rstest_bdd_support/`. The
+`ortho_config` entry point declares the shared `tests/fixtures/` module using a
+conventional `mod` declaration. Feature files are kept alongside the targets
+that consume them:
 
-- `ortho_config/tests/rstest_bdd/` and `ortho_config/tests/features/`
-- `cargo-orthohelp/tests/rstest_bdd/` and `cargo-orthohelp/tests/features/`
+- `ortho_config/tests/rstest_bdd.rs`,
+  `ortho_config/tests/rstest_bdd_support/`, and `ortho_config/tests/features/`
+- `cargo-orthohelp/tests/rstest_bdd.rs`,
+  `cargo-orthohelp/tests/rstest_bdd_support/`, and
+  `cargo-orthohelp/tests/features/`
 - `examples/hello_world/tests/rstest_bdd/` and
   `examples/hello_world/tests/features/`
+
+The `cargo-orthohelp` PowerShell golden tests keep their fixture at
+`cargo-orthohelp/tests/golden/powershell_fixture.rs`, beside the target that
+uses it.
 
 ## Shared test-support modules
 
@@ -99,10 +127,17 @@ These modules provide shared integration-test infrastructure:
   builder. It creates an independent `ConfigDiscovery` over the caller's
   `MapEnv`, with no other environment or filesystem access, for deterministic
   injected-source discovery tests.
-- `ortho_config/tests/rstest_bdd/behaviour/steps/common.rs` owns the
+- `ortho_config/tests/rstest_bdd_support/behaviour/steps/common.rs` owns the
   `set_scalar_once`, `set_nonblank_scalar_once`, and `SlotTakeOrExt::take_or`
-  helpers. Step modules under `behaviour/steps/` use them for scalar-slot
-  validation and descriptive missing-slot errors.
+  helpers, alongside `config_fixture`, `shared_sources`, and
+  `isolated_home_env`. Step modules under `behaviour/steps/` use them for
+  scalar-slot validation, descriptive missing-slot errors, temporary fixture
+  files, shared environment source pairs, and home-directory isolation.
+- `ortho_config/tests/subcommand/fixtures.rs` owns the `isolated_root` fixture
+  and the `close_discovery` constructor. They pair a temporary root with a
+  discovery source closed against the ambient environment, with the Unix global
+  rung pinned to that root. The `subcommand` target's child modules reach them
+  as `super::fixtures`; other targets keep their own setup.
 
 ## Important root files
 
@@ -118,7 +153,7 @@ Table 2 lists root files that carry project policy or workspace behaviour.
 | `typos.local.toml`         | Narrow repository-specific spelling policy merged with the shared estate dictionary.                                                                        |
 | `typos.toml`               | Generated en-GB-oxendict spelling configuration. Regenerated by `make spellcheck` from the live shared dictionary and `typos.local.toml`; do not hand-edit. |
 | `clippy.toml`              | Clippy configuration. Lint suppressions should be rare, tightly scoped, and justified.                                                                      |
-| `rust-toolchain.toml`      | Rust toolchain pin. Do not change it incidentally while working on unrelated tasks.                                                                         |
+| `rust-toolchain.toml`      | Dated nightly pin, moved by Dependabot; components and rationale are in the developers' guide. Do not change it incidentally.                               |
 | `CHANGELOG.md`             | Release history. Update it when user-visible behaviour changes or migration notes are required.                                                             |
 | `README.md`                | Repository-level introduction. Keep deep design and contributor detail in `docs/` and link to it from the README when needed.                               |
 
@@ -134,8 +169,11 @@ isolated Cargo caches unless the repository instructions explicitly change.
 
 ## Documentation ownership
 
-Long-lived documentation belongs under `docs/`. Active plans belong under
-`docs/execplans/`, while historical plans or roadmaps that should remain
+Long-lived documentation belongs under `docs/`. Architectural decision records
+belong under `docs/adrs/`, and proposals for review belong under `docs/rfcs/`.
+Both use four-digit serials and title slugs as specified in the
+[documentation style guide](documentation-style-guide.md). Active plans belong
+under `docs/execplans/`, while historical plans or roadmaps that should remain
 readable but should not drive future work belong under `docs/archive/`.
 
 When adding, renaming, or removing documentation, update

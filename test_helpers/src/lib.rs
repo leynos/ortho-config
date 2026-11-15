@@ -6,6 +6,8 @@
 //! Usage scope:
 //! - Intended for test code only; do not use in production binaries or libraries.
 
+pub mod coverage;
 pub mod cwd;
 pub mod env;
+pub mod process;
 pub mod text;

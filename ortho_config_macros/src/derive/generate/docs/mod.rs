@@ -3,8 +3,11 @@
 //! This module emits `OrthoConfigDocs` implementations that return the
 //! `DocMetadata` IR used by `cargo-orthohelp`.
 
+mod behaviour;
+mod discovery;
 mod fields;
-mod sections;
+mod renderer;
+pub(crate) mod sections;
 mod types;
 
 pub(crate) use types::AppName;
@@ -13,27 +16,40 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-use crate::derive::build::CliFieldMetadata;
+use crate::derive::build::{CliFieldMetadata, compute_profile_env_var};
+use crate::derive::generate::localization::LocalizationIds;
 use crate::derive::parse::{
     DocExampleAttr, DocLinkAttr, DocNoteAttr, FieldAttrs, SerdeRenameAll, StructAttrs,
 };
 
+/// Borrowed derive inputs needed to emit the downstream documentation trait.
 pub(crate) struct DocsArgs<'a> {
+    /// Configuration type whose documentation metadata is being generated.
     pub ident: &'a Ident,
+    /// Source fields, kept in declaration order for stable help output.
     pub fields: &'a [syn::Field],
+    /// Parsed field attributes aligned with `fields` by index.
     pub field_attrs: &'a [FieldAttrs],
+    /// Container settings that supply names, headings, and platform metadata.
     pub struct_attrs: &'a StructAttrs,
+    /// Serde naming policy used to identify serialized configuration keys.
     pub serde_rename_all: Option<SerdeRenameAll>,
+    /// CLI details used to keep generated help metadata in sync with parsing.
     pub cli_fields: &'a [CliFieldMetadata],
+    /// Localisation identifiers determine which field defaults follow the
+    /// mounted command path. Fields absent from this model retain docs-only
+    /// dotted defaults.
+    pub localization_ids: &'a LocalizationIds,
     /// Resolved crate path for generated code references.
     pub krate: &'a TokenStream,
 }
 
+/// Emits an `OrthoConfigDocs` implementation whose IR combines parsed
+/// attributes with the same CLI and Serde names used by runtime loading.
 pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
     let krate = args.krate;
     let app_name = sections::resolve_app_name(args.struct_attrs, args.ident);
     let app_name_value = AppName::new(app_name);
-    let about_id = sections::resolve_about_id(&app_name_value, &args.struct_attrs.doc);
     let headings = sections::build_sections_metadata(&app_name_value, args.struct_attrs, krate)?;
     let windows = sections::build_windows_metadata(args.struct_attrs, krate);
     let fields = fields::build_fields_metadata(&fields::FieldDocArgs {
@@ -43,36 +59,55 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
         field_attrs: args.field_attrs,
         serde_rename_all: args.serde_rename_all,
         cli_fields: args.cli_fields,
+        localization_ids: args.localization_ids,
         krate,
     })?;
     let subcommands = build_subcommands_metadata(args)?;
+    let behaviour = behaviour::build_behaviour_metadata(&args.struct_attrs.doc, krate);
+    let renderer = renderer::build_renderer_metadata(&args.struct_attrs.doc, krate);
 
     let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
-    let about_id_lit = syn::LitStr::new(&about_id, proc_macro2::Span::call_site());
+    let about_id = sections::about_id_tokens(&args.struct_attrs.doc, krate);
     let bin_name_tokens = option_string_tokens(args.struct_attrs.doc.bin_name.as_deref());
-    let synopsis_tokens = option_string_tokens(args.struct_attrs.doc.synopsis_id.as_deref());
+    let synopsis_tokens = sections::synopsis_id_tokens(&args.struct_attrs.doc, krate);
+    let profiles_tokens = build_profiles_meta(args, krate);
 
     let ident = args.ident;
 
     Ok(quote! {
         impl #krate::docs::OrthoConfigDocs for #ident {
             fn get_doc_metadata() -> #krate::docs::DocMetadata {
+                let command_path = <Self as #krate::OrthoConfigLocalization>::LOCALIZATION_BASE
+                    .split('.')
+                    .map(String::from)
+                    .collect::<Vec<_>>();
+                Self::get_doc_metadata_for_path(&command_path)
+            }
+
+            fn get_doc_metadata_for_path(
+                command_path: &[String],
+            ) -> #krate::docs::DocMetadata {
                 #krate::docs::DocMetadata {
                     ir_version: #krate::docs::ORTHO_DOCS_IR_VERSION.to_string(),
                     app_name: #app_name_lit.to_string(),
                     bin_name: #bin_name_tokens,
-                    about_id: #about_id_lit.to_string(),
+                    about_id: #about_id,
                     synopsis_id: #synopsis_tokens,
                     sections: #headings,
                     fields: vec![ #( #fields ),* ],
                     subcommands: #subcommands,
                     windows: #windows,
+                    behaviour: #behaviour,
+                    renderer: #renderer,
+                    profiles: #profiles_tokens,
                 }
             }
         }
     })
 }
 
+/// Emits nested command metadata only when one supported subcommand field is
+/// present; multiple selectors are rejected consistently with clap.
 fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
     let subcommand_fields = args
         .fields
@@ -89,7 +124,7 @@ fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
             let krate = args.krate;
             Ok(quote! {
                 <#inner_ty as #krate::docs::OrthoConfigSubcommandDocs>
-                    ::get_subcommand_doc_metadata()
+                    ::get_subcommand_doc_metadata_for_path(command_path)
             })
         }
         [first, ..] => Err(syn::Error::new_spanned(
@@ -101,6 +136,9 @@ fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
 
 /// Unwrap `Option<T>` and `Vec<T>` to the inner type `T`, falling back to
 /// the original type for unrecognized wrappers.
+///
+/// This shallow projection keeps documentation generation independent of
+/// arbitrary user-defined container semantics.
 fn unwrap_known_wrapper(ty: &syn::Type) -> &syn::Type {
     let syn::Type::Path(type_path) = ty else {
         return ty;
@@ -121,6 +159,8 @@ fn unwrap_known_wrapper(ty: &syn::Type) -> &syn::Type {
     inner
 }
 
+/// Turns an optional string into tokens for `Option<String>` without parsing
+/// generated text back into Rust syntax.
 pub(super) fn option_string_tokens(value: Option<&str>) -> TokenStream {
     value.map_or_else(
         || quote! { None },
@@ -131,6 +171,8 @@ pub(super) fn option_string_tokens(value: Option<&str>) -> TokenStream {
     )
 }
 
+/// Turns an optional character into tokens for `Option<char>` while preserving
+/// literal escaping through `syn`.
 pub(super) fn option_char_tokens(value: Option<char>) -> TokenStream {
     value.map_or_else(
         || quote! { None },
@@ -141,6 +183,7 @@ pub(super) fn option_char_tokens(value: Option<char>) -> TokenStream {
     )
 }
 
+/// Converts parsed examples into owned IR values in their source order.
 pub(super) fn example_tokens(examples: &[DocExampleAttr], krate: &TokenStream) -> Vec<TokenStream> {
     examples
         .iter()
@@ -159,6 +202,7 @@ pub(super) fn example_tokens(examples: &[DocExampleAttr], krate: &TokenStream) -
         .collect()
 }
 
+/// Converts parsed links into IR tokens, retaining optional localized labels.
 pub(super) fn link_tokens(links: &[DocLinkAttr], krate: &TokenStream) -> Vec<TokenStream> {
     links
         .iter()
@@ -175,6 +219,7 @@ pub(super) fn link_tokens(links: &[DocLinkAttr], krate: &TokenStream) -> Vec<Tok
         .collect()
 }
 
+/// Converts note identifiers into owned IR values for the generated metadata.
 pub(super) fn note_tokens(notes: &[DocNoteAttr], krate: &TokenStream) -> Vec<TokenStream> {
     notes
         .iter()
@@ -187,4 +232,24 @@ pub(super) fn note_tokens(notes: &[DocNoteAttr], krate: &TokenStream) -> Vec<Tok
             }
         })
         .collect()
+}
+
+/// Build the `profiles` IR metadata tokens (decision D15).
+///
+/// Opted-in structs emit `Some(DocProfilesMeta { flag, env_var })`; legacy
+/// structs emit `None` so the IR stays additive and unchanged for them.
+fn build_profiles_meta(args: &DocsArgs<'_>, krate: &TokenStream) -> TokenStream {
+    if !args.struct_attrs.profiles {
+        return quote! { None };
+    }
+    let env_var = syn::LitStr::new(
+        &compute_profile_env_var(args.struct_attrs),
+        proc_macro2::Span::call_site(),
+    );
+    quote! {
+        Some(#krate::docs::DocProfilesMeta {
+            flag: String::from("profile"),
+            env_var: String::from(#env_var),
+        })
+    }
 }

@@ -8,6 +8,8 @@
 use camino::Utf8PathBuf;
 use std::error::Error;
 
+pub(crate) mod powershell_decoding;
+
 const ENV_VARS: &[&str] = &[
     "CARGO_BIN_EXE_cargo-orthohelp",
     "CARGO_BIN_EXE_cargo_orthohelp",

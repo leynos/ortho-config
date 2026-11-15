@@ -10,8 +10,8 @@ name: Coverage (main)
 # read the token, so the changed-line gate there was a silent skip for
 # exactly the contributions least likely to have been measured; and on a
 # branch it put a second tool on the critical path for a gate the
-# ratchet already applies. `tests/workflow_contracts/codescene_coverage_test.py`
-# holds the shape.
+# ratchet already applies. `cv005-contracts` (the Makefile's
+# `test-workflow-contracts` target) holds the shape.
 #
 # This workflow also advances the coverage ratchet baseline: caches
 # saved on main are readable by every pull-request run, so the baseline
@@ -28,31 +28,47 @@ on:
 # request ratchets against, so two runs racing would decide it by which
 # finished last. A cancelled run abandons both its upload and its
 # baseline write; a queued one publishes later, and the later push's
-# baseline still wins because it runs last.
+# baseline still wins because it runs last. The group is keyed on the
+# ref alone, so a dispatch aimed at another branch, if one is ever
+# allowed, gets its own group and cannot displace a pending main run,
+# while main keeps one group and its runs never overlap.
 concurrency:
-  group: coverage-main
+  group: coverage-main-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   coverage-upload:
     runs-on: ubuntu-latest
-    # Two coverage steps run in this job, each under its own 2,700 s cargo
+    # The CodeScene token belongs in this environment, whose deployment
+    # policy admits `main` alone; until it moves here it is read as a
+    # repository secret. The shared CV-005 library's environment.placement
+    # clause holds the environment to this job.
+    environment: codescene
+    # Two coverage steps run in this job, each under its own 3,300 s cargo
     # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
     # contain both. The work outside them reached 284 s on run 31908409573,
     # read across 31 runs of every conclusion, and the contract allows 15
     # minutes against that, which makes the requirement
-    # 5,400 + 900 = 6,300 s = 105 minutes with 15 more asked for above it.
+    # 6,600 + 900 = 7,500 s = 125 minutes with 15 more asked for above it.
     # This job had no ceiling either.
-    timeout-minutes: 120
+    timeout-minutes: 140
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # The explicit exclusion of the development build standard (the parallel
+      # frontend, Cranelift backend and mold in `.cargo/config.toml`) from the coverage builds.
+      # Cargo takes RUSTFLAGS in preference to every `rustflags` table in that
+      # file, and cargo-llvm-cov appends `-Cinstrument-coverage` to this value,
+      # so coverage is measured on the LLVM backend with the platform linker.
+      # Keep RUSTFLAGS non-empty: an assigned empty value selects no flags.
+      # The setup-rust rustflags input is different; empty leaves RUSTFLAGS
+      # unset only when no value is already inherited.
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
       # seconds (default 600); the full-suite coverage run needs longer.
-      RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '3300'
       # sccache. The shared Rust setup action installs it and, from this
       # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
       # installed. Before this pin it installed sccache and exported
@@ -69,20 +85,43 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        # The coverage flags above exclude mold, but the suite that runs under
+        # them is the one the Linux build-test leg runs, so the publisher
+        # installs the same pinned tools before it: unconditionally, in this
+        # job, ahead of both coverage steps. `.cargo/config.toml` selects mold
+        # on Linux, and the nested trybuild builds the coverage suite runs link
+        # with it. `mold-version` is held equal to tools/mold/VERSION by
+        # tests/workflow_contracts/build_tools_provisioning_test.py.
+        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        with:
+          install-mold: 'true'
+          mold-version: '2.41.0'
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: '1.2.21'
 
+      - name: Choose the Linux coverage target root
+        # Trybuild creates nested Cargo projects under its target directory.
+        # Keeping that directory outside this checkout prevents those projects
+        # from discovering .cargo/config.toml and inheriting Cranelift flags
+        # alongside LLVM coverage instrumentation.
+        shell: bash
+        run: |
+          coverage_target="$RUNNER_TEMP/llvm-cov-target"
+          echo "CARGO_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+          echo "CARGO_LLVM_COV_TARGET_DIR=$coverage_target" >> "$GITHUB_ENV"
+
       - name: Test and Measure Coverage (with serde_saphyr)
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job); it writes the authoritative baseline that
         # pull-request runs compare against.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -98,7 +137,7 @@ jobs:
           with-ratchet: 'true'
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -107,16 +146,61 @@ jobs:
 
       - name: Merge coverage results
         shell: bash
-        # lcov-result-merger takes a single glob pattern and an optional
-        # output file; passing two file paths treats the second as the
-        # output and leaves stdout empty. Match both feature-leg reports
-        # with one glob ('lcov-*.info' excludes the lcov.info output) and
-        # write the merged result via stdout.
-        run: bun x lcov-result-merger 'lcov-*.info' > lcov.info
+        # lcov-result-merger takes one glob pattern and an optional output
+        # file; with two file paths, the second is the output. The brace
+        # pattern names exactly the two feature-leg reports. The guard rejects
+        # missing, empty or unexpected `lcov-*.info` reports before the merge.
+        # The merged output must be non-empty and contain an `SF:` record
+        # with a non-whitespace source path.
+        # Pin 6.0.0 (registry-published integrity:
+        # `sha512-RsXi/N4J9b37mu83d3L8WdCGU0jsftN6GlXaJySK6fu+zD48joHC579hpA3K4brPvwWOhbNX5NoT7mghxDi5qw==`).
+        # The digest is a review reference, not a workflow check; this inline
+        # bun x install has no checked-in lockfile for it or its dependencies.
+        # Dependabot does not track this pin, so bump both workflows together
+        # in a manual, reviewed change.
+        run: |
+          set -euo pipefail
+
+          for report in lcov-serde-saphyr.info lcov-no-serde-saphyr.info; do
+            if ! test -s "$report"; then
+              echo "::error::Missing or empty coverage report: $report"
+              exit 1
+            fi
+          done
+
+          shopt -s nullglob
+          reports=(lcov-*.info)
+          for report in "${reports[@]}"; do
+            case "$report" in
+              lcov-serde-saphyr.info|lcov-no-serde-saphyr.info) ;;
+              *)
+                echo "::error::Unexpected coverage report: $report"
+                exit 1
+                ;;
+            esac
+          done
+
+          bun x lcov-result-merger@6.0.0 '{lcov-serde-saphyr.info,lcov-no-serde-saphyr.info}' > lcov.info
+
+          if ! test -s lcov.info; then
+            echo "::error::Merged coverage report is empty: lcov.info"
+            exit 1
+          fi
+
+          if ! grep -Eq '^SF:.*[^[:space:]]' lcov.info; then
+            echo "::error::Merged coverage report contains no source-file records: lcov.info"
+            exit 1
+          fi
+
+      # Whether the token is set, as a plain output. The expression is
+      # evaluated before the shell runs, so this step binds nothing and
+      # the token is in no step's env: the upload action is composite and
+      # passes its step env to its nested upload-artifact and cache steps.
+      - name: Check CodeScene token
+        id: codescene-token
+        run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
 
       - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         # The ref as well as the token. This workflow declares no
         # `workflow_dispatch` today, so `github.ref` is always main and
         # the guard changes nothing now; it is here because a dispatch
@@ -124,15 +208,17 @@ jobs:
         # adding one later would otherwise let a run from a feature
         # branch publish that branch's coverage as the trunk's, with
         # nothing reporting it.
-        if: env.CS_ACCESS_TOKEN != '' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        if: >-
+          steps.codescene-token.outputs.available == 'true'
+          && github.ref == 'refs/heads/main'
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           format: lcov
           # Named rather than left to the action's default, because this
           # is the one workflow allowed to upload and a reader of these
           # lines should not have to look the default up to know that.
           mode: upload
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          access-token: ${{ secrets.CS_ACCESS_TOKEN }}
           # No checksum input. `installer-checksum` is rejected outright
           # when non-empty from this pin, and `archive-checksum` is not a
           # rename of it: it digests the action's CLI manifest archive,

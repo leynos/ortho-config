@@ -18,8 +18,9 @@ impl Harness {
 
     pub(crate) fn run_example(&mut self, args: Vec<String>) -> Result<()> {
         let binary = self.binary();
+        let workdir = self.workdir()?.path().to_path_buf();
         let mut command = Command::new(binary.as_std_path());
-        command.current_dir(self.workdir.path());
+        command.current_dir(workdir);
         command.args(&args);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -43,7 +44,13 @@ impl Harness {
         let status = match wait_with_timeout(&mut child, self.command_timeout()) {
             Ok(status) => status,
             Err(err) => {
-                cleanup_child_and_readers(&mut child, stdout_reader, stderr_reader);
+                if let Err(cleanup_error) =
+                    cleanup_child_and_readers(&mut child, stdout_reader, stderr_reader)
+                {
+                    return Err(err.context(format!(
+                        "hello_world command timed out and process cleanup also failed: {cleanup_error:#}"
+                    )));
+                }
                 return Err(err);
             }
         };
@@ -105,11 +112,17 @@ fn cleanup_child_and_readers(
     child: &mut Child,
     stdout_reader: thread::JoinHandle<Result<Vec<u8>>>,
     stderr_reader: thread::JoinHandle<Result<Vec<u8>>>,
-) {
-    let _ = child.kill();
-    let _ = child.wait();
-    let _ = join_reader(stdout_reader, "hello_world stdout");
-    let _ = join_reader(stderr_reader, "hello_world stderr");
+) -> Result<()> {
+    let kill_result = child.kill().context("kill timed-out hello_world process");
+    let wait_result = child.wait().context("reap timed-out hello_world process");
+    let stdout_result = join_reader(stdout_reader, "hello_world stdout");
+    let stderr_result = join_reader(stderr_reader, "hello_world stderr");
+
+    kill_result?;
+    wait_result?;
+    stdout_result?;
+    stderr_result?;
+    Ok(())
 }
 
 fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus> {
@@ -146,8 +159,13 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use camino::Utf8PathBuf;
+    use std::ffi::{OsStr, OsString};
+    use std::path::Path;
     use std::process::Stdio;
     use tempfile::TempDir;
+
+    /// How long compiling one small helper may take before the test fails.
+    const COMPILE_TIMEOUT: Duration = Duration::from_secs(120);
 
     struct CompiledBinary {
         _dir: TempDir,
@@ -165,13 +183,15 @@ mod tests {
                 .write("main.rs", source)
                 .context("write test binary source")?;
             let bin_path = dir.path().join("bin");
-            let status = Command::new("rustc")
-                .arg("--edition=2021")
-                .arg(&src_path)
-                .arg("-o")
-                .arg(&bin_path)
-                .status()
-                .context("compile test binary")?;
+            let linker = host_rustc_linker();
+            // nested-cargo-allow: timed the compile is bounded by `wait_with_timeout`
+            // below, and this binary runs in the serial `orthohelp_cache` group.
+            let mut compiler = Command::new("rustc")
+                .args(rustc_compile_args(&src_path, &bin_path, linker.as_deref()))
+                .spawn()
+                .context("start the test binary compile")?;
+            let status = wait_with_timeout(&mut compiler, COMPILE_TIMEOUT)
+                .context("compile test binary within its deadline")?;
             if !status.success() {
                 return Err(anyhow!(
                     "rustc must compile helper binary; exited with {status}"
@@ -196,11 +216,73 @@ mod tests {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+            .is_ok_and(|status| status.success())
     }
 
-    fn ensure_rustc_available() -> bool { rustc_available() }
+    fn ensure_rustc_available() -> bool {
+        rustc_available()
+    }
+
+    /// Return the runner-configured linker only for native Windows MSVC tests.
+    fn host_rustc_linker() -> Option<OsString> {
+        #[cfg(all(windows, target_env = "msvc"))]
+        {
+            std::env::var_os("CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER")
+        }
+        #[cfg(not(all(windows, target_env = "msvc")))]
+        {
+            None
+        }
+    }
+
+    /// Build rustc arguments while keeping configured linker paths in one OS argument.
+    fn rustc_compile_args(source: &Path, binary: &Path, linker: Option<&OsStr>) -> Vec<OsString> {
+        let mut args = vec![
+            OsString::from("--edition=2021"),
+            source.as_os_str().to_owned(),
+            OsString::from("-o"),
+            binary.as_os_str().to_owned(),
+        ];
+        if let Some(linker_path) = linker {
+            let mut linker_setting = OsString::from("linker=");
+            linker_setting.push(linker_path);
+            args.extend([OsString::from("-C"), linker_setting]);
+        }
+        args
+    }
+
+    #[test]
+    fn rustc_compile_args_keep_linker_paths_with_spaces_as_one_argument() {
+        let linker = OsStr::new(r"C:\Program Files\Visual Studio\link.exe");
+        let args = rustc_compile_args(Path::new("main.rs"), Path::new("helper.exe"), Some(linker));
+
+        assert_eq!(
+            args,
+            [
+                OsString::from("--edition=2021"),
+                OsString::from("main.rs"),
+                OsString::from("-o"),
+                OsString::from("helper.exe"),
+                OsString::from("-C"),
+                OsString::from(r"linker=C:\Program Files\Visual Studio\link.exe"),
+            ]
+        );
+    }
+
+    #[test]
+    fn rustc_compile_args_leave_the_host_default_linker_unmodified() {
+        let args = rustc_compile_args(Path::new("main.rs"), Path::new("helper"), None);
+
+        assert_eq!(
+            args,
+            [
+                OsString::from("--edition=2021"),
+                OsString::from("main.rs"),
+                OsString::from("-o"),
+                OsString::from("helper"),
+            ]
+        );
+    }
 
     #[test]
     fn run_example_times_out() -> Result<()> {

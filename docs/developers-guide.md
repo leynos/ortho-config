@@ -15,6 +15,111 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+`make lint` also runs `interrogate` over every tracked and non-ignored untracked
+`*.py` and `*.pyi` file. Git path discovery includes hidden directories and
+does not restrict the scan to package and test directories, so Python sources
+used by GitHub workflows and actions, scripts, tests, tools, and benchmarks are
+covered as well.
+
+The inventory is discovered inside the recipe and passed NUL-separated through
+`xargs -0`, not through a `$(shell …)` variable. A `$(shell …)` expansion
+splits its output on whitespace and cannot quote what it finds, so a file named
+`local helper.py` would reach `interrogate` as two arguments; `xargs -0` execs
+the command directly and keeps every path whole.
+
+Coverage is judged by two checks, because `--fail-under 100` alone is not
+enough. `interrogate` rounds the percentage to the precision of the threshold
+before comparing it, so a run missing one docstring in 2000 reports `100.0%`
+and passes. The recipe therefore also reads the `Miss` column of the verbose
+summary, which is an exact count, and fails on any non-zero total. Because
+`xargs` may split a large inventory into batches, every batch's `TOTAL` row is
+summed rather than just the last one: the missing item need not fall in the
+final batch.
+
+Discovery writes to a temporary file instead of straight into a pipe. A
+pipeline reports the status of its last command, so a failing `git ls-files`
+would otherwise let an empty batch pass the gate; the recipe runs under
+`set -e` and aborts on that failure. A genuinely empty inventory still passes
+and does not invoke `interrogate` at all, which keeps it distinct from a run
+that produced no summary.
+
+The shared workspace Clippy policy denies `missing_docs_in_private_items`.
+Document private modules with `//!` and private items with `///`, including
+build support, examples, and shared fixtures. Explain internal contracts such
+as ownership, precedence, error handling, and generated-code assumptions.
+`make lint` applies the policy across workspace targets and features; keep new
+members opted into the workspace lint table. An unavoidable generated-code
+exception must use an item-scoped `#[expect(..., reason = "...")]` that names
+the concrete limitation.
+
+## Kani and Verus verification tools
+
+The repository pins Kani in `tools/kani/VERSION` and Verus in
+`tools/verus/VERSION`, with the Verus archive digest in
+`tools/verus/SHA256SUMS`. The shared `rust-prover-tools` package runs through
+`uv tool run --python 3.14`; the Python 3.13 baseline for repository scripts
+does not change. Kani installs into the active `CARGO_HOME`. Verus installs
+under the ignored `.verus/` directory.
+
+A Verus release only accepts the Z3 build it shipped with, so
+`make install-verus` installs the release bundle and the Make boundary points
+`VERUS_Z3_PATH` at `<repository>/.verus/<version>/verus/z3`. The shared
+package's standalone `z3 install` command pins a solver for other repositories;
+do not use it here, because Verus aborts when the solver version differs from
+its release. `VERUS_Z3_PATH` remains overridable for local experiments.
+
+A Verus release also embeds the exact Rust toolchain it was built with and
+refuses to run under any other. `make install-verus` therefore reads the
+toolchain name from the installed release's `version.json` and installs it with
+`rustup`, so a runner that only has the repository's own pin still works. The
+name is not duplicated in this repository, and `VERUS_TOOLCHAIN_FILE` overrides
+the manifest path for tests.
+
+This lane is validated on Linux x86_64 only. The default Kani installer
+supports that platform, and the Verus installer defaults to the Linux archive,
+so do not expect these commands to produce a working setup elsewhere.
+
+Install and check the pinned tools with `make install-kani`, `make kani-check`,
+and `make install-verus`. Proof execution is opt-in: `make kani` runs the
+registered smoke harnesses, `make kani-full` runs every registered production
+harness, and `make verus VERUS_FLAGS='--proof-file path/to/proof.rs'` runs the
+explicit Verus input. `KANI`, `KANI_FLAGS`, `KANI_INSTALL_FLAGS`,
+`VERUS_FLAGS`, and `VERUS_INSTALL_FLAGS` are available for local overrides.
+
+An empty production inventory fails with a `FORMAL-EMPTY` diagnostic instead of
+reporting a successful proof run. The ordinary `make all`, `make test`, and
+`make lint` targets do not install or run either prover.
+
+The tool's own behaviour (accepting true claims, rejecting false ones, exit
+status preservation) is tested in rust-prover-tools, and the shared
+`install-prover-tools` action in shared-actions installs and checks the pinned
+releases, so this repository keeps no real-tool integration fixtures or CI lane.
+`make install-verus` may download the Rust toolchain the Verus release
+requires, so that step needs network access and changes the local rustup
+installation.
+
+Proof execution never installs anything either. `make verus` passes both
+`--no-install-missing` and `--no-ensure-toolchain` to the shared package, so a
+run with a missing Verus binary or a missing Rust toolchain fails instead of
+downloading one. The two options are independent: passing only the first still
+lets the runner invoke `rustup`, so keep both. `make install-verus` remains the
+single installing step.
+
+### Production proof inventory
+
+Production harnesses and proofs are registered by extending
+`KANI_SMOKE_HARNESSES`, `KANI_ALL_HARNESSES`, or `VERUS_PROOF_FILES` in the
+Makefile. Each entry must name, in the pull request that adds it:
+
+- the owning feature and crate;
+- the production source file under verification;
+- the harness or proof file and the exact symbol it reasons about;
+- the symbolic inputs and their bounds, including the Kani unwind depth;
+- every assumption, precondition, or modelled abstraction;
+- the expected check count and the negative control that must be rejected.
+
+No production entries exist yet.
+
 ## Clap default inference
 
 The `cli_default_as_absent` default path is split between parse-time metadata
@@ -49,23 +154,248 @@ file or environment value overrides the inferred default, while an explicit CLI
 value still wins. Run the standard quality gates before requesting a CodeRabbit
 review.
 
+### Feature gates in generated code
+
+Derive output is compiled in the caller's crate. A `#[cfg(feature = "...")]`
+attribute emitted by the derive therefore tests the *caller's* features, which
+an application rarely declares, rather than `ortho_config`'s. Before 0.10.0 the
+`cli_default_as_absent` `CliValueExtractor` implementation was guarded this
+way, and its `not(feature = "serde_json")` arm emitted a `compile_error!` in
+every application without its own `serde_json` feature.
+
+The derive now emits that implementation with no feature test. This is sound
+only because `ortho_config` does not build without its `serde_json` feature:
+although the feature is declared optional, the discovery, file-loading,
+profile, and merge modules use `serde_json` unconditionally. A gate whose
+disabled arm can never be compiled would be untestable dead code.
+
+Do not emit `cfg` attributes for `ortho_config` features from the derive. If
+generated code must depend on a feature that `ortho_config` can genuinely be
+built without, select the code inside `ortho_config` instead, for example with
+a hidden `#[macro_export]` macro defined once per feature state, and add a
+compile-fail fixture that builds `ortho_config` without the feature. The same
+applies to `cli_default_as_absent` if `serde_json` is ever made genuinely
+optional. The decision is recorded in the
+[design decision log](design.md#9-decision-log).
+
+Two tests cover the current boundary:
+
+- the generator unit test in
+  `ortho_config_macros/src/derive/generate/ortho_impl.rs` requires the
+  implementation and rejects any `cfg` or `compile_error!` in the expansion; and
+- the documented `cli_default_as_absent` examples, such as
+  `migration-cli-default-after`, compile and run in the generated documentation
+  workspace. That crate declares no features and takes `ortho_config`'s default
+  features, which `workspace_tests.rs` pins, so it stands for a downstream
+  application.
+
+### Scoped use of `googletest` and `pretty_assertions`
+
+The `googletest` and `pretty_assertions` dev dependencies (decision D9 of
+[execplan 9-1-1](execplans/9-1-1-profile-metadata.md)) are scoped to the
+profile test modules and the profile-layer tests only. New tests elsewhere
+should keep using the existing `assert_eq!`/`ensure!` conventions; do not
+migrate existing tests to these crates. When a new assertion needs richer
+matcher output, prefer `googletest::assert_that!` with matchers for shape
+inspection and `pretty_assertions::assert_eq!` for scalar equality, and keep
+the use local to the module that needs it.
+
 ### Nextest test-group serialization
 
-`.config/nextest.toml` assigns two test binaries to single-threaded groups:
+`.config/nextest.toml` places eleven documentation and cache users in the
+single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
+`nested_subcommand_end_to_end`, `documented_command`,
+`documentation_examples_rust_tests`, `agent_context_contract`,
+`policy_report_contract`, `golden_tests`, `identifier_artefact_e2e`,
+`cli_dispatch` and `agent_context_renderer_end_to_end`. These binaries can
+clear the shared BDD cache or build documented examples against Cargo's shared
+target. A named process-local `Mutex` serializes scenarios within one test
+process, including direct `cargo test`. It cannot coordinate independent test
+processes, so filesystem leases also protect cache ownership across them.
 
-- **`rstest_bdd`** — each BDD scenario runs in its own OS process under nextest,
-  so a process-local `Mutex` cannot protect the shared `target/orthohelp` cache
-  directory. Setting `max-threads = 1` for this binary ensures scenarios run
-  sequentially and do not race on cache reads or `remove_dir_all` calls.
-- **`powershell_windows`** — both test cases invoke
-  `cargo-orthohelp --format ps` for the same package, which writes to the same
-  ephemeral bridge directory (`target/orthohelp/<hash>/`). On Windows,
-  `cargo build` holds a read lock on `Cargo.toml`; a concurrent
-  truncate-and-rewrite from the second invocation violates that lock.
-  Serializing the binary prevents the race.
+The membership is not a hand-maintained list, and
+`tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from
+becoming one. That contract reads which test binaries drive a child `cargo` out
+of the Rust sources, compares that set with the entries that grant a raised
+allowance in either direction, and requires every binary a test-group filter
+serializes to be a member of the set, among the binaries it audits. That
+universe is `ortho_config` and `cargo-orthohelp`; a group selecting only
+binaries outside it belongs to a different contract, so nothing here is claimed
+about those. `cli_dispatch` and `agent_context_renderer_end_to_end` were absent
+from the list here and from every raised allowance in the configuration: both
+spawned a child `cargo` on the 600 s base tier, and no other assertion could
+see the omission, because every other reading begins from the same list that
+omitted them.
 
-Do not remove the `max-threads = 1` constraint from either group without first
-verifying that the underlying shared-state access has been eliminated.
+Membership of the raised allowances and membership of the group are separate
+questions, and the contract keeps them apart: it requires every *group* member
+it audits to be a class member, because the raised allowance is written for the
+class and a serialized non-member would fall through to the base tier, while
+the class itself may be raised without being serialized. A binary can drive a
+child `cargo` without touching the shared caches the group protects, so the
+class can be the wider of the two. It is not wider today: the two sets
+coincide, and the contract does not require that they keep doing so.
+
+`cli_dispatch` is a member of both. Its `.config/nextest.toml` entry places it
+in `orthohelp_cache` and gives it the class's raised allowance, so neither
+follows from the other. Its child cargo was measured at 0.04 s on a warm tree,
+which is why the allowance is sized for the nested build the class can reach
+rather than for the cheapest path this binary takes.
+`documentation_budget_test.py` separately pins a named subset to an
+`orthohelp_cache` filter, so narrowing this group past those names fails that
+assertion rather than this one.
+
+The `powershell_windows` cases invoke `cargo-orthohelp --format ps` for the
+same package and ephemeral bridge directory (`target/orthohelp/<hash>/`). On
+Windows, `cargo build` holds a read lock on `Cargo.toml`; a concurrent
+truncate-and-rewrite from another invocation violates that lock. Keep the whole
+group serialized unless the shared-state access has been eliminated.
+
+The `boundary` binary has a group of its own, `boundary_packaging`. Its
+packaged contracts materialize the release once per *process*, and nextest runs
+each test in its own process, so without the group six of them run
+`cargo package` and unpack `target/localization-boundary/packaging-target` side
+by side. Cargo's package-cache lock does not cover that: it does not hold
+readers out while a package root is removed and unpacked, so one process can
+replace a root another is reading.
+
+`cargo test` and `make boundary` start one process for the binary but run its
+tests as threads, so the group cannot help there. The fixture's
+`run_with_deadline` therefore holds a process-wide mutex across each nested
+Cargo invocation. It is acquired before the child is spawned, so time a sibling
+spends holding the shared target directory's build lock is never charged to the
+deadline of the call that is counting. The wait for the mutex is itself bounded
+by the contract's shared allowance, and the child's bound is computed only
+after the wait ends, so a sibling that held the mutex for a long time shortens
+the child's bound instead of being ignored. A call whose allowance is spent
+while it waits fails with a diagnostic naming the wait, rather than blocking
+until the sibling finishes. Without it, the consumer contracts and the four
+negative controls queue on the one target directory they share, and a healthy
+child waiting for its turn reads as a hang.
+
+The same override carries the per-test allowance, 960 s (120 s x 8). A
+per-invocation deadline cannot bound a contract that makes several calls: the
+packaged consumer contract packages the set and then builds and resolves each
+of the three shapes, so eight calls at a 440 s cap apiece could spend 3,520 s
+of a 960 s allowance, and nextest would stop the test before any later call
+reported its own deadline. Every contract therefore shares one 900 s
+`SCENARIO_ALLOWANCE` (`fixture_cargo/budget.rs`), passed explicitly from the
+test to every fixture it creates. Each call is bounded by the smaller of its
+own cap and what the allowance has left; a call that starts with nothing left
+fails naming itself and the allowance, and a call clamped by the allowance says
+so in its deadline error. The 60 s outside the budget cover rendering fixture
+roots, reading manifests, and reporting.
+
+One packaged test runs both `cargo package` invocations, each bounded at 440 s
+by `PACKAGE_DEADLINE`. A consumer contract resolves and then builds, each call
+bounded at 440 s by `CARGO_DEADLINE`. A bound that did not fit could never
+fire: nextest would stop the test first, and the error naming the invocation
+that hung would never be printed. `boundary_packaging_test.py` reads the group,
+the manifest, the override's allowance, both caps, the shared allowance and the
+consumer shape count, so neither half can drift from the other. It checks that
+the shared allowance expires inside the nextest allowance, that each cap fits
+inside the shared allowance, and that the complete call sequence is longer than
+the shared allowance, which is what makes the shared budget load-bearing rather
+than a restatement of the caps.
+
+The package-set cache is process-local to the packaged boundary contracts. It
+shares successful roots and retains failures from unbounded packaging attempts,
+but does not cache a failure caused by a caller's sequence deadline. A later
+caller with time remaining can retry.
+
+The earlier bounds were 240 s for packaging and 300 s for a nested call, sized
+against the 600 s base allowance. They were reached on a shared host while the
+children queued behind 340 compile-admission requests, and the timeout error
+discarded the child's output, including the lines that named the queue, so the
+failure could not be attributed. `run_with_deadline` now retains a bounded tail
+of each stream and includes it in the deadline error; the tail is what
+distinguishes compile-admission waiting, package-cache waiting, and a hang from
+one another.
+
+A deadline kill terminates the child's whole process tree, not only the Cargo
+process. On Unix the child leads its own process group and the group is killed;
+on Windows it runs in its own Job Object, whose termination covers every
+descendant. Leaving descendants alive would keep the package-cache lock, the
+compile-admission slot, and the output pipes in use after the test has already
+reported a timeout. Reader collection is bounded in both outcomes as well: when
+a descendant outlives a parent that exited normally it still holds the
+inherited pipe, so a reader gets a two-second grace and is then detached with
+its retained tail reported instead of being joined without a bound. Regressions
+drive real descendants from the test binary itself. Each test spawns its probe
+as an owned process tree, waits for the probe's own readiness marker, and only
+then applies the deadline, so a saturated host's start-up delay is never
+charged to the runner; each also asserts that a surviving descendant still held
+its lock when the runner returned, rather than racing a fixed sleep. One
+descendant holds a lock across a timeout, so the lock becoming acquirable
+proves the kill reached it; one holds the pipe after its parent exits, so the
+bounded collection path is exercised rather than assumed; and a Unix-only one
+places its descendant in a new process group so the group kill cannot reach it,
+proving that a deadline is still reported while a survivor holds the pipe, and
+that the runner neither waits for that survivor nor hides it.
+
+On Windows only, one further override gives each of four binaries every nextest
+slot (`threads-required = "num-test-threads"`), so each runs alone:
+`ortho_config::crate_path_trybuild`, `ortho_config::declarative_merge_trybuild`,
+`ortho_config::compile_fail` and `cargo-orthohelp::compile_time`. Each drives
+a cold child `cargo` build through trybuild in the first coverage pass. Run
+side by side on Windows, those builds exhausted the 600 s per-test allowance:
+every Windows failure in runs 36127709137, 36127710357, 36127710423,
+36127710779 and 36127709460 was `compile_time`'s `must_use_compile_tests` at
+600 s. That entry keeps its 600 s ceiling, and Linux keeps its parallel
+execution. `windows_trybuild_isolation_test.py` holds the exact binary set, the
+platform, the reservation, that entry's allowance, and the absence of any other
+slot reservation.
+
+Exclusivity and the raised allowance are two fixes for one failure, and the
+file carries both. nextest resolves each override field from the **first**
+matching entry that sets it, so the Windows entry above, being first, decides
+the four binaries it names; the wider entry below is second and supplies the
+rest of the class. The four therefore keep both 600 s *and* run alone, while
+`boolean_cli_trybuild`, `env_source_trybuild`, `generated_lint_trybuild`,
+`localization_trybuild`, `localized_parse_trybuild` and `subcommand_trybuild`
+take the 960 s entry, and Linux takes 960 s for all ten. Merging the two would
+have to choose between running alone and the larger allowance; leaving both
+keeps each measured remedy at the binaries it was measured on.
+`trybuild_tier_test.py` reads the widening and
+`windows_trybuild_isolation_test.py` the reservation, so neither remedy can be
+removed by editing the other's entry.
+
+The reservation costs Windows wall time. On run 36195916343 the job took 53.5
+min, against a 38 min median over the preceding pull-request runs, and
+`must_use_compile_tests` took 158.7 s. A single-threaded test group for the
+same four binaries was measured as an alternative on run 36264533224. It saved
+no wall time (52.9 min), and `must_use_compile_tests`, still competing with the
+rest of the suite, took 523.5 s of its 600 s allowance, so the reservation was
+kept.
+
+#### Packaging must resolve the way a clean runner resolves
+
+The packaged contracts are the only place in this repository that exercises a
+stranger's dependency graph, and the failure they are most likely to hide is
+resolution that only works on a developer's machine. Two rules keep them honest.
+
+**Patch every internal edge the invocation resolves, not just the ones it
+packages.** `cargo package` builds every dependency table, dev-dependencies
+included, so a path member that is only a dev-dependency still has to be
+patched, or its rewritten version requirement is looked up in an index that may
+never have seen it. Patches are keyed by *package* name, which is not always
+the directory name: `ortho_config_test_helpers` lives in `test_helpers`.
+
+**Do not remove `--verify` to get past a packaging failure.** It is the step
+that unpacks each `.crate` into the `package/<name>-<version>/` root every
+consumer and manifest contract reads. `--no-verify` writes the archives and
+unpacks nothing, so the failure moves from packaging to path resolution. The
+remedy for a verify-time failure is to remove the cause - a dev-dependency
+cycle is the one that has actually bitten here, because verifying the macros
+tarball pulled the patched library back in through its normal edge and
+duplicated the package under verification.
+
+A packaging failure on a *clean* registry is not reproducible by re-running the
+command locally: the developer's `CARGO_HOME` already holds the index entries
+the runner lacks. Reproduce it with an isolated `CARGO_HOME` that has the
+internal crates' entries removed, and check the output for
+`patch … was not used in the crate graph` - that warning means the patch under
+test was never consulted, and the probe proved nothing.
 
 ## Subcommand dispatch changes
 
@@ -75,7 +405,7 @@ forwards the injected subcommand token is changed, update all of the following
 in the same change:
 
 - `docs/design.md` §4.17 and
-  [ADR-004](adr-004-cargo-external-subcommand-entry-point.md).
+  [ADR-0004](adrs/adr-0004-cargo-external-subcommand-entry-point.md).
 - `docs/roadmap.md` if the work remains tracked there.
 - Any user-facing guide or README that shows `cargo <name>` or
   `cargo-<name> <name>` invocation.
@@ -83,11 +413,55 @@ in the same change:
   `cargo-<name> <name> [OPTIONS]` once the repository adds or revises those
   tests.
 
+## Derive expansion ownership
+
+`ortho_config_macros/src/components.rs` owns the intermediate expansion bundle
+and loader-token assembly shared by generated implementation paths. Proc-macro
+entry points and CLI field extraction metadata remain in `lib.rs`. Output
+generators consume the assembled bundle rather than independently rebuilding
+discovery settings or CLI key mappings.
+
+Derive-side file-discovery token assembly belongs to
+`ortho_config_macros/src/derive/load_impl/discovery.rs`. Legacy and configured
+builder setup, including lookup-only source wiring, stay behind the parent
+module's `build_file_discovery` entry point. The generated block returns
+ordered layers and a separate discovery-failure signal. Policy resolution
+remains in `derive/policy_impl.rs`, and environment merging remains in
+`build_env_section`.
+
+Field documentation resolution and duplicate-source checks remain in
+`derive/generate/docs/fields/mod.rs`. Its private `emission` module accepts
+resolved components and emits the public IR initializer without discovering
+fields or applying policy. Only the parent field builder uses this boundary;
+other generators continue through `build_fields_metadata`.
+
+MAML parameter prose belongs to
+`cargo-orthohelp/src/powershell/maml/paragraphs.rs`. Only the MAML renderer
+consumes its ordered paragraphs; XML structure and escaping remain in
+`render.rs`. Other output formats retain their own formatting contracts.
+
+## CLI long-flag validation ownership
+
+`LongFlagCandidate` in
+`ortho_config_macros/src/derive/build/cli/cli_flags/validation.rs` owns one
+borrowed field identifier and its raw `cli_long` spelling during validation.
+Only `validate_cli_long` constructs it; other derive-builder code uses the
+`cli` module facade. The context is limited to one spelling check and is not a
+reusable representation of a validated flag.
+
+The raw spelling carries no validity promise. Validation checks empty input,
+then a leading dash or underscore, then the ASCII alphanumeric-or-dash grammar,
+and finally clap's reserved `help` and `version` names. This order preserves
+the most specific syntax diagnostic and its source-field span. Duplicate-name
+checks remain in field resolution, where declaration-order reservations are
+available. Keep this context limited to syntax and reserved-name validation;
+short flags and duplicate tracking compose at their existing owners.
+
 ## Schema ownership
 
 Documentation IR, agent context, and policy reports have separate owners. See
-[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md) for
-the accepted decision.
+[ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
+for the accepted decision.
 
 Add localized human-documentation fields to `ortho_config::docs` only when they
 are required by generated documentation, localization, roff, PowerShell help,
@@ -95,6 +469,13 @@ or other human-facing reference material. Those fields are versioned by
 `ORTHO_DOCS_IR_VERSION` and exposed through `OrthoConfigDocs`.
 `OrthoConfigSubcommandDocs` is part of the same human-documentation IR contract
 and uses the same versioning boundary for recursive subcommand metadata.
+
+Adding, removing, or changing a field in `ortho_config::docs` requires a
+matching change in `cargo-orthohelp::schema`, which mirrors the IR for the
+standalone generator. The two definitions must stay byte-for-byte aligned;
+`ORTHO_DOCS_IR_VERSION` is bumped in both, and the version-alignment test fails
+if the pair drifts. Add fields with `#[serde(default)]` so documents written
+before the field existed still read correctly, as ADR-0003 requires.
 
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
@@ -112,13 +493,235 @@ Skill manifest descriptors are part of this agent-context contract: keep
 `ortho_config::agent_context`, and keep downstream manifest prose
 application-owned.
 
-`localizer::identifier::normalize_segment` is the single source of truth for
-strict runtime and derive-time Fluent identifier segments. Reuse it from
-command localization, derive output, and future lookup-id generation instead of
-duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
-`localizer::fluent` separate: it exists only to pre-normalize hand-authored
-resource ids such as dotted catalogue keys before Fluent parses them, and must
-not be used to validate generated command ids.
+Profile support (roadmap 9.1.1) adds two agent-context fields with an
+omitted-when-absent rule: `ProfilesDeclaration.selection` and
+`ProfilesDeclaration.list_command` are `Option` fields that serialize only when
+present, so the unsupported `{ "supported": false }` case stays byte-identical
+to the pre-profile schema. New optional fields must follow that rule and
+provide a `ProfilesDeclaration::unsupported()`/`supported()` constructor, so
+downstream construction of the declaration itself survives later field
+additions. Retyping `AgentContext.profiles` is nonetheless a break for callers
+that build `AgentContext` with a struct literal: they must either update the
+literal's `profiles` value or construct it with one of those two constructors.
+The constructors keep future *field* additions non-breaking, not this field's
+retype. The derive emits the matching IR `DocMetadata.profiles` only for
+opted-in structs; the `cargo-orthohelp` bridge maps it into the declaration.
+Adding `DocMetadata.profiles` is a second break of the same kind, and it
+reaches two copies of the type — `ortho_config::docs::DocMetadata` and the
+`cargo_orthohelp::schema::DocMetadata` mirror. The field is
+`#[serde(default)]`, so the wire contract stays additive and older JSON still
+deserializes, but a defaulted field is still required in a struct literal:
+every external literal, including the linked Weaver and Netsuke consumers, must
+name `profiles: None`. The runtime "which profile is active" concern is
+`SelectedProfile` and `ProfileLoadOutcome`, deliberately separate from the
+static agent-context contract.
+
+### Renderer metadata ownership
+
+Renderer metadata (ADR-0016) is declared through the sibling `renderer(...)`
+attribute and is owned in three places that must move together:
+
+- `ortho_config::docs::ir::renderer` holds the human-documentation IR types;
+- `cargo_orthohelp::schema::renderer` holds the mirror the standalone generator
+  decodes, per
+  [ADR-0003](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md);
+  and
+- `ortho_config::agent_context::renderer` and
+  `cargo_orthohelp::agent_context::renderer` hold the wire contract, linked by
+  `agent_context::walk`, which maps one IR into the other.
+
+The macro side is a matching pair, `derive/parse/renderer_attrs.rs` for the
+nested group and `derive/parse/renderer_values.rs` for the token vocabularies,
+emitted by `derive/generate/docs/renderer.rs`. Keep the accepted-token lists in
+`renderer_values.rs` as the source for authoring; the IR and wire enums must
+accept exactly those spellings. Do not extend `behaviour_attrs`: the two
+surfaces parse independent nested groups, so a change to one cannot loosen the
+other's validation.
+
+Decoding differs by side, deliberately. IR decoding is strict, because it reads
+a document this workspace just produced, so an unknown token is a bug worth
+surfacing. Agent-context decoding is tolerant, because a consumer may meet a
+document written by a newer generator, so unrecognized tokens normalize to
+`unknown` rather than failing. Adding a token therefore means updating the
+strict lists *and* the tolerant fallbacks; changing one without the other
+either rejects valid input or silently accepts a typo.
+
+Support defaults are per renderer and are applied by `RendererContract`, not by
+`SupportDeclaration::default()`, whose `false` is right elsewhere but wrong for
+human output. Human defaults to supported and machine to unsupported, which is
+what an undeclared command reported before the field existed. Change that pair
+together: changing either alone changes what every unannotated command claims.
+
+Localization copies the renderer block verbatim. Renderer data is presentation
+policy containing no translatable text, so `ir::localize_doc` clones it rather
+than resolving it. Dropping it there is a silent failure — the agent-context
+path would still report the declaration while every published per-locale
+artefact lost it — which is why the behavioural suite asserts both artefact
+families and compares them across locales.
+
+Fixture discipline: `tests/fixtures/orthohelp_fixture` carries one command that
+declares both renderers (`NestedGreetCommand`) and one that declares none
+(`NestedVersionCommand`). Keep both. A fixture whose commands all declare the
+same block cannot distinguish "declared" from "defaulted", and the scenarios
+assert opposite support claims across the pair for exactly that reason.
+
+Test entry points:
+
+- `cargo test -p cargo-orthohelp --test rstest_bdd -- orthohelp_agent_context`
+  for the behavioural scenarios, including the locale-stability pair;
+- `cargo test -p cargo-orthohelp --test agent_context_renderer_end_to_end` for
+  subprocess runs of the shipped binary with closed stdin and a bounded
+  deadline;
+- `cargo test -p ortho_config --test docs_ir_renderer` and
+  `cargo test -p cargo-orthohelp --lib renderer` for the IR and bridge units;
+  and
+- `cargo test -p cargo-orthohelp --test golden_tests` for the agent-context
+  snapshots.
+
+`ortho_l10n::try_normalize_segment` is the single source of truth for strict
+runtime and derive-time Fluent identifier segments. Reuse it, or the
+complete-identifier helpers re-exported beside it, from command localization,
+derive output, and future lookup-id generation instead of duplicating ASCII
+normalization rules. Keep the tolerant catalogue load path in
+`ortho_l10n/src/fluent.rs` separate: it exists only to pre-normalize
+hand-authored resource ids such as dotted catalogue keys before Fluent parses
+them, and must not be used to validate generated command ids.
+
+`#[derive(OrthoConfig)]` emits `OrthoConfigLocalization` for the deriving
+configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
+`#[ortho_config(localization_base = "…")]` (or the normalized application-name
+default), while the command-level constants and `ARG_IDS` use the normalized,
+hyphen-joined Fluent ids. Each `ArgLocalizationIds` entry records the Clap
+argument name and its `help`, `long_help`, and `value_name` ids. Argument ids
+are validated for normalized collisions during expansion; flattened,
+subcommand, and `skip_cli` fields are excluded from `ARG_IDS`. Set
+`ORTHO_CONFIG_EMIT_IDENTIFIERS=1` for an opt-in standalone inventory; the
+derive writes it through per-expansion fragments and merges them
+deterministically. Mounted command-tree identifiers remain owned by the
+path-aware documentation IR.
+
+The rendered layout depends on the inventory size. Up to 1 MiB the whole
+inventory is written to `${OUT_DIR}/ortho-config/cli-identifiers.json`. Above
+that cap — measured on the serialized document, and never splitting a batch
+below one entry, so a single oversized entry stays in one part — the output
+becomes `cli-identifiers.index.json` plus the numbered
+`cli-identifiers.<n>.json` parts it lists. Read the index rather than assuming
+the single-file path when the cap may be exceeded. A render prunes every file
+of the *other* layout before publishing, so a build that switches
+representations never leaves a stale file where a reader would find it.
+
+`OUT_DIR` is package-scoped, so every writer holds an exclusive
+`cli-identifiers.lock` across the complete fragment-write, merge, prune, and
+publication sequence; the unit tests in `artefact/artefact_lock_tests.rs` spawn
+two real processes to prove the exclusion and the release, rather than relying
+on an in-process mutex.
+
+That lock serializes *writers among themselves*. It is cooperative, so it does
+not exclude a process that never takes it: a reader — a build script listing
+the directory, or any other tool — can observe an intermediate state between
+the prune and the writes that follow it, and can read the fragments before a
+render. Atomic per-file writes keep each file whole, but the directory as a
+whole is not replaced atomically and the layout may change between renders. A
+reader that must be consistent has to take the same lock or retry.
+
+A second opt-in, `ORTHO_CONFIG_ARTEFACT_REPORT=1`, turns on the observation
+channel that explains the same sequence when a build is slow or fails. It
+writes three files below the artefact root, none of which is part of the
+inventory and none of which the prune matches.
+`cli-identifiers.lock-wait.<pid>.json` is written once a publication has been
+blocked on the lock for five seconds, and refreshed every second while the wait
+continues, so a build that appears hung can be diagnosed as waiting rather than
+deadlocked. `cli-identifiers.build-report.<pid>.json` records the process, the
+expansion, the stage the publication reached — `lock_wait`, `fragment_write`,
+`merge`, `render`, `prune`, or `publish` — with its lock-wait and total
+durations in whole milliseconds, a bounded `completed`/`failed` outcome, a
+`written_at_ms` timestamp, and, on failure, a bounded `io`/`serialization`
+error category. `cli-identifiers.observation-errors.<pid>.jsonl` is the
+channel's own failure record: it appends one JSON Lines record per observation
+that could not be written, carrying the operation, the same bounded category,
+and the underlying error's text.
+
+All three are per-process because `OUT_DIR` is package-scoped and several
+compiler processes may publish into one directory; the error record is what
+makes the best-effort contract safe, since a build with no report at all is
+otherwise indistinguishable from one whose report was dropped. Every write is
+best effort: the channel explains builds and must not be able to fail one, so
+an unwritable directory leaves the publication's own result untouched — the
+report write on the acquisition-failure path is attempted even though no lock
+was taken, precisely so that the build which could not start is still explained.
+
+**A marker's presence is not evidence of contention now.** The wait marker is a
+snapshot, not a lock: a process killed mid-wait never retires its marker,
+failed cleanup leaves one behind and records that in the error log, and process
+ids are reused, so a live pid does not prove the writing process is still
+running. Read `written_at_ms` against the build's own timeline; a marker older
+than the build under investigation is a leftover, not a clue. This is why the
+filename carries the pid *and* the body carries a timestamp — neither alone
+establishes freshness.
+
+**A report describes the last publication its process completed.** A report is
+named for the process, and each publication replaces what that process reported
+before, so a crate with several derives leaves the report of its last one
+rather than a file per derive per build. A replacement that fails leaves the
+*earlier* report in place — the write is atomic, so a failed rename never
+truncates the destination — which is the other reason `written_at_ms` and the
+recorded expansion are load-bearing rather than decorative.
+
+`artefact/artefact_report.rs` owns the channel's vocabulary, serialization, and
+the build report; `artefact/artefact_wait_marker.rs` owns the announcement and
+its retirement; `artefact/artefact_channel_log.rs` owns the failure record;
+`artefact/artefact_observation.rs` owns the stage and duration state one
+publication accumulates; `artefact/publish.rs` is its only producer. A build
+that did not opt in takes the plain blocking `lock`, so the common case pays no
+polling cost for a channel it never enabled. Because a blocked publisher does
+not hold the lock, the wait marker is written through `write_private_atomic`,
+whose temporary derives from the already-unique destination; the shared
+`atomic_write` temporary would let two blocked publishers collide.
+
+`artefact/publish.rs` owns that whole write path. It takes the lock, writes the
+fragment, merges, renders, prunes, and publishes — one function,
+`publish::publish`, called by `emit` and by the lock tests alike, so the
+exclusivity the tests observe is the exclusivity the compiler runs. The guard
+is threaded by reference into each step rather than merely bound in `publish`:
+a local that is never read can be dropped early by a later edit while every
+test still passes, because a publisher that acquires and immediately releases
+still *blocks* on acquisition and is therefore indistinguishable to an outside
+observer. Passing `&LockGuard` makes releasing it early a borrow-check error
+instead of a silent regression. `emit` is correspondingly the **only** reader
+of the ambient environment (`OUT_DIR`, `CARGO_CRATE_NAME`, and the opt-in
+flag); everything below it takes a `publish::Publication` of explicit values.
+That boundary is what lets a test publish into a temporary root without
+mutating the process environment, which matters because build scripts and tests
+share one `OUT_DIR` per package and an unset variable would otherwise be
+indistinguishable from a stale one.
+
+`artefact/artefact_probe.rs` owns the stale-fragment policy:
+`source_still_exists` is its only entry point, `probe_metadata` is the only
+`std::fs::metadata` call site for it, and `classify_metadata` is the only copy
+of the rule that `NotFound` alone means stale while every other metadata error
+aborts the merge. `merge_fragments` is the single production caller; the
+identity artefact's merge and the merge-level regression tests are its only
+call sites. For OS-independent policy tests, `with_metadata_outcome` is a
+test-only, thread-local injection that matches one exact probe path and is
+compiled out of non-test builds. It exists because no filesystem layout
+provokes the same metadata error portably: a regular file in a parent position
+yields `NotADirectory` on Unix and `NotFound` on Windows. Which `ErrorKind` a
+platform reports for a given layout is an implementation mapping, not a
+portability guarantee, so a policy test built on a real layout would assert a
+different kind per platform. The policy tests in
+`artefact/artefact_probe_tests.rs` inject the outcome and drive the shared
+classification, while the merge-level tests in
+`artefact/artefact_fragment_tests.rs` inject through the same boundary and
+assert the diagnostic retains the path and the injected error marker. It is
+**not** a general-purpose filesystem abstraction and must not grow readers, an
+enumeration capability, or call sites beyond this probe.
+
+Normalized argument-ID collisions within one derived struct fail at compile
+time. Hand-built and dynamic command trees retain the runtime panic contract.
+Cargo does not include proc-macro environment reads in its rebuild fingerprint;
+after changing the opt-in variable or source, refresh the artefact with
+`cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`.
+Do not rely on a warm build to observe changed artefact output.
 
 Use `LocalizedParse` for default-base localized clap parsing and
 `parse_localized_command` when callers need to pass a command that has already
@@ -135,12 +738,97 @@ command identifiers are still a documented runtime panic contract owned by
 runtime panic tests until derive-emitted identifiers move validation to compile
 time.
 
+`ortho_l10n` owns the shared fallible identifier normalizer. The runtime panic
+and macro spanned diagnostics wrap that implementation; argument fragments use
+the shared separator without imposing the root rule. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md). Generated docs IR
+receives mounted paths through path-aware trait methods; handwritten trait
+implementations use their provided fallback. The optional identifier artefact
+uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
+schema has standalone scope until a downstream consumer joins it to docs IR.
+
+## CLI localization surface
+
+Phase 11 promotes the localization helpers from the example into the public
+crate surface. `LocalizeCmd`, `LocalizedParse`, and `parse_localized_command`
+are implemented; `#[derive(OrthoConfig)]` also emits the public
+`OrthoConfigLocalization` contract and supports opt-in identifier artefacts.
+Their current contracts are documented above. `localized_default` is recognized
+by the derive but rejected with a deferral diagnostic, so the derive-level
+default-value feature remains future work.
+
+That deferral is about the derive attribute, not about catalogues. `ortho_l10n`
+now owns the runtime and its embedded English and Japanese resources;
+`FluentLocalizer::embedded` loads them, and `FluentLocalizer::builder` layers a
+consumer's catalogue over them. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md) for why the runtime
+is a separate crate and why `ortho_config` re-exports its actual types instead
+of adding bridge traits.
+
+The remaining proposals belong at clear ownership boundaries: locale lifecycle,
+Clap coverage, and translation interfaces in the core localizer; identifier
+generation in `ortho_config_macros`; and aggregate translation reports in
+`cargo-orthohelp`. These proposals are not available crate APIs yet:
+
+- `BootLocalizer` / `BootHandle` define the boot-to-final typestate lifecycle.
+- `FluentEmbedLocalizer` adapts an application-owned loader. No
+  `i18n-embed-bridge` feature currently exists; the design proposes a dedicated
+  optional feature for this adapter and dependency. `cargo-orthohelp`
+  translation tooling is an integration point: the bridge adapts an
+  application-owned loader and neither creates nor owns it.
+- `ClapErrorCoverage` and the exhaustive error-kind count gate remain proposed.
+  The proposed `ortho_config/build.rs` emits
+  `ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` for the total variant count of the
+  supported resolved `clap_builder` identity and verifies the compiled `clap`
+  facade re-export. Only then is `const_assert_eq!` against the matrix length a
+  mechanical gate. `ClapErrorCoverage` reports translated identifiers the
+  supplied localizer cannot resolve. See
+  [design §6.1.1](cli-localization-design.md#611-proposed-coverage-gate) and
+  §6.2 for the contract.
+- `MissingTranslationReporter` / `MissingTranslationEvent` and
+  `cargo-orthohelp` JSON translation coverage reports remain roadmap work; the
+  proposed reporter aggregates events under
+  `target/orthohelp/missing-translations/<locale>.json`.
+
+The proposed lifecycle treats each parse as a locale snapshot: parsing uses
+`BootHandle<Boot>`, and finalization consumes it to produce `BootHandle<Final>`
+after configuration is merged. Finalization does not swap the locale of a
+running service. A long-lived service that supports locale changes must own a
+swap primitive (the design's baseline is `arc_swap::ArcSwap<dyn Localizer>`)
+and load the current snapshot at each request boundary. See
+[the design](cli-localization-design.md), §§5.2–5.3 and §12. Translator
+diagnostics and aggregation are specified in
+[design §9](cli-localization-design.md#9-translator-diagnostics) and roadmap
+§11.
+
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for compatibility and keep rule
 identifiers, finding codes, severities, and source locations machine-stable.
 Extract the report model into `ortho_config` only after a new ADR approves
 shared ownership.
+
+The `--check-agent-native` lint runs without the bridge build and writes
+exactly one JSON `PolicyReport` document atomically to `policy-report.json` in
+the output directory, plus a one-line human-readable summary to stderr. It
+evaluates the package's policy configuration; the bridge-driven behaviour rules
+below are exported as library API because they need a compiled agent context
+that a policy-only run deliberately does not build.
+
+The behaviour rule IDs live under `agent-native.behaviour.*` and their machine
+codes are stable across runs:
+
+- `agent-native.behaviour.destructive-bypass` / `destructive_bypass_missing`;
+- `agent-native.behaviour.prompt-bypass` / `prompt_bypass_missing`;
+- `agent-native.behaviour.bypass-unknown` / `bypass_flag_unknown`;
+- `agent-native.behaviour.undeclared` / `interaction_unknown` and
+  `mutation_unknown`.
+
+`cargo_orthohelp::policy::rules::behaviour::check_behaviour(context, mode)` is
+the entry point, and it is total: `PolicyMode::Off` returns an empty report
+without evaluating any rule. Each `PolicyResult.location` is `null` because
+agent context carries no source spans; keep the `message` self-contained
+(command path plus the exact annotation to add).
 
 Use `rstest` for schema unit tests. Add `rstest-bdd` behavioural scenarios and
 end-to-end tests when a change affects observable CLI behaviour, generated
@@ -163,7 +851,7 @@ and `all` formats, their accepted spellings, generated paths, and process
 success/failure contract are externally visible behaviours. Add policy and JSON
 status surfaces beside those formats rather than changing them.
 
-Keep schema ownership aligned with ADR-003. Localized human-documentation data
+Keep schema ownership aligned with ADR-0003. Localized human-documentation data
 belongs in `ortho_config::docs`, compact reusable agent context belongs in
 `ortho_config::agent_context`, and policy reports stay in
 `cargo_orthohelp::policy` until a later ADR extracts a shared report model. Do
@@ -181,7 +869,7 @@ roff, PowerShell help, or localized IR output.
 
 `--format agent-context` is the generator format. Downstream applications that
 emit their own runtime payload expose `context --json` as defined by
-[ADR-007](adr-007-downstream-context-command-naming.md).
+[ADR-0007](adrs/adr-0007-downstream-context-command-naming.md).
 
 Agent-context output is not localized. The current transform may use the short
 en-US command description as `AgentCommand.summary`, but it must not copy
@@ -196,6 +884,20 @@ ownership decision.
 
 Treat `AgentInput.default` as display-only. It is normalized for stable
 goldens, but it is not executable or machine-parseable.
+
+`AgentCommand` carries the declared behaviour surface populated by the bridge
+from the documentation IR `behaviour` block:
+
+- `interaction_mode` — `InteractionMode::Unknown` when undeclared;
+- `mutation_effect` — `MutationEffect::Unknown` when undeclared;
+- `bypass_flag` — `Option<String>`, explicit `null` when absent;
+- `dry_run_flag` — `Option<String>`, explicit `null` when absent.
+
+The bridge maps IR `InteractionKind`/`MutationKind` onto the agent-context
+enums, copying `bypass` and `dry_run` verbatim. It never infers these values
+from command names, verbs, or flags: absence stays `unknown`/`null` (design doc
+§8.1). The derive-side keys and grammar are recorded in
+[ADR-0010](adrs/adr-0010-behavioural-metadata-attribute-surface.md).
 
 Evolve the schema through the compatibility policy in
 [agent-native-cli-design.md](agent-native-cli-design.md) §8.2. Bump
@@ -261,6 +963,24 @@ pub fn write_agent_context(
 AgentContext,
 ```
 
+### Internal default-display normalizer
+
+`cargo_orthohelp::agent_context::normalize_default_display` is a crate-internal
+helper of the agent-context bridge, not part of the stable surface listed
+above. It rewrites a displayed default value so Rust path separators render
+consistently, removing whitespace around `::` outside quoted strings, character
+literals, and raw strings, whose contents it copies verbatim. Whitespace inside
+a literal is data, so only the surrounding path separator is normalized.
+
+Ownership stays with the agent-context bridge: the bridge's input projection
+(`agent_context::input`) calls it when populating `AgentInput.default`, and
+nothing outside `cargo-orthohelp` may depend on it. The normalization is
+display-only. `AgentInput.default` is not executable or machine-parseable, so a
+consumer needing the original rendering must read the documentation IR rather
+than this output. Keep the helper `pub(crate)`; exposing it publicly would make
+a display detail of one bridge a compatibility promise, and widening it belongs
+with a documented agent-context API decision, not a refactor.
+
 ### Consumer dependency tiers
 
 [Agent-native CLI assistance design](agent-native-cli-design.md) §2.2 is the
@@ -298,10 +1018,135 @@ routing, build graph behaviour, and application-specific persistence. If
 OrthoConfig executes downstream commands or owns downstream side effects, stop
 and revisit the boundary in the agent-native design.
 
+## Profile layering (roadmap 9.1.1)
+
+Profile support is opt-in at the struct level through the derive attribute
+`#[ortho_config(profiles)]`. A struct that does not opt in keeps the four-tier
+merge order, gains no `--profile` flag, and treats a `[profile.*]` table in a
+shared file as an ordinary key rather than extracting it. The accepted design is
+[ADR-0012](adrs/adr-0012-profile-selection-and-layering.md); the user-facing
+view is the
+[named profiles section](users-guide.md#switch-between-named-profiles) of the
+users' guide.
+
+Opted-in structs merge five tiers, lowest to highest: built-in defaults,
+configuration files, the selected profile, environment variables, and CLI
+flags. An explicit flag beats the profile even when the flag value equals the
+built-in default, so the generated CLI push consults clap's value-source
+information rather than relying on a value comparison alone.
+
+Extraction runs over the *resolved file chain* — the first successful discovery
+candidate plus its `extends` chain — not over every candidate the discovery
+walk considered. Every file layer in that chain has its reserved `profile` root
+key stripped, and one profile layer is produced for each file that defines the
+selected profile, in chain order (base first). The environment layer has the
+selector stripped too, and the generated flag is excluded from the serialized
+CLI layer, so the selector never merges as an ordinary configuration value.
+Subcommand loading uses a separate pipeline and ignores profiles; a `cmds` key
+inside a profile body is rejected rather than silently ignored.
+
+The merge API and the post-load surface divide as follows:
+
+- `MergeProvenance::Profile` tags a profile layer's provenance;
+- `MergeLayer::profile(value, path)` constructs one, and
+  `MergeComposer::push_profile` pushes it after the file layers and before the
+  environment layer;
+- `extract_profile_layers` is the extraction and validation entry point,
+  returning an `ExtractionOutcome` with `file_layers` and `profile_layers`;
+- `ProfileLoadOutcome` is the post-load runtime type that reports the active
+  selection, with `config()`, `into_config()`, and `selection()` accessors; and
+- the generated profile entry points named below return a `ProfileLoadOutcome`.
+
+Keep the [ADR-0007](adrs/adr-0007-downstream-context-command-naming.md)
+static/runtime split: profile *support* is agent-context metadata and is
+static, while the *active selection* is runtime-only and reported by
+`ProfileLoadOutcome`. Selected-profile output is deliberately not part of the
+static agent-context contract, which documents the mechanism rather than the
+moment.
+
+### Generated profile entry points
+
+Opting in with `#[ortho_config(profiles)]` adds methods that an opted-in struct
+does not otherwise have. They divide into a process-backed pair and an injected
+pair, and the split matters: the process-backed methods read the live
+environment, so a test that calls them cannot be hermetic, whereas the injected
+methods take their environment from the caller.
+
+The process-backed pair, generated on both the CLI struct and the config struct:
+
+- `load_with_profile_from_iter(iter)` composes the five tiers from an argument
+  iterator plus the live process environment. Both surfaces return the
+  configuration type rather than the type that owns the method:
+  `ProfileLoadOutcome<Config>` on the CLI struct, which performs the load, and
+  `ProfileLoadOutcome<Self>` on the config struct, whose delegate returns
+  whatever the CLI loader produced; and
+- `load_with_profile()` is its convenience form over `std::env::args_os()`.
+
+The injected pair, which mirror the source-aware loaders described under the
+[environment access boundary](#environment-access-boundary):
+
+- `load_with_profile_from_iter_with_sources(iter, discovery_source, merge_source)`
+  is the hermetic counterpart of `load_with_profile_from_iter`; and
+- `load_with_profile_with_sources(discovery_source, merge_source)` is the
+  hermetic counterpart of `load_with_profile`.
+
+The two sources are deliberately separate types, and the separation is a safety
+property rather than an ergonomic detail. `discovery_source` is a
+`SharedEnvSource` (`Arc<dyn EnvSource>`), which resolves a named variable only;
+`merge_source` is a `SharedScanEnvSource` (`Arc<dyn ScanEnvSource>`), which can
+enumerate everything the source holds. Discovery needs to look up a handful of
+names — the configuration-path selector, the XDG base directories, the Windows
+application-data variables, and the home directory fallback — while the
+environment merge layer has to scan an application prefix. Typing the
+capabilities apart means a lookup-only discovery source physically cannot
+enumerate the merge environment, so a caller cannot accidentally hand the
+discovery walk a scanner that sweeps unrelated process secrets into a layer. A
+single `MapEnv` can back both roles by coercing two `Arc` clones, one to each
+type. The `EnvSource` boundary itself is documented under the
+[environment access boundary](#environment-access-boundary).
+
+Opted-in structs also gain the primitive form
+`compose_layers_with_selection_from_iter_with_sources(iter, discovery_source,
+merge_source)`,
+which returns the `LayerComposition` together with the resolved
+`Vec<SelectedProfile>` instead of merging immediately. It is the primitive the
+injected pair is built on: `load_with_profile_from_iter_with_sources` calls it
+and maps `into_merge_result` over the composition. It is generated on the CLI
+struct only; the config struct receives delegating wrappers instead. Both
+structs also gain the injected `compose_layers_from_iter_with_sources`, which
+the config struct delegates to the CLI struct.
+
+The injected methods, and the compose helpers they build on, carry
+`#[allow(dead_code, reason = "Generated method may not be used in all builds")]`
+because a generated method can be unused in a consumer that never calls it;
+the process-backed `load_with_profile_from_iter` and `load_with_profile` are
+not annotated, since a consumer that opts into profiles is expected to call one
+of them. See [issue #584](https://github.com/leynos/ortho-config/issues/584)
+for the tracked follow-up that would replace that blanket allow.
+
+Of the injected pair, only `load_with_profile_from_iter_with_sources` carries
+the hooks itself; `load_with_profile_with_sources` is a thin delegation that
+reaches them through the `from_iter` form. Those hooks label the event
+`operation = profile_load`, `source = injected`, where the process-backed pair
+emit `source = process`; the
+[environment merge telemetry](#environment-merge-telemetry) section lists the
+full closed vocabulary. Because the delegation supplies its own argument vector
+from `std::env::args_os()` while taking the environment sources from the caller,
+`load_with_profile_with_sources` is injected-labelled on the strength of its
+*environment* sources alone — the argument vector is never injected.
+
 ## Behavioural test layout
 
 Behavioural suites live in crate-local integration test targets. The repository
 layout guide records the current target and feature-file inventory.
+
+The `ortho_config` BDD target is rooted at `tests/rstest_bdd.rs`; it declares
+the shared `tests/fixtures/` module and the `tests/rstest_bdd_support/` module
+with conventional `mod` declarations. `cargo-orthohelp` also uses a top-level
+`tests/rstest_bdd.rs` entry point and keeps its BDD modules under
+`tests/rstest_bdd_support/`. Keep the PowerShell golden-test fixture at
+`cargo-orthohelp/tests/golden/powershell_fixture.rs` with the golden tests that
+consume it.
 
 Step definitions use `rstest-bdd` macros (`#[given]`, `#[when]`, `#[then]`) and
 consume `rstest` fixtures. Scenario-local mutable state is modelled with
@@ -313,11 +1158,58 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
 fixture-specific module rather than expanding unrelated step files. Likewise,
 `CargoContext` and its `#[fixture]` provider plus the `cargo` steps live in
-`tests/rstest_bdd/behaviour/steps/cargo_steps.rs`, backing
+`tests/rstest_bdd_support/behaviour/steps/cargo_steps.rs`, backing
 `cargo_entry_point.feature` (scenarios: Cargo dispatch parses the inner
 options; bare invocation without the injected token is rejected), also isolated
 in a fixture-specific steps module. Future contributors should extend the
 existing fixture families rather than duplicate them.
+
+### Policy configuration test layout
+
+Agent-native policy configuration (roadmap 7.1.1) follows the same layout. The
+canonical vocabulary is a single source of truth in
+`cargo-orthohelp/src/policy/vocabulary/mod.rs` (Decision D2); the agent-context
+verb mapper currently imports its constants, so that consumer cannot drift. The
+unimplemented 7.1.2 lint rules do not import them yet. Assertions in new policy
+tests split by crate: `assert!`-style boolean checks in `cargo-orthohelp`, and
+matcher- or collection-shaped checks in `ortho_config` agent-context tests
+(Decision D8).
+
+Fixtures: `tests/fixtures/orthohelp_policy_warn_fixture/` (mode `warn`, one
+redundant exception, one scoped exception) and
+`tests/fixtures/orthohelp_policy_deny_fixture/` (mode `deny`, one malformed
+exception) back the policy golden and behavioural suites; `orthohelp_fixture`
+keeps no policy table and serves the "off by default" scenario (Decision D10).
+`tests/fixtures/orthohelp_policy_adoption_fixture/` omits `root_type` and the
+`ortho_config` dependency so the check-first pipeline (Decision D11) stays
+covered for packages still adopting the toolchain. The CLI-level policy
+behaviour is exercised end-to-end by
+`cargo-orthohelp/tests/features/orthohelp_policy.feature` with steps in
+`cargo-orthohelp/tests/rstest_bdd_support/behaviour/steps_policy.rs`, and the
+report wire format is snapshotted in
+`cargo-orthohelp/tests/golden/policy_report_tests.rs`.
+
+The policy boundary keeps `PolicyConfig` and `evaluate` as pure domain code.
+`run_policy_check` performs the check early, before generation, and writes the
+machine-readable report through `output::write_policy_report`, which uses an
+atomic artefact write. `apply_policy_to_context` maps the configured policy to
+agent context while deliberately excluding exception reasons. The CLI exposes
+`--check-agent-native` and the `--policy-mode <off|warn|deny>` report override;
+the latter requires the check flag. The fixture layout above remains the
+canonical policy coverage, and `googletest` plus `pretty_assertions` are
+`cargo-orthohelp` development dependencies used by those tests.
+
+The stdout writers `output::write_agent_context_stdout` and
+`output::write_policy_report_stdout` serialize one compact JSON document,
+append a newline, then write and flush the locked stdout handle. Keep tracing
+on stderr: stdout is a machine-readable channel and must not contain
+diagnostics. The policy check writes and emits its report before deciding
+whether generation may continue. With `--check-agent-native` alone, it returns
+after the report; with an explicit generator format, a successful check
+proceeds to generation. That generation writes `agent-context.json` for
+`agent-context` and `all`, but suppresses AgentContext JSON on stdout whenever
+policy checking is enabled. A deny-mode finding fails after the report is
+retained and emitted, before any generator artefacts are created.
 
 ### Integration test targets
 
@@ -335,8 +1227,9 @@ cargo test -p ortho_config --test <target>
 
 ### Public documentation examples
 
-The root README and `docs/users-guide.md` are executable documentation. Every
-fenced block in either file must have a unique `tested-example` marker on the
+The root README, `docs/users-guide.md`, `docs/cargo-orthohelp-api-guide.md`, and
+`docs/v0-10-0-migration-guide.md` are executable documentation. Every fenced
+block in those files must have a unique `tested-example` marker on the
 immediately preceding line. The documentation-example test support owns parsing
 and lookup for these examples. It is test infrastructure only; production code,
 other crates, and examples must not depend on it.
@@ -362,21 +1255,379 @@ an exact fence body. A workspace has one owner: operations that add, build,
 run, or write require an exclusive mutable borrow. Concurrent scenarios must
 create an independent workspace per thread rather than share one workspace. The
 helper may add the dependencies needed to compile a published example, but it
-must not rewrite that source. Keep the expected identifier registry closed so
-adding an example without choosing its behavioural contract fails a test. The
-documentation-example Cargo runner owns isolated Cargo process setup for these
-documentation tests; reuse it only when executing a documented Cargo workflow
-with a caller-owned temporary state directory. Run Cargo and child binaries
-with cleared environments. Cargo receives only the toolchain and platform paths
-it needs; binaries receive only the non-sensitive Windows runtime variables
-named by the workspace allow-list and deliberate scenario overrides. Keep
-fallible host-tool discovery and environment preparation at the runner
-boundary; command construction consumes the prepared values without starting
-subprocesses or writing files. The process-runner helper owns bounded execution
-for these documentation tests only: route Cargo, host-tool, and
-documented-binary commands through it, while keeping command construction and
-exit-status policy with their existing owners. Run-file paths must contain
-normal relative components only.
+must not rewrite that source. Workspace setup copies the repository's
+`Cargo.lock`, when present, into the private example workspace to reuse its
+dependency versions without editing the parent lockfile. This helper belongs to
+the documentation layout and is separate from production bridge seeding. Keep
+the expected identifier registry closed so adding an example without choosing
+its behavioural contract fails a test. The documentation-example Cargo runner
+owns isolated Cargo process setup for these documentation tests; reuse it only
+when executing a documented Cargo workflow with caller-owned temporary state.
+The build-tool environment is a closed allow-list, separate from the narrower
+environment used by documented applications. It retains the configured Cargo
+home and shared package cache, Rust toolchain, compiler and documentation
+wrappers, applicable wrapper settings, build-job limits, warning flags, and
+platform paths. It also forwards `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`,
+`CARGO_LLVM_COV`, and the LLVM profile-output controls unchanged, so a nested
+build reuses the parent's compiler flags and dependency fingerprints instead of
+compiling a second, instrumentation-free copy. Those variables are therefore
+not sanitized: rewriting them would split the fingerprint and defeat the shared
+cache.
+
+The allow-list is closed: unlisted application variables do not cross it.
+Target-specific forwarding is limited to
+`CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER`. Proxy and registry settings come
+from Cargo's project and home configuration, including configured credentials;
+the documentation-test environment forwards no proxy or registry environment
+variable. Registry tokens, `SSH_AUTH_SOCK`, `ACTIONS_RUNTIME_TOKEN`, cache
+credentials, application secrets, and other unlisted variables do not cross
+this boundary. The non-secret `SCCACHE_GHA_ENABLED` cache-mode setting is
+preserved. Documented binaries receive only the non-sensitive Windows runtime
+variables, LLVM profile-output controls, deterministic home directories, and
+deliberate scenario overrides named by the workspace policy. Do not clear or
+relocate the shared Cargo cache to make a test pass.
+
+Documentation Rust examples use Cargo's resolved parent target for compiler
+artefacts. Their separate ownership state and OS-level lock live under
+`<parent-target>/documentation-examples/v2`; this is not another Cargo target.
+The shared test-only `BuildState` module handles metadata discovery, lock
+ownership, and the recovery marker for both Rust-example builds and the CLI
+documentation integration test. The Rust-example build helper additionally
+parses compiler-reported Cargo JSON paths and snapshots those executables into
+private workspaces. This protects same-named binaries across separate test
+processes; a process-local mutex is insufficient. Cargo 1.89 released its
+profile build lock before running tests in the observed workflow. A regression
+test checks this lock-order contract; it can report an inconclusive result when
+another Cargo process owns the profile lock.
+
+The CLI integration test lives in the `cargo-orthohelp` package and snapshots
+the executable path Cargo supplies through `CARGO_BIN_EXE_cargo-orthohelp` into
+a private run directory. It does not rebuild that CLI executable from Cargo
+JSON while another test might be using it. The test then runs the documented
+Cargo external-subcommand flow; its generated bridge is built and snapshotted
+by the production bridge helper. Keep manifests, source inputs, run
+directories, and copied executables private to their owner. A successful
+operation requires confirmation that the owned process tree has completed and
+its output streams have drained; root exit and pipe EOF alone do not establish
+that descendants have stopped. If that completion cannot be confirmed within
+the cleanup deadline, fail the operation and retain any cache ownership marker
+for owner recovery.
+
+A direct Cargo build error from the subprocess runner retains its marker even
+when OS-tree cleanup completes: an externally admitted compiler may outlive the
+cancelled Cargo process, so its lifetime is unconfirmed. A fully observed Cargo
+nonzero exit and preparation or snapshot errors keep the existing cleanup path;
+remove the marker only after owned-process completion is confirmed. An opaque
+nested CLI callback error retains its marker because internal capture pipes
+hide compiler writer lifetime from the outer runner. Never clear an unconfirmed
+marker automatically or terminate an unrelated process.
+
+During `cargo llvm-cov`, `show-env` exports its selected target as
+`CARGO_LLVM_COV_TARGET_DIR`, not `CARGO_TARGET_DIR`. Metadata discovery
+promotes that value to `CARGO_TARGET_DIR`, so it resolves the instrumented
+parent target instead of silently selecting a cold default target. Otherwise
+metadata follows the caller's Cargo target configuration. Nested Cargo builds
+preserve coverage flags and LLVM profile-output variables, while omitting the
+coverage CLI from `RUSTC_WRAPPER`; configured Cargo wrappers and warning policy
+remain active. Regression cases cover target precedence, wrapper selection, and
+secret exclusion.
+
+Keep fallible host-tool discovery and environment preparation at the runner
+boundary; command construction consumes prepared values without starting
+subprocesses or writing files. The process runner is test infrastructure for
+these documentation tests only: route Cargo, host-tool, and documented-binary
+commands through it, while command construction and exit-status policy remain
+with their existing owners. Its build, execution, discovery, and cleanup
+policies use one monotonic overall scenario deadline, keep per-stream capture
+to 1 MiB while continuing to drain output, and report truncation and
+unavailable evidence on failure. Output activity does not extend a deadline.
+The runner must prove that owned descendants have completed before it reports
+success, on every supported platform. The mechanism is platform-specific; the
+contract is not. This ownership applies only to test subprocesses and must not
+terminate unrelated processes or shared cache services.
+
+The shared process-tree owners and cancellable pipe readers live in
+`test_helpers/src/process/`. Crates whose package boundaries permit the helper
+dependency use `ortho_config_test_helpers::process`: call `run_with_deadline`
+for one bounded command and `run_with_deadline_until` when an enclosing test
+sequence supplies a deadline. The `ortho_l10n` boundary fixture keeps its own
+implementation in `tests/boundary/fixture_cargo/process.rs`: its calls are
+already bounded by a scenario-wide budget and a process-wide serialization lock
+that the shared runner does not model, and `ortho_l10n` bans the workspace
+test-helper package in its resolved graph and packaged manifest. Do not weaken
+that boundary or copy the process implementation elsewhere.
+
+The shared runner keeps every captured byte, because its callers report Cargo
+and compiler diagnostics in full; both streams are drained concurrently, so a
+full pipe never blocks the child, and the test process's memory grows with what
+the child writes. A caller that starts a child with unbounded output owns that
+bound. The documentation-example runner keeps its own diagnostics policy, so
+its per-stream capture stays capped at 1 MiB and reports truncation; the two
+policies are deliberate, and neither may be described as the other.
+
+Callers retain ownership of command construction, environment policy, any
+serialization lock, and interpretation of the returned status and output. Use
+the lower-level reader or platform tree modules only when a specialized test
+runner needs its own diagnostics or capture policy; do not add another
+process-group, Job Object, or blocking pipe-reader implementation to a package.
+These helpers are for tests and must not be used by production code.
+
+The runner's own failure branches are tested against real children, and the
+deadline cases assert the child's fate rather than only the message: a runner
+that reported a timeout and then left the child running would satisfy a
+message-only assertion. Each case gives its child a survival marker — the child
+writes a file only after it has outlived its budget, the case waits past that
+point, and the case asserts no marker appeared. The marker covers the owned
+group rather than the root alone, so killing only the root while a descendant
+slept on is caught. A pid probe on the root would miss that case, and would
+also depend on whether the shell `exec`s the sleep or forks it, so prefer the
+marker. The detached-writer case needs `setsid`; it probes for the executable
+and skips where it is absent, because `setsid` is not POSIX and a `cfg(unix)`
+target does not imply it.
+
+Documentation example scenarios start a fixed 956-second monotonic envelope
+inside their 960-second nextest override, reserving two two-second cleanup
+allowances. Individual build, execution, and discovery operations have 956, 60,
+and 30-second caps, each further limited by the scenario time remaining. The
+`cargo-orthohelp` BDD target uses the same 956-second operation envelope. A
+local direct-Cargo run reached its 595.791-second build deadline with only
+repeated Cargo package-cache lock messages and no compiler-progress evidence.
+The 956-second envelope is 1.60 times that observed lower bound. Its deadline
+counts cache and compiler-admission waits without estimating or subtracting
+them, and preserves two seconds for child cleanup and two for test reporting.
+Output does not reset either deadline. The workflow contract checks this
+ordering against nextest's configured 2,300-second whole-run limit, the
+3,300-second Cargo watchdog, and the enclosing job ceiling. See
+[Test timeouts](#test-timeouts-the-tiers-this-repository-sets) and
+`documentation_budget_test.py`.
+
+Shared Cargo-runner and process-runner regressions live in the owning
+`documentation_examples_rust_tests` target. Other callers use runtime-only
+wrappers, so the same child-process probes do not run again in each integration
+binary. Build-heavy Rust documentation tests share a named in-process serial
+lock, and the matching nextest binaries share one test group. This prevents a
+test from spending its scenario deadline waiting behind another test that owns
+the same build-and-snapshot lock. The independent-workspace regression still
+performs its two workspace operations concurrently inside one test.
+
+Nested Cargo commands discover the configured target directory with
+`cargo metadata` and reuse that target and Cargo's default shared package
+cache. Documentation workspaces keep their source, manifest, run files, and
+executable snapshots in private directories; a sidecar `fs4` lock protects
+build-and-snapshot ownership across processes. The BDD scenarios use a separate
+filesystem lease under the selected target while reading and updating their
+shared bridge cache. The identifier-artefact test owns a private target nested
+under the configured workspace target, so `cargo clean -p` cannot remove
+workspace test executables. That directory has a fixed name rather than a
+per-run temporary one, and only the phases that must force a rebuild start with
+`cargo clean -p orthohelp_fixture`: the first, opt-in and forced-rebuild builds
+do, while the warm-build phase deliberately does not, because its contract is
+that an ordinary warm build leaves the emitted artefact alone. After a clean,
+the fixture and its build script are rebuilt and report their output directory,
+while the dependency build beneath them is reused between runs; the final
+forced rebuild asserts that Cargo reports fresh dependency units and recompiles
+only the fixture package. A per-run target rebuilt `ortho_config`, its macros,
+Clap and Serde from cold on every invocation, so all four phases paid a full
+dependency build. That recurring cost is what the fixed target removes, but it
+does not by itself attribute an earlier deadline exhaustion: the failing run
+discarded the child's output, the test compiles with `--all-features` while the
+fixture builds with its own default features, and both share Cargo's package
+cache, so dependency reuse was already available. What the retained tail now
+distinguishes is a nested build waiting for compile admission from one that has
+hung. Under saturated admission even a single cold dependency build can outlast
+the envelope; the fixed target makes that cold phase pay once rather than once
+per phase. The fixture still uses Cargo's default shared package cache. Cargo
+retains compiler wrappers, job limits, warning enforcement, coverage settings,
+and allow-listed native build inputs. Application secrets and arbitrary
+application variables are excluded. Run-file paths must contain normal relative
+components only.
+
+Because the target is fixed, it is shared state. nextest's `boundary_packaging`
+group and the test's `#[serial]` attribute coordinate tests inside one runner,
+but neither excludes a second test process on the same checkout. The identifier
+test therefore holds an exclusive operating-system file lease (a loop over
+`File::try_lock`) inside the private target from discovery until the fixture is
+dropped, so another process's `cargo clean -p orthohelp_fixture` cannot
+interleave with this test's build or artefact read. Discovery itself only reads
+workspace metadata and is safe to run while another process holds the lease.
+The wait is bounded by the same scenario envelope the build uses, captured
+before discovery rather than after the wait: metadata, the wait and every build
+share the one per-test allowance nextest grants. Discovery's own 30-second cap
+is charged to that envelope too, so the two phases cannot add up past nextest's
+ceiling. A target held by another runner therefore produces a diagnostic naming
+the lease rather than consuming the allowance and leaving nextest to kill the
+test without saying which wait it was in. A two-process regression drives a
+second copy of the test binary: it proves the second process blocks on a held
+lease, sees the first process's artefact intact, and rebuilds it after the
+lease is released.
+
+`ORTHO_CONFIG_FIXTURE_TELEMETRY` names a file to which each fixture build phase
+appends one record. The sink is inert unless the variable is set, so an
+ordinary test run writes nothing. The path must name a file: a path with no
+file name, such as `/`, is refused at the boundary, and the file name must be
+UTF-8. The parent directory must already exist because it is opened as a
+capability; a relative name resolves against the process working directory.
+Records are appended, one line per build phase, in the form
+`at_ms=<unix milliseconds> emit=<true|false>` followed by the counts
+`fresh=<n>, rebuilt=<n>, rebuilt_fixture=<n>`, then `admission_lines=<n>` and
+`package_cache_lines=<n>`. `admission_lines` counts the build's stderr lines
+containing `[build-limits]`; `package_cache_lines` counts lines containing
+`waiting for file lock`. A clock failure is reported to the caller rather than
+recorded as zero, so a phase is never stamped `at_ms=0` without saying so. The
+environment is read once at the test boundary and the sink is passed explicitly
+to the build, so the record format and the clock can be driven directly by a
+regression.
+
+The contracts are split across integration-test targets by concern, following
+the layout used in Netsuke:
+
+- `documentation_examples_tests.rs` owns the closed identifier registry, the
+  packaging contract for the README, and static contracts for data fences such
+  as configuration files, JSON documents, and command spellings;
+- `documentation_installation_tests.rs` owns installation and upgrade
+  manifests. It sweeps every TOML fence that depends on `ortho_config` and
+  requires the version to equal `CARGO_PKG_VERSION`, so `lading bump`, which
+  rewrites the README and user's guide, keeps the contract and the
+  documentation in step. The `[bump.documentation]` globs in `lading.toml` also
+  name `ortho_l10n/README.md`, so its install line moves with each bump; that
+  README is a doctest target of `ortho_l10n` rather than part of this sweep.
+  Migration guides are excluded from the sweep because their versions describe
+  a fixed upgrade path;
+- `documentation_examples_rust_tests.rs` compiles every Rust fence into one
+  temporary workspace and runs it. Examples whose contract is their output for
+  fixed arguments belong in the table in
+  `documentation_examples/simple_runs.rs`; examples that need fixture files,
+  environment overrides, or transcripts belong in a feature-named flow module
+  such as `guide_flows.rs`, `migration_flows.rs`, or `cargo_flows.rs`; and
+- `cargo-orthohelp/tests/documented_command.rs` runs the documented
+  `cargo orthohelp` command flows against workspace packages, using the
+  executable Cargo has already built for the package, and checks the artefacts
+  and streams they produce. The command text itself is pinned by the static
+  contracts, so the executed flags and the published flags cannot drift apart.
+
+A console transcript is tested in two halves: assert the exact published text,
+then run the binary under the conditions each command line names and compare
+the output with the lines that follow it. Placeholder package names in command
+examples, such as `my-cli`, are mapped onto workspace fixture packages whose
+manifests carry the documented configuration.
+
+The `ortho_config` crate publishes the repository README itself: its manifest
+sets `readme = "../README.md"`, and `cargo package` copies that file into the
+crate root. Do not add `ortho_config/README.md`; it would collide with the
+copied file and reintroduce a second README to keep in step. Because crates.io
+and docs.rs render the README away from the repository, every link in it must
+be absolute, which `repository_readme_links_are_absolute` enforces.
+
+### Production bridge build ownership
+
+The production bridge used by `cargo-orthohelp` has a separate build helper
+from the documentation-test workspace helper. The stable IR cache entry stays
+under `target/orthohelp/<hash>/`; each invocation writes its generated
+manifest, bridge source, a private copy of the selected workspace's
+`Cargo.lock` when present, and its executable snapshot into a temporary
+directory under that entry. Cargo builds into the selected package's
+Cargo-resolved target. This reuses compiler output across cache keys without
+sharing mutable bridge inputs or running a binary from an artefact path that
+another build can overwrite.
+
+The production helper is scoped to bridge compilation. It uses an `fs4`
+operating-system file lock in Cargo's selected target directory across the
+JSON-reported build, its copy into the private run directory, and cleanup of
+the generated binary outputs. The generated manifest selects a target name
+derived from the package root and private invocation directory, so an ordinary
+workspace binary named `orthohelp_bridge` cannot replace the reported
+executable after Cargo releases its own target lock. Once the private snapshot
+succeeds, the helper removes only Cargo-reported files whose names belong to
+that generated binary. Missing files are accepted; other cleanup failures are
+logged without invalidating the snapshot. Dependencies and the shared Cargo
+cache remain under Cargo's ownership. The generated IR cache path and its
+atomic, idempotent publication remain unchanged. Cargo's configured wrappers,
+job limits, warning flags, and coverage settings remain active. The helper does
+not rewrite Rust flags or relocate the default shared Cargo cache. Its Cargo
+JSON reader retains at most 1 MiB of rendered diagnostics; `run_cargo` forwards
+that bounded output to the supervising CLI after draining the stream and marks
+truncation explicitly. The nested build asks for Cargo's plain `json` message
+format, so rustc's rendered diagnostics travel in that bounded stream rather
+than through inherited stderr. The build environment is an explicit allow-list,
+and three families of Cargo setting are also recognized structurally rather
+than by name: target-specific `LINKER` and `RUSTFLAGS` settings, and registry
+`INDEX` locations. Proxy endpoints and registry indexes cross only when their
+values contain no user information, query, or fragment, because a URL can carry
+credentials that a name check cannot see. An omitted value is reported by
+variable name, never by value. See the
+[cargo-orthohelp bridge design][bridge-build-ownership] for the ownership and
+data-flow details.
+
+[bridge-build-ownership]:
+  cargo-orthohelp-design.md#633-bridge-build-ownership-and-recovery
+
+The lock is not a recovery signal. The fail-closed marker is
+`<selected-target>/orthohelp-bridge-build.in-progress`. If an interruption
+leaves it behind, confirm no Cargo, rustc, or wrapper-managed build process is
+still using that target before removing only the marker file and rerunning the
+command. Let healthy compiler admission and Cargo lock waits complete; do not
+infer that a build has stopped from a queued wrapper alone. The bridge helper
+must not clear an unconfirmed marker, kill unrelated processes, remove the
+shared cache, or restart a cache service. The existing nextest serialization
+groups remain until their shared-state assumptions are independently disproven.
+
+#### Windows nested Cargo builds
+
+The bridge performs a nested Cargo build, so a Windows developer or CI runner
+needs a discoverable MSVC toolchain and Windows SDK before any gate that
+compiles Rust. The hosted `build-test (windows)` lane performs this setup in
+its "Configure MSVC for nested Cargo builds" step; reproduce the equivalent
+environment locally.
+
+Prerequisites are Visual Studio with the **Desktop development with C++**
+workload and the x64 compiler tools. Discovery uses `vswhere`, which hosted
+runners ship at
+`${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe`,
+filtered on `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`.
+
+`VsDevCmd.bat -arch=x64 -host_arch=x64` configures the x64 toolchain by setting
+environment variables in the process that runs it; it does not print those
+values for a parent PowerShell or Bash shell to export. Keep that process in
+the ancestry of the build instead. The simplest route is to open an **x64
+Native Tools Command Prompt** for the installed Visual Studio and run the gates
+from it, so every gate inherits the `INCLUDE`, `LIB`, `LIBPATH`, and SDK
+variables the script set.
+
+A shell that cannot inherit them, such as the Bash coverage step the hosted
+lane runs, has to read them back from a child `cmd.exe` that calls the script
+and then lists its environment:
+
+```powershell
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+$installation = & $vswhere -latest -products '*' `
+  -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+  -property installationPath | Select-Object -First 1
+$env:MSVC_VSDEVCMD = Join-Path $installation 'Common7\Tools\VsDevCmd.bat'
+$environment = & $env:COMSPEC /d /s /c `
+  'call "%MSVC_VSDEVCMD%" -arch=x64 -host_arch=x64 >nul && set'
+```
+
+`>nul` hides the script's banner so only the resulting `NAME=value` lines
+remain, and `set` with no arguments prints every variable the child now holds.
+Import only the toolchain names the gates need — `INCLUDE`, `LIB`, `LIBPATH`,
+`VCINSTALLDIR`, `VSINSTALLDIR`, `VSCMD_ARG_TGT_ARCH`, `WindowsSdkDir`, and
+`WindowsSDKVersion` — rather than the whole environment, which also carries
+application credentials.
+
+Two checks make the setup fail closed rather than produce a confusing linker
+error later. `LIB` must be present, and at least one directory on it must
+contain `kernel32.lib`, which proves the Windows SDK search path resolved. The
+x64 `link.exe` found under `VC\Tools\MSVC\**\bin\Hostx64\x64` is then placed on
+`PATH`, and its full path is exported as
+`CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` so the nested build selects it
+rather than whatever `PATH` resolves first.
+
+That ordering matters: the coverage action runs under Bash, and Git's
+`/usr/bin` precedes Visual Studio on `PATH`. Configure MSVC before coverage or
+any other step that builds Rust, or the nested bridge build links against the
+wrong tools. The setup is a CI and local-development requirement only; it does
+not change the production allow-list beyond the linker variable already
+documented above.
 
 ### Python docstring examples
 
@@ -425,6 +1676,29 @@ metrics — which need a `ConfigDiscovery` configured identically so that their
 results remain comparable. Any test needing a deterministic discovery over an
 injected environment may reuse it.
 
+The shared isolated-environment helper owns `with_host_overrides`. It serves
+suites that load through the *derived* entry points, where the derive macro
+builds its own `ConfigDiscovery` and no attribute can select a project root.
+`with_host_overrides` points the XDG search bases at the caller's fixture root,
+which ranks them above the platform default `/etc/xdg`; an empty
+`XDG_CONFIG_DIRS` still falls back to that default, so leaving the variable
+unset is not isolation. It is owned by the CLI integration and
+error-aggregation suites.
+
+One hole stays open and is inherited from the injected-source migration: the
+derived loader's project rung resolves its root from `std::env::current_dir`,
+so a `.config.toml` beside the test binary's working directory would still be
+discovered. The exposure is bounded by the rung's position — projects are
+searched *last*, so the ambient file is reached only once every earlier
+candidate is absent or has failed to load. The bound is weaker than it looks:
+discovery records a failure and keeps walking, so a malformed file, an invalid
+selector target, or a failed required candidate all fall through to the project
+rung rather than ending the search. No injection point can redirect it:
+`project_file_name` names a file, while `project_roots`, `add_project_root`, and
+`clear_project_roots` are reachable only when a test builds the
+`ConfigDiscovery` itself, as the discovery-builder suite above does. Closing
+the gap needs a derive-level discovery attribute for project roots.
+
 The common behavioural-step helper module owns `set_scalar_once`,
 `set_nonblank_scalar_once`, and the `SlotTakeOrExt` extension trait's
 `take_or`. The first two centralize the repeated "guard, validate, and populate
@@ -432,6 +1706,131 @@ a scalar slot" shape used to fill scenario `Slot` state exactly once; `take_or`
 centralizes the repeated "take the slot's value or fail with a descriptive
 error" shape. Both are scoped to behavioural step modules; step modules must
 use these helpers rather than re-implementing slot-guard boilerplate.
+
+The common behavioural-step helper module also owns `config_fixture`,
+`shared_sources`, and `isolated_home_env`. `config_fixture` writes `contents`
+into `file_name` inside a fresh temporary directory and returns the
+`tempfile::TempDir` guard together with the absolute file path; passing `None`
+for `contents` derives the path without writing, which preserves scenarios that
+deliberately leave a selected file absent, such as those in
+`merge_composer_steps`, `cli_default_as_absent_steps`, and `subcommand_steps`.
+`shared_sources` splits one owned `MapEnv` into the `SharedEnvSource` and
+`SharedScanEnvSource` handles that loader APIs require for their separate
+discovery and merge roles, both reading that single environment.
+`isolated_home_env` returns a `MapEnv` pinning `HOME`, `XDG_CONFIG_HOME`, and
+`XDG_CONFIG_DIRS` under a supplied root, so subcommand scenarios do not inherit
+the machine's home directory; it is gated on the `serde_json` feature because
+only the subcommand step modules use it. These helpers are owned by the
+behavioural step modules under `behaviour/steps/`, which must use them rather
+than re-implementing temporary-directory, config-file, or
+environment-source-pair boilerplate. Callers must keep the `tempfile::TempDir`
+guard alive until the loader has read the fixture, because dropping it deletes
+the directory.
+
+The shared helper crate's coverage module, `test_helpers/src/coverage.rs`, owns
+`resolve_profile_path`. Tests that launch a child process clear its
+environment, which also drops `LLVM_PROFILE_FILE`; an instrumented child would
+then write its profile to a default location, either inside a fixture directory
+the test deletes or inside the working tree where no collection step expects it.
+`resolve_profile_path` returns an absolute profile path unchanged and joins a
+relative one to the parent's working directory, which is the only stable anchor
+once the child runs in a fixture directory. It is owned by the child-process
+probes in `hello_world`'s layer tests and the `subcommand` integration target:
+any probe that calls `.env_clear()` and forwards coverage must read the
+parent's path through `ProcessEnv` and pass the resolved value to the child
+rather than restating the anchoring rule. Both crates already depend on
+`ortho_config_test_helpers` under the `test_helpers` import name.
+
+The subcommand fixture module, `ortho_config/tests/subcommand/fixtures.rs`,
+owns the `isolated_root` fixture and the `close_discovery` constructor. The
+fixture returns a temporary root paired with a discovery source closed against
+the ambient environment, and `close_discovery` pins the Unix global rung to
+that root so the search cannot walk out into the developer's own
+`XDG_CONFIG_DIRS`. It is owned by the `subcommand` integration target, whose
+child modules reach it as `super::fixtures`; suites in that target must take
+their discovery source from here rather than repeating the `#[cfg]`-guarded
+construction inline, because a hand-rolled copy that omits one platform branch
+silently reads the ambient environment on that platform instead of failing.
+File contents and merge-source values stay with their tests — those are the
+behaviour under test. Other integration targets keep their own setup: in
+particular, `basic.rs` retains a private `write_config` because its cases need
+nested fixture paths with parents created first, and the discovery suites use
+`discovery_with`, which owns no temporary root.
+
+The decoding fixture module,
+`cargo-orthohelp/tests/fixtures/powershell_decoding.rs`, owns the
+byte-order-mark aware decoders `decode_utf16` and
+`decode_probable_utf16le_without_bom`, their `Endianness` selector, and the
+`to_u16` code-unit join. It is owned by the `powershell_windows` integration
+target, which reaches it as `super::fixtures::powershell_decoding` and whose
+`decode_help_output` composes the two decoders in the order it wants to try
+them.
+
+The module lives in the shared fixture tree rather than beside that test
+because of where the test can run. `powershell_windows` is gated on
+`cfg(windows)`, and it declines to exercise the decoders at all when neither
+`powershell.exe` nor `pwsh` is on the machine, so a copy of the decoders inside
+it would be untested everywhere except a Windows host with a shell installed.
+As a module of `fixtures`, it rides along in every integration target that
+declares `mod fixtures` unconditionally — `agent_context_contract`,
+`cli_dispatch`, `golden_tests`, `nested_subcommand_end_to_end`,
+`policy_report_contract`, and `rstest_bdd` — so on Linux, where
+`powershell_windows` compiles to nothing at all, the decoders are still
+compiled and still tested, with no shell involved. Suites must reach the
+decoders here rather than re-deriving byte-order detection, because the
+zero-high-byte threshold, the two different trailing-byte policies, and the
+rule that a byte-order mark must be the mark its order implies are the
+behaviour under test, and a second copy would drift in exactly the cases that
+are hard to see.
+
+## Isolated filesystem tests
+
+Unit tests under `ortho_config/src/file` stage their configuration trees in a
+per-test temporary root rather than changing the process working directory or
+using Figment Jail. The generic fixture shape is documented under
+[temporary-file fixtures][temporary-fixture-guide]; the rules below are
+specific to these tests.
+
+[temporary-fixture-guide]: rust-testing-with-rstest-fixtures.md#a-fixtures-for-temporary-files-and-directories
+
+`ortho_config/src/file/tests/mod.rs` owns the convention and consolidates the
+ambient-filesystem ceremony into two entry points, imported by submodules as
+`use super::{TestRoot, test_root};` and `use super::with_fresh_graph;`:
+
+- `test_root` is a fallible `rstest` fixture returning `Result<TestRoot>`. A
+  test takes it as `test_root: Result<TestRoot>` and binds the whole value with
+  `let root = test_root?;`. Renaming the binding keeps the lint configuration's
+  denied `shadow_*` lints satisfied; the guard still outlives the test body.
+- `with_fresh_graph` is a callback helper for tests that need the loader's
+  cycle-detection state. Its callback receives the capability, the canonical
+  root, the current `config.toml` path, and the mutable visited and stack sets.
+
+`TestRoot` pairs a private `TempDir` guard, the canonical `root: PathBuf`, and a
+`dir: cap_std::fs::Dir` capability opened with `open_ambient_dir` over the
+same directory; the fixture is the only place in the test module that opens a
+capability. The guard is held rather than exposed so it outlives the test;
+dropping it deletes the directory that `root` points into.
+
+Fixture files are written through the capability
+(`dir.write("config.yaml", b"...")`) and passed to production helpers as
+canonical absolute paths. `load_config_file` canonicalizes the file it is
+given, and `process_extends` canonicalizes `current_path`'s parent before
+joining a relative `extends` base to it, so a test that speaks in
+`Dir`-relative names still observes absolute, symlink-resolved paths in merge
+results and error messages.
+
+`resolve_base_path` canonicalizes the base, not `current_path`; the
+missing-file error interpolates `current_path` as supplied. Pass a canonical
+`current_path` when a test asserts absolute paths in that error; a relative
+value appears as supplied.
+
+Do not destructure `TestRoot` with `..`: the `TempDir` guard drops at the end
+of the `let` statement, deleting the root before the test body runs, and the
+test then fails with `No such file or directory`. Bind the whole value instead.
+
+Tests must not reintroduce Figment Jail, `std::env::set_current_dir`, or writes
+outside the temporary root. This work is part of the migration tracked by
+[#452](https://github.com/leynos/ortho-config/issues/452).
 
 ## Snapshot tests
 
@@ -445,24 +1844,52 @@ creation in a controlled milestone, use `INSTA_UPDATE=always` and then verify
 that no `.pending-snap` or `.snap.new` files remain before running the normal
 quality gates.
 
-## `rstest-bdd` v0.5.0 migration strategy
+## `rstest-bdd` migration strategy
 
-Status: adopted. See `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for execution
-history and rationale.
+Status: adopted at v0.6.0. See `docs/execplans/migrate-rstest-bdd-v0-6-0.md`
+for the current migration and `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for
+the previous one. The imported upstream guides are
+`docs/rstest-bdd-users-guide.md`, `docs/rstest-bdd-v0-6-0-migration-guide.md`
+and `docs/rstest-bdd-v0-5-0-migration-guide.md`; their exact upstream revision
+is pinned in `docs/rstest-bdd-doc-provenance.md`.
 
 Migration guidance for contributors:
 
-- Upgrade workspace pins to `rstest-bdd = "0.5.0"` and
-  `rstest-bdd-macros = "0.5.0"`.
-- Scenario functions must return `()` or explicit unit results
-  (`Result<(), E>` / `rstest_bdd::StepResult<(), E>`). Avoid return type
-  aliases in scenario signatures.
+- Workspace pins are `rstest-bdd = "0.6.0"` and
+  `rstest-bdd-macros = "0.6.0"`. The workspace floor stays at Rust 1.89.0 and
+  the pinned toolchain did not move, but the reason is not simply that upstream
+  requires 1.88: `rstest-bdd-macros` 0.6.0 depends unconditionally on
+  `rstest-bdd-harness`, which pulls `cargo_metadata` 0.23.1 and hence
+  `cargo-platform ^0.3.0`, whose floating resolution to 0.3.3 declares a 1.91
+  floor. `Cargo.lock` therefore holds `cargo-platform` at 0.3.2 (declared
+  1.88). Do not drop that constraint when refreshing the lockfile, and re-check
+  the whole graph before raising the floor.
+- To re-check the floor after any dependency change, use `Cargo.lock` to
+  enumerate resolved registry packages, then read each package's `rust-version`
+  from its registry manifest or full `cargo metadata` output. Compare those
+  values with the workspace's declared floor. The offending package is not
+  necessarily one this workspace names directly; here it was a third-level
+  transitive dependency reached through a crate that upstream does not require
+  for a plain-BDD consumer.
+- The MSRV breakage surfaced only as a `trybuild` failure in
+  `cargo test -p ortho_config --test compile_fail`, because the generated
+  trybuild sandbox resolves its own lockfile. A green workspace build is not
+  evidence that the floor holds.
+- A step returning an alias of `Result<T, E>` now fails the scenario when it
+  returns `Err` and injects `T` when it returns `Ok`. `E` must implement
+  `Display`. This replaced the v0.5.0 advice to avoid return type aliases;
+  aliases are now classified correctly and are safe to use.
+- A unit payload never overrides a fixture, so `Ok(())` from a
+  `Result<()>` step is safe even where a `Slot<()>` flag fixture exists.
+- Scenario functions must return `()` or an explicit fallible result;
+  `#[scenario]` return classification is unchanged from v0.5.0.
 - Prefer `scenarios!(..., fixtures = [...], tags = ...)` for large feature
   bindings to reduce handwritten wrapper boilerplate.
 - Prefer descriptive placeholder names over generic `{string}` placeholders so
   step signatures remain explicit and compile-time checked.
-- Prefer underscore-prefixed fixture names only when no step resolves that
-  fixture by name.
+- Implicit fixture names strip exactly one leading underscore, so `world` and
+  `_world` both bind the fixture named `world`. Use an explicit `#[from(...)]`
+  when a genuinely underscore-named key is intended.
 - Remove file-wide lint suppressions used only for historical generated-fixture
   warnings; retain only narrow, item-level `#[expect(...)]` annotations when
   still required.
@@ -472,14 +1899,19 @@ Migration guidance for contributors:
   `rstest_bdd::async_step::sync_to_async`.
 - Keep tag names filter-friendly (`@name_part` style). Avoid dots in tag names
   used with `tags = "..."` expressions.
+- Feature-file paths passed to `scenarios!` are manifest-relative and stay
+  that way; diagnostics, the JSON reporter, and the JUnit `classname` attribute
+  all render them relative to the manifest, so no path handling changes are
+  needed in this workspace.
 
 ## Adding or changing behavioural tests
 
 When adding scenarios or steps:
 
 1. Add or edit the `.feature` file first.
-2. Implement or update step definitions under the matching `tests/rstest_bdd`
-   module.
+2. Implement or update step definitions under the matching
+   `tests/rstest_bdd_support/` module tree in `ortho_config` or
+   `cargo-orthohelp`.
 3. Bind scenarios using `scenarios!` where possible; use explicit `#[scenario]`
    only when a feature needs bespoke fixtures or per-scenario control.
 4. Keep assertions user-observable (`Then` steps) and avoid asserting private
@@ -526,21 +1958,36 @@ contract stays discoverable.
 ### Environment merge telemetry
 
 The environment merge boundary emits a `merge.layer` tracing event at the
-decision and terminal points of source-aware work. Events use only these
-bounded fields:
+decision and terminal points of source-aware and profile-aware work. Events use
+only these bounded fields:
 
-- `operation`: `csv_env`, `derived_load`, or `subcommand_load`;
+- `operation`: `csv_env`, `derived_load`, `profile_load`, or `subcommand_load`;
 - `source`: `process` or `injected`;
 - `outcome`: `attempt`, `success`, or `failure`; and
 - `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
-  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or `aggregate`.
+  `default_value_conversion`, `file`, `cyclic_extends`, `gathering`, `merge`,
+  `validation`, `profile`, or `aggregate`.
 
-`CsvEnv` emits process-backed and injected events. Derive-generated loads and
-subcommand loads emit events when their source-aware entry points are used. The
-events never contain environment values, keys, paths, configuration data,
-caller-supplied prefixes, or raw error text. Error categories are reduced to
-the closed vocabulary before emission so subscribers can aggregate failures
-without receiving sensitive input.
+`CsvEnv` emits process-backed events, or injected events when `with_source`
+supplies a scanning source. The source label tracks the environment the entry
+point actually reads, and for the generated loaders that means the
+`*_with_sources` suffix rather than the operation name. Derive-generated and
+subcommand source-aware loads (`*_with_sources`) take injected sources and emit
+`source = injected`; so do the profile-aware injected pair
+(`load_with_profile_from_iter_with_sources` and
+`load_with_profile_with_sources`), which are covered in
+[generated profile entry points](#generated-profile-entry-points). The
+profile-aware entry points without that suffix (`load_with_profile_from_iter`
+and `load_with_profile`) accept no injected source and read the live process,
+so they emit `source = process`. A profile-enabled struct's
+`load_from_iter_with_sources` emits `source = injected` under
+`operation = profile_load`, not `derived_load`, because it resolves a selection
+on that boundary; the operation label distinguishes what the call does, and the
+source label distinguishes where its environment came from. The events never
+contain environment values, keys, paths, configuration data, caller-supplied
+prefixes, or raw error text. Error categories are reduced to the closed
+vocabulary before emission so subscribers can aggregate failures without
+receiving sensitive input.
 
 Capture tests must cover successful and failing paths for each emitting
 operation. They assert the operation, source, outcome, and category fields, and
@@ -555,9 +2002,194 @@ counter families use only the bounded `operation`, `source`, `outcome`, and
 `none` for its outcome and category. No metrics recorder is installed by the
 library.
 
+### Discovery telemetry
+
+Configuration discovery emits its events from two co-located modules, both of
+which are written so that leaking an input is not the easy path: the helpers
+are module-private and take closed-vocabulary labels, and the suite below
+asserts that no captured field carries an injected value:
+
+- `discovery/telemetry.rs` owns the closed label vocabulary, the three counter
+  families, and six event callsites whose field lists are fixed;
+- `discovery/telemetry_events.rs` owns the remaining event callsites, one per
+  field subset, because a `tracing` event's field *names* are fixed at the
+  macro call even when a value is absent.
+
+The split is described under [emitter structure](#emitter-structure) below.
+Nothing outside these two modules emits a `discovery.*` event, and nothing
+outside `telemetry.rs` calls the second module: the entrypoints that choose a
+field subset are dispatchers, so a caller states which facts it has and the
+dispatcher picks the callsite whose static metadata matches.
+
+| Event                       | Fields                                                                                                                                                                                                                                                                                                                                            | Emitted from                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `discovery.source_selected` | `source`: `process`, `injected`                                                                                                                                                                                                                                                                                                                   | `builder::build`            |
+| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                                                                                                                                                                                                                                                                           | `candidates::push_selector` |
+| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`                                                                                                                                                                                                                                                           | `candidates::push_xdg`      |
+| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                                                                                                                                                                                                                                                                               | `candidates::push_home`     |
+| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`, `policy_resolve`                                                                                                                                                                                                                                                                                 | `load`, `policy`            |
+| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`; `source`: `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `category`: `file`, `cyclic_extends`, `gathering`, `validation`, `other`; `scope` (scoped walks only): `system`, `user`, `project`                                        | `load`                      |
+| `discovery.project_root`    | `state`: `cwd_unavailable`                                                                                                                                                                                                                                                                                                                        | `builder::build`            |
+| `discovery.load`            | `operation`: `discover_first`, `compose_layers`, `policy_resolve`; `outcome`: `success`, `not_found`, and under `policy_resolve` also `required_failure`, `optional_failure`; `source` (success only): `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `scope` (scoped walks only): `system`, `user`, `project` | `load`, `policy`            |
+| `discovery.policy`          | `operation`: `policy_resolve`; `selector_class` (optional): `cli`, `environment`                                                                                                                                                                                                                                                                  | `policy`                    |
+
+Table: Structured events emitted during configuration discovery, with the
+closed field vocabulary each carries and the module that emits it.
+
+Behind the optional `metrics` feature, discovery also increments three counter
+families using the same bounded labels:
+
+| Metric                                      | Labels                            |
+| ------------------------------------------- | --------------------------------- |
+| `ortho_config.discovery.attempts`           | `operation`                       |
+| `ortho_config.discovery.outcomes`           | `operation`, `outcome`            |
+| `ortho_config.discovery.candidate_failures` | `operation`, `source`, `category` |
+
+Table: `metrics`-feature counter families and their bounded labels, mirroring
+the `tracing` event fields above.
+
+Rules for extending this set:
+
+- **Extend only through the closed-vocabulary constants in `telemetry.rs`.**
+  A new event or field starts as a `pub(super) const` in that module, next to
+  the set it belongs to, and the emission helper takes it as a `&'static str`.
+  That type accepts any string literal, so the vocabulary is a convention the
+  call sites follow, not something the signature enforces. The helpers are
+  `pub(super)`, so no downstream crate can reach them, and there is
+  deliberately no helper that accepts caller-formatted text.
+- **Every field is a `&'static str` from a constant declared in
+  `telemetry.rs`, or a `bool`.** Discovery's inputs and outputs — variable
+  values, resolved paths, file contents — are exactly what must not reach a
+  log. The module-private helpers, plus the discipline of passing the declared
+  constants, keep them out of it; the type alone would not, because a
+  handwritten literal also satisfies `&'static str`. The same property keeps the
+  `metrics` labels bounded; an unbounded label here becomes an unbounded
+  time-series in a consumer's monitoring system. Declare the constant in
+  `telemetry.rs` even when its only callsite is in `telemetry_events.rs`: one
+  module owning the whole vocabulary is what makes the closed set readable in
+  one place.
+- **Add an event spelling, not a parameter.** A new combination of optional
+  fields is a new function in `telemetry_events.rs` plus a new arm in its
+  dispatcher, never a wider signature on an existing emitter.
+- **The discovery telemetry suite enforces it.** The suite feeds discovery
+  distinctive values and asserts no captured field contains any of them. Adding
+  a field that formats a path fails that test rather than shipping.
+- **A separate suite pins field *names*, not just values.**
+  `ortho_config/tests/discovery_telemetry_metadata.rs` reads `Metadata::fields`
+  for events whose optional fields are absent and asserts the name is missing —
+  the check a value-level assertion cannot make, because a `None` value already
+  renders as nothing.
+- **Counters go behind the optional `metrics` feature**, per the library
+  and application boundary above. The `tracing` events are unconditional.
+
+#### Emitter structure
+
+`tracing` builds an event's static `Metadata` from the macro's *field list*.
+Recording a `None` for an `Option` field records no value, but the field's name
+stays in the metadata either way, so a subscriber filtering on
+`Metadata::fields` would see a field the design document promises is absent.
+"Omitted" therefore has to mean omitted from the metadata, and the only way to
+write that is one macro call per field combination. `telemetry_events.rs` holds
+those callsites:
+
+- `policy_resolution_with_selector` and `policy_resolution_without_selector`
+  for `discovery.policy`;
+- `candidate_failure_scoped` and `candidate_failure_unscoped` for
+  `discovery.candidate`, whose `scope` is present only on a scoped walk;
+- four `load_outcome_*` emitters for `discovery.load`, where the independent
+  `source` and `scope` options combine into four spellings.
+
+Three small declarative macros provide the bodies, so each function expands to
+a single statement. The bodies would otherwise be near-identical, because the
+difference between them *is* the field list, and hand-writing them drew a
+measured `CodeScene` duplicacy finding. Keep the macros private to the module:
+the contract is the set of functions and the metadata each produces, not the
+expansion.
+
+Two rules keep this structure from decaying:
+
+- **One `tracing` emission per function.** When a dependent crate enables
+  `tracing`'s `log` bridge, Cargo's feature unification expands every event
+  into a branch ladder, and those branches count against the workspace's
+  `cognitive-complexity-threshold` in `clippy.toml` (9). In this workspace the
+  enabling crate is `rstest-bdd`, a dev-dependency, so the ladder appears in
+  every test build even though the shipped libraries never enable it. A
+  function that reports two facts therefore delegates each to a small
+  `fn log_<fact>` helper, as `bridge/telemetry.rs` and the atomic-write helpers
+  in `output/mod.rs` do; their module docs record the reason.
+- **Split by size, not by taste.** The vocabulary, the entrypoints and their
+  documentation together reach the 400-line module cap, which is why the
+  emitters and the counters live in sibling modules. Moving code back would
+  fail that cap before it failed a test.
+
+When adding an event, add its row below, its constants to `telemetry.rs`, its
+emitter or dispatcher arm to the module that owns the relevant shape, and a
+metadata-level assertion to `discovery_telemetry_metadata.rs` if it carries an
+optional field.
+
+One trap worth recording: `tracing`'s global maximum level is recomputed as
+dispatchers register and drop, so concurrent tests each installing a
+thread-local subscriber can drop the maximum out from under one another and
+silently lose events. `pin_global_max_level` in the shared test support holds
+one dispatcher for the lifetime of the binary. This was an observed
+intermittent failure, not a precaution.
+
+### `cargo-orthohelp` bridge and output telemetry
+
+`cargo-orthohelp`'s diagnostics follow the same one-emission rule but a
+different boundary rule: every event here is diagnostic only. None decides
+anything, none is a contract a consumer may filter against, and no control flow
+returns through an emitter. The modules are grouped by the fact they report:
+
+- `bridge/telemetry.rs` — the IR cache only (`hit`, `miss`, `unchanged`,
+  `write`), one function per spelling so the function that decides something
+  never spells an event.
+- `bridge_build_telemetry.rs` — the build's recovery markers and generated
+  output cleanup.
+- `bridge_observability.rs` — the completed/failed pairs for the Cargo build,
+  executable snapshot, bridge execution, and cache operations. Each pair
+  carries a closed operation and outcome vocabulary plus elapsed time, and
+  omits paths, cache keys, error strings, and child output.
+- `output/mod.rs` — the atomic JSON write: the start, the completion with its
+  byte count, the stdout path, and one failure event per fallible step
+  (prepare, open, write, flush, sync, rename, and parent-directory sync).
+- `output/agent_context.rs` — the agent-context document's own
+  start/completion/failure trio.
+
+The output events carry real paths, artefact names, byte counts, and error
+renderings, so they are not held to discovery's closed-vocabulary rule. The
+bridge lifecycle outcome events are the exception, and the distinction is a
+boundary rather than a licence: those events carry a closed operation and
+outcome vocabulary plus elapsed time, never child output. A failed bridge build
+reports its diagnostics through the returned error rather than through the
+event. Do not extend the same treatment to `discovery`, whose inputs are
+configuration values and are exactly what the closed vocabulary exists to keep
+out.
+
+The IR cache is a persistence unit with no observability of its own.
+`bridge/ir_cache.rs` returns a closed `PublishOutcome` (`Unchanged` or
+`Updated`) and a `PublishError` tagged with the `Read` or `Write` stage that
+produced it; it never records a span or a counter. `bridge/mod.rs` owns the
+publish policy: `publish_ir_cache` maps that outcome onto
+`bridge_observability`, onto `bridge/telemetry.rs`, and, behind the `metrics`
+feature, onto `bridge/telemetry_metrics.rs`. Keep the split. A second caller
+recording the same fact would double-count it, and a persistence test should
+not need a metrics recorder.
+
+The counter is `cargo_orthohelp.bridge_cache.events`, and both of its labels
+(`operation`, `outcome`) are drawn from the closed enums in
+`bridge/telemetry_metrics.rs`. Never attach a path, cache key, or error string.
+The `metrics` facade drops every update unless the process installs a recorder,
+so the `cargo-orthohelp` binary installs `src/metrics_recorder.rs` before any
+bridge work. That recorder emits one `tracing` event per update under the
+`cargo_orthohelp::metrics` target and leaves the process-wide slot alone when a
+host has already claimed it. Its contract test drives a real cache emission
+through the installed recorder, so a regression in the event shape or in the
+install hook fails the suite rather than silently dropping the counter.
+
 ## Digest rendering
 
-`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
+`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as
 lowercase hexadecimal digits. From `sha2` 0.11 the `finalize` and `digest`
 methods return `hybrid_array::Array<u8, _>`, which dereferences to `[u8]` but
 does not implement `core::fmt::LowerHex`, so the `{:x}` formatting the cache
@@ -577,6 +2209,10 @@ previously used no longer compiles. `sha2` 0.11 also no longer implements
   genuinely needs one.
 - Pass the digest by reference, as in `to_lower_hex(&hasher.finalize())`, so
   `Array` coerces to `&[u8]` through `Deref`.
+- Render only a prefix by `zip`ping the digest into a fixed-size array, never
+  by slicing. The workspace denies `clippy::indexing_slicing`, and a zipped
+  copy has no panic path; a `const` assertion pairs with it to prove the array
+  cannot be wider than the digest it is filled from.
 - Feed a hasher with `update` from a bounded buffered read loop, or through a
   small `std::io::Write` adapter newtype that forwards to `update`. Do not
   reach for `std::io::copy` with a hasher as the sink.
@@ -590,59 +2226,337 @@ test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
 digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
 encoder cannot pass.
 
-### Discovery telemetry
+### The bridge cache key
 
-`discovery/telemetry.rs` is the only place configuration discovery emits
-events, and it is written so that a leak is a compile-time impossibility rather
-than a review responsibility.
+`CacheKey::hash` names the bridge directory under `target/orthohelp/`, and that
+name is one component of every path the bridge's `cargo build` hands to the
+linker. The directory name starts with `v1-`, followed by the leading
+`CACHE_DIRECTORY_DIGEST_BYTES` bytes of the full SHA-256 digest — 16 bytes, 32
+hexadecimal digits — rather than all 64. The prefix versions this cache-key
+encoding so a future format change can use a fresh cache namespace.
 
-| Event                       | Fields                                                                                                                                                                                                                                           | Emitted from                |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
-| `discovery.source_selected` | `source`: `process`, `injected`                                                                                                                                                                                                                  | `builder::build`            |
-| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                                                                                                                                                                          | `candidates::push_selector` |
-| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`                                                                                                                                                          | `candidates::push_xdg`      |
-| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                                                                                                                                                                              | `candidates::push_home`     |
-| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                                                                                                                                                                                  | `load`                      |
-| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`; `source`: `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `category`: `file`, `cyclic_extends`, `gathering`, `validation`, `other` | `load`                      |
-| `discovery.project_root`    | `state`: `cwd_unavailable`                                                                                                                                                                                                                       | `builder::build`            |
-| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`; `source` (success only): `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`                                                                                        | `load`                      |
+The limit is not a tuning choice. Cargo 1.100 made the new build-directory
+layout unconditional, so every artefact of the bridge build lands in
+`target/debug/build/<package>/<hash>/out/` instead of `target/debug/deps/`.
+That adds roughly 50 characters, and Windows still applies a 260-character
+`MAX_PATH` to the file names `link.exe` opens. Halving the directory name
+bought back 32 of them; `build-test (windows)` had failed with `LNK1104` on
+`orthohelp_policy_warn_fixture` before the change.
 
-Table: Structured events emitted during configuration discovery, with the
-closed field vocabulary each carries and the module that emits it.
+Two rules follow from this:
 
-Behind the optional `metrics` feature, discovery also increments three counter
-families using the same bounded labels:
+- The truncation happens at rendering time, in `CacheKey::hash`. Keep it there.
+  The digest is still computed over the full SHA-256 output, so truncation
+  cannot mask a defect in how the inputs are combined.
+- Treat the width as a path-length budget, not a security boundary. A
+  collision costs a stale IR reuse, not a corrupt result, and 128 bits is
+  already far wider than the input space. A test asserting the exact rendered
+  length lives beside the hash, and `cargo-orthohelp/src/tests.rs` reconstructs
+  the hosted Windows runner's longest linker path so the next lengthening fails
+  on Linux instead.
 
-| Metric                                      | Labels                            |
-| ------------------------------------------- | --------------------------------- |
-| `ortho_config.discovery.attempts`           | `operation`                       |
-| `ortho_config.discovery.outcomes`           | `operation`, `outcome`            |
-| `ortho_config.discovery.candidate_failures` | `operation`, `source`, `category` |
+### Bridge build environment
 
-Table: `metrics`-feature counter families and their bounded labels, mirroring
-the `tracing` event fields above.
+The bridge build starts a nested `cargo build`. Its environment policy lives in
+`cargo-orthohelp/src/bridge_build_environment.rs`. `BuildEnvironment` selects
+named build controls from the parent process, then clears the child's inherited
+environment and reapplies only those selected values. This keeps unrelated
+application variables out of the build while preserving the Cargo and toolchain
+settings the nested command needs.
 
-Rules for extending this set:
+The policy combines a closed allow-list with two narrow dynamic name patterns:
+Cargo target linker or rustflags settings, and Cargo registry index settings.
+Proxy and registry-index values are omitted when they are non-UTF-8 or contain
+`@`, `?`, or `#`, preventing credential-bearing URLs from reaching the child. If
+`RUSTC_WRAPPER` names `cargo-llvm-cov`, that wrapper is omitted because the
+coverage CLI is not a compiler wrapper for the nested Cargo process. Other
+selected Rust flags and profile settings pass through unchanged.
 
-- **Every field is a `&'static str` from a constant declared in
-  `telemetry.rs`, or a `bool`.** Discovery's inputs and outputs — variable
-  values, resolved paths, file contents — are exactly what must not reach a
-  log, and callers cannot pass one through a function that accepts only the
-  closed vocabulary. The same property keeps the `metrics` labels bounded; an
-  unbounded label here becomes an unbounded time-series in a consumer's
-  monitoring system.
-- **The discovery telemetry suite enforces it.** The suite feeds discovery
-  distinctive values and asserts no captured field contains any of them. Adding
-  a field that formats a path fails that test rather than shipping.
-- **Counters go behind the optional `metrics` feature**, per the library
-  and application boundary above. The `tracing` events are unconditional.
+The selection rules are tested with injected environment lookups and inspected
+child command environments. Tests verify both which values are selected and
+that unrelated inherited variables do not reach the nested build.
 
-One trap worth recording: `tracing`'s global maximum level is recomputed as
-dispatchers register and drop, so concurrent tests each installing a
-thread-local subscriber can drop the maximum out from under one another and
-silently lose events. `pin_global_max_level` in that test file holds one
-dispatcher for the lifetime of the binary. This was an observed intermittent
-failure, not a precaution.
+## Scoped and policy-based configuration discovery
+
+Automatic discovery historically resolved one file: the candidate list was
+scanned most-preferred first and the scan stopped at the first success. The
+build tool that motivated the change needed an ordered, fail-closed explicit
+selector chain and a stack of every file that exists, with project keys
+overriding user keys while user-only keys survive. The resulting runtime types
+live in `ortho_config/src/discovery/`, and RFC 0002
+(`docs/rfcs/rfc-0002-config-layer-resolution-policy.md`) is their design
+record: it fixes the semantics tables, the suppression gate, the drain
+precedence, and the stability surface that must settle before the first release
+shipping them. Read it before changing any behaviour here.
+
+Candidate provenance is owned by candidate generation. The co-located
+`ortho_config/src/discovery/candidates/provenance.rs` groups the bounded
+telemetry source/scope pair and XDG decision labels. Candidate call sites
+assign these values where the source is known; keep raw paths and environment
+values out of them. Explicit paths and selectors remain outside
+`CandidateOrigin` because they have no automatic scope. The accumulator keeps
+the first source and list position while merging later scopes for duplicate
+paths.
+
+This section is about file-layer *resolution*. The agent-native,
+`cargo-orthohelp` policy configuration described in
+[Policy configuration test layout](#policy-configuration-test-layout) is a
+different feature that shares only the word "policy".
+
+### Type roles and how they compose
+
+Four layers of responsibility, each thin enough to test on its own:
+
+- `ConfigDiscovery` and `ConfigDiscoveryBuilder` own the candidate search space:
+  the file names, the project roots, and the injected `EnvSource`. See
+  [Environment access boundary](#environment-access-boundary).
+- `ConfigFilePolicy` sits above that builder and adds the explicit selector
+  chain, the two mode enums, and the scope order. `from_builder` is the
+  constructor; the builder methods are chainable.
+- `FileLayerOutcome` is the replayable result of `resolve_layers`. It is a
+  struct rather than an enum because a successful chain can coexist with an
+  earlier ignorable probe, and because a fatal selected-file failure must still
+  carry the winning selector.
+- `ResolvedSelection` records which selector won and where it pointed, on both
+  the success and the failure path, so an error can name the selector that
+  chose the offending file.
+
+`resolve_layers` reads the environment once, at resolve time, and never returns
+`Err`; failures are carried in the outcome's classified error buckets and
+realized only when it is drained. Two exhaustive lists in RFC 0002 describe the
+surface and are worth checking against any change: the "Reusable file-layer
+resolver" section for the accessors, and "File-layer error policy" for the
+four-case mapping. That document also records what has deliberately not changed:
+`compose_layers`, `compose_layer`, `load_first*`, `DiscoveryLayersOutcome`,
+`LayerComposition`, `MergeComposer`, and `MergeLayer` keep their signatures and
+behaviour, because the new types are additive.
+
+### First-wins and scope stacking are two code paths
+
+`AutomaticMode` decides what automatic discovery does once it runs, and the two
+variants do not share a traversal.
+
+- `AutomaticMode::FirstWins` is the default. `compose_scoped_layers` preserves
+  `ConfigDiscovery::compose_layers` exactly, by calling it directly and
+  returning no origins. `compose_layers` walks the flat candidate list that
+  interleaves explicit, environment, and platform entries, and stops at the
+  first candidate whose `extends` chain loads.
+- `AutomaticMode::StackScopes` resolves every requested scope in `scope_order`
+  and appends the layers of every applicable candidate that loads, so a project
+  file layers over a user file instead of replacing it.
+
+Scope is not a concept under `FirstWins`, so a scope request is never
+dereferenced there and no scope can be an origin. Within `StackScopes`, every
+candidate in a scope is attempted rather than only the first that loads: that
+is the mode, and it is also what makes the diagnostics complete, since a
+candidate's defect is only discoverable by opening it. A failed lower-preferred
+candidate therefore does not prevent the layers that did load from being
+returned.
+
+The legacy `compose_layers` is retained unchanged and the scoped engine groups
+the platform generators only; explicit and environment selection belong to the
+selector chain. They are two tested code paths, not one path wearing two
+signatures, so a fix to one is not automatically a fix to the other.
+
+### Selector precedence, and why it suppresses
+
+`ConfigFilePolicy::selectors` takes an ordered chain. `resolve_layers` walks it
+with `find_map` and the first selector that resolves a path wins. Resolution
+reads a CLI-supplied `PathBuf` directly, and for `ConfigPathSelector::env`
+reads the named variable through the discovery `EnvSource`, treating an unset
+or empty value as "no selection".
+
+A winning selector suppresses every later selector and all automatic probing.
+That is the property `add_required_path` cannot deliver: the gate lives at
+candidate generation, so a required path can no longer mechanically coexist
+with later discovered layers. `ExplicitMode` decides what happens once a rung
+wins:
+
+- `ExplicitMode::RequiredExclusive` is the default. A missing or malformed
+  selected file produces a single terminal `selected_error` carrying the winning
+  `ResolvedSelection`; automatic discovery never runs, and there is no
+  fallback.
+- `ExplicitMode::Optional` is exclusive but tolerant. An absent selected path
+  yields no file layers while still suppressing automatic discovery; a
+  malformed file is still an error.
+
+Draining follows a fixed precedence, and the change is worth knowing because it
+alters which failures surface: a `selected_error`, when present, is the sole
+surfaced error and the layers are empty; otherwise `reportable_errors` always
+surface, and `ignorable_errors` surface only when no layer loaded. The
+reportable bucket is the genuinely new expressiveness. Previously a malformed
+*automatic* file landed in `optional_errors` and was dropped whenever a later
+candidate succeeded, so a broken project file could vanish behind a valid user
+file.
+
+### Scope order, and the two opposite orderings
+
+Two orderings meet in `discovery/scoped.rs` and they run in opposite directions.
+`docs/design.md` states the point authoritatively and should be read in full;
+the short form is:
+
+- The candidate list is a **preference** order, most-preferred first, because
+  index 0 is the location the historic first-wins scan selects.
+- A composed layer list is a **precedence** order, because a `MergeComposer`
+  applies layers in the order given and the last one wins.
+
+A scope therefore walks its candidates in reverse preference order, applying
+the least-preferred location first and the most-preferred last, so the historic
+winner still wins while every lower-preferred location contributes a base layer
+for the keys it alone sets. This keeps "later applied wins" as the single rule
+for the whole system. Emitting candidates in preference order instead would let
+a fallback such as `~/.demo.toml` silently override
+`$XDG_CONFIG_HOME/demo/config.toml`, inverting established behaviour the moment
+a second location starts loading.
+
+The reversal happens in one named place, `ConfigDiscovery::scope_candidates`,
+so that no call site has to hold two opposite orderings in mind: everything
+downstream of it merely appends in application order. A maintainer changing the
+traversal should keep that property — a second reversal, or a call site that
+"fixes up" the order it receives, would restore the inversion this design
+exists to prevent.
+
+`scope_order` is a *request*, not a record. The default is
+`[System, User, Project]`, and later scopes override earlier ones, so project
+layers naturally override user layers. A scope contributes nothing when none of
+its candidates loads, or when every layer it produced was already contributed
+by an earlier scope.
+
+Two invariants make that stacking deterministic, because the loader
+de-duplicates and detects `extends` cycles only within a single chain:
+
+- De-duplication is by **canonical** path across the whole composition, keeping
+  the earliest position in application order, which within a scope is the
+  lowest-precedence one. Keying on the canonical path the loader already stored
+  collapses aliases and symlinks without changing public layer metadata, and it
+  stops a file reachable from two places from contributing two layers and
+  silently doubling append-strategy vectors. A parent reached by two children
+  applies once, at the position its first child gave it; both children still
+  override it.
+- The `extends` chain of each file remains parent-first, so a parent is still
+  applied before the child that overrides it. `extends` resolution is
+  chain-local, with each file resolving its own parents against its own visited
+  set, and a cross-scope cycle is reported with the same cyclic-extends error
+  as a within-chain cycle.
+
+### Inspecting and replaying a `FileLayerOutcome`
+
+The load-bearing requirement is that the layers are resolved once and reused:
+the same outcome is peeked for an early scalar read, then replayed into the
+merge. The accessors split by purpose rather than by field.
+
+- Early inspection, before any merge runs. `selection()` returns the winning
+  `ResolvedSelection`; `selected_error()` returns the fatal selected-file error;
+  `reportable_errors()` returns the non-fatal errors that should always be
+  reported; and `merged_file_value()` folds the loaded layers into one JSON
+  object for a scalar-only peek, such as a diagnostics flag that governs how
+  later errors are rendered.
+- Provenance for an operator-facing "what loaded" trace. `origins()` returns the
+  scopes that actually contributed, and it does **not** echo `scope_order`: a
+  requested scope whose candidates were all absent, or whose every layer was
+  already contributed by an earlier scope, is not an origin. Under `FirstWins`
+  it is always empty, and a failed explicit selection reports none either,
+  because selection is not automatic discovery. That is why the report is
+  computed inside the scoped engine rather than reconstructed by the policy.
+- Replay, which reads no files because the layers are already resolved.
+  `push_into` drains the layers into an existing `MergeComposer`;
+  `into_layers_and_errors` drains them plus the classified errors into a
+  caller-owned buffer, which is the shape the generated loader already feeds to
+  `LayerComposition::new`; and `into_result` is the convenience form that
+  aggregates into an `OrthoResult` instead. Both drains call one private
+  helper, so the order above has a single source of truth rather than two
+  restatements.
+
+`merged_file_value` is deliberately narrow. The fold covers scalar keys only: a
+collection-typed key reflects last-file-wins rather than the field's append or
+keyed-merge strategy, so only scalars should be read from it. Widening it later
+would be safe; broadening the claim and then narrowing it would not.
+
+### The derive attribute plumbing
+
+A struct opts into this path by setting any policy key alongside the existing
+discovery keys:
+
+```rust
+#[ortho_config(discovery(
+    app_name = "demo",
+    env_vars = ["DEMO_CONFIG"],
+    explicit_mode = "required_exclusive",
+    automatic_mode = "stack_scopes",
+    scope_order = ["user", "project"],
+    project_file_name = "demo.toml",
+    project_root_from = "directory",
+))]
+struct DemoConfig { /* ... */ }
+```
+
+`ortho_config_macros/src/derive/parse/discovery_attrs.rs` parses the keys, and
+`uses_policy` is what selects the emitter: a struct setting only the
+pre-existing keys keeps generating the legacy loader verbatim, while an opt-in
+struct routes through `build_policy_based_loading` in
+`ortho_config_macros/src/derive/policy_impl.rs`, which assembles a
+`ConfigFilePolicy`, calls `resolve_layers`, and drains it with
+`into_layers_and_errors`.
+
+- `env_vars` is an ordered alias chain, resolved into `ConfigPathSelector::env`
+  rungs in the order written. It is mutually exclusive with the single
+  `env_var`, which is a compile error because the combined precedence would be
+  ambiguous. A struct that sets only `automatic_mode` still honours `env_var`;
+  the emitter prefers `env_vars` when it is non-empty, so opting into the
+  policy path cannot silently drop the override a non-policy struct already
+  honours.
+- `explicit_mode` and `automatic_mode` accept the string forms of the runtime
+  enum variants and are validated at compile time. Their defaults reproduce the
+  existing behaviour: `first_wins` for automatic mode, and `required_exclusive`
+  for explicit mode. An unrecognized string is a compile error naming the
+  accepted set.
+- `scope_order` lists scopes by name — `system`, `user`, or `project` — and is
+  validated at compile time.
+- `project_root_from` names a CLI field to read at run time, which is the part
+  static attributes cannot otherwise reach: the generated code checks the
+  parsed CLI value and calls `project_root` when it is present. The macro
+  rejects the attribute unless the field exists, is not `skip_cli`, and is a
+  `PathBuf` or `Option<PathBuf>`. The value is the Rust field identifier, not
+  the serde rename, because the wiring is code-level.
+- An injected environment source still reaches the builder on this path, so a
+  `load_from_iter_with_sources` caller's `MapEnv` is honoured for both the
+  selector rungs and automatic discovery. Without that step, discovery would
+  read the real process environment instead.
+
+The derive grammar and the runtime enum strings become a public grammar once
+shipped, which is why RFC 0002 stages the derive extension last. The static
+grammar also cannot express every policy — a root derived from two fields, or
+conditional scopes — so the runtime `ConfigFilePolicy` remains the escape hatch
+for an application that builds one by hand and bypasses the derive.
+
+### Testing these diagnostics
+
+Each refusal above has two tests, and they are not duplicates of one another.
+The unit tests in
+`ortho_config_macros/src/derive/parse/tests/discovery_validation.rs` call the
+parser directly and assert the *message string* and the variant it belongs to;
+that is the place a message is changed. The trybuild fixtures under
+`ortho_config/tests/ui/` compile a small derive and pin the *rendered form* —
+the message together with the span the compiler points at — which is the only
+way to catch a diagnostic that still says the right thing in the wrong place.
+
+Five fixtures cover the policy and discovery vocabulary:
+
+- `policy_explicit_mode_invalid_value` and
+  `policy_automatic_mode_invalid_value` for the two mode enums, each using a
+  near-miss spelling so the fixture exercises the rejection rather than a typo;
+- `policy_scope_order_invalid_value` for a scope name outside the three;
+- `policy_project_root_from_skipped` and
+  `policy_project_root_from_wrong_type` for the two `project_root_from`
+  refusals the field lookup reaches. The third — a name matching no field at
+  all — is covered by a parser unit test, which is why no fixture mirrors it.
+
+Each `.stderr` is compiler output rather than a handwritten guess: emit it with
+`TRYBUILD=overwrite cargo test -p ortho_config --test compile_fail`, then
+re-run the same command with `TRYBUILD` unset to confirm. A snapshot that
+drifts fails under the default, which is what makes the pair a check rather
+than a record; a fixture whose code compiles clean is reported by trybuild as a
+case that failed to fail, so add the `.rs` and `.stderr` together.
 
 ## Environment access boundary
 
@@ -658,6 +2572,12 @@ variables for tests.
 - `ScanEnvSource` is owned by the merge boundary. `CsvEnv` accepts one through
   `with_source`, and the derived loader receives it through
   `OrthoConfig::load_from_iter_with_sources`.
+- The discovery candidate reader and subcommand file discovery are the only
+  production readers of `EnvSource`, and neither calls `std::env::var_os`
+  directly: both go through the `EnvSource` implementation they are handed.
+- The process-backed loaders are the legacy/default wrappers. They route their
+  lookups through `ProcessEnv`, whose `get` is the crate's only
+  `std::env::var_os` call.
 - `GlobalConfigSources` is the `hello_world` application's narrow composition
   context. Its global and greeting-default loaders pass lookup and scan sources
   to the appropriate boundaries. Greeting-default loading also requires an
@@ -675,6 +2595,12 @@ variables for tests.
   `load_greet_defaults_with_sources` and `GlobalConfigSources`. Keep this seam
   within greeting/farewell composition and its tests; source selection remains
   with the configuration-loading caller.
+- `test_support::sample_config` is the `rstest` fixture that loads the shipped
+  sample files through closed sources. It is the single place that copies
+  `config/baseline.toml` and `config/overrides.toml` into a fixture root and
+  resolves the sample greeting defaults, so message tests inject it rather than
+  repeating that setup. It belongs to the example's test support surface, not
+  to production composition.
 - Example tests may pass a `ConfigDiscovery` with explicit project roots to the
   crate-private override loader. Source injection alone does not disable
   project-root or current-directory candidates. Tests needing no ambient
@@ -687,15 +2613,13 @@ variables for tests.
   select their own source to keep setup and precedence assertions visible.
 - The `extends` integration tests keep their `ConfigFixture` in
   `ortho_config/tests/support/extends_fixture.rs`. It writes a temporary
-  `.config.toml` through `cap_std::fs::Dir`, requires it with the generated
-  `--config-path` flag, and passes an injected discovery `MapEnv` plus a
-  separate merge `MapEnv`. Keep discovery tests on explicit builder setups so
-  their candidate and environment cases remain visible; this fixture composes
-  the existing lookup and merge boundaries rather than expanding the
-  environment API. Cycle and missing-file cases inject a valid merge value to
-  isolate the file error.
-- The discovery candidate reader is the only production reader, and holds no
-  `std::env::var_os` call of its own.
+  `.config.toml` through `cap_std::fs_utf8::Dir` with `camino` paths, requires
+  it with the generated `--config-path` flag, and passes an injected discovery
+  `MapEnv` plus a separate merge `MapEnv`. Keep discovery tests on explicit
+  builder setups so their candidate and environment cases remain visible; this
+  fixture composes the existing lookup and merge boundaries rather than
+  expanding the environment API. Cycle and missing-file cases inject a valid
+  merge value to isolate the file error.
 - It is **not** a general environment service. Adding readers elsewhere in the
   crate requires a decision about scope, not a call site.
 - Subcommand file loading may use `SubcommandFileContext` for named lookup of
@@ -703,6 +2627,9 @@ variables for tests.
   files from its explicit base. On non-Unix and non-Redox targets it may also
   use the source's native platform configuration-directory fallback. It must
   not enumerate variables or become a general-purpose environment service.
+- `first_existing_xdg_candidate` is private to subcommand path
+  discovery and is called only by `push_xdg_candidates`. It skips `NotFound`
+  and propagates other metadata errors with the candidate path.
 - The derived `SelectedSubcommandMerge::load_and_merge_selected_with_sources`
   uses that file context and a separate `SharedScanEnvSource` to merge the
   selected enum variant. Its file base and environment values are supplied by
@@ -728,6 +2655,11 @@ variables for tests.
   not scan. Callers can use one `Arc<MapEnv>` by coercing cloned `Arc`s to
   `SharedEnvSource` and `SharedScanEnvSource`;
   [#412](https://github.com/leynos/ortho-config/issues/412) completed this path.
+- **`EnvSource` injection into `CsvEnv` remains out of scope.** The merge
+  layer accepts only the scanning capability; `EnvSource` is discovery-only.
+  Adding an `EnvSource`-shaped constructor to `CsvEnv` would either require
+  enumeration on that trait — voiding the guarantee above — or silently read
+  the process environment behind an injected-looking API.
 - **Injected merge providers are declarative.** Injected `CsvEnv` loading
   replays only the declarative prefix, case, split, and CSV options. Calling
   `CsvEnv::with_source` after `map()` or `filter_map()` is rejected because
@@ -744,6 +2676,29 @@ variables for tests.
   subcommand discovery uses it. `ProcessEnv` retains `directories::BaseDirs`
   native-path behaviour; `MapEnv` stays closed, and custom sources may supply
   an explicit native configuration root for deterministic tests.
+
+### Process-backed environment test probes
+
+Tests that compare `CsvEnv` process behaviour with an injected `MapEnv` must
+run the process-backed provider in a child with a cleared environment and only
+the explicit probe inputs. Keep the probe ignored during ordinary test runs and
+require a dedicated opt-in environment marker before it reads or emits process
+data, so accidental direct invocation cannot expose ambient variables. Run one
+exact probe at a time with `--show-output --test-threads=1`, validate exactly
+one dedicated output marker, and compare the child's result in the parent with
+the injected provider's result. Prefix child inputs with a test-specific key so
+runtime variables such as LLVM coverage settings cannot enter the comparison.
+Coverage settings are the one deliberate exception: `.env_clear()` also drops
+`LLVM_PROFILE_FILE`, so a probe running under instrumentation forwards it
+through `test_helpers::coverage::resolve_profile_path` to keep the child's
+profile next to its parent's.
+
+Telemetry probes follow the same child-process boundary for the real process
+source. Exercise injected sources separately in the parent, and assert both
+that the event vocabulary stays bounded and that input sentinels never appear
+in captured fields. This keeps process collection, injected-source coverage,
+and redaction checks explicit without copying the parent's environment into a
+probe.
 
 ## Dependency management
 
@@ -775,14 +2730,23 @@ integration (CI) environments.
 
 Dependabot owns scheduled dependency updates through `.github/dependabot.yml`:
 
-- Root GitHub Actions updates run weekly and use the `dependencies` and
+- Root GitHub Actions updates run daily and use the `dependencies` and
   `github-actions` labels.
 - Root Cargo workspace updates run daily and use the `dependencies` and
   `cargo` labels.
 - Python test requirements in `scripts/` update daily and use the
   `dependencies` and `python` labels.
-- The root `rust-toolchain.toml` updates weekly through the independent
+- The root `rust-toolchain.toml` updates daily through the independent
   `rust-toolchain` route, using the `dependencies` and `rust-toolchain` labels.
+  [Toolchain pin and freshness](#toolchain-pin-and-freshness)
+  explains why the interval is daily and carries no cooldown.
+- The Cargo entry's `ortho-config-fluent-bundle` group takes `ortho_config` and
+  `fluent-bundle` together, ahead of the `minor-and-patch` catch-all (the
+  Concordat dependency-family rule requires a group for that pair, because the
+  two share `FluentValue` types). `ortho_config` is a workspace crate that
+  Dependabot never offers, so the group in practice keeps `fluent-bundle` in
+  one pull request. `tests/workflow_contracts/dependabot_family_group_test.py`
+  holds it.
 
 GitHub Actions updates include calls into `leynos/shared-actions`. Contract
 tests that assert a caller's exact commit SHA create a lockstep dependency:
@@ -870,13 +2834,14 @@ Two Rust lanes are outside this, each for its own reason:
 
 `rust-build-release` and `mutation-cargo` are exempt from the one-SHA
 assertion. Every other reference into the shared-actions tree sits at
-`a5765019` today, and those two remain at `0e3c4d24`, where the CodeScene
-coverage adoption's repin left them. The exemption is an allowance for them to
-diverge without the contract reporting a partial repin: neither serves a lane
-this wiring governs, `rust-build-release` is the release build the action
-excludes from sccache, and `mutation-cargo` is a reusable workflow, which
-caller job environments cannot reach. Moving either is a separate change that
-needs its own evidence.
+`0eabb6bc0714` today, where the repin that brought in install-whitaker 0.2.12
+left them; those two stay at `7d751eded578`. The exemption remains an allowance
+for them to diverge without the contract reporting a partial repin, as they did
+after the CodeScene coverage adoption's repin: neither serves a lane this
+wiring governs, `rust-build-release` is the release build the action excludes
+from sccache, and `mutation-cargo` is a reusable workflow, which caller job
+environments cannot reach. Moving either is a separate change that needs its
+own evidence.
 
 The allowance is proved in both directions rather than assumed. Moving
 `rust-build-release` to a SHA of its own leaves the contract passing, which is
@@ -927,36 +2892,16 @@ and a Rust job declared in a `.yaml` workflow without a backend. The last two
 passed before the sweeps were widened, which is how they were shown to be real
 rather than theoretical.
 
-### Whitaker release installer
-
-`scripts/install_whitaker_binary.sh` belongs only to the Linux
-`Install Whitaker` step in `.github/workflows/ci.yml`. It downloads the
-resolved Whitaker release archive and its checksum sidecar through the GitHub
-API, checks both asset API digests and the sidecar's archive digest, then
-extracts only the expected binary member into the CI Cargo home. The cache
-holds those verified release inputs rather than an executable, so every cache
-hit is revalidated. Do not reuse this helper for local installation, releases,
-or other repositories: its token boundary, archive names, target map, and cache
-ownership are specific to this CI consumer.
-
-The helper emits only these credential-free, bounded stderr messages to the CI
-job log: `cache=download`, `cache=repair`, `cache=reused`,
-`verification=passed`, and `verification=failed`, each prefixed with
-`whitaker-installer:`. They describe the installer decision, never tokens,
-release metadata, cache paths, digests, or asset contents. The subprocess tests
-exercise each status alongside the cache and verification behaviour it reports.
-
-`dylint-link@6.0.1` is separately preinstalled through `cargo binstall`. That
-command alone receives `GH_TOKEN` and `GITHUB_TOKEN` through command-scoped
-assignments and uses `--disable-strategies compile`, so a missing prebuilt
-release fails rather than building from source.
-
 ### Workflow contract gate
 
-`make test-workflow-contracts` runs the contracts in `tests/workflow_contracts`
-against the checked-in workflow and Make sources. It is a separate target from
+`make test-workflow-contracts` runs two stages against the checked-in workflow
+and Make sources. The first is the shared CV-005 contract library,
+`cv005-contracts check --repository .`, run through `uv tool run` on Python
+3.13 from the full commit named by `CV005_CONTRACTS_REF`; it needs `uv` and
+network access to fetch that commit. The second is the repository's own
+contracts in `tests/workflow_contracts`. The target is separate from
 `make test` because it needs neither a Rust toolchain nor the workspace's
-Python test requirements:
+Python test requirements. The second stage is this command:
 
 ```bash
 uv run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' \
@@ -981,6 +2926,791 @@ contains no test functions; its own executable examples are what
 document rather than matching its text, so a re-indentation cannot change a
 verdict.
 
+### Whitaker in continuous integration
+
+In continuous integration (CI), the Linux lint leg installs Whitaker through
+the shared `leynos/shared-actions/.github/actions/install-whitaker` action,
+pinned to a full commit hash (SHA, the Secure Hash Algorithm identifier of a
+Git commit), in a step named `Install Whitaker` that is guarded to
+`matrix.platform == 'linux'`. The action owns the install: it takes a
+digest-verified, prebuilt `whitaker-installer` (0.2.12 by default), passes
+`--no-source-fallback`, preinstalls the prebuilt `dylint-link`, authenticates
+with `github.token`, and caches the installer itself. The repository therefore
+carries no resolve, cache or install script for it. Whitaker's lint suite is a
+rolling release, so the suite is not pinned here; the pinned action revision is
+what stays fixed.
+
+The concordat QG-002 rule accepts a revision of that action only if it is a
+shared-actions commit, from the revision that first carried the install rules
+onwards, that either leaves the action directory content-identical to an
+approved root or is itself approved as a new root (concordat #331 approved the
+revision that defaults whitaker-installer to 0.2.11; the pin now sits at one
+that defaults to 0.2.12), so the pin moves with the other shared-actions
+references (the one-SHA contract in `sccache_wiring_test.py`, which exempts
+`.github/actions/rust-build-release` and
+`.github/workflows/mutation-cargo.yml`; those two may sit at their own full
+commit hashes, and the Whitaker pin follows the rule for every non-exempt
+reference). The workflow contract `whitaker_install_test.py` asserts exactly one
+`Install Whitaker` step, using the action at a full commit hash, with no
+script of its own, on the Linux leg only.
+
+Whitaker takes none of the
+[development build standard](#development-build-standard). `make lint-whitaker`
+deliberately assigns `STRICT_RUSTFLAGS` alone and never `GATE_RUSTFLAGS`,
+because Whitaker runs on the toolchain its installer manages rather than on
+this repository's pinned nightly, and `mold` is not a prerequisite it can rely
+on. `build_standard_routing_test.py` holds the assignment to exactly
+`-D warnings`.
+
+### The advisory Clippy-on-beta lane
+
+`clippy-beta` is the early-warning job for lints that have landed on the Rust
+beta channel but not yet on the pinned toolchain. It is advisory at the *job*
+level, through `continue-on-error: true` next to `runs-on` rather than inside
+the lint step. Job scope is what keeps a new beta lint from blocking a merge
+while still leaving each leg's own result visible; the pinned-toolchain
+`build-test` job remains the required one, and `clippy-beta`'s own
+`fail-fast: false` is what stops a failing Linux leg from cancelling the
+Windows one before it reports.
+
+The job runs on `ubuntu-latest` and `windows-latest`, and the Windows leg earns
+its machine. `make lint-clippy` compiles materially different source on the two
+platforms: `cargo-orthohelp/tests/powershell_windows.rs` is gated behind
+`cfg(windows)` and is not compiled anywhere else, and the same is true of the
+MSVC branch of `ortho_config/tests/documentation_examples/cargo_runner.rs`. On
+2026-09-28 the job failed on four lints in the first of those — a `Result`
+predicate and three constant-size chunk iterators — none of which a Linux-only
+leg can see.
+
+The lane's strictness is not written into the workflow. Both this job and the
+pinned `build-test` job call `make lint-clippy`, whose flags come from the
+Makefile's `CLIPPY_FLAGS`
+(`--workspace --all-targets --all-features -- -D warnings`). CI states the
+strictness once, in the Makefile, and
+`tests/workflow_contracts/clippy_beta_test.py` asserts both ends: the job's
+platforms and advisory scope, and the target it calls.
+
+The beta step also sets `BUILD_STANDARD: '0'`. Beta refuses the nightly-only
+flags the [development build standard](#development-build-standard) restates,
+`-Zthreads=8` among them, so the lane turns the standard off for the whole
+invocation. That also makes the build-tools preflight a no-op, so the job
+installs neither `mold` nor the pinned nightly. `clippy_beta_test.py` asserts
+that the step selecting beta sets the switch to `0`.
+
+## Development build standard
+
+The development build standard is what a contributor's builds, tests, lints and
+type checks use unless a route opts out. It is the parallel `rustc` frontend
+(`-Zthreads=8`) on every host with the default LLVM backend, plus the `mold`
+linker on Linux. These compiler options require the pinned dated nightly; see
+[Toolchain pin and freshness](#toolchain-pin-and-freshness). Cranelift's
+unwinding limitation and the tests it ignores are recorded in the "Cranelift
+development backend" section (now an opt-in) and
+[ADR-0019](adrs/adr-0019-use-cranelift-for-development-builds.md).
+
+The maintainer has made four decisions that this section records: development
+and formatting use a dated nightly, dev-fast uses the parallel frontend (with
+Cranelift as a disabled opt-in since 14 November 2026), Linux uses `mold`, and
+Dependabot keeps the pin fresh.
+
+### Where the flags live
+
+For a bare `cargo` invocation, `.cargo/config.toml` is the whole statement of
+the standard:
+
+```toml
+[build]
+rustflags = [
+  "-Zthreads=8",
+  # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+  # "-Zcodegen-backend=cranelift",
+  # "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+]
+
+[target.'cfg(target_os = "linux")']
+rustflags = [
+  "-Zthreads=8",
+  # Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+  # "-Zcodegen-backend=cranelift",
+  # "--cfg=ortho_config_dev_fast",
+  "--check-cfg=cfg(ortho_config_dev_fast)",
+  "-Clink-arg=-fuse-ld=mold",
+]
+```
+
+The estate standard is LLVM, so LLVM is the default backend here; see the
+[concordat decision record](https://github.com/leynos/concordat/blob/main/docs/adrs/adr-0004-cranelift-is-not-part-of-the-rust-build-standard.md),
+with review due 14 May 2027. The commented lines are the opt-in: uncomment the
+backend and the `ortho_config_dev_fast` cfg together (and
+`STANDARD_BACKEND_FLAG` and `STANDARD_DEV_FAST_CFG` in the Makefile). Cranelift
+does not run destructors while unwinding, so the cfg ignores the
+unwind-dependent tests under it. A persistent opt-in also changes the
+default-only expectations in
+`tests/workflow_contracts/build_standard_*_test.py` and
+`cargo-orthohelp/tests/compile_time/flags_tests.rs`; a one-off `--config` or
+`RUSTFLAGS` override needs neither.
+
+`mold` ships for Linux only, so it appears under the Linux target table alone.
+It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
+match. macOS and Windows get the parallel frontend and keep the platform linker.
+
+Cargo selects one `rustflags` source and does not merge them. A matching
+`[target.*]` table replaces `[build] rustflags` outright, and an assigned
+`RUSTFLAGS` outranks every table. `-Zthreads=8` is therefore repeated in each
+source, and each Makefile recipe that assigns `RUSTFLAGS` restates the standard
+through four variables:
+
+- `STANDARD_RUSTFLAGS` is the standard for the host: `-Zthreads=8` and the
+  registered `ortho_config_dev_fast` cfg name, plus `-Clink-arg=-fuse-ld=mold`
+  when `BUILD_HOST_OS` is `Linux`. `STANDARD_BACKEND_FLAG` is empty by default;
+  it carries the Cranelift flag only for an opt-in. `STANDARD_RUSTFLAGS` is
+  empty when `BUILD_STANDARD` is not `1`.
+- `GATE_RUSTFLAGS` is `-D warnings` followed by `STANDARD_RUSTFLAGS`. Every
+  gate recipe that runs Cargo through the standard uses it.
+- `DEBUG_RUSTFLAGS` is `STANDARD_RUSTFLAGS` alone, so a debug build keeps the
+  caller's warning policy rather than imposing one.
+- `RELEASE_RUSTFLAGS` is an empty assignment, which displaces the configuration
+  and so gives release builds none of the standard.
+
+`BUILD_HOST_OS` is the output of `uname -s`, or `Windows_NT` on Windows.
+Recipes invoke Cargo as `$(CARGO)`, so the executable is injectable.
+
+A gate that assigned only `-D warnings` would silently lose the standard and
+still be green. `build_standard_routing_test.py` therefore holds the Make
+variables equal to the configuration file for each host it names; change one
+without the other and that contract fails.
+
+Cargo ranks `CARGO_ENCODED_RUSTFLAGS` above `RUSTFLAGS`, and an empty value
+still wins. A value inherited from an enclosing Cargo run would therefore
+displace every route above, however carefully it was written, so the Makefile
+un-exports it. A dry run cannot show an `unexport`, so the same contract reads
+the directive from the file.
+
+### Routing matrix
+
+Which flags reach Cargo depends on the route, and three things must not be
+blurred:
+
+- Bare Cargo behaviour is the configuration file. A bare `cargo build`,
+  `cargo test` or `cargo check` reads `.cargo/config.toml` and nothing else.
+- Make restates the flags, because an assigned `RUSTFLAGS` displaces the file.
+  The restatement is what keeps `make test` and `cargo test` building the same
+  way on the same host.
+- Explicit non-development routes assign `RUSTFLAGS` on purpose, and say so in a
+  comment where they do. Release, coverage, packaging and the Whitaker suite
+  are not development builds and take none of the standard.
+
+The table lists, for each invocation, the flags that reach Cargo and the route
+they take.
+
+| Invocation                                           | Flags that reach Cargo                                                       | Route                |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------- |
+| Bare `cargo` build, test or check (Linux)            | `-Zthreads=8` and `mold`, from the Linux table                               | Development          |
+| Bare `cargo` build, test or check (macOS or Windows) | `-Zthreads=8`, from `[build]`                                                | Development          |
+| `make test`, `make typecheck`                        | `-D warnings` and the host's standard, restated                              | Development          |
+| `make boundary`                                      | `-D warnings` and the host's standard, restated                              | Development          |
+| `make lint-clippy`: the `cargo doc` line             | `-D warnings` and the host's standard, restated                              | Development          |
+| `make lint-clippy`: the `cargo clippy` line          | `-D warnings` and the host's standard, restated                              | Development          |
+| `make build`                                         | The host's standard, restated; no `-D warnings`                              | Development          |
+| `make release`                                       | None: an empty assignment displaces the configuration                        | Production           |
+| `make lint-whitaker`                                 | `-D warnings` alone                                                          | Whitaker's toolchain |
+| `make msrv-build`                                    | `-D warnings` alone, on the stable MSRV compiler                             | MSRV                 |
+| `clippy-beta` lane                                   | `-D warnings` alone, with `BUILD_STANDARD=0` on `cargo +beta`                | Advisory beta        |
+| Coverage in CI                                       | `-D warnings` from the job; `cargo llvm-cov` appends `-Cinstrument-coverage` | Coverage             |
+| Release builds and packaging in CI                   | `-D warnings` from an explicit job-level `RUSTFLAGS`                         | Production           |
+| `cargo +1.95.0 install merman-cli` in CI             | `-D warnings` from the job-level `RUSTFLAGS`                                 | Shielded             |
+| Mutation testing                                     | `-D warnings` from the shared action's default                               | Shared workflow      |
+
+*Table: How each invocation obtains its Cargo flags, and whether it takes the
+development standard.*
+
+Notes on individual rows:
+
+- `make lint-clippy` runs two Cargo commands, `cargo doc` and `cargo clippy`,
+  and the routing contract proves each separately. `make build` omits
+  `-D warnings` by design.
+- `make lint-whitaker` assigns `STRICT_RUSTFLAGS` (`-D warnings`) alone.
+  Whitaker runs on its installer-managed toolchain and takes none of the
+  standard.
+- `make msrv-build` runs on a stable compiler, which refuses the nightly-only
+  flags, so it assigns `STRICT_RUSTFLAGS` alone to displace the configuration.
+- Releases are not a development route and are not built on a stable compiler:
+  they use the pinned nightly with production flags only. See
+  [Releases use the pinned nightly](#releases-use-the-pinned-nightly).
+- Coverage is `generate-coverage` in the `build-test` job and in
+  `coverage-main.yml`. The job-level `RUSTFLAGS: -D warnings` displaces the
+  configuration, so a coverage build uses LLVM and has neither Cranelift,
+  `mold` nor the parallel frontend. The custom cfg is also absent, so the
+  unwind-dependent mutex-poisoning test runs in coverage. The Linux coverage
+  jobs in `ci.yml` and `coverage-main.yml` put the target under `RUNNER_TEMP`
+  and set `CARGO_TARGET_DIR` and `CARGO_LLVM_COV_TARGET_DIR` to the same path.
+  This keeps trybuild's nested Cargo projects from discovering the checkout's
+  development configuration. The Windows leg in `ci.yml` also uses a drive-root
+  path to keep compiler command lines under the `CreateProcess` limit; see
+  [The Windows coverage command line](#the-windows-coverage-command-line).
+- The `cargo-orthohelp` trybuild harness uses `target-tuple` to identify the
+  compiled target when forwarding target-specific Cargo flags to its child.
+- Release builds (`release.yml`, job `build-assets`) and packaging (`ci.yml`,
+  job `binstall-packaging`) set the same explicit job-level value and take the
+  production route.
+- `cargo +1.95.0 install merman-cli` reads this checkout's configuration on a
+  stable compiler that refuses `-Zthreads`. The job-level `RUSTFLAGS` shields
+  it.
+- Mutation testing is a shared reusable workflow whose `setup-rust` default
+  exports `RUSTFLAGS=-D warnings`, so the configuration is displaced. This
+  repository does not set that value and no repository contract covers it; the
+  route depends on the shared action's default.
+
+An empty `RUSTFLAGS` assignment displaces the configuration, which is how
+`RELEASE_RUSTFLAGS` works. An empty `rustflags` input to the shared
+`setup-rust` action is different: it leaves `RUSTFLAGS` unset and so leaves the
+configuration in force. `build_exclusions_test.py` refuses that in the excluded
+jobs.
+
+Installed tooling need not be active in every job. The coverage publisher
+installs `mold` although its flags exclude it, because the suite that runs
+under coverage is the suite the Linux leg runs, and that suite needs the pinned
+linker.
+
+### Installing and checking the build tools
+
+The standard needs the pinned toolchain and Cranelift component on every host,
+plus the pinned `mold` release on Linux. Two targets provision and verify them:
+
+- `make install-build-tools` runs `scripts/install-build-tools.sh`. It downloads
+  the pinned `mold` release (`tools/mold/VERSION`) for the host architecture
+  and verifies it against `tools/mold/SHA256SUMS`. It refuses an unlisted
+  artefact, an ambiguous file and a mismatch, and installs nothing in any of
+  those cases. It then unpacks the release under `BUILD_TOOLS_PREFIX` (default
+  `~/.local`) and runs `rustup toolchain install` with the channel, profile and
+  components from `rust-toolchain.toml` passed explicitly. This prevents a
+  `RUSTUP_TOOLCHAIN` override from selecting another toolchain. Only binary
+  releases are fetched; there is no source-build fallback.
+- `make check-build-tools` runs `scripts/check-build-tools.sh`. On Linux,
+  `ld.mold` must be on `PATH`, must run, and must equal the pin; `rustup`, the
+  pinned toolchain and its Cranelift component must be present. Every failure
+  names `make install-build-tools`, and all failures are reported in one pass.
+  Off Linux the linker half prints a note and passes.
+
+The check runs before `test`, `typecheck`, `lint-clippy` (and therefore `lint`)
+and the debug `build`. It never runs before `release`, `lint-whitaker` or
+`msrv-build`, so a release build does not fail for want of a linker it will not
+use. Under `BUILD_STANDARD=0` it is a no-op.
+
+The Makefile puts `$(BUILD_TOOLS_PREFIX)/bin` first on `PATH` on every host
+except Windows, because `-fuse-ld=mold` resolves by `PATH` order and the pinned
+release must outrank any distribution `mold`. Running the scripts outside Make
+means arranging that order separately.
+
+In CI, `build-test` and the coverage publisher job `coverage-upload` call the
+shared `setup-rust` action, pinned by SHA, with `install-mold: 'true'` and a
+`mold-version` equal to `tools/mold/VERSION`. The call is unconditional, in the
+same job, and before the first step that reaches the suite. The action is a
+notice-only no-op on Windows, so no platform guard exists or is allowed. It
+sets no linker flag; `.cargo/config.toml` does. The Windows leg installs
+nothing because the action does nothing there, and `clippy-beta`, `msrv`,
+packaging and release do not call the installer.
+
+### The Windows coverage command line
+
+Windows enforces two different length limits, and they fail differently. The
+first is `MAX_PATH`, 260 characters, which `link.exe` reports as `LNK1104`; the
+bridge cache key is sized to stay inside it (see
+[The bridge cache key](#the-bridge-cache-key)). The second is the command line
+`CreateProcess` accepts for a spawned process: 32,767 characters, reported as
+`os error 206` before the process ever starts.
+
+The coverage build reaches the second limit. Cargo repeats a single target root
+across dependency search paths and `--extern` arguments. In run 39893695039 the
+`ortho_config` library test's invocation was 33,497 characters, 730 over;
+`D:\a\_temp\cov\llvm-cov-target` appeared 302 times.
+
+`cargo-llvm-cov` normally appends `llvm-cov-target` to `CARGO_TARGET_DIR`,
+while trybuild independently reads that variable through Cargo metadata. A
+drive-root target makes trybuild's normalizer treat source paths as target
+paths, so the Windows-only `Choose the coverage target root` step derives the
+drive from `RUNNER_TEMP`, then sets both `CARGO_TARGET_DIR` and
+`CARGO_LLVM_COV_TARGET_DIR` to the same `llvm-cov-target` directory. The
+LLVM-specific value prevents the action from appending the suffix again. The
+effective `D:\llvm-cov-target` is outside the checkout, shortens each of the
+302 measured occurrences by 12 characters, and leaves 2,894 characters of
+headroom. Linux also sets both variables to one target directory under
+`RUNNER_TEMP`; there the reason is to keep trybuild's nested Cargo projects
+outside the checkout so they cannot discover its Cranelift development flags
+while compiling with LLVM coverage. Two consequences are easy to undo by
+accident:
+
+- The coverage steps must not set either target-directory variable themselves.
+  The platform-specific chooser steps publish them through `GITHUB_ENV`, with
+  equal values so `cargo-llvm-cov` does not append its default suffix again.
+- The selected directory must stay a direct child of the drive root and
+  outside the checkout. A drive-root value prefixes every source path in
+  trybuild diagnostics; a longer directory spends command-line headroom once
+  for every dependency path.
+
+`coverage_command_line_test.py` holds both rules and re-derives the arithmetic
+from the measured invocation, so a change that restores the long root, shortens
+the margin, or moves the assignment fails the contract rather than the Windows
+job.
+
+### Opting out with `BUILD_STANDARD`
+
+`BUILD_STANDARD=0` turns the standard off for one invocation: the recipes then
+assign no standard flags, and the build-tools check prints a note and checks
+nothing. Only the advisory `clippy-beta` lane uses it, because beta refuses the
+nightly-only flags. Use it for any toolchain that is not the pinned nightly,
+together with `CARGO`:
+
+```bash
+make lint-clippy BUILD_STANDARD=0 CARGO="cargo +beta"
+```
+
+### Contract tests
+
+`make test-workflow-contracts` (see
+[Workflow contract gate](#workflow-contract-gate)) holds the standard in place
+with four contracts, a case in a fifth, and two support modules under
+`tests/workflow_contracts/`. Their method is a dry run:
+
+```bash
+make --dry-run <target> CARGO=probe-cargo
+```
+
+Make expands every variable and conditional as a real run would, and the
+contract judges the command line that would have reached Cargo. Case
+identifiers are distinct, so each appears by name in `pytest --collect-only`.
+
+- `build_standard_routing_test.py` compares each development route with the
+  configuration for each of four named hosts: Linux on x86_64, Linux on
+  aarch64, macOS and Windows. It proves that release, Whitaker, MSRV and the
+  `BUILD_STANDARD=0` opt-out are excluded, and that every standard route
+  reaches the preflight before its first Cargo line. A real `make` run proves
+  that a failing preflight stops the build before Cargo runs.
+- `build_tools_provisioning_test.py` derives the Linux jobs that reach the suite
+  from the workflows and from Make's dry run rather than listing them. Each
+  must install the pinned tools first, unconditionally, without
+  `continue-on-error`, with the pinned version.
+- `build_exclusions_test.py` requires the coverage, release and packaging jobs
+  to set a non-empty `RUSTFLAGS` with none of the standard, and requires that
+  nothing re-empties it. It also holds the MSRV job; see
+  [The MSRV lane](#the-msrv-lane).
+- `build_tools_scripts_test.py` drives the preflight with fixture tools in place
+  of the linker and `rustup`, and observes every refusal. The separate
+  `build_tools_install_test.py` exercises archive verification, installation
+  and the supported and unsupported architecture names with offline fixtures.
+- `build_tools_test_support.py` owns the fake tools and offline archive fixtures
+  used only by those two build-tools script contracts; it is not shared
+  subprocess infrastructure.
+- `clippy_beta_test.py` carries a case that the beta step sets
+  `BUILD_STANDARD` to `0`.
+- `build_standard_make.py`, `workflow_legs.py` and `workflow_shell.py` are
+  support code: the first evaluates the Makefile and reads the Cargo
+  configuration, the second derives a job's legs and the steps that reach the
+  suite, and the third reads only enough shell syntax to identify Make goals
+  and command-line `NAME=value` variables in workflow `run` steps.
+  `workflow_shell.py` belongs to this interpreter and is not a general-purpose
+  shell parser. A Make variable can arrive from the job `env`, the step `env`,
+  or the invocation itself; the command line wins, as it does in Make.
+- `workflow_legs_properties_test.py` holds Hypothesis property tests of the
+  `workflow_legs` interpreter: matrix product completeness, `include` entries
+  augmenting the cells whose axis values they keep (and becoming cells of their
+  own when they match none), an `exclude` entry removing exactly its matches,
+  degenerate matrices giving one empty leg, the string, list and mapping forms
+  of `runs-on`, `matrix.<key>` substitution including the fork fallback,
+  unreadable runners raising, and step `if` conditions agreeing with an
+  independent oracle. They are derandomized, bounded and use no example
+  database, so they are deterministic and fast. Each property is also run
+  against a deliberately wrong interpreter (a dropped axis, an ignored
+  `exclude`, includes appended verbatim, a swapped comparison operator, an
+  always-true condition, an unsubstituted reference) and must reject it. They
+  exist because the repository's workflows use one spelling of everything, so
+  the real workflows cannot tell a working interpreter from a broken one, and
+  the provisioning contract depends on it. Hypothesis is already declared for
+  `make test-workflow-contracts` (`--with 'hypothesis>=6,<7'` in the Makefile
+  target).
+
+These contracts judge this repository's own invocations. Estate-wide policy is
+audited by Concordat (`concordat artefact rule run rust-build-defaults`,
+`rust-toolchain-policy` and `dependabot-update-shape`, each with `--repo .`),
+which this repository does not replicate.
+
+## Toolchain pin and freshness
+
+### The pin
+
+`rust-toolchain.toml` pins a dated nightly. The file is authoritative, and this
+guide does not copy its date. The profile is `minimal` and the components are
+`rustfmt`, `clippy`, `rust-analyzer`, `rustc-codegen-cranelift-preview` and
+`llvm-tools-preview`. The pin is the newest nightly for which every component
+exists on Linux (x86_64 and aarch64), Windows MSVC and macOS, checked against
+the published rustup manifests.
+
+- The nightly is needed because `-Zthreads=8`, the parallel `rustc` frontend, is
+  nightly-only.
+- `llvm-tools-preview` is for local `cargo llvm-cov`.
+- `rustc-codegen-cranelift-preview` is the optional Cranelift backend for an
+  opt-in; development builds use LLVM by default.
+
+`scripts/build-tools-common.sh` reads the channel from `rust-toolchain.toml`,
+so the installer and the check follow the pin and no second copy exists.
+
+### Releases use the pinned nightly
+
+Releases stay on the pinned nightly; this is a maintainer decision.
+`rust-build-release` resolves the toolchain from an explicit input, then from
+`rust-toolchain.toml`, then from the manifest `rust-version`. `release.yml`
+passes no `toolchain` input and names no toolchain, so the
+Dependabot-maintained pin governs releases. They take production flags only:
+`RUSTFLAGS: -D warnings`, LLVM and the platform linker. No workflow names a
+dated nightly other than the pin (estate rule RT-027).
+
+### Dependabot keeps the pin fresh
+
+`.github/dependabot.yml` carries a `rust-toolchain` entry on `/`. It runs
+daily, sits in the catch-all `minor-and-patch` group (patterns `*`, update types
+`minor` and `patch`), uses the `dependencies` and `rust-toolchain` labels, and
+has no cooldown. The reasoning is:
+
+- The estate audit requires a Dependabot `rust-toolchain` entry that is daily or
+  weekly (RT-024), and a pinned dated nightly no older than 56 days (RT-023).
+- The estate Dependabot-shape rule requires every entry to be daily with a final
+  catch-all group (DB-005). Daily is the one interval that satisfies both
+  interval rules.
+- No rule asks for a cooldown, and a nightly's age is its date, so a cooldown
+  would spend part of the 56-day window before the bump pull request opened.
+
+### Bumping the pin
+
+Dependabot proposes the bump. A human reviewing the pull request must:
+
+1. Regenerate the trybuild `.stderr` snapshots from the compiler, never by
+   hand, then re-run with `TRYBUILD` unset to confirm. Ten test binaries use
+   trybuild, and they share one project directory under
+   `target/tests/trybuild`, so run them one at a time (`cargo test` does; a
+   parallel runner must serialize them):
+
+   ```bash
+   for t in boolean_cli_trybuild compile_fail crate_path_trybuild \
+     declarative_merge_trybuild env_source_trybuild generated_lint_trybuild \
+     localization_trybuild localized_parse_trybuild subcommand_trybuild; do
+     TRYBUILD=overwrite cargo test -p ortho_config --test "$t"
+   done
+   TRYBUILD=overwrite cargo test -p cargo-orthohelp --test compile_time
+   ```
+
+   See [Testing these diagnostics](#testing-these-diagnostics).
+2. Confirm from the diff that only compiler wording changed.
+3. Read a red test run for layout assumptions as well as compiler wording. A
+   nightly can change where Cargo writes build output: the first bump moved
+   build-script output from `target/<profile>/build/<hash>/out` to
+   `target/<profile>/build/<package>/<hash>/out`, which broke
+   `identifier_artefact_e2e.rs` ("fixture identifier artefact was not emitted")
+   after a complete build. Tests should ask where an artefact is, by bounded
+   search or Cargo's JSON `out_dir`, rather than encode one layout.
+4. Check the length of the longest path the Windows leg builds. Cargo 1.100
+   made the new build directory layout unconditional: every artefact now lands
+   in `target/<profile>/build/<package>/<hash>/out/`, and there is no flag to
+   restore `deps/`. On the pin at the time of writing this moved
+   `orthohelp_policy_warn_fixture`'s `.rlib` from 210 to 262 characters on a
+   hosted Windows runner, over the 260-character `MAX_PATH` that `link.exe`
+   still applies, and `build-test (windows)` failed with `LNK1104`. The bridge
+   cache-directory name was shortened from 64 to 32 hexadecimal digits to make
+   room; see [*The bridge cache key*](#the-bridge-cache-key). A newer
+   dependency also widens the coverage compiler command line, which is bounded
+   by `CreateProcess` rather than by `MAX_PATH`; see
+   [The Windows coverage command line](#the-windows-coverage-command-line).
+   Platform-specific length limits are invisible to a Linux-only gate, so check
+   them by hand rather than waiting for the runner to say so.
+5. Re-read the remeasurement instruction in the "Cranelift development backend"
+   section of this guide.
+6. Run `make install-build-tools` and `make check-build-tools` locally to pick
+   up and verify the new channel.
+
+### The MSRV lane
+
+The workspace `rust-version` is 1.89.0 and CI exercises it. The `msrv` job in
+`ci.yml` is a matrix job keyed by `toolchain`, with one leg, `"1.89"`, quoted
+in YAML so that it is not read as a number. The leg installs
+`${{ matrix.toolchain }}` through the pinned `dtolnay/rust-toolchain` action
+and runs `make msrv-build MSRV=${{ matrix.toolchain }}`. That target is:
+
+```bash
+RUSTFLAGS="$(STRICT_RUSTFLAGS)" $(CARGO) +$(MSRV) build --workspace --all-targets --all-features
+```
+
+`MSRV` defaults to the manifest's `rust-version` as major.minor (currently
+1.89), so a local run cannot drift from the promise; CI passes the matrix value
+explicitly. The leg builds every workspace target with all features and runs no
+test.
+
+The lane builds rather than checks by a deliberate maintainer choice. The
+estate rule RT-026 states a cost rule of `cargo check --all-targets` on the
+MSRV and never a second test run. A build is stronger than a check, because it
+also links, and it is still not a test run. The numeric leg, equal in
+major.minor to the MSRV, is what RT-026 detects. Behaviour is established on
+the pinned toolchain by `build-test`, so a test run here would only repeat it.
+The command was proved by running it on 1.89.
+
+The leg must not inherit the nightly flags. `.cargo/config.toml` carries
+`-Zthreads=8`, which a stable compiler rejects, so the recipe assigns
+`RUSTFLAGS` to displace it, as the coverage route does. `mold` is not required
+on this leg.
+
+`build_exclusions_test.py` and `build_standard_routing_test.py` hold the lane
+in place:
+
+- The matrix leg equals the manifest's `rust-version` as major.minor, so the
+  two cannot drift, and it is quoted in YAML.
+- The job installs `matrix.toolchain` and runs only
+  `make msrv-build MSRV=${{ matrix.toolchain }}`. It runs no test command and
+  sets no nightly flag in its environment.
+- The Make recipe builds, and does not test, with
+  `--workspace --all-targets --all-features`. It selects `+toolchain`, assigns
+  `RUSTFLAGS` without any standard flag, and takes the toolchain it is given.
+
+### The workspace-package warning
+
+On the pinned nightly, Cargo warns `cargo::unused_workspace_package_fields` for
+`version`, `readme`, `keywords` and `categories` in `[workspace.package]`,
+because no member inherits them. They cannot simply be removed:
+`scripts/bump_version.py` and `scripts/release_archive_naming.py` read
+`workspace.package.version`.
+
+## Cranelift development backend
+
+This section records the known limitation of the selected dev-fast backend, the
+measurements that established it, and how to remeasure after a toolchain bump.
+The current route is defined in
+[ADR-0019](adrs/adr-0019-use-cranelift-for-development-builds.md).
+
+Current record: Pinned channel `nightly-2026-10-16`; initial measurement on
+2026-10-16; dev-fast adopted on 2026-10-23 with the test routing below.
+
+Tracking: [issue #598](https://github.com/leynos/ortho-config/issues/598)
+requires a re-measurement by 2027-04-18, whatever the pin has moved to by then.
+Rewrite the record line above when that measurement is taken.
+
+The pinned nightly is `rustc 1.101.0-nightly (2026-10-15)`. The
+`rustc-codegen-cranelift-preview` component of the same date stays installed by
+`rust-toolchain.toml`, so a re-measurement needs no toolchain edit.
+
+### Known limitation
+
+Cranelift, an opt-in since 14 November 2026, has a known unwind limitation: a
+panic raised in Cranelift-compiled code does not find the unwind handler. As a
+result:
+
+- `catch_unwind` fails to catch the panic.
+- Destructors do not run during unwinding.
+- A panic on a spawned thread aborts the whole process with
+  `fatal runtime error: failed to initiate panic, error 5, aborting` (SIGABRT).
+
+The direct `#[should_panic]` path works. The three external-subcommand
+debug-assertion tests and the empty-aggregate test use that path, so they stay
+active under dev-fast. The spawned-thread mutex-poisoning test is marked
+ignored only when `ortho_config_dev_fast` is set; coverage overrides
+`RUSTFLAGS`, uses LLVM, and runs it.
+
+The measurement host was x86_64 Linux (Rocky 10). Cranelift was selected the
+way the standard would have carried it: `-Zcodegen-backend=cranelift` in
+`rustflags`, together with `-Zthreads=8` and `-Clink-arg=-fuse-ld=mold`. A
+`[profile.dev] codegen-backend` key was rejected on other grounds; see Option A
+in
+[ADR-0018](adrs/adr-0018-adopt-a-dated-nightly-and-the-development-build-standard.md).
+
+### The probe
+
+The probe is a five-case crate: a `#[should_panic]` test, `catch_unwind` on the
+main thread, a `Drop` guard observed after `catch_unwind`, a spawned thread
+that is joined, and a scoped thread caught with `catch_unwind`.
+
+```rust
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+#[test]
+#[should_panic(expected = "boom")]
+fn should_panic_is_observed() {
+    panic!("boom");
+}
+
+#[test]
+fn main_thread_catch_unwind_catches() {
+    assert!(catch_unwind(AssertUnwindSafe(|| panic!("boom"))).is_err());
+}
+
+#[test]
+fn spawned_thread_panic_unwinds_to_join() {
+    assert!(std::thread::spawn(|| panic!("boom")).join().is_err());
+}
+
+#[test]
+fn scoped_thread_panic_unwinds_to_scope() {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        std::thread::scope(|scope| {
+            scope.spawn(|| panic!("boom"));
+        });
+    }));
+    assert!(result.is_err());
+}
+
+#[test]
+fn drop_runs_during_unwind() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static DROPPED: AtomicBool = AtomicBool::new(false);
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            DROPPED.store(true, Ordering::SeqCst);
+        }
+    }
+    let _ = catch_unwind(|| {
+        let _guard = Guard;
+        panic!("boom");
+    });
+    assert!(DROPPED.load(Ordering::SeqCst));
+}
+```
+
+| Case                        | Cranelift (with `-Zthreads=8` and `mold`) | LLVM control (`-Zthreads=8` and `mold`, the prior standard) |
+| --------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `#[should_panic]`           | Passes                                    | Passes                                                      |
+| Main-thread `catch_unwind`  | Fails                                     | Passes                                                      |
+| `Drop` during unwinding     | Fails                                     | Passes                                                      |
+| Spawned-thread panic joined | Aborts the process                        | Passes                                                      |
+| Scoped-thread panic caught  | Aborts the process                        | Passes                                                      |
+
+*Table: Results of the initial five-case probe on `nightly-2026-10-16`,
+measured on 2026-10-16.*
+
+As an attribution control, `-Zcodegen-backend=cranelift` as the only flag, with
+neither `mold` nor `-Zthreads`, aborts the probe the same way. Neither `mold`
+nor the parallel frontend is the cause.
+
+### Initial repository-suite measurement
+
+The results below are the initial measurement before the test adaptation
+described above. They preserve which existing tests exposed the unwind
+limitation; they are not the current `make test` result.
+
+The suite ran as `cargo nextest run --workspace --all-features --no-fail-fast`
+with
+`RUSTFLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold"`,
+which is equivalent to the configuration file. It selected 1924 tests in 97
+binaries. Of these, 1902 completed and 1876 passed. Nine test executions (seven
+distinct test functions) failed, all by unwinding.
+
+| Failure mode                                                              | Test functions                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catch_unwind` fails: assertion failed (4 executions)                     | `ortho_config` `cargo::tests::empty_subcommand_name_trips_debug_assertion`, `cargo::tests::reserved_help_name_trips_debug_assertion`, `cargo::tests::transposed_names_trip_debug_assertion` and `error::tests::aggregate_panics_on_empty`                           |
+| Panic on a spawned thread aborts the test process: SIGABRT (5 executions) | `process_runner::tests::reader_thread_diagnostic_names_the_stream` cases `case_1_stdout` and `case_2_stderr`, compiled into two test binaries (`ortho_config::documentation_examples_tests` and `ortho_config::documentation_examples_rust_tests`; four executions) |
+| Panic on a spawned thread aborts the test process: SIGABRT (continued)    | `rstest_bdd_support::scenario_state::scenario_state_tests::take_issues_recovers_from_poisoned_mutex` in `ortho_config::rstest_bdd`, where a thread panics while holding a mutex (one execution)                                                                     |
+
+*Table: Test functions that failed under Cranelift, by failure mode.*
+
+The LLVM control on the same tree, under the then-committed standard
+(`-Zthreads=8` and `mold`, LLVM backend), passed all 1731 tests in the 80 fast
+binaries. That includes the five unwinding tests that failed above, and the four
+`reader_thread_diagnostic_names_the_stream` executions pass when run by name.
+
+Under Cranelift these mechanisms, which the estate watches, passed:
+
+- All five `#[should_panic]` tests:
+  `localizer::clap_command::tests::localize_panics_on_colliding_argument_identifiers`,
+  the matching test for subcommand identifiers,
+  `localizer::identifier::tests::message_id_for_rejects_ids_without_leading_letter`
+  (its cases), the `..._unrepresentable_segments` test (its cases), and
+  `localized_parse::agreement::fluent_unsafe_identifier_panics`.
+- The proc-macro crate `ortho_config_macros`. Its 281 unit tests passed, and a
+  type generated by the Cranelift-compiled macro still rejects invalid input:
+  `#[ortho_config(cli_long = "help")]` fails with "reserved `cli_long` 'help'
+  conflicts with global clap flags", identically under LLVM.
+- 116 `cargo-orthohelp` bridge tests (`golden_tests`, `agent_context_contract`,
+  `policy_report_contract`, `nested_subcommand_end_to_end` and `rstest_bdd`).
+  They spawn child `cargo build` processes that inherit the configuration.
+- Doctests: `cargo test --workspace --doc --all-features` with the same
+  `RUSTFLAGS` passed all 124 doctests across the workspace crates, with none
+  failing. Rustdoc builds the doctest binaries and does not read `RUSTFLAGS`,
+  so Cranelift compiled their dependencies only.
+- The trybuild corpus, with its nine test binaries serialized: all 10 tests
+  passed (see the next subsection).
+
+### What is not attributed
+
+The following are not attributable to Cranelift and are not part of the
+exception:
+
+- The earlier result that `ortho_config::compile_fail` reported all 33 of its
+  UI cases as compiling was an artefact of running the trybuild binaries
+  concurrently. They share one project directory
+  (`target/tests/trybuild/ortho_config`) and must run one at a time. It is not
+  a Cranelift failure. With the nine trybuild test binaries serialized
+  (`--test-threads 8` and a nextest group allowing one at a time), all 10 tests
+  pass under the same flags: `cargo-orthohelp::compile_time`
+  (`must_use_compile_tests`), `ortho_config::compile_fail` (two tests),
+  `crate_path_trybuild`, `declarative_merge_trybuild`, `env_source_trybuild`,
+  `generated_lint_trybuild`, `localization_trybuild`,
+  `localized_parse_trybuild` and `subcommand_trybuild`.
+- `identifier_artefact_e2e` failed in the Cranelift run, but not because of the
+  backend. It assumed the older Cargo build-directory layout
+  (`build/<hash>/out`), while the pinned nightly writes
+  `build/<package>/<hash>/out`. It now reads the build-script `out_dir` from
+  Cargo's JSON messages and passes under the standard, so it is not an
+  exception test.
+- Of the ten tests terminated when the first run was stopped, nine were
+  trybuild tests, now measured as above. The tenth, the
+  `cargo-orthohelp::rstest_bdd` scenario
+  `orthohelp_agent_context_generate_agent_context_json_from_the_simple_fixture`,
+  was not re-run.
+
+At the time that initial run ended, these had not been measured under Cranelift:
+
+- 22 selected tests were never reached when the first run was stopped.
+- Five documentation-example tests failed at their 1,200-second in-process
+  deadline. They fail identically under LLVM on this saturated host, so the
+  deadline reflects host load and not the backend.
+- The one `cargo-orthohelp::rstest_bdd` scenario named above.
+
+A later measurement that covers these belongs in the tables above.
+
+Windows and macOS were not included in that initial full-suite measurement,
+which ran on Linux. The pinned nightly publishes the Cranelift component for
+x86_64 Windows MSVC, aarch64 and x86_64 macOS, and Linux aarch64. The current
+CI build-test jobs exercise the configured development route on supported
+platforms; coverage remains LLVM-only.
+
+### Remeasuring after a toolchain bump
+
+Remeasure on every toolchain bump, because Dependabot moves the pin daily.
+Rewrite the record line near the top of this section with the current pin and
+measurement date. Compare the probe and suite with the historical results above
+and keep the test routing aligned with the observed backend behaviour.
+
+The flags below select Cranelift the way the standard would carry it:
+
+```bash
+CRANELIFT_FLAGS="-Zthreads=8 -Zcodegen-backend=cranelift -Clink-arg=-fuse-ld=mold"
+```
+
+1. Read the pinned channel from `rust-toolchain.toml` before leaving the
+   checkout, because a scratch crate outside the repository does not inherit
+   that file and the flags above need the pinned nightly:
+
+   ```bash
+   CHANNEL=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+   ```
+
+   Run the probe above in the scratch crate with
+   `RUSTFLAGS="$CRANELIFT_FLAGS" cargo "+$CHANNEL" test`. The component is
+   installed by `rust-toolchain.toml` and checked by `make check-build-tools`.
+2. Run the suite with the same `RUSTFLAGS` and
+   `cargo nextest run --workspace --all-features --no-fail-fast`, serializing
+   the trybuild binaries.
+3. Keep the known limitation and cfg-gated test if unwind behaviour is
+   unchanged. Remove the dev-fast test exception only after the five-case probe
+   and all affected tests pass under Cranelift. Coverage must continue using
+   LLVM instrumentation.
+
 ## Publish dry run
 
 `make publish-check` runs `lading publish` over the workspace. lading copies
@@ -995,6 +3725,25 @@ own instance: `OrthoConfigSubcommandDocs` is exported by the workspace
 tarball verification resolves the re-export against the published crate and
 fails with "no `OrthoConfigSubcommandDocs` in the root". Nothing else in CI
 sees that.
+
+The order is a claim about the workspace graph, so it is checked against the
+graph rather than restated beside it.
+`tests/workflow_contracts/publish_order_test.py` derives the published set from
+the manifests (a member publishes unless it sets `publish = false`) and the
+edges from the `path` dependencies they declare. It asserts that the order
+names exactly the publishable members, and that a crate appears after
+everything it depends on. A wrong order still builds locally, because Cargo
+resolves the path; it fails only when a publisher asks crates.io for a version
+that is not there yet.
+
+Dev dependencies are real edges here. The workspace has no dev-dependency cycle
+today: the macros crate once dev-depended back on `ortho_config`, which made
+the pair mutually dependent, and that edge has since been removed. The contract
+keeps a narrow exemption for mutually dependent pairs, so a future cycle cannot
+fail the ordering check for a reason no order can fix. Every other edge is
+enforced, including `ortho_config`'s dev dependency on
+`ortho_config_test_helpers`, which is why the helper crate is published before
+it. That edge has already been broken once.
 
 Before it packages, lading runs a pre-flight:
 `cargo check --workspace --all-targets`, then `cargo test`, both into a
@@ -1032,6 +3781,8 @@ a no-source-build policy, so every release must carry prebuilt archives that
 `cargo binstall` can resolve. `.github/workflows/release.yml` publishes them
 for five targets, each built on a runner of its own architecture and operating
 system rather than cross-compiled:
+
+*Table: `cargo-orthohelp` release targets and native runners.*
 
 | Target                      | Runner             |
 | --------------------------- | ------------------ |
@@ -1095,6 +3846,17 @@ one, so a tooling-only release is a patch bump of that crate alone. Edit
 `cargo update -p cargo-orthohelp`, and tag `v<version>`. Use
 `scripts/bump_version.py` only when the whole workspace is being released.
 
+That script discovers the internal dependency requirements instead of naming
+them. For each member manifest it bumps every dependency declared with a
+`path`, across the normal, dev, and build tables. A hand-kept list of crates
+went stale as soon as `ortho_l10n` joined the graph: `ortho_config` kept
+requiring a version the release would never publish, and the resulting failure
+would have surfaced only in the publish dry run. External requirements are left
+alone, so a dependency on a third-party crate is never rewritten. Selection
+works on the table and the name together rather than on the name alone, so a
+crate whose name is also an external dependency's is rewritten only in the
+table where it is declared with a `path`.
+
 ### Verifying the packaging locally
 
 `make test` covers the packager and the auditor; `make test-workflow-contracts`
@@ -1114,7 +3876,9 @@ test of the extracted binary on Linux, macOS, and Windows.
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-Run the gate on its own with `make spellcheck`. The whole gate is the shared
+Run the gate on its own with `make spellcheck`; `make spelling` is an alias for
+it, because the shared `AGENTS.md` spelling block names that command. The whole
+gate is the shared
 [`typos-config-builder`](https://github.com/leynos/typos-config-builder), run
 through `uv tool run` and pinned by the Makefile `TYPOS_CONFIG_BUILDER_VERSION`
 variable, so local runs and CI use the same version of both the builder and the
@@ -1148,7 +3912,12 @@ into untracked `.typos-oxendict-base.toml`, merged with the `typos.local.toml`
 overlay. A word added to the shared dictionary therefore reaches this
 repository on its next run, with no change here. Because the dictionary is live,
 `typos.toml` must never be drift checked in continuous integration; any hand
-edit is overwritten on the next run.
+edit is overwritten on the next run. When a run changes the tracked
+`typos.toml`, commit the regenerated file; if the change is unrelated to the
+work in hand, commit it in a separate base pull request and stack the branch on
+it. `TYPOS_CONFIG_BUILDER_VERSION` in the `Makefile` pins the release the gate
+runs (currently `v0.1.3`); raise it together with the regenerated `typos.toml`,
+never on its own.
 
 Generic Oxford stems and corrections belong in the shared dictionary maintained
 by `leynos/agent-helper-scripts`. Keep local entries narrow: this repository's
@@ -1216,6 +3985,19 @@ that discovery still finds the workflows it is expected to, so a broken read
 cannot empty the list and turn the rest into a vacuous pass. Run it with
 `make test-workflow-contracts`.
 
+## Development build footprint
+
+The Concordat `rust-dev-build-footprint` rule keeps default development builds
+small. The workspace `Cargo.toml` sets `incremental = false` and `debug = 0` in
+`[profile.dev]`, and the test profile inherits both, so builds keep no
+incremental compilation state and no debug information. The trade-off is that a
+debugger sees no symbols or line tables in a default development build and
+every rebuild recompiles whole crates. To debug, run with
+`CARGO_PROFILE_DEV_DEBUG=true`; to rebuild incrementally, set
+`CARGO_INCREMENTAL=1`. The workspace pins `nightly-2026-10-16` for development,
+formatting and Clippy; stable MSRV builds use the separate `make msrv-build`
+route. `tests/workflow_contracts/build_footprint_test.py` holds both settings.
+
 ## Test timeouts: the tiers this repository sets
 
 Four independent timers can end a test run, and the canonical statement of how
@@ -1224,14 +4006,34 @@ they must be ordered lives in the `generate-coverage` README in
 until this branch, tier one covered two trybuild binaries and nothing else, and
 tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10); the trybuild override is also 600 s |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                                                                               |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10) base; 960 s (120 s x 8) for the trybuild, child-cargo, BDD and boundary packaging classes |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 2,300 s (38 m 20 s)                                                                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 3,300 s (55 m)                                                                                              |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 190 m in `ci.yml`, 140 m in `coverage-main.yml`                                                             |
 
 *Table: the timers that can end a run, innermost first.*
+
+### Documentation subprocess budgets on shared hosts
+
+Executable documentation examples use the fixed 956-second scenario envelope
+described above. Build, execution, and discovery are capped at 956, 60, and 30
+seconds respectively; each operation also inherits the scenario's remaining
+time. `cargo-orthohelp` BDD scenarios use the same 956-second envelope. These
+scenarios run under a 960-second nextest allowance, count Cargo lock and
+compiler admission time, and have no environment override; controlled
+regression tests inject short-lived policies directly so they cannot change
+parallel test processes.
+
+The earlier separate-target implementation of the documented CLI flow took 56.5
+s and 120.7 s on hosted runners, 588.0 s and 593.6 s on a shared host, and
+600.5 s on a saturated shared host, where the old 600-second limit ended the
+run. Those wall times did not include correlated admission-delay or reliable
+cache hit/miss evidence. This change reuses Cargo's configured target and
+shared cache, removing the duplicate cold dependency build. The finite scenario
+ceiling remains tied to nextest's per-test allowance rather than being
+increased to absorb unmeasured queue time.
 
 ### The outermost tier was missing
 
@@ -1252,9 +4054,16 @@ callers invoke the action once.
 ### The per-test budget is a product, not a period
 
 `terminate-after` counts warning periods, so the budget a test gets is `period`
-multiplied by it. The longest override here is 120 s with a multiplier of five,
-so reading the period alone would report 120 s where the real figure is 600 s.
-The contract asserts that reading outright rather than leaving it implied.
+multiplied by it. The longest override here is 120 s with a multiplier of
+eight, so reading the period alone would report 120 s where the real figure is
+960 s. The contract asserts that reading outright rather than leaving it
+implied.
+
+Two tiers can also name the *same* product while meaning different things,
+which is worth knowing before sizing one by the other. The trybuild override
+was 120 s x 5 and the default profile is 60 s x 10, so both allowed 600 s and
+the override changed only how often the warning appeared. A binary added to the
+override for its larger-looking period therefore gained nothing at all.
 
 ### Tier one covered two binaries, and tier two did not exist
 
@@ -1287,18 +4096,167 @@ allowance is 600 s, ten warning periods of 60 s, about 1.6 times that worst
 case: enough that a legitimately slow test finishes, small enough that a hang
 is caught well inside the whole-run budget.
 
-The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
-It has to fit inside the watchdog with nextest's termination procedure and a
-cold build counted, which is 1,800 s plus 70 s plus 600 s, or 2,470 s. The
-watchdog was 1,800 s and could not have carried it, so it rises to 2,700 s.
-That is what moves the ceilings: the requirement is the watchdogs a job
-contains plus the work outside them plus the margin, and each job runs the
-action twice.
+### The trybuild allowance was raised after it killed two tests
+
+The trybuild class outgrew its 600 s. It is budgeted apart from the base
+allowance because each of these binaries spawns a child `cargo` in a separate
+target directory, so none shares cargo-llvm-cov's warmed cache and each pays a
+cold dependency build. They also share one package cache and so block on its
+lock while their neighbours build, which the logs show directly: run
+36070786646 recorded four `Blocking waiting for file lock on package cache`
+lines, and run 36068184976 recorded none.
+
+Two measurements set the new figure:
+
+| What                             | Duration | Of its budget   | Run         |
+| -------------------------------- | -------- | --------------- | ----------- |
+| `crate_path_trybuild`, passed    | 572.5 s  | 0.95 of 600 s   | 36068184976 |
+| `must_use_compile_tests`, killed | 600.2 s  | the whole of it | 36070786646 |
+
+*Table: the worst trybuild durations observed. The first passed with only 27 s
+to spare, so the old allowance was already too small rather than merely
+unlucky; the second was still cold-compiling its first dependencies
+(`proc-macro2`, `unicode-ident`) when it was stopped, so it was slow rather
+than hung.*
+
+The allowance is now 960 s, eight warning periods of 120 s, which is 1.68 times
+the 572.5 s worst observed — the same headroom the base allowance was sized
+with against its own 364.8 s. The filter names all ten trybuild binaries rather
+than the two it used to; eight end in `trybuild` and `compile_fail` and
+`compile_time` do not, so no single glob covers the class and the names are
+enumerated instead. Ten is the count `trybuild_tier_test.py` enforces, so a
+trybuild binary that arrives after the enumeration is written is reported by
+the contract rather than silently left on the base allowance:
+`subcommand_trybuild` arrived that way on `main`, and `localization_trybuild`
+and `boolean_cli_trybuild` arrived that way from branches, and the contract is
+what caught each.
+
+The largest per-test allowance is 960 s, taken by the trybuild, `rstest_bdd`,
+documentation and boundary scenarios, and lower than the 2,300 s whole-run
+budget, which the ordering contract asserts. That comparison does not by itself
+guarantee a test using its full allowance finishes before the run deadline,
+since a test that starts late spends part of the budget waiting to be
+scheduled; it establishes that the allowance cannot exhaust the run on its own.
+
+The whole-run budget has to fit inside the watchdog with nextest's termination
+procedure and a cold build counted, which is 2,300 s plus 70 s plus 600 s, or
+2,970 s, so the watchdog rises to 3,300 s. That is what moves the ceilings: the
+requirement is the watchdogs a job contains plus the work outside them plus the
+margin, and each job runs the action twice.
+
+### The whole-run budget was resized from a cold run
+
+The budget was 1,800 s, about 1.76 times the 1,023.6 s warm sample above.
+Pinning the dated nightly invalidated that sample, and it is now 2,300 s, sized
+from a run that was cancelled rather than from one that finished.
+
+`sccache` keys its entries by compiler, so the toolchain change cold-missed the
+whole Windows dependency graph. The leg's hit rate fell from 89.00 % — 2,282
+hits against 282 misses — on the previous toolchain to 35.67 %, or 824 hits
+against 1,486 misses, on this one.
+
+A cold cache does not merely move the build out of the way. It lands inside
+nextest's clock, because the binaries whose tests spawn their own `cargo` each
+pay for a fresh dependency build. Three of them more than quadrupled while the
+tests that compile nothing rose by under half again:
+
+| Binary                               | Previous toolchain | Pinned nightly | Ratio |
+| ------------------------------------ | ------------------ | -------------- | ----- |
+| `cargo-orthohelp::compile_time`      | 71.4 s             | 335.9 s        | 4.7   |
+| `ortho_config::compile_fail`         | 45.2 s             | 195.8 s        | 4.3   |
+| `ortho_config::boolean_cli_trybuild` | 37.7 s             | 178.0 s        | 4.7   |
+| `documentation_examples_rust_tests`  | 235.7 s            | 315.3 s        | 1.3   |
+| `cargo-orthohelp::golden_tests`      | 96.5 s             | 136.0 s        | 1.4   |
+
+*Table: the Windows `build-test` leg's first coverage pass, run 39633413142 on
+the previous toolchain against run 39658769738 on the pin. Both ran 2,070 tests
+with the same features.*
+
+Over that same work, the leg ran 1,044.1 s on the old toolchain and 1,810.1 s
+on the pin, where nextest cancelled it with two tests still running:
+
+```text
+Cancelling due to global timeout: 2 tests still running
+Summary [1810.068s] 2070 tests run: 2068 passed (17 slow), 2 failed, 30 skipped
+```
+
+Both survivors were far inside their own 600 s allowance — 192.3 s and 157.3 s
+— so no per-test tier is what failed. How much the run still needed is bounded
+rather than guessed. The younger survivor started at 1,652.8 s and had used
+157.3 s when cancellation was reported at about 1,810.1 s. Its own 600 s
+allowance therefore ended at 2,252.8 s, so no outcome of that run could have
+taken longer. That is the figure 2,300 s was chosen against: it covers the
+bound with 47 s to spare, where 1,800 s fell 452.8 s short of it.
+
+The bound is not a comfortable margin, and none of the three runs on the
+enlarged budget widens it. All three were later runs on the pin, so all three
+inherited the entries the cancelled run had written, at 88.77 %, 89.04 % and
+89.20 % hit rates rather than the cold 35.67 %. Every Windows pass completed
+inside the budget:
+
+```text
+Summary [1519.887s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [1142.681s] 2042 tests run: 2042 passed (12 slow), 30 skipped
+Summary [1507.403s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [1164.063s] 2042 tests run: 2042 passed (12 slow), 30 skipped
+Summary [1186.471s] 2070 tests run: 2070 passed (16 slow), 30 skipped
+Summary [ 887.980s] 2042 tests run: 2042 passed ( 9 slow), 30 skipped
+```
+
+The warm runs on the pin span 1,186.5 s to 1,519.9 s over the same 2,070 tests,
+against main's 1,044.1 s: between 14 % and 46 % slower at a hit rate at least
+as good. That spread is itself the finding — it is too wide to read as a fixed
+cost of the toolchain, and it means the warm sample cannot bound the cold case.
+So the pin costs time with the cache already behind it, and the cold figure is
+not an anomaly to be explained away. What recurs is the cold case: Dependabot
+moves the pin, every entry keyed by the old compiler becomes unreachable, and
+the first run on the new pin pays the whole graph again. The warm figures
+measure the floor, not the peak, and the cold budget rests on the bound above.
+
+That the margin is 47 s is the argument for fixing the cause rather than the
+figure.
+
+Raising the figure again would be the wrong repair. The lever is letting the
+nested builds reach `sccache` at all, which cannot happen while
+`ortho_config/tests/documentation_examples/cargo_runner.rs` clears the
+environment and restores no `RUSTC_WRAPPER`
+([issue 614](https://github.com/leynos/ortho-config/issues/614)). A cold cache
+is inherent to a dated nightly that Dependabot moves daily, so the budget has
+to carry it rather than the sample that predates the pin.
 
 [Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
 measurements and named the constraint they had to satisfy, that each coverage
 job invokes the action twice so raising the watchdog costs twice as much
 ceiling here. It is answered above.
+
+### Documentation subprocess and cache ownership
+
+The documentation process runner applies a hard overall deadline to each
+subprocess. Build, execution, and discovery budgets are 956, 60, and 30
+seconds, with two seconds reserved for bounded cleanup. A fixed scenario
+deadline is never extended by output. The runner drains both streams while
+retaining at most 1 MiB per stream for callers, reports truncation and
+available evidence on timeout or wait failure, and limits reader completion
+during cleanup. Callers that parse a child's stdout keep that head window.
+Failure diagnostics additionally hold a 64 KiB tail of each stream: a child
+that stalls prints nothing while it waits, so the last lines it wrote are the
+only evidence of what it was waiting for, and a diagnostic built from the head
+alone would hide exactly that. Its platform-specific process-tree ownership and
+cancellable readers are shared through `ortho_config_test_helpers::process`;
+the documentation runner keeps its operation policies, diagnostics, and capture
+limits locally.
+
+These operations do not create a new Cargo target for each example workspace.
+They resolve the caller's configured target directory, including the target
+selected by `cargo llvm-cov`, and reuse Cargo's default shared package cache. An
+`fs4` sidecar lease under `target/documentation-examples/v2` serializes
+documentation builds through their JSON artefact snapshot; Cargo remains the
+owner of compiler output and package-cache locking. Each example's generated
+manifest, run directory, inputs, and executable snapshots remain private. BDD
+scenarios hold their own cross-process lease while exercising the shared bridge
+cache. These helpers are confined to documentation tests and do not change
+application environment policy or terminate processes outside the owned
+subprocess tree.
 
 ### What the ceilings are sized against
 
@@ -1323,12 +4281,13 @@ ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
 
 On the Windows leg the work outside the coverage steps is dominated by cache
 saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15. With the
-watchdog at 2,700 s and two coverage steps per job, the requirements are 165
-and 120 minutes: 5,400 s of watchdog, plus the lane's allowance, plus a 900 s
-margin. The margin is a term of the requirement rather than slack above it,
+watchdog at 3,300 s and two coverage steps per job, the minimum ceilings are
+185 and 140 minutes: 6,600 s of watchdog, plus the lane's allowance, plus a 900
+s margin. The margin is a term of the minimum rather than slack above it,
 because a ceiling equal to the sum it contains cancels the job at the moment
 the watchdog would have reported the overrun, and the report is the only thing
-that makes an overrun actionable. The ceilings equal their requirements.
+that makes an overrun actionable. The configured ceilings are 190 and 140
+minutes, leaving five extra minutes on `ci.yml` and none on `coverage-main.yml`.
 
 A lane in a workflow the contract has not measured is held to the larger
 allowance until someone measures it and records a run id.
@@ -1351,9 +4310,38 @@ a job and has to contain every watchdog inside it; counting the steps is what
 makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
 coverage-invoking job that declares no ceiling at all. The readings it rests on
-live in `nextest_budgets.py`, `nextest_durations.py`, `nextest_errors.py`,
-`timeout_budgets.py` and `coverage_lanes.py`, and are driven with controlled
-values in `timeout_reading_test.py`.
+live in `nextest_budgets.py`, `nextest_document.py`, `nextest_durations.py`,
+`nextest_errors.py`, `timeout_budgets.py` and `coverage_lanes.py`, and are
+driven with controlled values in `timeout_reading_test.py`.
+
+Which binaries a raised allowance covers is a question about the Rust sources,
+so that contract reads them rather than a list. `child_cargo_tier.py` decides
+which test binaries drive a child `cargo` of their own, `rust_module_graph.py`
+answers which files a binary compiles, and `child_cargo_tier_test.py` compares
+the class with what `.config/nextest.toml` selects. `trybuild_tier.py` asks a
+different question of the same sources — membership of the trybuild class is a
+dependency fact rather than a call-site one — and reads them through
+`source_scan` instead.
+
+Membership here is decided by reaching files, not by grepping the `tests/`
+tree, and the difference is not academic. A grep for `Command::new("cargo")`
+also matches `clap::Command::new` and a probe that re-runs the test binary, and
+it matches every binary that merely mentions a helper without declaring it, so
+it is wrong in both directions at once.
+`#[path = "test_utils.rs"] mod other_name;` is legal and this repository uses
+it, so a rule keyed on the declared name would link a binary to a file it never
+compiles. Both readings are therefore taken from what each crate root actually
+compiles.
+
+A marker that has gone dead is the failure this reading is most exposed to,
+because the class simply comes back smaller and every downstream comparison
+agrees with it. `child_cargo_tier.marker_binaries` therefore reports each label
+separately and the contract requires every one of the three to select a binary
+somewhere in the audited crates — workspace-wide, not per crate, since
+`cargo_orthohelp_exe` is a `cargo-orthohelp`-only export and no honest
+`ortho_config` source could supply it. A bare `prepare_cargo_command` marker
+did go dead when the helper it named was renamed, and the replacement carries
+the old name in its pattern so the same rename cannot recur silently.
 
 Run them with `make test-workflow-contracts`. The target provisions `pytest`,
 `pyyaml` and `hypothesis` through `uv run --with` rather than from the
@@ -1377,7 +4365,7 @@ it happens to be the case somebody wrote.
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
 table nextest never consults, and reports a budget the runner does not use.
-`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering
+`.config/nextest.toml` sets `global-timeout = "2300s"`, and the ordering
 assertion requires that value to sit above the largest per-test allowance and
 inside the watchdog; it skips only when no whole-run budget is set at all. A
 scraping reader would read a commented-out or filtered budget as one in force,
@@ -1518,7 +4506,7 @@ the tier in question, which is what a maintainer can act on.
 
 It also pins how many coverage steps each job runs. The ceiling's requirement
 is the sum of the watchdogs found, so deleting one of a job's two coverage
-steps lowers that requirement by 2,700 s and every timing assertion still
+steps lowers that requirement by 3,300 s and every timing assertion still
 passes while the lane measures half of what it did.
 
 `tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
@@ -1537,6 +4525,121 @@ step, so it is outside this contract, and bounding it is separate work.
 
 [shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
 
+### Reading the child-cargo class, and checking the reader
+
+The class is derived from the Rust sources, which makes the reading itself
+something that can be wrong. `scripts/verify_child_cargo_reader_equivalence.py`
+compares what one revision's readers find against another's, so a change in the
+reading can be told apart from a change in the sources it reads:
+
+```sh
+python3 -I scripts/verify_child_cargo_reader_equivalence.py <older> <newer>
+```
+
+Both revisions are named rather than defaulting to `HEAD`, because a comparison
+whose input moved is not a comparison. It exits `0` when the class, the
+per-marker attribution, the root inventory and every source text agree; `1`
+when any of them differs, printing the member or path that disagreed; and `2`
+when a revision names no commit, because a mistyped name is a usage error
+rather than a reading that changed. The `Makefile` lists the script in
+`PYTEST_FLAGS`, so `make test` runs its doctests, and
+`scripts/tests/test_verify_child_cargo_reader_equivalence.py` drives it over
+synthetic repositories: two revisions that agree, a widened class, a source
+tree that changed, a root present in only one revision, and an unknown revision.
+
+The readings it shares with the contract are split by the question each
+answers. A contract that needs one should import it rather than write a second
+copy, because a second copy is what lets two classifications disagree about the
+same file:
+
+- `child_cargo_source_markers.py` holds the three call sites that count as
+  starting a child `cargo`.
+- `rust_module_graph.py` follows `mod` declarations, `#[path]` attributes and
+  inline modules to decide which files one binary compiles.
+- `rust_source_mask.py` blanks comments and literals while keeping offsets, so
+  a brace in prose or in a string cannot change that walk.
+- `nextest_override_reader.py` returns one profile's override entries in
+  declaration order, leaving a platform gate visible to its caller.
+- `nextest_filterset.py` reads the `binary(...)` and `binary_id(...)` terms a
+  filter may consist of, refusing a shape it cannot read.
+- `nextest_precedence.py` resolves the effective `slow-timeout` for a binary,
+  including entries that shadow one another and a tier no entry decides.
+- `source_scan.py` is the read layer beneath all of them, refusing a source it
+  cannot read rather than reporting it absent.
+
+A refusal is only observable where a mode actually denies a read, so the tests
+that exercise one skip on Windows and as root; `unreadable_support.py` holds
+that guard and the helper that denies the access.
+
+## Runner placement
+
+The Linux leg of `ci.yml`'s `build-test` runs on Ubicloud's
+`ubicloud-standard-4`. On GitHub-hosted runners, its queue wait over the ten
+runs before the move had a 10-min median and reached 29 min, against a 27-min
+median wall. That made it the worst hosted-queue case in the estate.
+
+The size is set for disk, not for wall time. `ubicloud-standard-2` is the
+estate's starting shape, but on it this leg ran out of disk in both measured
+runs (36308332712 and 36354295154). The second run began lint with 6,869 MB
+free. After lint 5,297 MB remained, and the discard below freed about 1 GB. The
+first coverage pass then took it down to 791 MB and failed with "No space left
+on device". `ubicloud-standard-4` offers 150 GB, against 75 GB on `-2`.
+
+A pull request from a fork cannot obtain an Ubicloud runner, so the leg falls
+back to `ubuntu-latest` for forks. So does a pull request Dependabot opened:
+hosted minutes cost nothing on a public repository, and Dependabot opens many
+pull requests. The expression tests the pull request's author, not
+`github.actor`, because the actor is whoever triggered the run, so a person
+pushing to a Dependabot branch would flip the runner. A Dependabot pull request
+therefore builds cold on the hosted pool:
+
+```yaml
+runs-on: >-
+  ${{ (github.event.pull_request.head.repo.fork
+  || github.event.pull_request.user.login == 'dependabot[bot]')
+  && matrix.fork-runner || matrix.runner }}
+```
+
+Each matrix entry names its `platform`, its `runner` and its `fork-runner`. The
+Windows leg names `windows-latest` for both. The job is named
+`build-test (${{ matrix.platform }})`, so the required check contexts are
+`build-test (linux)` and `build-test (windows)` whichever runner serves the
+event. A name built from the runner would exist on only one of a fork's and a
+branch's pull requests. The steps choose their platform through
+`matrix.platform`, never through a runner label.
+
+The Ubicloud leg exports the cache proxy's credentials before Setup Rust, which
+starts the sccache server. That step is guarded on
+`runner.environment == 'self-hosted'` because on a hosted runner there is no
+proxy and the action fails closed. The Windows leg and the three packaging legs
+stay GitHub-hosted.
+
+Before coverage starts, the Linux leg runs `scripts/discard_build_trees.py`,
+which removes the rustdoc and Clippy output (`target/debug`, `target/doc`) and
+Whitaker's (`target/dylint`), prints each tree's size, and reports a tree that
+was not there. It accepts only a single relative name for a direct child of the
+target directory, and refuses one that is nested, absolute, escapes the target
+or reaches its tree through a symlink, so a link such as
+`debug -> llvm-cov-target` cannot delete another tree. A missing target
+directory or a filesystem failure while resolving, examining, measuring or
+removing a tree ends the step with a one-line diagnostic on standard error and
+status 1. It keeps the registry and sccache. Trybuild's child builds land under
+the coverage target directory, which trybuild takes from `cargo metadata`, so
+they cannot be redirected independently. Removing them between the two coverage
+passes would throw away the warm builds the second pass reuses. The leg prints
+`df -BM /` at each boundary: before lint, before and after the discard, and
+after each coverage pass.
+
+[ADR-0009](adrs/adr-0009-linux-build-test-runner-placement.md) records the
+decision.
+
+`runner_placement_test.py` holds all of this. It reads the fallback by position
+(the condition is exactly the fork test or the Dependabot author test), checks
+each leg's runners, and checks that no fork reaches Ubicloud, that the names
+are runner-independent, and that the job has a ceiling. It also checks the
+credentials step's guard and position, that the packaging legs stay hosted, and
+that the Linux leg discards the lint build trees before coverage.
+
 ## CodeScene coverage belongs to main
 
 `coverage-main.yml` is the only workflow in this repository that runs a
@@ -1554,10 +4657,21 @@ returning a gates configuration that tool failed every pull request here over a
 defect in none of them.
 
 What a pull-request lane keeps is the ratchet. `ci.yml` runs
-`generate-coverage` with `with-ratchet` on the ubuntu leg, comparing against
-the baseline `coverage-main.yml` writes, which applies the same "do not go
-backwards" gate from this repository's own history with no token and no second
-tool.
+`generate-coverage` with `with-ratchet` on the Linux leg
+(`with-ratchet: ${{ matrix.ratchet }}`, true for the Linux matrix entry alone),
+comparing against the baseline `coverage-main.yml` writes, which applies the
+same "do not go backwards" gate from this repository's own history with no
+token and no second tool.
+
+`build-test` takes the default depth-1 checkout. It used to fetch full history
+only so `cs-coverage check` could diff against the pull request's merge base,
+and that gate has gone. At the pinned revision `generate-coverage` runs no git
+command. The job's other git readers are `git ls-files` (mdtablefix `--git`,
+and lading's lockfile guard) and `git status` (lading's working-tree guard),
+and neither reads history. A future step that diffs against the merge base,
+walks the log or describes a tag has to restore `fetch-depth` for itself.
+`test_the_pull_request_lane_checks_out_shallowly` fails until that change also
+updates the contract.
 
 **The two lanes must be built the same way.** Both run two feature legs, paired
 by the report each writes. The ratchet compares this commit's report against
@@ -1573,6 +4687,19 @@ publisher rather than the lane, since the comment on that leg records why
 `metrics` is there at all, namely that it is off by default and the facade
 would otherwise never be compiled in CI.
 
+**The merge accepts two checked reports.** Both workflows use Bun `1.2.21` to
+invoke `lcov-result-merger@6.0.0` with only `lcov-serde-saphyr.info` and
+`lcov-no-serde-saphyr.info`. A pre-merge guard requires both reports to be
+non-empty and rejects every other `lcov-*.info` file; the merged `lcov.info`
+must be non-empty and contain an `SF:` source-file record with a non-whitespace
+path. The registry publishes integrity
+`sha512-RsXi/N4J9b37mu83d3L8WdCGU0jsftN6GlXaJySK6fu+zD48joHC579hpA3K4brPvwWOhbNX5NoT7mghxDi5qw==`
+for this release. The digest is a review reference, not a workflow check; the
+inline `bun x` invocation has no checked-in lockfile for this package or its
+transitive dependencies. Dependabot does not track this pin, so review and
+update both workflows together. Remaining risks are unlocked transitive
+dependencies and same-runner persistence between report generation and upload.
+
 **The publisher is guarded on the ref, and runs one at a time.** It declares no
 `workflow_dispatch` today, so `github.ref` is always main and the guard changes
 nothing now; it is there because a dispatch can be aimed at any branch and the
@@ -1583,7 +4710,44 @@ guard as one `&&` term and refuses any `||`, because a substring match passes
 concurrency group queues a superseded run rather than cancelling it: two runs
 racing would decide the baseline by which finished last, and a cancelled run
 abandons both its upload and its baseline write, while a queued one publishes
-later and the later push still wins.
+later and the later push still wins. The group is exactly
+`coverage-main-${{ github.ref }}`, keyed on the ref alone. A static group would
+let a dispatch aimed at another branch, if one were ever allowed, displace a
+pending main run and then skip its upload on the ref guard. A group keyed on
+the event as well would let an older run upload after a newer one.
+
+**The token reaches the upload as an input, and no `env` block holds it.** A
+`codescene-token` step with no `if:` and no `env` runs exactly
+`echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`.
+The expression is evaluated before the shell starts, so the step writes `true`
+or `false` and no process ever holds the token. The upload is guarded on
+exactly that output and the main ref, and passes the secret directly as
+`access-token`. The upload action is composite and hands its step `env` to its
+nested artefact-upload and cache steps, so the contract refuses the token in
+every `env` block of the publisher. The old guard, `env.CS_ACCESS_TOKEN != ''`
+on a step-level binding, also passed with the binding deleted, after which the
+upload would skip forever. The contract therefore asserts the check step and
+its command positively, and the shared CV-005 library names each of those
+failures.
+
+**The upload job runs in the `codescene` environment.** `coverage-upload`
+declares `environment: codescene`, whose deployment policy admits `main` alone.
+The token belongs there, but moving it is a pending owner step: until it moves,
+`CS_ACCESS_TOKEN` is a repository secret, and the pull-request clauses above,
+not the environment, keep it out of what a pull request can start. Once it
+moves, the policy refuses every run whose ref is not `main`. It does not
+inspect what a job executes: a `main` run that checked out and ran pull-request
+code would still hold the secret, so no such job may exist. The publisher
+declares no `workflow_dispatch`, so no dispatch is refused today; one added
+later and aimed at a branch would be refused for the whole job. The shared
+library holds the placement: every job invoking the uploader declares the
+environment, no other job does, and no job a pull request can reach does. Names
+are compared without case, as GitHub compares them, and a name computed by an
+expression is refused because its placement cannot be proved. The pull-request
+surface there also seeds from review and comment events, the merge queue,
+`workflow_run` chains and pushes not confined to `main` or to tags, and it
+follows `$/` calls as well as `./`, because an environment declaration is safe
+only where no branch can start the job.
 
 **No checksum input.** `installer-checksum` is rejected outright when non-empty
 from the pinned uploader, and `archive-checksum` is not a rename of it: it
@@ -1593,62 +4757,78 @@ across under the new name fails every run. The action pins the CLI through its
 own manifest now, which is what that variable stood in for; the variable is
 unreferenced and can be removed from the repository's settings.
 
-`tests/workflow_contracts/codescene_coverage_test.py` holds the shape, reading
-through `codescene_coverage.py` (which workflows a rule applies to) and
-`codescene_reach.py` (what a selected workflow must not do). The generic
-parsing is in `workflow_reading.py`. `codescene_reader_test.py` drives those
-readings on documents this repository does not contain, and
-`codescene_reader_properties_test.py` drives the step and token readings with
-Hypothesis over generated workflows of any number of jobs and steps.
+`make test-workflow-contracts` holds the shape by running
+`cv005-contracts check`, the shared contract library in
+`leynos/shared-actions`, from the full commit named by `CV005_CONTRACTS_REF` in
+the Makefile; a fix to the rules is a pin bump. The library reads workflows
+with a loader that refuses duplicate keys, follows the pull-request lane as a
+closure through local calls and composite actions (a workflow declaring only
+`workflow_call` runs on a pull request when a pull-request workflow calls it,
+and `secrets: inherit` hands it the token), refuses the CodeScene action, the
+CLI, the token and the `codescene.io` host anywhere a pull request reaches, and
+drives every clause against breaching fixtures in its own suite, so this
+repository keeps no copy of the readers. `workflow_reading.py` stays for the
+runner-placement contract.
 
-**The pull-request lane is a closure, not a trigger list.** A workflow
-declaring only `workflow_call` runs on a pull request when a pull-request
-workflow calls it, and `secrets: inherit` hands it the token. Every
-pull-request clause (the action, the command, the token and the `codescene.io`
-host) runs over the pull-request workflows and everything they call,
-transitively. A call is recognized by shape rather than by a list of prefixes:
-a leading `./` is stripped, and the remainder must be a file directly under
-`.github/workflows/`. `pull_request_closure_test.py` holds a `workflow_call`
-probe that curls the CodeScene API with an inherited token and asserts that
-both the token clause and the host clause catch it. The host clause reads every
-value in each parsed workflow rather than a list of expected places, because a
-URL reaches a step through the workflow's, the job's or the step's `env`, a
-step's inputs, or a reusable-workflow call's `with`; comments are not read,
-because the parser discards them.
+`.github/cv005.toml` holds the repository's parameters. Its two `[[pairing]]`
+tables map each pull-request feature leg to the publisher leg that writes its
+report; the broad leg ratchets in the Linux cell of the matrix, through
+`with-ratchet: ${{ matrix.ratchet }}`, which the library reads in. Its
+`[selection]` pins the publisher's coverage-generation inputs, so a change made
+to both lanes at once is still a reviewed change. It does not define the files
+accepted by the later merge. `coverage_lane_facts_test.py` keeps the two facts
+the shared rules do not know: only the Linux leg ratchets, and the pull-request
+checkout is shallow. `coverage_merge_test.py` owns the merger pin, exact report
+filenames, input guards and merge/upload order; `coverage_merge_output_test.py`
+checks generated LCOV-like output against the source-path guard, and
+`coverage_merge_real_test.py` checks the pinned package's no-record rejection
+and preservation of records from both reports. These tests own merge inputs;
+`.github/cv005.toml` owns generation selections.
 
 **The ratchet has to stay switched on.** Pairing the legs' selections proves
-the comparison is fair, not that it happens, so the contract also holds each
-pull-request leg to the publisher's choice: a leg whose baseline is written
-ratchets on the Linux leg, and a leg whose baseline is not written does not
-ratchet at all.
+the comparison is fair, not that it happens. The library counts the broad leg
+as the job's one ratchet in its declared Linux cell and refuses a job that
+ratchets in none or in two, and `coverage_lane_facts_test.py` holds the matrix
+`ratchet` value to true for Linux alone.
 
-**Workflows are loaded strictly.** The loader refuses a mapping that declares
-one key twice, since PyYAML otherwise keeps the last value silently and a job
-declaring `runs-on` twice would read as the half GitHub may not run. A file
-that is not YAML at all is reported as a `WorkflowReadingError` naming the
-file, not as a parser error naming none.
-
-Two properties of that reading are worth knowing before changing it. The
-publisher is "pushes to main **and serves no pull request**": a repository's
-main workflow often declares both, so a predicate reading only the push makes
-one file simultaneously required to upload and forbidden from uploading. And
-the trigger reader looks under both `"on"` and the boolean `True`, because YAML
-1.1 resolves an unquoted `on:` to a boolean; a reader finding nothing makes
-every rule above pass over an empty set, which reports compliance rather than
-an error. `load_workflow` uses `yaml.BaseLoader` and keeps the string, which is
-precisely why narrowing the reader to the string key alone fails nothing
-against the real files, and why the constructed case in
-`codescene_reader_test.py` exists.
+**Workflows are loaded strictly.** `workflow_reading.py`, kept for the
+runner-placement contract, refuses a mapping that declares one key twice, since
+PyYAML otherwise keeps the last value silently and a job declaring `runs-on`
+twice would read as the half GitHub may not run. The library's loader does the
+same for the CV-005 shape and exits 2 on a file it cannot read, rather than
+passing.
 
 ## Command checklist
 
-Run from repository root:
+Run from repository root.
+
+For first-time setup, install the pinned `mold` linker and the pinned
+toolchain, then confirm them (see
+[Installing and checking the build tools](#installing-and-checking-the-build-tools)):
+
+```bash
+make install-build-tools
+make check-build-tools
+```
+
+Then run the gates:
 
 ```bash
 set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
 set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
 set -o pipefail; make markdownlint 2>&1 | tee /tmp/make-markdownlint.log
 set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
+```
+
+Two further targets complete the set. `make msrv-build` builds every target on
+the declared MSRV toolchain without running tests (see
+[The MSRV lane](#the-msrv-lane)), and `make test-workflow-contracts` runs the
+workflow and build-standard contracts (see
+[Workflow contract gate](#workflow-contract-gate)):
+
+```bash
+set -o pipefail; make msrv-build 2>&1 | tee /tmp/make-msrv-build.log
+set -o pipefail; make test-workflow-contracts 2>&1 | tee /tmp/make-test-workflow-contracts.log
 ```
 
 For targeted behavioural debugging:

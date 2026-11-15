@@ -1,7 +1,7 @@
 //! Tests for unknown `#[ortho_config(...)]` keys and prefix normalization.
 
 use super::super::*;
-use super::ortho_attrs::{assert_crate_path, assert_post_merge_hook};
+use super::ortho_attrs::{assert_crate_path, assert_post_merge_hook, assert_profiles};
 use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
 use syn::{DeriveInput, parse_quote};
@@ -129,6 +129,42 @@ fn post_merge_hook_defaults_to_false() -> Result<()> {
         },
         false,
         "post_merge_hook should default to false when not specified",
+    )
+}
+
+#[rstest]
+#[case(
+    parse_quote! {
+        #[ortho_config(profiles)]
+        struct Config { field: String }
+    },
+    true,
+    "a bare profiles key should enable profile support"
+)]
+#[case(
+    parse_quote! {
+        #[ortho_config(profiles = false)]
+        struct Config { field: String }
+    },
+    false,
+    "profiles should be false when explicitly set to false"
+)]
+fn parses_profiles(
+    #[case] input: DeriveInput,
+    #[case] expected: bool,
+    #[case] error_msg: &str,
+) -> Result<()> {
+    assert_profiles(&input, expected, error_msg)
+}
+
+#[test]
+fn profiles_defaults_to_false() -> Result<()> {
+    assert_profiles(
+        &parse_quote! {
+            struct Config { field: String }
+        },
+        false,
+        "profiles should default to false when not specified",
     )
 }
 

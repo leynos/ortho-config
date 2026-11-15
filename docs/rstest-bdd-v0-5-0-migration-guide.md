@@ -15,12 +15,6 @@ This guide highlights the significant behaviour changes between `v0.4.0` and
 - Manual async wrappers for sync steps should use
   `rstest_bdd::async_step::sync_to_async`; concise signature aliases are
   available for wrapper parameters.
-- Underscore-prefixed fixture bindings are supported for intentionally unused
-  fixture handles without triggering `used_underscore_binding` in generated
-  scenario glue.
-- File-wide lint suppressions that existed only for macro-generated unused
-  fixture parameters are no longer needed for `#[scenario]` and `scenarios!`
-  tests.
 
 ## Affected cases
 
@@ -36,11 +30,6 @@ Projects are affected if any of the following are true:
   cucumber-style global `World`).
 - The project maintains explicit async wrapper functions for synchronous step
   handlers.
-- The suite relied on file-wide lint suppressions (for example
-  `#![allow(unused_variables)]`) to keep generated scenario bindings warning
-  free.
-- Scenario bindings currently use non-underscore fixture names solely to avoid
-  lint noise from intentionally unused handles.
 
 ## Required changes
 
@@ -73,8 +62,10 @@ injected via fixtures or slots.
 ### 2) Use explicit `Result`/`StepResult` in scenario signatures
 
 Scenario return classification does not resolve type aliases. When using an
-alias like `type MyResult<T> = Result<T, MyError>`, the scenario signature must
-spell out `Result<(), MyError>` or use `rstest_bdd::StepResult<(), MyError>`.
+alias like `type MyResult<T> = Result<T, MyError>`, the `#[scenario]` signature
+must spell out `Result<(), MyError>` or use
+`rstest_bdd::StepResult<(), MyError>`; this constraint does not apply to step
+return aliases.
 
 ```rust
 # use rstest_bdd::StepResult;
@@ -119,14 +110,14 @@ state to fixture-based scenario isolation.
 
 ```mermaid
 flowchart TD
-    A[Start migration] --> B{"Does the suite rely on<br/>shared mutable state<br/>across scenarios?"}
+    A["Start migration"] --> B{"Does the suite rely on<br/>shared mutable state<br/>across scenarios?"}
 
-    B -- Yes --> C["Identify global World-like structures<br/>and cross-scenario mutation"]
+    B -- Yes --> C["Identify global World like structures<br/>and cross-scenario mutation"]
     C --> D["Move shared mutable data into<br/>scenario-local fixtures<br/>using &mut FixtureType or Slot"]
     D --> E{"Is any expensive, mostly<br/>read-only infrastructure used?"}
 
-    E -- Yes --> F["Wrap expensive, read-only infra<br/>in `#[once]` fixtures<br/>for reuse across scenarios"]
-    E -- No --> G["Keep all fixtures per-scenario<br/>without `#[once]`"]
+    E -- Yes --> F["Wrap expensive, read-only infra<br/>in #[once] fixtures<br/>for reuse across scenarios"]
+    E -- No --> G["Keep all fixtures per-scenario<br/>without #[once]"]
 
     F --> H["Ensure scenario data is recreated<br/>per scenario and does not<br/>depend on execution order"]
     G --> H
@@ -137,7 +128,7 @@ flowchart TD
     I --> J
 
     J --> K["Update docs and templates<br/>around state sharing and fixtures"]
-    K --> L[End migration]
+    K --> L["End migration"]
 ```
 
 *Figure: Decision flow for migrating from shared mutable state to scenario-
@@ -187,61 +178,6 @@ This alias-based form keeps the fixture lifetime inferred in parameter position
 (`StepCtx<'ctx, '_>`), so explicit `'fixtures` naming is rarely required in
 end-user wrapper code.
 
-### 7) Prefer underscore-prefixed fixture handles when intentionally unused
-
-When a fixture exists only to make it available to steps through `StepContext`,
-prefixing that parameter with an underscore now works without
-`used_underscore_binding` lint violations in generated scenario glue.
-
-**Before (often forced to avoid lint noise):**
-
-```rust
-# use rstest_bdd_macros::scenario;
-# struct Harness;
-#[scenario(path = "tests/features/example.feature")]
-fn runs_feature(harness: Harness) {
-    let _ = harness;
-}
-```
-
-**After (clear intent, no dummy usage needed):**
-
-```rust
-# use rstest_bdd_macros::scenario;
-# struct Harness;
-#[scenario(path = "tests/features/example.feature")]
-fn runs_feature(_harness: Harness) {}
-```
-
-The same convention applies to autodiscovered suites:
-
-```rust
-# use rstest_bdd_macros::scenarios;
-# struct Harness;
-scenarios!("tests/features", fixtures = [_harness: Harness]);
-```
-
-Use this style for fixtures that are intentionally injected for steps but not
-directly consumed in the scenario body.
-
-Important: fixture names inserted into `StepContext` must still match what
-steps request. If a step uses `fn step(world: &World)`, keep the fixture
-binding as `world` (or use `#[from(...)]` on the step parameter to map names
-explicitly). Prefix with `_` only when no step depends on that fixture name.
-
-### 8) Remove file-wide lint suppressions used by legacy scenario glue
-
-If a module previously relied on file-level allowances only to silence
-macro-generated unused fixture parameters, remove them during migration.
-`#[scenario]` and `scenarios!` generated tests now handle this case without a
-module-level suppression.
-
-Prefer:
-
-- No module-level suppression when no real warning remains.
-- Narrow, item-level `#[expect(...)]` only when a specific step or helper still
-  requires it for a documented reason.
-
 ## Migration checklist
 
 - [ ] Every `#[scenario]` returns `()` or `Result<(), E>`/`StepResult<(), E>`.
@@ -255,10 +191,6 @@ Prefer:
   scenario isolation, with `#[once]` limited to infrastructure.
 - [ ] Explicit sync-to-async wrappers import
   `rstest_bdd::async_step::sync_to_async`.
-- [ ] Scenario bindings with intentionally unused fixture handles use
-  underscore-prefixed names where they improve clarity.
-- [ ] File-wide lint suppressions added only for historical generated-fixture
-  warnings are removed.
 - [ ] Documentation or internal templates describing scenario return types,
   async steps, and state sharing are updated.
 
@@ -270,21 +202,8 @@ Prefer:
 - **Error:** `no \`sync_to_async\` in the root` when importing from
   `rstest_bdd::sync_to_async`
   - **Fix:** Update imports to `rstest_bdd::async_step::sync_to_async`.
-- **Error:** `used_underscore_binding` emitted for scenario fixture parameters
-  that were intentionally underscore-prefixed
-  - **Fix:** Use v0.5.0 macros and remove compatibility workarounds; underscore
-    fixture handles are supported in generated scenario glue.
-- **Error:** `requires fixtures <name>, but the following are missing: <name>`
-  after renaming fixture bindings with leading underscores
-  - **Fix:** Keep names aligned with step parameter lookups, or map explicitly
-    with `#[from(...)]` on step parameters.
-- **Error:** legacy `#![allow(unused_variables)]` or similar file-level lint
-  suppressions remain in BDD scenario modules after migration
-  - **Fix:** Remove file-wide suppressions and keep only narrowly scoped
-    `#[expect(...)]` annotations where still justified.
-- **Error:** `invalid tag expression ... unexpected character '.'`
-  - **Fix:** Rename tags used in tag expressions to valid identifiers such as
-    `@requires_yaml` and update scenario filters accordingly.
 
-For migration issues not covered here, see the
-[`rstest-bdd` user's guide](rstest-bdd-users-guide.md).
+For migration issues not covered here, see
+[ADR-006](adr-006-fallible-scenario-functions.md).[^adr]
+
+[^adr]: docs/adr-006-fallible-scenario-functions.md

@@ -11,11 +11,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ValidationError;
 mod commands;
+
 mod config_loading;
+
 pub mod context;
+
 mod discovery;
+
 mod global_config;
+
 mod localization;
+
 mod overrides;
 
 #[cfg(test)]
@@ -36,13 +42,14 @@ pub use localization::LocalizeCmd;
 pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides};
 
 /// Command-line surface exposed by the example.
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
 #[command(
     name = "hello-world",
     bin_name = "hello-world",
     about = "Friendly greeting demo showcasing OrthoConfig layering",
     version
 )]
+#[ortho_config(prefix = "HELLO_WORLD", localization_base = "hello_world.cli")]
 pub struct CommandLine {
     /// Overrides configuration discovery with an explicit file path.
     #[arg(
@@ -52,15 +59,22 @@ pub struct CommandLine {
         global = true,
         help = "Path to the configuration file"
     )]
+    #[ortho_config(cli_short = 'c')]
     pub config_path: Option<PathBuf>,
     /// Global switches shared by every subcommand.
     #[command(flatten)]
+    #[ortho_config(skip_cli)]
     pub globals: GlobalArgs,
     /// Selected workflow to execute.
+    #[serde(skip)]
     #[command(subcommand)]
     pub command: Commands,
 }
 
+/// Predicate used by Serde to omit disabled switches from CLI override layers.
+///
+/// False is absence for layering purposes; serializing it would mask a true
+/// value supplied by a lower-priority configuration source.
 #[expect(
     clippy::trivially_copy_pass_by_ref,
     reason = "serde skip hooks receive references to field values"
@@ -129,6 +143,8 @@ impl GlobalArgs {
     PartialEq,
     Eq,
     Subcommand,
+    Deserialize,
+    Serialize,
     ortho_config_macros::SelectedSubcommandMerge,
     OrthoConfigSubcommandDocs,
 )]
@@ -212,6 +228,10 @@ pub enum DeliveryMode {
 }
 
 impl HelloWorldCli {
+    /// Detects the one pair of mutually exclusive global delivery switches.
+    ///
+    /// Validation calls this before `delivery_mode`, whose match assumes the
+    /// configuration is valid.
     #[inline]
     const fn has_conflicting_modes(&self) -> bool {
         self.is_excited && self.is_quiet
@@ -279,10 +299,12 @@ impl HelloWorldCli {
     }
 }
 
+/// Returns the friendly recipient used when no source supplies one.
 fn default_recipient() -> String {
     String::from("World")
 }
 
+/// Returns the initial greeting word used when no source supplies a list.
 fn default_salutations() -> Vec<String> {
     vec![String::from("Hello")]
 }

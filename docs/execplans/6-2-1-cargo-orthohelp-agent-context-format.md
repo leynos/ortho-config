@@ -99,12 +99,12 @@ workaround.
   existing IR data using the rule
   `cli.long.is_none() && cli.short.is_none() && cli.takes_value`. (See
   `Design overview` for rationale.)
-- Preserve the boundary established by ADR-003
-  (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`). The
-  schema lives in `ortho_config::agent_context`; the new transform and emitter
-  live in `cargo_orthohelp::agent_context`. The transform must not depend on
-  `cargo-orthohelp`'s renderer modules (`roff`, `powershell`), and the reusable
-  schema must not depend on `cargo-orthohelp`.
+- Preserve the boundary established by ADR-0003
+  (`docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`).
+  The schema lives in `ortho_config::agent_context`; the new transform and
+  emitter live in `cargo_orthohelp::agent_context`. The transform must not
+  depend on `cargo-orthohelp`'s renderer modules (`roff`, `powershell`), and
+  the reusable schema must not depend on `cargo-orthohelp`.
 - The agent-context output is **not** localized. The adapter may pass an
   en-US `ortho_config::Localizer` into the transform only to resolve the short
   command summary used for command selection. The transform must not include
@@ -326,7 +326,7 @@ Record every significant decision made while working on this plan.
 - Decision: drop the proposed `AgentInput.kind` schema extension and detect
   positional inputs from existing IR data instead. Rationale: the Logisphere
   review (2026-06-02) flagged that adding a new schema field on `AgentInput` in
-  this PR muddies ADR-003 ownership and requires version coordination. The
+  this PR muddies ADR-0003 ownership and requires version coordination. The
   `cli.long.is_none() && cli.short.is_none() && cli.takes_value` rule is
   sufficient given the IR macro's current output. Date/Author: 2026-06-02 /
   planning agent.
@@ -410,7 +410,7 @@ and modules are:
   the defaulting policy for legacy derives.
 - `docs/cargo-orthohelp-design.md` §6.3.1 names the cargo-orthohelp side of
   the transform.
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
   establishes the boundary: schema lives in `ortho_config::agent_context`; the
   transform and emitter live in `cargo_orthohelp`.
 - `ortho_config/src/agent_context/mod.rs` defines `AgentContext`,
@@ -937,7 +937,7 @@ The following documentation must be consulted while implementing this plan:
   canonical verbs and flags (§5), legacy defaulting (§8.1).
 - `docs/cargo-orthohelp-design.md` — the bridge pipeline (§6.2) and the
   agent-context pipeline additions (§6.3.1).
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` —
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md` —
   schema ownership boundary.
 - `docs/users-guide.md` — consumer-facing documentation to extend.
 - `docs/developers-guide.md` — internal conventions and practices to
@@ -952,7 +952,7 @@ The following documentation must be consulted while implementing this plan:
 - `docs/complexity-antipatterns-and-refactoring-strategies.md` —
   refactoring discipline if the transform grows.
 - `docs/rtest-bdd-users-guide.md` — `rstest-bdd` patterns.
-- ADR-003 — applicable schema-ownership reminders.
+- ADR-0003 — applicable schema-ownership reminders.
 
 The following Rust skills should be loaded while implementing the relevant
 sections:

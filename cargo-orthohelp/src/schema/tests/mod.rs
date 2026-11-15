@@ -3,6 +3,8 @@
 use super::*;
 use ortho_config::docs as ortho_docs;
 
+mod renderer_snapshots;
+
 #[test]
 fn ir_version_matches_ortho_config() {
     assert_eq!(
@@ -25,6 +27,40 @@ fn schema_round_trips_against_ortho_config() {
     );
 }
 
+/// IR written before `value_optional` existed still reads as a plain switch.
+///
+/// The field is additive on the wire but not in meaning: a v1.1 document has no
+/// `value_optional` key at all, and the flag it describes is an ordinary
+/// switch. Reading it as `true` would render `--flag[=BOOL]` for a flag that
+/// rejects values. Both schema mirrors carry `#[serde(default)]` for that
+/// reason, so both are checked here against the same legacy payload.
+#[test]
+fn legacy_ir_without_value_optional_defaults_to_false() {
+    let legacy = r#"{
+        "long": "verbose",
+        "short": "v",
+        "value_name": null,
+        "multiple": false,
+        "takes_value": false,
+        "possible_values": [],
+        "hide_in_help": false
+    }"#;
+
+    let from_config: ortho_docs::CliMetadata =
+        serde_json::from_str(legacy).expect("legacy IR should read into ortho_config::docs");
+    let from_helper: CliMetadata =
+        serde_json::from_str(legacy).expect("legacy IR should read into the local schema");
+
+    assert!(
+        !from_config.value_optional,
+        "ortho_config::docs should default a legacy flag to a required value"
+    );
+    assert!(
+        !from_helper.value_optional,
+        "the local schema should default a legacy flag to a required value"
+    );
+}
+
 struct DocMetadataSpec<'a> {
     app_name: &'a str,
     bin_name: Option<&'a str>,
@@ -32,6 +68,7 @@ struct DocMetadataSpec<'a> {
     synopsis_id: Option<&'a str>,
     subcommands: Vec<ortho_docs::DocMetadata>,
     windows: Option<ortho_docs::WindowsMetadata>,
+    behaviour: Option<ortho_docs::BehaviourMetadata>,
 }
 
 fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
@@ -45,6 +82,9 @@ fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
         fields: vec![sample_field()],
         subcommands: spec.subcommands,
         windows: spec.windows,
+        behaviour: spec.behaviour,
+        renderer: None,
+        profiles: None,
     }
 }
 
@@ -56,7 +96,21 @@ fn sample_metadata() -> ortho_docs::DocMetadata {
         synopsis_id: Some("demo.synopsis"),
         subcommands: vec![sample_subcommand()],
         windows: Some(sample_windows()),
+        behaviour: Some(sample_behaviour()),
     })
+}
+
+/// Supplies a fully declared behaviour block for the sample metadata fixture.
+///
+/// Every key is populated so schema assertions can observe each field rather
+/// than the undeclared nulls the fixture would otherwise carry.
+fn sample_behaviour() -> ortho_docs::BehaviourMetadata {
+    ortho_docs::BehaviourMetadata {
+        interaction: Some(ortho_docs::InteractionKind::Interactive),
+        mutation: Some(ortho_docs::MutationKind::Delete),
+        bypass: Some("--force".to_owned()),
+        dry_run: Some("--dry-run".to_owned()),
+    }
 }
 
 fn sample_subcommand() -> ortho_docs::DocMetadata {
@@ -67,6 +121,7 @@ fn sample_subcommand() -> ortho_docs::DocMetadata {
         synopsis_id: None,
         subcommands: vec![sample_nested_subcommand()],
         windows: None,
+        behaviour: None,
     })
 }
 
@@ -78,6 +133,12 @@ fn sample_nested_subcommand() -> ortho_docs::DocMetadata {
         synopsis_id: None,
         subcommands: Vec::new(),
         windows: Some(sample_child_windows()),
+        behaviour: Some(ortho_docs::BehaviourMetadata {
+            interaction: Some(ortho_docs::InteractionKind::NonInteractive),
+            mutation: Some(ortho_docs::MutationKind::ReadOnly),
+            bypass: None,
+            dry_run: None,
+        }),
     })
 }
 
@@ -190,6 +251,7 @@ fn sample_cli_metadata() -> ortho_docs::CliMetadata {
         value_name: Some("PORT".to_owned()),
         multiple: false,
         takes_value: true,
+        value_optional: false,
         possible_values: vec!["8080".to_owned(), "9090".to_owned()],
         hide_in_help: false,
     }

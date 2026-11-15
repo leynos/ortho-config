@@ -5,11 +5,23 @@
 //! contents of the files it opens. Every event here therefore records a
 //! *decision* rather than the datum the decision was made from.
 //!
-//! That is enforced by construction: each field is a `&'static str` drawn from
-//! a closed set declared in this module, or a `bool`. No caller can pass a path
-//! or a variable value through these functions, and the same property keeps the
+//! That is kept true by design rather than by the type alone: each field is a
+//! `&'static str` naming one of the closed sets declared in this module, or a
+//! `bool`, and every helper is `pub(super)`. A `&'static str` would also accept
+//! a handwritten literal, so the vocabulary is a convention the call sites
+//! follow; the telemetry test suite separately asserts that no captured field
+//! carries a value derived from discovery input. The same property keeps the
 //! metric labels bounded — a cardinality bug here would otherwise show up as an
 //! unbounded time-series in a consumer's monitoring system.
+//!
+//! An optional field is absent from an event in two senses, and both are
+//! preserved here. A `None` records no *value*: `tracing` implements `Value`
+//! for `Option<T>` by recording nothing for `None`. The field *name* is a
+//! different matter — the macro's field list fixes it in the callsite's static
+//! metadata whether or not a value follows, so a subscriber filtering on
+//! `Metadata::fields` would still see it. A field that must be absent in both
+//! senses therefore needs its own macro call; the [`super::telemetry_events`]
+//! module holds one emitter per field subset for exactly that reason.
 //!
 //! Metrics are emitted through the [`metrics`] facade behind the optional
 //! `metrics` feature. The facade is inert unless the consuming binary installs
@@ -17,6 +29,9 @@
 //! a metrics backend on an application's behalf.
 
 use std::ffi::OsString;
+
+use super::telemetry_counters::{count_attempt, count_candidate_failure, count_outcome};
+use super::telemetry_events as events;
 
 /// Discovery consulted the live process environment.
 pub(super) const SOURCE_PROCESS: &str = "process";
@@ -53,6 +68,10 @@ pub(super) const HOME_FROM_FALLBACK: &str = "fallback";
 /// No home directory could be determined, so no home candidates were added.
 pub(super) const HOME_NONE: &str = "none";
 
+/// The current working directory was unavailable, so the project-root
+/// fallback contributed nothing.
+pub(super) const PROJECT_ROOT_CWD_UNAVAILABLE: &str = "cwd_unavailable";
+
 /// A path the builder was told is required.
 pub(super) const CANDIDATE_REQUIRED_EXPLICIT: &str = "required_explicit";
 /// A path the builder was given explicitly but optionally.
@@ -83,6 +102,13 @@ pub(super) const CATEGORY_OTHER: &str = "other";
 pub(super) const OPERATION_DISCOVER_FIRST: &str = "discover_first";
 /// The `compose_layers` extends-chain family.
 pub(super) const OPERATION_COMPOSE_LAYERS: &str = "compose_layers";
+/// The `ConfigFilePolicy` selector-chain family.
+pub(super) const OPERATION_POLICY_RESOLVE: &str = "policy_resolve";
+
+/// A `ConfigPathSelector` built by [`crate::ConfigPathSelector::cli`].
+pub(super) const SELECTOR_CLASS_CLI: &str = "cli";
+/// A `ConfigPathSelector` built by [`crate::ConfigPathSelector::env`].
+pub(super) const SELECTOR_CLASS_ENVIRONMENT: &str = "environment";
 
 /// A candidate loaded and the operation returned it.
 pub(super) const OUTCOME_SUCCESS: &str = "success";
@@ -92,6 +118,35 @@ pub(super) const OUTCOME_NOT_FOUND: &str = "not_found";
 pub(super) const OUTCOME_OPTIONAL_FAILURE: &str = "optional_failure";
 /// A required candidate failed; the error is reported regardless of fallbacks.
 pub(super) const OUTCOME_REQUIRED_FAILURE: &str = "required_failure";
+
+/// Machine-wide automatic configuration, such as `/etc/xdg`.
+pub(super) const SCOPE_SYSTEM: &str = "system";
+/// Per-user automatic configuration.
+pub(super) const SCOPE_USER: &str = "user";
+/// Configuration rooted in the current project.
+pub(super) const SCOPE_PROJECT: &str = "project";
+
+/// Name the scope a scoped-loading event is about, in the closed
+/// `SCOPE_*` vocabulary.
+///
+/// The `source` label alone cannot carry this: an XDG candidate is
+/// `source = "xdg"` whether it came from a machine-wide `/etc/xdg` directory
+/// or the user's own `XDG_CONFIG_HOME`, so a scoped failure or winner is
+/// otherwise unattributable in a log where both are present. The scope is
+/// the one fact that separates them, and it is a closed three-value set
+/// rather than a path, so the module's no-values-in-events property holds.
+///
+/// Every scope has a label, so this returns one directly rather than an
+/// `Option`: a rung with no scope at all — an explicit path or a selector —
+/// is a different question, answered by whether the caller has a
+/// [`crate::DiscoveryScope`] to pass here in the first place.
+pub(super) const fn scope_label(scope: crate::DiscoveryScope) -> &'static str {
+    match scope {
+        crate::DiscoveryScope::System => SCOPE_SYSTEM,
+        crate::DiscoveryScope::User => SCOPE_USER,
+        crate::DiscoveryScope::Project => SCOPE_PROJECT,
+    }
+}
 
 /// Classify a variable as absent, empty, or present.
 ///
@@ -158,6 +213,31 @@ pub(super) fn attempt(operation: &'static str) {
     count_attempt(operation);
 }
 
+/// Record which rung of a policy's selector chain resolved the file layers.
+///
+/// A policy turns on the explicit selector chain and, deliberately, bypasses
+/// the candidate machinery: no candidate list is assembled, so none of the
+/// decision events that machinery emits would otherwise fire. This event is
+/// what keeps such a run observable at all — without it, an operator who
+/// supplied an explicit path gets no evidence that discovery ran.
+///
+/// `selector_class` is drawn from the closed `SELECTOR_CLASS_*` set, and is
+/// `None` for the automatic branch, where no selector matched and the scopes
+/// supplied the layers. The field is then omitted rather than rendered empty —
+/// an absent field cannot be mistaken for a class. That omission *is* the
+/// explicit/automatic distinction, so no second field encodes the same bit.
+///
+/// The selector's own `label` and its environment variable name are both
+/// caller-supplied text, so neither can become an event field; the class is
+/// carried on the selector as a private field instead of being derived from
+/// either.
+pub(super) fn policy_resolution(selector_class: Option<&'static str>) {
+    match selector_class {
+        Some(class) => events::policy_resolution_with_selector(class),
+        None => events::policy_resolution_without_selector(),
+    }
+}
+
 /// Classify an error into the closed `CATEGORY_*` vocabulary.
 ///
 /// The raw error carries paths and values, so only its variant reaches an
@@ -173,36 +253,59 @@ pub(super) const fn error_category(err: &crate::OrthoError) -> &'static str {
     }
 }
 
+/// One candidate's failure, in the bounded labels the event carries.
+///
+/// Grouped rather than passed as scalars because the fields already reach the
+/// repository's four-argument ceiling, and because the scope is optional: the
+/// grouping keeps the "omit a field that has no value" decision at the emission
+/// site instead of at every call site.
+pub(super) struct CandidateFailureFields {
+    /// Discovery operation whose candidate list contains this path.
+    pub(super) operation: &'static str,
+    /// Whether failure must be returned even if a later candidate succeeds.
+    pub(super) required: bool,
+    /// Closed-vocabulary label identifying the candidate's origin.
+    pub(super) source: &'static str,
+    /// Closed-vocabulary reason category; never the raw error or path.
+    pub(super) category: &'static str,
+    /// Scope whose walk met this candidate, or `None` for flat first-wins walks.
+    /// Explicit policy selections emit separate policy-resolution events.
+    pub(super) scope: Option<&'static str>,
+}
+
 /// Record a single candidate failing to load.
 ///
 /// This is not terminal: discovery continues to the next candidate. `required`
 /// distinguishes a failure that will be reported even if a later fallback
 /// succeeds from one that is discarded when a fallback works. `outcome` and
 /// `required` deliberately encode the same bit — no third rendering is added —
-/// while `source` and `category` carry the two facts the pair cannot: which
-/// rung produced the candidate and why it failed, each drawn from a closed set.
-pub(super) fn candidate_failure(
-    operation: &'static str,
-    required: bool,
-    source: &'static str,
-    category: &'static str,
-) {
-    let outcome = if required {
-        OUTCOME_REQUIRED_FAILURE
-    } else {
-        OUTCOME_OPTIONAL_FAILURE
-    };
-    tracing::debug!(
-        event = "discovery.candidate",
+/// while `source`, `category`, and `scope` carry the facts the pair cannot:
+/// which rung produced the candidate, why it failed, and which scope's walk met
+/// it, each drawn from a closed set.
+pub(super) fn candidate_failure(fields: &CandidateFailureFields) {
+    let CandidateFailureFields {
         operation,
-        outcome,
         required,
         source,
         category,
-        "configuration candidate rejected"
-    );
+        scope,
+    } = *fields;
+    let outcome = failure_outcome(required);
+    match scope {
+        Some(label) => events::candidate_failure_scoped(fields, outcome, label),
+        None => events::candidate_failure_unscoped(fields, outcome),
+    }
     count_outcome(operation, outcome);
     count_candidate_failure(operation, source, category);
+}
+
+/// Name the outcome a candidate failure has, given whether it was required.
+const fn failure_outcome(required: bool) -> &'static str {
+    if required {
+        OUTCOME_REQUIRED_FAILURE
+    } else {
+        OUTCOME_OPTIONAL_FAILURE
+    }
 }
 
 /// Record that no working directory was available for the project-root
@@ -210,7 +313,7 @@ pub(super) fn candidate_failure(
 pub(super) fn project_root_cwd_unavailable() {
     tracing::debug!(
         event = "discovery.project_root",
-        state = "cwd_unavailable",
+        state = PROJECT_ROOT_CWD_UNAVAILABLE,
         "working directory unavailable; no default project root added"
     );
 }
@@ -222,8 +325,16 @@ pub(super) fn project_root_cwd_unavailable() {
 /// actually asks: "which location did this configuration come from?" It is
 /// `None` for the outcomes that have no winner, and the field is then omitted
 /// rather than rendered empty — an absent field cannot be mistaken for a rung.
-/// That is why the two branches below exist: a `tracing` event's fields are
-/// fixed at the macro call, so a conditional field means a conditional call.
+/// That is why the branches below exist: a `tracing` event's fields are fixed
+/// at the macro call, so a conditional field means a conditional call.
+///
+/// `scope` is the scope that produced the winner, and is present only where a
+/// scope is meaningful — the scoped walk, where the same `source` label can
+/// belong to either the machine-wide or the per-user scope. It is `None`
+/// elsewhere: the flat first-wins walk has no scope concept, and a policy
+/// resolves explicit paths before automatic discovery begins. The two optional
+/// fields combine into four spellings, which is why this is written as a
+/// four-arm match rather than one flat macro call.
 ///
 /// The metric is deliberately left alone: `count_outcome` keeps its existing
 /// `operation`/`outcome` label pair. `source` would multiply that series by the
@@ -233,117 +344,15 @@ pub(super) fn load_outcome(
     operation: &'static str,
     outcome: &'static str,
     source: Option<&'static str>,
+    scope: Option<&'static str>,
 ) {
-    if let Some(rung) = source {
-        tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            source = rung,
-            "configuration discovery finished"
-        );
-    } else {
-        tracing::debug!(
-            event = "discovery.load",
-            operation,
-            outcome,
-            "configuration discovery finished"
-        );
+    match (source, scope) {
+        (Some(rung), Some(label)) => {
+            events::load_outcome_source_and_scope(operation, outcome, rung, label);
+        }
+        (Some(rung), None) => events::load_outcome_source(operation, outcome, rung),
+        (None, Some(label)) => events::load_outcome_scope(operation, outcome, label),
+        (None, None) => events::load_outcome_bare(operation, outcome),
     }
     count_outcome(operation, outcome);
-}
-
-#[cfg(feature = "metrics")]
-fn count_attempt(operation: &'static str) {
-    metrics::counter!("ortho_config.discovery.attempts", "operation" => operation).increment(1);
-}
-
-#[cfg(not(feature = "metrics"))]
-const fn count_attempt(_operation: &'static str) {}
-
-#[cfg(feature = "metrics")]
-fn count_outcome(operation: &'static str, outcome: &'static str) {
-    metrics::counter!(
-        "ortho_config.discovery.outcomes",
-        "operation" => operation,
-        "outcome" => outcome,
-    )
-    .increment(1);
-}
-
-#[cfg(not(feature = "metrics"))]
-const fn count_outcome(_operation: &'static str, _outcome: &'static str) {}
-
-#[cfg(feature = "metrics")]
-fn count_candidate_failure(operation: &'static str, source: &'static str, category: &'static str) {
-    metrics::counter!(
-        "ortho_config.discovery.candidate_failures",
-        "operation" => operation,
-        "source" => source,
-        "category" => category,
-    )
-    .increment(1);
-}
-
-#[cfg(not(feature = "metrics"))]
-const fn count_candidate_failure(
-    _operation: &'static str,
-    _source: &'static str,
-    _category: &'static str,
-) {
-}
-
-#[cfg(test)]
-mod tests {
-    //! Unit tests for the telemetry vocabulary.
-    //!
-    //! Event emission is covered end to end by `tests/discovery_telemetry.rs`;
-    //! these cases pin the classification helper the labels are derived from.
-
-    use super::*;
-
-    /// Every `OrthoError` variant maps to its closed-set category.
-    ///
-    /// The integration suites drive only the `file` category, so a wrong arm
-    /// for the others would go unnoticed without this table: each variant is
-    /// constructed and checked against the label consumers key dashboards on.
-    #[test]
-    fn error_category_covers_every_variant() {
-        use crate::OrthoError;
-
-        let file = OrthoError::File {
-            path: std::path::PathBuf::from("demo.toml"),
-            source: Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "gone")),
-        };
-        assert_eq!(error_category(&file), CATEGORY_FILE);
-
-        let cyclic = OrthoError::CyclicExtends {
-            cycle: String::from("a -> b -> a"),
-        };
-        assert_eq!(error_category(&cyclic), CATEGORY_CYCLIC_EXTENDS);
-
-        let gathering = OrthoError::Gathering(Box::new(figment::Error::from(String::from(
-            "gathering failed",
-        ))));
-        assert_eq!(error_category(&gathering), CATEGORY_GATHERING);
-
-        let validation = OrthoError::Validation {
-            key: String::from("port"),
-            message: String::from("out of range"),
-        };
-        assert_eq!(error_category(&validation), CATEGORY_VALIDATION);
-
-        let other = OrthoError::CliParsing(Box::new(clap::Error::raw(
-            clap::error::ErrorKind::InvalidValue,
-            "bad flag",
-        )));
-        assert_eq!(error_category(&other), CATEGORY_OTHER);
-    }
-
-    #[test]
-    fn presence_distinguishes_absent_empty_and_present() {
-        assert_eq!(presence(None), PRESENCE_ABSENT);
-        assert_eq!(presence(Some(&OsString::new())), PRESENCE_EMPTY);
-        assert_eq!(presence(Some(&OsString::from("/xdg"))), PRESENCE_PRESENT);
-    }
 }

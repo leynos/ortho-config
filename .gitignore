@@ -36,6 +36,7 @@ scripts/.venv/
 .pytest_cache/
 .uv-cache/
 .uv-tools/
+.verus/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
 .vtcode/

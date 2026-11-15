@@ -27,7 +27,10 @@ in [agent-native-cli-design.md](agent-native-cli-design.md).
 - **For End-Users (of the application):** A consistent and predictable
   configuration experience. They can use the most convenient method (CLI, env,
   file) to configure the application, and the rules of precedence will be clear
-  and unambiguous.
+  and unambiguous. For fields that grant capabilities or set security and
+  resource boundaries, preference precedence remains separate from the
+  application-defined policy authority proposed in
+  [RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md).
 - **For Developers (using `OrthoConfig`):** A dramatic reduction in boilerplate
   and cognitive load. It abstracts away the tedious integration details,
   allowing developers to focus on their application's logic rather than
@@ -48,6 +51,11 @@ The implementation must adhere to the following principles:
   box. Error messages must be rich, informative, and clearly attribute issues
   to their original source (e.g., "Error in `config.toml` at line 5: invalid
   type for `port`").
+- **Orthogonal policy authority:** Layer order resolves ordinary preferences;
+  it does not grant permission to widen protected fields. Applications define
+  source authority, while OrthoConfig provides reusable monotonic composition,
+  delegation, provenance, and diagnostics. See
+  [RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md).
 - **Mechanical agent assistance:** Agent-native CLI behaviour must be generated
   or linted from metadata wherever possible. OrthoConfig should help developers
   enforce canonical verbs, canonical flags, structured output, bounded list
@@ -58,8 +66,10 @@ The implementation must adhere to the following principles:
   including command metadata, documentation and agent-context IR, renderer
   metadata, vocabulary policy, `skill_manifests` validation, profile metadata,
   delivery and feedback parsers, and execution-ledger metadata. They continue
-  to own command execution, side effects, safety policy, and domain execution
-  engines. The canonical boundary is documented in
+  to own authority classifications, policy choices, enforcement, command
+  execution, side effects, and domain execution engines. OrthoConfig may own
+  reusable policy-composition mechanics without owning those application
+  decisions. The canonical command-contract boundary is documented in
   [agent-native-cli-design.md](agent-native-cli-design.md), and the
   authoritative hard and soft ship-time dependency tiers are recorded in
   [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
@@ -76,7 +86,7 @@ The implementation must adhere to the following principles:
 
 ## 3. High-Level Architecture
 
-The crate will be composed of three main parts:
+The workspace will be composed of four main parts:
 
 1. **Procedural Macro (`ortho_config_macros`):** The `#[derive(OrthoConfig)]`
    macro. It will be responsible for parsing the user's struct definition and
@@ -84,8 +94,13 @@ The crate will be composed of three main parts:
 2. **Core Crate (`ortho_config`):** The runtime component. It will contain the
    `OrthoConfig` trait, the core loading and merging logic, error types, and
    necessary helper functions.
-3. **Dependencies:** It will be built upon the shoulders of established
-   community crates: `clap`, `figment`, `serde`, and `syn`/`quote`.
+3. **Localization Runtime (`ortho_l10n`):** The reusable catalogue and
+   identifier layer. Applications that only need Fluent lookup and formatting
+   depend on it directly, without configuration discovery, derives, Figment, or
+   Clap. See [ADR-0015](adrs/adr-0015-localization-runtime-boundary.md).
+4. **Dependencies:** It will be built upon the shoulders of established
+   community crates: `clap`, `figment`, `serde`, `fluent-bundle`, and
+   `syn`/`quote`.
 
 The primary data flow for a user calling `AppConfig::load()` will be:
 
@@ -99,6 +114,12 @@ The primary data flow for a user calling `AppConfig::load()` will be:
     `#[ortho_config(default = …)]`.
    - **File Provider:** A `Toml` (or other format) provider that discovers and
      loads the configuration file.
+   - **Profile Provider (opt-in):** When a struct opts in with
+     `#[ortho_config(profiles)]` and a profile is selected, the selected
+     `[profile.<name>]` tables overlay the file values. Each file in the
+     resolved chain that defines the selected profile contributes one profile
+     layer, in chain order. See
+     [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md).
    - **Environment Provider:** An `Env` provider configured with the correct
      prefix and key-mapping rules.
 
@@ -120,6 +141,13 @@ The primary data flow for a user calling `AppConfig::load()` will be:
 6. The result, either `Ok(AppConfig)` or `Err(Arc<OrthoError>)`, is returned
    via the alias `OrthoResult<T>`. This keeps public `Result` types small while
    preserving rich error variants.
+
+This sequence defines preference composition. A field that opts into the
+trust-aware model proposed in
+[RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md) additionally
+receives application-supplied authority metadata and a semantic policy family.
+Its policy envelope is composed separately from ordinary scalar and collection
+precedence before the final configuration is returned.
 
 ### Error ergonomics and interop
 
@@ -168,10 +196,10 @@ owns the rest of the merge pipeline via the trait-driven design below:
   testing guide.[^design-reliable]
 - `MergeComposer` orchestrates the merge order. The derive macro generates a
   `fn compose_layers() -> impl Iterator<Item = MergeLayer<'static>>` that
-  yields defaults, discovered files, environment variables, and finally CLI
-  overrides. The iterator deliberately separates discovery from merging so
-  behavioural tests can inject synthetic layers without touching the file
-  system.[^behavioural-testing]
+  yields defaults, discovered files, the selected profile when profiles are
+  enabled, environment variables, and finally CLI overrides. The iterator
+  deliberately separates discovery from merging so behavioural tests can inject
+  synthetic layers without touching the file system.[^behavioural-testing]
 
 This design removes Figment from the public API. Applications call the new
 `AppConfig::load()` (generated by the macro) which internally feeds layers into
@@ -258,6 +286,24 @@ checks (file → environment → CLI) stay deterministic and the developer's
 environment remains pristine. Compile-time tag filters keep `@requires.yaml`
 scenarios out of non-`yaml` builds without ad-hoc runtime filtering.
 
+Unit tests that exercise CLI overrides use `ConfigFixture`, which creates a
+fresh `TempDir` and scopes file writes through a directory capability. Its
+`ConfigDiscovery` is rooted at that fixture and receives a closed `MapEnv`, so
+discovery and merge inputs are explicit. The `sample_config` fixture reads the
+shipped baseline and override files through a directory capability, stages
+copies in a fresh `ConfigFixture`, then injects the selected paths into the
+source-aware loaders. Public loaders keep their process-backed defaults.
+
+Message tests use the private `build_take_leave_plan_with_greet_loader` seam to
+provide deterministic greeting defaults; the public `build_take_leave_plan`
+continues to load defaults through the process-backed loader. A child-process
+test covers the supported process-backed subcommand loader: it clears the
+child's environment, supplies fixture values for `HOME`, `XDG_CONFIG_DIRS`, and
+the test setting, then asserts that the environment value overrides the file
+value while another file-only value remains available. The child also receives
+`LLVM_PROFILE_FILE` when set; relative profile paths are resolved against the
+parent test's working directory before launch.
+
 The example now ships repository-managed samples in `config/baseline.toml` and
 `config/overrides.toml`. The baseline file captures the values exercised by the
 demo scripts and behavioural scenarios, while `overrides.toml` extends it to
@@ -304,11 +350,76 @@ attribute mirrors the builder surface and lists:
 - `config_cli_long`
 - `config_cli_short`
 - `config_cli_visible`
+- `env_vars`
+- `explicit_mode`
+- `automatic_mode`
+- `scope_order`
+- `project_root_from`
 
 It retains the previous defaults when callers omit these properties.
 Behavioural tests in the `hello_world` example exercise the new `--config`/`-c`
 flags alongside the environment overrides to confirm the precedence order is
 preserved.
+
+Automatic candidates are partitioned into `System`, `User`, and `Project`
+scopes. `compose_layers()` retains its historic first-successful-file
+behaviour: the candidate list is scanned most-preferred first and the scan
+stops at the first file that loads.
+
+Consumers that need layered configuration select `AutomaticMode::StackScopes`
+and an ordered scope list. Every requested scope is resolved in `scope_order`
+and every applicable candidate within it is loaded, so the result is a stack of
+all the files that exist rather than the one highest-priority file. Because a
+`MergeComposer` applies layers in order and the last one wins, scope order is
+precedence order: project layers naturally override user layers.
+
+Two orderings meet here and they run in opposite directions. The candidate list
+is a *preference* order — most-preferred first, since index 0 is what the
+first-wins scan selects. A composed layer list is a *precedence* order — last
+applied is highest. A scope therefore walks its candidates in reverse
+preference order, applying the least-preferred location first and the
+most-preferred last, so the historically-winning location still wins while
+every lower-preferred location contributes a base layer for the keys it alone
+sets. This keeps "later applied wins" as the single rule for the whole system.
+Emitting candidates in preference order instead would let a fallback such as
+`~/.demo.toml` silently override `$XDG_CONFIG_HOME/demo/config.toml`, inverting
+established behaviour the moment a second location starts loading.
+
+Canonical paths are de-duplicated across scopes, retaining the earliest
+position in application order — which, within a scope, is the lowest-precedence
+one. The `extends` chain of each file remains parent-first, so a parent is
+still applied before the child that overrides it.
+
+`StackScopes` attempts every applicable candidate rather than stopping at the
+first success, so it opens files the first-wins scan never reached. Their
+defects are reported through the usual partitioned diagnostics instead of being
+swallowed, and a failed lower-preferred candidate does not prevent the layers
+that did load from being returned.
+
+`ConfigFilePolicy` adds an ordered chain of explicit selectors above automatic
+discovery. A winning CLI or environment selector suppresses later selectors and
+automatic probing. `RequiredExclusive` reports a selected-file failure without
+falling back; `Optional` accepts an absent selected path. The policy returns a
+replayable `FileLayerOutcome`, allowing callers to inspect scalar file values
+early and then add the same layers to a `MergeComposer`.
+
+The selector vocabulary lives in
+`ortho_config/src/discovery/policy_selector.rs`, which owns
+`ConfigPathSelector`, `ExplicitMode`, and `ResolvedSelection`; `policy.rs` owns
+`ConfigFilePolicy` and `FileLayerOutcome`. The split keeps the selector's
+ordering rules — where a value came from and which selector wins — separate
+from the policy's decision about whether a failed selected file is tolerated.
+Callers reach the selector types through the `discovery` re-export; do not push
+policy decisions into the selector module, and do not duplicate the ordering
+rules at a call site.
+
+The project scope is rooted at the working directory by default. A policy that
+needs it elsewhere replaces every automatic project root with one
+caller-selected directory, either by calling `ConfigFilePolicy::project_root`
+on a hand-built policy or by naming a CLI field through the derive attribute
+`project_root_from`. The named field must be a non-skipped `PathBuf` or
+`Option<PathBuf>`, and the derive rejects any other field at compile time; a
+`None` value leaves the default root in place.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can
@@ -343,6 +454,11 @@ and are rejected when a source is injected. The process-backed path remains
 delegated to figment and keeps its existing behaviour. Source-aware derived
 loading uses `OrthoConfig::load_from_iter_with_sources`, so one `MapEnv` can
 drive discovery and `APP_*` merging without a process environment mutation.
+Profile-opted-in structs extend the same boundary to selection through the
+`load_with_profile_from_iter_with_sources` entry point and its
+`compose_layers_with_selection_from_iter_with_sources` primitive, so a test can
+resolve a profile from a `MapEnv` without touching the process environment; the
+process-backed `load_with_profile_from_iter` remains for the ordinary case.
 This completes [issue #412](https://github.com/leynos/ortho-config/issues/412).
 
 Default project-root resolution is a distinct boundary.
@@ -365,17 +481,29 @@ vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
 - `discovery.xdg` — `config_home` and `dirs`: `absent`, `empty`, or `present`;
   `resolution`: `default` or `list`.
 - `discovery.home` — `source`: `home`, `userprofile`, `fallback`, or `none`.
-- `discovery.attempt` — `operation`: `discover_first` or `compose_layers`.
+- `discovery.attempt` — `operation`: `discover_first`, `compose_layers`, or
+  `policy_resolve`.
 - `discovery.candidate` — `operation`; `outcome`: `required_failure` or
   `optional_failure`; `required`: `bool`; `source`: `required_explicit`,
   `explicit`, `selector`, `xdg`, `windows`, `home`, or `project`; `category`:
-  `file`, `cyclic_extends`, `gathering`, `validation`, or `other`.
+  `file`, `cyclic_extends`, `gathering`, `validation`, or `other`; `scope`:
+  `system`, `user`, or `project`, present only when a scoped walk met the
+  candidate and omitted on the flat first-wins walk.
 - `discovery.project_root` — `state = "cwd_unavailable"`, emitted only when
   the default project-root resolver fails.
-- `discovery.load` — `operation`; `outcome`: `success` or `not_found`; on
-  success only, `source`: `required_explicit`, `explicit`, `selector`, `xdg`,
-  `windows`, `home`, or `project`, naming the rung that produced the winning
-  candidate.
+- `discovery.load` — `operation`: `discover_first`, `compose_layers`, or
+  `policy_resolve`; `outcome`: `success` or `not_found`, plus
+  `required_failure` or `optional_failure` under `policy_resolve`, which has no
+  `discovery.candidate` event to report a failed selected file and so carries
+  the terminal outcome here; on success only, `source`: `required_explicit`,
+  `explicit`, `selector`, `xdg`, `windows`, `home`, or `project`, naming the
+  rung that produced the winning candidate, and omitted for `policy_resolve`,
+  which consults no candidate list; `scope`: `system`, `user`, or `project`,
+  present only as the per-scope terminal event of a scoped walk, and omitted
+  for the flat first-wins walk even when it reports a `source`.
+- `discovery.policy` — `operation`: `policy_resolve`; `selector_class`: `cli` or
+  `environment`, omitted when no selector matched and the supplied scopes
+  produced the layers.
 
 Behind the optional `metrics` feature, discovery also increments three counter
 families using the same bounded labels:
@@ -389,6 +517,18 @@ Every field is a `&'static str` drawn from a closed set declared in
 `telemetry.rs`, or a `bool`. Neither the events nor the metric labels ever
 carry an environment variable's value, a resolved filesystem path, a
 configuration value, file contents, or a raw error string.
+
+The vocabulary and the emitters are separate modules. `telemetry.rs` declares
+the label constants and holds the callsites whose field lists are fixed.
+`telemetry_events.rs` holds one callsite per field subset, because a `tracing`
+event's field names are fixed in its static metadata by the macro's field list:
+recording `None` omits a value but leaves the name, so a field documented as
+"omitted" needs its own call. `telemetry.rs` dispatches to those emitters and
+is the only module that calls them. The counters sit behind the `metrics`
+feature in `telemetry_counters.rs`. The
+[developers' guide](developers-guide.md) records the one-emission-per-function
+rule that shapes these callsites and the metadata-level test that pins the
+field names.
 
 ### Aggregated errors
 
@@ -610,6 +750,39 @@ resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and `%LOCALAPPDATA%`
 Support for `XDG_CONFIG_HOME` on Windows could be added later using
 `directories` to mimic the XDG specification.
 
+#### Subcommand file discovery
+
+Subcommand loading resolves its own candidates through
+`candidate_paths_at(prefix, base, source)`. It does not use `ConfigDiscovery`;
+instead it re-implements the XDG candidate search against an injected
+`EnvSource` rather than calling the `xdg` crate. An oracle child-process test
+pins parity with XDG-3 `find_config_file`.
+
+The inputs are a `SubcommandFileContext`: an explicit local base path and a
+lookup-only `EnvSource`. Named lookups cover `HOME`, `USERPROFILE` (non-Unix),
+`XDG_CONFIG_HOME`, and `XDG_CONFIG_DIRS`. On non-Unix targets the source's
+`config_dir_fallback()` supplies the native platform configuration directory,
+which `ProcessEnv` backs with `directories::BaseDirs`.
+
+On Unix and Redox, candidates are generated in this order: the injected `HOME`
+with `.<prefix>.<ext>` files; the XDG bases — `XDG_CONFIG_HOME` when it is
+absolute, otherwise `$HOME/.config`, otherwise the source's `home_fallback()` —
+followed by every absolute entry of `XDG_CONFIG_DIRS` (defaulting to `/etc/xdg`
+when unset, empty, or entirely relative), each joined with the prefix; and
+finally the explicit base with `.<prefix>.<ext>`. On other targets the order is
+`HOME`, else `USERPROFILE`, else `home_fallback()`, with `.<prefix>.<ext>`
+files; the source's `config_dir_fallback()` scoped by the prefix, with
+`config.<ext>` files; and then the explicit base with `.<prefix>.<ext>`.
+
+Within the XDG bases only the first existing `<base>/config.<ext>` is kept per
+extension, in base order. Existence uses metadata-only semantics, so a
+directory at a candidate path counts as existing, matching the `xdg` crate's
+`find_config_file`. The process-backed `load_and_merge_subcommand*` wrappers
+keep the historical behaviour by passing `Path::new(".")` and `ProcessEnv`.
+Absence is the only probe outcome that means "no candidate": any other failure
+is reported as an `OrthoError::File` naming the probed path and aborts the load
+before a file is selected, rather than treated as an absent candidate.
+
 ### 4.9. Comma-Separated Environment Lists
 
 Environment variables often provide simple comma-separated strings for lists.
@@ -643,11 +816,16 @@ Precedence across all sources becomes:
 
 1. Base file specified via `extends`
 2. The extending file itself
-3. Environment variables
-4. Command‑line arguments
+3. The selected profile, when profiles are enabled
+   (`#[ortho_config(profiles)]`): one overlay layer per file in the chain that
+   defines the selected profile, in chain order (base first), per
+   [ADR-0012](adrs/adr-0012-profile-selection-and-layering.md)
+4. Environment variables
+5. Command‑line arguments
 
 Prefixes and subcommand namespaces are applied at each layer just as they would
-be without inheritance.
+be without inheritance. Profiles are strictly opt-in: without the attribute the
+precedence remains the four tiers above minus the profile tier.
 
 ### 4.11. Improved Subcommand Merging
 
@@ -697,10 +875,13 @@ sequenceDiagram
 ### 4.12. Localization architecture
 
 `clap` surfaces every string presented to end users, so localization must be
-first-class. `ortho-config` introduces a `Localizer` trait that abstracts
-string lookup and delegates to a Fluent-powered implementation layered over
-built-in defaults. Consumers can therefore opt into internationalization
-without giving up a working baseline.
+first-class. The `ortho_l10n` crate introduces a `Localizer` trait that
+abstracts string lookup and delegates to a Fluent-powered implementation
+layered over built-in defaults; `ortho_config` re-exports those types and owns
+the Clap adapters. Consumers can therefore opt into internationalization
+without giving up a working baseline, and applications that never load
+configuration can use the runtime directly. See
+[ADR-0015](adrs/adr-0015-localization-runtime-boundary.md).
 
 - **Trait surface:** The trait exposes a single lookup entry point,
   `fn lookup(&self, id: &str, args: Option<&HashMap<&str, FluentValue<'_>>>)`,
@@ -715,10 +896,10 @@ without giving up a working baseline.
   to `clap`'s native message.
 
 - **Bundling defaults:** Default message catalogues live under
-  `locales/<lang>/messages.ftl` and are embedded with `include_str!`. A helper
-  constructs the default `FluentBundle` for the selected locale, parsing the
-  static resources once at start-up. Additional locales reuse the same helper
-  by passing a different language identifier.
+  `ortho_l10n/locales/<lang>/messages.ftl` and are embedded with
+  `include_str!`. A helper constructs the default `FluentBundle` for the
+  selected locale, parsing the static resources once at start-up. Additional
+  locales reuse the same helper by passing a different language identifier.
 
 - **Consumer integration:** Callers either pass a fully built
   `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
@@ -748,12 +929,12 @@ unlock per-application phrasing and additional languages without forking the
 library.
 
 The shipped implementation builds a concurrent `FluentBundle` from the embedded
-`locales/en-US/messages.ftl` catalogue and layers any consumer-provided
-resources over it. Formatting errors raised during `format_pattern` are logged
-via `tracing::warn!` by default and yield `None`, allowing the next bundle—or
-the caller’s fallback string—to supply the final message. Builders expose
-`with_error_reporter` so applications and tests can capture these issues
-without reconfiguring global loggers.
+`ortho_l10n/locales/en-US/messages.ftl` catalogue and layers any
+consumer-provided resources over it. Formatting errors raised during
+`format_pattern` are logged via `tracing::warn!` by default and yield `None`,
+allowing the next bundle—or the caller’s fallback string—to supply the final
+message. Builders expose `with_error_reporter` so applications and tests can
+capture these issues without reconfiguring global loggers.
 
 The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
 `HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named
@@ -843,7 +1024,10 @@ OrthoConfig should make this pattern easy to adopt for Cargo subcommand
 binaries, but it should not move Cargo dispatch semantics into the
 `OrthoConfig` trait or the configuration merge pipeline. The entry-point shape
 belongs at the command boundary; configuration precedence remains defaults →
-files → environment → explicit command-line arguments.
+files → selected profile (opt-in) → environment → explicit command-line
+arguments, with the profile tier present only for structs that opt in via
+`#[ortho_config(profiles)]` (see
+[ADR-0012](adrs/adr-0012-profile-selection-and-layering.md)).
 
 The near-term API is a small `ortho_config::cargo` helper for callers that
 build clap commands by hand. A function such as
@@ -866,7 +1050,7 @@ The helper shipped in 8.3.1 as `ortho_config::cargo::external_subcommand`. Help
 renders two forms: the top-level usage is `Usage: cargo <COMMAND>`, and the
 inner subcommand usage is `Usage: cargo orthohelp [OPTIONS]`. The installed
 binary name is carried as the inner command's display name, so `--version`
-output names the installed binary; see the ADR-004 amendment.
+output names the installed binary; see the ADR-0004 amendment.
 
 The helper must preserve the inner command's existing options rather than
 introducing a second source of configuration semantics. Its success criterion
@@ -921,15 +1105,105 @@ test helper should run `cargo-<name> <name> --help`, then run
 should reuse that coverage, so a flat direct invocation cannot pass while Cargo
 dispatch fails.
 
+### 4.18. Trust-aware policy composition
+
+Ordinary precedence remains defaults → files → environment → explicit CLI
+arguments, with later layers resolving preference conflicts. Security and
+resource policy needs a separate authority dimension: a later project layer
+must not acquire the right to add a trusted interpreter, enable network access,
+or raise a resource ceiling merely because it appears later.
+
+[RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md) proposes the opt-in
+contract. Applications define a validated partial order of authority classes,
+classify each participating source deliberately, and supply authoritative
+anchors and typed delegation grants. OrthoConfig supplies semantic monotonic
+families, runtime composition, active-constraint provenance, and bounded
+diagnostics. Scope and origin from
+[RFC 0002](rfcs/rfc-0002-config-layer-resolution-policy.md) feed source
+identity but never imply authority by themselves.
+
+The runtime composer precedes derive support. Protected fields use their
+declared policy family instead of `append`, `replace`, or `keyed`; unprotected
+fields retain those strategies unchanged. Applications continue to enforce the
+effective policy at network, filesystem, interpreter, process, and provider
+boundaries.
+
+### 4.19. Executable documentation-test build ownership
+
+Executable README and user's-guide examples use private integration-test
+support. It compiles each exact published source body, creates private
+manifests, inputs, run directories, and executable snapshots, and reads
+executable paths from Cargo's JSON artefact records. Documentation tests use
+Cargo's configured shared package cache and resolved target directory. A
+cross-process lock spans the build and snapshot interval so a same-named binary
+cannot be overwritten before its private copy is made. The production
+`cargo-orthohelp` bridge has a separate lock and helper with ownership limited
+to bridge builds.
+
+Build-tool environment preparation has a narrow infrastructure allow-list,
+separate from the smaller application environment. It preserves Cargo
+configuration, compiler and documentation wrappers, warning enforcement,
+configured jobs, and relevant instrumentation without forwarding unlisted
+application variables or secrets. It leaves the shared Cargo cache under
+Cargo's ownership.
+
+Each documentation scenario has a single monotonic 956-second deadline within
+its 960-second nextest per-test allowance. Build, execution, discovery, and
+cleanup have respective 956-, 60-, 30-, and 2-second policies; each operation
+is capped by the remaining scenario time. Output activity does not extend a
+deadline. The documentation-example runner retains at most 1 MiB per stream and
+continues draining, and also keeps a separate 64 KiB diagnostic tail, because a
+stalled child's last compile-admission or heartbeat line explains the wait that
+the leading bytes do not. Owned process-tree cleanup is bounded.
+
+The shared capture and process-tree implementation lives in
+`test_helpers/src/process/`, and the documentation runner applies its own 1 MiB
+policy to it. The shared runner used by the CLI compile-time contracts keeps
+the complete output of each stream, because its callers report compiler
+diagnostics in full. The two capture policies are deliberate and neither may be
+described as the other. Both are test-only; the production bridge keeps the
+separate build ownership and helper described above, and neither is a general
+application subprocess API. See
+[ADR-014](adrs/adr-0014-documentation-build-ownership.md).
+
+### 4.20. Formal verification tooling boundary
+
+Kani and Verus are contributor tooling, not runtime dependencies. The
+repository owns the version pins in `tools/kani/VERSION` and
+`tools/verus/VERSION`, the Verus archive digest, the selected harnesses and
+proof files, and the CI lane. The pinned `rust-prover-tools` package owns
+downloading, archive validation, installation, and Verus process execution; no
+package source is vendored, and ordinary `make all`, `make test`, and
+`make lint` runs never install or execute a prover.
+
+Verus accepts only the Z3 build its release shipped with, so
+`make install-verus` installs the release bundle and `VERUS_Z3_PATH` names the
+solver inside it rather than a separately downloaded Z3. Kani harnesses are
+bounded by their unwind depth; a Verus proof may reason about a model that is
+not refined against runtime code. Both limits are stated wherever the evidence
+is reported. An empty production inventory fails with `FORMAL-EMPTY` instead of
+reporting a successful run, and the fixture lane asserts both acceptance and
+rejection so that a runner that verifies nothing cannot pass. See
+[ADR-0017](adrs/adr-0017-consumer-side-prover-tooling.md).
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
   - `syn`: To parse Rust code and attributes.
   - `quote`: To generate Rust code.
   - `proc-macro2`: For improved procedural macro APIs.
+  - `ortho_l10n`: For the shared fallible identifier convention.
+- **`ortho_l10n` (Runtime):**
+  - `fluent-bundle` and `fluent-syntax`: For catalogue parsing, registration,
+    and formatting.
+  - `unic-langid`: For locale identifiers.
+  - `thiserror`: For the builder error enum.
+  - `tracing`: For the default formatting-issue reporter. It installs no
+    subscriber.
 - **`ortho_config` (Core):**
   - `clap`: For CLI parsing. Choose a version with the `derive` feature.
   - `figment`: As the core layering engine.
+  - `ortho_l10n`: For catalogue lookup and message identifiers.
   - `serde`: For serialization/deserialization.
   - `serde_json`: For manipulating configuration when pruning `None` CLI
     values.
@@ -948,6 +1222,10 @@ dispatch fails.
   targets), and the optional format parsers (`figment_json5`, `json5`,
   `serde_saphyr`, `toml`), so downstream libraries can import them via
   `ortho_config::` without declaring separate dependencies.
+- **Verification tooling (development only):** Kani and Verus are pinned in
+  `tools/` and installed through the shared `rust-prover-tools` package. They
+  are contributor tools, not crate dependencies, and never appear in a
+  `Cargo.toml`.
 
 ## 6. Historical implementation baseline
 
@@ -1036,13 +1314,18 @@ flags on top of the derive macro while keeping the application logic explicit.
   `OrthoConfig::load`; see [roadmap.md](roadmap.md) §8.3.
 - **Consumer application alignment:** Weaver and Netsuke requirements should be
   pushed left into OrthoConfig when they describe reusable command contracts,
-  not when they describe semantic execution. Examples include renderer
-  metadata, JSON mode stream contracts, exit-code taxonomy metadata, skill
-  manifest validation, capability provenance metadata, profile redaction,
-  delivery and feedback parser contracts, and configurable execution ledgers.
-  The authoritative consumer dependency tier for those reusable capabilities is
-  [agent-native-cli-design.md](agent-native-cli-design.md)
-  §2.2.
+  not when they describe semantic execution. Renderer metadata has shipped
+  (roadmap 7.2.2); JSON mode stream contracts, exit-code taxonomy metadata,
+  skill manifest validation, capability provenance metadata, profile redaction,
+  delivery and feedback parser contracts, and configurable execution ledgers
+  remain. The authoritative consumer dependency tier for those reusable
+  capabilities is [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
+- **Trust-aware policy composition:** OrthoConfig should provide the runtime
+  authority graph, monotonic policy families, explicit delegation, provenance,
+  and diagnostics proposed in
+  [RFC 0003](rfcs/rfc-0003-trust-aware-policy-composition.md). Applications
+  retain authority classification and enforcement. See [roadmap.md](roadmap.md)
+  phase 14.
 - **Async configuration loading:** A version of `load` that uses non-blocking
   IO remains useful, but it is distinct from application-level async job
   metadata such as `--wait`, `jobs get`, or durable job ledgers.
@@ -1100,7 +1383,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
 - **Define downstream agent-context command naming (2026-06-14):**
   Downstream applications expose `context --json` and emit
   `kind: "<tool>.agent_context"`, while `cargo-orthohelp` retains
-  `--format agent-context` as its generator format. ADR-007 records the
+  `--format agent-context` as its generator format. ADR-0007 records the
   rationale, the compatibility rule: use `schema_version`, not parsed `kind`,
   to detect schema compatibility, and the split between the reusable JSON
   adapter and the application CLI literals.
@@ -1175,10 +1458,47 @@ generated documentation, generated agent context, and enforceable CLI policy.
   `CliValueExtractor`.
 - **Generate recursive subcommand documentation metadata (2026-05-24):**
   Introduce the `OrthoConfigSubcommandDocs` companion trait and derive for
-  `clap::Subcommand` enums, as accepted in ADR-005. `OrthoConfig` now
+  `clap::Subcommand` enums, as accepted in ADR-0005. `OrthoConfig` now
   recognizes a `#[command(subcommand)]` selector field, skips it as a
   configuration field, and fills `DocMetadata.subcommands` from the enum's
   per-variant metadata in declaration order.
+- **Declare non-interactive execution and mutation boundaries (2026-08-14):**
+  The `#[ortho_config(behaviour(...))]` struct-level group lets command authors
+  declare interaction, mutation, bypass, and dry-run metadata that the derive
+  carries into IR 1.2 and the agent-context bridge populates into
+  `interaction_mode`, `mutation_effect`, `bypass_flag`, and `dry_run_flag`.
+  ADR-0010 records the attribute shape, the no-inference rule, the pinned
+  bypass/dry-run flag grammar, the non-interactive/bypass contradiction rule,
+  and the IR version-skew contract.
+- **Never test `ortho_config` features in derive output (2026-10-25):**
+  Derive output compiles in the caller's crate, so a `#[cfg(feature = ...)]`
+  attribute in generated code tests the caller's features, not
+  `ortho_config`'s. The `cli_default_as_absent` extractor is therefore emitted
+  unconditionally, which is sound because `ortho_config` does not build without
+  its `serde_json` feature. Generated code that must depend on a feature
+  `ortho_config` can genuinely be built without is selected inside
+  `ortho_config`, with a compile-fail fixture for the disabled state; the
+  developers' guide records the contract and its tests.
+- **Declare renderer metadata rather than infer it (2026-10-30):** A command's
+  human and machine rendering is now declared through a sibling `renderer(...)`
+  attribute and carried through both documentation IR owners into agent
+  context, completing roadmap 7.2.2. Inference was rejected on purpose: command
+  names, flags, terminal detection, and locale all describe something other
+  than what the command actually emits, and a wrong guess here invites an agent
+  to pipe human prose into a parser. Support defaults stay per renderer (human
+  supported, machine not) so an undeclared command claims exactly what it
+  claimed before the field existed, and undeclared policy is reported as
+  absence rather than as an affirmative "no". Localization copies the block
+  verbatim, because it is presentation policy rather than text. ADR-0016
+  records the vocabulary.
+- **Import prover tooling without importing proof claims (2026-11-06):** Kani
+  and Verus enter the repository as opt-in contributor tooling pinned in
+  `tools/` and delegated to `rust-prover-tools`; ordinary gates never install
+  or run them. The lane is accepted on Linux x86_64 only, installs the solver
+  bundled with the pinned Verus release because Verus rejects a different Z3
+  build, and reports `FORMAL-EMPTY` when no production inputs are registered.
+  Fixture acceptance and rejection demonstrate the runners, not OrthoConfig
+  behaviour. ADR-0017 records the boundary and its limits.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

@@ -31,6 +31,8 @@ use options::{Csv, KeyMapping, KeyTransform, Lowercase, Options, Uppercase};
 pub struct CsvEnv {
     /// Inner environment provider that performs the actual variable access.
     inner: Env,
+    /// Replayable key transforms and the optional injected source used by
+    /// `data()`.
     options: Options,
 }
 

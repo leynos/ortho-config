@@ -41,6 +41,9 @@ mod convert;
 mod layer;
 mod merge;
 
+#[cfg(test)]
+mod tests_profile_layer;
+
 pub use composer::{LayerComposition, MergeComposer};
 pub use convert::{from_value, from_value_merge};
 pub use layer::{MergeLayer, MergeProvenance};

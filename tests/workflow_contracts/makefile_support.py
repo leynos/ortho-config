@@ -66,6 +66,43 @@ def is_recipe_line(line: str) -> bool:
     return line.startswith("\t")
 
 
+def unexported_variables(makefile: str) -> set[str]:
+    r"""Return the names a Makefile un-exports from its recipes.
+
+    An ``unexport`` directive is not a recipe, so a dry run cannot show it.
+    Reading the file is the only way to hold it in place, and this is the
+    reading that ignores a tab-indented mention inside a recipe.
+
+    Parameters
+    ----------
+    makefile : str
+        The text of a Makefile.
+
+    Returns
+    -------
+    set of str
+        Every variable named by a top-level ``unexport`` directive, in any of
+        the three forms Make accepts: one name, several names, or none (which
+        un-exports everything, named here as ``*``).
+
+    Examples
+    --------
+    >>> sorted(unexported_variables("unexport ONE TWO\n"))
+    ['ONE', 'TWO']
+    >>> unexported_variables("all:\n\techo unexport ONE\n")
+    set()
+    """
+    names: set[str] = set()
+    for line in makefile.splitlines():
+        if line.startswith("\t"):
+            continue
+        tokens = line.split()
+        if not tokens or tokens[0] != "unexport":
+            continue
+        names.update(tokens[1:] or ["*"])
+    return names
+
+
 def lading_subcommand(makefile: str, target: str) -> str | None:
     r"""Return the lading subcommand a Make target's recipe invokes.
 

@@ -223,6 +223,7 @@ def render_binstall_template(template: str, fields: dict[str, str]) -> str:
     """
 
     def substitute(match: re.Match[str]) -> str:
+        """Replace one placeholder with its supplied field value."""
         key = match.group(1)
         if key not in fields:
             message = f"template placeholder {{ {key} }} has no value"

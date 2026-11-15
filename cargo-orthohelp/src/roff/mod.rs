@@ -59,11 +59,13 @@ pub fn generate(
     Ok(output)
 }
 
+/// Renders the main command page, preferring the binary override for its title name.
 fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> String {
     let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
     generate_man_page_with_name(metadata, config, bin_name)
 }
 
+/// Renders one standalone subcommand page without nesting further split pages.
 fn generate_subcommand_page(
     metadata: &LocalizedDocMetadata,
     config: &RoffConfig,
@@ -74,6 +76,7 @@ fn generate_subcommand_page(
     generate_man_page_with_name(metadata, &subcommand_config, composite_name)
 }
 
+/// Builds one complete page using the supplied display name for its title and sections.
 fn generate_man_page_with_name(
     metadata: &LocalizedDocMetadata,
     config: &RoffConfig,
@@ -99,6 +102,7 @@ fn generate_man_page_with_name(
     content
 }
 
+/// Appends standard sections in man-page order using the localized metadata and headings.
 fn append_standard_sections(
     content: &mut String,
     metadata: &LocalizedDocMetadata,
@@ -162,6 +166,7 @@ fn append_standard_sections(
     content.push_str(&sections::exit_status_section(headings));
 }
 
+/// Lists split-page subcommands for SEE ALSO; inline commands have no separate page target.
 fn collect_related_commands(
     metadata: &LocalizedDocMetadata,
     bin_name: &str,
@@ -181,6 +186,7 @@ fn collect_related_commands(
         .collect()
 }
 
+/// Adds subcommand descriptions to the parent page only when split-page output is disabled.
 fn append_inline_subcommands(
     content: &mut String,
     metadata: &LocalizedDocMetadata,
@@ -200,6 +206,7 @@ fn append_inline_subcommands(
     }
 }
 
+/// Renders a compact inline subcommand entry with its description and visible CLI options.
 fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
     let mut content = String::new();
     let name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
@@ -225,16 +232,7 @@ fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
             content.push_str(".TP\n");
 
             let placeholder = field.value.as_ref().map(escape::value_type_placeholder);
-            let flag_line = if cli.takes_value {
-                let value_name = cli
-                    .value_name
-                    .as_deref()
-                    .or(placeholder.as_deref())
-                    .unwrap_or("VALUE");
-                escape::format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
-            } else {
-                escape::format_flag(cli.long.as_deref(), cli.short)
-            };
+            let flag_line = escape::format_option(cli, placeholder.as_deref(), "VALUE");
             content.push_str(&flag_line);
             content.push('\n');
             content.push_str(&escape::escape_text(&field.help));
@@ -269,7 +267,7 @@ mod tests {
     #[fixture]
     fn minimal_metadata() -> LocalizedDocMetadata {
         LocalizedDocMetadata {
-            ir_version: "1.1".to_owned(),
+            ir_version: crate::schema::ORTHO_DOCS_IR_VERSION.to_owned(),
             locale: "en-US".to_owned(),
             app_name: "test-app".to_owned(),
             bin_name: None,
@@ -298,6 +296,7 @@ mod tests {
             fields: vec![],
             subcommands: vec![],
             windows: None,
+            renderer: None,
         }
     }
 

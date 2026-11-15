@@ -260,7 +260,7 @@ Create or update a design decision record if the approved ownership split is
 substantive. The likely file is:
 
 ```plaintext
-docs/adr-003-define-schema-ownership-for-agent-native-contracts.md
+docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md
 ```
 
 The ADR should use `docs/documentation-style-guide.md` and record:
@@ -517,14 +517,14 @@ two.
   `domain-cli-and-daemons`, `hexagonal-architecture`, and `commit-message`
   guidance for implementation.
 - [x] (2026-05-20) Froze ownership decisions in design documentation and
-  ADR-003.
+  ADR-0003.
 - [x] (2026-05-20) Added passive `ortho_config::agent_context` schema types
   and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` without adding generator flags or
   command output.
 - [x] (2026-05-20) Added passive `cargo_orthohelp::policy` report schema
   types and `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for tool-owned warnings and
   hard failures.
-- [x] (2026-05-20) Added ADR-003 and updated agent-native design,
+- [x] (2026-05-20) Added ADR-0003 and updated agent-native design,
   `cargo-orthohelp` design, user's guide, developer's guide, and contents
   documentation with the accepted ownership split.
 - [x] (2026-05-20) Ran targeted schema validation:
@@ -666,7 +666,7 @@ passive JSON contracts. Behavioural and end-to-end coverage remain scoped to
 later roadmap items because this item deliberately added no new command output
 surface.
 
-ADR-003 records the ownership split. The user guide, developer guide,
+ADR-0003 records the ownership split. The user guide, developer guide,
 agent-native design, `cargo-orthohelp` design, documentation contents, and
 roadmap were updated. Pull request #325 merged the implementation after the
 required gates and review, and the 2026-05-25 validation restored roadmap item

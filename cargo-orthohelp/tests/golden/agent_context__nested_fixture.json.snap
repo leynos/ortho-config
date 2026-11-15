@@ -1,6 +1,5 @@
 ---
 source: cargo-orthohelp/tests/golden/agent_context_tests.rs
-assertion_line: 43
 expression: snapshot
 ---
 {
@@ -27,10 +26,20 @@ expression: snapshot
       "output_modes": [],
       "interaction_mode": "unknown",
       "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
-      "examples": []
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
     },
     {
       "path": [
@@ -52,10 +61,20 @@ expression: snapshot
       "output_modes": [],
       "interaction_mode": "unknown",
       "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
-      "examples": []
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
     },
     {
       "path": [
@@ -78,10 +97,20 @@ expression: snapshot
       "output_modes": [],
       "interaction_mode": "unknown",
       "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
-      "examples": []
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
     },
     {
       "path": [
@@ -103,11 +132,99 @@ expression: snapshot
       ],
       "output_modes": [],
       "interaction_mode": "unknown",
-      "mutation_effect": "unknown",
+      "mutation_effect": "submit",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
-      "examples": []
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "admin",
+        "prune"
+      ],
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "older_than_days",
+          "long": "older-than-days",
+          "value_type": "integer",
+          "required": false,
+          "default": "30",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "delete",
+      "bypass_flag": null,
+      "dry_run_flag": null,
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "admin",
+        "purge"
+      ],
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "force",
+          "long": "force",
+          "value_type": "bool",
+          "required": true,
+          "default": null,
+          "enum_values": []
+        },
+        {
+          "name": "target",
+          "long": "target",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "interactive",
+      "mutation_effect": "delete",
+      "bypass_flag": "--force",
+      "dry_run_flag": null,
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
     },
     {
       "path": [
@@ -135,12 +252,68 @@ expression: snapshot
         }
       ],
       "output_modes": [],
-      "interaction_mode": "unknown",
-      "mutation_effect": "unknown",
+      "interaction_mode": "non_interactive",
+      "mutation_effect": "read_only",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
-      "examples": []
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true,
+          "tty": "adapts",
+          "closed_stdin": "eof",
+          "colour": "auto",
+          "emoji": "never",
+          "progress": "always",
+          "pager": "auto",
+          "width": {
+            "kind": "terminal"
+          },
+          "accessibility": "text_equivalent",
+          "plain": "available",
+          "stdout": "text",
+          "stderr": "mixed",
+          "progress_inheritance": "allowed",
+          "subprocess_inheritance": "forbidden",
+          "fields": [
+            {
+              "id": "message",
+              "localization": "localized"
+            },
+            {
+              "id": "error_code",
+              "localization": "non_localized"
+            }
+          ]
+        },
+        "machine": {
+          "supported": true,
+          "tty": "independent",
+          "closed_stdin": "error",
+          "colour": "never",
+          "emoji": "auto",
+          "progress": "never",
+          "pager": "always",
+          "width": {
+            "kind": "unbounded"
+          },
+          "accessibility": "unspecified",
+          "plain": "always",
+          "stdout": "structured",
+          "stderr": "none",
+          "progress_inheritance": "forbidden",
+          "subprocess_inheritance": "allowed",
+          "fields": [
+            {
+              "id": "error_code",
+              "localization": "non_localized"
+            }
+          ]
+        }
+      }
     },
     {
       "path": [
@@ -153,10 +326,20 @@ expression: snapshot
       "output_modes": [],
       "interaction_mode": "unknown",
       "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
-      "examples": []
+      "examples": [],
+      "renderer": {
+        "human": {
+          "supported": true
+        },
+        "machine": {
+          "supported": false
+        }
+      }
     }
   ],
   "profiles": {
@@ -166,7 +349,8 @@ expression: snapshot
     "supported": false
   },
   "policy": {
-    "agent_native": "warn"
+    "agent_native": "warn",
+    "exceptions": []
   },
   "skill_manifests": []
 }

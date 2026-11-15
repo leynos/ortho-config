@@ -4,6 +4,10 @@ use super::*;
 use crate::serialize_agent_context;
 use proptest::{collection::vec, option, prelude::*};
 
+#[path = "tests_round_trip_renderer.rs"]
+mod renderer_strategies;
+use renderer_strategies::*;
+
 proptest! {
     #[test]
     fn to_json_always_round_trips(context in any_agent_context()) {
@@ -16,18 +20,57 @@ proptest! {
 }
 
 fn any_agent_context() -> impl Strategy<Value = AgentContext> {
-    (package_name(), vec(any_agent_command(), 0..4)).prop_map(|(package, commands)| AgentContext {
-        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-        kind: crate::agent_context_kind(&package),
-        package,
-        commands,
-        profiles: SupportDeclaration { supported: false },
-        feedback: SupportDeclaration { supported: false },
-        policy: AgentPolicy {
-            agent_native: PolicyMode::Warn,
-        },
-        skill_manifests: Vec::new(),
-    })
+    (
+        package_name(),
+        vec(any_agent_command(), 0..4),
+        profiles_declaration(),
+        vec(any_policy_exception(), 0..3),
+    )
+        .prop_map(|(package, commands, profiles, exceptions)| AgentContext {
+            schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
+            kind: crate::agent_context_kind(&package),
+            package,
+            commands,
+            profiles,
+            feedback: SupportDeclaration { supported: false },
+            policy: AgentPolicy {
+                agent_native: PolicyMode::Warn,
+                exceptions,
+            },
+            skill_manifests: Vec::new(),
+        })
+}
+
+/// Generates unsupported and supported profile declarations so the round-trip
+/// property covers the omitted-when-absent optional fields too.
+fn profiles_declaration() -> impl Strategy<Value = ProfilesDeclaration> {
+    prop_oneof![
+        Just(ProfilesDeclaration::unsupported()),
+        (
+            Just(String::from("profile")),
+            Just(String::from("PROFILE_FIXTURE")),
+        )
+            .prop_map(|(flag, env_var)| ProfilesDeclaration::supported(
+                ProfileSelectionContract { flag, env_var }
+            )),
+    ]
+}
+
+fn any_policy_exception() -> impl Strategy<Value = PolicyException> {
+    (
+        prop_oneof![
+            Just("verb".to_owned()),
+            Just("flag".to_owned()),
+            Just("future_kind".to_owned()),
+        ],
+        command_segment(),
+        option::of(command_segment()),
+    )
+        .prop_map(|(kind, name, command_path)| PolicyException {
+            kind,
+            name,
+            command_path,
+        })
 }
 
 fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
@@ -39,10 +82,15 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
         vec(output_mode(), 0..4),
         interaction_mode(),
         mutation_effect(),
+        // proptest strategies only tuple up to twelve elements, so the two
+        // flag-name strategies share one slot.
+        (option::of(flag_name()), option::of(flag_name())),
         option::of(async_submission()),
         option::of(delivery_route()),
         option::of(pagination_contract()),
-        vec(any_agent_example(), 0..4),
+        // The same twelve-element ceiling keeps examples paired with the
+        // renderer contract rather than in their own slot.
+        (vec(any_agent_example(), 0..4), any_agent_renderer()),
     )
         .prop_map(
             |(
@@ -53,10 +101,11 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
                 output_modes,
                 interaction_mode,
                 mutation_effect,
+                (bypass_flag, dry_run_flag),
                 async_submission,
                 delivery_route,
                 pagination,
-                examples,
+                (examples, renderer),
             )| AgentCommand {
                 path,
                 summary,
@@ -65,10 +114,13 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
                 output_modes,
                 interaction_mode,
                 mutation_effect,
+                bypass_flag,
+                dry_run_flag,
                 async_submission,
                 delivery_route,
                 pagination,
                 examples,
+                renderer,
             },
         )
 }
@@ -166,6 +218,46 @@ fn command_segment() -> impl Strategy<Value = String> {
     "[a-z][a-z0-9-]{0,12}"
 }
 
+/// Generates flag names matching the grammar pinned by ADR-0010.
+///
+/// Bypass and dry-run declarations are restricted to
+/// `--[a-z0-9]+(-[a-z0-9]+)*`, so the generator mirrors that pattern to keep
+/// round-trip cases within the declared contract.
+fn flag_name() -> impl Strategy<Value = String> {
+    "--[a-z0-9]+(-[a-z0-9]+)*"
+}
+
 fn summary() -> impl Strategy<Value = String> {
     "[A-Za-z0-9 .,;-]{0,48}"
+}
+
+#[rstest]
+fn unrecognized_exception_kind_survives_round_trip() {
+    let context: AgentContext = serde_json::from_value(json!({
+        "schema_version": "1",
+        "kind": "future-cli.agent_context",
+        "package": "future-cli",
+        "commands": [],
+        "policy": { "agent_native": "warn",
+            "exceptions": [{ "kind": "resource-kind", "name": "remote" }] }
+    }))
+    .expect("unrecognized exception kind should deserialize");
+
+    let exception = context
+        .policy
+        .exceptions
+        .first()
+        .expect("exception should survive");
+    assert_eq!(exception.kind, "resource-kind");
+
+    let value = serde_json::to_value(&context).expect("serialize context");
+    let round_tripped = first_array_item(
+        field(field(&value, "policy").expect("policy block"), "exceptions")
+            .expect("exceptions list"),
+    )
+    .expect("exception entry");
+    assert_eq!(
+        field(round_tripped, "kind").expect("exception kind"),
+        "resource-kind"
+    );
 }

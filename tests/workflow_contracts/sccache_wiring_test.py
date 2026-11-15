@@ -454,6 +454,8 @@ def _guide_naming(text: str) -> Path:
     """Return a path whose `read_text` yields the supplied prose."""
 
     class _Guide:
+        """Provide the guide's text through the Path read interface."""
+
         name = "developers-guide.md"
 
         @staticmethod

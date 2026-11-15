@@ -144,8 +144,60 @@ impl Default for NestedFixtureCommand {
 }
 
 /// Options for the nested fixture greet command.
+///
+/// Declares both renderers so the end-to-end scenarios can observe a real
+/// dual declaration: human support with presentation policies, machine support
+/// with a structured stream, and an output field classified non-localized so a
+/// change of human language cannot be mistaken for a protocol rename.
+///
+/// Both records declare every policy leaf, because a leaf that code generation
+/// silently drops is invisible to a test whose fixture never declares it. The
+/// four toggle leaves share a three-variant vocabulary, so one pair repeats
+/// within each record; the repeated pair differs between the records
+/// (`colour`/`pager` here, `colour`/`progress` on the machine record), so a
+/// swap of any toggle pair is visible in at least one of them.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "NESTED_FIXTURE")]
+#[ortho_config(
+    prefix = "NESTED_FIXTURE",
+    behaviour(interaction = "non_interactive", mutation = "read_only"),
+    renderer(
+        human(
+            supported = true,
+            tty = "adapts",
+            closed_stdin = "eof",
+            colour = "auto",
+            emoji = "never",
+            progress = "always",
+            pager = "auto",
+            width = "terminal",
+            accessibility = "text_equivalent",
+            plain = "available",
+            stdout = "text",
+            stderr = "mixed",
+            progress_inheritance = "allowed",
+            subprocess_inheritance = "forbidden",
+            field("message", localization = "localized"),
+            field("error_code", localization = "non_localized")
+        ),
+        machine(
+            supported = true,
+            tty = "independent",
+            closed_stdin = "error",
+            colour = "never",
+            emoji = "auto",
+            progress = "never",
+            pager = "always",
+            width = "unbounded",
+            accessibility = "unspecified",
+            plain = "always",
+            stdout = "structured",
+            stderr = "none",
+            progress_inheritance = "forbidden",
+            subprocess_inheritance = "allowed",
+            field("error_code", localization = "non_localized")
+        )
+    )
+)]
 pub struct NestedGreetCommand {
     /// Recipient to greet.
     #[ortho_config(default = String::from("World"))]
@@ -155,6 +207,10 @@ pub struct NestedGreetCommand {
     pub is_excited: bool,
 }
 /// Empty command proving leaf commands without options survive the bridge.
+///
+/// Deliberately declares no `renderer(...)` group: it is the undeclared child
+/// the E4 scenarios assert keeps the legacy support defaults and makes no
+/// presentation claim.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "NESTED_FIXTURE")]
 pub struct NestedVersionCommand {}
@@ -198,6 +254,12 @@ pub enum NestedAdminSubcommand {
     /// Grants access to a principal.
     #[command(name = "grant-access")]
     GrantAccess(NestedGrantAccessCommand),
+    /// Permanently deletes a principal's records.
+    #[command(name = "purge")]
+    Purge(NestedPurgeCommand),
+    /// Removes expired records under an explicit policy.
+    #[command(name = "prune")]
+    Prune(NestedPruneCommand),
 }
 
 impl Default for NestedAdminSubcommand {
@@ -216,9 +278,53 @@ pub struct NestedAuditCommand {
 }
 
 /// Options for the nested fixture grant-access command.
+///
+/// Declared `submit` so the end-to-end attribute → IR → agent-context path
+/// covers a boundary that is neither read-only, write, nor delete: the fixture
+/// is the only place the full pipeline runs, so the rarest accepted value
+/// belongs here rather than only in unit-level tables.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "NESTED_FIXTURE")]
+#[ortho_config(prefix = "NESTED_FIXTURE", behaviour(mutation = "submit"))]
 pub struct NestedGrantAccessCommand {
     /// Principal receiving access.
     pub principal: Option<String>,
+}
+
+/// Options for the nested fixture purge command.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_FIXTURE",
+    behaviour(interaction = "interactive", mutation = "delete", bypass = "--force")
+)]
+pub struct NestedPurgeCommand {
+    /// Confirms the destructive purge without an interactive prompt.
+    #[arg(long)]
+    pub force: bool,
+    /// Target of the destructive purge.
+    pub target: Option<String>,
+}
+
+/// Options for the nested fixture prune command.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_FIXTURE", behaviour(mutation = "delete"))]
+pub struct NestedPruneCommand {
+    /// Expiry threshold interpreted as a number of days.
+    #[ortho_config(default = 30)]
+    pub older_than_days: u32,
+}
+
+/// Profile-enabled configuration schema for the profile agent-context golden.
+///
+/// Opts into `#[ortho_config(profiles)]` so the bridge emits a supported
+/// `ProfilesDeclaration` with the selection contract.
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "PROFILE_FIXTURE", profiles)]
+pub struct ProfileFixtureConfig {
+    /// Endpoint host used by the profile fixture.
+    #[ortho_config(default = String::from("localhost"))]
+    pub host: String,
+
+    /// Retry count for profile fixture requests.
+    #[ortho_config(default = 3)]
+    pub retries: u8,
 }

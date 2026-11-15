@@ -10,38 +10,56 @@
 //! let _ = 1 + 1;
 //! ```
 
-use syn::meta::ParseNestedMeta;
-use syn::parenthesized;
-use syn::{Attribute, Expr, Lit, LitStr, Token};
+use syn::{Attribute, Expr, LitStr};
 
+mod behaviour_attrs;
 mod clap_attrs;
+mod clap_defaults;
+mod discovery_attrs;
 mod doc_attrs;
+mod doc_attrs_common;
 mod doc_types;
+mod field_attrs;
 mod input;
 mod literals;
+mod localization;
+mod renderer_attrs;
+mod renderer_values;
 mod serde_attrs;
+mod struct_attrs;
 #[cfg(test)]
 mod tests;
 mod type_utils;
 
+pub(crate) use behaviour_attrs::parse_behaviour_meta;
 pub(crate) use clap_attrs::{
-    ClapDefaultValue, ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute,
-    clap_default_value, clap_field_is_subcommand, clap_variant_name,
-    reject_subcommand_ortho_config_attrs,
+    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
+    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
 };
-use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
+pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
+pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};
+use doc_attrs::apply_field_doc_attr;
 pub(crate) use doc_types::{
-    DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
+    BehaviourAttrs, DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs,
+    HeadingOverrides, RenderWidthAttr, RendererFieldAttr, RendererRecordAttrs,
 };
+pub(crate) use field_attrs::parse_field_attrs;
 pub(crate) use input::parse_input;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
+/// Re-exported for the `lit` tests, which reach the helpers through this
+/// module's glob import. The production callers of `lit_char` now live in
+/// [`struct_attrs`] and [`doc_attrs`], so without this the test-only path
+/// would depend on an incidental private import surviving future splits.
+#[cfg(any(test, doctest))]
+pub(crate) use literals::lit_char;
 pub(crate) use literals::lit_crate_path;
-use literals::{lit_bool, lit_char, lit_str};
+pub(crate) use renderer_attrs::parse_renderer_meta;
 pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
     serde_serialized_field_key,
 };
+pub(crate) use struct_attrs::{discard_unknown, parse_ortho_config, parse_struct_attrs};
 pub(crate) use type_utils::{
     ClapDefaultValueShape, btree_map_inner, hash_map_inner, option_inner, vec_inner,
 };
@@ -51,11 +69,25 @@ const _: fn(&syn::Field) -> syn::Result<bool> = clap_field_is_subcommand;
 const _: fn(&syn::Variant) -> syn::Result<Option<LitStr>> = clap_variant_name;
 const _: fn(&[Attribute]) -> syn::Result<Option<String>> = serde_field_rename;
 
+/// Parsed struct options shared by derive validation and code generation.
+///
+/// Values are kept as syntax-level metadata until generation validates and
+/// emits the corresponding runtime contract.
 #[derive(Default, Clone)]
 pub(crate) struct StructAttrs {
+    /// Environment-variable prefix, normalized to end in `_` when non-empty.
     pub prefix: Option<String>,
+    /// Optional file-discovery policy and naming overrides.
     pub discovery: Option<DiscoveryAttrs>,
+    /// Whether generated loading calls the post-merge hook after composition.
     pub post_merge_hook: bool,
+    /// Fluent catalogue root as a dotted path (D-5); falls back to docs app name.
+    pub localization_base: Option<String>,
+    /// Opts the struct into profile support (roadmap 9.1.1): the generated
+    /// `--profile` flag, the `<PREFIX>PROFILE` selector, the profile merge
+    /// layer, and `profiles.supported = true` in agent context.
+    pub profiles: bool,
+    /// Documentation metadata copied into generated API documentation.
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.
     ///
@@ -83,301 +115,22 @@ pub(crate) struct StructAttrs {
 ///   active and no explicit `#[ortho_config(default = ...)]` is provided.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
+    /// Explicit long option spelling used by generated CLI metadata.
     pub cli_long: Option<String>,
+    /// Explicit short option spelling used by generated CLI metadata.
     pub cli_short: Option<char>,
+    /// User expression used when no configuration layer supplies the field.
     pub default: Option<Expr>,
+    /// Clap default preserved when the CLI default must be treated as absent.
     pub inferred_clap_default: Option<ClapInferredDefault>,
+    /// Collection policy applied as configuration layers are composed.
     pub merge_strategy: Option<MergeStrategy>,
+    /// Excludes the field from CLI parsing without excluding it from merging.
     pub skip_cli: bool,
+    /// Omits a clap-provided default from the CLI merge layer.
     pub cli_default_as_absent: bool,
+    /// Marks a clap-owned subcommand selector excluded from config fields.
     pub is_subcommand: bool,
+    /// Field documentation metadata copied into generated API documentation.
     pub doc: DocFieldAttrs,
-}
-
-#[derive(Default, Clone)]
-pub(crate) struct DiscoveryAttrs {
-    pub app_name: Option<String>,
-    pub env_var: Option<String>,
-    pub config_file_name: Option<String>,
-    pub dotfile_name: Option<String>,
-    pub project_file_name: Option<String>,
-    pub config_cli_long: Option<String>,
-    pub config_cli_short: Option<char>,
-    pub config_cli_visible: Option<bool>,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) enum MergeStrategy {
-    Append,
-    Replace,
-    Keyed,
-}
-
-impl MergeStrategy {
-    pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
-        match s {
-            "append" => Ok(Self::Append),
-            "replace" => Ok(Self::Replace),
-            "keyed" => Ok(Self::Keyed),
-            _ => Err(syn::Error::new(
-                span,
-                format!(
-                    "unknown merge_strategy '{s}'; expected one of \"append\", \"replace\", or \"keyed\""
-                ),
-            )),
-        }
-    }
-}
-
-/// Iterate all `#[ortho_config(...)]` attributes once and apply a callback.
-fn parse_ortho_config<F>(attrs: &[Attribute], mut f: F) -> syn::Result<()>
-where
-    F: FnMut(&syn::meta::ParseNestedMeta) -> syn::Result<()>,
-{
-    for attr in attrs.iter().filter(|a| a.path().is_ident("ortho_config")) {
-        attr.parse_nested_meta(|meta| f(&meta))?;
-    }
-    Ok(())
-}
-
-/// Consumes an unrecognised key-value or list without recording it.
-fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
-    if meta.input.peek(Token![=]) {
-        meta.value()?.parse::<proc_macro2::TokenStream>()?;
-    } else if meta.input.peek(syn::token::Paren) {
-        let content;
-        parenthesized!(content in meta.input);
-        content.parse::<proc_macro2::TokenStream>()?;
-    }
-    Ok(())
-}
-
-fn parse_prefix(meta: &ParseNestedMeta) -> syn::Result<String> {
-    let lit = meta.value()?.parse::<Lit>()?;
-    match lit {
-        Lit::Str(s) => {
-            let mut value = s.value();
-            if !value.is_empty() && !value.ends_with('_') {
-                value.push('_');
-            }
-            Ok(value)
-        }
-        other => Err(syn::Error::new(other.span(), "prefix must be a string")),
-    }
-}
-
-fn parse_discovery_meta(meta: &ParseNestedMeta, discovery: &mut DiscoveryAttrs) -> syn::Result<()> {
-    meta.parse_nested_meta(|nested| handle_discovery_nested(&nested, discovery))
-}
-
-fn handle_discovery_nested(
-    nested: &ParseNestedMeta,
-    discovery: &mut DiscoveryAttrs,
-) -> syn::Result<()> {
-    let Some(ident) = nested.path.get_ident().map(ToString::to_string) else {
-        return discard_unknown(nested);
-    };
-
-    match ident.as_str() {
-        "app_name" => assign_str(&mut discovery.app_name, nested, "app_name"),
-        "env_var" => assign_str(&mut discovery.env_var, nested, "env_var"),
-        "config_file_name" => {
-            assign_str(&mut discovery.config_file_name, nested, "config_file_name")
-        }
-        "dotfile_name" => assign_str(&mut discovery.dotfile_name, nested, "dotfile_name"),
-        "project_file_name" => assign_str(
-            &mut discovery.project_file_name,
-            nested,
-            "project_file_name",
-        ),
-        "config_cli_long" => assign_str(&mut discovery.config_cli_long, nested, "config_cli_long"),
-        "config_cli_short" => {
-            assign_char(&mut discovery.config_cli_short, nested, "config_cli_short")
-        }
-        "config_cli_visible" => assign_bool(
-            &mut discovery.config_cli_visible,
-            nested,
-            "config_cli_visible",
-        ),
-        _ => discard_unknown(nested),
-    }
-}
-
-fn assign_str(target: &mut Option<String>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
-    let value = lit_str(nested, key)?.value();
-    *target = Some(value);
-    Ok(())
-}
-
-fn assign_char(target: &mut Option<char>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
-    let value = lit_char(nested, key)?;
-    *target = Some(value);
-    Ok(())
-}
-
-fn assign_bool(target: &mut Option<bool>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
-    let value = lit_bool(nested, key)?;
-    *target = Some(value);
-    Ok(())
-}
-
-/// Extracts `#[ortho_config(...)]` metadata applied to a struct.
-///
-/// Only the `prefix` key is currently recognised. Unknown keys are
-/// ignored so callers keep compiling when new attributes appear. This
-/// improves forwards compatibility at the cost of allowing silent typos.
-/// If stricter validation is desired, a custom `compile_error!` guard can
-/// reject unexpected keys.
-///
-/// Used internally by the derive macro to extract configuration metadata
-/// from struct-level attributes.
-pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn::Error> {
-    let mut out = StructAttrs::default();
-    parse_ortho_config(attrs, |meta| {
-        match meta.path.get_ident().map(ToString::to_string).as_deref() {
-            Some("prefix") => {
-                let value = parse_prefix(meta)?;
-                out.prefix = Some(value);
-                Ok(())
-            }
-            Some("discovery") => {
-                let mut discovery = out.discovery.take().unwrap_or_default();
-                parse_discovery_meta(meta, &mut discovery)?;
-                out.discovery = Some(discovery);
-                Ok(())
-            }
-            Some("post_merge_hook") => {
-                // Accept both `post_merge_hook` and `post_merge_hook = true`
-                let v = if meta.input.peek(Token![=]) {
-                    meta.value()?.parse::<syn::LitBool>()?.value
-                } else {
-                    true
-                };
-                out.post_merge_hook = v;
-                Ok(())
-            }
-            Some("crate") => {
-                if out.crate_path.is_some() {
-                    return Err(syn::Error::new_spanned(
-                        &meta.path,
-                        "duplicate `crate` attribute",
-                    ));
-                }
-                out.crate_path = Some(lit_crate_path(meta)?);
-                Ok(())
-            }
-            _ => {
-                if apply_struct_doc_attr(meta, &mut out.doc)? {
-                    return Ok(());
-                }
-                discard_unknown(meta)
-            }
-        }
-    })?;
-    Ok(out)
-}
-
-/// Applies a recognised field attribute, returning `true` if handled.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// # use syn::meta::ParseNestedMeta;
-/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
-/// let mut out = FieldAttrs::default();
-/// if !apply_field_attr(meta, &mut out)? {
-///     // unknown attribute
-/// }
-/// # Ok(())
-/// # }
-/// ```
-/// Parse the optional boolean value of `cli_default_as_absent`.
-///
-/// A bare `cli_default_as_absent` enables the behaviour; an explicit
-/// `cli_default_as_absent = <bool>` sets it directly.
-fn parse_cli_default_as_absent(meta: &syn::meta::ParseNestedMeta) -> Result<bool, syn::Error> {
-    if meta.input.peek(Token![=]) {
-        Ok(meta.value()?.parse::<syn::LitBool>()?.value)
-    } else {
-        Ok(true)
-    }
-}
-
-fn apply_field_attr(
-    meta: &syn::meta::ParseNestedMeta,
-    out: &mut FieldAttrs,
-) -> Result<bool, syn::Error> {
-    let Some(ident) = meta.path.get_ident() else {
-        return Ok(false);
-    };
-    let key = ident.to_string();
-    match key.as_str() {
-        "cli_long" => {
-            let s = lit_str(meta, "cli_long")?;
-            out.cli_long = Some(s.value());
-            Ok(true)
-        }
-        "cli_short" => {
-            let c = lit_char(meta, "cli_short")?;
-            out.cli_short = Some(c);
-            Ok(true)
-        }
-        "default" => {
-            out.default = Some(meta.value()?.parse()?);
-            Ok(true)
-        }
-        "merge_strategy" => {
-            let s = lit_str(meta, "merge_strategy")?;
-            out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
-            Ok(true)
-        }
-        "skip_cli" => {
-            out.skip_cli = true;
-            Ok(true)
-        }
-        "cli_default_as_absent" => {
-            out.cli_default_as_absent = parse_cli_default_as_absent(meta)?;
-            Ok(true)
-        }
-        _ => apply_field_doc_attr(meta, out),
-    }
-}
-
-/// Parses field-level `#[ortho_config(...)]` attributes.
-///
-/// Recognised keys include `cli_long`, `cli_short`, `default`,
-/// `merge_strategy`, `skip_cli`, and `cli_default_as_absent`. Unknown keys are
-/// ignored, matching [`parse_struct_attrs`] for forwards compatibility. This
-/// lenience may permit misspelt attribute names; users wanting stricter
-/// validation can insert a manual `compile_error!` guard.
-///
-/// When `cli_default_as_absent` is active and no explicit `default` is
-/// provided, this function attempts to infer a default from clap's default
-/// attributes. String defaults retain the field parser metadata so generated
-/// code can reproduce clap's conversion at runtime.
-///
-/// Used internally by the derive macro to extract configuration metadata
-/// from field-level attributes.
-pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> {
-    let mut out = FieldAttrs {
-        is_subcommand: clap_field_is_subcommand(field)?,
-        ..FieldAttrs::default()
-    };
-    if out.is_subcommand {
-        reject_subcommand_ortho_config_attrs(field)?;
-        return Ok(out);
-    }
-    parse_ortho_config(&field.attrs, |meta| {
-        if !apply_field_attr(meta, &mut out)? {
-            // Unknown attributes are intentionally discarded to preserve
-            // forwards compatibility while still allowing callers to add
-            // new keys in future versions.
-            discard_unknown(meta)?;
-        }
-        Ok(())
-    })?;
-    if out.cli_default_as_absent && out.default.is_none() {
-        out.inferred_clap_default = clap_default_value(field)?;
-    }
-    Ok(out)
 }

@@ -4,8 +4,8 @@ use anyhow::{Result, ensure};
 
 use super::{field, first_array_item};
 use crate::agent_context::{
-    AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, InteractionMode, MutationEffect,
-    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PolicyMode,
+    AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, AgentInput, InteractionMode,
+    MutationEffect, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PolicyException, PolicyMode, SkillManifest,
 };
 use crate::docs::ORTHO_DOCS_IR_VERSION;
 use serde_json::Value;
@@ -49,14 +49,15 @@ fn assert_legacy_default_identity(context: &AgentContext) {
 }
 
 fn assert_legacy_default_support_declarations(context: &AgentContext) {
-    assert!(context.commands.is_empty());
+    assert_eq!(context.commands, [] as [AgentCommand; 0]);
     assert!(!context.profiles.supported);
     assert!(!context.feedback.supported);
 }
 
 fn assert_legacy_default_policy_and_skills(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.skill_manifests.is_empty());
+    assert_eq!(context.policy.exceptions, [] as [PolicyException; 0]);
+    assert_eq!(context.skill_manifests, [] as [SkillManifest; 0]);
 }
 
 /// Asserts the schema-v1 serialization contract for absent optional command,
@@ -90,6 +91,8 @@ fn assert_optional_command_presence_fields_are_null(serialized_command: &Value) 
 }
 
 fn assert_optional_command_route_fields_are_null(serialized_command: &Value) -> Result<()> {
+    ensure_field_is_null(serialized_command, "bypass_flag")?;
+    ensure_field_is_null(serialized_command, "dry_run_flag")?;
     ensure_field_is_null(serialized_command, "delivery_route")?;
     ensure_field_is_null(serialized_command, "pagination")
 }
@@ -116,12 +119,14 @@ fn assert_legacy_command_modes(command: &AgentCommand) {
 
 fn assert_legacy_command_optional_metadata(command: &AgentCommand) {
     assert!(command.summary.is_none());
+    assert!(command.bypass_flag.is_none());
+    assert!(command.dry_run_flag.is_none());
     assert!(command.async_submission.is_none());
     assert!(command.delivery_route.is_none());
 }
 
 fn assert_legacy_command_collections(command: &AgentCommand) {
-    assert!(command.inputs.is_empty());
+    assert_eq!(command.inputs, [] as [AgentInput; 0]);
 }
 
 fn assert_legacy_context_support_defaults(context: &AgentContext) {
@@ -131,9 +136,19 @@ fn assert_legacy_context_support_defaults(context: &AgentContext) {
 
 fn assert_legacy_context_policy_defaults(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.skill_manifests.is_empty());
+    assert_eq!(context.policy.exceptions, [] as [PolicyException; 0]);
+    assert_eq!(context.skill_manifests, [] as [SkillManifest; 0]);
 }
 
 /// Canonical pretty-printed schema-v1 JSON used by the wire-contract test.
 pub(super) const AGENT_CONTEXT_WIRE_CONTRACT_JSON: &str =
+    include_str!("fixtures/agent_context_renderer_contract.json").trim_ascii_end();
+
+/// Frozen pre-renderer schema-v1 JSON, kept as historical evidence.
+///
+/// This document was written before the `renderer` field existed. It must keep
+/// parsing, and it must still produce the documented legacy support defaults.
+/// Overwriting it with the current serializer's output would destroy the only
+/// evidence that old readers and old documents stay compatible.
+pub(super) const FROZEN_PRERENDERER_WIRE_JSON: &str =
     include_str!("fixtures/agent_context_wire_contract.json").trim_ascii_end();

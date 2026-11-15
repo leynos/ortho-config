@@ -1,17 +1,12 @@
 //! End-to-end tests for the `hello_world context --json` surface.
 
-use assert_cmd::Command;
+use assert_cmd::{Command, cargo::cargo_bin_cmd};
 use ortho_config::serde_json::{self, Value};
 use rstest::{fixture, rstest};
 
 #[fixture]
 fn hello_world_command() -> Command {
-    #[expect(
-        deprecated,
-        clippy::expect_used,
-        reason = "cargo_bin is the standard assert_cmd API and test panics are acceptable"
-    )]
-    Command::cargo_bin("hello_world").expect("binary should exist")
+    cargo_bin_cmd!("hello_world")
 }
 
 #[rstest]
@@ -42,8 +37,8 @@ fn context_json_writes_only_to_stdout(mut hello_world_command: Command) {
 
     // This depends on no global tracing subscriber or logger being installed
     // before `Commands::Context` returns early in `main::run`.
-    assert!(output.stderr.is_empty());
-    assert!(!output.stdout.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
+    assert_ne!(output.stdout, [] as [u8; 0]);
 }
 
 #[rstest]

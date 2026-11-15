@@ -34,37 +34,106 @@ fn skips_fields_marked_with_skip_cli() -> Result<()> {
     Ok(())
 }
 
+/// Renders the generated `#[arg(...)]` attribute for a single-field struct.
+fn generated_attribute(ty: &str) -> Result<String> {
+    let input: syn::DeriveInput =
+        syn::parse_str(&format!("struct Demo {{ excited: {ty} }}")).map_err(|err| anyhow!(err))?;
+    let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+    let tokens = build_cli_struct_fields(&fields, &field_attrs)?;
+    tokens
+        .fields
+        .first()
+        .map(std::string::ToString::to_string)
+        .ok_or_else(|| anyhow!("expected generated field tokens"))
+}
+
 #[rstest]
-#[case("")]
-#[case("bad/flag")]
-#[case("alpha_beta")]
-#[case("has space")]
-#[case("*")]
-#[case("_alpha")]
-#[case("-alpha")]
-fn rejects_invalid_long_flags(#[case] bad: &str) -> Result<()> {
-    let name: Ident = syn::parse_quote!(field);
-    let Err(err) = validate_cli_long(&name, bad) else {
-        return Err(anyhow!("expected invalid long flag for {bad}"));
-    };
+#[case("bool")]
+#[case("Option<bool>")]
+fn boolean_fields_accept_an_optional_value(#[case] ty: &str) -> Result<()> {
+    let field_ts = generated_attribute(ty)?;
+    for expected in [
+        "value_name = \"BOOL\"",
+        "num_args = 0 ..= 1",
+        "require_equals = true",
+        "default_missing_value = \"true\"",
+    ] {
+        ensure!(
+            field_ts.contains(expected),
+            "{ty} fields should emit `{expected}`, got: {field_ts}"
+        );
+    }
     ensure!(
-        err.to_string().contains("invalid `cli_long`"),
-        "unexpected error: {err}"
+        !field_ts.contains("ArgAction :: SetTrue"),
+        "{ty} fields should not use presence-only ArgAction::SetTrue, got: {field_ts}"
     );
     Ok(())
 }
 
 #[rstest]
-#[case("help")]
-#[case("version")]
-fn rejects_reserved_long_flags(#[case] long: &str) -> Result<()> {
+#[case("std::string::String")]
+#[case("Option<u16>")]
+fn non_boolean_fields_take_a_value(#[case] ty: &str) -> Result<()> {
+    let field_ts = generated_attribute(ty)?;
+    ensure!(
+        !field_ts.contains("num_args") && !field_ts.contains("default_missing_value"),
+        "{ty} fields should keep the default clap value semantics, got: {field_ts}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::empty("", "invalid `cli_long` '': must be non-empty")]
+#[case::slash(
+    "bad/flag",
+    concat!(
+        "invalid `cli_long` 'bad/flag': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::underscore(
+    "alpha_beta",
+    concat!(
+        "invalid `cli_long` 'alpha_beta': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::space(
+    "has space",
+    concat!(
+        "invalid `cli_long` 'has space': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::asterisk(
+    "*",
+    concat!(
+        "invalid `cli_long` '*': must contain only ASCII ",
+        "alphanumeric characters or '-'",
+    ),
+)]
+#[case::leading_underscore("_alpha", "invalid `cli_long` '_alpha': must not start with '_'")]
+#[case::leading_dash("-alpha", "invalid `cli_long` '-alpha': must not start with '-'")]
+#[case::prefix_before_character(
+    "-bad/flag",
+    "invalid `cli_long` '-bad/flag': must not start with '-'"
+)]
+#[case::help("help", "reserved `cli_long` 'help' conflicts with global clap flags")]
+#[case::version(
+    "version",
+    "reserved `cli_long` 'version' conflicts with global clap flags"
+)]
+fn rejects_invalid_and_reserved_long_flags(
+    #[case] long: &str,
+    #[case] expected_error: &str,
+) -> Result<()> {
     let name: Ident = syn::parse_quote!(field);
     let Err(err) = validate_cli_long(&name, long) else {
-        return Err(anyhow!("expected reserved long flag error for {long}"));
+        return Err(anyhow!("expected long flag error for {long}"));
     };
     ensure!(
-        err.to_string().contains("reserved `cli_long`"),
-        "unexpected error: {err}"
+        err.to_string() == expected_error,
+        "expected {expected_error:?}, got {err}"
     );
     Ok(())
 }

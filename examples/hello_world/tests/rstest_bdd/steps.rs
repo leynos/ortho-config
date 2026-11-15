@@ -1,8 +1,9 @@
 //! Step definitions driving the `hello_world` rstest-bdd canary scenario.
 
-use anyhow::{Result, anyhow, ensure};
 use super::fixtures::HelloWorldState;
+use anyhow::{Result, anyhow, ensure};
 use hello_world::cli::HelloWorldCli;
+use ortho_config::OrthoConfig;
 use rstest_bdd::ScenarioState as _;
 use rstest_bdd_macros::{given, then, when};
 

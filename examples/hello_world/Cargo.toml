@@ -1,6 +1,6 @@
 [package]
 name = "hello_world"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 rust-version.workspace = true
 publish = false
@@ -17,8 +17,8 @@ workspace = true
 
 [dependencies]
 # `figment`, `uncased`, and `xdg` are available via `ortho_config` re-exports.
-ortho_config = { path = "../../ortho_config", version = "0.9.0" }
-ortho_config_macros = { path = "../../ortho_config_macros", version = "0.9.0" }
+ortho_config = { path = "../../ortho_config", version = "0.10.0" }
+ortho_config_macros = { path = "../../ortho_config_macros", version = "0.10.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
@@ -30,7 +30,7 @@ tracing = "0.1"
 anyhow = "1"
 assert_cmd = "2.1"
 insta = { version = "1.41", features = ["filters"] }
-rstest = "0.26"
+rstest = "0.28"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
 shlex = "2.0.1"
@@ -45,3 +45,7 @@ serde_json = ["ortho_config/serde_json"]
 json5 = ["ortho_config/json5"]
 yaml = ["ortho_config/yaml"]
 toml = ["ortho_config/toml"]
+
+[[test]]
+name = "rstest_bdd"
+path = "tests/rstest_bdd/mod.rs"

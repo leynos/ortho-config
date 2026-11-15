@@ -30,16 +30,16 @@ for Weaver's generated command surface, while profiles, delivery, feedback,
 skill manifests, and execution ledgers are ship-time soft dependencies that may
 be locally adapted. Every other affected document (`docs/design.md`,
 `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-`docs/developers-guide.md`, and ADR-003) carries only a back-reference to §2.2;
-none restates the matrix. Roadmap item 5.2.3 is then marked done.
+`docs/developers-guide.md`, and ADR-0003) carries only a back-reference to
+§2.2; none restates the matrix. Roadmap item 5.2.3 is then marked done.
 
 The plan is documentation-only. It does not change schema ownership, runtime
 code, generated artefacts, public Rust APIs, or `cargo-orthohelp` command-line
 behaviour. The schema ownership decision in
-[ADR-003](../adr-003-define-schema-ownership-for-agent-native-contracts.md) and
-the compatibility rules recorded by roadmap item 5.2.2 remain authoritative.
-This plan applies that accepted boundary by giving every capability a
-dependency tier and a normative consumer-adaptation rule.
+[ADR-0003](../adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
+and the compatibility rules recorded by roadmap item 5.2.2 remain
+authoritative. This plan applies that accepted boundary by giving every
+capability a dependency tier and a normative consumer-adaptation rule.
 
 ## Constraints
 
@@ -50,7 +50,7 @@ suggestions; violation requires escalation, not workarounds.
 - Treat this as a documentation-only change. No production Rust code, no
   `cargo-orthohelp` generator, and no schema definition file changes are in
   scope.
-- Preserve the schema ownership defined in ADR-003 and recorded in
+- Preserve the schema ownership defined in ADR-0003 and recorded in
   `docs/agent-native-cli-design.md` §3, `docs/cargo-orthohelp-design.md` §1, and
   `docs/developers-guide.md` "Schema ownership". OrthoConfig owns reusable
   command-contract machinery, agent context lives in
@@ -82,7 +82,7 @@ suggestions; violation requires escalation, not workarounds.
   be able to conclude that the hard tier is "mostly shipped" or that the soft
   tier is "blocked".
 - Treat `docs/agent-native-cli-design.md` §2.2 as the authoritative location
-  for the dependency-tier matrix. ADR-003 and every other affected document
+  for the dependency-tier matrix. ADR-0003 and every other affected document
   carry only a one-sentence back-reference. If the back-reference and §2.2 ever
   disagree, §2.2 wins.
 - Mark whole-CLI introspection, strict vocabulary policy, agent-context IR, and
@@ -135,11 +135,11 @@ of autonomous action, not quality criteria.
 - Approval: stop after this draft is complete and wait for explicit approval
   before implementation.
 - Scope: stop if implementation requires touching more than 10 files or more
-  than 700 net lines of documentation. The expected surface is ADR-003 and five
-  design or guide documents.
+  than 700 net lines of documentation. The expected surface is ADR-0003 and
+  five design or guide documents.
 - Public API: stop if any public Rust type, trait, constant, command-line
   spelling, or generated file path must change.
-- Ownership: stop if writing the dependency-tier list shows that ADR-003 is
+- Ownership: stop if writing the dependency-tier list shows that ADR-0003 is
   ambiguous about who owns a capability. A new ownership decision is out of
   scope for 5.2.3 and requires a 5.2.x extension or a new ADR.
 - Vocabulary: stop if the hard or soft dependency framing would force a
@@ -151,7 +151,7 @@ of autonomous action, not quality criteria.
 - Documentation: stop if the same dependency tier cannot be described
   identically in `docs/agent-native-cli-design.md`, `docs/design.md`,
   `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-  `docs/developers-guide.md`, and ADR-003.
+  `docs/developers-guide.md`, and ADR-0003.
 - Roadmap: stop if a hard or soft classification would require changing the
   scope of an existing roadmap item rather than referencing it. The plan
   describes dependency tiers; it does not redesign roadmap phases.
@@ -199,14 +199,14 @@ update as work proceeds.
   medium. Mitigation: qualify the terms as "ship-time" on first use in §2.2 and
   forbid runtime resilience reuse of the same words in the same paragraph.
 
-- Risk: the back-reference paragraph in ADR-003 and the matrix in §2.2 drift
-  apart after a future ADR-003 edit. Severity: medium. Likelihood: medium.
-  Mitigation: keep ADR-003's amendment a single back-reference sentence with no
-  normative content of its own, and record the precedence rule (§2.2 wins) in
-  Constraints.
+- Risk: the back-reference paragraph in ADR-0003 and the matrix in §2.2 drift
+  apart after a future ADR-0003 edit. Severity: medium. Likelihood: medium.
+  Mitigation: keep ADR-0003's amendment a single back-reference sentence with
+  no normative content of its own, and record the precedence rule (§2.2 wins)
+  in Constraints.
 
 - Risk: introducing hard or soft vocabulary could clash with the existing
-  Compatibility and Migration wording or with ADR-003's "reusable contracts"
+  Compatibility and Migration wording or with ADR-0003's "reusable contracts"
   language. Severity: medium. Likelihood: medium. Mitigation: define the terms
   once in `docs/agent-native-cli-design.md` §2.1, cross-link from every other
   document, and keep the Compatibility and Migration sections in 5.2.2
@@ -222,7 +222,7 @@ update as work proceeds.
   the exact command and failure and escalate rather than claiming review or
   pull-request creation succeeded.
 
-- Risk: the maintainer may want a standalone ADR rather than reusing ADR-003.
+- Risk: the maintainer may want a standalone ADR rather than reusing ADR-0003.
   Severity: low. Likelihood: low. Mitigation: keep the ADR amendment minimal
   and approval-gated so it can be lifted into a new ADR without redoing the
   classification work if review requests it.
@@ -242,7 +242,7 @@ work.
   `docs/cargo-orthohelp-design.md` §0.1 and §12, `docs/design.md` §2 and §8,
   `docs/users-guide.md` "Documentation metadata", `docs/developers-guide.md`
   "Schema ownership", and
-  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`.
+  `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`.
 - [x] (2026-06-02T00:00:00Z) Used an Explore reconnaissance subagent to confirm
   every existing Weaver and Netsuke reference and to verify that the terms
   "hard dependency" and "soft dependency" do not yet appear in `docs/`.
@@ -272,7 +272,8 @@ work.
   matrix in §2.2.
 - [x] (2026-06-04T00:00:00Z) Cross-linked the dependency tiers from
   `docs/design.md`, `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-  `docs/developers-guide.md`, and amended ADR-003 with a brief consequence note.
+  `docs/developers-guide.md`, and amended ADR-0003 with a brief consequence
+  note.
 - [x] (2026-06-04T00:00:00Z) Ran the documentation milestone gates before
   CodeRabbit review: `make check-fmt`, `make lint`, `make test`,
   `make typecheck`, and `make markdownlint` all passed with `/tmp` logs.
@@ -359,12 +360,12 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   document, rather than creating a new standalone ADR or extending §2.1.
   Considered options were:
 
-  - A. Amend ADR-003 with a longer consequence paragraph and embed the matrix
+  - A. Amend ADR-0003 with a longer consequence paragraph and embed the matrix
     in §2.1. Rejected: §2.1 already carries the ownership boundary and §8.1
     carries the legacy defaulting table; adding a third structural framework
-    under the same heading risks framework collisions, and ADR-003's
+    under the same heading risks framework collisions, and ADR-0003's
     Consequences section was not written to hold normative consumer guidance.
-  - B. Create a new ADR-004 "Consumer dependency tier model" alongside a
+  - B. Create a new ADR-0004 "Consumer dependency tier model" alongside a
     §2.2 cross-reference. Rejected for now: the predecessor 5.2.2 plan
     established the lightweight pattern of placing migration rules into
     existing design documents, and a new ADR would expand scope without
@@ -397,7 +398,7 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 The implementation recorded the consumer dependency tier in
 `docs/agent-native-cli-design.md` §2.2 as the single authoritative matrix and
-kept every other affected document to a back-reference. ADR-003 needed only a
+kept every other affected document to a back-reference. ADR-0003 needed only a
 brief consequence note, not a new decision record. CodeRabbit reported zero
 findings on both the initial documentation milestone and the cleaned final
 diff. The final wording preserved the planned hard/soft tier split and the
@@ -452,7 +453,7 @@ Relevant documentation sources are:
   downstream consumer compatibility wording.
 - `docs/developers-guide.md` "Schema ownership" for the internal practice
   framing.
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` for
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md` for
   the accepted ownership decision.
 - `docs/documentation-style-guide.md` for document structure, ADR shape, and
   the Compatibility and Migration section convention.
@@ -598,7 +599,7 @@ make the back-reference legible.
   capability must also record which roadmap item the local adapter shadows so
   the eventual replacement can be tracked. This is the "shadowed contracts"
   pointer the review recommended.
-- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`
+- `docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md`
   acquires a single back-reference sentence in its "Consequences" section that
   names §2.2 as the authoritative dependency-tier location. The ADR's decision
   and rationale do not change.
@@ -658,7 +659,7 @@ sed -n '50,80p' docs/design.md
 sed -n '30,70p' docs/cargo-orthohelp-design.md
 sed -n '1240,1280p' docs/users-guide.md
 sed -n '50,110p' docs/developers-guide.md
-sed -n '60,110p' docs/adr-003-define-schema-ownership-for-agent-native-contracts.md
+sed -n '60,110p' docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md
 ```
 
 Update documentation in the order described in Stage B and Stage C. After each
@@ -696,7 +697,7 @@ git diff -- docs
 git add docs/agent-native-cli-design.md docs/design.md \
   docs/cargo-orthohelp-design.md docs/users-guide.md \
   docs/developers-guide.md \
-  docs/adr-003-define-schema-ownership-for-agent-native-contracts.md \
+  docs/adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md \
   docs/roadmap.md \
   docs/execplans/5-2-3-record-consumer-dependency-boundaries.md
 git diff --cached
@@ -762,11 +763,11 @@ The implementation is accepted when all of the following are true:
   adapter and the published OrthoConfig shape disagree, the published shape
   wins.
 - `docs/design.md`, `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-  `docs/developers-guide.md`, and ADR-003 each carry only a back-reference to
+  `docs/developers-guide.md`, and ADR-0003 each carry only a back-reference to
   §2.2. None duplicates the matrix or restates the normative tier definitions.
   `docs/developers-guide.md` additionally records the "shadowed contracts"
   pointer for soft-dependency adapters.
-- The existing schema ownership boundary in ADR-003 and the migration rules
+- The existing schema ownership boundary in ADR-0003 and the migration rules
   recorded by roadmap item 5.2.2 are unchanged.
 - No production Rust code or `cargo-orthohelp` command-line behaviour
   changed.
@@ -866,7 +867,7 @@ not modified by this plan:
 
 The dependency-tier paragraphs name these contracts by full path the first time
 they are introduced so a reader can navigate from the boundary documentation
-directly to the owning crate without re-reading ADR-003.
+directly to the owning crate without re-reading ADR-0003.
 
 ## Revision note
 
@@ -889,5 +890,5 @@ the next consumer release. A "shadowed contracts" practice was added for
 matrix (capability, tier, roadmap item with title, consumer adaptation rule,
 replacement trigger) so renumbering and contract drift surface mechanically in
 review. The Decision Log now records the considered options A through D.
-ADR-003 is amended only with a single back-reference sentence; §2.2 wins on any
-future disagreement.
+ADR-0003 is amended only with a single back-reference sentence; §2.2 wins on
+any future disagreement.

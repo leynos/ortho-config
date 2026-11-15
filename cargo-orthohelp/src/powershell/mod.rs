@@ -21,17 +21,24 @@ use cap_std::fs_utf8::Dir;
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 
+/// Capability handle and display path for writes beneath the module root.
 struct GenerationPaths<'a> {
+    /// Open directory used to perform capability-relative file operations.
     root_dir: &'a Dir,
+    /// Module path used in returned paths and errors, preserving the
+    /// caller-relative form provided by the configuration.
     module_root: &'a Utf8PathBuf,
 }
 
+/// Localized content and destination locale for one set of help artefacts.
 struct LocaleWriteRequest<'a> {
+    /// Metadata rendered into the locale's MAML and about-topic files.
     metadata: &'a LocalizedDocMetadata,
+    /// Locale directory name; fallback content may be written as `en-US`.
     locale_name: &'a str,
 }
 
-/// Generates `PowerShell` wrapper modules and MAML help from localized metadata.
+/// Generate `PowerShell` wrapper modules and MAML help from localized metadata.
 ///
 /// # Errors
 ///
@@ -99,6 +106,10 @@ pub fn generate(
     Ok(output)
 }
 
+/// Write the locale-independent wrapper module and its `PowerShell` manifest.
+///
+/// These artefacts use the root metadata for command names and configuration
+/// settings and are recorded in the output only after each write succeeds.
 fn write_core_files(
     paths: &GenerationPaths<'_>,
     config: &PowerShellConfig,
@@ -144,6 +155,10 @@ fn write_core_files(
     Ok(())
 }
 
+/// Create a locale directory and write its MAML and about-topic help files.
+///
+/// The MAML file receives a UTF-8 BOM for `PowerShell` help compatibility; the
+/// plain-text about topic is emitted without one.
 fn write_locale_files(
     paths: &GenerationPaths<'_>,
     config: &PowerShellConfig,
@@ -182,6 +197,10 @@ fn write_locale_files(
     Ok(())
 }
 
+/// Write one generated artefact relative to the capability-open module root.
+///
+/// Errors retain the full module path for diagnostics while file access stays
+/// relative to the opened directory handle.
 fn write_module_file(
     paths: &GenerationPaths<'_>,
     relative_path: &Utf8Path,
@@ -199,6 +218,7 @@ fn write_module_file(
     )
 }
 
+/// Create a module subdirectory and report failures against its full path.
 fn ensure_module_subdir(
     paths: &GenerationPaths<'_>,
     relative_path: &Utf8Path,
@@ -213,6 +233,7 @@ fn ensure_module_subdir(
     Ok(())
 }
 
+/// List the main wrapper and, when enabled, immediate subcommand wrappers.
 fn build_functions_to_export(
     metadata: &LocalizedDocMetadata,
     config: &PowerShellConfig,
@@ -227,6 +248,10 @@ fn build_functions_to_export(
     functions
 }
 
+/// Build MAML command inputs matching the exported wrapper functions.
+///
+/// Subcommands remain one level deep, matching the wrapper renderer's
+/// behaviour.
 fn build_command_specs<'a>(
     metadata: &'a LocalizedDocMetadata,
     config: &PowerShellConfig,
@@ -247,6 +272,8 @@ fn build_command_specs<'a>(
     commands
 }
 
+/// Iterate immediate subcommands using their configured name or app-name
+/// fallback.
 fn iter_subcommands(
     metadata: &LocalizedDocMetadata,
 ) -> impl Iterator<Item = (&str, &LocalizedDocMetadata)> {
@@ -261,6 +288,11 @@ fn iter_subcommands(
     })
 }
 
+/// Preserve supplied locales and optionally select a source for an `en-US`
+/// fallback.
+///
+/// An existing `en-US` locale suppresses fallback generation; when none exists,
+/// the first supplied locale is reused as fallback content if requested.
 fn resolve_locales(
     locales: &[LocalizedDocMetadata],
     should_ensure_en_us: bool,

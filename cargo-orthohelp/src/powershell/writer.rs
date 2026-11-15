@@ -7,6 +7,7 @@ use std::io::Write;
 
 use crate::error::OrthohelpError;
 
+/// UTF-8 signature required by Windows `PowerShell`'s XML help-file reader.
 const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 
 /// Ensures a directory exists and returns a handle to it.
@@ -76,6 +77,10 @@ pub fn write_crlf_text(
     Ok(full_path)
 }
 
+/// Normalize CRLF, CR and LF input to one CRLF per logical line break.
+///
+/// Existing CRLF pairs are collapsed before lone carriage returns are handled,
+/// preventing doubled carriage returns in generated files.
 fn normalise_to_crlf(content: &str) -> String {
     content
         .replace("\r\n", "\n")
