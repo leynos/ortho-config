@@ -7,8 +7,10 @@ Published package name: `ortho_config_test_helpers`.
 
 This crate provides:
 
-- RAII guards for process-global environment variable mutation.
-- RAII guards for current working directory mutation.
+- Deprecated (since 0.11.0) RAII guards for process-global environment variable
+  mutation. Inject an `ortho_config::MapEnv` instead.
+- Deprecated (since 0.11.0) RAII guards for current working directory mutation.
+  Pin the directory with `MapEnv::with_current_dir` instead.
 - Shared text normalization functions for behavioural tests.
 
 ## Intended usage

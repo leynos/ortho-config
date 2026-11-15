@@ -123,6 +123,7 @@ fn nested_cargo_helper() -> Result<()> {
 /// its build script runs; the parent records and terminates the tree to
 /// release it.
 #[test]
+// Serial for the shared fixture crate's build tree and artefact lease, not for the environment.
 #[serial]
 fn a_real_cargo_build_keeps_the_lease_after_its_helper_dies() -> Result<()> {
     let scratch = TempDir::new().context("create the helper scratch directory")?;

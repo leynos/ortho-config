@@ -129,6 +129,8 @@ fn ensure_three_suffixes_per_field(
 
 /// Verifies schema output, warm-build preservation, and forced opt-in refresh.
 #[test]
+// Serial for the shared fixture crate's build tree, which each case cleans and rebuilds; not
+// for the environment.
 #[serial]
 fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()> {
     let cargo = fixture_cargo()?;

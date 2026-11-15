@@ -78,6 +78,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
 
 /// Compiles and runs the public Rust examples, checking their documented contracts.
 #[test]
+// Serial because documentation examples share one nested Cargo build tree; not for the environment.
 #[serial_test::serial(documentation_build)]
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
@@ -124,6 +125,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 }
 
 #[test]
+// Serial because documentation examples share one nested Cargo build tree; not for the environment.
 #[serial_test::serial(documentation_build)]
 fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;

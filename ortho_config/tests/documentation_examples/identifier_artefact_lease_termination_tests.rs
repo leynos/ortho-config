@@ -108,6 +108,7 @@ fn nested_build_helper() -> Result<()> {
 
 /// A killed helper's nested writer keeps both the lease and its write access.
 #[test]
+// Serial for the shared fixture crate's build tree and artefact lease, not for the environment.
 #[serial]
 fn a_nested_writer_cannot_outlive_a_killed_helper() -> Result<()> {
     let scratch = TempDir::new().context("create the helper scratch directory")?;

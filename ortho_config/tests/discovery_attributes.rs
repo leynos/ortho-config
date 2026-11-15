@@ -5,15 +5,19 @@
 //! variable names, and file paths. Tests cover loading via CLI flags,
 //! environment variables, `XDG_CONFIG_HOME`, dotfile fallback, defaults, and
 //! error handling for missing or malformed configurations.
+//!
+//! Every case injects a [`MapEnv`] that also pins the working directory, so no
+//! test changes the process environment or its working directory and the cases
+//! run concurrently.
 
 use anyhow::{Context, Result, anyhow, ensure};
-use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
-use rstest::{fixture, rstest};
+use ortho_config::{MapEnv, OrthoConfig, OrthoError, OrthoResult};
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
+use std::sync::Arc;
 use tempfile::TempDir;
-use test_helpers::cwd;
-use test_helpers::env as test_env;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(
@@ -66,12 +70,7 @@ struct OptionalPolicyDiscoveryConfig {
     value: u32,
 }
 
-#[fixture]
-fn env_lock() -> test_env::EnvVarLock {
-    test_env::lock()
-}
-
-fn write_file(path: &std::path::Path, contents: &str) -> Result<()> {
+fn write_file(path: &Path, contents: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("create parent directory for {}", parent.display()))?;
@@ -80,38 +79,25 @@ fn write_file(path: &std::path::Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
-fn clear_support_env() -> Vec<test_env::EnvVarGuard> {
-    ["XDG_CONFIG_HOME", "HOME", "USERPROFILE"]
-        .into_iter()
-        .map(test_env::remove_var)
-        .collect()
+/// A closed environment rooted at `dir`: no host variable, home, or XDG
+/// directory can contribute, and the working directory is a subdirectory of
+/// `dir` that holds nothing unless a test puts something there.
+fn isolated_env(dir: &Path) -> MapEnv {
+    MapEnv::new()
+        .with_current_dir(dir.join("cwd-empty"))
+        .with_var("XDG_CONFIG_HOME", dir.join("xdg-empty"))
+        .with_var("XDG_CONFIG_DIRS", dir.join("xdg-dirs-empty"))
 }
 
-fn setup_clean_env() -> Vec<test_env::EnvVarGuard> {
-    let mut guards = clear_support_env();
-    guards.push(test_env::remove_var("APP_CONFIG_PATH"));
-    guards
+/// Load `T` from `args` through the injected `env`.
+fn load<T: OrthoConfig>(args: &[&str], env: MapEnv) -> OrthoResult<T> {
+    T::load_from_iter_with_env(args.iter().copied(), Arc::new(env))
 }
 
-fn create_test_config(
-    dir: &std::path::Path,
-    filename: &str,
-    value: u32,
-) -> Result<std::path::PathBuf> {
+fn create_test_config(dir: &Path, filename: &str, value: u32) -> Result<std::path::PathBuf> {
     let path = dir.join(filename);
     write_file(&path, &format!("value = {value}"))?;
     Ok(path)
-}
-
-/// Helper to load config from CLI args and verify the expected value.
-fn load_and_verify_value(expected: u32) -> Result<()> {
-    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-    ensure!(
-        cfg.value == expected,
-        "expected {expected}, got {}",
-        cfg.value
-    );
-    Ok(())
 }
 
 fn validation_error(message: impl Into<String>) -> OrthoResult<()> {
@@ -120,6 +106,11 @@ fn validation_error(message: impl Into<String>) -> OrthoResult<()> {
         message: message.into(),
     }
     .into())
+}
+
+fn utf8(path: &Path) -> Result<&str> {
+    path.to_str()
+        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))
 }
 
 struct CliFlagCase {
@@ -152,15 +143,7 @@ struct CliFlagCase {
     expected_value: Some(17),
     description: "load config from short flag",
 })]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn cli_flag_config_loading(
-    #[case] case: CliFlagCase,
-    _env_lock: test_env::EnvVarLock,
-) -> Result<()> {
-    let _env = setup_clean_env();
+fn cli_flag_config_loading(#[case] case: CliFlagCase) -> Result<()> {
     let dir = TempDir::new().context("create temp dir")?;
     let config_path = if case.file_contents.is_empty() {
         dir.path().join(case.filename)
@@ -178,16 +161,11 @@ fn cli_flag_config_loading(
         path
     };
 
-    let args = [
-        "prog",
-        case.flag,
-        config_path
-            .to_str()
-            .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?,
-    ];
+    let args = ["prog", case.flag, utf8(&config_path)?];
+    let env = isolated_env(dir.path());
 
     if let Some(value) = case.expected_value {
-        let cfg = DiscoveryConfig::load_from_iter(args).map_err(|err| anyhow!(err))?;
+        let cfg = load::<DiscoveryConfig>(&args, env).map_err(|err| anyhow!(err))?;
         ensure!(
             cfg.value == value,
             "{}: expected {value}, got {}",
@@ -195,7 +173,7 @@ fn cli_flag_config_loading(
             cfg.value
         );
     } else {
-        match DiscoveryConfig::load_from_iter(args) {
+        match load::<DiscoveryConfig>(&args, env) {
             Ok(_) => ensure!(false, "{}: expected Err but got Ok", case.description),
             Err(err) => ensure!(
                 matches!(&*err, OrthoError::File { .. }),
@@ -207,39 +185,29 @@ fn cli_flag_config_loading(
     Ok(())
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn env_var_overrides_default_locations(_env_lock: test_env::EnvVarLock) -> Result<()> {
-    let _env = setup_clean_env();
+#[test]
+fn env_var_overrides_default_locations() -> Result<()> {
     let dir = TempDir::new().context("create temp dir")?;
     let config_path = create_test_config(dir.path(), "env.toml", 99)?;
+    let env = isolated_env(dir.path()).with_var("APP_CONFIG_PATH", &config_path);
 
-    let _guard = test_env::set_var("APP_CONFIG_PATH", &config_path);
-    load_and_verify_value(99)
+    let cfg = load::<DiscoveryConfig>(&["prog"], env).map_err(|err| anyhow!(err))?;
+    ensure!(cfg.value == 99, "expected 99, got {}", cfg.value);
+    Ok(())
 }
 
 fn load_xdg_config<F>(setup: F) -> OrthoResult<DiscoveryConfig>
 where
-    F: FnOnce(&std::path::Path) -> Result<()>,
+    F: FnOnce(&Path) -> Result<()>,
 {
     let result = (|| -> Result<DiscoveryConfig> {
-        let _env = setup_clean_env();
         let dir = TempDir::new().context("create temp dir")?;
         let xdg_home = dir.path().join("xdg");
         let app_dir = xdg_home.join("demo_app");
         fs::create_dir_all(&app_dir).context("create XDG application directory")?;
         setup(&app_dir)?;
-        let xdg_value = xdg_home
-            .to_str()
-            .ok_or_else(|| anyhow!("XDG path must be UTF-8"))?
-            .to_owned();
-        let guard = test_env::set_var("XDG_CONFIG_HOME", &xdg_value);
-        let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-        drop(guard);
-        Ok(cfg)
+        let env = isolated_env(dir.path()).with_var("XDG_CONFIG_HOME", &xdg_home);
+        load::<DiscoveryConfig>(&["prog"], env).map_err(|err| anyhow!(err))
     })();
     result.map_err(|err| {
         OrthoError::Validation {
@@ -252,7 +220,7 @@ where
 
 fn assert_xdg_cfg_value<F>(expected: u32, setup: F) -> OrthoResult<()>
 where
-    F: FnOnce(&std::path::Path) -> Result<()>,
+    F: FnOnce(&Path) -> Result<()>,
 {
     let cfg = load_xdg_config(setup)?;
     if cfg.value != expected {
@@ -261,62 +229,41 @@ where
     Ok(())
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn xdg_config_home_missing_uses_default(_env_lock: test_env::EnvVarLock) -> OrthoResult<()> {
+#[test]
+fn xdg_config_home_missing_uses_default() -> OrthoResult<()> {
     assert_xdg_cfg_value(1, |_| Ok(()))
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn xdg_config_home_reads_custom_file(_env_lock: test_env::EnvVarLock) -> OrthoResult<()> {
+#[test]
+fn xdg_config_home_reads_custom_file() -> OrthoResult<()> {
     assert_xdg_cfg_value(64, |app_dir| {
         write_file(&app_dir.join("demo.toml"), "value = 64")?;
         Ok(())
     })
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn dotfile_fallback_uses_custom_name(_env_lock: test_env::EnvVarLock) -> Result<()> {
-    let _env = setup_clean_env();
+#[test]
+fn dotfile_fallback_uses_custom_name() -> Result<()> {
     let dir = TempDir::new().context("create temp dir")?;
     let _ = create_test_config(dir.path(), ".demo.toml", 23)?;
+    let env = isolated_env(dir.path()).with_current_dir(dir.path());
 
-    let _cwd_guard = cwd::set_dir(dir.path())?;
-    load_and_verify_value(23)
+    let cfg = load::<DiscoveryConfig>(&["prog"], env).map_err(|err| anyhow!(err))?;
+    ensure!(cfg.value == 23, "expected 23, got {}", cfg.value);
+    Ok(())
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn defaults_apply_when_no_config_found(_env_lock: test_env::EnvVarLock) -> Result<()> {
-    let _env = setup_clean_env();
-    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+#[test]
+fn defaults_apply_when_no_config_found() -> Result<()> {
+    let dir = TempDir::new().context("create temp dir")?;
+    let cfg =
+        load::<DiscoveryConfig>(&["prog"], isolated_env(dir.path())).map_err(|err| anyhow!(err))?;
     ensure!(cfg.value == 1, "expected default 1, got {}", cfg.value);
     Ok(())
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn policy_attribute_stacks_scopes_and_suppresses_them_after_selection(
-    _env_lock: test_env::EnvVarLock,
-) -> Result<()> {
-    let _env = clear_support_env();
+#[test]
+fn policy_attribute_stacks_scopes_and_suppresses_them_after_selection() -> Result<()> {
     let dir = TempDir::new().context("create temp dir")?;
     let user_home = dir.path().join("user");
     let project_root = dir.path().join("project");
@@ -324,22 +271,18 @@ fn policy_attribute_stacks_scopes_and_suppresses_them_after_selection(
     let _ = create_test_config(&user_home.join("policy_app"), "policy.toml", 20)?;
     let _ = create_test_config(&project_root, "project.toml", 30)?;
     let _ = create_test_config(dir.path(), "selected.toml", 40)?;
-    let xdg_home = user_home
-        .to_str()
-        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
-    let _xdg = test_env::set_var("XDG_CONFIG_HOME", xdg_home);
-    let _cwd_guard = cwd::set_dir(&project_root)?;
+    let env = isolated_env(dir.path())
+        .with_var("XDG_CONFIG_HOME", &user_home)
+        .with_current_dir(&project_root);
 
-    let stacked = PolicyDiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+    let stacked =
+        load::<PolicyDiscoveryConfig>(&["prog"], env.clone()).map_err(|err| anyhow!(err))?;
     ensure!(
         stacked.value == 30,
         "project scope must override user scope"
     );
 
-    let selected_path = selected
-        .to_str()
-        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
-    let explicit = PolicyDiscoveryConfig::load_from_iter(["prog", "--config", selected_path])
+    let explicit = load::<PolicyDiscoveryConfig>(&["prog", "--config", utf8(&selected)?], env)
         .map_err(|err| anyhow!(err))?;
     ensure!(
         explicit.value == 40,
@@ -348,22 +291,15 @@ fn policy_attribute_stacks_scopes_and_suppresses_them_after_selection(
     Ok(())
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn optional_policy_selector_ignores_a_missing_config_path(
-    _env_lock: test_env::EnvVarLock,
-) -> Result<()> {
-    let _env = clear_support_env();
+#[test]
+fn optional_policy_selector_ignores_a_missing_config_path() -> Result<()> {
     let dir = TempDir::new().context("create temp dir")?;
     let missing = dir.path().join("missing.toml");
-    let missing_path = missing
-        .to_str()
-        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
-    let config = OptionalPolicyDiscoveryConfig::load_from_iter(["prog", "--config", missing_path])
-        .map_err(|err| anyhow!(err))?;
+    let config = load::<OptionalPolicyDiscoveryConfig>(
+        &["prog", "--config", utf8(&missing)?],
+        isolated_env(dir.path()),
+    )
+    .map_err(|err| anyhow!(err))?;
     ensure!(
         config.value == 1,
         "optional missing selection must use defaults"
@@ -371,23 +307,17 @@ fn optional_policy_selector_ignores_a_missing_config_path(
     Ok(())
 }
 
-#[rstest]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "Env lock fixture is intentionally unused; it holds the lock for the test."
-)]
-fn error_on_malformed_config(_env_lock: test_env::EnvVarLock) -> Result<()> {
-    let _env = setup_clean_env();
+#[test]
+fn error_on_malformed_config() -> Result<()> {
     let dir = TempDir::new().context("create temp dir")?;
     let config_path = dir.path().join("broken.toml");
     write_file(&config_path, "value = ???")?;
+    let env = isolated_env(dir.path()).with_var("APP_CONFIG_PATH", &config_path);
 
-    let guard = test_env::set_var("APP_CONFIG_PATH", &config_path);
-    let err = match DiscoveryConfig::load_from_iter(["prog"]) {
+    let err = match load::<DiscoveryConfig>(&["prog"], env) {
         Ok(cfg) => return Err(anyhow!("expected parse failure, got config {cfg:?}")),
         Err(err) => err,
     };
-    drop(guard);
 
     ensure!(
         matches!(&*err, OrthoError::File { .. }),

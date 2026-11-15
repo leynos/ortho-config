@@ -88,8 +88,11 @@ fn load_without_any_source_leaves_every_field_absent() -> Result<()> {
 
 /// A matching project file in *another* directory must not be found.
 ///
-/// The working directory is pinned to an empty root while a file the loader
-/// would read sits elsewhere, so only the pin keeps it out of the load.
+/// A positive control first loads the decoy by pinning the working directory
+/// to the directory that holds it, so the decoy is known to be readable. The
+/// same source then goes through `hermetic` with an empty root, which must
+/// pin the directory away from it again: only that pin keeps it out of the
+/// load.
 #[rstest]
 fn a_project_file_outside_the_pinned_directory_is_ignored() -> Result<()> {
     let elsewhere = tempfile::tempdir().context("create the directory holding the file")?;
@@ -98,10 +101,18 @@ fn a_project_file_outside_the_pinned_directory_is_ignored() -> Result<()> {
         .write(".emptylayer.toml", "flag = true\n")
         .context("write the decoy")?;
     let root = tempfile::tempdir().context("create the empty root")?;
-    let env = Arc::new(hermetic(MapEnv::new(), root.path()));
+    let with_decoy = MapEnv::new().with_current_dir(elsewhere.path());
 
-    let config = AllOptional::load_from_iter_with_env(["prog"], env).map_err(|err| anyhow!(err))?;
+    let control = AllOptional::load_from_iter_with_env(["prog"], Arc::new(with_decoy.clone()))
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        control.flag == Some(true),
+        "the decoy must be readable through its own directory: {control:?}"
+    );
 
+    let pinned = Arc::new(hermetic(with_decoy, root.path()));
+    let config =
+        AllOptional::load_from_iter_with_env(["prog"], pinned).map_err(|err| anyhow!(err))?;
     ensure!(config.flag.is_none(), "the decoy file was read: {config:?}");
     Ok(())
 }

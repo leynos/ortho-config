@@ -111,6 +111,7 @@ fn lease_helper() -> Result<()> {
 
 /// A second process must wait for the lease instead of cleaning under the test.
 #[test]
+// Serial for the shared fixture crate's build tree and artefact lease, not for the environment.
 #[serial]
 fn a_second_process_cannot_clean_a_leased_artefact() -> Result<()> {
     let cargo = fixture_cargo()?;

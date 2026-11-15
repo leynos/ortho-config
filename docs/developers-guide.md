@@ -2144,6 +2144,31 @@ that expects no discovered file pins the working directory and the XDG bases to
 an empty root (`support/hermetic_env.rs`), so neither the process's directory
 nor the host can contribute a file.
 
+## Tests do not change process state
+
+No test changes the process environment or working directory. Doing so forces
+the whole binary to serialize behind a lock, which leaves runner cores idle,
+and Rust 2024 makes `std::env::set_var` unsafe. `clippy.toml` disallows
+`std::env::set_var`, `std::env::remove_var` and `std::env::set_current_dir`;
+the only `#[expect(clippy::disallowed_methods)]` sites are the deprecated
+`ortho_config_test_helpers` guards, which remain for downstream crates.
+
+A test controls its inputs in one of two ways:
+
+- **Inject them.** Build a `MapEnv`, pin the working directory with
+  `MapEnv::with_current_dir`, name `XDG_CONFIG_HOME` and `XDG_CONFIG_DIRS` so
+  no host directory contributes, and call a `_with_env` or `_with_sources`
+  loader. `discovery_attributes.rs` shows the shape.
+- **Run a child process.** A path that reads the live process environment on
+  purpose (`load_from_iter`, `load_and_merge`) runs through
+  `tests/support/process_child.rs`, which re-runs the test binary with an exact
+  environment and working directory. A child test is an ordinary `#[test]` that
+  returns at once unless `process_child::case()` names a case; the parent
+  passes the case and requires the child to report one passing test.
+
+`#[serial]` that remains guards a shared Cargo build tree or artefact lease,
+and says so beside the attribute. It is never for the environment.
+
 ## Snapshot tests
 
 Use `insta` for renderer golden coverage that would be noisy as handwritten

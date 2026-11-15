@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Deprecated (test helpers)
+
+- **The process-mutating helpers in `ortho_config_test_helpers` are
+  deprecated.** `env::set_var`, `env::remove_var`, `env::lock`, `env::scope`,
+  `env::scope_with`, `env::scope_from_iter`, `env::with_lock`, the
+  `EnvVarGuard`, `EnvVarLock` and `EnvScope` types, and `cwd::set_dir` with
+  `CwdGuard` now warn. Changing the process environment or working directory
+  forces every test in the binary to serialize, which leaves runner cores idle.
+  Inject a `MapEnv` (pinning the directory with `MapEnv::with_current_dir`) and
+  call the `_with_env` loaders, or run a process-backed code path in a child
+  process. They will be removed in a later release; see the
+  [v0.11.0 migration guide](docs/v0-11-0-migration-guide.md).
+- **ortho-config's own tests no longer change process-wide state.**
+  `clippy.toml` disallows `std::env::set_var`, `std::env::remove_var` and
+  `std::env::set_current_dir`; the deprecated helpers carry the only remaining
+  `#[expect(clippy::disallowed_methods)]` sites.
+
 ### Added (environment injection)
 
 - **The injected environment now carries the working directory.**

@@ -1,5 +1,16 @@
 //! Helpers for safely mutating environment variables in tests.
 //!
+//! **Deprecated since 0.11.0.** Changing the process environment forces every
+//! test in the binary to serialize behind a lock, which leaves runner cores
+//! idle, and Rust 2024 makes `set_var` unsafe. Inject the environment instead:
+//! build an `ortho_config::MapEnv` and call the derive-generated
+//! `load_from_iter_with_env` family, which reads nothing from the process. A
+//! test that must exercise a process-backed code path runs it in a child
+//! process with `Command::env`. The v0.11.0 migration guide in the
+//! `ortho-config` repository (`docs/v0-11-0-migration-guide.md`) walks through
+//! both forms. The helpers remain for downstream crates that have not migrated
+//! yet, and will be removed in a later release.
+//!
 //! Each mutation acquires a global re-entrant mutex only for the duration of
 //! the set/remove operation, returning an RAII guard that:
 //! - Restores the previous state when dropped (removing the variable if it
@@ -21,11 +32,17 @@
 //! # Examples
 //!
 //! ```
+//! # #![expect(deprecated)]
 //! use ortho_config_test_helpers::env;
 //!
 //! let _g = env::set_var("KEY", "VALUE");
 //! // `KEY` is set to `VALUE` for the duration of the guard.
 //! ```
+
+#![expect(
+    deprecated,
+    reason = "this module implements the deprecated API and uses it internally"
+)]
 
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use std::env;
@@ -41,6 +58,10 @@ static ENV_MUTEX: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::d
 /// # Safety
 ///
 /// Callers must ensure the global environment is synchronized.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the deprecated guard API exists to mutate the process environment under a lock"
+)]
 unsafe fn env_set_var(key: &str, value: &OsStr) {
     unsafe { env::set_var(key, value) };
 }
@@ -50,6 +71,10 @@ unsafe fn env_set_var(key: &str, value: &OsStr) {
 /// # Safety
 ///
 /// Callers must ensure the global environment is synchronized.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the deprecated guard API exists to mutate the process environment under a lock"
+)]
 unsafe fn env_remove_var(key: &str) {
     unsafe { env::remove_var(key) };
 }
@@ -80,6 +105,10 @@ where
 }
 
 /// RAII guard restoring an environment variable to its prior value on drop.
+#[deprecated(
+    since = "0.11.0",
+    note = "inject an `ortho_config::MapEnv` instead; see the v0.11.0 migration guide"
+)]
 #[must_use = "dropping restores the prior value"]
 pub struct EnvVarGuard {
     /// Variable restored when this guard is dropped.
@@ -95,12 +124,17 @@ pub struct EnvVarGuard {
 ///
 /// # Examples
 /// ```
+/// # #![expect(deprecated)]
 /// use ortho_config_test_helpers::env;
 ///
 /// let _lock = env::lock();
 /// let _guard = _lock.set_var("KEY", "VALUE");
 /// // Environment mutations remain serialized while `_lock` is alive.
 /// ```
+#[deprecated(
+    since = "0.11.0",
+    note = "inject an `ortho_config::MapEnv` instead; see the v0.11.0 migration guide"
+)]
 #[must_use = "dropping releases the environment lock"]
 pub struct EnvVarLock {
     /// Exclusive process-wide access retained for this lock's lifetime.
@@ -140,93 +174,6 @@ impl EnvVarLock {
     }
 }
 
-/// RAII scope that holds the environment lock while retaining guards.
-///
-/// This is useful when a test needs to clear or set multiple environment
-/// variables and keep the lock for the duration of the test to avoid
-/// interleaving with other environment mutations.
-///
-/// # Examples
-/// ```
-/// use ortho_config_test_helpers::env;
-///
-/// let guards = vec![env::remove_var("FOO"), env::remove_var("BAR")];
-/// let _scope = env::EnvScope::new(guards);
-/// ```
-#[must_use = "dropping releases the environment lock and restores guards"]
-pub struct EnvScope {
-    /// Keeps environment mutation and guard destruction inside one locked scope.
-    _lock: EnvVarLock,
-    /// Restores variables in drop order before `_lock` is released.
-    guards: Vec<EnvVarGuard>,
-}
-
-impl EnvScope {
-    /// Create a scope that holds the global lock and retains the guards.
-    ///
-    /// Creating guards before calling this function can leave a window where
-    /// other threads interleave between guard creation and scope construction;
-    /// use helpers that build guards under the lock or pass guards directly
-    /// when atomicity is required.
-    ///
-    /// # Examples
-    /// ```
-    /// use ortho_config_test_helpers::env;
-    ///
-    /// let guards = vec![env::remove_var("FOO"), env::remove_var("BAR")];
-    /// let _scope = env::EnvScope::new(guards);
-    /// ```
-    pub fn new(guards: Vec<EnvVarGuard>) -> Self {
-        Self {
-            _lock: lock(),
-            guards,
-        }
-    }
-
-    /// Create a scope after running the provided builder while holding the lock.
-    ///
-    /// Builders must use the provided lock's methods (for example
-    /// `lock.set_var`/`lock.remove_var`) instead of the standalone helpers to
-    /// avoid re-entrant locking overhead.
-    ///
-    /// # Examples
-    /// ```
-    /// use ortho_config_test_helpers::env;
-    ///
-    /// let _scope = env::EnvScope::new_with(|lock| {
-    ///     vec![lock.remove_var("FOO"), lock.remove_var("BAR")]
-    /// });
-    /// ```
-    pub fn new_with<F>(builder: F) -> Self
-    where
-        F: FnOnce(&EnvVarLock) -> Vec<EnvVarGuard>,
-    {
-        let lock = lock();
-        let guards = builder(&lock);
-        Self {
-            _lock: lock,
-            guards,
-        }
-    }
-
-    /// Create a scope from an iterator of guards.
-    pub fn from_guards<I>(guards: I) -> Self
-    where
-        I: IntoIterator<Item = EnvVarGuard>,
-    {
-        Self::new(guards.into_iter().collect())
-    }
-}
-
-impl Drop for EnvScope {
-    fn drop(&mut self) {
-        // Drop runs before field destructors, so `_lock` remains held while
-        // `guards` are dropped and restore environment values.
-        let guards = std::mem::take(&mut self.guards);
-        drop(guards);
-    }
-}
-
 impl fmt::Debug for EnvVarGuard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EnvVarGuard")
@@ -246,11 +193,16 @@ impl fmt::Debug for EnvVarGuard {
 ///
 /// # Examples
 /// ```
+/// # #![expect(deprecated)]
 /// use ortho_config_test_helpers::env;
 /// let _g = env::set_var("FOO", "bar");
 /// assert!(matches!(std::env::var("FOO"), Ok(ref value) if value == "bar"));
 /// // Dropping `_g` restores the prior value (or unsets it if none existed).
 /// ```
+#[deprecated(
+    since = "0.11.0",
+    note = "inject an `ortho_config::MapEnv` instead; see the v0.11.0 migration guide"
+)]
 pub fn set_var<K, V>(key: K, value: V) -> EnvVarGuard
 where
     K: Into<String>,
@@ -272,11 +224,16 @@ where
 ///
 /// # Examples
 /// ```
+/// # #![expect(deprecated)]
 /// use ortho_config_test_helpers::env;
 /// let _g = env::remove_var("FOO");
 /// assert!(std::env::var("FOO").is_err());
 /// // Dropping `_g` restores the prior value (if any).
 /// ```
+#[deprecated(
+    since = "0.11.0",
+    note = "inject an `ortho_config::MapEnv` instead; see the v0.11.0 migration guide"
+)]
 pub fn remove_var<K>(key: K) -> EnvVarGuard
 where
     K: Into<String>,
@@ -304,80 +261,24 @@ impl Drop for EnvVarGuard {
 ///
 /// # Examples
 /// ```
+/// # #![expect(deprecated)]
 /// use ortho_config_test_helpers::env;
 ///
 /// let _lock = env::lock();
 /// let _guard = env::set_var("KEY", "VALUE");
 /// ```
+#[deprecated(
+    since = "0.11.0",
+    note = "inject an `ortho_config::MapEnv` instead; see the v0.11.0 migration guide"
+)]
 pub fn lock() -> EnvVarLock {
     EnvVarLock {
         guard: ENV_MUTEX.lock(),
     }
 }
 
-/// Create a scope that holds the global lock and retains the guards.
-///
-/// # Examples
-/// ```
-/// use ortho_config_test_helpers::env;
-///
-/// let _scope = env::scope(vec![env::remove_var("FOO")]);
-/// ```
-pub fn scope(guards: Vec<EnvVarGuard>) -> EnvScope {
-    EnvScope::new(guards)
-}
-
-/// Create a scope after running the provided builder while holding the lock.
-///
-/// Builders must use the provided lock's methods (for example
-/// `lock.set_var`/`lock.remove_var`) instead of the standalone helpers to
-/// avoid re-entrant locking overhead.
-///
-/// # Examples
-/// ```
-/// use ortho_config_test_helpers::env;
-///
-/// let _scope = env::scope_with(|lock| vec![lock.remove_var("FOO")]);
-/// ```
-pub fn scope_with<F>(builder: F) -> EnvScope
-where
-    F: FnOnce(&EnvVarLock) -> Vec<EnvVarGuard>,
-{
-    EnvScope::new_with(builder)
-}
-
-/// Create a scope from an iterator of guards.
-///
-/// # Examples
-/// ```
-/// use ortho_config_test_helpers::env;
-///
-/// let _scope = env::scope_from_iter([env::remove_var("FOO")]);
-/// ```
-pub fn scope_from_iter<I>(guards: I) -> EnvScope
-where
-    I: IntoIterator<Item = EnvVarGuard>,
-{
-    EnvScope::from_guards(guards)
-}
-
-/// Run a closure while holding the global environment lock.
-///
-/// # Examples
-/// ```
-/// use ortho_config_test_helpers::env;
-///
-/// env::with_lock(|lock| {
-///     let _guard = lock.set_var("KEY", "VALUE");
-/// });
-/// ```
-pub fn with_lock<F, R>(f: F) -> R
-where
-    F: FnOnce(&EnvVarLock) -> R,
-{
-    let lock = lock();
-    f(&lock)
-}
+mod scoped;
+pub use scoped::{EnvScope, scope, scope_from_iter, scope_with, with_lock};
 
 #[cfg(test)]
 mod tests;
