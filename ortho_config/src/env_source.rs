@@ -29,6 +29,7 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(not(any(unix, target_os = "redox")))]
@@ -88,6 +89,28 @@ pub trait EnvSource: fmt::Debug + Send + Sync {
     /// ```
     fn home_fallback(&self) -> Option<std::path::PathBuf> {
         None
+    }
+
+    /// Return the working directory that anchors implicit project discovery.
+    ///
+    /// The name covers ambient process context, not just variables: the
+    /// derived loaders search the working directory for project configuration
+    /// files, so a test that wants a hermetic load must be able to name that
+    /// directory without changing the process's own.
+    ///
+    /// The default reads the process working directory, so existing sources
+    /// and callers behave exactly as before. [`MapEnv::with_current_dir`] pins
+    /// it; a custom source may override it too. An `Err` means discovery has no
+    /// implicit project root, which it records in telemetry rather than
+    /// failing.
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying error when the directory cannot be determined,
+    /// for example because the process's directory was deleted. See
+    /// [`MapEnv::with_current_dir`] for a runnable example.
+    fn current_dir(&self) -> std::io::Result<std::path::PathBuf> {
+        std::env::current_dir()
     }
 
     /// Return the platform configuration directory when named values are insufficient.
@@ -189,6 +212,8 @@ pub struct MapEnv {
     // ordering would buy determinism no output consumes at O(log n) cost.
     /// Owned values keyed by their exact operating-system environment name.
     vars: HashMap<String, OsString>,
+    /// Working directory reported by [`EnvSource::current_dir`], when pinned.
+    current_dir: Option<PathBuf>,
 }
 
 impl MapEnv {
@@ -252,6 +277,29 @@ impl MapEnv {
     pub fn remove(&mut self, key: &str) {
         self.vars.remove(key);
     }
+
+    /// Pin the working directory that [`EnvSource::current_dir`] reports.
+    ///
+    /// Derived loaders search this directory for project configuration, so a
+    /// test names a temporary directory here instead of changing the process's
+    /// own. Without it the map keeps reporting the process working directory,
+    /// which preserves the behaviour of callers that never set one.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    /// use std::path::Path;
+    ///
+    /// let env = MapEnv::new().with_current_dir("/srv/project");
+    /// assert_eq!(env.current_dir()?, Path::new("/srv/project"));
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    #[must_use]
+    pub fn with_current_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.current_dir = Some(dir.into());
+        self
+    }
 }
 
 /// Debug output deliberately reveals structure only.
@@ -273,6 +321,13 @@ impl EnvSource for MapEnv {
     /// Look `key` up in the captured in-memory map, cloning the value found.
     fn get(&self, key: &str) -> Option<OsString> {
         self.vars.get(key).cloned()
+    }
+
+    /// Report the pinned directory, or the process's when none was pinned.
+    fn current_dir(&self) -> std::io::Result<PathBuf> {
+        self.current_dir
+            .clone()
+            .map_or_else(std::env::current_dir, Ok)
     }
 }
 
@@ -297,7 +352,10 @@ where
             .into_iter()
             .map(|(key, value)| (key.into(), value.as_ref().to_os_string()))
             .collect();
-        Self { vars }
+        Self {
+            vars,
+            current_dir: None,
+        }
     }
 }
 

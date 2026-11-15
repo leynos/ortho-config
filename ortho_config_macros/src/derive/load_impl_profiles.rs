@@ -316,6 +316,20 @@ pub(crate) fn build_config_profile_delegates(
                 )
             }
 
+            /// Load configuration from one injected environment that backs
+            /// both discovery and merging, and report the selected profile.
+            pub fn load_with_profile_from_iter_with_env<I, T, E>(
+                iter: I,
+                env: std::sync::Arc<E>,
+            ) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<Self>>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+                E: #krate::EnvSource + #krate::ScanEnvSource + 'static,
+            {
+                #cli_ident::load_with_profile_from_iter_with_env(iter, env)
+            }
+
             /// Load configuration using the current process arguments and
             /// report the selected profile.
             pub fn load_with_profile_with_sources(

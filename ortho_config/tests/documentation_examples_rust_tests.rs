@@ -53,6 +53,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-hermetic-discovery",
     "guide-load-first-outcomes",
     "guide-source-aware-load",
+    "guide-injected-working-directory",
     "guide-compose-layers-with-sources",
     "guide-csv-env-with-source",
     "guide-subcommand",

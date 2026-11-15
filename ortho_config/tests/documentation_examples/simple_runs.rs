@@ -77,6 +77,11 @@ const SIMPLE_RUNS: &[SimpleRun] = &[
         stdout: "port=9000\n",
     },
     SimpleRun {
+        id: "guide-injected-working-directory",
+        args: &[],
+        stdout: "port=9000\n",
+    },
+    SimpleRun {
         id: "guide-compose-layers-with-sources",
         args: &[],
         stdout: "composition=ready\n",

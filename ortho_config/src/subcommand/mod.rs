@@ -24,6 +24,8 @@ use uncased::Uncased;
 
 #[cfg(feature = "serde_json")]
 mod config_merge;
+#[cfg(feature = "serde_json")]
+mod injected_env;
 mod paths;
 #[cfg(feature = "serde_json")]
 mod selected;
