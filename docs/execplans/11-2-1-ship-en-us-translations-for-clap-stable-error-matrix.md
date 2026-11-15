@@ -323,6 +323,24 @@ stopping and reporting.
       this plan. The lock-evidence references in `evidence_trybuild.rs` and
       ADR-0021 keep 0020, so the sweep was by exact filename and by the
       documents that name the gate, not by number alone.
+- [x] (2026-11-15) Boundary flake classified; the hosted Lint red attributed
+      to a base-layer rule change. The first eight-gate certificate run on
+      `33d3a26f` was red on `make boundary` only: the allowance probe
+      `an_allowance_spent_while_waiting_is_reported` exhausted its 600 s
+      in-process `NESTED_CARGO` acquisition while the serialized suite ran
+      678.47 s from a cold fixture. An isolated re-run of that gate on the same
+      head, with nothing else running, passed in 21.64 s of test time (44
+      passed, 0 failed, 10 ignored), so the failure is cold-host contention
+      rather than a defect in the candidate. The remaining red is hosted and is
+      not this branch's: the `build-test (linux)` Lint step reports 11
+      `bumpy-road-function` errors in `ortho_config_macros/src/derive/parse/*`,
+      a rule introduced by Whitaker's rolling suite at `880939d1`, published
+      04:14:59Z on 2026-11-15. A dispatched CI run on `main` at `f086edc9`
+      reports the same step failing, as do unrelated PRs #694 and #592, so no
+      branch change can clear it; the local Whitaker install predates the rule,
+      and the wrapper refuses to pin a suite that is published as a rolling
+      release. Recorded as a blocker with the upstream owner rather than
+      silenced by threshold tuning or an `allow`.
 
 ## Surprises & discoveries
 
