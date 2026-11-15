@@ -242,6 +242,9 @@ def test_cargo_config_leaves_cranelift_unselected() -> None:
     assert "codegen-backend" not in document.get("unstable", {}), (
         "the [unstable] table enables a backend selection"
     )
+    assert document.get("unstable", {}).get("embed-metadata") is False, (
+        "the [unstable] table must set embed-metadata = false (DF-003)"
+    )
     profiles = document.get("profile", {})
     assert not any("codegen-backend" in table for table in profiles.values()), (
         "a [profile] table selects a codegen backend"

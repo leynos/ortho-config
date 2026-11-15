@@ -3051,6 +3051,15 @@ default-only expectations in
 `cargo-orthohelp/tests/compile_time/flags_tests.rs`; a one-off `--config` or
 `RUSTFLAGS` override needs neither.
 
+The `[unstable]` table carries `embed-metadata = false`, the dev-build
+footprint standard's DF-003 setting. On a dated nightly from
+`nightly-2026-07-31` it keeps metadata out of the rlibs (Cargo still writes the
+`.rmeta` files), which shrinks `target/`. It is a nightly-only key, so it
+depends on the pinned toolchain, and it applies to every profile. A tool that
+reads a standalone rlib needs the `.rmeta` file beside it.
+`tests/workflow_contracts/build_standard_routing_test.py` asserts the key stays
+set.
+
 `mold` ships for Linux only, so it appears under the Linux target table alone.
 It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
 match. macOS and Windows get the parallel frontend and keep the platform linker.
