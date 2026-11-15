@@ -12,7 +12,36 @@
 //! See ADR-0023 for the vocabulary, the omission rules, and the no-inference
 //! contract.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Deserializes a declared member, rejecting an explicit `null`.
+///
+/// `Option<T>` alone cannot tell an omitted member from a present `null`,
+/// because serde maps both to `None`. Inside agent context ADR-0022 reserves
+/// `None` for omission, so a present `null` is a decode error rather than a
+/// second spelling of "undeclared". The field keeps `#[serde(default)]` so an
+/// omitted member still yields `None` without calling this function.
+pub(crate) fn deserialize_present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+/// Deserializes the output block, rejecting an explicit `null`.
+///
+/// Omission is the only way to say a command declared nothing. A present
+/// `null` would make "declared nothing" and a decode accident
+/// indistinguishable, which ADR-0022 forbids for agent context.
+pub(crate) fn deserialize_contract<'de, D>(
+    deserializer: D,
+) -> Result<Option<OutputContract>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    OutputContract::deserialize(deserializer).map(Some)
+}
 
 /// Declared structured-output capability for one command in agent context.
 ///
@@ -26,13 +55,25 @@ pub struct OutputContract {
     ///
     /// This is the author's assertion that a `--json` capability exists. It is
     /// not an observation that any particular flag, runtime, or payload exists.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub supports_json: Option<bool>,
     /// Purpose of the normal successful result on stdout; `None` is undeclared.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub stdout: Option<StdoutPurpose>,
     /// Whether stderr can carry diagnostics; `None` means undeclared.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub stderr_diagnostics: Option<bool>,
     /// Documented exit classes in the author's declared order.
     ///

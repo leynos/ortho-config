@@ -202,16 +202,22 @@ the use local to the module that needs it.
 
 ### Nextest test-group serialization
 
-`.config/nextest.toml` places eleven documentation and cache users in the
+`.config/nextest.toml` places twelve documentation and cache users in the
 single-threaded `orthohelp_cache` group: `rstest_bdd`, `powershell_windows`,
 `nested_subcommand_end_to_end`, `documented_command`,
 `documentation_examples_rust_tests`, `agent_context_contract`,
 `policy_report_contract`, `golden_tests`, `identifier_artefact_e2e`,
-`cli_dispatch` and `agent_context_renderer_end_to_end`. These binaries can
-clear the shared BDD cache or build documented examples against Cargo's shared
-target. A named process-local `Mutex` serializes scenarios within one test
-process, including direct `cargo test`. It cannot coordinate independent test
-processes, so filesystem leases also protect cache ownership across them.
+`cli_dispatch`, `agent_context_renderer_end_to_end` and
+`agent_context_output_end_to_end`. These binaries can clear the shared BDD
+cache or build documented examples against Cargo's shared target. A named
+process-local `Mutex` serializes scenarios within one test process, including
+direct `cargo test`. It cannot coordinate independent test processes, so
+filesystem leases also protect cache ownership across them.
+
+`agent_context_output_end_to_end` runs the shipped `cargo-orthohelp` binary
+through `cargo_orthohelp_exe`, the same loader the renderer end-to-end target
+uses, so its nested build writes into the shared Cargo target and sits on the
+raised allowance as well as in this group.
 
 The membership is not a hand-maintained list, and
 `tests/workflow_contracts/child_cargo_tier_test.py` is what keeps it from

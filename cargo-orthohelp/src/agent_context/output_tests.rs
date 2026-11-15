@@ -217,7 +217,11 @@ fn localizer_does_not_alter_output_metadata() {
         Some("The command completed"),
         "a class meaning is an identifier's explanation, not a Fluent key"
     );
-    assert_eq!(output.stdout, Some(AgentStdoutPurpose::Summary));
+    assert_eq!(
+        output.stdout,
+        Some(AgentStdoutPurpose::Summary),
+        "the declared stdout purpose must survive the bridge"
+    );
 }
 
 /// A parent's declaration does not reach its child, and vice versa.

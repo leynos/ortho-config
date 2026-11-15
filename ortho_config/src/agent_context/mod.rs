@@ -169,8 +169,13 @@ pub struct AgentCommand {
     /// from a present block that explicitly declines JSON support. Omitted from
     /// the wire when absent, like [`AgentCommand::summary`] and the optional
     /// profile fields; this is an additive schema-v1 exception to the
-    /// explicit-`null` convention.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// explicit-`null` convention. A present `null` is invalid rather than a
+    /// second spelling of absence.
+    #[serde(
+        default,
+        deserialize_with = "crate::agent_context::output::deserialize_contract",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub output: Option<OutputContract>,
 }
 

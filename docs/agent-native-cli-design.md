@@ -929,8 +929,10 @@ change.
 
 `AgentCommand.summary` is intentionally omitted when absent, as are the optional
 `ProfilesDeclaration` fields (`selection` and `list_command`) added by roadmap
-9.1.1. Other optional schema v1 fields serialize as explicit `null` when
-absent. This asymmetry is part of the wire contract; changing it is breaking.
+9.1.1 and `AgentCommand.output` together with every undeclared member inside a
+present block. Other optional schema v1 fields serialize as explicit `null`
+when absent. This asymmetry is part of the wire contract; changing it is
+breaking.
 
 `AgentInput.default` is a best-effort human-readable display. It is useful for
 selection and review, but it is not normative, executable, or

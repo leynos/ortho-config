@@ -479,18 +479,52 @@ migration guide before touching the candidate.
   `whitaker-lints-880939d` again and the run reported the same 11
   `ortho_config_macros` diagnostics, so a docs-only head adds no failure and
   the one red check is the recorded prerequisite.
+- [x] (2026-11-15) Formal-review repair and its gates at head `51118715`, with
+  eight modified files and no other change. The substantive finding was real:
+  agent context read an explicit `null` for the output block, or for one of its
+  scalar members, as absence, which ADR-0022 and the design reject. Two serde
+  helpers now deserialize the present value and wrap it in `Some`,
+  `exit_classes` keeps rejecting `null`, and four regression cases assert the
+  rejection; the focused `cargo test -p ortho_config --lib agent_context` run
+  passed 118 tests, including `present_null_is_rejected::case_1_block` through
+  `case_4_stderr_diagnostics`. `make typecheck`, `make check-fmt`,
+  `make markdownlint` (0 issues in 104 files, spelling gate clean),
+  `make nixie` and `make docstring-coverage` (1014/1014) passed, and
+  `make lint` passed every stage: `cargo doc`, `cargo clippy`, a clean
+  `lint-whitaker`, then 1014/1014. That Whitaker stage ran against the
+  workstation's installed suite, whose checkout `whitaker-installer` stages
+  from is at `00cf1a19` ("Bump version to v0.2.11", 2026-10-29) — older than the
+  `880939d1` tip CI downloads — so the green certifies the older suite and
+  nothing about the hosted leg.
+- [ ] `make test` for the repair is not green yet, and both red targets are
+  nested-build deadline expiries. `cargo-orthohelp`'s `must_use_compile_tests`
+  passed this time after failing at its 900 s cap twice in the preceding run,
+  so the earlier red was admission load rather than the diff.
+  `ortho_l10n --test boundary` reported 33 passed, 11 failed and 10 ignored,
+  and a focused `make boundary` rerun reported 30 passed and 14 failed; every
+  failure reads "exceeded the … deadline; its process tree was killed" for a
+  child `cargo`, and the reported tail carries
+  `[build-limits] … waiting for a compile slot` and
+  `Blocking waiting for file lock on package cache`. The host ran at load
+  average 24–29 on six cores, admission held all four slots, and one child
+  built 17 crates in 440 s. No assertion failed, no compiler diagnostic
+  appeared, and the target builds `ortho_l10n` fixture consumers this branch
+  does not touch. The superseding certificate above records the same target
+  passing once load fell to about 9; the next action is to rerun `make test` in
+  that condition and record the result.
 - [ ] Blocked on the prerequisite lint repair, which an installation rollback
   did not clear. Hosted `build-test (linux)` failed only at `lint-whitaker` on
   runs 43686357368, 43696101238, 43697766275 and 43702602040, and the last two
   installer logs show `whitaker-lints-880939d` downloaded from the suite's
-  default-branch tip, so the macro-aware rule is still what CI measures. A local
-  `make lint` passed once only because this workstation's checkout had rolled
-  back to `00186d43`, an ancestor of that commit, and it fails again now that
-  the checkout has moved forward: a local green is evidence about the
-  workstation, not about the candidate CI builds. The next action is unchanged
-  — the eleven flagged functions (issue #695) or the configured threshold must
-  be settled on `main` first, then the branch is rebased and re-gated. If the
-  suite tip is itself reverted, re-run the hosted leg before repairing anything.
+  default-branch tip, so the macro-aware rule is still what CI measures. Local
+  `make lint` greens track whichever suite the workstation happens to have
+  staged, not the one CI measures: one passed on the `00186d43` checkout,
+  another failed once that checkout moved forward, and the latest passed on
+  `00cf1a19`. A local green is evidence about the workstation, not about the
+  candidate CI builds. The next action is unchanged — the eleven flagged
+  functions (issue #695) or the configured threshold must be settled on `main`
+  first, then the branch is rebased and re-gated. If the suite tip is itself
+  reverted, re-run the hosted leg before repairing anything.
 
 ## Surprises & discoveries
 
@@ -729,17 +763,18 @@ Preserve author order, reject unknown keys, invalid literal kinds, blank
 meanings, and repeated scalar assignments across groups. Each `exit_class(...)`
 requires exactly one `name` and one `meaning`; missing or repeated members are
 errors. Accept `output()` as an explicitly empty declaration. Distinct
-declarations may compose across groups as renderer metadata does. Optional
-blocks and scalars accept JSON `null` and omission as `None`; serialization
-canonicalizes `None` to omission. An empty class vector is accepted and
-omitted, but a `null` class vector is rejected. These rules apply only to the
-new fields, never existing serialized fields. The documentation IR rejects
-unknown stdout tokens. The agent-context enum adds an `Unknown` fallback,
-serialized as `unknown`, for unknown wire tokens; it never establishes
-data-returning status. Test this fifth explicit variant and future-token
-fallback independently of undeclared stdout. Do not fetch or validate a
-response schema; schema references remain future work because 7.2.3's
-acceptance list does not require them.
+declarations may compose across groups as renderer metadata does. Omission is
+the only spelling of absence: an IR `null` reads as absence, as elsewhere in
+the IR, but a present `null` inside agent context — for the block, for any
+scalar member, or for `exit_classes` — is a decode error rather than `None`.
+Serialization omits every `None`. An empty class vector is accepted and
+omitted. These rules apply only to the new fields, never existing serialized
+fields. The documentation IR rejects unknown stdout tokens. The agent-context
+enum adds an `Unknown` fallback, serialized as `unknown`, for unknown wire
+tokens; it never establishes data-returning status. Test this fifth explicit
+variant and future-token fallback independently of undeclared stdout. Do not
+fetch or validate a response schema; schema references remain future work
+because 7.2.3's acceptance list does not require them.
 
 The policy specification is independent of the implementation:
 

@@ -2,8 +2,9 @@
 //!
 //! The wire format is the lenient half of the contract. ADR-0023 gives it two
 //! obligations this module pins: an unrecognized stdout token reads as
-//! `unknown` without disturbing the rest of the document, and an undeclared
-//! member is omitted rather than written as `null`. The strict authoring
+//! `unknown` without disturbing the rest of the document, an undeclared member
+//! is omitted rather than written as `null`, and a present `null` is rejected
+//! so absence keeps exactly one spelling. The strict authoring
 //! schema, which rejects both of those inputs, is covered by
 //! `ortho_config/tests/docs_ir_output.rs`.
 //!
@@ -15,15 +16,19 @@ use serde_json::{Value, json};
 
 use super::*;
 
-/// Decodes a context holding the supplied command array.
-fn decode_context(commands: &Value) -> AgentContext {
+/// Decodes a context holding the supplied command array, keeping the error.
+fn try_decode_context(commands: &Value) -> Result<AgentContext, serde_json::Error> {
     serde_json::from_value(json!({
         "schema_version": "1",
         "kind": "wire-cli.agent_context",
         "package": "wire-cli",
         "commands": commands
     }))
-    .expect("the fixture context should decode")
+}
+
+/// Decodes a context holding the supplied command array.
+fn decode_context(commands: &Value) -> AgentContext {
+    try_decode_context(commands).expect("the fixture context should decode")
 }
 
 /// Decodes a one-command context and returns that command's contract.
@@ -38,12 +43,10 @@ fn decode_output(output: &Value) -> OutputContract {
         .expect("the fixture command should declare an output contract")
 }
 
-/// Omission and an explicit `null` both read as an absent contract.
-#[rstest]
-#[case::omitted(json!({"path": ["wire-cli"]}))]
-#[case::explicit_null(json!({"path": ["wire-cli"], "output": null}))]
-fn absent_output_stays_none(#[case] command: Value) {
-    let context = decode_context(&json!([command]));
+/// Omission is the only spelling of an absent contract.
+#[test]
+fn omitted_output_stays_none() {
+    let context = decode_context(&json!([{"path": ["wire-cli"]}]));
 
     assert_eq!(
         context
@@ -51,7 +54,35 @@ fn absent_output_stays_none(#[case] command: Value) {
             .first()
             .and_then(|declared| declared.output.as_ref()),
         None,
-        "neither omission nor an explicit null may become a default contract: {command}"
+        "an omitted block must not become a default contract"
+    );
+}
+
+/// A present `null` is invalid for the block and for every optional member.
+///
+/// Without this rejection `null` would decode to `None` through `Option`,
+/// making a decode accident look like an author who declared nothing, which
+/// ADR-0022 forbids inside agent context.
+#[rstest]
+#[case::block(json!({"path": ["wire-cli"], "output": null}), "the output block")]
+#[case::supports_json(
+    json!({"path": ["wire-cli"], "output": {"supports_json": null}}),
+    "supports_json"
+)]
+#[case::stdout(
+    json!({"path": ["wire-cli"], "output": {"stdout": null}}),
+    "stdout"
+)]
+#[case::stderr_diagnostics(
+    json!({"path": ["wire-cli"], "output": {"stderr_diagnostics": null}}),
+    "stderr_diagnostics"
+)]
+fn present_null_is_rejected(#[case] command: Value, #[case] member: &str) {
+    let decoded = try_decode_context(&json!([command]));
+
+    assert!(
+        decoded.is_err(),
+        "a present null for {member} must be rejected, not read as undeclared"
     );
 }
 
