@@ -291,6 +291,29 @@ fn nested_definition_is_refused() -> Result<()> {
     ensure_refusal(&error, "inside `mod error`")
 }
 
+/// A condition on the module does not exempt its nested inventory.
+///
+/// `#[cfg(all())]` always holds, so the compiler builds `mod error` and the
+/// eighteen-variant enum inside it is the exported inventory. A gate that
+/// skipped conditional modules would count the seventeen-variant decoy beside
+/// it and pass.
+#[test]
+fn conditional_nested_definition_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/conditional_nested_definition");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "inside `mod error`")
+}
+
+/// A condition applied through a nested `cfg_attr` does not exempt it either.
+#[test]
+fn cfg_attr_nested_definition_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/cfg_attr_nested_definition");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "inside `mod error`")
+}
+
 /// A tree with no crate root is refused rather than counted.
 #[test]
 fn tree_without_a_crate_root_is_refused() -> Result<()> {

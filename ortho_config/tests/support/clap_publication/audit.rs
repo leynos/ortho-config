@@ -115,6 +115,12 @@ pub(super) fn is_error_kind_enum(item: &Item) -> bool {
 /// actually exported, and a file-level count would report the decoy and pass.
 /// The gate therefore refuses the nested shape instead of choosing between the
 /// two declarations it can see.
+///
+/// A condition on the module does not exempt it. `#[cfg(..)]` is evaluated by
+/// the compiler, and a condition can hold — `#[cfg(all())]` always does — so a
+/// conditional module may be compiled and its inventory may be the one the
+/// crate exports. The gate cannot evaluate the condition, and refusing only the
+/// unconditional shape would let a decoy pass behind a condition that is true.
 pub(super) fn refuse_nested_error_kinds(items: &[Item], origin: &Utf8Path) -> Result<()> {
     match nested_error_kind(items, "") {
         Some(path) => bail!(
@@ -126,18 +132,15 @@ pub(super) fn refuse_nested_error_kinds(items: &[Item], origin: &Utf8Path) -> Re
     }
 }
 
-/// The module path of the first compiled nested `ErrorKind`, if any.
+/// The module path of the first nested `ErrorKind`, if any.
 ///
-/// A module whose presence is conditional is skipped: its contents are not
-/// compiled, so they cannot be exported either.
+/// Every inline module is searched, conditional or not: the condition decides
+/// whether the compiler sees the declaration, and the gate cannot decide it.
 fn nested_error_kind(items: &[Item], prefix: &str) -> Option<String> {
     for item in items {
         let Item::Mod(module) = item else {
             continue;
         };
-        if has_presence_conditional_attribute(&module.attrs) {
-            continue;
-        }
         let Some((_, nested)) = &module.content else {
             continue;
         };

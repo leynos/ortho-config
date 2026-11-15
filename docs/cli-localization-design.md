@@ -494,7 +494,10 @@ fails closed. The declaration must also be the crate's only one and must sit at
 file level: an `ErrorKind` declared inside an inline module is refused, because
 the file-level scan cannot bind it to the inventory the crate exports, and a
 compiled file-level decoy beside it would otherwise let the count describe the
-wrong enum.
+wrong enum. A condition on the module does not exempt it. The compiler decides
+whether a conditional module is present, and a condition can hold, so refusing
+only the unconditional shape would let a decoy pass behind a condition that is
+true.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

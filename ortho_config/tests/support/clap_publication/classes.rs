@@ -11,9 +11,10 @@
 //! The classes are the shapes the supported source can plausibly present, plus
 //! every shape the gate must refuse. Variant order, doc comments, explicit
 //! discriminants, and the three variant shapes must not change the count; an
-//! empty enum counts zero; a conditional variant, a nested declaration, a
-//! malformed source, a duplicate declaration, and a file with no declaration
-//! must each be refused for the reason recorded beside it.
+//! empty enum counts zero; a conditional variant, a nested declaration whether
+//! or not its module is conditional, a malformed source, a duplicate
+//! declaration, and a file with no declaration must each be refused for the
+//! reason recorded beside it.
 
 use anyhow::{Result, ensure};
 use camino::Utf8Path;
@@ -69,6 +70,14 @@ const ORIGIN: &str = "classes/error_kind.rs";
 )]
 #[case::nested_declaration(
     "pub mod error {\n    pub enum ErrorKind {\n        Alpha,\n    }\n}\n",
+    Classification::Refused("inside `mod error`")
+)]
+#[case::conditional_nested_declaration(
+    "#[cfg(all())]\npub mod error {\n    pub enum ErrorKind {\n        Alpha,\n    }\n}\n",
+    Classification::Refused("inside `mod error`")
+)]
+#[case::nested_cfg_attr_declaration(
+    "#[cfg_attr(all(), cfg(all()))]\npub mod error {\n    pub enum ErrorKind {\n        Alpha,\n    }\n}\n",
     Classification::Refused("inside `mod error`")
 )]
 #[case::malformed_source(
