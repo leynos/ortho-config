@@ -2,11 +2,15 @@
 
 ## Status
 
-COMPLETE — approved on 2026-11-14 and implemented in M1–M3. The temporary #664
-prerequisite merged on 2026-11-11 as `eaf4c028`, and the branch was rebased onto
-`origin/main` at `959dbd7e` before implementation began. All three milestones
-have recorded certificates; the only remaining activity is publication and
-review of the branch.
+IMPLEMENTED, PENDING ACCEPTANCE — approved on 2026-11-14 and implemented in
+M1–M3. The temporary #664 prerequisite merged on 2026-11-11 as `eaf4c028`, and
+the branch was rebased onto `origin/main` at `959dbd7e` before implementation
+began, so all three milestones have recorded local certificates. Acceptance is
+not complete: one Progress item remains open because hosted
+`build-test (linux)` cannot pass until a prerequisite lint repair lands on
+`main`, which is neither in this plan's scope nor in this branch's ownership.
+Until that lands and the branch is re-gated, the delivery state is published
+and under review, not finished.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -416,12 +420,38 @@ migration guide before touching the candidate.
   across 10 suites with 47 ignored. `make lint` is red only at `lint-whitaker`,
   so `docstring-coverage` did not run; the earlier 1014/1014 figure belongs to
   the pre-repair head and is not claimed here.
-- [ ] Blocked on the prerequisite lint repair. Hosted `build-test (linux)`
-  cannot go green for this branch while `main` is red for the same reason, and
-  that repair is neither in this plan's scope nor in this branch's ownership.
-  The next action is to rebase onto `main` once the flagged functions are
-  repaired there, then re-run the full gate set; if the maintainer raises the
-  configured threshold instead, record that decision and re-gate.
+- [x] (2026-11-15) CodeRabbit a4 repairs. The structured-output property file
+  had reached 414 lines against the 400-line module cap, so its strategies,
+  their own `ValueTree` contract test, and the metadata builders moved into
+  `agent_context/output_proptests/generators.rs`, declared as a `#[path]`
+  submodule beside the properties. No property was weakened: the three
+  properties and the contract test still run, and the file is now 189 lines
+  beside a 239-line generator module.
+- [x] (2026-11-15) Gate certificate for the a4 repairs, taken on the worktree
+  content committed as `203a91c8` with HEAD unmoved at `ee93a3fe` and the tree
+  clean before and after every gate: `make check-fmt` left 104 files unchanged,
+  `make lint` passed every stage including a clean `lint-whitaker` and
+  `docstring-coverage` at 1014/1014, `make markdownlint` with the spelling gate
+  reported 0 issues in 104 files, and `make nixie` validated 105 files.
+  `make test` is red only in `ortho_l10n --test boundary`: 37 passed, 7 failed,
+  10 ignored, where all seven are wall-clock deadline expiries inside a 900 s
+  allowance and the log carries 36 queued-slot notices and 25 unavailable-cache
+  notices. `docs/BOUNDARY-ALLOWANCE-FINDING.md` records the same suite failing
+  12 nodes on unmodified `origin/main`, so this is the documented load domain
+  rather than this diff. Every other binary passed, including all 332
+  `agent_context` tests and the moved
+  `output_proptests::generators::generated_declarations_are_well_formed`; the
+  recipe's pytest step was then run directly, 128 passed and 5 skipped.
+- [ ] Blocked on the prerequisite lint repair, which may now clear by itself.
+  Hosted `build-test (linux)` failed only at `lint-whitaker` on run
+  43686357368, while the shared suite was at `880939d1`. CI takes that suite
+  from its default-branch tip on every run, so the next hosted run installs
+  whatever the tip is then: the local checkout has since rolled back to
+  `00186d43`, an ancestor of the macro-aware commit, and `make lint` now passes
+  every stage. The next action is therefore a fresh hosted run rather than a
+  rebase. If the tip returns to `880939d1` before the flagged functions are
+  repaired (issue #695), the branch is blocked again, and the repair, or the
+  maintainer's threshold decision, has to land on `main` first.
 
 ## Surprises & discoveries
 
@@ -501,6 +531,16 @@ while these gates ran (suite library at 05:17, wrappers at 06:51, checkout at
 07:06). The cheap defences are to quote a gate's suite revision beside its
 verdict, and to treat a sudden lint failure in untouched files as evidence
 about the tooling until the code is shown to be responsible.
+
+A rolling suite can also roll back, and the failure it caused leaves no trace
+in the repository. By the a4 gate run the shared checkout was back at
+`00186d43`, an ancestor of the macro-aware commit, so `make lint` passed every
+stage and `docstring-coverage` returned to 1014/1014 without a single tracked
+line changing. A red recorded from a rolling tool is therefore not a property
+of the code and not permanent either: it needs a re-run before anyone repairs
+around it, and the `install-whitaker` action takes the suite from the default
+branch tip on every run, so the hosted Linux leg can change verdict between two
+pushes of the same commit.
 
 ## Decision log
 
@@ -1016,3 +1056,8 @@ Implementation milestones remain untouched and await approval.
 2026-11-09: record the user-requested temporary #664 prerequisite and the safe
 return-to-main procedure after it merges. The original plan commit rebased
 unchanged; implementation remains subject to explicit approval.
+
+2026-11-15: split the structured-output generators out of the property file to
+stay under the 400-line module cap, restate the status as implemented but not
+yet accepted, and record that the prerequisite lint red came from a rolling
+shared suite revision rather than from this branch.
