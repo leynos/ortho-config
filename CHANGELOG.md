@@ -88,7 +88,7 @@ All notable changes to this project will be documented in this file.
   `agent-native.output.json-missing` for a data command that does not claim
   JSON support. Deriving runtime output (7.2.4) and mapping classes to process
   statuses (7.2.5) are not part of this change. See
-  [ADR-0020](docs/adrs/adr-0020-explicit-structured-output-declarations.md) and
+  [ADR-0022](docs/adrs/adr-0022-explicit-structured-output-declarations.md) and
   [the user's guide](docs/users-guide.md#lint-declared-structured-output).
 - `cargo-orthohelp` documents its normal-completion process statuses: `0` for
   success including `--help` and `--version`, `1` for a runtime failure

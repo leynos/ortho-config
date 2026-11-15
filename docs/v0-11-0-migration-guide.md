@@ -219,7 +219,7 @@ a parent command, and an omitted block stays omitted rather than defaulting.
 `cargo_orthohelp::policy::rules::output::check_output`; the derivation of
 runtime output is roadmap 7.2.4 and the status mapping is 7.2.5. The vocabulary
 and omission rules live in
-[ADR-0020](adrs/adr-0020-explicit-structured-output-declarations.md), and the
+[ADR-0022](adrs/adr-0022-explicit-structured-output-declarations.md), and the
 [user's guide](users-guide.md#lint-declared-structured-output) shows the rule's
 findings.
 
