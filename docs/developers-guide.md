@@ -3603,6 +3603,57 @@ from the measured invocation, so a change that restores the long root, shortens
 the margin, or moves the assignment fails the contract rather than the Windows
 job.
 
+The contract is arithmetic over measured numbers, not a runtime observation. It
+derives the chosen root from the runner constant `D:\a\_temp` by taking only
+its drive, prices that root at the 302 occurrences the failed invocation
+contained, and holds every other part of the measured line fixed. Two limits
+follow. A temporary directory longer below its drive cannot change the chosen
+root, because the chooser uses only the drive, so its length is not part of the
+arithmetic at all. And because the occurrence count is an input rather than a
+re-measurement, an invocation that repeated the root more often would spend the
+2,894-character margin without moving this projection. The hosted Windows leg
+is what observes the runner the arithmetic assumes.
+
+#### Verifying the coverage target root in use
+
+The choosers publish through `GITHUB_ENV`, which records intent. The two
+`Verify the … coverage target root` steps read it back after the second
+coverage action and require the chosen directory to exist, so a chooser left
+with an empty value fails the leg that owns it instead of surfacing later as a
+refused command line. Reordering is caught only while the expected directory is
+absent: a chooser moved after both actions can still publish the expected
+values before the verification runs, and when the directory already exists the
+check passes even though the actions used another root. Each step recomputes
+its expected root from the chooser's own expression — the Windows step
+re-derives the drive root from `RUNNER_TEMP`, the Linux step rebuilds
+`$RUNNER_TEMP/llvm-cov-target` — so there is no second copy of the path to
+drift.
+
+A step-level `env` block declaring either variable is a different case, and the
+steps cannot see it: the block applies only to its own step, so the check still
+reads the chooser's value and passes when either pass created the expected
+directory. `coverage_target_root_verification_test.py` rejects such a block at
+workflow, job and step level, so that edit fails in the contract suite rather
+than in the lane.
+
+The Linux step is plain Bash, and `coverage_target_root_behaviour_test.py`
+exercises its acceptance and rejection paths on every host. The Windows step
+derives its root from the drive containing `RUNNER_TEMP`, which on a POSIX host
+is `/`; the suite leaves acceptance to the hosted Windows leg, which runs the
+step with the real directory present. Both Windows rejection tests skip where
+`pwsh` is unavailable (`PWSH_REQUIRED`), and the missing-directory test also
+skips when the derived directory already exists, so a passing suite on a POSIX
+host establishes neither path. The check observes the environment and the
+directory, not the length of any command line: a root chosen correctly but
+still too long passes the check and fails at the compiler, which is what the
+projection arithmetic above guards. It also observes them once, not per pass.
+Both coverage actions inherit one job environment, so the variables record what
+each pass was given rather than what it did, and the directory check
+establishes only that the chosen directory exists, not which action wrote it.
+The steps therefore report that the chosen root exists and the published
+variables match, and a pass that built elsewhere would leave both checks
+passing.
+
 ### Opting out with `BUILD_STANDARD`
 
 `BUILD_STANDARD=0` turns the standard off for one invocation: the recipes then

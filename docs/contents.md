@@ -96,6 +96,10 @@
   review the `ProcFs` and `Clock` traits that make the report's failure
   branches and its settle deadline directly testable, and the rejected
   single-read and mock-crate alternatives.
+- [ADR-0022: Verify the coverage target root in use](adrs/adr-0022-verify-the-coverage-target-root.md):
+  review the steps that read the chosen root back after both coverage passes,
+  the rejection paths their contract suite executes, and the acceptance path
+  the hosted Windows leg observes.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
