@@ -1,0 +1,48 @@
+---
+source: cargo-orthohelp/src/policy/rules/output_tests.rs
+expression: json
+---
+{
+  "version": "1",
+  "tool": "cargo-orthohelp",
+  "mode": "deny",
+  "results": [
+    {
+      "rule_id": "agent-native.output.json-missing",
+      "code": "json_support_missing",
+      "severity": "deny",
+      "message": "command `export` declares stdout purpose `data` but leaves JSON support undeclared; add `output(supports_json = true)` to its arguments struct once it implements `--json`, or correct the declared stdout purpose if it does not return data",
+      "location": null
+    }
+  ],
+  "summary": {
+    "off": 0,
+    "warn": 0,
+    "deny": 1,
+    "total": 1
+  },
+  "exceptions": [],
+  "vocabulary": {
+    "verbs": [
+      "get",
+      "list",
+      "create",
+      "update",
+      "delete",
+      "jobs",
+      "profile",
+      "feedback"
+    ],
+    "flags": [
+      "--json",
+      "--no-input",
+      "--force",
+      "--dry-run",
+      "--limit",
+      "--cursor",
+      "--wait",
+      "--profile",
+      "--deliver"
+    ]
+  }
+}

@@ -135,8 +135,10 @@ fn finding(command: &AgentCommand, severity: PolicySeverity, out: &mut Vec<Polic
 /// Explains the failing declaration and gives the annotation to add.
 ///
 /// An explicit refusal and a forgotten declaration are told apart so the
-/// author can see which mistake they made; both end with the same two
-/// remedies.
+/// author can see which mistake they made. Both messages lead with the JSON
+/// remedy, because a data command that gains `--json` keeps its truthful
+/// purpose; correcting `stdout` is offered only for a declaration that was
+/// wrong about what the command returns.
 fn missing_json_message(command: &AgentCommand) -> String {
     let state = match command
         .output
@@ -147,7 +149,7 @@ fn missing_json_message(command: &AgentCommand) -> String {
         _ => "leaves JSON support undeclared",
     };
     format!(
-        "command `{}` declares stdout purpose `data` but {state}; if the command implements `--json`, add `output(supports_json = true)` to its arguments struct, otherwise correct the declared stdout purpose",
+        "command `{}` declares stdout purpose `data` but {state}; add `output(supports_json = true)` to its arguments struct once it implements `--json`, or correct the declared stdout purpose if it does not return data",
         command.path.join(" ")
     )
 }

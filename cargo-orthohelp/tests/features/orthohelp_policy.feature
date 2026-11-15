@@ -45,8 +45,10 @@ Feature: Agent-native policy check
 
   Scenario: Policy check runs for a package lacking generator preconditions
     Given the policy adoption fixture package without root_type
+    And the bridge cache directory is recorded
     When cargo orthohelp runs with --check-agent-native
     Then the command succeeds
     And the policy report records mode off and no findings
     And the policy report is the only artefact in the output directory
+    And no bridge build artefact appears under the target directory
     And standard error notes that nothing was checked

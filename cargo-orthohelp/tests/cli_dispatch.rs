@@ -2,9 +2,10 @@
 //!
 //! Besides the dispatch diagnostics themselves, these tests pin the three
 //! normal-completion process statuses documented for the CLI: `0` for a
-//! successful run including help, `1` for an ordinary runtime failure, and `2`
-//! for Clap's argument or dispatch rejection. Expected failures also assert
-//! the exact number, because "not success" would accept a crash or a signal.
+//! successful run including help and version, `1` for an ordinary runtime
+//! failure, and `2` for Clap's argument or dispatch rejection. Expected
+//! failures also assert the exact number, because "not success" would accept a
+//! crash or a signal.
 
 mod fixtures;
 
@@ -103,6 +104,40 @@ fn help_output_matches_snapshots(
         stderr(&output)
     );
     assert_snapshot!(snapshot_name, usage_lines(&output));
+}
+
+/// `--version` completes successfully at both command levels.
+///
+/// The documented status contract puts version alongside help in the success
+/// class, and the banner must report the version this binary was built from.
+/// The single-line assertion is what catches an extra stdout line, which a
+/// status check alone would accept.
+#[rstest]
+#[case::direct_top_level_version(&["--version"], "direct --version should succeed")]
+#[case::direct_subcommand_version(&["orthohelp", "--version"], "direct subcommand --version should succeed")]
+fn version_reports_success_and_the_built_version(
+    #[case] args: &[&str],
+    #[case] success_message: &str,
+) {
+    let output = run_direct(args).expect("direct orthohelp invocation should run");
+
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_SUCCESS),
+        "{success_message}: {}",
+        stderr(&output)
+    );
+    let banner = stdout(&output);
+    assert_eq!(
+        banner.lines().count(),
+        1,
+        "the version banner must stay one line, got:\n{banner}"
+    );
+    assert!(
+        banner.contains(env!("CARGO_PKG_VERSION")),
+        "the banner must name the built version {}: {banner}",
+        env!("CARGO_PKG_VERSION")
+    );
 }
 
 #[rstest]

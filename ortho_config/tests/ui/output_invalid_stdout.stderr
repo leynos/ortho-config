@@ -1,0 +1,5 @@
+error: unknown stdout 'matrix'; expected one of "data", "path", "summary", "none"
+  --> tests/ui/output_invalid_stdout.rs:12:32
+   |
+12 | #[ortho_config(output(stdout = "matrix"))]
+   |                                ^^^^^^^^
