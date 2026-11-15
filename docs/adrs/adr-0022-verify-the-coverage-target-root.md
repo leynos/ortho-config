@@ -19,11 +19,14 @@ now set `CARGO_TARGET_DIR` and `CARGO_LLVM_COV_TARGET_DIR` to
 `$RUNNER_TEMP/llvm-cov-target` on Linux.
 
 Those steps publish a root to `GITHUB_ENV`. Publishing is not receipt. A later
-edit that reorders a chooser after the actions, or that lets a platform's value
-arrive empty, would leave the chooser looking correct while the coverage
-processes built somewhere else — and the first evidence would again be a
-refused command line on one leg. Reading the variables back, and requiring the
-chosen directory to exist, turns those edits into a failure where they happen.
+edit that lets a platform's value arrive empty would leave the chooser looking
+correct while the coverage processes built somewhere else — and the first
+evidence would again be a refused command line on one leg. Reading the
+variables back, and requiring the chosen directory to exist, turns that edit
+into a failure where it happens. Reordering is caught only while the expected
+directory is absent: a chooser moved after both actions can still publish the
+expected values before the check runs, and when the directory already exists
+the check passes even though the actions used another root.
 
 A step-level `env` block is the third way to shadow the chooser, and reading
 the variables back cannot see it: the block applies only to its own step, so
@@ -40,9 +43,11 @@ either pass created the expected directory.
   test.
 - It must not become a second source of truth for the root. A hardcoded path
   would drift from the chooser and disagree with it silently.
-- It must distinguish a variable that is set to the wrong value from one that
-  is absent, because `cargo-llvm-cov` rejects an empty value rather than
-  treating it as unset.
+- It must reject an absent or empty variable as well as one set to a wrong
+  value: `cargo-llvm-cov` rejects an empty value rather than treating it as
+  unset. The checks compare each variable against the expected root, so they
+  reject unset and empty identically; distinguishing them is not needed to fail
+  the leg.
 - A passing run should say which root it observed.
 
 ## Options considered
@@ -106,10 +111,12 @@ remains the guard for the failure this ADR responds to.
 The Linux step is plain Bash over `$RUNNER_TEMP`, so its acceptance and
 rejection paths are exercised by the contract suite on every host. The Windows
 step derives its root from the drive containing `RUNNER_TEMP`; on a POSIX host
-that drive is `/`, so the suite observes its two rejection paths there and
-leaves acceptance to the hosted Windows leg, which runs the step with the real
-directory present. `coverage_target_root_behaviour_test.py` says so in its
-module comment rather than leaving the gap implicit.
+that drive is `/`, and acceptance is left to the hosted Windows leg, which runs
+the step with the real directory present. Both of its rejection paths are
+skipped where `pwsh` is unavailable, and the missing-directory path is skipped
+as well when the derived directory already exists, so a passing suite on a
+POSIX host does not establish either. `coverage_target_root_behaviour_test.py`
+records those limits in its module comment rather than leaving the gap implicit.
 
 `coverage_target_root_verification_test.py` pins the steps' platform
 conditions, shells, positions after both coverage actions, the variables they

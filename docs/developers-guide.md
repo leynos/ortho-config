@@ -3585,11 +3585,14 @@ is what observes the runner the arithmetic assumes.
 
 The choosers publish through `GITHUB_ENV`, which records intent. The two
 `Verify the … coverage target root` steps read it back after the second
-coverage action and require the chosen directory to exist, so a chooser that is
-reordered after the actions, or left with an empty value, fails the leg that
-owns it instead of surfacing later as a refused command line. Each step
-recomputes its expected root from the chooser's own expression — the Windows
-step re-derives the drive root from `RUNNER_TEMP`, the Linux step rebuilds
+coverage action and require the chosen directory to exist, so a chooser left
+with an empty value fails the leg that owns it instead of surfacing later as a
+refused command line. Reordering is caught only while the expected directory is
+absent: a chooser moved after both actions can still publish the expected
+values before the verification runs, and when the directory already exists the
+check passes even though the actions used another root. Each step recomputes
+its expected root from the chooser's own expression — the Windows step
+re-derives the drive root from `RUNNER_TEMP`, the Linux step rebuilds
 `$RUNNER_TEMP/llvm-cov-target` — so there is no second copy of the path to
 drift.
 
@@ -3603,17 +3606,20 @@ than in the lane.
 The Linux step is plain Bash, and `coverage_target_root_behaviour_test.py`
 exercises its acceptance and rejection paths on every host. The Windows step
 derives its root from the drive containing `RUNNER_TEMP`, which on a POSIX host
-is `/`; the suite observes both its rejection paths there and leaves acceptance
-to the hosted Windows leg, which runs the step with the real directory present.
-The check observes the environment and the directory, not the length of any
-command line: a root chosen correctly but still too long passes the check and
-fails at the compiler, which is what the projection arithmetic above guards. It
-also observes them once, not per pass. Both coverage actions inherit one job
-environment, so the variables record what each pass was given rather than what
-it did, and the directory check establishes only that the chosen directory
-exists, not which action wrote it. The steps therefore report that the chosen
-root exists and the published variables match, and a pass that built elsewhere
-would leave both checks passing.
+is `/`; the suite leaves acceptance to the hosted Windows leg, which runs the
+step with the real directory present. Both Windows rejection tests skip where
+`pwsh` is unavailable (`PWSH_REQUIRED`), and the missing-directory test also
+skips when the derived directory already exists, so a passing suite on a POSIX
+host establishes neither path. The check observes the environment and the
+directory, not the length of any command line: a root chosen correctly but
+still too long passes the check and fails at the compiler, which is what the
+projection arithmetic above guards. It also observes them once, not per pass.
+Both coverage actions inherit one job environment, so the variables record what
+each pass was given rather than what it did, and the directory check
+establishes only that the chosen directory exists, not which action wrote it.
+The steps therefore report that the chosen root exists and the published
+variables match, and a pass that built elsewhere would leave both checks
+passing.
 
 ### Opting out with `BUILD_STANDARD`
 

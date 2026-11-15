@@ -8,9 +8,11 @@ changed script is observed rather than modelled.
 The Windows script derives its expected root from the drive containing
 `RUNNER_TEMP`. On a POSIX host that drive is `/`, so its acceptance path needs a
 writable drive root and is left to the hosted Windows leg, which runs the step
-with the real directory present. Its two rejection paths are observed here on
-every host. The Linux script reads `RUNNER_TEMP` directly and is exercised in
-full, acceptance included.
+with the real directory present. Its two rejection paths are exercised wherever
+`pwsh` is installed and skipped rather than passed where it is not; the
+missing-directory path is also skipped when the derived directory already
+exists. The Linux script reads `RUNNER_TEMP` directly and is exercised in full,
+acceptance included.
 
 The PowerShell scripts run only where `pwsh` is installed; the Linux coverage
 leg installs it and runs this suite. The Linux verification step is plain Bash
