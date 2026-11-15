@@ -239,8 +239,12 @@ it audits to be a class member, because the raised allowance is written for the
 class and a serialized non-member would fall through to the base tier, while
 the class itself may be raised without being serialized. A binary can drive a
 child `cargo` without touching the shared caches the group protects, so the
-class can be the wider of the two. It is not wider today: the two sets
-coincide, and the contract does not require that they keep doing so.
+class can be the wider of the two. It is wider by two today: `clap_error_cli`
+builds its fixture into the shared target directory and `clap_error_coverage`
+runs `cargo metadata`, and neither clears `target/orthohelp` nor builds against
+`target/documentation-examples/v2`, so both take the class's raised allowance
+without joining the group. The contract does not require the two sets to keep
+coinciding.
 
 `cli_dispatch` is a member of both. Its `.config/nextest.toml` entry places it
 in `orthohelp_cache` and gives it the class's raised allowance, so neither
