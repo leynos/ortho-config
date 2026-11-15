@@ -220,8 +220,8 @@ D11's no-bridge guarantee continues to govern the deprecated
 `check --scope config`. It does not prohibit the new full `check` operation
 from obtaining command metadata and calling the reusable behaviour and output
 checkers. Bare generation remains a deprecated alias for `gen`. Preserve the
-legacy combined check/generation path, warning only on stderr and retaining
-its single-report stdout contract.
+legacy combined check/generation path, warning only on stderr and retaining its
+single-report stdout contract.
 
 D9's enforcement defaults and override boundary remain unchanged, as do D5/D6's
 report channels and existing process statuses. The new operation adds explicit

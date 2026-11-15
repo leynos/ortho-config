@@ -300,9 +300,11 @@ unsafe mutation surfaces before release.
   - [ ] Move documentation and agent-context generation behind `gen`, reusing
     the existing pipeline and preserving formats, defaults, options, artefact
     paths, locale behaviour, and cache semantics.
-  - [ ] Make `check` acquire command metadata once and invoke the existing
-    configuration and behaviour checks plus 7.2.3's real output policy API.
-    Do not duplicate policy predicates or require unfinished future rules.
+  - [ ] When full-scope checking is enabled, make `check` acquire command
+    metadata once and invoke the existing configuration and behaviour checks
+    plus 7.2.3's real output policy API. Do not acquire metadata in `off` mode
+    or for `check --scope config`, and do not duplicate policy predicates or
+    require unfinished future rules.
   - [ ] Provide `check --scope config` without a bridge build, root type, or
     library target. Enabled full checking must fail explicitly when required
     metadata is unavailable rather than silently skipping command rules.

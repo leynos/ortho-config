@@ -2,8 +2,9 @@
 
 Status: design amendment for review; implementation pending roadmap item 7.2.8.
 
-Scope: command routing, policy orchestration, compatibility, and the integration
-boundary with 7.2.3. This amendment changes no executable behaviour by itself.
+Scope: command routing, policy orchestration, compatibility, and the
+integration boundary with 7.2.3. This amendment changes no executable behaviour
+by itself.
 
 Audience: maintainers and the agents implementing 7.2.3 and 7.2.8.
 
@@ -33,7 +34,8 @@ It amends the command-surface scope of
 defaults, exception semantics, or process statuses. Existing command examples
 continue to describe supported compatibility forms until 7.2.8 lands. The
 [Cargo dispatch boundary](adrs/adr-0004-cargo-external-subcommand-entry-point.md)
-and [schema ownership](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
+and
+[schema ownership](adrs/adr-0003-define-schema-ownership-for-agent-native-contracts.md)
 remain unchanged.
 
 The 7.2.3 agent continues its approved work. Neither this amendment nor 7.2.8
@@ -67,12 +69,12 @@ second generator, configuration loader, or metadata schema.
 
 ### 2.2. Check declared command contracts
 
-`check` defaults to `--scope all`. With enforcement enabled, it evaluates policy
-configuration and all implemented, applicable command-metadata rule groups.
-The initial complete set includes configuration checks, the existing behaviour
-checker, and the output checker delivered by 7.2.3. Later vocabulary and other
-rules join when their own roadmap items land; 7.2.8 does not claim to implement
-or require unfinished rules.
+`check` defaults to `--scope all`. With enforcement enabled, it evaluates
+policy configuration and all implemented, applicable command-metadata rule
+groups. The initial complete set includes configuration checks, the existing
+behaviour checker, and the output checker delivered by 7.2.3. Later vocabulary
+and other rules join when their own roadmap items land; 7.2.8 does not claim to
+implement or require unfinished rules.
 
 The command obtains recursive command metadata through the existing bridge and
 agent-context conversion. It acquires that metadata once per selected target,
@@ -112,8 +114,8 @@ because the orchestrator combines its results with another rule group.
 
 ## 3. Deprecated aliases and migration
 
-An omitted operation, with or without the existing generation options, routes
-to `gen`. Thus `cargo orthohelp --format man` retains its generation behaviour,
+An omitted operation, with or without the existing generation options, routes to
+`gen`. Thus `cargo orthohelp --format man` retains its generation behaviour,
 and `cargo orthohelp` retains the existing default-generation behaviour,
 including errors caused by missing required package metadata.
 
@@ -170,11 +172,11 @@ equal. Existing report constructors and ordering contracts remain the basis of
 composition; the CLI must not duplicate the output-rule predicate.
 
 A check writes the report atomically to the existing policy-report location and
-emits the same single JSON document to stdout, with the human summary on stderr.
-Bridge progress and child-process diagnostics must not contaminate stdout.
-Publish deny findings before returning failure. If metadata acquisition fails,
-return an operational error; any report that can be produced must identify the
-failed acquisition rather than assert a completed clean check.
+emits the same single JSON document to stdout, with the human summary on
+stderr. Bridge progress and child-process diagnostics must not contaminate
+stdout. Publish deny findings before returning failure. If metadata acquisition
+fails, return an operational error; any report that can be produced must
+identify the failed acquisition rather than assert a completed clean check.
 
 The report needs additive, machine-readable execution coverage. Record the
 requested scope, effective mode, and whether each implemented rule group was
@@ -194,10 +196,10 @@ Preserve the normal-completion statuses documented by 7.2.3: zero for success
 or display-only exits, one for policy denial or operational failure, and two
 for usage errors. Warning findings do not cause a policy failure. A positive
 `summary.deny` distinguishes a reported denial from other failures. Off mode
-retains a successful status with explicit non-evaluation; continuous integration
-(CI) must select an active policy and inspect coverage rather than treating
-status zero alone as a compliance certificate. No numeric exit-taxonomy
-redesign belongs here.
+retains a successful status with explicit non-evaluation; continuous
+integration (CI) must select an active policy and inspect coverage rather than
+treating status zero alone as a compliance certificate. No numeric
+exit-taxonomy redesign belongs here.
 
 ## 5. Architecture and scope boundaries
 
@@ -224,15 +226,15 @@ separately. There is no new dependency on those later features.
 7.2.3 remains the producer. It owns output declarations, derive parsing, docs
 IR and mirror types, conversion into `AgentContext`, the reusable
 `check_output(context: &AgentContext, mode: PolicyMode) -> PolicyReport` API,
-and its rule semantics, stable identifiers, and public consumer examples.
-It also owns evidence for the existing exit statuses. Its current scope and
+and its rule semantics, stable identifiers, and public consumer examples. It
+also owns evidence for the existing exit statuses. Its current scope and
 completion criteria remain unchanged; it does not wait for 7.2.8.
 
 7.2.8 is the consumer. It owns `check`/`gen` routing, deprecated aliases,
 metadata acquisition orchestration, composition of the behaviour and output
-reports, execution coverage, process tests, and command migration guidance.
-It may implement routing, generator extraction, configuration-only checking,
-and tests against the established interfaces while 7.2.3 proceeds.
+reports, execution coverage, process tests, and command migration guidance. It
+may implement routing, generator extraction, configuration-only checking, and
+tests against the established interfaces while 7.2.3 proceeds.
 
 The cross-over is the real public 7.2.3 API and its agent-context metadata, not
 a copied rule or speculative alternate schema. Record the producer commit and
@@ -245,8 +247,8 @@ At the cross-over, run the actual nested-fixture pipeline through the bridge,
 7.2.3 conversion, the real output checker, report composition, and the real
 `cargo orthohelp check` process. A command declaring data output with JSON
 support false or undeclared must produce the 7.2.3 `json_support_missing`
-finding under `agent-native.output.json-missing`; deny mode must exit one.
-A supported-data command must pass that rule. A command with no output
+finding under `agent-native.output.json-missing`; deny mode must exit one. A
+supported-data command must pass that rule. A command with no output
 declaration retains 7.2.3's no-inference behaviour, with applicability visible
 in coverage.
 
@@ -274,8 +276,8 @@ amendment and the producer's public contracts. Required evidence includes:
 - The producer/consumer cross-over test in section 6, not just direct calls to
   the checker or mocks of a successful evaluator.
 - Complete stdout JSON parsing, atomic report/file parity, correct merged
-  counts, stable ordering, coverage states, and old-report deserialization.
-  A legacy combined check/generation retains its single-document stdout rule.
+  counts, stable ordering, coverage states, and old-report deserialization. A
+  legacy combined check/generation retains its single-document stdout rule.
 - Negative controls showing that disconnecting the output checker, treating a
   failed bridge as a pass, or leaking a warning to stdout fails named tests.
 - Updated help, completions, README, users' guide, API guide, design examples,
@@ -292,11 +294,11 @@ passes. This design-only PR does not claim those implementation gates ran.
 
 ## 8. Alternatives and consequences
 
-Keeping only library APIs leaves each consumer to implement enforcement.
-Adding another root `--check` flag retains the growing mixture of generation
-and validation options. Broadening `--check-agent-native` silently breaks its
-no-bridge contract. Removing the old spellings breaks existing automation.
-The selected operation split avoids those failures while preserving a small,
+Keeping only library APIs leaves each consumer to implement enforcement. Adding
+another root `--check` flag retains the growing mixture of generation and
+validation options. Broadening `--check-agent-native` silently breaks its
+no-bridge contract. Removing the old spellings breaks existing automation. The
+selected operation split avoids those failures while preserving a small,
 explicit compatibility path.
 
 Full checking can incur a bridge build, so its cost and failure modes must be
