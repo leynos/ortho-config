@@ -409,8 +409,8 @@ migration guide before touching the candidate.
   shared installation rather than either codebase. Issue #695, filed from PR
   #592 and assigned to `pandalump`, owns the eleven `ortho_config_macros`
   functions and records that changing the repository-wide threshold needs a
-  maintainer decision; the other eleven are unowned, and three of them sit in
-  files PR #688 already modifies.
+  maintainer decision; the other eleven are tracked as issue #697, and three of
+  them sit in files PR #688 already modifies.
 - [x] (2026-11-15) Gate certificate at `1fb1c562` with HEAD unmoved and the
   tree clean before and after every gate: `make fmt` mutated nothing,
   `make check-fmt` left 104 files unchanged, `make test` passed 113 suites with
@@ -469,18 +469,28 @@ migration guide before touching the candidate.
   failed. The M2 certificate's 21 `cargo-orthohelp` doctests and the 135
   recorded at `1fb1c562` are separate earlier explicit runs and stand as
   recorded; this entry fills the one gap those runs did not cover.
+- [x] (2026-11-15) Hosted results for the assessed head `ebbba1de`, whose only
+  change since the clean-tree certificate is the plan document. Run 43702602040
+  reports `build-test (windows)` success, all three packaging dry runs, MSRV,
+  both advisory Clippy legs, Gecko Security Review and CodeScene green, and
+  `build-test (linux)` failing at `lint-whitaker` alone: its earlier Check
+  formatting, Markdown lint and Spelling steps passed, and the test, coverage
+  and packaging steps after Lint were skipped. The installer downloaded
+  `whitaker-lints-880939d` again and the run reported the same 11
+  `ortho_config_macros` diagnostics, so a docs-only head adds no failure and
+  the one red check is the recorded prerequisite.
 - [ ] Blocked on the prerequisite lint repair, which an installation rollback
   did not clear. Hosted `build-test (linux)` failed only at `lint-whitaker` on
-  runs 43686357368, 43696101238 and 43697766275, and the last two installer
-  logs show `whitaker-lints-880939d` downloaded from the suite's default-branch
-  tip, so the macro-aware rule is still what CI measures. A local `make lint`
-  passed once only because this workstation's checkout had rolled back to
-  `00186d43`, an ancestor of that commit, and it fails again now that the
-  checkout has moved forward: a local green is evidence about the workstation,
-  not about the candidate CI builds. The next action is unchanged — the eleven
-  flagged functions (issue #695) or the configured threshold must be settled on
-  `main` first, then the branch is rebased and re-gated. If the suite tip is
-  itself reverted, re-run the hosted leg before repairing anything.
+  runs 43686357368, 43696101238, 43697766275 and 43702602040, and the last two
+  installer logs show `whitaker-lints-880939d` downloaded from the suite's
+  default-branch tip, so the macro-aware rule is still what CI measures. A local
+  `make lint` passed once only because this workstation's checkout had rolled
+  back to `00186d43`, an ancestor of that commit, and it fails again now that
+  the checkout has moved forward: a local green is evidence about the
+  workstation, not about the candidate CI builds. The next action is unchanged
+  — the eleven flagged functions (issue #695) or the configured threshold must
+  be settled on `main` first, then the branch is rebased and re-gated. If the
+  suite tip is itself reverted, re-run the hosted leg before repairing anything.
 
 ## Surprises & discoveries
 
