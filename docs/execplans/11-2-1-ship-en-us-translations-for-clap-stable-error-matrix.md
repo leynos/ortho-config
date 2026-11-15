@@ -238,7 +238,14 @@ stopping and reporting.
       squashed. The rebase exposed an ADR number collision — main had taken
       0018 and 0019 — so this branch's ADR moved to
       `docs/adrs/adr-0020-pre-publication-clap-coverage-gate.md` and every
-      reference was renumbered in the same commits. Full re-gating follows.
+      reference was renumbered in the same commits. The first full certificate
+      on the rebased candidate (`89613ae2`) was green on six gates and red on
+      `make lint`: Whitaker's `conditional-max-n-branches` rejected the
+      three-term predicate in `reported_executable`. The predicate is now split
+      into named one- and two-term helpers, and the record selection runs
+      through `filter_map`/`filter`/`find_map` so no redundant closure remains
+      for Clippy. `lint-clippy`, `lint-whitaker`, `docstring-coverage`, and the
+      five-case CLI suite all pass on the repair. Full re-gating follows.
 
 ## Surprises & discoveries
 
