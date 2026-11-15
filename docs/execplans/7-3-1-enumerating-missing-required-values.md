@@ -426,6 +426,19 @@ with a compatibility probe rather than an assumption.
     deserializer cases now assert that the advertised route recovers the leaf,
     and `recovered_reference` fails when the selected variant is not `serve`.
 
+- [x] (2026-11-15) Rebased onto `main`'s `1f4a5775`, the landing of PR #698.
+  That commit is the #695 prerequisite repair, so the reconciliation of the
+  rebase also closes the acceptance deviation recorded below: the ordered gate
+  sequence now reaches the end with `make lint` green rather than stopping at
+  Whitaker. One conflict arose, in `apply_field_attr`
+  (`ortho_config_macros/src/derive/parse/field_attrs.rs`), where #698 split the
+  key match into setters while this branch had added `nested` and moved
+  `skip_cli` onto `CliFieldMode`. The resolution keeps the setters and carries
+  both branch decisions into them; `range-diff` shows every other commit
+  unchanged, and `git diff --check` is clean. The rebase is the reason the
+  plan's base/head pair changes, so every earlier assessment verdict is
+  evidence for its own candidate only and round c7 re-covers the new pair.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -1288,31 +1301,28 @@ The round-c5 gate run continued after a red `make lint` instead of stopping
 there, so that the remaining gates could show whether the pre-existing failure
 masked any defect of this branch. It did not, and every later gate passed.
 
-This is a deviation, not the sequence above. `make lint` fails at its Whitaker
-stage on sites that are unchanged from `main`, and the prerequisite repair is
-outside this plan's authority. The cause is now established and is not this
-branch's. The shared suite checkout at `~/.local/share/whitaker` is at
-`880939d1`, which adds the macro-aware cognitive complexity rule described in
-its own `docs/v0-3-0-migration-guide.md`, and that rule lets a function cross
-the weighted threshold without any of its own lines changing. Commit `f086edc9`
+This was a deviation, not the sequence above, and it is now closed. `make lint`
+failed at its Whitaker stage on sites unchanged from `main`: the shared suite
+checkout at `~/.local/share/whitaker` is at `880939d1`, which adds the
+macro-aware cognitive complexity rule described in its own
+`docs/v0-3-0-migration-guide.md`, and that rule lets a function cross the
+weighted threshold without any of its own lines changing. Commit `f086edc9`
 passed a hosted lint run at 03:40 UTC and failed one at 05:05 UTC on 2026-11-15
-with no repository change between them, and the eleven diagnostics are
+with no repository change between them, and the eleven diagnostics were
 identical on `main` and on this branch's head.
 
-Issue #695 owns the repair and carries the full inventory. Its eleven listed
-functions are the diagnostics the hosted job reports. Its evidence comment
-records eleven further sites in `ortho_l10n/tests/boundary*` and
-`test_helpers/src/env/tests.rs`, plus six in the `ortho_config_macros` artefact
-test modules, which the hosted job does not report because `cargo check` aborts
-on that crate's library target first. Three of the wider sites are in files the
-artefact-lock PR (see #688) already modifies, so those two changes need
-coordinating. No separate follow-up issue is needed; #695 is the single tracker.
+Issue #695 owned the repair and carried the full inventory. PR #698 landed it as
+`1f4a5775` on `main`, and this branch is rebased onto that commit, so a whole
+ordered `make lint` now runs to completion: `lint-clippy`, `lint-whitaker` and
+`docstring-coverage` all pass on the rebased head. The prerequisite is no
+longer outstanding and no acceptance requirement changed.
 
-A final ordered `make lint` run must follow that repair, or an approved change
-to this acceptance requirement; until then the lint gate is reported as an
-outstanding prerequisite rather than as a pass. The stages behind it are
-certified separately: `make lint-clippy` passes, and `make docstring-coverage`,
-which the abort never reached, is run on its own.
+The rebase needed one conflict resolution. `apply_field_attr` in
+`ortho_config_macros/src/derive/parse/field_attrs.rs` was split by #698 into
+one setter per recognized key, while this branch had added the `nested` key and
+moved `skip_cli` onto `CliFieldMode`. The resolution keeps #698's setter
+structure and carries both branch decisions into it, so `nested` is recorded and
+`skip_cli` still selects `CliFieldMode::Skipped`.
 
 ## Idempotence and recovery
 
