@@ -479,6 +479,25 @@ migration guide before touching the candidate.
   `whitaker-lints-880939d` again and the run reported the same 11
   `ortho_config_macros` diagnostics, so a docs-only head adds no failure and
   the one red check is the recorded prerequisite.
+- [x] (2026-11-15) Rebased the 39-commit series from `f086edc9` onto
+  `41d0f217`, which brings the prerequisite `bumpy_road_function` refactor
+  (`1f4a5775`, PR #698) and the environment-loader work (`41d0f217`, PR #694)
+  underneath it. Recovery refs `refs/recovery/7-2-3-r2-old-head`, `-old-base`
+  and `-target` hold `cb73249e`, `f086edc9` and `41d0f217`. One conflict, in
+  the impact table of `docs/v0-11-0-migration-guide.md`: main added an
+  "Injected environment" row while the branch added the output rows and widened
+  the columns, so the resolution keeps both and re-lays the table. `range-diff`
+  reports the other 38 commits as identical text apart from context main added
+  beneath them, and `git diff --check` is clean. The replay also left one line
+  of `ortho_config_macros/src/derive/parse/doc_attrs.rs` wrong: main's refactor
+  moved the dispatcher's tail onto `recognised.map(|()| true)`, and the merge
+  kept that statement in front of the new `match` instead of after it, so the
+  module did not parse. Rustfmt reported the unparseable module, and the repair
+  moves the statement back while keeping the branch's `"output"` arm inside
+  main's `match`. That arm also had to lose a `?`: the old tail propagated each
+  arm's error and returned unit, while the new `match` yields `syn::Result<()>`
+  per arm, so `parse_output_meta` is the arm's value and `cargo check` rejected
+  the `?` as an arm of the wrong type.
 - [x] (2026-11-15) Formal-review repair and its gates at head `51118715`, with
   eight modified files and no other change. The substantive finding was real:
   agent context read an explicit `null` for the output block, or for one of its
