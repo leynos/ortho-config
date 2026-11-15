@@ -397,7 +397,49 @@ with a compatibility probe rather than an assumption.
     earlier rounds planned is unnecessary. The `apply_field_attr` diagnostic is
     not this branch's: it appears identically on `main`'s `f086edc9`.
 
+- [x] (2026-11-15) CodeScene cleanup of the branch-only code. The hosted check
+  reported two rule violations and one duplication finding, all introduced by
+  this branch:
+  - *String heavy function arguments* on
+    `required_schema/tests.rs` (57.1% of arguments were string literals). The
+    cause was this round's own assertion helper, which took the forbidden token
+    and a case label as strings. A `Demotion` enum now names the two ways a
+    flatten could weaken a child's requirements, so the assertion takes no
+    string at all. The two case tables moved to `tests_serde_keys.rs`
+    behind `RenameCase` and `UnreadField`, each pairing a spelling with the
+    key it must produce. That also splits "which keys does Serde read?" from
+    "what does the generator emit?", and keeps both files under the size cap.
+  - *Code duplication* between the required and defaulted flatten tests. They
+    are one `#[rstest]` over a `FlattenCase` now; the argument list and the
+    demotion it must not apply travel together, so no case can assert without
+    its expectation.
+  - *Code duplication* in `subcommand/sources.rs`. Four exported wrappers
+    repeated the announce/build/finish/report sequence. `recorded_load` owns
+    the sequence and `load_extracted` names the raw entry points' policy,
+    leaving `finish_with_required_values` as the schema-aware counterpart.
+    CodeScene still reports this file at 9.09 with the duplication marked
+    *unchanged* (3.0 → 3.0): the residual similarity is between the two public
+    `_with_sources_at` signatures, and the change both introduced and reduced
+    blocks, so the finding predates and outlives the repair. It is dispositioned
+    as unchanged-from-base rather than hidden behind further indirection.
+  - Two helpers were strengthened while they were being extracted: the custom
+    deserializer cases now assert that the advertised route recovers the leaf,
+    and `recovered_reference` fails when the selected variant is not `serve`.
+
 ## Surprises & discoveries
+
+The full local suite aborted once at round c7 on
+`identifier_artefact_lease_cargo_build_tests::a_real_cargo_build_keeps_the_lease_after_its_helper_dies`
+with "timed out waiting for the second test process to write build_started".
+The test waits 120 s for a probe `cargo build` to write a marker. Build
+admission at the time reported `capacity 4, held 4, healthy` with roughly forty
+queued requests from other repositories, so the probe could not reach a compile
+slot inside its window. Re-running that test alone passed in 60.77 s, and the
+full suite with `--no-fail-fast` then passed every binary (2786 tests, no
+failures). The failing log is kept as
+`/tmp/test-ortho-config-7-3-1-enumerating-missing-required-values.run1.out` and
+the clean log beside it, so the abort is evidence about the host, not about
+this branch.
 
 The `make lint` failure that began in round c5 is an estate-wide effect of a
 shared lint installation, not a property of any branch. The suite checkout at
