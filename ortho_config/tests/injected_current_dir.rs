@@ -8,7 +8,7 @@
 use anyhow::{Context as _, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser};
-use ortho_config::{EnvSource, MapEnv, OrthoConfig, SubcmdConfigMerge};
+use ortho_config::{EnvSource, MapEnv, OrthoConfig, ScanEnvSource, SubcmdConfigMerge};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -161,6 +161,91 @@ fn subcommand_merge_reads_the_injected_working_directory() -> Result<()> {
         "expected the environment above the file, got {:?}",
         above_file.reference
     );
+    Ok(())
+}
+
+/// A source that cannot report a working directory.
+#[derive(Debug, Default)]
+struct NoWorkingDirectory(MapEnv);
+
+impl EnvSource for NoWorkingDirectory {
+    fn get(&self, key: &str) -> Option<std::ffi::OsString> {
+        self.0.get(key)
+    }
+
+    fn current_dir(&self) -> std::io::Result<std::path::PathBuf> {
+        Err(std::io::Error::other("deleted"))
+    }
+}
+
+impl ScanEnvSource for NoWorkingDirectory {
+    fn scan(&self) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+        self.0.scan()
+    }
+}
+
+/// A failed directory lookup is reported, not replaced by `.`, so a process
+/// relative file can never be read through an injected source.
+#[test]
+fn a_failed_directory_lookup_is_an_error_for_subcommands() -> Result<()> {
+    let outcome =
+        SeamCmd::default().load_and_merge_with_env(Arc::new(NoWorkingDirectory::default()));
+
+    let error = outcome.err().ok_or_else(|| anyhow!("expected an error"))?;
+    ensure!(
+        matches!(error.as_ref(), ortho_config::OrthoError::Validation { key, .. } if key == "current_dir"),
+        "unexpected error: {error:?}"
+    );
+    Ok(())
+}
+
+/// The derived loader survives a failed lookup by omitting the implicit
+/// project root, so it reads no process-relative file either.
+#[test]
+fn a_failed_directory_lookup_omits_the_derived_project_root() -> Result<()> {
+    let config =
+        SeamConfig::load_from_iter_with_env(["seam"], Arc::new(NoWorkingDirectory::default()))
+            .map_err(|err| anyhow!(err))?;
+
+    ensure!(
+        config.port == 1,
+        "expected the default port, got {}",
+        config.port
+    );
+    Ok(())
+}
+
+/// Loads in different directories on different threads see only their own file.
+#[test]
+fn concurrent_loads_in_distinct_directories_stay_independent() -> Result<()> {
+    let directories = (1..=4_u16)
+        .map(|n| dir_with(".cwdseam.toml", &format!("port = {}\n", n * 1000)).map(|dir| (n, dir)))
+        .collect::<Result<Vec<_>>>()?;
+
+    let ports = std::thread::scope(|scope| {
+        let handles = directories
+            .iter()
+            .map(|(_, dir)| {
+                scope.spawn(|| {
+                    SeamConfig::load_from_iter_with_env(["seam"], Arc::new(env_in(dir.path())))
+                        .map(|config| config.port)
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .map_err(|_| anyhow!("a loader thread panicked"))
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+
+    for ((n, _), outcome) in directories.iter().zip(ports) {
+        let port = outcome.map_err(|err| anyhow!(err))?;
+        ensure!(port == n * 1000, "directory {n} loaded port {port}");
+    }
     Ok(())
 }
 

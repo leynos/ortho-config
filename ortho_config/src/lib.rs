@@ -304,7 +304,13 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// }
     ///
     /// # fn main() -> OrthoResult<()> {
-    /// let env = Arc::new(MapEnv::new().with_var("APP_PORT", "8080"));
+    /// // Pinning the directory keeps the load off the process's own; an
+    /// // unpinned map still reports the process working directory.
+    /// let env = Arc::new(
+    ///     MapEnv::new()
+    ///         .with_current_dir("/nonexistent/app-project")
+    ///         .with_var("APP_PORT", "8080"),
+    /// );
     /// let cfg = AppConfig::load_from_iter_with_env(["app"], env)?;
     /// assert_eq!(cfg.port, 8080);
     /// # Ok(())

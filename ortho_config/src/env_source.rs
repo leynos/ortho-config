@@ -283,7 +283,9 @@ impl MapEnv {
     /// Derived loaders search this directory for project configuration, so a
     /// test names a temporary directory here instead of changing the process's
     /// own. Without it the map keeps reporting the process working directory,
-    /// which preserves the behaviour of callers that never set one.
+    /// which preserves the behaviour of callers that never set one. Pin an
+    /// absolute path: a relative one is used as given and so resolves against
+    /// the process working directory when files are opened.
     ///
     /// # Examples
     ///

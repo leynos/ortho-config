@@ -120,9 +120,15 @@ pub trait SubcmdConfigMerge: OrthoConfig + CommandFactory + Sized {
     /// Merge configuration defaults from one injected environment.
     ///
     /// The environment answers the named lookups that locate configuration
-    /// files, supplies the working directory ([`crate::MapEnv::with_current_dir`])
-    /// and backs the `<PREFIX>_CMDS_<NAME>_*` variable layer, so the load reads
-    /// nothing from the process.
+    /// files, supplies the working directory and backs the
+    /// `<PREFIX>_CMDS_<NAME>_*` variable layer. The load reads nothing from the
+    /// process once the source pins a working directory
+    /// ([`crate::MapEnv::with_current_dir`]); an unpinned `MapEnv` still reports
+    /// the process's. Name `HOME` and the XDG variables too when host
+    /// configuration directories must stay out; an empty `HOME` counts as unset.
+    ///
+    /// A source whose `current_dir` fails makes the load return
+    /// [`crate::OrthoError::Validation`] rather than fall back to `.`.
     ///
     /// # Errors
     ///
