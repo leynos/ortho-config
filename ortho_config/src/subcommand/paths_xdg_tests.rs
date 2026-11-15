@@ -148,23 +148,14 @@ impl crate::EnvSource for RelativeFallback {
 /// working directory when opened, which would escape an injected one. With the
 /// base absolute, every candidate that survives must be absolute.
 #[rstest::rstest]
-#[case::empty_home(MapEnv::new().with_var("HOME", ""))]
-#[case::relative_home(MapEnv::new().with_var("HOME", "relative-home"))]
-fn unusable_home_yields_no_process_relative_candidate(#[case] env: MapEnv) -> Result<()> {
+#[case::empty_home(Box::new(MapEnv::new().with_var("HOME", "")))]
+#[case::relative_home(Box::new(MapEnv::new().with_var("HOME", "relative-home")))]
+#[case::relative_home_fallback(Box::new(RelativeFallback))]
+fn unusable_home_yields_no_process_relative_candidate(
+    #[case] source: Box<dyn crate::EnvSource>,
+) -> Result<()> {
     let base = TempDir::new().context("create base")?;
-    assert_all_absolute(&env, base.path())
-}
-
-/// A relative platform home fallback is refused, like a relative `HOME`.
-#[test]
-fn relative_home_fallback_yields_no_process_relative_candidate() -> Result<()> {
-    let base = TempDir::new().context("create base")?;
-    assert_all_absolute(&RelativeFallback, base.path())
-}
-
-/// Requires every candidate for `source` rooted at `base` to be absolute.
-fn assert_all_absolute(source: &dyn crate::EnvSource, base: &Path) -> Result<()> {
-    let paths = candidate_paths_at(&Prefix::new("app"), base, source)?;
+    let paths = candidate_paths_at(&Prefix::new("app"), base.path(), source.as_ref())?;
     ensure!(
         paths.iter().all(|path| path.is_absolute()),
         "a process-relative candidate leaked: {paths:?}"

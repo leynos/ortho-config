@@ -113,12 +113,13 @@ impl ortho_config::EnvSource for NoWorkingDirectory {
 /// A relative selector that cannot be anchored is reported as dropped, not
 /// accepted, while an absolute one is unaffected.
 #[rstest]
-#[case::relative("chosen.toml", "dropped")]
-#[case::absolute("/etc/chosen.toml", "accepted")]
+#[case::relative("chosen.toml", true)]
+#[case::absolute("/etc/chosen.toml", false)]
 fn selector_without_a_working_directory_is_reported(
     #[case] selector: &str,
-    #[case] expected: &str,
+    #[case] is_dropped: bool,
 ) {
+    let expected = if is_dropped { "dropped" } else { "accepted" };
     let source = NoWorkingDirectory(MapEnv::new().with_var("DEMO_CONFIG", selector));
     let discovery = ConfigDiscovery::builder("demo")
         .clear_project_roots()
