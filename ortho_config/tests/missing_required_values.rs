@@ -2,8 +2,8 @@
 //!
 //! Each case supplies values exactly as a user would — command-line flags and
 //! environment variables — and asserts which canonical paths are reported.
-//! Documentation overrides are absent on purpose: they must never influence a
-//! runtime decision.
+//! Documentation overrides appear only as controls: they must never influence
+//! a runtime decision.
 
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{MapEnv, MissingRequiredValues, OrthoConfig, OrthoError, SupplyRoute};
