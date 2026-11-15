@@ -284,7 +284,7 @@ pub(super) fn parse_lock_record(line: &str) -> Option<LockRecord> {
     let (blocked, kind) = parse_blocked_kind(&mut fields)?;
     let mode = fields.next()?.to_owned();
     let access = fields.next()?.to_owned();
-    let pid = parse_owner(fields.next()?)?;
+    let pid = owner_of(parse_pid(fields.next()?)?);
     let (device, inode) = parse_identity(fields.next()?)?;
     let range = parse_range(&mut fields)?;
     Some(LockRecord {
@@ -312,12 +312,12 @@ fn parse_blocked_kind<'a>(fields: &mut impl Iterator<Item = &'a str>) -> Option<
     }
 }
 
-/// Reads the pid column as an optional owner: `None` outer means malformed.
+/// The owning process a pid column named, or `None` when the kernel named none.
 #[cfg(any(target_os = "linux", test))]
-fn parse_owner(field: &str) -> Option<Option<ProcessId>> {
-    match parse_pid(field)? {
-        RecordedPid::Owner(pid) => Some(Some(pid)),
-        RecordedPid::NoOwner => Some(None),
+const fn owner_of(recorded: RecordedPid) -> Option<ProcessId> {
+    match recorded {
+        RecordedPid::Owner(pid) => Some(pid),
+        RecordedPid::NoOwner => None,
     }
 }
 

@@ -273,6 +273,21 @@ pub(crate) fn toml_string(value: &str) -> String {
     toml::Value::String(value.to_owned()).to_string()
 }
 
+/// Join manifest lines, ending each with a newline; an empty line is a blank one.
+pub(crate) fn manifest_text<I, S>(lines: I) -> String
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut text = lines
+        .into_iter()
+        .map(|line| line.as_ref().to_owned())
+        .collect::<Vec<_>>()
+        .join("\n");
+    text.push('\n');
+    text
+}
+
 /// Canonicalize a workspace member's crate root, for a manifest `path` key.
 ///
 /// The spelling is absolute because a rendered consumer lives under `target/`,

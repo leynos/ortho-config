@@ -34,16 +34,22 @@ use std::process::Command;
 /// but did not compile would not pass.
 #[test]
 fn workspace_runtime_consumer_has_no_facade_closure() -> Result<()> {
-    let consumer = Consumer::render(Dependency::Runtime, &DependencySource::Workspace)?;
-    let budget = Budget::new();
-    let fixture = ConsumerFixture::new(budget)?.write_consumer(&consumer)?;
-    let metadata = fixture.resolve_metadata()?;
+    let fixture = runtime_fixture(&DependencySource::Workspace, Budget::new())?;
+    assert_runtime_closure(&fixture.resolve_metadata()?)?;
+    fixture.test()
+}
 
-    assert_no_forbidden_packages(&metadata)?;
-    assert_runtime_normal_edges(&metadata)?;
-    assert_root_edges(&metadata)?;
-    fixture.test()?;
-    Ok(())
+/// Render a runtime consumer from `source` and write it to a fresh fixture root.
+fn runtime_fixture(source: &DependencySource, budget: Budget) -> Result<ConsumerFixture> {
+    let consumer = Consumer::render(Dependency::Runtime, source)?;
+    ConsumerFixture::new(budget)?.write_consumer(&consumer)
+}
+
+/// Require the runtime consumer's graph to have the claimed closure.
+fn assert_runtime_closure(metadata: &Metadata) -> Result<()> {
+    assert_no_forbidden_packages(metadata)?;
+    assert_runtime_normal_edges(metadata)?;
+    assert_root_edges(metadata)
 }
 
 /// Resolve a runtime consumer from packaged sources and assert its closure.
@@ -61,16 +67,11 @@ fn packaged_runtime_consumer_has_no_facade_closure() -> Result<()> {
     let source = DependencySource::Packaged {
         unpacked: unpacked_directory()?,
     };
-    let consumer = Consumer::render(Dependency::Runtime, &source)?;
-    let fixture = ConsumerFixture::new(budget)?.write_consumer(&consumer)?;
+    let fixture = runtime_fixture(&source, budget)?;
     let metadata = fixture.resolve_metadata()?;
-
-    assert_no_forbidden_packages(&metadata)?;
-    assert_runtime_normal_edges(&metadata)?;
-    assert_root_edges(&metadata)?;
+    assert_runtime_closure(&metadata)?;
     assert_patched_packages_come_from_paths(&metadata)?;
-    fixture.test()?;
-    Ok(())
+    fixture.test()
 }
 
 /// The patched packages that did resolve must come from the unpacked roots.

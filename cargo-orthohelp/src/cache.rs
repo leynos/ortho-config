@@ -212,8 +212,8 @@ fn hash_directory_recursive(
     let mut entries = list_entries(dir, base)?;
     entries.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-    for (name, file_type) in entries {
-        hash_entry(dir, base, &name, file_type, hasher)?;
+    for entry in &entries {
+        hash_entry(dir, base, entry, hasher)?;
     }
     Ok(())
 }
@@ -244,8 +244,7 @@ fn list_entries(
 fn hash_entry(
     dir: &Dir,
     base: &Utf8Path,
-    name: &Utf8Path,
-    file_type: cap_std::fs::FileType,
+    (name, file_type): &(Utf8PathBuf, cap_std::fs::FileType),
     hasher: &mut Sha256,
 ) -> Result<(), OrthohelpError> {
     let rel = base.join(name);

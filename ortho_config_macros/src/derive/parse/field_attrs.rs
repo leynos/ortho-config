@@ -91,7 +91,8 @@ fn apply_field_attr(
         "cli_short" => set_cli_short(meta, out),
         "default" => set_default(meta, out),
         "merge_strategy" => set_merge_strategy(meta, out),
-        "skip_cli" => Ok(out.skip_cli = true),
+        // A bare flag: there is no value to parse, so it cannot fail.
+        "skip_cli" => Ok(()).inspect(|()| out.skip_cli = true),
         "cli_default_as_absent" => set_cli_default_as_absent(meta, out),
         _ => return apply_field_doc_attr(meta, out),
     };
