@@ -16,6 +16,7 @@ mod artefact_lock;
 mod artefact_merge_error;
 mod artefact_observation;
 mod artefact_probe;
+mod artefact_prune;
 mod artefact_report;
 mod artefact_wait_marker;
 mod publish;
@@ -33,18 +34,25 @@ use self::artefact_merge_error::MergeError;
 use self::artefact_probe::source_still_exists;
 #[cfg(test)]
 use self::artefact_probe::{INJECTED_PROBE_MESSAGE, with_metadata_outcome};
+// Imported rather than called from here: `publish` prunes between its render
+// and its writes, and the prune's own suite reaches the predicate and the
+// injection hook through `super::*`. Making the names visible from `artefact`
+// is what lets both do so without knowing which file holds them.
+use self::artefact_prune::prune_stale_rendered;
+#[cfg(test)]
+use self::artefact_prune::{is_rendered_artefact, with_entry_probe_error};
 #[cfg(test)]
 use self::artefact_report::ErrorCategory;
 // Named re-exports keep the schema items reachable from `publish` and the test
 // modules as `super::Name`, exactly as they were before the split. The
 // test-only names are listed under `cfg(test)` so a release build does not
 // carry an unused import.
-use self::schema::{ArtefactFile, Entry, Fragment, Source, entries, json, render, source};
 #[cfg(test)]
 use self::schema::{
-    CAP_BYTES, Document, EntryContext, Index, SCHEMA_VERSION, argument_entries, command_entries,
-    ordered,
+    ArtefactFile, CAP_BYTES, Document, EntryContext, Index, SCHEMA_VERSION, argument_entries,
+    command_entries, ordered,
 };
+use self::schema::{Entry, Fragment, Source, entries, json, render, source};
 use super::LocalizationIds;
 #[cfg(test)]
 use super::suffix::MessageSuffix;
@@ -77,147 +85,6 @@ fn atomic_write(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     let temporary = path.with_extension("tmp");
     fs::write(&temporary, contents)?;
     fs::rename(temporary, path)
-}
-
-/// Returns whether a directory entry is a rendered artefact file.
-///
-/// Rendered files are the single `cli-identifiers.json`, the
-/// `cli-identifiers.index.json` manifest, and the numbered
-/// `cli-identifiers.<n>.json` parts. Fragments live in `FRAGMENT_DIR` and the
-/// lock file is not JSON, so neither is matched.
-fn is_rendered_artefact(name: &str) -> bool {
-    let Some(rest) = name.strip_prefix("cli-identifiers") else {
-        return false;
-    };
-    // The unsuffixed file is the whole single-file layout.
-    if rest == ".json" {
-        return true;
-    }
-    let Some(tail) = rest.strip_prefix('.') else {
-        return false;
-    };
-    tail.strip_suffix(".json")
-        .is_some_and(|index| index == "index" || index.parse::<usize>().is_ok())
-}
-
-/// Names the message a test-injected directory-entry probe failure carries.
-///
-/// The prune returns the probe error, so a regression test can prove the
-/// reported failure came from the injection rather than from a real
-/// filesystem condition.
-#[cfg(test)]
-pub(super) const INJECTED_ENTRY_PROBE_MESSAGE: &str = "injected directory-entry probe failure";
-
-// Records one metadata error kind to inject for one exact directory entry.
-//
-// This mirrors the injection `artefact_probe` documents: a failed probe that
-// is not `NotFound` cannot be provoked portably through filesystem topology,
-// so test builds name the failure they want. Only failures are injectable
-// here; a test that wants the success path creates the file.
-#[cfg(test)]
-thread_local! {
-    static INJECTED_ENTRY_PROBE: std::cell::RefCell<Option<(PathBuf, std::io::ErrorKind)>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-/// Runs `body` with `kind` injected as the probe outcome for `path`.
-#[cfg(test)]
-pub(super) fn with_entry_probe_error<T>(
-    path: &Path,
-    kind: std::io::ErrorKind,
-    body: impl FnOnce() -> T,
-) -> T {
-    INJECTED_ENTRY_PROBE.with(|cell| *cell.borrow_mut() = Some((path.to_path_buf(), kind)));
-    let result = body();
-    INJECTED_ENTRY_PROBE.with(|cell| *cell.borrow_mut() = None);
-    result
-}
-
-/// Reads one directory entry's metadata, honouring an injected failure.
-///
-/// This asks about the entry the prune would unlink, so it uses
-/// `symlink_metadata`: a symlink must be classified as the link it is, not as
-/// whatever its target happens to be.
-fn probe_entry(path: &Path) -> std::io::Result<fs::Metadata> {
-    #[cfg(test)]
-    if let Some(kind) = INJECTED_ENTRY_PROBE.with(|cell| {
-        cell.borrow()
-            .as_ref()
-            .filter(|(recorded, _)| recorded == path)
-            .map(|(_, kind)| *kind)
-    }) {
-        return Err(std::io::Error::new(kind, INJECTED_ENTRY_PROBE_MESSAGE));
-    }
-    fs::symlink_metadata(path)
-}
-
-/// Returns whether a directory entry is a superseded rendered artefact.
-///
-/// Only a regular file that is rendered output and is absent from the current
-/// render is superseded. Splitting the tests out of the prune loop keeps the
-/// directory scan reading as "for each entry: drop it when superseded", rather
-/// than as a single conjunct that a reader must unpack.
-///
-/// The probe reports failure rather than answering `false`. An unreadable
-/// entry says nothing about whether the file is superseded, so reading the
-/// failure as "keep it" would leave stale rendered output in the directory
-/// while the declared [`std::io::Result`] promised the caller a diagnostic.
-/// Only an entry that has genuinely vanished is answered `false`: it cannot be
-/// a leftover the prune still needs to remove.
-fn is_superseded(
-    name: &str,
-    keep: &std::collections::HashSet<&str>,
-    path: &Path,
-) -> std::io::Result<bool> {
-    if !is_rendered_artefact(name) || keep.contains(name) {
-        // Neither the fragments, nor the lock, nor any file the current
-        // render keeps is a stale candidate, so none of them pays a metadata
-        // call.
-        return Ok(false);
-    }
-    match probe_entry(path) {
-        Ok(metadata) => Ok(metadata.is_file()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error),
-    }
-}
-
-/// Removes rendered artefact files left over from a previous layout.
-///
-/// `render` returns only the files the current entry set needs, so switching
-/// between the single-file and index-plus-parts layouts would otherwise leave
-/// the superseded files in place. A reader cannot tell them from current
-/// output, and a stale index would keep pointing at parts that no longer
-/// describe the inventory. Pruning keeps the directory equal to exactly what
-/// the latest render produced.
-///
-/// The caller holds the artefact lock, so no other *writer* participates while
-/// these files are removed. The lock excludes publishers only: it is
-/// cooperative, so a reader that never takes it — a build script globbing the
-/// directory, say — can still observe the transition between the prune and the
-/// writes that follow it. Atomic per-file writes keep each file whole; the
-/// directory as a whole is not swapped atomically.
-///
-/// A failure to classify an entry, or to unlink it, is returned rather than
-/// skipped. Both would otherwise leave a stale file in place while the caller
-/// reported success.
-fn prune_stale_rendered(root: &Path, current: &[ArtefactFile]) -> std::io::Result<()> {
-    let keep = current
-        .iter()
-        .map(|file| file.name.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    for entry in fs::read_dir(root)? {
-        let candidate = entry?;
-        let raw_name = candidate.file_name();
-        let Some(name) = raw_name.to_str() else {
-            continue;
-        };
-        let path = candidate.path();
-        if is_superseded(name, &keep, &path)? {
-            fs::remove_file(path)?;
-        }
-    }
-    Ok(())
 }
 
 /// Hashes a source path for a stable per-expansion fragment name.
@@ -321,61 +188,143 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
     )
 }
 
-#[cfg(test)]
-#[path = "artefact_tests.rs"]
-mod tests;
-
+// The test suites are declared without blank lines between them: each costs
+// three lines of a file held to Whitaker's 400-line `module_max_lines` cap, and
+// the cap is reached by declarations alone. The comments below are what a
+// reader needs; the spacing is not.
 #[cfg(test)]
 #[path = "artefact_fragment_tests.rs"]
 mod fragment_tests;
-
 #[cfg(test)]
 #[path = "artefact_prune_tests.rs"]
 mod prune_tests;
-
 #[cfg(test)]
 #[path = "artefact_report_tests.rs"]
 mod report_tests;
-
+#[cfg(test)]
+#[path = "artefact_tests.rs"]
+mod tests;
 // What a channel file's *name* lets a reader conclude, split from
 // `report_tests` so neither suite outgrows the file-length cap; the two share
 // `report_tests::report`.
 #[cfg(test)]
 #[path = "artefact_report_identity_tests.rs"]
 mod report_identity_tests;
-
 // The channel's own failure record, split from `report_tests` so neither suite
 // outgrows the file-length cap; `report_tests::report` is shared between them.
 #[cfg(test)]
 #[path = "artefact_report_failure_tests.rs"]
 mod report_failure_tests;
-
 // The categories a *failing publication* produces for the two merge faults,
 // which `report_failure_tests` cannot show: it hands the channel a category it
 // built itself rather than one a real merge classified.
 #[cfg(test)]
 #[path = "artefact_merge_report_tests.rs"]
 mod merge_report_tests;
-
 // Shared by `lock_tests` and `publication_tests`, so it is neither suite's own.
 #[cfg(test)]
 #[path = "artefact_lock_support.rs"]
 mod lock_support;
-
 // The fixture publications the lock suites drive the production boundary with,
 // split out so neither support module outgrows the file-length cap.
 #[cfg(test)]
 #[path = "artefact_lock_fixture.rs"]
 mod lock_fixture;
-
 #[cfg(test)]
 #[path = "artefact_lock_tests.rs"]
 mod lock_tests;
-
+// Turns a still-held lock into a report naming the process and descriptor that
+// hold it, split from the pure evidence vocabulary it prints so neither half
+// outgrows the file-length cap; `lock_report_tests` proves it against a hold
+// this process really owns.
+#[cfg(test)]
+#[path = "artefact_lock_diagnostics.rs"]
+mod lock_diagnostics;
+// The settle's two temporal decisions, split out so a fake clock can reach
+// them; a real clock cannot test "the deadline passed" without waiting it out.
+#[cfg(test)]
+#[path = "artefact_lock_clock.rs"]
+mod lock_clock;
+// Every kernel read the report makes, behind one trait, so a test can fail the
+// read it needs to fail instead of arranging filesystem topology for it.
+#[cfg(test)]
+#[path = "artefact_lock_evidence.rs"]
+mod lock_evidence;
+// Gated on the platform as well as `test`, like `lock_process`: every item in
+// it is derived from `/proc`, and `Descriptor` is itself `cfg(target_os =
+// "linux")`. Compiled on another target, the module's own imports would name
+// items that platform removes and `-D warnings` would fail the build — which is
+// what `build-test (windows)` did before this gate.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_procfs.rs"]
+mod lock_procfs;
+// The procfs half of the report, split from the deciding half so each stays
+// inside the file-length cap and so "no descriptor" and "could not read" have
+// one place to be kept apart. Gated on the platform with the scan it holds:
+// every function in it takes a `ProcFs`, and its only caller is the Linux-only
+// `holder_lines`.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_holder.rs"]
+mod lock_holder;
+// The scan's tests live beside it, not inside: the cap counts every line a
+// module declares, and the scan plus the cases that pin it no longer fit.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_holder_tests.rs"]
+mod lock_holder_tests;
+// The directory walk that decides whether entries survive an enumeration error,
+// driven directly: the fake hands over a listing that is already complete or
+// already partial, so it cannot show whether the walk itself discards entries.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_walk_tests.rs"]
+mod lock_walk_tests;
+// The `/proc/<pid>/stat` parser, against literal lines. A real process cannot
+// be renamed to `a) b` on cue, so the first-`)` reading that the parser exists
+// to avoid has no other way to be caught.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_stat_tests.rs"]
+mod lock_stat_tests;
+// Test support for the holder report: gated on `test`, not the platform, so
+// every test build compiles the module and its `lock_evidence` import alike.
+#[cfg(test)]
+#[path = "artefact_lock_process.rs"]
+mod lock_process;
+// The two relation branches a real hold cannot produce on cue, driven through
+// the fake: `this process` and `child of this process` are asserted where a
+// real holder supplies them, and a mutant mapping every known parent to the
+// child sentence survived until these called the other two directly.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_relation_tests.rs"]
+mod lock_relation_tests;
+#[cfg(test)]
+#[path = "artefact_lock_report_tests.rs"]
+mod lock_report_tests;
+// The scan reading this process's own descriptor table, split from
+// `lock_report_tests` so neither suite outgrows the file-length cap; it is
+// the one case where the diagnostic's own reads appear in its evidence.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_self_scan_tests.rs"]
+mod lock_self_scan_tests;
+// The test doubles both suites drive the boundaries with, shared so the two
+// cannot disagree about what a boundary answers. Gated on the platform with
+// them: both suites that drive these doubles are Linux-only, and `FakeProcFs`
+// implements the Linux-only `ProcFs` over the Linux-only `Descriptor`.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_fakes.rs"]
+mod lock_fakes;
+// The settle's deadline and sleep placement, which a real clock can only be
+// made to show by waiting the real budget out.
+#[cfg(all(test, target_os = "linux"))]
+#[path = "artefact_lock_settle_tests.rs"]
+mod lock_settle_tests;
+// Bounded contention whose every free assertion routes through
+// `lock_diagnostics`, so a post-release hold fails with the report that names
+// its holder instead of with a bare boolean.
+#[cfg(test)]
+#[path = "artefact_lock_stress_tests.rs"]
+mod lock_stress_tests;
 #[cfg(test)]
 #[path = "artefact_publication_tests.rs"]
 mod publication_tests;
-
 // The channel observed against real publications, split from `report_tests` so
 // neither suite outgrows the file-length cap.
 #[cfg(test)]
