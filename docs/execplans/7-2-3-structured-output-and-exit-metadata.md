@@ -2,15 +2,16 @@
 
 ## Status
 
-IMPLEMENTED, PENDING ACCEPTANCE — approved on 2026-11-14 and implemented in
-M1–M3. The temporary #664 prerequisite merged on 2026-11-11 as `eaf4c028`, and
-the branch was rebased onto `origin/main` at `959dbd7e` before implementation
-began, so all three milestones have recorded local certificates. Acceptance is
-not complete: one Progress item remains open because hosted
-`build-test (linux)` cannot pass until a prerequisite lint repair lands on
-`main`, which is neither in this plan's scope nor in this branch's ownership.
-Until that lands and the branch is re-gated, the delivery state is published
-and under review, not finished.
+IMPLEMENTED, IN REVIEW — approved on 2026-11-14 and implemented in M1–M3. The
+temporary #664 prerequisite merged on 2026-11-11 as `eaf4c028`, and the branch
+has been rebased onto `origin/main` three times since, most recently onto
+`934c4c99`, so all three milestones have recorded local certificates. The
+prerequisite lint repair landed on `main` as `1f4a5775` (PR #698), and the
+branch's hosted Lint stage is green, so no delivery gate remains blocked on
+another branch's work. The one hosted step that still fails, `Publish dry run`,
+runs only for `workflow_dispatch` and reproduces on unmodified `main`: it is
+the release-ordering drift issue #414 records, not a branch defect. Delivery is
+therefore published and under review, awaiting the review outcome.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -574,6 +575,36 @@ migration guide before touching the candidate.
   both legs, the same twelve renderer imports, no output imports), so nothing
   in this branch caused it. The remedy is the release bump #414 names, not a
   feature-branch change.
+- [x] (2026-11-16) Rebased the 42-commit series from `41d0f217` onto
+  `934c4c99`, which brings the process-state test helpers (`934c4c99`, PR #696)
+  and the Figment test-helper removal (`2117f1a3`, PR #525) underneath it.
+  Recovery refs `refs/recovery/7-2-3-r3-old-head`, `-old-base` and `-target`
+  hold `32cadde7`, `41d0f217` and `934c4c99`. One conflict, again in the impact
+  table of `docs/v0-11-0-migration-guide.md`: main added a Figment-Jail row and
+  a process-mutating-helpers row while the branch added the output rows, so the
+  resolution keeps every row from both sides and re-lays the widened columns.
+  `range-diff` reports the other 41 commits as identical text, and
+  `git diff --check` is clean. No branch source used the removed
+  `test_helpers::figment` API, so the replay needed no code repair.
+- [x] (2026-11-16) Gate certificate for the rebased head `8d73c0d9`, tree
+  clean before and after each gate. `make check-fmt` left 104 files unchanged
+  and `make typecheck` passed after 12 m 53 s. `make lint` passed every stage:
+  `cargo doc`, `cargo clippy`, a clean `lint-whitaker`, then
+  `docstring-coverage` at 1014/1014. pytest passed 128 and skipped 5. The
+  boundary target is the one red, and it is the documented load domain rather
+  than the diff: in the whole-suite run it reported 26 passed, 18 failed and 10
+  ignored in 905 s, and a focused `make boundary` reported 37 passed, 7 failed
+  and 10 ignored in 794 s at load average 15–23. Every failure is a wall-clock
+  expiry — the contract's 900 s allowance exhausted waiting for a sibling
+  nested Cargo invocation, or the 440 s child deadline killing
+  `cargo package`/`cargo test` mid-compile — with
+  `[build-limits] … waiting for a compile slot` queues of 20–64 requests in the
+  captured tails. No assertion failed and no compiler diagnostic appeared. The
+  same target passed 44/44 in 328 s at load average 8.98 earlier in this work,
+  and `docs/BOUNDARY-ALLOWANCE-FINDING.md` records the same suite failing on
+  unmodified `origin/main`, so the red tracks host load in both directions. The
+  hosted coverage lanes, which run the same target on an unloaded runner, are
+  the certification for this gate.
 
 ## Surprises & discoveries
 
