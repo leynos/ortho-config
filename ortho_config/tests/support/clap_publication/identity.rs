@@ -49,10 +49,15 @@ pub(crate) const REVIEWED_CLAP_BUILDER: ReviewedPackage = ReviewedPackage {
 /// The facade crate whose production dependency selects `clap`.
 const FACADE_PACKAGE: &str = "ortho_config";
 
-/// Load workspace metadata with the gate's locked, offline resolution.
+/// Load workspace metadata with the gate's locked, offline, host resolution.
 ///
 /// `--offline` keeps the gate hermetic; `--locked` makes Cargo fail rather
 /// than update the lock, so metadata and `Cargo.lock` describe one resolution.
+/// `--filter-platform host-tuple` keeps the resolve graph to the platform the
+/// tests run on: without it Cargo resolves every target, and an offline run
+/// then fails when a dependency for another platform has never been fetched.
+/// The gate's premise — one unconditional normal `clap` edge — is unaffected,
+/// because the facade declares that dependency without a target predicate.
 ///
 /// Cargo runs through the shared deadline-bounded test runner, so a metadata
 /// invocation that hangs cannot block the whole suite.
@@ -60,7 +65,12 @@ pub(crate) fn load_metadata(manifest_dir: &Utf8Path) -> Result<Metadata> {
     let manifest = manifest_dir.join("Cargo.toml");
     let command = MetadataCommand::new()
         .manifest_path(manifest.as_std_path())
-        .other_options(vec!["--locked".to_owned(), "--offline".to_owned()])
+        .other_options(vec![
+            "--locked".to_owned(),
+            "--offline".to_owned(),
+            "--filter-platform".to_owned(),
+            "host-tuple".to_owned(),
+        ])
         .cargo_command();
     let output = run_with_deadline(
         command,

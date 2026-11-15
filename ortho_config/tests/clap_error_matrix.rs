@@ -8,9 +8,7 @@
 //! source.
 
 use clap::error::ErrorKind;
-use googletest::prelude::*;
 use ortho_config::{CLAP_ERROR_IDS, ClapErrorTranslation};
-use pretty_assertions::assert_eq;
 use rstest::rstest;
 use std::collections::BTreeSet;
 
@@ -75,9 +73,10 @@ fn reviewed_kind_has_the_reviewed_outcome(
     #[case] kind: ErrorKind,
     #[case] identifier: Option<&'static str>,
 ) {
-    assert_that!(
+    assert_eq!(
         translation_for(kind),
-        eq(Some(expected_translation(identifier)))
+        Some(expected_translation(identifier)),
+        "{kind:?} should carry the reviewed translation outcome"
     );
 }
 
