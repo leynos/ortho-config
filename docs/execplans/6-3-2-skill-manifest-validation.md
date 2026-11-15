@@ -446,10 +446,16 @@ original constraint text is left as written.
   repository already answers that question the same way twice: the policy
   evaluator and the IR bridge each carry a `tests/ui/must_use_*` pair. The
   report is the only product of a validation run, so
-  `must_use_skill_validation` calls `is_complete` and `has_structural_findings`
-  with an ignored result under `#![deny(unused_must_use)]`, and its `.stderr`
-  was emitted by the compiler rather than written by hand. The developers'
-  guide records the rule and the fixture. No production code changed.
+  `must_use_skill_validation` ignores all three report queries,
+  `EffectiveCommandSurface::from_agent_context`, and the glossary's
+  `concept_for_long_name` under `#![deny(unused_must_use)]`; its `.stderr` was
+  emitted by the compiler rather than written by hand.
+  `skill_validation_public_api` compiles the consumer path that builds the
+  input from struct literals and pins the finding code a consumer matches on.
+  `CommandPath` and `OptionName` are crate-private, so the wrapper type-safety
+  guarantee the row also names cannot be expressed as a trybuild case: the
+  guarantee is that the crate compiles. The developers' guide records the rule
+  and both fixtures. No production code changed.
 
 ## Surprises & discoveries
 
@@ -1420,6 +1426,13 @@ OrthoConfig format mandate.
   already keeps in `cargo-orthohelp/tests/ui/`, and recorded the convention in
   the developers' guide. Test and documentation only; scope and design are
   unchanged.
+
+- 2026-11-15: Extended that fixture to every item the row's full resolution
+  names — the three report queries, the surface adapter, and the glossary
+  lookup — and added a compile-pass case for the public consumer path. The
+  crate-private `CommandPath` and `OptionName` wrappers have no expressible
+  trybuild case, so their guarantee stays structural. Test and documentation
+  only; scope and design are unchanged.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md

@@ -1383,8 +1383,12 @@ The report is the only product of a validation run, so its queries are
 has thrown the result away. Each public must-use function that matters this way
 gets a `cargo-orthohelp/tests/ui/` case, as the policy evaluator and the IR
 bridge already have, with its `.stderr` emitted by the compiler rather than
-written by hand. `must_use_skill_validation` covers both report queries in one
-fixture.
+written by hand. `must_use_skill_validation` covers the three report queries,
+the surface adapter, and the glossary lookup in one fixture, and
+`skill_validation_public_api` compiles the consumer path that builds the input
+from struct literals. `CommandPath` and `OptionName` are crate-private, so
+their type-safety guarantee has no fixture: the guarantee is that the crate
+compiles at all.
 
 The consumer fixtures in `cargo-orthohelp/tests/fixtures/skills/` are ordinary
 skill directories: one `SKILL.md` per skill, plus the `command-surface.json`

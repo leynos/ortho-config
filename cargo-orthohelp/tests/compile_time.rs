@@ -307,6 +307,7 @@ fn must_use_compile_tests() -> Result<(), Box<dyn std::error::Error>> {
     t.pass("tests/ui/policy_public_api.rs");
     t.compile_fail("tests/ui/must_use_policy_evaluate.rs");
     t.compile_fail("tests/ui/must_use_skill_validation.rs");
+    t.pass("tests/ui/skill_validation_public_api.rs");
     t.compile_fail("tests/ui/policy_inputs_non_exhaustive.rs");
     Ok(())
 }
