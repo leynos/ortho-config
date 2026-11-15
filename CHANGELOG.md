@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [0.11.0] - 2026-11-15
 
 ### Deprecated (test helpers)
 
@@ -37,6 +37,24 @@ All notable changes to this project will be documented in this file.
   discovery and merge layers. They wrap the existing `_with_sources` methods.
   See
   [the users' guide](docs/users-guide.md#use-one-environment-and-inject-the-working-directory).
+- **Relative paths the source names resolve against its working directory.** A
+  relative config-path selector, `XDG_CONFIG_HOME` or `HOME` in derived
+  discovery is resolved against the injected working directory rather than the
+  process's, and is dropped when the source cannot report one; the selector
+  telemetry reports that as the bounded state `dropped`. In subcommand path
+  discovery a relative or empty `HOME`, `USERPROFILE`, or platform fallback
+  counts as unset. A failed working-directory lookup makes the subcommand
+  `_with_env` loaders return a validation error instead of falling back to `.`.
+  For the process source nothing changes. Drive-less rooted Windows paths are
+  kept as written; see
+  [issue 699](https://github.com/leynos/ortho-config/issues/699).
+
+### Changed (internal)
+
+- **Lint refactor for the macro-aware complexity rule.** About fifty functions
+  in the derive parsers, the artefact-lock code, `cargo-orthohelp`, and the
+  tests were split into named helpers so the rolling Whitaker suite's
+  `bumpy_road_function` rule passes. Behaviour is unchanged.
 
 ### Added (renderer metadata)
 
@@ -395,6 +413,7 @@ also records changes first published in 0.8.0 and earlier._
 - Add doc comments to generated `OrthoConfig` support structs so crates with
   strict `missing_docs` linting build without broad suppressions (closes #253).
 
+[0.11.0]: https://github.com/leynos/ortho-config/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/leynos/ortho-config/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/leynos/ortho-config/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/leynos/ortho-config/compare/v0.8.0...v0.9.0
