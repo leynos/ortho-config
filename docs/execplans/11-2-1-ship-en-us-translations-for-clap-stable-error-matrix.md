@@ -529,6 +529,28 @@ stopping and reporting.
         blockers; the M0 narrative is retained in past tense as the record it
         was written from.
 
+- [x] (2026-11-15) Hosted `Lint` named a finding in this branch's own code, and
+      the coverage gate was split so no single function carries it.
+      - Hosted run `43721577802` on `dc10130f` failed step 21, `Lint`, with one
+        `bumpy-road-function` error and no other: "Multiple clusters of nested
+        conditional logic in
+        `resolved_clap_builder_inventory_matches_the_reviewed_total`"
+        (`ortho_config/tests/clap_error_coverage.rs:31`). The earlier run on
+        `0669051f` had named seven `origin/main` files instead, so the rolling
+        suite changed between the two runs and this finding is current. A
+        function that is a straight line of `?` calls has no `if` or `match`,
+        so the clusters are the `?` operators the rule scores as conditional
+        logic.
+      - The test now delegates to `verified_inventory`, `verified_metadata`, and
+        `verified_lock`, one stage per published step. Each function holds a
+        single unbroken run of `?` calls, which is at most one cluster, and the
+        published order is visible in the names. Behaviour is unchanged: the
+        focused target passes 47 of 47, and the gate still refuses on the same
+        checks in the same order.
+      - A local green Whitaker run does not clear this class of finding. The
+        installed suite is older than the rolling one hosted CI installs, so
+        only a hosted run can confirm the repair.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -679,6 +701,16 @@ exempted conditional modules, and `#[cfg(all())]` — always true — hid an
 eighteen-variant inventory behind it. The repair refuses every nested
 declaration and leaves condition evaluation to the compiler that will perform
 it.
+
+Whitaker's rolling suite scores `?` as conditional logic, so a straight line of
+fallible calls can be reported as a bumpy road. The coverage gate's single body
+held fourteen `?` operators in four groups separated by blank lines and
+verification calls, and the hosted run reported it as multiple clusters. The
+rule is a property of the suite, not of this branch's logic; the repair is to
+give each published stage its own function, which is also the shape the
+developers' guide asks for. The installed suite lags the rolling release, so
+`make lint` passing locally says nothing about this rule — only a hosted `Lint`
+step can.
 
 ## Decision log
 
