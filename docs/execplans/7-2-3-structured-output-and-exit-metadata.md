@@ -495,7 +495,12 @@ migration guide before touching the candidate.
   workstation's installed suite, whose checkout `whitaker-installer` stages
   from is at `00cf1a19` ("Bump version to v0.2.11", 2026-10-29) — older than the
   `880939d1` tip CI downloads — so the green certifies the older suite and
-  nothing about the hosted leg.
+  nothing about the hosted leg. The review's failed Developer Documentation row
+  is covered by the same work: the guide now counts twelve binaries, names
+  `agent_context_output_end_to_end` with the reason it is serialized, and links
+  ADR-0022 from its ownership section. `documentation_budget_test.py` still
+  passes (5 passed), so the named subset and the `.config/nextest.toml` filter
+  still agree at this head.
 - [ ] `make test` for the repair is not green yet, and both red targets are
   nested-build deadline expiries. `cargo-orthohelp`'s `must_use_compile_tests`
   passed this time after failing at its 900 s cap twice in the preceding run,

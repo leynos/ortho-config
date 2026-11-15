@@ -586,9 +586,10 @@ Test entry points:
 
 ### Structured output metadata ownership
 
-Structured-output metadata (ADR-0022) is declared through the sibling
-`output(...)` attribute and is owned in the same three places as the renderer
-block, which it sits beside in every document:
+Structured-output metadata
+([ADR-0022](adrs/adr-0022-explicit-structured-output-declarations.md)) is
+declared through the sibling `output(...)` attribute and is owned in the same
+three places as the renderer block, which it sits beside in every document:
 
 - `ortho_config::docs::ir::output` holds the human-documentation IR types;
 - `cargo_orthohelp::schema` re-exports the mirror the standalone generator
