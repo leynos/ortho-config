@@ -85,37 +85,57 @@ fn apply_field_attr(
         return Ok(false);
     };
     let key = ident.to_string();
-    match key.as_str() {
+    let recognised = match key.as_str() {
         "localized_default" => Err(reject_localized_default(&meta.path)),
-        "cli_long" => {
-            let s = lit_str(meta, "cli_long")?;
-            out.cli_long = Some(s.value());
-            Ok(true)
-        }
-        "cli_short" => {
-            let c = lit_char(meta, "cli_short")?;
-            out.cli_short = Some(c);
-            Ok(true)
-        }
-        "default" => {
-            out.default = Some(meta.value()?.parse()?);
-            Ok(true)
-        }
-        "merge_strategy" => {
-            let s = lit_str(meta, "merge_strategy")?;
-            out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
-            Ok(true)
-        }
-        "skip_cli" => {
-            out.skip_cli = true;
-            Ok(true)
-        }
-        "cli_default_as_absent" => {
-            out.cli_default_as_absent = parse_cli_default_as_absent(meta)?;
-            Ok(true)
-        }
-        _ => apply_field_doc_attr(meta, out),
-    }
+        "cli_long" => set_cli_long(meta, out),
+        "cli_short" => set_cli_short(meta, out),
+        "default" => set_default(meta, out),
+        "merge_strategy" => set_merge_strategy(meta, out),
+        "skip_cli" => Ok(out.skip_cli = true),
+        "cli_default_as_absent" => set_cli_default_as_absent(meta, out),
+        _ => return apply_field_doc_attr(meta, out),
+    };
+    recognised.map(|()| true)
+}
+
+/// Records the `cli_long` flag name.
+fn set_cli_long(meta: &syn::meta::ParseNestedMeta, out: &mut FieldAttrs) -> Result<(), syn::Error> {
+    out.cli_long = Some(lit_str(meta, "cli_long")?.value());
+    Ok(())
+}
+
+/// Records the `cli_short` flag character.
+fn set_cli_short(
+    meta: &syn::meta::ParseNestedMeta,
+    out: &mut FieldAttrs,
+) -> Result<(), syn::Error> {
+    out.cli_short = Some(lit_char(meta, "cli_short")?);
+    Ok(())
+}
+
+/// Records the explicit `default` expression.
+fn set_default(meta: &syn::meta::ParseNestedMeta, out: &mut FieldAttrs) -> Result<(), syn::Error> {
+    out.default = Some(meta.value()?.parse()?);
+    Ok(())
+}
+
+/// Records the `merge_strategy`, reporting an unknown name at its own span.
+fn set_merge_strategy(
+    meta: &syn::meta::ParseNestedMeta,
+    out: &mut FieldAttrs,
+) -> Result<(), syn::Error> {
+    let name = lit_str(meta, "merge_strategy")?;
+    out.merge_strategy = Some(MergeStrategy::parse(&name.value(), name.span())?);
+    Ok(())
+}
+
+/// Records whether `cli_default_as_absent` is enabled.
+fn set_cli_default_as_absent(
+    meta: &syn::meta::ParseNestedMeta,
+    out: &mut FieldAttrs,
+) -> Result<(), syn::Error> {
+    out.cli_default_as_absent = parse_cli_default_as_absent(meta)?;
+    Ok(())
 }
 
 /// Parses the optional boolean value of `cli_default_as_absent`.

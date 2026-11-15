@@ -171,6 +171,13 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
     assert_app_names(subcommands, &["greet", "version", "admin"])?;
     assert_ir_greet_renderer(subcommands)?;
 
+    assert_ir_admin_subcommands(subcommands)?;
+    ir_identifier_audit::assert_no_respelled_identifier_misses(&value, FIXTURE_PACKAGE)?;
+    Ok(())
+}
+
+/// Requires the `admin` IR entry to list its nested subcommands in order.
+fn assert_ir_admin_subcommands(subcommands: &[Value]) -> Result<(), TestError> {
     let admin = subcommands
         .iter()
         .find(|command| command.get("app_name").and_then(Value::as_str) == Some("admin"))
@@ -178,9 +185,7 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
     assert_app_names(
         array_field(admin, "subcommands")?,
         &["audit", "grant-access", "purge", "prune"],
-    )?;
-    ir_identifier_audit::assert_no_respelled_identifier_misses(&value, FIXTURE_PACKAGE)?;
-    Ok(())
+    )
 }
 
 /// Requires the `greet` IR entry to carry the complete declared renderer block.

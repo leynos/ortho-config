@@ -35,9 +35,48 @@ const ALIAS_EXAMPLE: &str = "guide-scoped-discovery";
 /// unambiguous and avoids relying on exactly the coincidence that discovery
 /// elsewhere goes out of its way not to rely on.
 pub(super) fn assert_env_alias_chain(workspace: &mut ExampleWorkspace) -> Result<()> {
-    let first = "run-first.toml";
-    let second = "run-second.toml";
-    for (name, contents) in [(first, "port = 1111\n"), (second, "port = 2222\n")] {
+    write_alias_fixtures(workspace)?;
+    let first_selector = selector_path(workspace, FIRST_FILE)?;
+    let second_selector = selector_path(workspace, SECOND_FILE)?;
+    run_alias_cases(workspace, &first_selector, &second_selector)
+}
+
+/// The absolute path of a run-directory file, as a UTF-8 selector value.
+fn selector_path(workspace: &ExampleWorkspace, file: &str) -> Result<String> {
+    let path = workspace.path_in_root(&format!("run-{ALIAS_EXAMPLE}/{file}"))?;
+    Ok(path.to_str().context("selector path is UTF-8")?.to_owned())
+}
+
+/// Run the three selector combinations: first wins, empty falls through, and
+/// the alias agrees with the primary.
+fn run_alias_cases(
+    workspace: &mut ExampleWorkspace,
+    first_selector: &str,
+    second_selector: &str,
+) -> Result<()> {
+    let cases: [(&str, &str, &str); 3] = [
+        (first_selector, second_selector, "port=1111\n"),
+        ("", second_selector, "port=2222\n"),
+        (first_selector, first_selector, "port=1111\n"),
+    ];
+    for (first_value, second_value, expected) in cases {
+        assert_alias_case(workspace, first_value, second_value, expected)?;
+    }
+    Ok(())
+}
+
+/// The two selector files, and a decoy in the XDG location that must never win.
+const FIRST_FILE: &str = "run-first.toml";
+const SECOND_FILE: &str = "run-second.toml";
+
+/// Write the two selector files and the XDG decoy into the example's run directory.
+fn write_alias_fixtures(workspace: &mut ExampleWorkspace) -> Result<()> {
+    let files = [
+        (FIRST_FILE, "port = 1111\n"),
+        (SECOND_FILE, "port = 2222\n"),
+        ("xdg/acme/config.toml", "port = 3333\n"),
+    ];
+    for (name, contents) in files {
         workspace.write_run_file(
             ExampleId(ALIAS_EXAMPLE),
             RunFile {
@@ -46,52 +85,42 @@ pub(super) fn assert_env_alias_chain(workspace: &mut ExampleWorkspace) -> Result
             },
         )?;
     }
-    workspace.write_run_file(
+    Ok(())
+}
+
+/// Run the example with both selector variables set and check its output.
+fn assert_alias_case(
+    workspace: &mut ExampleWorkspace,
+    first_value: &str,
+    second_value: &str,
+    expected: &str,
+) -> Result<()> {
+    let output = workspace.run_with_environment(
         ExampleId(ALIAS_EXAMPLE),
-        RunFile {
-            path: Path::new("xdg/acme/config.toml"),
-            contents: "port = 3333\n",
-        },
+        std::iter::empty::<&str>(),
+        [
+            EnvironmentVariable {
+                name: "ACME_CONFIG_PATH",
+                value: first_value,
+            },
+            EnvironmentVariable {
+                name: "ACME_LEGACY_CONFIG",
+                value: second_value,
+            },
+        ],
     )?;
-
-    let first_path = workspace.path_in_root(&format!("run-{ALIAS_EXAMPLE}/{first}"))?;
-    let second_path = workspace.path_in_root(&format!("run-{ALIAS_EXAMPLE}/{second}"))?;
-    let first_selector = first_path.to_str().context("selector path is UTF-8")?;
-    let second_selector = second_path.to_str().context("selector path is UTF-8")?;
-
-    let cases: [(&str, &str, &str); 3] = [
-        (first_selector, second_selector, "port=1111\n"),
-        ("", second_selector, "port=2222\n"),
-        (first_selector, first_selector, "port=1111\n"),
-    ];
-    for (first_value, second_value, expected) in cases {
-        let output = workspace.run_with_environment(
-            ExampleId(ALIAS_EXAMPLE),
-            std::iter::empty::<&str>(),
-            [
-                EnvironmentVariable {
-                    name: "ACME_CONFIG_PATH",
-                    value: first_value,
-                },
-                EnvironmentVariable {
-                    name: "ACME_LEGACY_CONFIG",
-                    value: second_value,
-                },
-            ],
-        )?;
-        ensure!(
-            output.status.success(),
-            "{} failed with ACME_CONFIG_PATH={first_value:?} and \
-             ACME_LEGACY_CONFIG={second_value:?}:\n{}",
-            ALIAS_EXAMPLE,
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let stdout = String::from_utf8(output.stdout).context("alias stdout is UTF-8")?;
-        ensure!(
-            stdout == expected,
-            "alias chain with ACME_CONFIG_PATH={first_value:?} and \
-             ACME_LEGACY_CONFIG={second_value:?}: expected {expected:?}, got {stdout:?}"
-        );
-    }
+    ensure!(
+        output.status.success(),
+        "{} failed with ACME_CONFIG_PATH={first_value:?} and \
+         ACME_LEGACY_CONFIG={second_value:?}:\n{}",
+        ALIAS_EXAMPLE,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("alias stdout is UTF-8")?;
+    ensure!(
+        stdout == expected,
+        "alias chain with ACME_CONFIG_PATH={first_value:?} and \
+         ACME_LEGACY_CONFIG={second_value:?}: expected {expected:?}, got {stdout:?}"
+    );
     Ok(())
 }

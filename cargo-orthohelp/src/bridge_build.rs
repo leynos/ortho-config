@@ -119,31 +119,46 @@ fn build_and_snapshot_with(
     let snapshot = open_directory(snapshot_directory)?;
     let marker = BuildMarker::create(&ownership.directory, target.directory)?;
 
-    let build = match run() {
-        Ok(build) => build,
-        Err(failure) => {
-            if failure.writer_lifetime_confirmed {
-                remove_marker_after_failure(&marker);
-            } else {
-                telemetry::writer_lifetime_unconfirmed();
-                observability::failed(
-                    "bridge_cargo_cleanup",
-                    "writer_lifetime_unconfirmed",
-                    started,
-                );
-            }
-            return Err(failure.error);
-        }
-    };
+    let build = run().map_err(|failure| settle_failed_build(failure, &marker, started))?;
 
     let result = snapshot::finish_build(build, &target, snapshot_directory, &snapshot);
+    settle_snapshot(result, &marker)
+}
+
+/// Clean up after a failed Cargo run, returning the error to report.
+///
+/// The marker is removed only when the writer's lifetime is confirmed;
+/// otherwise it stays so the next build refuses a possibly live writer.
+fn settle_failed_build(
+    failure: CargoFailure,
+    marker: &BuildMarker,
+    started: Instant,
+) -> OrthohelpError {
+    if failure.writer_lifetime_confirmed {
+        remove_marker_after_failure(marker);
+    } else {
+        telemetry::writer_lifetime_unconfirmed();
+        observability::failed(
+            "bridge_cargo_cleanup",
+            "writer_lifetime_unconfirmed",
+            started,
+        );
+    }
+    failure.error
+}
+
+/// Remove the marker once the snapshot is taken, or after a failed snapshot.
+fn settle_snapshot(
+    result: Result<Utf8PathBuf, OrthohelpError>,
+    marker: &BuildMarker,
+) -> Result<Utf8PathBuf, OrthohelpError> {
     match result {
         Ok(executable) => {
             marker.remove()?;
             Ok(executable)
         }
         Err(primary) => {
-            remove_marker_after_failure(&marker);
+            remove_marker_after_failure(marker);
             Err(primary)
         }
     }

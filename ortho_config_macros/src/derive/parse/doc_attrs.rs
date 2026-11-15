@@ -23,40 +23,34 @@ pub(crate) fn apply_struct_doc_attr(
         return Ok(false);
     };
     let key = ident.to_string();
-    match key.as_str() {
-        "about_id" => {
-            out.about_id = Some(lit_str(meta, "about_id")?.value());
-            Ok(true)
-        }
-        "synopsis_id" => {
-            out.synopsis_id = Some(lit_str(meta, "synopsis_id")?.value());
-            Ok(true)
-        }
-        "bin_name" => {
-            out.bin_name = Some(lit_str(meta, "bin_name")?.value());
-            Ok(true)
-        }
-        "example" => {
-            out.examples.push(parse_example_meta(meta)?);
-            Ok(true)
-        }
-        "link" => {
-            out.links.push(parse_link_meta(meta)?);
-            Ok(true)
-        }
-        "note" => {
-            out.notes.push(parse_note_meta(meta)?);
-            Ok(true)
-        }
-        "behavior" => Err(syn::Error::new(
-            meta.path.span(),
-            concat!(
-                "unknown attribute `behavior`; use the en-GB spelling `behaviour` ",
-                "(declares non-interactive execution and mutation-boundary metadata)"
-            ),
-        )),
-        _ => apply_nested_struct_attr(meta, key.as_str(), out),
-    }
+    let recognised = match key.as_str() {
+        "about_id" => set_lit_string(meta, "about_id", &mut out.about_id),
+        "synopsis_id" => set_lit_string(meta, "synopsis_id", &mut out.synopsis_id),
+        "bin_name" => set_lit_string(meta, "bin_name", &mut out.bin_name),
+        "example" => parse_example_meta(meta).map(|example| out.examples.push(example)),
+        "link" => parse_link_meta(meta).map(|link| out.links.push(link)),
+        "note" => parse_note_meta(meta).map(|note| out.notes.push(note)),
+        "behavior" => Err(misspelt_behaviour(meta)),
+        _ => return apply_nested_struct_attr(meta, key.as_str(), out),
+    };
+    recognised.map(|()| true)
+}
+
+/// Stores the string literal named by `key` in `slot`.
+fn set_lit_string(meta: &ParseNestedMeta, key: &str, slot: &mut Option<String>) -> syn::Result<()> {
+    *slot = Some(lit_str(meta, key)?.value());
+    Ok(())
+}
+
+/// The diagnostic for the American spelling of the struct-level `behaviour` key.
+fn misspelt_behaviour(meta: &ParseNestedMeta) -> syn::Error {
+    syn::Error::new(
+        meta.path.span(),
+        concat!(
+            "unknown attribute `behavior`; use the en-GB spelling `behaviour` ",
+            "(declares non-interactive execution and mutation-boundary metadata)"
+        ),
+    )
 }
 
 /// Applies one attribute whose value is a nested group.
@@ -68,31 +62,41 @@ fn apply_nested_struct_attr(
     key: &str,
     out: &mut DocStructAttrs,
 ) -> syn::Result<bool> {
-    match key {
-        "headings" => {
-            let mut headings = out.headings.clone();
-            parse_headings_meta(meta, &mut headings)?;
-            out.headings = headings;
-        }
-        "precedence" => {
-            let mut precedence = out.precedence.take().unwrap_or_default();
-            parse_precedence_meta(meta, &mut precedence)?;
-            out.precedence = Some(precedence);
-        }
-        "windows" => {
-            let mut windows = out.windows.take().unwrap_or_default();
-            parse_windows_meta(meta, &mut windows)?;
-            out.windows = Some(windows);
-        }
-        "behaviour" => {
-            let mut behaviour = out.behaviour.take().unwrap_or_default();
-            parse_behaviour_meta(meta, &mut behaviour)?;
-            out.behaviour = Some(behaviour);
-        }
-        "renderer" => parse_renderer_meta(meta, out.renderer.get_or_insert_default())?,
+    let recognised = match key {
+        "headings" => parse_headings_group(meta, out),
+        "precedence" => parse_group(&mut out.precedence, |group| {
+            parse_precedence_meta(meta, group)
+        }),
+        "windows" => parse_group(&mut out.windows, |group| parse_windows_meta(meta, group)),
+        "behaviour" => parse_group(&mut out.behaviour, |group| {
+            parse_behaviour_meta(meta, group)
+        }),
+        "renderer" => parse_renderer_meta(meta, out.renderer.get_or_insert_default()),
         _ => return Ok(false),
-    }
-    Ok(true)
+    };
+    recognised.map(|()| true)
+}
+
+/// Parses `headings(...)` over a copy of the earlier overrides.
+fn parse_headings_group(meta: &ParseNestedMeta, out: &mut DocStructAttrs) -> syn::Result<()> {
+    let mut headings = out.headings.clone();
+    parse_headings_meta(meta, &mut headings)?;
+    out.headings = headings;
+    Ok(())
+}
+
+/// Parses a repeatable group into its slot, starting from any earlier value.
+///
+/// The earlier value is taken out of the slot, so a malformed group leaves it
+/// empty rather than half-updated.
+fn parse_group<T: Default>(
+    slot: &mut Option<T>,
+    parse: impl FnOnce(&mut T) -> syn::Result<()>,
+) -> syn::Result<()> {
+    let mut group = slot.take().unwrap_or_default();
+    parse(&mut group)?;
+    *slot = Some(group);
+    Ok(())
 }
 /// Applies one documentation setting to a field's parsed attribute model.
 ///
@@ -106,57 +110,30 @@ pub(crate) fn apply_field_doc_attr(
         return Ok(false);
     };
     let key = ident.to_string();
-    match key.as_str() {
-        "help_id" => {
-            out.doc.help_id = Some(lit_str(meta, "help_id")?.value());
-            Ok(true)
-        }
-        "long_help_id" => {
-            out.doc.long_help_id = Some(lit_str(meta, "long_help_id")?.value());
-            Ok(true)
-        }
-        "value" => {
-            parse_value_meta(meta, &mut out.doc)?;
-            Ok(true)
-        }
-        "deprecated" => {
-            parse_deprecated_meta(meta, &mut out.doc)?;
-            Ok(true)
-        }
-        "required" => {
-            out.doc.required = Some(parse_bool(meta)?);
-            Ok(true)
-        }
-        "env" => {
-            parse_env_meta(meta, &mut out.doc)?;
-            Ok(true)
-        }
-        "file" => {
-            parse_file_meta(meta, &mut out.doc)?;
-            Ok(true)
-        }
-        "cli" => {
-            parse_cli_meta(meta, out)?;
-            Ok(true)
-        }
-        "example" => {
-            out.doc.examples.push(parse_example_meta(meta)?);
-            Ok(true)
-        }
-        "link" => {
-            out.doc.links.push(parse_link_meta(meta)?);
-            Ok(true)
-        }
-        "note" => {
-            out.doc.notes.push(parse_note_meta(meta)?);
-            Ok(true)
-        }
-        "behaviour" | "behavior" => Err(syn::Error::new(
-            meta.path.span(),
-            "behaviour(...) is a struct-level attribute",
-        )),
-        _ => Ok(false),
-    }
+    let recognised = match key.as_str() {
+        "help_id" => set_lit_string(meta, "help_id", &mut out.doc.help_id),
+        "long_help_id" => set_lit_string(meta, "long_help_id", &mut out.doc.long_help_id),
+        "value" => parse_value_meta(meta, &mut out.doc),
+        "deprecated" => parse_deprecated_meta(meta, &mut out.doc),
+        "required" => parse_bool(meta).map(|required| out.doc.required = Some(required)),
+        "env" => parse_env_meta(meta, &mut out.doc),
+        "file" => parse_file_meta(meta, &mut out.doc),
+        "cli" => parse_cli_meta(meta, out),
+        "example" => parse_example_meta(meta).map(|example| out.doc.examples.push(example)),
+        "link" => parse_link_meta(meta).map(|link| out.doc.links.push(link)),
+        "note" => parse_note_meta(meta).map(|note| out.doc.notes.push(note)),
+        "behaviour" | "behavior" => Err(struct_level_behaviour(meta)),
+        _ => return Ok(false),
+    };
+    recognised.map(|()| true)
+}
+
+/// The diagnostic for `behaviour(...)` written on a field.
+fn struct_level_behaviour(meta: &ParseNestedMeta) -> syn::Error {
+    syn::Error::new(
+        meta.path.span(),
+        "behaviour(...) is a struct-level attribute",
+    )
 }
 /// Parses heading overrides while retaining the caller's earlier values for
 /// headings omitted by this attribute.
