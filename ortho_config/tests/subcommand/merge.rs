@@ -94,3 +94,43 @@ fn merge_wrapper_respects_prefix(isolated_root: Result<IsolatedRoot>) -> Result<
     );
     Ok(())
 }
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Default, PartialEq, Parser)]
+#[command(name = "test")]
+#[ortho_config(prefix = "APP_")]
+struct MergeNonFinite {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ratio: Option<f64>,
+}
+
+/// A configured non-finite float is data, not absence.
+///
+/// The requirement enumeration projects the merged figment into JSON, which
+/// cannot represent `nan` or `inf`, so the projection sees `null`. Reading the
+/// final value back out of that projection would report `None` for a value the
+/// user really configured, and would fail outright for a plain `f64`. This
+/// case therefore pins the extraction to the original figment.
+#[rstest]
+fn a_non_finite_float_survives_the_schema_aware_subcommand_merge(
+    isolated_root: Result<IsolatedRoot>,
+) -> Result<()> {
+    let isolated = isolated_root?;
+    let discovery = isolated.discovery();
+    let directory = Dir::open_ambient_dir(isolated.path(), ambient_authority())
+        .context("open non-finite merge fixture directory")?;
+    directory
+        .write(".app.toml", b"[cmds.test]\nratio = nan")
+        .context("write non-finite merge fixture")?;
+    let merged = load_and_merge_subcommand_for_with_sources_at(
+        &MergeNonFinite::default(),
+        SubcommandFileContext::new(isolated.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge a configured non-finite value")?;
+    ensure!(
+        merged.ratio.is_some_and(|ratio| ratio.is_nan()),
+        "a configured nan must survive the merge, got {:?}",
+        merged.ratio
+    );
+    Ok(())
+}

@@ -469,6 +469,22 @@ with a compatibility probe rather than an assumption.
   charged-wait boundary probe passed here, which makes the earlier failure
   intermittent rather than a deterministic property of this host.
 
+- [x] (2026-11-15) Codex's readiness review found two valid defects on
+  `1025cd1b`. The first is a repository-rule violation this branch introduced:
+  five assertions added to the telemetry vocabulary tests carried no diagnostic
+  message, contrary to `AGENTS.md`. All five now name the contract they check.
+  The second is a real regression in the schema-aware subcommand loaders. The
+  new finish enumerated absences from a JSON projection and then deserialized
+  that same projection, and JSON has no `nan` or `inf`, so a configured
+  non-finite float became `null`: an `Option<f64>` silently read back as `None`
+  and a plain `f64` failed. At `934c4c99` those entry points extracted the
+  figment directly, so only the new finish lost the value. It now enumerates
+  from the projection and extracts the result from the original figment, which
+  is what the raw helpers do. The regression test drives
+  `load_and_merge_subcommand_for_with_sources_at` over a TOML file holding
+  `ratio = nan`. With the JSON extraction restored it fails with `got None`,
+  which is the reported symptom; on the repair it passes.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -633,6 +649,16 @@ a segment, and the real-loader case therefore drives the alias route rather
 than the rename one. The environment-route exclusion for `=` and NUL is
 likewise a platform property, not a provider setting: no configuration could
 make either spelling expressible.
+
+The readiness review added one property worth keeping: a `serde_json::Value`
+projection is safe to *inspect* and unsafe to *deserialize from*. Figment and
+TOML both carry non-finite floats and JSON does not, so serializing `nan` yields
+`null`. The derived root finish already accumulated its layers as JSON at the
+base commit, so roots never supported such values; the subcommand finish is new
+and had begun deserializing from the projection, which turned a configured
+`nan` into silence. Enumeration over the projection is still right, because a
+present `null` counts as supplied — which is also the correct answer for a
+non-finite float.
 
 ## Decision log
 

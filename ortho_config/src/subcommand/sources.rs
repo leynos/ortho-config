@@ -136,6 +136,14 @@ where
 /// user typed on the command line, and its routes are scoped to the namespaces
 /// this loader actually reads: `PREFIX_CMDS_<NAME>_*` variables and the
 /// `[cmds.<name>]` file section.
+///
+/// The merged figment is read twice: once as a JSON projection, which is what
+/// the pure collector inspects, and once as the extracted result. Only the
+/// first read may be JSON. A JSON number has no `nan` or `inf`, so serializing
+/// a configured non-finite float turns it into `null`, and deserializing from
+/// the projection would silently report `None` for an `Option<f64>` the user
+/// really set. The final extraction therefore reads the original figment, as
+/// the raw helpers do.
 pub(super) fn finish_with_required_values<T>(fig: &Figment, prefix: &Prefix) -> OrthoResult<T>
 where
     T: DeserializeOwned + CommandFactory + RequiredConfigSchema,
@@ -154,7 +162,7 @@ where
         name.as_str(),
         &scope,
     )?;
-    crate::declarative::from_value_merge(value)
+    fig.extract().into_ortho_merge()
 }
 
 /// Loads defaults using explicit file and merge sources, then overlays CLI values.
