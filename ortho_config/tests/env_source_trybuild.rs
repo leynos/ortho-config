@@ -11,4 +11,6 @@ fn environment_source_contracts_compile() {
     t.pass("tests/trybuild/env_source_object_safe.rs");
     t.pass("tests/trybuild/scan_env_source_object_safe.rs");
     t.pass("tests/trybuild/selected_subcommand_sources.rs");
+    t.pass("tests/trybuild/with_env_loaders.rs");
+    t.compile_fail("tests/trybuild/with_env_requires_scan.rs");
 }
