@@ -128,7 +128,7 @@ fn a_non_finite_float_survives_the_schema_aware_subcommand_merge(
     )
     .context("merge a configured non-finite value")?;
     ensure!(
-        merged.ratio.is_some_and(|ratio| ratio.is_nan()),
+        matches!(merged.ratio, Some(ratio) if ratio.is_nan()),
         "a configured nan must survive the merge, got {:?}",
         merged.ratio
     );
