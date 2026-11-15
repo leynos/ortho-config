@@ -96,6 +96,41 @@ fn selector_state_is_reported(
     assert_eq!(only(&events, "discovery.selector").field("state"), expected);
 }
 
+/// A source that holds one selector and cannot report a working directory.
+#[derive(Debug)]
+struct NoWorkingDirectory(MapEnv);
+
+impl ortho_config::EnvSource for NoWorkingDirectory {
+    fn get(&self, key: &str) -> Option<std::ffi::OsString> {
+        self.0.get(key)
+    }
+
+    fn current_dir(&self) -> std::io::Result<std::path::PathBuf> {
+        Err(std::io::Error::other("deleted"))
+    }
+}
+
+/// A relative selector that cannot be anchored is reported as dropped, not
+/// accepted, while an absolute one is unaffected.
+#[rstest]
+#[case::relative("chosen.toml", true)]
+#[case::absolute("/etc/chosen.toml", false)]
+fn selector_without_a_working_directory_is_reported(
+    #[case] selector: &str,
+    #[case] is_dropped: bool,
+) {
+    let expected = if is_dropped { "dropped" } else { "accepted" };
+    let source = NoWorkingDirectory(MapEnv::new().with_var("DEMO_CONFIG", selector));
+    let discovery = ConfigDiscovery::builder("demo")
+        .clear_project_roots()
+        .env_var("DEMO_CONFIG")
+        .env_source(Arc::new(source))
+        .build();
+
+    let events = capture(|| discovery.load_first());
+    assert_eq!(only(&events, "discovery.selector").field("state"), expected);
+}
+
 /// A `XDG_CONFIG_DIRS` value consisting of the separator alone.
 ///
 /// Selected by `cfg!` rather than written as `":"`. The path-list separator is

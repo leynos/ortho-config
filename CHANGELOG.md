@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added (environment injection)
+
+- **The injected environment now carries the working directory.**
+  `EnvSource::current_dir` is a defaulted method that reads the process working
+  directory, so existing sources and callers are unchanged. `MapEnv` gains
+  `with_current_dir` to pin it, and the derived loaders resolve the implicit
+  project root through it. A test can therefore load project files from a
+  temporary directory without changing the process's own.
+- **Single-environment entry points.** `OrthoConfig::load_from_iter_with_env`,
+  the generated `compose_layers_from_iter_with_env` and
+  `load_with_profile_from_iter_with_env`, and
+  `SubcmdConfigMerge::load_and_merge_with_env` and
+  `load_and_merge_with_matches_with_env` take one `Arc<E>` that backs both the
+  discovery and merge layers. They wrap the existing `_with_sources` methods.
+  See
+  [the users' guide](docs/users-guide.md#use-one-environment-and-inject-the-working-directory).
+
 ### Added (renderer metadata)
 
 - **Dual-renderer metadata (roadmap 7.2.2).** Commands can now declare how they

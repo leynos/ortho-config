@@ -29,6 +29,7 @@ omitted when undeclared.
 | **Optional**         | Agent-native policy checks | Read the projected `renderer` block from agent context.                      |
 | **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.     |
 | **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.          |
+| **Optional**         | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.     |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -202,3 +203,27 @@ implementation in tests. See the
 [user's guide](users-guide.md#run-test-subprocesses-under-a-deadline) for the
 contract and the [developer's guide](developers-guide.md) for why the
 repository routes Cargo, host-tool, and documented-binary commands through it.
+
+## 10. Load with one injected environment
+
+Nothing is required. The derive-generated `_with_sources` loaders keep working.
+Tests and embedding applications that want the whole load off the process can
+now use one `MapEnv` behind both layers:
+
+- `Config::load_from_iter_with_env(args, Arc::new(env))` replaces
+  `load_from_iter_with_sources(args, discovery, merge)` when one map serves
+  both, and `compose_layers_from_iter_with_env`,
+  `load_with_profile_from_iter_with_env` and the subcommand
+  `load_and_merge_with_env` follow the same shape.
+- `EnvSource` gains a defaulted `current_dir` method. Custom implementors need
+  not change: the default reads the process working directory. Pin it on a map
+  with `MapEnv::with_current_dir`, and name `XDG_CONFIG_HOME`,
+  `XDG_CONFIG_DIRS` and `HOME` so no host directory contributes.
+- A relative path the source names (a config-path selector, `XDG_CONFIG_HOME`,
+  `HOME`) now resolves against the source's working directory, which for the
+  process source is the process's own, so existing callers see no change. In
+  subcommand path discovery a relative `HOME` counts as unset, like an empty
+  one.
+
+See the
+[user's guide](users-guide.md#use-one-environment-and-inject-the-working-directory).

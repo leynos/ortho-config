@@ -60,6 +60,18 @@ pub(super) fn ensure_charged_wait_was_reported(
     error: &anyhow::Error,
     directory: &Dir,
 ) -> Result<()> {
+    // Another test in this binary may win the serialization once this
+    // regression releases it, and hold it past what is left of the allowance.
+    // The runner then reports the wait, not the child's deadline; the child was
+    // never spawned, so this case has nothing to say about its bound. That
+    // outcome is the wait-allowance regression's subject, and a spawn failure
+    // does not produce it.
+    if error
+        .to_string()
+        .contains("waited for a sibling nested Cargo invocation")
+    {
+        return Ok(());
+    }
     // The probe's own description contains the word "allowance", and a spawn
     // failure echoes it, so the check matches the deadline error's note instead.
     ensure!(

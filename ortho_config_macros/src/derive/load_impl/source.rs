@@ -168,6 +168,20 @@ pub(crate) fn build_config_impl_delegates(
                     merge_source,
                 )
             }
+
+            /// Compose layers from arguments and one injected environment
+            /// that backs both discovery and merging.
+            pub fn compose_layers_from_iter_with_env<I, T, E>(
+                iter: I,
+                env: std::sync::Arc<E>,
+            ) -> #krate::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+                E: #krate::EnvSource + #krate::ScanEnvSource + 'static,
+            {
+                #cli_ident::compose_layers_from_iter_with_env(iter, env)
+            }
         }
     }
 }

@@ -1189,6 +1189,53 @@ source handles named lookups, while the scan source supplies the merge layer.
 The ordinary `load()` and `load_from_iter()` methods continue to use the
 process environment.
 
+### Use one environment and inject the working directory
+
+Most tests want a single `MapEnv` behind both layers. The `_with_env` methods
+take one `Arc<E>` where `E` implements both traits, and wrap the two-source
+methods: `OrthoConfig::load_from_iter_with_env`, the generated
+`compose_layers_from_iter_with_env` and `load_with_profile_from_iter_with_env`,
+and `SubcmdConfigMerge::load_and_merge_with_env` with its
+`load_and_merge_with_matches_with_env` companion.
+
+`EnvSource` also answers `current_dir`, because the derived loaders search the
+working directory for project configuration files. The default reads the
+process working directory, so existing callers see no change. Pin it with
+`MapEnv::with_current_dir`, and a test names its fixture directory without
+changing the process's own:
+
+<!-- tested-example: guide-injected-working-directory -->
+```rust
+use ortho_config::{MapEnv, OrthoConfig, OrthoResult};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_")]
+struct Config {
+    #[ortho_config(default = 8080)]
+    port: u16,
+}
+
+fn main() -> OrthoResult<()> {
+    // A real test points this at a temporary directory holding `.acme.toml`.
+    let environment = Arc::new(
+        MapEnv::new()
+            .with_current_dir("/nonexistent/acme-project")
+            .with_var("ACME_PORT", "9000"),
+    );
+
+    let config = Config::load_from_iter_with_env(["acme"], environment)?;
+    println!("port={}", config.port);
+    Ok(())
+}
+```
+
+The example prints `port=9000`. An unpinned `MapEnv` keeps reporting the
+process working directory, so a hermetic test sets one explicitly, along with
+`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS` and `HOME` when it must exclude host
+configuration directories.
+
 ### Compose layers without deserializing
 
 When layer composition is needed without deserializing a configuration,

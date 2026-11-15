@@ -183,6 +183,25 @@ fn injected_candidates_preserve_home_xdg_and_base_order() -> Result<()> {
     Ok(())
 }
 
+/// A relative platform configuration directory is refused.
+#[cfg(not(any(unix, target_os = "redox")))]
+#[test]
+fn relative_platform_config_root_yields_no_process_relative_candidate() -> Result<()> {
+    let base = PathBuf::from("C:/injected/base");
+    let source = PlatformFallbackEnv {
+        vars: MapEnv::new(),
+        config_dir: Some(PathBuf::from("relative-config")),
+    };
+
+    let paths = candidate_paths_at(&Prefix::new("app"), &base, &source)?;
+
+    ensure!(
+        paths.iter().all(|path| path.is_absolute()),
+        "a process-relative candidate leaked: {paths:?}"
+    );
+    Ok(())
+}
+
 /// A relative `XDG_CONFIG_HOME` is unusable, so the injected home supplies the base.
 #[cfg(any(unix, target_os = "redox"))]
 #[test]

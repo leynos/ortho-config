@@ -1989,19 +1989,17 @@ which ranks them above the platform default `/etc/xdg`; an empty
 unset is not isolation. It is owned by the CLI integration and
 error-aggregation suites.
 
-One hole stays open and is inherited from the injected-source migration: the
-derived loader's project rung resolves its root from `std::env::current_dir`,
-so a `.config.toml` beside the test binary's working directory would still be
-discovered. The exposure is bounded by the rung's position — projects are
-searched *last*, so the ambient file is reached only once every earlier
-candidate is absent or has failed to load. The bound is weaker than it looks:
-discovery records a failure and keeps walking, so a malformed file, an invalid
-selector target, or a failed required candidate all fall through to the project
-rung rather than ending the search. No injection point can redirect it:
-`project_file_name` names a file, while `project_roots`, `add_project_root`, and
-`clear_project_roots` are reachable only when a test builds the
-`ConfigDiscovery` itself, as the discovery-builder suite above does. Closing
-the gap needs a derive-level discovery attribute for project roots.
+The derived loader's project rung used to resolve its root from
+`std::env::current_dir`, so a `.config.toml` beside the test binary's working
+directory could still be discovered. That hole is closed: the rung asks the
+injected source for its working directory (`EnvSource::current_dir`, pinned on a
+`MapEnv` with `with_current_dir`), and the `_with_env` loaders put one such
+source behind both layers. An unpinned `MapEnv` still reports the process's
+directory, so a hermetic test pins one. A *relative* path the source names — a
+config-path selector, `XDG_CONFIG_HOME`, or `HOME` in derived discovery —
+resolves against that same directory rather than the process's, and is dropped
+when the source cannot report one. In subcommand path discovery a relative
+`HOME` counts as unset, as the XDG variables there already do.
 
 The common behavioural-step helper module owns `set_scalar_once`,
 `set_nonblank_scalar_once`, and the `SlotTakeOrExt` extension trait's
@@ -2328,7 +2326,7 @@ dispatcher picks the callsite whose static metadata matches.
 | Event                       | Fields                                                                                                                                                                                                                                                                                                                                            | Emitted from                |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | `discovery.source_selected` | `source`: `process`, `injected`                                                                                                                                                                                                                                                                                                                   | `builder::build`            |
-| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                                                                                                                                                                                                                                                                           | `candidates::push_selector` |
+| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`, `dropped`                                                                                                                                                                                                                                                                                | `candidates::push_selector` |
 | `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`                                                                                                                                                                                                                                                           | `candidates::push_xdg`      |
 | `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                                                                                                                                                                                                                                                                               | `candidates::push_home`     |
 | `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`, `policy_resolve`                                                                                                                                                                                                                                                                                 | `load`, `policy`            |
