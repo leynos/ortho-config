@@ -341,6 +341,28 @@ all possible public values are validated.
   skipped), markdownlint with spelling, nixie over 103 diagram-bearing files,
   and 21 doctests. Any queueing was normal: admission reported healthy with all
   four slots held.
+- [x] (2026-11-15) Assessment reply `ep-7-2-3-20261115-a2` cleared the five
+  earlier findings and raised two more, both repaired. E1's property generator
+  drew class names from three fixed tokens and allowed repeated names and
+  whitespace-only meanings, which the derive rejects; it now draws from an
+  eight-entry pool in `[a-z][a-z0-9_]*`, keeps the first occurrence of each
+  name, and generates meanings that begin with a letter. A pool contract test
+  keeps every entry valid and distinct, and the malformed shapes the parser
+  rejects moved to `rejected_class_shapes_are_transported_verbatim`, so the
+  property samples only declarations an author can write. The defaulting
+  paragraph in the developers' guide now separates "no capability claim is
+  defaulted" from the decoding defaults that do exist: the three optional
+  scalars decode to `None` and `exit_classes` to an empty vector, both skipped
+  when serializing.
+- [x] (2026-11-15) Rebased the 24-commit series onto `f086edc9` (main's
+  artefact-lock evidence and embed-metadata work). One conflict, in
+  `docs/contents.md`, because main had taken ADR-0020 and ADR-0021 for the
+  artefact-lock decisions. This plan's ADR moved to
+  `adr-0022-explicit-structured-output-declarations.md`, with its heading, the
+  index entry, and every reference in the design documents, the module
+  documentation and this plan updated. `git range-diff` shows every replayed
+  commit identical apart from that rename, and the net diff against the
+  pre-rebase head contains only main's own work plus the renumbering.
 
 ## Surprises & discoveries
 
@@ -399,6 +421,15 @@ quietly add replay work to every later run. Restoring the mutated source is
 therefore only half the cleanup; the regression corpus and any scratch artefact
 the mutation created must be removed in the same step, and the restore checked
 by hash rather than by eye.
+
+An ADR number is only free at the moment it is written. This plan recorded its
+decision as ADR-0020 while `main` had no such file; by the time the branch was
+rebased, `main` had landed ADR-0020 and ADR-0021 for the artefact-lock work, so
+the branch's ADR had to move to 0022 along with its index entry, its heading,
+and every cross-reference in prose and module documentation. The number is part
+of the citation surface, not a label on one file, so a rebase that advances the
+target branch needs a repository-wide reference sweep rather than a conflict
+resolution confined to the one file that conflicted.
 
 ## Decision log
 
