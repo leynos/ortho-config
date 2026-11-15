@@ -110,7 +110,7 @@ All notable changes to this project will be documented in this file.
   consumer build. See:
   - [Translate or override clap parse errors](docs/users-guide.md#translate-or-override-clap-parse-errors)
   - [Design §6.1.1](docs/cli-localization-design.md#611-pre-publication-coverage-gate)
-  - [ADR-0020](docs/adrs/adr-0020-pre-publication-clap-coverage-gate.md)
+  - [ADR-0022](docs/adrs/adr-0022-pre-publication-clap-coverage-gate.md)
 
 ### Changed (clap error behaviour)
 

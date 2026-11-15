@@ -1,6 +1,6 @@
 //! Pre-publication identity and inventory helpers for the clap coverage gate.
 //!
-//! ADR-0020 keeps the gate test-only and workspace-scoped, and requires that
+//! ADR-0022 keeps the gate test-only and workspace-scoped, and requires that
 //! every refusal names the check that failed. This module therefore keeps the
 //! gate's decisions out of the test body: `lock` parses and selects from
 //! `Cargo.lock`, `identity` holds the reviewed identities and the metadata
