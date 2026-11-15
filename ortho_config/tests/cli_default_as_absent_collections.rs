@@ -2,6 +2,8 @@
 
 #[path = "support/isolated_discovery.rs"]
 mod isolated_discovery;
+#[path = "support/process_child.rs"]
+mod process_child;
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
@@ -16,11 +18,9 @@ use ortho_config::{
 use rstest::{fixture, rstest};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serial_test::serial;
 use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
-use test_helpers::cwd;
 
 #[fixture]
 fn prefix() -> Prefix {
@@ -174,11 +174,31 @@ fn test_cli_default_as_absent_collection_defaults(prefix: Prefix) -> Result<()> 
 /// `_at` form with `ProcessEnv` and the working directory as the local base, so
 /// it must find `./.app.toml`. The environment layer must come from the
 /// supplied scan source rather than from the process.
-#[rstest]
-#[serial]
-fn process_backed_matches_wrapper_delegates_to_the_at_form(prefix: Prefix) -> Result<()> {
+#[test]
+fn process_backed_matches_wrapper_delegates_to_the_at_form() -> Result<()> {
     let temp_dir = config_dir("[cmds.retry]\ncount = 5\n")?;
-    let _cwd_guard = cwd::set_dir(temp_dir.path())?;
+    let empty_root = tempfile::tempdir().context("create the empty configuration tree")?;
+    // The wrapper reads the process working directory by design, so it runs in
+    // a child whose directory holds the file rather than in this process.
+    process_child::run(
+        "process_backed_matches_wrapper_child",
+        "wrapper",
+        &process_child::ChildEnvironment {
+            dir: temp_dir.path(),
+            empty_root: empty_root.path(),
+            vars: &[],
+        },
+    )
+}
+
+/// Child half of [`process_backed_matches_wrapper_delegates_to_the_at_form`].
+///
+/// A no-op unless a parent started it with its case.
+#[rstest]
+fn process_backed_matches_wrapper_child(prefix: Prefix) -> Result<()> {
+    if process_child::case().as_deref() != Some("wrapper") {
+        return Ok(());
+    }
 
     let matches = RetryArgs::command().get_matches_from(["retry"]);
     let args = RetryArgs::from_arg_matches(&matches).context("parse clap defaults")?;
@@ -213,15 +233,20 @@ fn process_backed_matches_wrapper_delegates_to_the_at_form(prefix: Prefix) -> Re
 
 /// Verifies generated defaults replay clap parsing without a config file or CLI override.
 #[rstest]
-#[serial]
 fn generated_collection_defaults_match_clap() -> Result<()> {
     let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
-    let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+    let env = Arc::new(
+        MapEnv::new()
+            .with_current_dir(no_file_dir.path())
+            .with_var("XDG_CONFIG_HOME", no_file_dir.path().join("xdg-empty"))
+            .with_var("XDG_CONFIG_DIRS", no_file_dir.path().join("xdg-dirs-empty")),
+    );
 
-    let tags = TagsArgs::load_from_iter(["tags"]).context("load typed tag defaults")?;
+    let tags = TagsArgs::load_from_iter_with_env(["tags"], env.clone())
+        .context("load typed tag defaults")?;
     ensure!(tags.tags == vec!["alpha", "beta"], "got {:?}", tags.tags);
 
-    let string_tags = StringTagsArgs::load_from_iter(["string-tags"])
+    let string_tags = StringTagsArgs::load_from_iter_with_env(["string-tags"], env.clone())
         .context("load delimiter-separated tag defaults")?;
     ensure!(
         string_tags.tags == vec!["alpha", "beta"],
@@ -229,7 +254,8 @@ fn generated_collection_defaults_match_clap() -> Result<()> {
         string_tags.tags
     );
 
-    let retry = RetryArgs::load_from_iter(["retry"]).context("load retry defaults")?;
+    let retry =
+        RetryArgs::load_from_iter_with_env(["retry"], env).context("load retry defaults")?;
     ensure!(retry.count == 8, "got {}", retry.count);
     Ok(())
 }

@@ -26,10 +26,8 @@ use ortho_config::{
 };
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
-use serial_test::serial;
 use std::sync::Arc;
 use tempfile::TempDir;
-use test_helpers::cwd;
 
 /// Subcommand with `cli_default_as_absent` attribute on a non-Option field.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
@@ -60,11 +58,10 @@ impl Default for GreetArgs {
     }
 }
 
-/// Write `cfg` to `.app.toml` in a fresh temp directory and change into it.
+/// Write `cfg` to `.app.toml` in a fresh temp directory.
 ///
-/// Returns the temp directory and a guard that restores the previous working
-/// directory when dropped, so tests can rely on relative configuration
-/// discovery without leaking state between cases.
+/// Tests name the directory as the working directory of an injected
+/// environment (see [`dir_env`]) instead of entering it.
 #[fixture]
 fn config_dir(#[default("")] cfg: &str) -> Result<TempDir> {
     let dir = tempfile::tempdir().context("create temp dir")?;
@@ -74,10 +71,16 @@ fn config_dir(#[default("")] cfg: &str) -> Result<TempDir> {
     Ok(dir)
 }
 
-fn config_dir_with_cwd(cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
-    let dir = config_dir(cfg)?;
-    let guard = cwd::set_dir(dir.path())?;
-    Ok((dir, guard))
+/// A closed environment whose working directory is `dir`.
+///
+/// XDG directories are pinned beneath `dir`, and no `HOME` is set, so neither
+/// the host's configuration nor the process's own working directory can reach a
+/// load through it.
+fn dir_env(dir: &std::path::Path) -> MapEnv {
+    MapEnv::new()
+        .with_current_dir(dir)
+        .with_var("XDG_CONFIG_HOME", dir.join("xdg-empty"))
+        .with_var("XDG_CONFIG_DIRS", dir.join("xdg-dirs-empty"))
 }
 
 struct GreetPrecedenceCase {

@@ -12,6 +12,7 @@ use crate::workspace::{DependencyAlias, ExampleId, ExampleWorkspace};
 /// The documented Cargo external-subcommand example accepts both
 /// `cargo demo` dispatch and direct `cargo-demo demo` invocation.
 #[test]
+// Serial because documentation examples share one nested Cargo build tree; not for the environment.
 #[serial_test::serial(documentation_build)]
 fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {
     let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;

@@ -29,6 +29,7 @@ omitted when undeclared.
 | **Optional**         | Agent-native policy checks | Read the projected `renderer` block from agent context.                      |
 | **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.     |
 | **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.          |
+| **Optional**         | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.         |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -202,3 +203,41 @@ implementation in tests. See the
 [user's guide](users-guide.md#run-test-subprocesses-under-a-deadline) for the
 contract and the [developer's guide](developers-guide.md) for why the
 repository routes Cargo, host-tool, and documented-binary commands through it.
+
+## 9. Stop changing the process in tests
+
+The `ortho_config_test_helpers` helpers that change the process environment or
+working directory are deprecated: `env::set_var`, `env::remove_var`,
+`env::lock`, `env::scope`, `env::scope_with`, `env::scope_from_iter`,
+`env::with_lock`, `EnvVarGuard`, `EnvVarLock`, `EnvScope`, `cwd::set_dir` and
+`CwdGuard`. They still work, and warn. They force every test in a binary to run
+one at a time, because the process environment is shared, so they leave runner
+cores idle. Rust 2024 also makes `std::env::set_var` unsafe.
+
+Replace them in one of two ways:
+
+- **Inject the environment.** Build a `MapEnv` with the variables the test
+  needs, pin the working directory with `MapEnv::with_current_dir`, and call a
+  `_with_env` loader: `Config::load_from_iter_with_env`,
+  `compose_layers_from_iter_with_env`, `load_with_profile_from_iter_with_env`,
+  or `SubcmdConfigMerge::load_and_merge_with_env`. Name `XDG_CONFIG_HOME` and
+  `XDG_CONFIG_DIRS` in the map when host configuration directories must stay
+  out. Nothing then reads or writes the process, so the test runs concurrently.
+- **Run a child process.** A test of a code path that reads the live process
+  environment on purpose (`load_from_iter`, `load_and_merge`) re-runs the test
+  binary with `std::process::Command`, giving it `env_clear`, the variables it
+  needs, and `current_dir`. The parent changes nothing in its own process.
+
+Add the matching lints to your own `clippy.toml` to keep it that way:
+
+```toml
+disallowed-methods = [
+    { path = "std::env::set_var", reason = "mutates process-wide state" },
+    { path = "std::env::remove_var", reason = "mutates process-wide state" },
+    { path = "std::env::set_current_dir", reason = "mutates process-wide state" },
+]
+```
+
+A site that must stay carries
+`#[expect(clippy::disallowed_methods, reason = "...")]`. The helpers will be
+removed in a later release.

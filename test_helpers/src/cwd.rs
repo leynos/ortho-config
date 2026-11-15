@@ -1,5 +1,15 @@
 //! Helpers for safely mutating the process working directory in tests.
 //!
+//! **Deprecated since 0.11.0.** Changing the working directory forces every
+//! test in the binary to serialize behind a lock. Pin the directory on an
+//! injected `ortho_config::MapEnv` with `MapEnv::with_current_dir` and call the
+//! derive-generated `load_from_iter_with_env` family instead, or run a
+//! process-backed code path in a child process with `Command::current_dir`.
+//! The v0.11.0 migration guide in the `ortho-config` repository
+//! (`docs/v0-11-0-migration-guide.md`) walks through both forms. The helper
+//! remains for downstream crates that have not migrated yet, and will be
+//! removed in a later release.
+//!
 //! The current working directory is process-global state requiring serialized
 //! access across all test files.  This module provides an RAII guard that
 //! acquires a global mutex, captures the original directory, and restores it
@@ -8,11 +18,17 @@
 //! # Examples
 //!
 //! ```no_run
+//! # #![expect(deprecated)]
 //! use ortho_config_test_helpers::cwd;
 //!
 //! let guard = cwd::set_dir("/tmp/test-dir").expect("set cwd");
 //! // CWD is now `/tmp/test-dir`; it is restored when `guard` is dropped.
 //! ```
+
+#![expect(
+    deprecated,
+    reason = "this module implements the deprecated API and uses it internally"
+)]
 
 use anyhow::{Context, Result, anyhow};
 use camino::Utf8PathBuf;
@@ -23,6 +39,10 @@ use std::sync::LazyLock;
 static CWD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(Mutex::default);
 
 /// RAII guard that restores the working directory on drop.
+#[deprecated(
+    since = "0.11.0",
+    note = "pin the directory on an injected `ortho_config::MapEnv`; see the v0.11.0 migration guide"
+)]
 #[must_use = "dropping restores the prior working directory"]
 pub struct CwdGuard {
     /// Directory restored explicitly or on drop.
@@ -41,12 +61,20 @@ impl CwdGuard {
     /// # Errors
     ///
     /// Returns an error if `set_current_dir` fails.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the deprecated guard exists to change the working directory under a lock"
+    )]
     pub fn restore(&self) -> std::io::Result<()> {
         std::env::set_current_dir(&self.original)
     }
 }
 
 impl Drop for CwdGuard {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the deprecated guard exists to change the working directory under a lock"
+    )]
     fn drop(&mut self) {
         // Best-effort restoration.  Callers that need to observe failures
         // should call `restore()` explicitly before the guard is dropped.
@@ -68,6 +96,14 @@ impl Drop for CwdGuard {
 ///
 /// Returns an error if the current directory cannot be read, is not valid
 /// UTF-8, or the target path cannot be set.
+#[deprecated(
+    since = "0.11.0",
+    note = "pin the directory on an injected `ortho_config::MapEnv`; see the v0.11.0 migration guide"
+)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the deprecated guard exists to change the working directory under a lock"
+)]
 pub fn set_dir(path: impl AsRef<std::path::Path>) -> Result<CwdGuard> {
     let lock = CWD_MUTEX.lock();
     let old = std::env::current_dir().context("read current dir")?;

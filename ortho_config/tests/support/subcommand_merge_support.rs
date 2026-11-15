@@ -1,9 +1,9 @@
 //! Shared scaffolding for the `SubcmdConfigMerge` behavioural suite.
 //!
-//! The suite in `subcommand_merge_methods.rs` drives the three public trait
-//! methods, and every case needs the same three things: subcommand structs
-//! whose per-layer defaults are distinguishable, staged configuration
-//! directories to enter, and a neutralised process environment.
+//! The suite in `subcommand_merge_methods.rs` drives the public trait methods,
+//! and every case needs the same things: subcommand structs whose per-layer
+//! defaults are distinguishable, staged configuration directories, and a way to
+//! run the process-backed methods without changing this process.
 //!
 //! # Scope and re-use policy
 //!
@@ -13,32 +13,22 @@
 //! file stays inside the repository's 400-line limit without its coverage being
 //! trimmed to get there.
 //!
-//! # Why the environment is neutralised rather than injected
+//! # Why the methods run in a child process
 //!
-//! The methods under test take a `SharedScanEnvSource` for the merge layer but
-//! hard-code `ProcessEnv` and the working directory for file discovery, so the
-//! ambient environment cannot be injected away. [`isolated_env`] therefore
-//! points every rung discovery consults — `HOME`, `USERPROFILE`,
-//! `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA` — at an empty temporary
-//! tree, wrapped in the shared `test_helpers` guards that AGENTS.md requires for
-//! any environment mutation.
-//!
-//! Setting `HOME` is deliberate. `ProcessEnv::home_fallback` consults it through
-//! `dirs::home_dir`, which honours the variable when present and falls back to
-//! the real user database (`getpwuid_r`, via `passwd`) when it is absent or
-//! empty. Clearing it would leave the rung open rather than closing it.
+//! `load_and_merge` and the `_with_sources` forms resolve configuration files
+//! through `ProcessEnv` and the working directory by design, so a case cannot
+//! inject them. Changing this process's environment or directory instead would
+//! race every other test in the binary, so each case runs the method in a child
+//! started with an exact environment and working directory (see
+//! `process_child.rs`). The hermetic `_with_env` forms need no child.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 use ortho_config::{MapEnv, OrthoConfig, SharedScanEnvSource, SubcmdConfigMerge};
-use rstest::fixture;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
-use test_helpers::cwd;
-use test_helpers::env::EnvScope;
 
 /// Subcommand used by the plain injected-source cases.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
@@ -210,6 +200,47 @@ impl LayerRow {
             expected,
         }
     }
+
+    /// Encode the row so it can travel to a child process as one variable.
+    pub fn encode(self) -> String {
+        let method = match self.method {
+            MatchesMethod::Plain => "plain",
+            MatchesMethod::WithSources => "with_sources",
+        };
+        let cli = match self.cli {
+            CliMode::Absent => "absent",
+            CliMode::Explicit => "explicit",
+        };
+        let injected = self
+            .injected
+            .map_or_else(|| "none".to_owned(), |value| value.to_string());
+        format!("{method},{cli},{injected},{}", self.expected)
+    }
+
+    /// Decode a row produced by [`Self::encode`].
+    pub fn decode(encoded: &str) -> Result<Self> {
+        let parts: Vec<&str> = encoded.split(',').collect();
+        let [method, cli, injected, expected] = parts.as_slice() else {
+            anyhow::bail!("malformed row `{encoded}`");
+        };
+        Ok(Self {
+            method: match *method {
+                "plain" => MatchesMethod::Plain,
+                "with_sources" => MatchesMethod::WithSources,
+                other => anyhow::bail!("unknown method `{other}`"),
+            },
+            cli: match *cli {
+                "absent" => CliMode::Absent,
+                "explicit" => CliMode::Explicit,
+                other => anyhow::bail!("unknown CLI mode `{other}`"),
+            },
+            injected: match *injected {
+                "none" => None,
+                value => Some(value.parse().context("parse the injected value")?),
+            },
+            expected: expected.parse().context("parse the expected value")?,
+        })
+    }
 }
 
 /// Drives one match-aware row and returns the merged retry count.
@@ -223,111 +254,39 @@ pub fn merged_retries(method: MatchesMethod, cli: CliMode, source: Option<u32>) 
     Ok(method.merge(&parsed, source)?.retries)
 }
 
-/// Fails when `key` is visible in the process environment.
+/// A temporary directory holding a staged `.vk.toml`, plus an empty tree for
+/// every home and platform rung.
 ///
-/// An exported variable reaches every merge through the process-backed
-/// environment layer, so it can supply an expected value whether or not the
-/// source under test contributes anything. Requiring the key to be unset keeps
-/// each case decisive.
-pub fn ensure_key_is_unset(key: &str) -> Result<()> {
-    ensure!(
-        std::env::var_os(key).is_none(),
-        "{key} must be unset for this case to be meaningful"
-    );
-    Ok(())
+/// Nothing enters the directory: the case hands it to a child as its working
+/// directory.
+pub struct StagedDir {
+    /// Holds the staged file; the child's working directory.
+    pub dir: TempDir,
+    /// Empty tree that every home and platform-configuration variable names.
+    pub empty_root: TempDir,
 }
 
-/// Renders `path` as UTF-8 so it can be used as an environment variable value.
-fn utf8(path: &Path, what: &str) -> Result<String> {
-    path.to_str()
-        .map(str::to_owned)
-        .with_context(|| format!("{what} is not valid UTF-8: {}", path.display()))
-}
-
-/// Holds the neutralised environment for the duration of one case.
-pub struct IsolatedEnv {
-    /// Holds the process-environment lock and restores every variable on drop.
-    _scope: EnvScope,
-    /// Owns the empty tree that every discovery rung resolves into.
-    _root: TempDir,
-}
-
-/// Points every environment rung discovery consults at an empty temporary tree,
-/// and removes the subcommand variables the merge layer would otherwise read.
-///
-/// The methods under test hard-code `ProcessEnv`, so the ambient environment
-/// cannot be injected away and is neutralised instead. `HOME` is *set* rather
-/// than merely cleared because `ProcessEnv::home_fallback` consults it through
-/// `dirs::home_dir`, which honours the variable when it is present and falls
-/// back to the real user database when it is not. Every other discovery
-/// variable is pointed at the same empty tree, so no rung can contribute a file
-/// whatever the host exports and whichever platform the suite runs on.
-///
-/// Pointing the discovery rungs at an empty tree is not enough on its own. The
-/// process environment is also a merge layer, sitting above the file and below
-/// the CLI, so a key exported by the host would answer before the file does and
-/// the layer the rows assert would be masked. The two keys are removed rather
-/// than merely checked, because an exported value has to be made harmless
-/// rather than reported; the guard returned restores it on drop, so nothing
-/// leaks back into the running process.
-#[fixture]
-pub fn isolated_env() -> Result<IsolatedEnv> {
-    let root = tempfile::tempdir().context("create isolated environment root")?;
-    let home = utf8(root.path(), "isolated root")?;
-    let config_home = utf8(&root.path().join(".config"), "isolated config home")?;
-    let scope = EnvScope::new_with(|lock| {
-        vec![
-            lock.set_var("HOME", &home),
-            lock.set_var("USERPROFILE", &home),
-            lock.set_var("XDG_CONFIG_HOME", &config_home),
-            lock.set_var("XDG_CONFIG_DIRS", &home),
-            lock.set_var("APPDATA", &home),
-            lock.remove_var(PR_REFERENCE_KEY),
-            lock.remove_var(ISSUE_RETRIES_KEY),
-        ]
-    });
-    Ok(IsolatedEnv {
-        _scope: scope,
-        _root: root,
-    })
-}
-
-/// A temporary configuration directory the case has entered.
-pub struct ConfigDir {
-    /// Declared first so the working directory is restored before the directory
-    /// it points at is removed.
-    _guard: cwd::CwdGuard,
-    /// Owns the directory holding the staged file.
-    _dir: TempDir,
-}
-
-/// Writes `cfg` to `.vk.toml` in a fresh temporary directory and enters it.
-fn staged_dir(cfg: &str) -> Result<ConfigDir> {
+/// Writes `cfg` to `.vk.toml` in a fresh temporary directory.
+fn staged_dir(cfg: &str) -> Result<StagedDir> {
     let dir = tempfile::tempdir().context("create temp dir")?;
     let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
     cap.write(".vk.toml", cfg.as_bytes())
         .context("write config")?;
-    let guard = cwd::set_dir(dir.path()).context("enter temp config dir")?;
-    Ok(ConfigDir {
-        _guard: guard,
-        _dir: dir,
-    })
+    let empty_root = tempfile::tempdir().context("create the empty configuration tree")?;
+    Ok(StagedDir { dir, empty_root })
 }
 
-/// Enters a fresh temporary directory holding no subcommand configuration.
-#[fixture]
-pub fn empty_dir() -> Result<ConfigDir> {
+/// A directory holding no subcommand configuration.
+pub fn empty_dir() -> Result<StagedDir> {
     staged_dir("")
 }
 
-/// Enters a temporary directory whose only file supplies `FILE_REFERENCE`.
-#[fixture]
-pub fn pr_dir() -> Result<ConfigDir> {
+/// A directory whose only file supplies `FILE_REFERENCE`.
+pub fn pr_dir() -> Result<StagedDir> {
     staged_dir(&format!("[cmds.pr]\nreference = \"{FILE_REFERENCE}\"\n"))
 }
 
-/// Enters a temporary directory whose only file supplies `FILE_RETRIES`.
-#[fixture]
-pub fn issue_dir() -> Result<ConfigDir> {
+/// A directory whose only file supplies `FILE_RETRIES`.
+pub fn issue_dir() -> Result<StagedDir> {
     staged_dir(&format!("[cmds.issue]\nretries = {FILE_RETRIES}\n"))
 }

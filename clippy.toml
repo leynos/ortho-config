@@ -6,6 +6,17 @@ excessive-nesting-threshold = 4        # default is off
 
 allow-expect-in-tests = true
 
+# Tests must not change process-wide state: it forces them to serialize, which
+# leaves runner cores idle, and Rust 2024 makes `set_var` unsafe. Inject the
+# environment (`MapEnv`, including `with_current_dir`) or run the code in a
+# child process. Any site that must stay carries
+# `#[expect(clippy::disallowed_methods, reason = "..")]`.
+disallowed-methods = [
+    { path = "std::env::set_var", reason = "mutates process-wide state; inject a `MapEnv` or run a child process" },
+    { path = "std::env::remove_var", reason = "mutates process-wide state; inject a `MapEnv` or run a child process" },
+    { path = "std::env::set_current_dir", reason = "mutates process-wide state; pin the directory on a `MapEnv` or run a child process" },
+]
+
 # `figment::Error` measures ~208 bytes and figment's `Jail::try_with` /
 # `expect_with` API requires every jail closure to return
 # `Result<(), figment::Error>`, so the signature-based `result_large_err`

@@ -55,7 +55,6 @@ impl Default for DefaultParityArgs {
 /// Inferred string defaults, file values, and explicit CLI values all pass
 /// through each field's clap parser and respect source precedence.
 #[rstest]
-#[serial]
 fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
     assert_inferred_default_parity()?;
     assert_file_overrides_inferred_default_parity()?;
@@ -107,9 +106,11 @@ fn assert_default_parity(
 /// With no file or environment, the parsed clap defaults are loaded.
 fn assert_inferred_default_parity() -> Result<()> {
     let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
-    let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
-    let inferred =
-        DefaultParityArgs::load_from_iter(["default-parity"]).context("load inferred defaults")?;
+    let inferred = DefaultParityArgs::load_from_iter_with_env(
+        ["default-parity"],
+        Arc::new(dir_env(no_file_dir.path())),
+    )
+    .context("load inferred defaults")?;
     assert_default_parity(
         &inferred,
         DefaultParityExpected {
@@ -193,12 +194,13 @@ fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
 /// The generated CLI applies the field's custom `value_parser` to explicit
 /// arguments.
 #[rstest]
-#[serial]
 fn generated_cli_uses_captured_value_parser() -> Result<()> {
     let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
-    let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
-    let parsed = DefaultParityArgs::load_from_iter(["default-parity", "--port", "tcp:10"])
-        .context("parse explicit custom CLI value")?;
+    let parsed = DefaultParityArgs::load_from_iter_with_env(
+        ["default-parity", "--port", "tcp:10"],
+        Arc::new(dir_env(no_file_dir.path())),
+    )
+    .context("parse explicit custom CLI value")?;
     ensure!(
         parsed.port == 10,
         "expected parsed port 10, got {}",
@@ -227,45 +229,43 @@ impl Default for BoolDefaultArgs {
 /// A `true` bool default is used only when no file, environment, or CLI value
 /// is supplied, and each higher-precedence source overrides the one below.
 #[rstest]
-#[serial]
 fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
     {
         let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
-        let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
-        let loaded = BoolDefaultArgs::load_from_iter(["bool-default"])?;
+        let loaded = BoolDefaultArgs::load_from_iter_with_env(
+            ["bool-default"],
+            Arc::new(dir_env(no_file_dir.path())),
+        )?;
         ensure!(
             loaded.enabled,
             "expected inferred bool default to remain true"
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = false\n")?;
-        let source = Arc::new(MapEnv::new());
-        let loaded =
-            BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
+        let dir = config_dir("enabled = false\n")?;
+        let loaded = BoolDefaultArgs::load_from_iter_with_env(
+            ["bool-default"],
+            Arc::new(dir_env(dir.path())),
+        )?;
         ensure!(
             !loaded.enabled,
             "expected file value to override bool default"
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = true\n")?;
-        let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
-        let loaded =
-            BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
+        let dir = config_dir("enabled = true\n")?;
+        let env = dir_env(dir.path()).with_var("APP_ENABLED", "false");
+        let loaded = BoolDefaultArgs::load_from_iter_with_env(["bool-default"], Arc::new(env))?;
         ensure!(
             !loaded.enabled,
             "expected environment value to override file value"
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = false\n")?;
-        let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
-        let loaded = BoolDefaultArgs::load_from_iter_with_sources(
-            ["bool-default", "--enabled"],
-            source.clone(),
-            source,
-        )?;
+        let dir = config_dir("enabled = false\n")?;
+        let env = dir_env(dir.path()).with_var("APP_ENABLED", "false");
+        let loaded =
+            BoolDefaultArgs::load_from_iter_with_env(["bool-default", "--enabled"], Arc::new(env))?;
         ensure!(loaded.enabled, "expected explicit CLI value to win");
     }
     Ok(())
@@ -344,12 +344,14 @@ fn contains_default_value_conversion(error: &OrthoError) -> bool {
 /// A clap default rejected by the field parser surfaces as a redacted
 /// `DefaultValueConversion` error instead of a panic.
 #[rstest]
-#[serial]
 fn invalid_inferred_default_is_reported_without_panicking() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir_with_cwd("")?;
-    let error = InvalidDefaultArgs::load_from_iter(["invalid-default"])
-        .err()
-        .ok_or_else(|| anyhow::anyhow!("expected invalid default to fail"))?;
+    let dir = config_dir("")?;
+    let error = InvalidDefaultArgs::load_from_iter_with_env(
+        ["invalid-default"],
+        Arc::new(dir_env(dir.path())),
+    )
+    .err()
+    .ok_or_else(|| anyhow::anyhow!("expected invalid default to fail"))?;
     ensure!(
         contains_default_value_conversion(error.as_ref()),
         "expected DefaultValueConversion, got {error:?}",

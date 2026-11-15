@@ -23,7 +23,9 @@
 use anyhow::{Context as _, Result, ensure};
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
-use test_helpers::env as test_env;
+
+#[path = "support/process_child.rs"]
+mod process_child;
 
 /// Opts into profile support so the process selector lookup path is exercised.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -77,14 +79,53 @@ fn non_unicode_selector() -> std::ffi::OsString {
 #[test]
 fn a_non_unicode_process_selector_fails_the_load() -> Result<()> {
     let fixture_dir = tempfile::tempdir().context("create process selector fixture")?;
+    let empty_root = tempfile::tempdir().context("create the empty configuration tree")?;
     let config_path = write_selector_fixture(fixture_dir.path())?;
 
-    let lock = test_env::lock();
-    let _path_guard = lock.set_var("PROCESS_SELECTOR_CONFIG_PATH", &config_path);
+    // Both cases read the *process* environment by design, so each runs in a
+    // child started with exactly the variables it needs; this process's own
+    // environment is never changed.
+    let run = |case: &str, selector: std::ffi::OsString| {
+        process_child::run(
+            CHILD_TEST,
+            case,
+            &process_child::ChildEnvironment {
+                dir: fixture_dir.path(),
+                empty_root: empty_root.path(),
+                vars: &[
+                    (
+                        "PROCESS_SELECTOR_CONFIG_PATH",
+                        config_path.clone().into_os_string(),
+                    ),
+                    ("PROCESS_SELECTOR_PROFILE", selector),
+                ],
+            },
+        )
+    };
+    // The control pins the fixture to profile `ci`, so the case cannot be
+    // blamed on an unreachable fixture or an inoperative selector variable.
+    run("control", "ci".into())?;
+    run("non_unicode", non_unicode_selector())
+}
 
-    // CONTROL: a valid selector must reach profile `ci` and yield 7. The struct
-    // default (1) and the file base (3) are both distinguishable from it.
-    let control_guard = lock.set_var("PROCESS_SELECTOR_PROFILE", "ci");
+/// Name of the child test in this binary.
+const CHILD_TEST: &str = "process_selector_child";
+
+/// Child half of [`a_non_unicode_process_selector_fails_the_load`].
+///
+/// A no-op unless a parent started it with a case.
+#[test]
+fn process_selector_child() -> Result<()> {
+    match process_child::case().as_deref() {
+        Some("control") => assert_control_reaches_profile_ci(),
+        Some("non_unicode") => assert_non_unicode_selector_fails(),
+        _ => Ok(()),
+    }
+}
+
+/// A valid selector must reach profile `ci` and yield 7. The struct default (1)
+/// and the file base (3) are both distinguishable from it.
+fn assert_control_reaches_profile_ci() -> Result<()> {
     let control = ProcessSelectorConfig::load_with_profile_from_iter(["process-selector"])
         .map_err(|error| anyhow::anyhow!(error))?;
     let control_retries = control.config().retries;
@@ -92,14 +133,13 @@ fn a_non_unicode_process_selector_fails_the_load() -> Result<()> {
         control_retries == 7,
         "the fixture must be discoverable and profile `ci` must apply: got {control_retries}"
     );
-    drop(control_guard);
+    Ok(())
+}
 
-    // CASE: the same run with a selector that cannot be Unicode. A success here
-    // would be returned in place of the `expect_err` panic, so the case is
-    // checked rather than merely awaited.
-    let case_guard = lock.set_var("PROCESS_SELECTOR_PROFILE", non_unicode_selector());
+/// The same run with a selector that cannot be Unicode must fail the load.
+fn assert_non_unicode_selector_fails() -> Result<()> {
+    let control_retries = 7;
     let case = ProcessSelectorConfig::load_with_profile_from_iter(["process-selector"]);
-    drop(case_guard);
 
     let case_retries = match case {
         Err(error) => {

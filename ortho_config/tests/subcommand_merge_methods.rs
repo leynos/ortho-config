@@ -17,16 +17,13 @@
 //!
 //! The methods are process-backed: they resolve configuration files through
 //! `ProcessEnv` and the working directory, neither of which a caller can
-//! inject, so isolation has to be arranged around them rather than supplied to
-//! them. Each case enters a temporary directory of its own *and* points every
-//! environment rung discovery consults into an empty temporary tree.
+//! inject, and this suite must not change either in its own process. Each case
+//! therefore runs the method in a child process (`support/process_child.rs`)
+//! started in a staged temporary directory with every home and platform rung
+//! pointed at an empty tree. The environment is exact rather than neutralised,
+//! so nothing the host exports can reach the merge.
 //!
-//! Working-directory isolation alone would not be enough. `collect_unix_paths`
-//! and `collect_non_unix_paths` push the home and platform candidates *before*
-//! the local ones, so a developer's own `~/.vk.toml` or
-//! `~/.config/vk/config.toml` would otherwise be merged into the result.
-//!
-//! The structs, sentinels, fixtures, and the row driver live in
+//! The structs, sentinels, staging helpers, and the row driver live in
 //! `support/subcommand_merge_support.rs`, which keeps this file within the
 //! repository's module-size limit without trimming coverage to get there.
 
@@ -34,40 +31,62 @@ use anyhow::{Context, Result, bail, ensure};
 use clap::{CommandFactory, FromArgMatches};
 use ortho_config::SubcmdConfigMerge;
 use rstest::rstest;
-use test_helpers::cwd;
 
+#[path = "support/process_child.rs"]
+mod process_child;
 #[path = "support/subcommand_merge_support.rs"]
 mod support;
 
+use process_child::ChildEnvironment;
 use support::{
-    CLAP_DEFAULT_RETRIES, CLI_REFERENCE, CLI_RETRIES, CliMode, ConfigDir, FILE_RETRIES,
-    INJECTED_REFERENCE, INJECTED_RETRIES, ISSUE_RETRIES_KEY, IsolatedEnv, LayerRow, MatchesMethod,
-    PR_REFERENCE_KEY, PrArgs, STRUCT_DEFAULT_RETRIES, empty_dir, ensure_key_is_unset, isolated_env,
-    issue_dir, merged_retries, pr_dir, scan_source,
+    CLAP_DEFAULT_RETRIES, CLI_REFERENCE, CLI_RETRIES, CliMode, FILE_RETRIES, INJECTED_REFERENCE,
+    INJECTED_RETRIES, LayerRow, MatchesMethod, PR_REFERENCE_KEY, PrArgs, STRUCT_DEFAULT_RETRIES,
+    StagedDir, empty_dir, issue_dir, merged_retries, pr_dir, scan_source,
 };
 
-/// Discovery resolves the home and XDG rungs through the process environment
-/// rather than the working directory, so entering a temporary directory does
-/// not close them.
-///
-/// This pins the invariant [`isolated_env`] exists to maintain. Were the
-/// fixture ever reduced to a working-directory change, every other case in this
-/// module would once again merge a developer's own `~/.vk.toml` or
-/// `~/.config/vk/config.toml`, and nothing else here would catch that: the suite
-/// still passes on a host that has neither file.
-#[rstest]
-fn isolated_env_excludes_the_ambient_home(isolated_env: Result<IsolatedEnv>) -> Result<()> {
-    let _isolated = isolated_env?;
-    ensure_key_is_unset(PR_REFERENCE_KEY)?;
-    let bare = tempfile::tempdir().context("create bare working directory")?;
-    let _guard = cwd::set_dir(bare.path()).context("enter bare working directory")?;
+/// The name of the child test in this binary.
+const CHILD_TEST: &str = "subcommand_methods_child";
 
-    // Nothing but the process environment is configured, and the fixture has
-    // emptied it of every rung discovery consults.
+/// Child half of every process-backed case.
+///
+/// It does nothing unless a parent started it with a case, so it passes
+/// trivially in a normal run. The case name selects the assertion; the process
+/// environment and working directory it observes are the ones the parent
+/// chose.
+#[test]
+fn subcommand_methods_child() -> Result<()> {
+    let Some(case) = process_child::case() else {
+        return Ok(());
+    };
+    if let Some(encoded) = case.strip_prefix("row:") {
+        return assert_row(LayerRow::decode(encoded)?);
+    }
+    match case.as_str() {
+        "bare" => assert_bare_home_is_excluded(),
+        "pr_sources_beat_file" => assert_sources_beat_file(),
+        "pr_sources_beneath_cli" => assert_sources_beneath_cli(),
+        other => bail!("unknown child case `{other}`"),
+    }
+}
+
+/// Run `case` in a child whose working directory is `staged`'s.
+fn run_in(staged: &StagedDir, case: &str) -> Result<()> {
+    process_child::run(
+        CHILD_TEST,
+        case,
+        &ChildEnvironment {
+            dir: staged.dir.path(),
+            empty_root: staged.empty_root.path(),
+            vars: &[],
+        },
+    )
+}
+
+/// Child assertion: nothing but the exact environment reaches the merge.
+fn assert_bare_home_is_excluded() -> Result<()> {
     let merged = PrArgs::default()
         .load_and_merge()
         .context("merge against the isolated environment")?;
-
     ensure!(
         merged.reference.is_none(),
         "an ambient home or XDG file reached the merge: {:?}",
@@ -76,29 +95,11 @@ fn isolated_env_excludes_the_ambient_home(isolated_env: Result<IsolatedEnv>) -> 
     Ok(())
 }
 
-/// `SubcmdConfigMerge::load_and_merge_with_sources` merges the supplied scan
-/// source as the environment layer, above the file but below the CLI.
-///
-/// Catches a forwarding that drops the supplied source and reads the process
-/// environment instead, which would leave `FILE_REFERENCE` in place. The
-/// precondition keeps the case non-vacuous: a `PR_REFERENCE_KEY` exported into
-/// the process environment could otherwise satisfy the assertion without the
-/// injected source being read at all.
-#[rstest]
-fn sources_method_prefers_the_injected_environment_over_the_file(
-    isolated_env: Result<IsolatedEnv>,
-    pr_dir: Result<ConfigDir>,
-) -> Result<()> {
-    let _isolated = isolated_env?;
-    let _dir = pr_dir?;
-    ensure_key_is_unset(PR_REFERENCE_KEY)?;
-    let source = scan_source(PR_REFERENCE_KEY, INJECTED_REFERENCE);
-
-    let cli = PrArgs::default();
-    let merged = cli
-        .load_and_merge_with_sources(source)
+/// Child assertion: the injected source beats the file value.
+fn assert_sources_beat_file() -> Result<()> {
+    let merged = PrArgs::default()
+        .load_and_merge_with_sources(scan_source(PR_REFERENCE_KEY, INJECTED_REFERENCE))
         .context("merge pr args from the injected source")?;
-
     ensure!(
         merged.reference.as_deref() == Some(INJECTED_REFERENCE),
         "expected {INJECTED_REFERENCE:?} above the file value, got {:?}",
@@ -107,32 +108,70 @@ fn sources_method_prefers_the_injected_environment_over_the_file(
     Ok(())
 }
 
-/// `SubcmdConfigMerge::load_and_merge_with_sources` keeps explicit CLI values
-/// above the injected environment.
-///
-/// Catches a forwarding that omits the CLI overlay, which would leave
-/// `INJECTED_REFERENCE` in place instead of `CLI_REFERENCE`.
-#[rstest]
-fn sources_method_keeps_cli_values_above_the_injected_environment(
-    isolated_env: Result<IsolatedEnv>,
-    pr_dir: Result<ConfigDir>,
-) -> Result<()> {
-    let _isolated = isolated_env?;
-    let _dir = pr_dir?;
-    let source = scan_source(PR_REFERENCE_KEY, INJECTED_REFERENCE);
+/// Child assertion: an explicit CLI value stays above the injected source.
+fn assert_sources_beneath_cli() -> Result<()> {
     let matches = PrArgs::command().get_matches_from(["pr", "--reference", CLI_REFERENCE]);
     let cli = PrArgs::from_arg_matches(&matches).context("parse explicit values")?;
-
     let merged = cli
-        .load_and_merge_with_sources(source)
+        .load_and_merge_with_sources(scan_source(PR_REFERENCE_KEY, INJECTED_REFERENCE))
         .context("merge pr args carrying CLI values")?;
-
     ensure!(
         merged.reference.as_deref() == Some(CLI_REFERENCE),
         "expected the CLI value above the injected source, got {:?}",
         merged.reference
     );
     Ok(())
+}
+
+/// Child assertion: one table row merges to its expected retry count.
+fn assert_row(row: LayerRow) -> Result<()> {
+    let merged = merged_retries(row.method, row.cli, row.injected)?;
+    ensure!(
+        merged == row.expected,
+        "{:?} with {:?} CLI and injected {:?}: expected {}, got {merged} — the clap default \
+         {CLAP_DEFAULT_RETRIES} leaking is the usual cause",
+        row.method,
+        row.cli,
+        row.injected,
+        row.expected
+    );
+    Ok(())
+}
+
+/// Discovery resolves the home and XDG rungs through the process environment
+/// rather than the working directory, so entering a temporary directory does
+/// not close them.
+///
+/// The child runs with an exact environment, so a developer's own
+/// `~/.vk.toml` or `~/.config/vk/config.toml` cannot be merged into the
+/// result. This pins that invariant: were the harness ever reduced to a
+/// working-directory change, every other case in this module would once again
+/// depend on what the host has installed, and nothing else here would catch it.
+#[test]
+fn child_environment_excludes_the_ambient_home() -> Result<()> {
+    run_in(&empty_dir()?, "bare")
+}
+
+/// `SubcmdConfigMerge::load_and_merge_with_sources` merges the supplied scan
+/// source as the environment layer, above the file but below the CLI.
+///
+/// Catches a forwarding that drops the supplied source and reads the process
+/// environment instead, which would leave `FILE_REFERENCE` in place. The child's
+/// environment is exact, so a `PR_REFERENCE_KEY` exported by the host cannot
+/// satisfy the assertion without the injected source being read at all.
+#[test]
+fn sources_method_prefers_the_injected_environment_over_the_file() -> Result<()> {
+    run_in(&pr_dir()?, "pr_sources_beat_file")
+}
+
+/// `SubcmdConfigMerge::load_and_merge_with_sources` keeps explicit CLI values
+/// above the injected environment.
+///
+/// Catches a forwarding that omits the CLI overlay, which would leave
+/// `INJECTED_REFERENCE` in place instead of `CLI_REFERENCE`.
+#[test]
+fn sources_method_keeps_cli_values_above_the_injected_environment() -> Result<()> {
+    run_in(&pr_dir()?, "pr_sources_beneath_cli")
 }
 
 /// The match-aware methods place every layer on the right rung when no
@@ -175,12 +214,8 @@ fn sources_method_keeps_cli_values_above_the_injected_environment(
     Some(INJECTED_RETRIES),
     CLI_RETRIES
 ))]
-fn matches_methods_place_each_layer_without_a_file(
-    isolated_env: Result<IsolatedEnv>,
-    empty_dir: Result<ConfigDir>,
-    #[case] row: LayerRow,
-) -> Result<()> {
-    assert_layer_rung(isolated_env, empty_dir, row)
+fn matches_methods_place_each_layer_without_a_file(#[case] row: LayerRow) -> Result<()> {
+    run_in(&empty_dir()?, &format!("row:{}", row.encode()))
 }
 
 /// The match-aware methods place every layer on the right rung when a
@@ -196,9 +231,8 @@ fn matches_methods_place_each_layer_without_a_file(
 /// - `explicit_cli_value_beats_file_and_source` catches one that lets either
 ///   lower layer win over the CLI.
 ///
-/// Every case also requires `ISSUE_RETRIES_KEY` to be unset in the process
-/// environment, so a value that is present came from the injected source rather
-/// than the live environment.
+/// The child's environment is exact, so a value that is present came from the
+/// injected source rather than the host.
 #[rstest]
 #[case::file_beats_clap_default(LayerRow::new(
     MatchesMethod::Plain,
@@ -218,41 +252,8 @@ fn matches_methods_place_each_layer_without_a_file(
     Some(INJECTED_RETRIES),
     CLI_RETRIES
 ))]
-fn matches_methods_place_each_layer_over_a_file(
-    isolated_env: Result<IsolatedEnv>,
-    issue_dir: Result<ConfigDir>,
-    #[case] row: LayerRow,
-) -> Result<()> {
-    assert_layer_rung(isolated_env, issue_dir, row)
-}
-
-/// Drives one table row against the configuration directory the case entered.
-///
-/// The directory arrives as a consumed fixture rather than being chosen from a
-/// row field: staging is a case-level decision, so which directory a row runs
-/// against is visible in the test that owns it, and the only expected value a
-/// row can carry is one its own layers can produce.
-fn assert_layer_rung(
-    isolated_env: Result<IsolatedEnv>,
-    staged: Result<ConfigDir>,
-    row: LayerRow,
-) -> Result<()> {
-    let _isolated = isolated_env?;
-    let _dir = staged?;
-    ensure_key_is_unset(ISSUE_RETRIES_KEY)?;
-
-    let merged = merged_retries(row.method, row.cli, row.injected)?;
-
-    ensure!(
-        merged == row.expected,
-        "{:?} with {:?} CLI and injected {:?}: expected {}, got {merged} — the clap default \
-         {CLAP_DEFAULT_RETRIES} leaking is the usual cause",
-        row.method,
-        row.cli,
-        row.injected,
-        row.expected
-    );
-    Ok(())
+fn matches_methods_place_each_layer_over_a_file(#[case] row: LayerRow) -> Result<()> {
+    run_in(&issue_dir()?, &format!("row:{}", row.encode()))
 }
 
 /// The row driver refuses a `with_sources` row that supplies no injected value.
