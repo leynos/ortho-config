@@ -6,6 +6,7 @@
 //! child process, which keeps this suite free of global environment mutation.
 
 use anyhow::{Context, Result, anyhow};
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::OnceLock;
@@ -76,22 +77,33 @@ fn build_fixture() -> std::result::Result<PathBuf, String> {
 fn reported_executable(build_output: &[u8]) -> Option<PathBuf> {
     String::from_utf8_lossy(build_output)
         .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .find_map(|record| {
-            let target = record.get("target")?;
-            let is_binary = target
-                .get("kind")?
-                .as_array()?
-                .iter()
-                .any(|kind| kind.as_str() == Some("bin"));
-            if record.get("reason")?.as_str()? != "compiler-artifact"
-                || !is_binary
-                || target.get("name")?.as_str()? != FIXTURE_BIN
-            {
-                return None;
-            }
-            Some(PathBuf::from(record.get("executable")?.as_str()?))
-        })
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(is_fixture_artifact)
+        .find_map(|record| record.get("executable")?.as_str().map(PathBuf::from))
+}
+
+/// Whether a record is a compiler artefact for the fixture binary.
+fn is_fixture_artifact(record: &Value) -> bool {
+    is_compiler_artifact(record) && names_fixture_bin(record)
+}
+
+/// Whether a record reports compiler output rather than a build message.
+fn is_compiler_artifact(record: &Value) -> bool {
+    record.get("reason").and_then(Value::as_str) == Some("compiler-artifact")
+}
+
+/// Whether a record's target is the fixture binary.
+fn names_fixture_bin(record: &Value) -> bool {
+    record.pointer("/target/name").and_then(Value::as_str) == Some(FIXTURE_BIN)
+        && target_is_binary(record)
+}
+
+/// Whether a record's target kind list includes a binary.
+fn target_is_binary(record: &Value) -> bool {
+    record
+        .pointer("/target/kind")
+        .and_then(Value::as_array)
+        .is_some_and(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("bin")))
 }
 
 /// Runs the fixture with `args`, injecting `locale` and disabling colour.
