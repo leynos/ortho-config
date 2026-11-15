@@ -10,6 +10,9 @@ mod output_proptests;
 mod output_tests;
 
 #[cfg(test)]
+mod output_tie_tests;
+
+#[cfg(test)]
 mod proptests;
 
 #[cfg(test)]

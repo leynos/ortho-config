@@ -327,6 +327,12 @@ all possible public values are validated.
   `first`/`get(1)`, inlines the capture, and collects the directory entries
   before recursing so no binding is shadowed and a failed entry surfaces before
   any recursion appends to the listing.
+- [x] (2026-11-15) The second certificate attempt at `49adb5b4` confirmed that
+  Clippy repair — rustdoc and Clippy green — and failed only Whitaker's
+  `module-max-lines`, because the new presentation tests had grown
+  `output_tests` to 446 lines. The tie and per-occurrence tests moved to
+  `output_tie_tests`, leaving `output_tests` at 385 lines, with `contract` and
+  `command_with_output` shared between the two as `pub(super)`.
 
 ## Surprises & discoveries
 

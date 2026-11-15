@@ -20,7 +20,10 @@ use crate::policy::{PolicyMode, PolicyReport, PolicyResult, PolicySeverity, Voca
 ///
 /// The unrelated declarations stay empty so each test varies one axis at a
 /// time; tests that deliberately vary them build their own contracts.
-const fn contract(supports_json: Option<bool>, stdout: Option<StdoutPurpose>) -> OutputContract {
+pub(super) const fn contract(
+    supports_json: Option<bool>,
+    stdout: Option<StdoutPurpose>,
+) -> OutputContract {
     OutputContract {
         supports_json,
         stdout,
@@ -33,7 +36,7 @@ const fn contract(supports_json: Option<bool>, stdout: Option<StdoutPurpose>) ->
 ///
 /// A non-interactive, read-only declaration keeps the behaviour rules quiet,
 /// so any finding in a report comes from the structured-output rule alone.
-fn command_with_output(path: &[&str], output: Option<OutputContract>) -> AgentCommand {
+pub(super) fn command_with_output(path: &[&str], output: Option<OutputContract>) -> AgentCommand {
     let mut cmd = command(
         path,
         InteractionMode::NonInteractive,
@@ -341,47 +344,6 @@ fn findings_follow_command_path_order() {
     );
 }
 
-/// Equal paths keep encounter order, and the tie is externally visible.
-///
-/// The two commands share one path but disagree about JSON support, so their
-/// findings differ in exactly the words a tie could swap. A sort that lost
-/// encounter order would therefore reverse the explicit refusal and the
-/// undeclared capability rather than passing unnoticed.
-#[test]
-fn equal_paths_keep_encounter_order_and_stay_distinguishable() {
-    let mut context = ortho_config::AgentContext::new("output-ties");
-    context.commands.push(command_with_output(
-        &["dup"],
-        Some(contract(Some(false), Some(StdoutPurpose::Data))),
-    ));
-    context.commands.push(command_with_output(
-        &["dup"],
-        Some(contract(None, Some(StdoutPurpose::Data))),
-    ));
-
-    let report = check_output(&context, PolicyMode::Deny);
-    let messages = report
-        .results
-        .iter()
-        .map(|result| result.message.as_str())
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        messages.len(),
-        2,
-        "both occurrences must be reported: {messages:?}"
-    );
-    assert!(
-        messages
-            .first()
-            .is_some_and(|message| message.contains("declines"))
-            && messages
-                .get(1)
-                .is_some_and(|message| message.contains("undeclared")),
-        "the first-declared command must be reported first: {messages:?}"
-    );
-}
-
 /// A context that exercises a firing command beside two silent declarations.
 ///
 /// `export` trips the rule, `inspect` claims data with declared JSON support,
@@ -420,27 +382,4 @@ fn output_report_snapshots_lock_each_mode(#[case] mode: PolicyMode) {
     let json = serde_json::to_string_pretty(&report).expect("serialize the output report");
 
     assert_snapshot!(format!("output_report__{mode}"), json);
-}
-
-/// One finding is emitted per command occurrence, even for equal paths.
-#[test]
-fn equal_paths_are_reported_once_each() {
-    let mut context = ortho_config::AgentContext::new("output-duplicates");
-    for _ in 0..3 {
-        context.commands.push(command_with_output(
-            &["dup"],
-            Some(contract(None, Some(StdoutPurpose::Data))),
-        ));
-    }
-
-    let report = check_output(&context, PolicyMode::Deny);
-    assert_eq!(
-        report.results.len(),
-        3,
-        "each occurrence must be reported rather than deduplicated"
-    );
-    assert_eq!(
-        report.summary.deny, 3,
-        "the summary must count every occurrence"
-    );
 }
