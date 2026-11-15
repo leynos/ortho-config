@@ -454,6 +454,47 @@ stopping and reporting.
         comparison the matrix suite depends on is observed failing as `E0080`
         instead of resting on a recorded mutation.
 
+- [x] (2026-11-15) Fourth whole-plan assessment (Assessment-ID
+      `EP-11-2-1-whole-plan-4a5a82e2-20261115T1012Z`, head `4a5a82e2`)
+      returned "not yet complete" with one finding against the gate and one
+      recorded-evidence gap. Both are repaired.
+      - F4, the count was not bound to the exported inventory. A tree holding
+        an ordinary file-level `decoy.rs` with the reviewed total and an inline
+        `pub mod error { pub enum ErrorKind { … } }` with a different total was
+        counted from the decoy and passed: the file-level scan cannot bind a
+        nested declaration to the enum the crate exports, so a compiled decoy
+        beside it makes the number describe the wrong type. The new
+        `support/clap_publication/audit.rs` — extracted from `source.rs`, which
+        had seven lines of headroom under the 400-line cap — now owns the
+        attribute and declaration-shape refusals and adds
+        `refuse_nested_error_kinds`, which refuses an `ErrorKind` declared
+        inside a non-conditional inline module at any depth and skips a
+        presence-conditional module the compiler may never compile. The real
+        package is unaffected: `clap_builder` 4.6.7 declares its single
+        `ErrorKind` at file level in `src/error/kind.rs`.
+        `fixtures/clap_publication/module_tree/nested_definition/` pairs a
+        compiled seventeen-variant `decoy.rs` with an inline eighteen-variant
+        inventory, exactly the counterexample, and `nested_definition_is_refused`
+        requires the refusal. It was proved non-vacuous: with the refusal call
+        removed and its import kept live so the failure was the intended one,
+        the control failed with an empty refusal message, and the line was
+        restored before further work.
+      - V4 gap, generator acceptance and classification were claimed but not
+        recorded. `support/clap_publication/classes.rs` is a thirteen-case
+        `rstest` table that asserts, on every run, how each declaration shape
+        the gate can meet is classified: unit, tuple, struct, doc-commented,
+        explicitly discriminated, reordered, and empty enums are counted;
+        `cfg` and nested `cfg_attr` variants, a nested module, malformed source,
+        duplicate declarations, and a file declaring no `ErrorKind` are refused
+        with a named reason. Deterministic witnesses replace the drawn-sample
+        record the assessor offered as an alternative.
+      - Documentation: the design's §6.1.1, ADR-0022 item 6, and the
+        developers' guide's module split, contract, fixtures, and
+        troubleshooting row all state the nested-declaration refusal. The
+        decision log records that the crate root Cargo reports supersedes the
+        plan's `manifest_path` wording, and why the nested shape is refused
+        rather than counted.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -640,6 +681,19 @@ JSON artefact stream removes the assumption entirely.
   rather than from the test executable's own directory. The nested build's
   profile and target directory are its own, so a derived path is an assumption
   the test cannot check.
+- 2026-11-15: bind the inventory to the crate root Cargo reports for the
+  package's unique library target, superseding the `manifest_path` wording in
+  the requirements, the verification plan, and the milestone steps. A package
+  may set `[lib] path` and keep an unused `src/lib.rs` beside the file it
+  really compiles, so `src/lib.rs` is a default rather than a rule and the
+  manifest's directory is not the file the compiler starts from. A package
+  reporting no library target, or more than one, is refused.
+- 2026-11-15: refuse an `ErrorKind` declared inside an inline module instead of
+  counting it. The count is a file-level scan, so a nested declaration cannot
+  be bound to the inventory the crate exports, and a compiled file-level decoy
+  beside it would let the count describe the wrong enum. The declaration must
+  also be the crate's only one; both conditions fail closed rather than
+  choosing between declarations the gate can see.
 
 ## Outcomes & retrospective
 

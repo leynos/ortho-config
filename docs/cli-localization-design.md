@@ -490,7 +490,11 @@ unconditional `mod` declarations, parses every file it reaches with `syn`, and
 counts every top-level variant without assigning meaning to any of them.
 Attributes and `cfg` conditions are audited for the supported source, and a
 declaration shape whose compiled inventory cannot be established exhaustively
-fails closed.
+fails closed. The declaration must also be the crate's only one and must sit at
+file level: an `ErrorKind` declared inside an inline module is refused, because
+the file-level scan cannot bind it to the inventory the crate exports, and a
+compiled file-level decoy beside it would otherwise let the count describe the
+wrong enum.
 
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`

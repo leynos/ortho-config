@@ -82,7 +82,11 @@ It does not run for consumers and makes no claim about their resolutions.
 6. Parse that source with `syn` and count every top-level variant without
    assigning meaning to any of them. Audit attributes and `cfg` conditions; a
    declaration shape whose compiled inventory cannot be established
-   exhaustively fails closed.
+   exhaustively fails closed. The declaration must be the crate's only one and
+   must sit at file level: an `ErrorKind` declared inside an inline module is
+   refused, because the file-level scan cannot bind it to the inventory the
+   crate exports, and a compiled file-level decoy beside it would otherwise let
+   the count describe the wrong enum.
 7. Compare the parsed count with the reviewed `CLAP_ERROR_KIND_COUNT` test
    constant.
 8. In the matrix test, assert the matrix length against the same constant at
