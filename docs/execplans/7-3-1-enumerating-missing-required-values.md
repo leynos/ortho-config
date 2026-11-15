@@ -439,6 +439,14 @@ with a compatibility probe rather than an assumption.
   plan's base/head pair changes, so every earlier assessment verdict is
   evidence for its own candidate only and round c7 re-covers the new pair.
 
+- [x] (2026-11-15) Ordered gates on the rebased candidate `c0a7e991`.
+  `make check-fmt`, `make typecheck`, `make lint-clippy` and the whole
+  `make lint` passed, Whitaker and its 100% docstring coverage included. The
+  suite then ran with `--no-fail-fast` across 112 test binaries: 2785 passed,
+  46 ignored, one failed, and pytest passed. The one failure is `ortho_l10n`'s
+  charged-wait boundary probe; "Surprises & discoveries" records why it is host
+  load rather than this branch.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -453,6 +461,21 @@ failures). The failing log is kept as
 `/tmp/test-ortho-config-7-3-1-enumerating-missing-required-values.run1.out` and
 the clean log beside it, so the abort is evidence about the host, not about
 this branch.
+
+The charged-wait boundary probe fails on this host whenever the boundary binary
+runs whole. `a_wait_for_a_sibling_is_charged_to_the_allowance` holds the
+process-wide serialization lock, releases it, and expects the child's bound to
+be the remainder of the shared allowance; what it reports instead is that the
+900 second allowance was exhausted while the child waited for a sibling nested
+Cargo invocation. That wait is nested Cargo, so it queues behind shared compile
+admission, and under saturation the wait alone consumes the remainder.
+Attribution rests on three facts rather than on the failure text alone: the
+branch changes nothing under `ortho_l10n`
+(`git diff 1f4a5775 HEAD -- ortho_l10n` is empty); the same test fails
+identically at the unmodified base `1f4a5775` on this host, 553.65 s and the
+same message; and the same binary passed in 302.31 s at `f086edc9` before the
+admission queue grew to forty waiting requests. Hosted `build-test` is the
+arbiter for this contract, and no local edit should paper over it.
 
 The `make lint` failure that began in round c5 is an estate-wide effect of a
 shared lint installation, not a property of any branch. The suite checkout at
