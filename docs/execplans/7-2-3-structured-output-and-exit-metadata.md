@@ -333,6 +333,14 @@ all possible public values are validated.
   `output_tests` to 446 lines. The tie and per-occurrence tests moved to
   `output_tie_tests`, leaving `output_tests` at 385 lines, with `contract` and
   `command_with_output` shared between the two as `pub(super)`.
+- [x] (2026-11-15) Third certificate: all seven gates green at `86c77002` with
+  the head unchanged and the tree clean before and after every gate — fmt
+  mutating nothing, check-fmt, lint (rustdoc, Clippy, Whitaker including
+  `module-max-lines`, and interrogate at 1014/1014 items, 100%), test (112
+  result lines, 2881 passed, 43 ignored, no panics; pytest 128 passed and 5
+  skipped), markdownlint with spelling, nixie over 103 diagram-bearing files,
+  and 21 doctests. Any queueing was normal: admission reported healthy with all
+  four slots held.
 
 ## Surprises & discoveries
 
