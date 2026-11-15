@@ -427,34 +427,53 @@ migration guide before touching the candidate.
   submodule beside the properties. No property was weakened: the three
   properties and the contract test still run, and the file is now 189 lines
   beside a 239-line generator module.
-- [x] (2026-11-15) Gate certificate for the a4 repairs, taken on the worktree
-  content committed as `203a91c8` with HEAD unmoved at `ee93a3fe` and the tree
-  clean before and after every gate: `make check-fmt` left 104 files unchanged,
-  `make lint` passed every stage including a clean `lint-whitaker` and
-  `docstring-coverage` at 1014/1014 (the local suite checkout had rolled back to
-  `00186d43`, while hosted runs still measure `880939d1`), `make markdownlint`
-  with the spelling gate reported 0 issues in 104 files, and `make nixie`
-  validated 105 files. `make test` is red only in `ortho_l10n --test boundary`:
-  37 passed, 7 failed, 10 ignored, where all seven are wall-clock deadline
-  expiries inside a 900 s allowance and the log carries 36 queued-slot notices
-  and 25 unavailable-cache notices. `docs/BOUNDARY-ALLOWANCE-FINDING.md`
-  records the same suite failing 12 nodes on unmodified `origin/main`, so this
-  is the documented load domain rather than this diff. Every other binary
-  passed, including all 332 `agent_context` tests and the moved
+- [x] (2026-11-15) First gate certificate for the a4 repairs, taken while the
+  repair was still uncommitted: HEAD was `ee93a3fe`, the worktree carried two
+  modified files and one untracked file, and that dirty state was identical
+  before and after every gate, after which it was committed unchanged as
+  `203a91c8`. `make check-fmt` left 104 files unchanged, `make lint` passed
+  every stage including a clean `lint-whitaker` and `docstring-coverage` at
+  1014/1014 (the local suite checkout had rolled back to `00186d43`, while
+  hosted runs still measure `880939d1`), `make markdownlint` with the spelling
+  gate reported 0 issues in 104 files, and `make nixie` validated 105 files.
+  `make test` was red only in `ortho_l10n --test boundary`: 37 passed, 7
+  failed, 10 ignored, where all seven were wall-clock deadline expiries inside
+  a 900 s allowance and the log carried 36 queued-slot notices and 25
+  unavailable-cache notices. `docs/BOUNDARY-ALLOWANCE-FINDING.md` records the
+  same suite failing 12 nodes on unmodified `origin/main`, so that was the
+  documented load domain rather than this diff. Every other binary passed,
+  including all 332 `agent_context` tests and the moved
   `output_proptests::generators::generated_declarations_are_well_formed`; the
   recipe's pytest step was then run directly, 128 passed and 5 skipped.
+- [x] (2026-11-15) Superseding certificate on a clean tree, so the evidence no
+  longer depends on reading a dirty-worktree record. At HEAD `f2ecafd5`, with
+  `git status --porcelain` empty before and after and the two property files
+  hashing `f085ff27…` and `c638fa9b…` unchanged across the run:
+  `make check-fmt`, `make typecheck`, `make markdownlint` (0 issues in 104
+  files, spelling gate clean), `make nixie` (105 files),
+  `make docstring-coverage` (1014 items, 100%) and `make test` all passed.
+  `make test` ran 113 binaries with 2956 passed, 0 failed and 44 ignored,
+  including `ortho_l10n --test boundary`, which passed once host load fell to
+  about 9; pytest added 128 passed and 5 skipped. `make lint` is red only at
+  `lint-whitaker`, with 22 `bumpy_road_function` diagnostics — 11 in
+  `ortho_config_macros`, 10 in the `ortho_l10n` boundary tests, 1 in
+  `ortho_config_test_helpers` — and `lint-clippy` passed; none of the 22 is in
+  a file this branch changes except three sites in `doc_attrs.rs`, a file the
+  branch touches by four insertions and one deletion. Hosted run 43697766275 on
+  the same head reports the same suite (`whitaker-lints-880939d`) and the same
+  11 macros diagnostics, with Windows green.
 - [ ] Blocked on the prerequisite lint repair, which an installation rollback
   did not clear. Hosted `build-test (linux)` failed only at `lint-whitaker` on
-  runs 43686357368 and 43696101238, and the second run's installer log shows it
-  downloading `whitaker-lints-880939d` from the suite's default-branch tip, so
-  the macro-aware rule is still what CI measures. A local `make lint` on the
-  same content passes because this workstation's checkout had meanwhile rolled
-  back to `00186d43`, an ancestor of that commit: the local green is evidence
-  about the workstation, not about the candidate CI builds. The next action is
-  therefore unchanged — the eleven flagged functions (issue #695) or the
-  configured threshold must be settled on `main` first, then the branch is
-  rebased and re-gated. If the suite tip is itself reverted, re-run the hosted
-  leg before repairing anything.
+  runs 43686357368, 43696101238 and 43697766275, and the last two installer
+  logs show `whitaker-lints-880939d` downloaded from the suite's default-branch
+  tip, so the macro-aware rule is still what CI measures. A local `make lint`
+  passed once only because this workstation's checkout had rolled back to
+  `00186d43`, an ancestor of that commit, and it fails again now that the
+  checkout has moved forward: a local green is evidence about the workstation,
+  not about the candidate CI builds. The next action is unchanged — the eleven
+  flagged functions (issue #695) or the configured threshold must be settled on
+  `main` first, then the branch is rebased and re-gated. If the suite tip is
+  itself reverted, re-run the hosted leg before repairing anything.
 
 ## Surprises & discoveries
 
@@ -551,6 +570,14 @@ workstation and one runner were measuring different rules against identical
 source. A local pass therefore refutes nothing about CI while the two
 installations disagree, and quoting the suite revision beside a verdict is what
 makes the disagreement visible at all.
+
+The boundary allowance's missing half is now observed rather than hypothesized.
+`docs/BOUNDARY-ALLOWANCE-FINDING.md` records every failing run and names one
+result as outstanding: that the suite passes on an idle host. At a load average
+of 8.98 the same `make test` passed in 21 m 56 s with
+`ortho_l10n --test boundary` green, so the deadline failures track host load in
+both directions. The practical rule is that a boundary failure is evidence only
+once the load at the time is recorded beside it.
 
 ## Decision log
 
@@ -1070,4 +1097,7 @@ unchanged; implementation remains subject to explicit approval.
 2026-11-15: split the structured-output generators out of the property file to
 stay under the 400-line module cap, restate the status as implemented but not
 yet accepted, and record that the prerequisite lint red came from a rolling
-shared suite revision rather than from this branch.
+shared suite revision rather than from this branch. The gate certificate was
+then retaken on a clean tree at the committed head, so it no longer depends on
+a record of a dirty worktree, and the boundary suite's idle-host pass is
+recorded as observed evidence.
