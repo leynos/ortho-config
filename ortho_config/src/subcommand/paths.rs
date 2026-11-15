@@ -15,6 +15,15 @@ use crate::{EnvSource, OrthoResult};
 #[path = "paths_telemetry.rs"]
 mod paths_telemetry;
 
+/// Accept a source's fallback directory only when it is not relative.
+///
+/// A fallback is a source's answer to "where is home" when no variable says, so
+/// it is held to the rule the named variables follow: a relative path names no
+/// stable directory and would be probed relative to the process.
+fn usable_fallback(path: PathBuf) -> Option<PathBuf> {
+    (path.is_absolute() || path.has_root()).then_some(path)
+}
+
 /// Look `key` up by name, treating an empty or relative value as unset.
 ///
 /// An empty or relative home would otherwise produce relative candidates such
@@ -112,7 +121,7 @@ fn source_xdg_bases(prefix: &Prefix, source: &dyn EnvSource) -> Vec<PathBuf> {
         .or_else(|| {
             named_absolute(source, "HOME")
                 .map(PathBuf::from)
-                .or_else(|| source.home_fallback())
+                .or_else(|| source.home_fallback().and_then(usable_fallback))
                 .map(|home| home.join(".config"))
                 .inspect(|_| paths_telemetry::unix_config_home_from_fallback())
         });
@@ -240,14 +249,14 @@ fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut V
         });
     if let Some(home) = configured_home {
         push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
-    } else if let Some(fallback_home) = source.home_fallback() {
+    } else if let Some(fallback_home) = source.home_fallback().and_then(usable_fallback) {
         paths_telemetry::windows_home_from_fallback();
         push_stem_candidates(&fallback_home, &dotted(prefix), paths);
     } else {
         paths_telemetry::windows_home_absent();
     }
 
-    if let Some(config_dir) = source.config_dir_fallback() {
+    if let Some(config_dir) = source.config_dir_fallback().and_then(usable_fallback) {
         paths_telemetry::windows_config_dir_from_platform();
         let scoped_config_dir = if prefix.as_str().is_empty() {
             config_dir

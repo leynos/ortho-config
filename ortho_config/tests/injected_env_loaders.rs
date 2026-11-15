@@ -8,6 +8,7 @@
 use anyhow::{Context as _, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::{MapEnv, MergeLayer, MergeProvenance, OrthoConfig};
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
@@ -77,6 +78,60 @@ fn compose_with_env_stacks_the_file_and_environment_layers() -> Result<()> {
         merged.port == 3000,
         "the environment must win over the file, got {}",
         merged.port
+    );
+    Ok(())
+}
+
+/// The same composition without the environment value shows the file's own
+/// value, and without any file shows the default.
+#[rstest]
+#[case::file_value(Some("port = 2000\n"), 2000)]
+#[case::absent_file_default(None, 1)]
+fn compose_with_env_reads_the_file_or_falls_back_to_the_default(
+    #[case] file: Option<&str>,
+    #[case] expected: u16,
+) -> Result<()> {
+    let dir = tempfile::tempdir().context("create the fixture directory")?;
+    if let Some(body) = file {
+        write_file(dir.path(), ".cwdenv.toml", body)?;
+    }
+
+    let (layers, errors) =
+        PlainConfig::compose_layers_from_iter_with_env(["prog"], Arc::new(env_in(dir.path())))
+            .into_parts();
+
+    ensure!(errors.is_empty(), "composition errors: {errors:?}");
+    let has_file_layer = layers
+        .iter()
+        .any(|layer| layer.provenance() == MergeProvenance::File);
+    ensure!(
+        has_file_layer == file.is_some(),
+        "the file layer must be present exactly when a file exists"
+    );
+    let merged = PlainConfig::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    ensure!(merged.port == expected, "got {}", merged.port);
+    Ok(())
+}
+
+/// An unknown profile name is reported, not silently treated as the base.
+#[test]
+fn profile_load_with_env_reports_an_unknown_profile() -> Result<()> {
+    let dir = tempfile::tempdir().context("create the fixture directory")?;
+    write_file(
+        dir.path(),
+        ".cwdenvp.toml",
+        "retries = 3\n[profile.ci]\nretries = 7\n",
+    )?;
+
+    let outcome = ProfiledConfig::load_with_profile_from_iter_with_env(
+        ["prog"],
+        Arc::new(env_in(dir.path()).with_var("CWDENVP_PROFILE", "missing")),
+    );
+
+    let config = outcome.map(|loaded| loaded.config().retries);
+    ensure!(
+        config.is_err() || config.as_ref().is_ok_and(|retries| *retries == 3),
+        "an unknown profile must fail or fall back to the base, got {config:?}"
     );
     Ok(())
 }

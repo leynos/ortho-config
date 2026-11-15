@@ -233,9 +233,10 @@ impl ConfigDiscovery {
             SelectorValue::Unset => telemetry::SELECTOR_UNSET,
             SelectorValue::Empty => telemetry::SELECTOR_EMPTY,
             SelectorValue::Accepted(value) => {
-                if let Some(path) = self.anchored(PathBuf::from(value)) {
-                    let _ = acc.push_unique(path, telemetry::CANDIDATE_SELECTOR, None);
-                }
+                let Some(path) = self.anchored(PathBuf::from(value)) else {
+                    return telemetry::SELECTOR_DROPPED;
+                };
+                let _ = acc.push_unique(path, telemetry::CANDIDATE_SELECTOR, None);
                 telemetry::SELECTOR_ACCEPTED
             }
         }

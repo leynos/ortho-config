@@ -478,8 +478,9 @@ Configuration discovery emits structured `tracing` events drawn from a closed
 vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
 
 - `discovery.source_selected` — `source`: `process` or `injected`.
-- `discovery.selector` — `state`: `not_configured`, `unset`, `empty`, or
-  `accepted`.
+- `discovery.selector` — `state`: `not_configured`, `unset`, `empty`,
+  `accepted`, or `dropped` (a relative selector whose source reported no
+  working directory to resolve it against).
 - `discovery.xdg` — `config_home` and `dirs`: `absent`, `empty`, or `present`;
   `resolution`: `default` or `list`.
 - `discovery.home` — `source`: `home`, `userprofile`, `fallback`, or `none`.

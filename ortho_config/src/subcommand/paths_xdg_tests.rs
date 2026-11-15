@@ -126,3 +126,48 @@ fn xdg_search_keeps_metadata_existence_contract() -> Result<()> {
     );
     Ok(())
 }
+
+/// A source whose only answer is a (relative) home fallback.
+#[derive(Debug)]
+struct RelativeFallback;
+
+impl crate::EnvSource for RelativeFallback {
+    fn get(&self, _key: &str) -> Option<std::ffi::OsString> {
+        None
+    }
+
+    fn home_fallback(&self) -> Option<PathBuf> {
+        Some(PathBuf::from("relative-home"))
+    }
+}
+
+/// An empty or relative `HOME`, or a relative platform fallback, is unset: no
+/// candidate may be process-relative.
+///
+/// A relative candidate such as `.app.toml` is resolved against the process
+/// working directory when opened, which would escape an injected one. With the
+/// base absolute, every candidate that survives must be absolute.
+#[rstest::rstest]
+#[case::empty_home(MapEnv::new().with_var("HOME", ""))]
+#[case::relative_home(MapEnv::new().with_var("HOME", "relative-home"))]
+fn unusable_home_yields_no_process_relative_candidate(#[case] env: MapEnv) -> Result<()> {
+    let base = TempDir::new().context("create base")?;
+    assert_all_absolute(&env, base.path())
+}
+
+/// A relative platform home fallback is refused, like a relative `HOME`.
+#[test]
+fn relative_home_fallback_yields_no_process_relative_candidate() -> Result<()> {
+    let base = TempDir::new().context("create base")?;
+    assert_all_absolute(&RelativeFallback, base.path())
+}
+
+/// Requires every candidate for `source` rooted at `base` to be absolute.
+fn assert_all_absolute(source: &dyn crate::EnvSource, base: &Path) -> Result<()> {
+    let paths = candidate_paths_at(&Prefix::new("app"), base, source)?;
+    ensure!(
+        paths.iter().all(|path| path.is_absolute()),
+        "a process-relative candidate leaked: {paths:?}"
+    );
+    Ok(())
+}
