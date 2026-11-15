@@ -10,8 +10,11 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::OnceLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use test_helpers::process::run_with_deadline;
+
+#[path = "support/clap_error_fixture_lock.rs"]
+mod fixture_build_lock;
 
 /// The fixture binary name, without a platform executable suffix.
 const FIXTURE_BIN: &str = "clap-error-fixture";
@@ -19,13 +22,23 @@ const FIXTURE_BIN: &str = "clap-error-fixture";
 /// The workspace package that owns the fixture binary.
 const FIXTURE_PACKAGE: &str = "clap_error_matrix_fixture";
 
-/// Budget for the one-time nested fixture build.
-const FIXTURE_BUILD_DEADLINE: Duration = Duration::from_secs(240);
+/// Budget for the whole one-time fixture build phase.
+///
+/// The budget covers waiting for another test process's build as well as
+/// running Cargo itself, because nextest gives each test process its own
+/// 960-second allowance and a wait charged to nobody would let the build
+/// overrun it. 600 seconds leaves the fixture runs that follow in the same test
+/// a comfortable remainder.
+const FIXTURE_BUILD_DEADLINE: Duration = Duration::from_secs(600);
 
 /// Budget for one fixture run.
 const FIXTURE_RUN_DEADLINE: Duration = Duration::from_secs(30);
 
-/// Guards the one-time fixture build and the executable it reported.
+/// Guards the fixture build within one test process.
+///
+/// nextest runs every test in its own process, so this cache saves work only
+/// within a process; the advisory lock in [`acquire_build_lock`] is what
+/// prevents concurrent builds across processes.
 static FIXTURE_BINARY: OnceLock<std::result::Result<PathBuf, String>> = OnceLock::new();
 
 /// Returns the fixture executable, building it once per test process.
@@ -48,8 +61,19 @@ fn fixture_binary() -> Result<&'static Path> {
 ///
 /// The outcome is stored in a [`OnceLock`] shared by every test thread, so it
 /// carries a message rather than the underlying error type, which is not
-/// cloneable.
+/// cloneable. The build itself runs under an advisory lock, because nextest's
+/// per-process execution would otherwise let several cases nest `cargo` at once.
 fn build_fixture() -> std::result::Result<PathBuf, String> {
+    let started = Instant::now();
+    let _build_lock = fixture_build_lock::acquire(started + FIXTURE_BUILD_DEADLINE)
+        .map_err(|error| format!("the fixture build lock should be acquired: {error:#}"))?;
+    let remaining = FIXTURE_BUILD_DEADLINE.saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        return Err(format!(
+            "the fixture build budget of {FIXTURE_BUILD_DEADLINE:?} elapsed while another process held the build lock"
+        ));
+    }
+
     let mut command = Command::new("cargo");
     command
         .args([
@@ -60,7 +84,7 @@ fn build_fixture() -> std::result::Result<PathBuf, String> {
             FIXTURE_PACKAGE,
         ])
         .current_dir(env!("CARGO_MANIFEST_DIR"));
-    let output = run_with_deadline(command, FIXTURE_BUILD_DEADLINE, "clap error fixture build")
+    let output = run_with_deadline(command, remaining, "clap error fixture build")
         .map_err(|error| format!("the fixture build should finish: {error}"))?;
     if !output.status.success() {
         return Err(format!(
@@ -71,6 +95,60 @@ fn build_fixture() -> std::result::Result<PathBuf, String> {
     }
     reported_executable(&output.stdout)
         .ok_or_else(|| "the fixture build should report its executable".to_owned())
+}
+
+/// The lock file shared by every process of this suite.
+///
+/// Every test process of a run executes the same binary, so the directory
+/// holding it is the one location they agree on without guessing at Cargo's
+/// target layout, which differs between `cargo test` and `cargo nextest` and
+/// moves with `--target-dir` and cross-compilation. The file itself is an empty
+/// advisory-lock target; nothing writes to it.
+fn build_lock_path() -> Result<PathBuf> {
+    let executable = std::env::current_exe().context("locate this test executable")?;
+    let directory = executable.parent().with_context(|| {
+        format!(
+            "{} should sit in the directory that holds the test binaries",
+            executable.display()
+        )
+    })?;
+    Ok(directory.join("clap-error-fixture-build.lock"))
+}
+
+/// A second acquisition waits for a held lock instead of building alongside it.
+///
+/// Each acquisition opens its own descriptor, which is exactly the situation
+/// of two test processes contending for one build; dropping the lock from
+/// [`fixture_build_lock::acquire`] would let this case succeed immediately
+/// rather than report the elapsed wait budget.
+#[test]
+fn a_held_build_lock_blocks_a_second_acquisition() {
+    use std::sync::mpsc;
+
+    let (ready, ready_rx) = mpsc::channel();
+    let (release, release_rx) = mpsc::channel::<()>();
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            let lock = fixture_build_lock::acquire(Instant::now() + FIXTURE_RUN_DEADLINE)
+                .expect("the first acquisition should succeed");
+            ready.send(()).expect("the test should still be waiting");
+            release_rx.recv().expect("the test should release the lock");
+            drop(lock);
+        });
+        ready_rx
+            .recv()
+            .expect("the first acquisition should report readiness");
+
+        let error = fixture_build_lock::acquire(Instant::now() + Duration::from_millis(200))
+            .expect_err("a held lock must block a second acquisition");
+        assert!(
+            error.to_string().contains("stayed held past"),
+            "the second acquisition should report its elapsed budget, got: {error}"
+        );
+        release
+            .send(())
+            .expect("the holder should still be waiting");
+    });
 }
 
 /// Finds the fixture's executable in Cargo's artefact records.

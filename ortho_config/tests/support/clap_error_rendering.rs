@@ -17,19 +17,32 @@ use std::sync::Arc;
 /// Builds one representative real parse error for each reachable kind.
 ///
 /// Colour is disabled so the rendered text is deterministic for snapshots and
-/// comparisons. `Io` and `Format` have no argv reproducer and are constructed
-/// with [`ClapError::raw`] by the callers that need them.
+/// comparisons. The reproduced error must carry the requested kind: without
+/// that check a reproducer that drifted onto a neighbouring failure would
+/// still translate, and the case would silently certify the wrong predicate.
+/// `Io` and `Format` have no argv reproducer and are constructed with
+/// [`ClapError::raw`] by the callers that need them.
 fn parse_error(kind: ErrorKind) -> ClapError {
     let (command, argv) = reproducer(kind);
     match command.try_get_matches_from(argv) {
-        Err(error) => error,
+        Err(error) => {
+            assert_eq!(
+                error.kind(),
+                kind,
+                "the synthetic argv for {kind:?} should raise that kind"
+            );
+            error
+        }
         Ok(_) => panic!("the synthetic argv for {kind:?} should be rejected by clap"),
     }
 }
 
 /// The command and argv that reproduce `kind`.
 fn reproducer(kind: ErrorKind) -> (Command, &'static [&'static str]) {
-    let Some(reproducer) = value_reproducer(kind).or_else(|| structure_reproducer(kind)) else {
+    let Some(reproducer) = value_reproducer(kind)
+        .or_else(|| structure_reproducer(kind))
+        .or_else(|| display_reproducer(kind))
+    else {
         panic!("no parser reproducer for {kind:?}");
     };
     reproducer
@@ -119,11 +132,26 @@ fn structure_reproducer(kind: ErrorKind) -> Option<(Command, &'static [&'static 
     Some(reproducer)
 }
 
-/// Builds one stock error per translated kind for snapshot rendering.
+/// Reproducers for the surfaces clap renders itself.
+fn display_reproducer(kind: ErrorKind) -> Option<(Command, &'static [&'static str])> {
+    let reproducer = match kind {
+        ErrorKind::DisplayHelp => (base_command(), &["prog", "--help"][..]),
+        ErrorKind::DisplayVersion => (base_command().version("1.0.0"), &["prog", "--version"][..]),
+        ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => {
+            (base_command().arg_required_else_help(true), &["prog"][..])
+        }
+        _ => return None,
+    };
+    Some(reproducer)
+}
+
+/// Builds one stock error per matrix row, in the matrix's review order.
 ///
+/// Every classified kind appears, including the three display-only rows, so
+/// the snapshot pins the whole matrix rather than only the translated half.
 /// `InvalidUtf8` is represented by a raw error so the snapshot stays identical
 /// on every platform; its real unix parse path is covered separately.
-fn translated_stock_errors() -> Vec<ClapError> {
+fn matrix_stock_errors() -> Vec<ClapError> {
     let parser_kinds = [
         ErrorKind::InvalidValue,
         ErrorKind::UnknownArgument,
@@ -136,16 +164,25 @@ fn translated_stock_errors() -> Vec<ClapError> {
         ErrorKind::ArgumentConflict,
         ErrorKind::MissingRequiredArgument,
         ErrorKind::MissingSubcommand,
+        ErrorKind::InvalidUtf8,
+        ErrorKind::Io,
+        ErrorKind::Format,
+        ErrorKind::DisplayHelp,
+        ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
+        ErrorKind::DisplayVersion,
     ];
 
-    let mut errors: Vec<ClapError> = parser_kinds.into_iter().map(parse_error).collect();
-    errors.push(ClapError::raw(
-        ErrorKind::InvalidUtf8,
-        "invalid UTF-8 was detected in one or more arguments",
-    ));
-    errors.push(ClapError::raw(ErrorKind::Io, "i/o failure"));
-    errors.push(ClapError::raw(ErrorKind::Format, "format failure"));
-    errors
+    parser_kinds
+        .into_iter()
+        .map(|kind| match kind {
+            ErrorKind::InvalidUtf8 => {
+                ClapError::raw(kind, "invalid UTF-8 was detected in one or more arguments")
+            }
+            ErrorKind::Io => ClapError::raw(kind, "i/o failure"),
+            ErrorKind::Format => ClapError::raw(kind, "format failure"),
+            _ => parse_error(kind),
+        })
+        .collect()
 }
 
 /// Asserts one error translates to its embedded message and keeps its tail.
@@ -239,7 +276,7 @@ fn context_free_raw_errors_render_the_embedded_translation(
 /// Asserts no translation is attempted when the localizer declines.
 #[test]
 fn no_op_localizer_preserves_the_stock_diagnostic() {
-    for error in translated_stock_errors() {
+    for error in matrix_stock_errors() {
         let kind = error.kind();
         let stock = error.to_string();
         let rendered = localize_clap_error(error, &NoOpLocalizer::new()).to_string();
@@ -251,6 +288,78 @@ fn no_op_localizer_preserves_the_stock_diagnostic() {
     }
 }
 
+/// Asserts every display-only path returns clap's own surface untouched.
+///
+/// The real help, version, and missing-input paths are exercised end to end,
+/// not just raw errors. The localizer would return conspicuous text if it were
+/// consulted, so a lookup that changed the output cannot hide here.
+#[rstest]
+#[case::display_help(ErrorKind::DisplayHelp)]
+#[case::display_help_on_missing_argument_or_subcommand(
+    ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+)]
+#[case::display_version(ErrorKind::DisplayVersion)]
+fn real_display_only_paths_never_consult_the_localizer(#[case] kind: ErrorKind) {
+    use ortho_config::{LocalizationArgs, Localizer};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct ConspicuousLocalizer {
+        lookups: Arc<AtomicUsize>,
+    }
+
+    impl Localizer for ConspicuousLocalizer {
+        fn lookup(&self, _id: &str, _args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+            self.lookups.fetch_add(1, Ordering::SeqCst);
+            Some(String::from("CONSPICUOUS REPLACEMENT"))
+        }
+    }
+
+    let lookups = Arc::new(AtomicUsize::new(0));
+    let localizer = ConspicuousLocalizer {
+        lookups: Arc::clone(&lookups),
+    };
+    let error = parse_error(kind);
+    let stock = error.to_string();
+    let stock_exit_code = error.exit_code();
+    let stock_uses_stderr = error.use_stderr();
+    let stock_context: Vec<_> = error
+        .context()
+        .map(|(context_kind, value)| (context_kind, value.clone()))
+        .collect();
+
+    let localised = localize_clap_error(error, &localizer);
+
+    assert_eq!(localised.kind(), kind, "{kind:?} should keep its kind");
+    assert_eq!(
+        localised.to_string(),
+        stock,
+        "{kind:?} should keep clap's own surface"
+    );
+    assert_eq!(
+        localised.exit_code(),
+        stock_exit_code,
+        "{kind:?} should keep clap's exit status"
+    );
+    assert_eq!(
+        localised.use_stderr(),
+        stock_uses_stderr,
+        "{kind:?} should keep clap's stream selection"
+    );
+    let localised_context: Vec<_> = localised
+        .context()
+        .map(|(context_kind, value)| (context_kind, value.clone()))
+        .collect();
+    assert_eq!(
+        localised_context, stock_context,
+        "{kind:?} should keep clap's error context"
+    );
+    assert_eq!(
+        lookups.load(Ordering::SeqCst),
+        0,
+        "{kind:?} must not consult the catalogue"
+    );
+}
+
 /// Pins the finite, colour-disabled rendered translation matrix.
 #[test]
 fn rendered_translation_matrix_matches_the_snapshot() {
@@ -258,7 +367,7 @@ fn rendered_translation_matrix_matches_the_snapshot() {
         FluentLocalizer::embedded(langid!("en-US")).expect("embedded en-US catalogue should parse");
 
     let mut rendered = String::new();
-    for error in translated_stock_errors() {
+    for error in matrix_stock_errors() {
         let kind = error.kind();
         let translated = localize_clap_error(error, &localizer).to_string();
         write!(rendered, "--- {kind:?}\n{translated}\n")

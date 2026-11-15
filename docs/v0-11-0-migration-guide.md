@@ -16,9 +16,11 @@ Two areas deserve a review before release:
 - authors who want to describe how a command renders, or what structured output
   it supports, can now adopt a `renderer(...)` or `output(...)` declaration.
 
-JSON consumers need no change, and neither do Fluent catalogues. The
-documentation IR version stays at 2.0, because the new fields are optional and
-omitted when undeclared.
+JSON consumers need no change. Fluent catalogues need no change for the additions this release makes, with one exception: an override of
+`clap-error-missing-subcommand` no longer reaches the help `clap` prints when a
+required argument or subcommand is absent, as §12 explains. The documentation IR
+version stays at 2.0, because the new fields are optional and omitted when
+undeclared.
 
 ## Impact at a glance
 
@@ -36,6 +38,7 @@ omitted when undeclared.
 | **Optional**           | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
 | **Optional**           | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.                 |
 | **Optional**           | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.             |
+| **Optional if used** | Clap error overrides       | Re-check an override of `clap-error-missing-subcommand`; see §12.            |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -361,3 +364,22 @@ policy, and receives one ordered report.
 See
 [Validate skill manifests against commands](users-guide.md#validate-skill-manifests-against-commands)
 for the contract and a worked example.
+
+## 12. Re-check an override for missing-input help
+
+v0.11.0 classifies three `clap` error kinds as display-only: `DisplayHelp`,
+`DisplayVersion`, and `DisplayHelpOnMissingArgumentOrSubcommand`. The
+localization pipeline never substitutes a translated body for a display-only
+kind, so missing-input help — the help `clap` prints when a required argument
+or subcommand is absent — stays `clap`'s own text and keeps `clap`'s error exit
+status.
+
+An application that overrode `clap-error-missing-subcommand` to restyle that
+help no longer sees the override applied there. The identifier still translates
+the `MissingSubcommand` kind, so keep the override if that diagnostic still
+needs consumer copy. Missing-input help has no translated identifier of its own.
+
+No other catalogue entry changes meaning: the three display identifiers are
+never looked up, and every translated identifier in the
+[user's guide](users-guide.md#translate-or-override-clap-parse-errors) keeps
+its earlier behaviour.

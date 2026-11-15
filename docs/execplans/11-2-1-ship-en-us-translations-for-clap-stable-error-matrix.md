@@ -341,6 +341,55 @@ stopping and reporting.
       and the wrapper refuses to pin a suite that is published as a rolling
       release. Recorded as a blocker with the upstream owner rather than
       silenced by threshold tuning or an `allow`.
+- [x] (2026-11-15) Whole-plan assessment answered: three in-scope findings
+      repaired, two documentation items actioned, one item rebutted. The
+      assessment of `f5e23086` (Assessment-ID
+      `EP-11-2-1-whole-plan-f5e23086-20261115T0544Z`) returned "not yet
+      complete".
+      - F1, the source inventory counted an `ErrorKind` that a file-level
+        `#![cfg]` or a conditional `mod` hop could exclude from the build. The
+        gate now walks plain `mod` declarations from `lib.rs`, refuses a
+        declaring file it cannot certify as unconditionally compiled, and
+        treats `#[cfg_attr(cond, ..)]` as conditional only when it applies a
+        nested `cfg`, so clap_builder's `#![cfg_attr(docsrs, feature(doc_cfg))]`
+        still counts. Six committed `module_tree` fixtures prove the counted
+        chain, the conditional hop, the orphan declaration, the file-level
+        gate, the inline hop, and a tree with no crate root.
+      - F2, the rendering suite neither asserted that each reproducer returned
+        the kind under test nor pinned the display-only rows, and the real
+        help, version, and missing-input paths had no zero-lookup witness of
+        their own. `parse_error` now asserts the kind, the snapshot carries all
+        17 matrix rows in review order, and a case table drives the three
+        display-only kinds through real parses, asserting kind, unchanged text,
+        exit status, stream selection, context, and zero catalogue lookups
+        against a conspicuous localizer.
+      - F3, `clap_error_cli` used a process-local `OnceLock` while nextest runs
+        each case in its own process, and its 240 s child deadline left the
+        wait charged to nobody. Fixture builds now take an advisory `fs4` lock
+        opened beside the test binary, the one path every process of a run
+        agrees on, and a 600 s budget covers both the wait and the build inside
+        nextest's 960 s allowance. A unit case proves a held lock blocks a
+        second acquisition.
+      - Documentation: the v0.11.0 migration guide gains §8 and an impact row
+        for overrides of `clap-error-missing-subcommand`, whose missing-input
+        effect is gone, and the developers' guide records the module-chain
+        certification and its two new refusals.
+      - Rebutted: the "no committed `trybuild` UI coverage" item. V1 and V2 ask
+        for observed and recorded negative controls — a 16-row matrix and a
+        duplicated display row — both of which the M2 record holds; neither
+        milestone asks for a committed `trybuild` fixture.
+      - Gate repairs on the repair commit itself. The first certificate on
+        `a391e752` was red on `make lint` with four denied Clippy findings in
+        the new test-support modules — two `shadow_unrelated` closures,
+        `excessive_nesting` on the module-file loop, and `or_fun_call`. All
+        four were corrected in place rather than allowed. The amended head
+        `d37d1d15` then certified Clippy, rustdoc, and `make test`, but
+        Whitaker's `no_std_fs_operations` rejected `std::fs::File` in the
+        fixture build lock: cap-std exposes no locking API and `fs4` locks a
+        `std::fs::File` and nothing else. The lock moved into its own
+        `clap_error_cli::fixture_build_lock` module, exempted through a narrow
+        `excluded_paths` entry with its rationale, keeping every other file in
+        the suite under the capability policy.
 
 ## Surprises & discoveries
 

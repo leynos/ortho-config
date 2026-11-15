@@ -16,7 +16,7 @@ use super::identity::{
     REVIEWED_CLAP, REVIEWED_CLAP_BUILDER, verify_lock_edge, verify_lock_identity,
 };
 use super::lock::{Lockfile, select_unique};
-use super::source::count_error_kind_variants;
+use super::source::{count_error_kind_variants, count_error_kinds_under};
 use crate::clap_reviewed::CLAP_ERROR_KIND_COUNT;
 
 /// The directory holding the committed gate fixtures.
@@ -186,4 +186,69 @@ fn file_without_a_definition_is_refused() -> Result<()> {
 
     let error = refusal(count_error_kind_variants(&source, origin).map(|_| ()));
     ensure_refusal(&error, "declares no top-level ErrorKind")
+}
+
+/// The tree whose module chain the compiler always follows is counted.
+///
+/// It reaches `ErrorKind` through a plain `mod` file, a `mod.rs`, and a nested
+/// declaration, so both resolution shapes are exercised.
+#[test]
+fn unconditional_module_chain_is_counted() -> Result<()> {
+    let root = fixture_root().join("module_tree/unconditional");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 3,
+        "the unconditional fixture should count three variants, found {count}",
+    );
+    Ok(())
+}
+
+/// A file module behind a `#[cfg]` hop is not counted as compiled.
+#[test]
+fn conditional_module_hop_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/conditional_hop");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "does not unconditionally compile it")
+}
+
+/// A declaration no module declaration reaches is refused, not counted.
+#[test]
+fn orphaned_declaration_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/orphan");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "does not unconditionally compile it")
+}
+
+/// A module file that gates its own contents is refused.
+#[test]
+fn file_level_cfg_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/file_gated");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "conditionally compiles the whole file")
+}
+
+/// An unconditional inline module is followed rather than assumed opaque.
+#[test]
+fn inline_module_hop_is_followed() -> Result<()> {
+    let root = fixture_root().join("module_tree/inline_hop");
+
+    let count = count_error_kinds_under(&root)?;
+    ensure!(
+        count == 2,
+        "the inline-module fixture should count two variants, found {count}",
+    );
+    Ok(())
+}
+
+/// A tree with no crate root is refused rather than counted.
+#[test]
+fn tree_without_a_crate_root_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/no_crate_root");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "expected a crate root lib.rs")
 }
