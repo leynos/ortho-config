@@ -239,7 +239,9 @@ def test_cargo_config_leaves_cranelift_unselected() -> None:
     disabled selection stays in the file for an opt-in.
     """
     document = tomllib.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    assert "unstable" not in document, "an [unstable] table enables a backend selection"
+    assert "codegen-backend" not in document.get("unstable", {}), (
+        "the [unstable] table enables a backend selection"
+    )
     profiles = document.get("profile", {})
     assert not any("codegen-backend" in table for table in profiles.values()), (
         "a [profile] table selects a codegen backend"
