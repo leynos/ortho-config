@@ -447,6 +447,28 @@ with a compatibility probe rather than an assumption.
   charged-wait boundary probe; "Surprises & discoveries" records why it is host
   load rather than this branch.
 
+- [x] (2026-11-15) Round c7's reply found no confirmed defect and asked for a
+  passing local suite, the six gates including `make nixie`, and a reassessment
+  once the branch was mergeable again. `main` had advanced to `934c4c99`, so
+  the series was replayed onto it. One conflict arose in
+  `docs/v0-11-0-migration-guide.md`, where both sides had added table rows and
+  numbered the sections that follow: the table carries the union and this
+  branch's two sections are renumbered `## 11.` and `## 12.`. Weave produced an
+  unparsable `config_merge.rs` during the same replay, so that file was rebuilt
+  from `main`'s version plus this branch's `RequiredConfigSchema` bounds.
+  `range-diff` against the previous candidate shows every commit unchanged
+  except the conflict resolution, whose only extra content is table padding that
+  `mdtablefix` requires. A comment-only correction to
+  `ortho_config/tests/missing_required_values.rs` now records that the
+  `declared` module does test a documentation override. On `8ca5dd81` all six
+  gates then passed in the plan's order: `make check-fmt`, `make lint`
+  (rustdoc, Clippy, Whitaker and 100% docstring coverage), `make typecheck`,
+  `make test`, `make markdownlint` and `make nixie`. `make test`'s Cargo
+  command ran with `--no-fail-fast` over 114 binaries: 2814 passed, 46 ignored,
+  none failed, and its pytest command passed 128 with 5 skipped. The
+  charged-wait boundary probe passed here, which makes the earlier failure
+  intermittent rather than a deterministic property of this host.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -462,20 +484,29 @@ failures). The failing log is kept as
 the clean log beside it, so the abort is evidence about the host, not about
 this branch.
 
-The charged-wait boundary probe fails on this host whenever the boundary binary
-runs whole. `a_wait_for_a_sibling_is_charged_to_the_allowance` holds the
-process-wide serialization lock, releases it, and expects the child's bound to
-be the remainder of the shared allowance; what it reports instead is that the
-900 second allowance was exhausted while the child waited for a sibling nested
-Cargo invocation. That wait is nested Cargo, so it queues behind shared compile
-admission, and under saturation the wait alone consumes the remainder.
-Attribution rests on three facts rather than on the failure text alone: the
-branch changes nothing under `ortho_l10n`
-(`git diff 1f4a5775 HEAD -- ortho_l10n` is empty); the same test fails
-identically at the unmodified base `1f4a5775` on this host, 553.65 s and the
-same message; and the same binary passed in 302.31 s at `f086edc9` before the
-admission queue grew to forty waiting requests. Hosted `build-test` is the
+The charged-wait boundary probe is intermittent on this host rather than
+deterministically failing. `a_wait_for_a_sibling_is_charged_to_the_allowance`
+holds the process-wide serialization lock, releases it, and expects the child's
+bound to be the remainder of the shared allowance; at `c0a7e991` it reported
+instead that the 900 second allowance was exhausted while the child waited for
+a sibling nested Cargo invocation. That wait is nested Cargo, so it queues
+behind shared compile admission, and a long-enough wait consumes the remainder.
+The branch changes nothing under `ortho_l10n`
+(`git diff 1f4a5775 HEAD -- ortho_l10n` is empty); the same test failed
+identically at the unmodified base `1f4a5775` on this host, in 553.65 s with
+the same message; and the same binary had passed in 302.31 s at `f086edc9`. On
+`8ca5dd81` the probe passed inside a boundary binary that took 456.06 s, in a
+run that logged 1717 admission waits with up to 47 queued requests, so queue
+depth alone does not predict the outcome. Hosted `build-test` remains the
 arbiter for this contract, and no local edit should paper over it.
+
+Two `make lint` runs on `8ca5dd81` aborted in the Whitaker stage with
+`sccache: Compile terminated by signal 11` and no rustc diagnostic, first on
+`ortho_config_macros` and then on the `rstest_bdd` test target.
+`build-limits-status` reported `capacity 4, held 4, healthy` on both occasions.
+`make lint-whitaker` then passed on its own in 9m 10s, which identifies the
+aborts as cache-side crashes rather than lint findings; the retry is the gate
+result and the two aborts are recorded as infrastructure noise.
 
 The `make lint` failure that began in round c5 is an estate-wide effect of a
 shared lint installation, not a property of any branch. The suite checkout at
