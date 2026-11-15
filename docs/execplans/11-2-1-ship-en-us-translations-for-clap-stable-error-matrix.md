@@ -576,6 +576,47 @@ stopping and reporting.
         repeated-block scan found only a closing-brace window that a second
         `impl` block explains.
 
+- [x] (2026-11-15) The gate run found a defect in the lock test's budget, and
+      the branch was merged up to a second main tip.
+      - The nine gates ran on frozen `664a1e84`. Seven passed. `make boundary`
+        failed thirteen of forty-four contracts, every one a nested-Cargo
+        deadline or allowance kill with no assertion failure. `make test`
+        aborted at `ortho_config --test clap_error_cli`, five cases passing and
+        `a_held_build_lock_blocks_a_second_acquisition` failing.
+      - That failure is a real defect in the test rather than in the product.
+        The contention test acquired the lock under `FIXTURE_RUN_DEADLINE`
+        (30 s), but the thread it competes with is the real fixture build,
+        which holds the lock for the whole build budget; under load the wait
+        legitimately outlived 30 s. The helper's message made the report
+        worse by printing `FIXTURE_BUILD_DEADLINE` whatever budget the caller
+        set, so a 200 millisecond caller was told a 600 second budget had
+        elapsed.
+      - `8e736c94` gives `acquire` the instant the caller started counting
+        from plus its budget, reports that budget verbatim, and moves the
+        contention test's first acquisition onto `FIXTURE_BUILD_DEADLINE`.
+        The assertion now requires the message to name `200ms`, so a budget
+        that stops matching its message fails the test rather than passing on
+        its prose prefix alone.
+      - Main moved again while the gates ran: `934c4c99` (#696) stops
+        ortho-config's own tests changing process-wide state, deprecates the
+        helpers that did, and adds a migration-guide section. `f5431ad5`
+        merges it. The one textual conflict is again
+        `docs/v0-11-0-migration-guide.md`, where both sides inserted sections
+        before "Load with one injected environment": main's new section is 9,
+        this branch's clap sections become 10 and 11, and the shared closing
+        section becomes 12. The table gains main's process-mutating row after
+        the clap rows, so its order matches the sections, and its "see §N"
+        references and the narrative cross reference follow the new numbers.
+      - A focused `cargo test -p ortho_config --test clap_error_cli` on the
+        pre-merge tree failed all six cases, but not on any assertion: the
+        nested fixture build exceeded its own 600 second command deadline
+        while queued behind roughly 145 compile requests from other
+        worktrees, after an outer build that itself took eighteen minutes.
+        The fixture directory held no binary afterwards, so no test body ran.
+        This is host saturation of the shared admission pool, which the
+        repository's guidance says to expect and not to treat as a slow
+        gate's verdict.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -757,6 +798,25 @@ published dependency, so an `ortho_config` release carrying those types has to
 exist before `cargo-orthohelp` can pass its own publish dry run. This change
 cannot supply it, and main has not either as of `2117f1a3`.
 
+A failure message that names a constant rather than the caller's value is a
+diagnostic that points at the wrong bound. The lock helper printed
+`FIXTURE_BUILD_DEADLINE` for every caller, so the 200 millisecond contention
+case claimed a 600 second budget had elapsed and the 30 second build wait
+claimed the same. The test that should have caught this asserted only the
+prefix "stayed held past", which both messages share. Carrying the budget
+alongside the deadline, and asserting the number inside the message, keeps the
+report and the wait from drifting apart.
+
+A deadline inside the design is not a tool timeout. `FIXTURE_BUILD_DEADLINE`
+exists to turn a hung nested `cargo` into a diagnosable failure, so it is sized
+for a compile on a runner doing one job, not for a shared admission queue
+hundreds of requests deep. When a gate fails on that deadline, the
+discriminator is whether any test body ran: here the outer build had already
+taken eighteen minutes, the nested build was killed before it reached a
+compiler slot, and the fixture directory held no binary. The repair is to wait
+for the queue to shorten and rerun, not to widen a bound whose purpose is to
+fail early.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -818,13 +878,14 @@ cannot supply it, and main has not either as of `2117f1a3`.
 
 ## Outcomes & retrospective
 
-The implementation is complete on head `0669051f` and delivery is not.
-Acceptance criteria E1–E4 are met and evidenced in Progress; none is
-outstanding as an implementation obligation. The users' guide enumerates the
-matrix, names the override identifiers, and documents the display-only and
-missing-input behaviour; the developers' guide owns the gate's troubleshooting
-procedure and its variant-intake steps; the roadmap records 11.2.1 as done with
-its finding and validation notes; and ADR-0022 records the mechanism.
+The implementation is complete and delivery is not; Progress records the
+current candidate and each repair. Acceptance criteria E1–E4 are met and
+evidenced in Progress; none is outstanding as an implementation obligation. The
+users' guide enumerates the matrix, names the override identifiers, and
+documents the display-only and missing-input behaviour; the developers' guide
+owns the gate's troubleshooting procedure and its variant-intake steps; the
+roadmap records 11.2.1 as done with its finding and validation notes; and
+ADR-0022 records the mechanism.
 
 The gate reached its final shape over five whole-plan assessment rounds, and
 each round removed a way for the count to describe a build the compiler does
@@ -834,16 +895,21 @@ finally a declaration nested in an inline module — conditional or not, because
 `cfg` condition can hold and the gate cannot evaluate it. A compiling or
 counted shape the gate cannot prove now fails closed.
 
-Two delivery blockers remain, both outside the acceptance criteria. The hosted
-`build-test (linux)` job is red on its `Lint` step for the
-`bumpy-road-function` rule that Whitaker's rolling suite introduced at
-`880939d1`; the rule fires only in files byte-identical to `origin/main`, so
-its owner is the base layer, and the Linux coverage and packaging steps
-sequenced behind Lint are uncertified until it is cleared. Locally,
+The hosted `Lint` blocker is cleared. The `bumpy-road-function` finding that
+Whitaker's rolling suite introduced at `880939d1` fired only in files
+byte-identical to `origin/main`, and main answered it in `1f4a5775`; the branch
+took main's version by merging rather than duplicating the refactor, so no
+branch-owned source carries the finding.
+
+Two blockers remain, both outside the acceptance criteria. Locally,
 `make boundary` and `make test` exhaust wall-clock allowances while the host's
-compile-admission pool is saturated by unrelated work; no assertion or output
-mismatch has been observed in either, and the same suites pass on hosted
-Windows. Both are recorded rather than papered over.
+compile-admission pool is saturated by unrelated work; every failure observed
+in those runs is a deadline or allowance kill with no assertion or output
+mismatch, and the same suites pass on hosted Windows. Separately, the
+dispatch-only `Publish dry run` fails on Windows for a release-ordering reason
+this branch cannot own: `cargo-orthohelp` verifies against the registry's
+published `ortho_config` 0.10.0, which predates the agent-context policy types.
+Both are recorded rather than papered over.
 
 The plan incorporates the merged prover tooling from PR #651, and the nested
 Cargo timeout fix that blocked validation on main has since landed from
