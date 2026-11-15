@@ -26,6 +26,14 @@ mod holder_tests {
     use anyhow::{Result, ensure};
     use rstest::rstest;
 
+    /// The enumeration fault `with_partial_listing` injects below.
+    ///
+    /// Named once because one test asserts the report reproduces it *verbatim*:
+    /// `append_owner`'s incomplete-scan sentence contains "could not be read"
+    /// whatever its `reason` holds, so only text that appears in this string and
+    /// nowhere in that sentence can prove the fault itself reached the report.
+    const INJECTED_FAULT: &str = "/proc/1/fd: an entry could not be read (Stale file handle)";
+
     /// Names a lock file identity the tests can compare against.
     const fn identity() -> LockFileIdentity {
         LockFileIdentity::of(DeviceNumber::from_raw(0x0801), Inode::new(42))
@@ -196,11 +204,7 @@ mod holder_tests {
     fn an_enumeration_fault_keeps_the_entries_it_yielded() -> Result<()> {
         let pid = ProcessId::new(1);
         let procfs = FakeProcFs::default()
-            .with_partial_listing(
-                pid,
-                vec![Descriptor::new(7)],
-                "/proc/1/fd: an entry could not be read (Stale file handle)",
-            )
+            .with_partial_listing(pid, vec![Descriptor::new(7)], INJECTED_FAULT)
             .with_identity(pid, Descriptor::new(7), identity());
 
         let outcome = inspect_descriptors(pid, identity(), &procfs);
@@ -226,6 +230,13 @@ mod holder_tests {
         // built itself. A report layer that discarded `matched` here therefore
         // passed both, so the descriptor and the fault are re-asserted on the
         // rendered report.
+        //
+        // The fault is asserted by the *injected* text, not by the fixed words
+        // of `append_owner`'s sentence: that sentence contains "could not be
+        // read" whatever `reason` holds, so an empty `reason` would satisfy a
+        // match on those words and a report that dropped the fault entirely
+        // would pass. `Stale file handle` appears only in the text this fake
+        // injects.
         let mut lines = Vec::new();
         append_owner_lines(&mut lines, &[pid], identity(), &procfs);
         let rendered = lines.join("\n");
@@ -235,9 +246,10 @@ mod holder_tests {
              report that dropped it would leave the hold unexplained: {rendered}",
         );
         ensure!(
-            rendered.contains("could not be read"),
-            "the enumeration fault must reach the report, not only the scan's \
-             `Err`: {rendered}",
+            rendered.contains(INJECTED_FAULT),
+            "the enumeration fault's own text must reach the report, not only \
+             the scan's `Err`; the fixed wording of the incomplete-scan \
+             sentence does not stand in for it: {rendered}",
         );
         Ok(())
     }
