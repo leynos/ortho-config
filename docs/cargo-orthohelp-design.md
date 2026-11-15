@@ -842,17 +842,27 @@ segment    = Rust identifier ;
 
 The accepted forms are a bare type name (`AppConfig`), a package-relative path
 (`crate::AppConfig`), and a fully qualified path (`my_app::AppConfig`). A bare
-name and a `crate::` prefix are both rewritten to the selected package's crate
-name, because the bridge is a separate crate. The parsed path is rendered from
-its syntax tree, and that rendered value is what the cache key and the
-generated source receive.
+name and a leading `crate` segment are both rewritten to the selected package's
+crate name, because the bridge is a separate crate. Qualification is decided
+from the parsed segments, so spacing variants such as `crate :: AppConfig` and
+a leading space qualify identically. The parsed path is rendered from its
+syntax tree, and that rendered value is what the cache key and the generated
+source receive.
 
 Generics and parenthesized path arguments (`Config<T>`, `Fn(A) -> B`), tuples
 (`(A, B)`), references (`&Config`), qualified self types
-(`<Config as Trait>::Assoc`), global paths (`::my_app::Config`), and any
-statement- or expression-shaped input are rejected with an `InvalidRootType`
-diagnostic. Parsing rather than pattern matching is essential: the value must
-never reach the generated source as text the caller controls.
+(`<Config as Trait>::Assoc`), global paths (`::my_app::Config`), paths starting
+with `self`, `super`, or `Self`, a bare `crate`, and any statement- or
+expression-shaped input are rejected with an `InvalidRootType` diagnostic.
+Parsing rather than pattern matching is essential: the value must never reach
+the generated source as text the caller controls.
+
+The grammar, its rejections, and the canonical renderer live in
+`cargo-orthohelp/src/root_type.rs`. `metadata::select_package` is the only
+caller: it merges the CLI flag and package metadata into one candidate, calls
+`root_type::parse_root_type`, and passes the rendered value to the cache key
+and the bridge. Other modules must consume that rendered value rather than
+re-parsing or re-qualifying the caller's text.
 
 ### 6.2 Pipeline
 

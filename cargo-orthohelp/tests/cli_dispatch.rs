@@ -171,7 +171,10 @@ fn version_reports_success_and_the_built_version(
         "--package",
         "orthohelp_fixture",
         "--root-type",
-        "Config as OrthoConfigDocs>::get_doc_metadata(); std::process::exit(1); let _ = <Config",
+        concat!(
+            "orthohelp_fixture::SimpleFixtureConfig as OrthoConfigDocs>::get_doc_metadata(); ",
+            "std::process::exit(1); let _ = <orthohelp_fixture::SimpleFixtureConfig",
+        ),
     ],
     "injection-shaped root type should fail",
     "InvalidRootType",
@@ -221,6 +224,47 @@ fn direct_invocation_without_subcommand_includes_cargo_hint() {
     );
 }
 
+/// The payload would be executable if validation were bypassed: it names a real
+/// root type from the fixture and writes a marker file as a side effect.
+#[test]
+fn cli_root_type_injection_is_rejected_before_the_bridge_runs()
+-> Result<(), Box<dyn Error + Send + Sync>> {
+    let marker_dir = tempfile::tempdir()?;
+    let marker_path = marker_dir.path().join("injected.marker");
+    let payload = format!(
+        concat!(
+            "orthohelp_fixture::SimpleFixtureConfig as OrthoConfigDocs>::",
+            "get_doc_metadata(); std::fs::write({marker:?}, b\"injected\")",
+            ".expect(\"marker write\"); let _ = <orthohelp_fixture::SimpleFixtureConfig",
+        ),
+        marker = marker_path,
+    );
+
+    let output = run_direct(&[
+        "orthohelp",
+        "--package",
+        "orthohelp_fixture",
+        "--root-type",
+        &payload,
+    ])?;
+
+    if output.status.success() {
+        return Err("injection-shaped root type should fail".into());
+    }
+    let stderr = stderr(&output);
+    if !stderr.contains("InvalidRootType") {
+        return Err(format!("unexpected diagnostic:\n{stderr}").into());
+    }
+
+    let marker_dir_path = Utf8Path::from_path(marker_dir.path())
+        .ok_or("temporary marker path should be valid UTF-8")?;
+    let dir = Dir::open_ambient_dir(marker_dir_path, ambient_authority())?;
+    if dir.exists("injected.marker") {
+        return Err("the bridge executed the injected payload".into());
+    }
+    Ok(())
+}
+
 #[test]
 fn metadata_root_type_injection_is_rejected() -> Result<(), Box<dyn Error + Send + Sync>> {
     let package_dir = tempfile::tempdir()?;
@@ -228,18 +272,55 @@ fn metadata_root_type_injection_is_rejected() -> Result<(), Box<dyn Error + Send
         .ok_or("temporary package path should be valid UTF-8")?;
     let dir = Dir::open_ambient_dir(package_path, ambient_authority())?;
     dir.create_dir("src")?;
-    dir.write("src/lib.rs", "pub struct Config;\n")?;
+    // The fixture is a complete, buildable package: it derives every trait the
+    // bridge requires and gives its field a default. If validation were
+    // bypassed, the payload below would compile and write the marker.
+    dir.write(
+        "src/lib.rs",
+        concat!(
+            "use clap::Parser;\n",
+            "use ortho_config::OrthoConfig;\n",
+            "use serde::{Deserialize, Serialize};\n",
+            "\n",
+            "#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]\n",
+            "#[ortho_config(prefix = \"ROOT_TYPE_INJECTION\")]\n",
+            "pub struct Config {\n",
+            "    /// Value used only to satisfy the derive's named-field rule.\n",
+            "    #[ortho_config(default = String::from(\"value\"))]\n",
+            "    pub value: String,\n",
+            "}\n",
+        ),
+    )?;
+
+    let ortho_config_path = fixtures::workspace_root()?.join("ortho_config");
+    let marker_path = package_dir.path().join("injected.marker");
+    let root_type = format!(
+        concat!(
+            "root_type_injection_fixture::Config as OrthoConfigDocs>::get_doc_metadata(); ",
+            "std::fs::write({marker:?}, b\"injected\").expect(\"marker write\"); ",
+            "let _ = <root_type_injection_fixture::Config",
+        ),
+        marker = marker_path,
+    );
     dir.write(
         "Cargo.toml",
-        concat!(
-            "[package]\n",
-            "name = \"root_type_injection_fixture\"\n",
-            "version = \"0.1.0\"\n",
-            "edition = \"2024\"\n",
-            "\n",
-            "[package.metadata.ortho_config]\n",
-            "root_type = \"Config as OrthoConfigDocs>::get_doc_metadata(); ",
-            "std::process::exit(1); let _ = <Config\"\n",
+        format!(
+            concat!(
+                "[package]\n",
+                "name = \"root_type_injection_fixture\"\n",
+                "version = \"0.1.0\"\n",
+                "edition = \"2024\"\n",
+                "\n",
+                "[dependencies]\n",
+                "ortho_config = {{ path = {ortho_config:?} }}\n",
+                "serde = {{ version = \"1\", features = [\"derive\"] }}\n",
+                "clap = {{ version = \"4\", features = [\"derive\"] }}\n",
+                "\n",
+                "[package.metadata.ortho_config]\n",
+                "root_type = {root_type:?}\n",
+            ),
+            ortho_config = ortho_config_path.as_str(),
+            root_type = root_type,
         ),
     )?;
 
@@ -255,6 +336,9 @@ fn metadata_root_type_injection_is_rejected() -> Result<(), Box<dyn Error + Send
     let stderr = stderr(&output);
     if !stderr.contains("InvalidRootType") {
         return Err(format!("unexpected diagnostic:\n{stderr}").into());
+    }
+    if dir.exists("injected.marker") {
+        return Err("the bridge executed the injected payload".into());
     }
     Ok(())
 }
