@@ -11,7 +11,7 @@
 //! nothing else; `dylint.toml` records the exemption under
 //! `no_std_fs_operations`.
 
-use super::{FIXTURE_BUILD_DEADLINE, build_lock_path};
+use super::build_lock_path;
 use anyhow::{Context, Result, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, OpenOptions};
@@ -25,10 +25,16 @@ use std::time::{Duration, Instant};
 /// The returned handle releases the lock when it is dropped, which happens
 /// before this function's caller runs the fixture, so a second process may
 /// build while the first is already executing its cases.
-pub(super) fn acquire(deadline: Instant) -> Result<File> {
+///
+/// The wait is bounded by `budget` measured from `started`, so a caller that
+/// shares one budget between this wait and a build keeps the total inside it.
+/// The budget is carried separately from the deadline because the failure
+/// message must name the budget the caller set: a caller waiting 200
+/// milliseconds must not be told that a 600-second budget elapsed.
+pub(super) fn acquire(started: Instant, budget: Duration) -> Result<File> {
     let path = build_lock_path()?;
     let lock = open_lock_file(&path)?;
-    wait_until_locked(&lock, &path, deadline)?;
+    wait_until_locked(&lock, &path, started + budget, budget)?;
     Ok(lock)
 }
 
@@ -56,8 +62,10 @@ fn open_lock_file(path: &Path) -> Result<File> {
 ///
 /// Polling rather than blocking keeps the wait inside one budget shared with
 /// the build, so a lock held by a stuck process is reported instead of
-/// consuming the test's whole nextest allowance.
-fn wait_until_locked(lock: &File, path: &Path, deadline: Instant) -> Result<()> {
+/// consuming the test's whole nextest allowance. `budget` is the interval the
+/// caller started counting from; it is reported verbatim so the message
+/// describes the wait that actually happened.
+fn wait_until_locked(lock: &File, path: &Path, deadline: Instant, budget: Duration) -> Result<()> {
     loop {
         match FileExt::try_lock(lock) {
             Ok(()) => return Ok(()),
@@ -67,7 +75,7 @@ fn wait_until_locked(lock: &File, path: &Path, deadline: Instant) -> Result<()> 
             Err(TryLockError::WouldBlock) => {
                 ensure!(
                     Instant::now() < deadline,
-                    "the clap error fixture build lock stayed held past its {FIXTURE_BUILD_DEADLINE:?} budget: {}",
+                    "the clap error fixture build lock stayed held past its {budget:?} budget: {}",
                     path.display(),
                 );
                 std::thread::sleep(Duration::from_millis(50));

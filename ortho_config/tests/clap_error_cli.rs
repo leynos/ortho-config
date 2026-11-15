@@ -65,7 +65,7 @@ fn fixture_binary() -> Result<&'static Path> {
 /// per-process execution would otherwise let several cases nest `cargo` at once.
 fn build_fixture() -> std::result::Result<PathBuf, String> {
     let started = Instant::now();
-    let _build_lock = fixture_build_lock::acquire(started + FIXTURE_BUILD_DEADLINE)
+    let _build_lock = fixture_build_lock::acquire(started, FIXTURE_BUILD_DEADLINE)
         .map_err(|error| format!("the fixture build lock should be acquired: {error:#}"))?;
     let remaining = FIXTURE_BUILD_DEADLINE.saturating_sub(started.elapsed());
     if remaining.is_zero() {
@@ -129,7 +129,10 @@ fn a_held_build_lock_blocks_a_second_acquisition() {
     let (release, release_rx) = mpsc::channel::<()>();
     std::thread::scope(|scope| {
         scope.spawn(move || {
-            let lock = fixture_build_lock::acquire(Instant::now() + FIXTURE_RUN_DEADLINE)
+            // Hold the lock under the same budget the real build path uses: a
+            // sibling process may still be building, and the wait for its lock
+            // is part of the build phase rather than of one fixture run.
+            let lock = fixture_build_lock::acquire(Instant::now(), FIXTURE_BUILD_DEADLINE)
                 .expect("the first acquisition should succeed");
             ready.send(()).expect("the test should still be waiting");
             release_rx.recv().expect("the test should release the lock");
@@ -139,11 +142,13 @@ fn a_held_build_lock_blocks_a_second_acquisition() {
             .recv()
             .expect("the first acquisition should report readiness");
 
-        let error = fixture_build_lock::acquire(Instant::now() + Duration::from_millis(200))
+        let error = fixture_build_lock::acquire(Instant::now(), Duration::from_millis(200))
             .expect_err("a held lock must block a second acquisition");
         assert!(
-            error.to_string().contains("stayed held past"),
-            "the second acquisition should report its elapsed budget, got: {error}"
+            error
+                .to_string()
+                .contains("stayed held past its 200ms budget"),
+            "the second acquisition should report the budget it was given, got: {error}"
         );
         release
             .send(())
