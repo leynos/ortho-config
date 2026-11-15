@@ -60,9 +60,17 @@ pub(super) fn ensure_charged_wait_was_reported(
     error: &anyhow::Error,
     directory: &Dir,
 ) -> Result<()> {
+    // The probe's own description contains the word "allowance", and a spawn
+    // failure echoes it, so the check matches the deadline error's note instead.
     ensure!(
-        error.to_string().contains("allowance"),
+        error
+            .to_string()
+            .contains("bounded by the boundary contract's shared allowance"),
         "the error should report the shared allowance rather than a bare cap:\n{error:#}",
+    );
+    ensure!(
+        directory.exists("charged.start"),
+        "the child never started, so its deadline was not what ended the run",
     );
     ensure!(
         !directory.exists("charged.exit"),
