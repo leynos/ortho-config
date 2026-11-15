@@ -194,6 +194,14 @@ reject malformed declarations, but direct construction/deserialization is not a
 runtime verification service. Document this distinction rather than claiming
 all possible public values are validated.
 
+A rolling lint suite is a shared, unpinned dependency of every gate. Whitaker
+publishes a rolling suite, so a release can make unchanged code fail the gate
+between two runs of the same commit; that has now happened once, to the Linux
+leg of `main` itself. A green local lint therefore certifies the suite that was
+installed when it ran, not the code, and the hosted leg is the arbiter. When a
+lint verdict moves with no source change, read the suite's revision and its
+migration guide before touching the candidate.
+
 ## Progress
 
 - [x] (2026-11-08) Rename branch and inspect baseline instructions and roadmap.
@@ -379,13 +387,41 @@ all possible public values are validated.
   references — the changelog and migration-guide links, the developers' guide
   heading, and the outcomes section of this plan — now point at ADR-0022;
   entries that explain the renumbering keep naming 0020.
-- [x] (2026-11-15) Hosted `build-test (linux)` is red at `b2188834` with eleven
-  Whitaker `Multiple clusters of nested conditional logic` errors, and the same
-  eleven errors appear in the Linux job for main's own head `f086edc9` (run
-  43679542090). The flagged functions are in `ortho_config_macros` parse
-  modules that neither main's recent commits nor this branch modify, and the
-  local `make lint` passes with the locally installed Whitaker. The failure is
-  therefore a hosted-lint baseline change, not a defect in this candidate.
+- [x] (2026-11-15) The hosted lint baseline is root-caused, and it lies outside
+  this repository. The shared Whitaker checkout advanced to `880939d1`,
+  "Implement the macro-aware cognitive complexity rule (#504) (#574)", authored
+  04:14:56Z, and its v0.3.0 migration guide records the consequence:
+  `bumpy_road_function` no longer stops at generated expressions, so authored
+  code written as a macro argument — a `matches!` arm, a guard, an assertion
+  predicate — now contributes complexity, and a function can cross the weighted
+  threshold "even though none of its own lines changed". The eleven
+  `ortho_config_macros` diagnostics are identical for main's `f086edc9` (run
+  43679542090) and for `b2188834` (run 43681024433), the latter logged before
+  the a3 repairs; they include `apply_nested_struct_attr`, the only flagged
+  function this branch edits, which gained one match arm. A full local
+  `make lint` at `1fb1c562` reports twenty-two sites: those eleven, ten in
+  `ortho_l10n` boundary tests, and one in `test_helpers`. The same diagnostic
+  appears in another repository's untouched base commit, so the cause is the
+  shared installation rather than either codebase. Issue #695, filed from PR
+  #592 and assigned to `pandalump`, owns the eleven `ortho_config_macros`
+  functions and records that changing the repository-wide threshold needs a
+  maintainer decision; the other eleven are unowned, and three of them sit in
+  files PR #688 already modifies.
+- [x] (2026-11-15) Gate certificate at `1fb1c562` with HEAD unmoved and the
+  tree clean before and after every gate: `make fmt` mutated nothing,
+  `make check-fmt` left 104 files unchanged, `make test` passed 113 suites with
+  2956 passed, 0 failed and 44 ignored, plus pytest's 128 passed and 5 skipped,
+  `make markdownlint` with the spelling gate reported 0 issues in 104 files,
+  `make nixie` validated 105 files, and `cargo test --doc` passed 135 doctests
+  across 10 suites with 47 ignored. `make lint` is red only at `lint-whitaker`,
+  so `docstring-coverage` did not run; the earlier 1014/1014 figure belongs to
+  the pre-repair head and is not claimed here.
+- [ ] Blocked on the prerequisite lint repair. Hosted `build-test (linux)`
+  cannot go green for this branch while `main` is red for the same reason, and
+  that repair is neither in this plan's scope nor in this branch's ownership.
+  The next action is to rebase onto `main` once the flagged functions are
+  repaired there, then re-run the full gate set; if the maintainer raises the
+  configured threshold instead, record that decision and re-gate.
 
 ## Surprises & discoveries
 
@@ -453,6 +489,18 @@ and every cross-reference in prose and module documentation. The number is part
 of the citation surface, not a label on one file, so a rebase that advances the
 target branch needs a repository-wide reference sweep rather than a conflict
 resolution confined to the one file that conflicted.
+
+A lint verdict can move while its subject stands still. Main's `f086edc9`
+passed the Linux leg at 03:40Z (run 43673395956) and failed it at 05:05Z (run
+43679542090), and the only change between the two was the suite: its checkout
+gained the macro-aware `bumpy_road_function` at 04:14Z. The local verdict moved
+inside this session as well — `make lint` passed at `b2188834` and failed from
+`1fb1c562` onwards, although the tracked files that changed in between touch
+`cargo-orthohelp` only — because other sessions rebuilt the shared installation
+while these gates ran (suite library at 05:17, wrappers at 06:51, checkout at
+07:06). The cheap defences are to quote a gate's suite revision beside its
+verdict, and to treat a sudden lint failure in untouched files as evidence
+about the tooling until the code is shown to be responsible.
 
 ## Decision log
 
