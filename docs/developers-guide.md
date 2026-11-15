@@ -1363,15 +1363,18 @@ Four conventions are easy to break and expensive to debug:
 
 Avoid `expect` and `unwrap` in these modules, including test-only helpers
 outside a `#[test]` body; `support.rs` returns values instead. Test helpers
-live in `support`, `tests`, `tests_examples`, `tests_policy`,
+live in `support`, `tests`, `tests_bridge`, `tests_examples`, `tests_policy`,
 `tests_policy_exceptions`, `tests_surface`, `proptests`, `proptests_controls`,
 and `proptests_examples`; each module holds one facet, so a table that outgrows
 the 400-line cap moves whole rather than losing cases. The property tests use
 independent linear oracles rather than calling the validator's own index, and
 `proptests_controls` holds the fixed-input mutation controls: a property that
 compares two computations needs a case where a changed rule changes the
-prediction, which a generated comparison alone cannot show. Coverage counts
-extraction (`examples_checked`) separately from binding (`examples_bound`), and
+prediction, which a generated comparison alone cannot show. `tests_surface`
+builds an `AgentContext` by hand, which pins the adapter but not the bridge, so
+`tests_bridge` drives `bridge_ir_to_agent_context` and reuses the bridge's own
+IR fixture builders rather than a second copy. Coverage counts extraction
+(`examples_checked`) separately from binding (`examples_bound`), and
 `ValidationStatus::Complete` requires the two to agree with no unsupported
 examples.
 

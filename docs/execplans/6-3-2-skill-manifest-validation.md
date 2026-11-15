@@ -429,6 +429,18 @@ original constraint text is left as written.
   verb. The deterministic controls moved whole to `proptests_controls.rs` so
   `proptests.rs` stays under the 400-line cap, and the developers' guide
   records that split.
+- [x] (2026-11-15) Closed the bridge gap the same assessment left open, and
+  corrected the interface sentence it queried. `tests_surface` builds its
+  `AgentContext` by hand, so it pinned the surface adapter but never showed
+  that a context produced by `bridge_ir_to_agent_context` reaches the
+  noncanonical-verb finding. `tests_bridge` now drives the real bridge, asserts
+  the bridge leaves `info` without canonical metadata, and asserts the finding
+  anyway; disabling the spelled-verb branch makes it fail with no findings. The
+  bridge's IR fixture builders became crate-visible test support instead of a
+  second copy. The Interfaces section said `ResolvedAgentPolicy` carries "the
+  exact mode, rule levels, and exceptions"; it carries the mode and the
+  exception list, and per-rule levels are deferred with 7.1.2, so the sentence
+  now says so.
 
 ## Surprises & discoveries
 
@@ -1291,10 +1303,10 @@ positionals, example source ordinal, and option source ordinals.
 inputs resolved by its consumer or bridge adapter. It rejects duplicate paths
 and ambiguous option metadata. It does not infer inheritance. The completed
 7.1.3 policy/glossary supplies canonical vocabulary and global-option rules;
-`ResolvedAgentPolicy` contains the exact mode, rule levels, and exceptions.
-Results separate structural from policy findings. Names and visibility may
-change during approved reconciliation; ownership, scoping, and non-I/O
-boundaries may not.
+`ResolvedAgentPolicy` contains the exact mode and exception list; per-rule
+levels are deferred with roadmap 7.1.2. Results separate structural from policy
+findings. Names and visibility may change during approved reconciliation;
+ownership, scoping, and non-I/O boundaries may not.
 
 No runtime dependency is proposed. Verify existing workspace test dependencies
 at EP-M1; add the authorized `googletest` and `pretty_assertions` as
@@ -1387,6 +1399,12 @@ OrthoConfig format mandate.
   refreshed completeness assessment; moved the deterministic controls to
   `proptests_controls.rs` to stay within the module cap. Scope and design are
   unchanged.
+
+- 2026-11-15: Added `tests_bridge`, which drives the real IR bridge before the
+  surface adapter, and made the bridge's IR fixture builders crate-visible test
+  support rather than duplicating them. Corrected the Interfaces sentence that
+  gave `ResolvedAgentPolicy` rule levels it does not carry; per-rule levels
+  remain deferred with 7.1.2. Scope and design are unchanged.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
