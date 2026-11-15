@@ -10,31 +10,32 @@ contract stays additive.
 Two areas deserve a review before release:
 
 - Rust code that builds documentation IR or an `AgentCommand` with a struct
-  literal must name the new `renderer` field;
+  literal must name the new `renderer` and `output` fields;
 - test code that imports `ortho_config_test_helpers::figment` must move to
   injected sources; and
-- authors who want to describe how a command renders can now adopt a
-  `renderer(...)` declaration.
+- authors who want to describe how a command renders, or what structured output
+  it supports, can now adopt a `renderer(...)` or `output(...)` declaration.
 
 JSON consumers need no change, and neither do Fluent catalogues. The
-documentation IR version stays at 2.0, because the new field is optional and
+documentation IR version stays at 2.0, because the new fields are optional and
 omitted when undeclared.
 
 ## Impact at a glance
 
-| Priority             | Area                       | What to do                                                                   |
-| -------------------- | -------------------------- | ---------------------------------------------------------------------------- |
-| **Required**         | Dependency versions        | Update every OrthoConfig crate requirement to v0.11.0 together.              |
-| **Required if used** | Documentation-IR literals  | Name `renderer: None`, or the declared records, when building `DocMetadata`. |
-| **Required if used** | `AgentCommand` literals    | Supply `renderer: RendererContract::default()`.                              |
-| **Optional**         | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.         |
-| **Optional**         | Agent-native policy checks | Read the projected `renderer` block from agent context.                      |
-| **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.     |
-| **Optional**         | Skill manifest validation  | Supply an explicit effective command surface to the validator.               |
-| **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.          |
-| **Required if used** | Figment Jail test helpers  | Replace `figment::with_jail` and `figment_error` with injected sources.      |
-| **Optional**         | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.         |
-| **Optional**         | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.     |
+| Priority             | Area                       | What to do                                                                           |
+| -------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
+| **Required**         | Dependency versions        | Update every OrthoConfig crate requirement to v0.11.0 together.                      |
+| **Required if used** | Documentation-IR literals  | Name `renderer: None` and `output: None`, or the declared records, in `DocMetadata`. |
+| **Required if used** | `AgentCommand` literals    | Supply `renderer: RendererContract::default()` and `output: None`.                   |
+| **Optional**         | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.                 |
+| **Optional**         | Output declarations        | Add `output(supports_json = true, stdout = "data", ...)` to a command that needs it. |
+| **Optional**         | Agent-native policy checks | Read the projected `renderer` and `output` blocks from agent context.                |
+| **Optional**         | Skill manifest validation  | Supply an explicit effective command surface to the validator.                       |
+| **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.             |
+| **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
+| **Required if used** | Figment Jail test helpers  | Replace `figment::with_jail` and `figment_error` with injected sources.              |
+| **Optional**         | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.                 |
+| **Optional**         | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.             |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -57,12 +58,12 @@ After:
 ortho_config = { version = "0.11.0", features = ["yaml"] }
 ```
 
-## 2. Name `renderer` in documentation-IR literals
+## 2. Name `renderer` and `output` in documentation-IR literals
 
 `ortho_config::docs::DocMetadata` and the `cargo-orthohelp` mirror of it gained
-a `renderer` field. The field is optional and is omitted when undeclared, so
-JSON written by an earlier release still deserializes, and a document that
-declares nothing looks exactly as it did before.
+a `renderer` field and an `output` field. Both are optional and are omitted
+when undeclared, so JSON written by an earlier release still deserializes, and
+a document that declares nothing looks exactly as it did before.
 
 Before:
 
@@ -81,11 +82,13 @@ let metadata = DocMetadata {
     ir_version: "2.0".to_owned(),
     app_name: "demo".to_owned(),
     renderer: None,
+    output: None,
     // … the remaining fields, as before
 };
 ```
 
-A document that does declare renderer metadata names both records instead.
+A document that does declare renderer or output metadata names the declared
+records instead.
 
 ```rust,no_run
 let metadata = DocMetadata {
@@ -98,15 +101,21 @@ let metadata = DocMetadata {
         }),
         machine: None,
     }),
+    output: Some(OutputMetadata {
+        supports_json: Some(true),
+        stdout: Some(StdoutPurpose::Data),
+        stderr_diagnostics: None,
+        exit_classes: Vec::new(),
+    }),
     // … the remaining fields, as before
 };
 ```
 
-## 3. Supply a renderer contract on `AgentCommand`
+## 3. Supply the renderer and output contracts on `AgentCommand`
 
-`ortho_config::agent_context::AgentCommand` gained the same field, typed as
-`RendererContract`. `AgentCommand` does not implement `Default`, so a struct
-literal must now name the field:
+`ortho_config::agent_context::AgentCommand` gained the same fields, typed as
+`RendererContract` and `Option<OutputContract>`. `AgentCommand` does not
+implement `Default`, so a struct literal must now name them:
 
 After:
 
@@ -114,23 +123,27 @@ After:
 let command = AgentCommand {
     // … the remaining fields, as before
     renderer: RendererContract::default(),
+    output: None,
 };
 ```
 
 `RendererContract::default()` is the legacy claim, not an observation: human
 output supported, machine output not. Use it for a command that declares
-nothing. If your code already declares renderer metadata, project that
-declaration instead.
+nothing. `output: None` is different in kind: it is the absence of a claim, and
+it stays distinct from a declared
+`Some(OutputContract { supports_json: Some(false), .. })`, which records a
+refusal. If your code already declares either block, project that declaration
+instead of a default.
 
 ## 4. The wire contract is unchanged
 
-The field is `#[serde(default)]` on both the authoring IR and the agent-context
-wire. As a result:
+Both fields are `#[serde(default)]` on the authoring IR and the agent-context
+wire, and both are omitted when absent. As a result:
 
-- JSON produced by v0.10.0 still decodes, and the `renderer` key is simply
-  absent;
+- JSON produced by v0.10.0 still decodes, and the `renderer` and `output` keys
+  are simply absent;
 - documentation IR stays at 2.0, so consumers pinned to that version keep
-  decoding documents that carry the new field;
+  decoding documents that carry the new fields;
 - unknown policy tokens still normalize to `unknown` on the tolerant
   agent-context side, and still fail on the strict authoring side.
 
@@ -168,7 +181,49 @@ defaults, and the omission-versus-null rule live in
 [user's guide](users-guide.md#declare-how-a-command-renders-its-output) shows
 the accepted keys with worked examples.
 
-## 6. Collect bridge-cache metrics from the CLI
+## 6. Optionally declare a command's structured output
+
+Adoption is the same sibling-attribute shape, and it composes with
+`renderer(...)` in one `#[ortho_config(...)]` list.
+
+```rust,ignore
+use clap::Parser;
+use ortho_config::OrthoConfig;
+use serde::Deserialize;
+
+#[derive(Debug, Parser, Deserialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "DEMO",
+    output(
+        supports_json = true,
+        stdout = "data",
+        stderr_diagnostics = true,
+        exit_class(name = "success", meaning = "the report was written"),
+        exit_class(name = "failure", meaning = "the run failed before writing")
+    )
+)]
+struct DemoConfig {
+    /// Recipient to greet.
+    recipient: String,
+}
+```
+
+`stdout` records what the normal successful result _is_ — `data`, `path`,
+`summary`, or `none` — independently of how it is encoded. `supports_json`
+records a claim about a `--json` capability, not an observation of one, and
+`supports_json = false` stays distinguishable from leaving it undeclared. Exit
+classes are documented in declaration order; they do not assign process status
+numbers. As with `renderer`, nothing is inferred from command names, flags, or
+a parent command, and an omitted block stays omitted rather than defaulting.
+`cargo-orthohelp` lints only declarations, through
+`cargo_orthohelp::policy::rules::output::check_output`; the derivation of
+runtime output is roadmap 7.2.4 and the status mapping is 7.2.5. The vocabulary
+and omission rules live in
+[ADR-0020](adrs/adr-0020-explicit-structured-output-declarations.md), and the
+[user's guide](users-guide.md#lint-declared-structured-output) shows the rule's
+findings.
+
+## 7. Collect bridge-cache metrics from the CLI
 
 The `metrics` feature is new in `cargo-orthohelp` v0.11.0; the published
 v0.10.0 package does not carry it. The feature emits
@@ -192,7 +247,7 @@ it, because the CLI claims the process-wide recorder slot only when it is free.
 Nothing is required to upgrade: the feature is off by default, and a build
 without it behaves exactly as before.
 
-## 7. Run test subprocesses through the shared helpers
+## 8. Run test subprocesses through the shared helpers
 
 The `ortho_config_test_helpers` crate publishes its bounded subprocess support
 as `ortho_config_test_helpers::process`. A test that starts another process

@@ -274,6 +274,49 @@ all possible public values are validated.
   600-second base allowance over a nested child build. Naming it passes
   `make test-workflow-contracts` (702 passed, 1 skipped).
 - [x] M3: exit documentation, process regression evidence and completion.
+- [x] (2026-11-15) Completeness-assessment repair, findings 1–5, against
+  assessment `ep-7-2-3-20261115-a1` (head `fbc0289b`, plan blob `96ac856e`):
+  - Finding 1, remedy wording: the rule's message and the users'-guide paragraph
+    now agree that the JSON annotation is the primary remedy and that correcting
+    `stdout` applies only to a declaration that was already wrong about what the
+    command returns. The `path`-versus-`data` distinction is stated as a claim
+    about purpose, independent of encoding.
+  - Finding 2, ties and non-vacuity:
+    `equal_paths_keep_encounter_order_and_stay_distinguishable`
+    proves two commands sharing one path stay separately reported and that an
+    explicit refusal and an undeclared capability remain distinguishable
+    through their message text.
+  - Finding 3, E3 boundary: the adoption fixture lost its library target
+    (`src/lib.rs` deleted, `src/main.rs` added) so it satisfies neither
+    `root_type` nor a library-target precondition, and the scenario now records
+    `<target_dir>/orthohelp` before the run and asserts the run added nothing.
+  - Finding 4, negative controls: three mutations were applied, each captured
+    with its named failing tests, then restored byte for byte (verified by
+    `sha256sum` against a pre-mutation baseline). Turning the predicate into
+    `supports_json == Some(false)` failed 9 tests, including both
+    `complete_rule_table` cases, `equal_paths_are_reported_once_each`,
+    `false_and_undeclared_json_support_have_distinct_explanations` and the
+    `warn`/`deny` snapshot cases. Emitting a duplicate finding failed more than
+    20, including `output_proptests::equal_paths_are_not_deduplicated` and every
+    `is_data = true` case of `unrelated_output_fields_do_not_change_the_rule`.
+    Mapping a declared `supports_json = false` to `true` in the bridge failed
+    `agent_context::tests::output_tests::declared_refusal_is_not_flattened_to_undeclared`
+    and `agent_context::output_proptests::declared_output_survives_the_bridge`.
+    The new artefact step is non-vacuous: writing one marker file beneath the
+    cache root after recording failed the adoption scenario at step 6, naming
+    `no bridge build artefact appears under the target directory` and printing
+    the gained entry.
+  - Finding 5, snapshots and process statuses:
+    `output_report_snapshots_lock_each_mode`
+    pins the `off`, `warn` and `deny` reports, and
+    `version_reports_success_and_the_built_version` pins `--version` at both the
+    top level and the subcommand position to status 0 with one banner line
+    carrying the built version.
+- [x] Focused validation of the repair (not a certificate): 111 output-rule
+  library tests with the three new snapshots written and reviewed, 30
+  `cli_dispatch` tests, 2 `compile_fail` cases including the new
+  `output_invalid_stdout` fixture after 749 s of cold build, and 13 policy BDD
+  scenarios including the strengthened adoption scenario.
 
 ## Surprises & discoveries
 
@@ -322,6 +365,17 @@ enough to trip it. Folding them into one `rstest` table cleared it; a
 `@codescene` directive would have been the wrong instrument for a genuine
 duplicate.
 
+A sensitivity mutation leaves evidence of its own. Failing property tests write
+their shrunk counterexample to `proptest-regressions/`, so the deliberate
+faults that prove the suites are real also deposit seeds that describe failures
+the repaired code does not have: one appended to the existing
+`agent_context/output_proptests.txt` and a whole new `policy/rules/` seed file.
+Committing those would record a counterexample history that never happened and
+quietly add replay work to every later run. Restoring the mutated source is
+therefore only half the cleanup; the regression corpus and any scratch artefact
+the mutation created must be removed in the same step, and the restore checked
+by hash rather than by eye.
+
 ## Decision log
 
 2026-11-08, planning proposal: add an optional sibling `output(...)` group, not
@@ -358,12 +412,15 @@ truth.
 
 2026-11-15, implementation decision: the output rule orders with the stable
 `sort_by`, unlike the behaviour rules' `sort_unstable_by`, because this plan
-requires encounter order to survive for equal paths. A finding's content is a
-pure function of the command path, so tied order is not externally
-distinguishable; the stable sort nevertheless keeps the stated contract.
-`check_output` returns `PolicySeverity` directly because its one rule has no
-quick-fix category to project, and its message distinguishes an explicit
-refusal from an undeclared capability while sharing both remedies.
+requires encounter order to survive for equal paths. Ties are externally
+distinguishable, so this is observable rather than a private convention: two
+commands sharing one path can differ in their `supports_json` declaration, and
+their messages then differ between an explicit refusal and an undeclared
+capability. The equal-path test uses exactly that pair, so a sort that lost
+encounter order would swap two visibly different explanations. `check_output`
+returns `PolicySeverity` directly because its one rule has no quick-fix
+category to project, and its message distinguishes an explicit refusal from an
+undeclared capability while sharing both remedies.
 
 2026-11-15, verification decision: the process tests assert the exact status
 with `status.code()` rather than `success()`, because "not success" also

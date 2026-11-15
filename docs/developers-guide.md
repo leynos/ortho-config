@@ -578,6 +578,62 @@ Test entry points:
 - `cargo test -p cargo-orthohelp --test golden_tests` for the agent-context
   snapshots.
 
+### Structured output metadata ownership
+
+Structured-output metadata (ADR-0020) is declared through the sibling
+`output(...)` attribute and is owned in the same three places as the renderer
+block, which it sits beside in every document:
+
+- `ortho_config::docs::ir::output` holds the human-documentation IR types;
+- `cargo_orthohelp::schema` re-exports the mirror the standalone generator
+  decodes; and
+- `ortho_config::agent_context::output` holds the wire contract, with
+  `cargo_orthohelp::agent_context::output::map_output` as the only place the
+  strict IR enum meets the tolerant wire enum.
+
+The macro side is `derive/parse/output_attrs.rs`, emitted by
+`derive/generate/docs/output.rs`. It borrows the shared `parse_bool` and
+`parse_token` helpers from `renderer_values.rs` rather than restating them, but
+owns its own accepted-token table and its own strict group: an unknown key, a
+mis-typed literal, a blank class meaning, a malformed class name, and a
+repeated leaf are all hard errors with spans. Two groups may contribute
+distinct leaves, so `output(supports_json = true)` followed by
+`output(stdout = "data")` is accepted while a repeated `stdout` is rejected.
+
+Unlike the renderer block, no member is defaulted anywhere. `supports_json`,
+`stdout`, and `stderr_diagnostics` are `Option` at every layer, so an author's
+refusal (`Some(false)`) stays distinct from silence, and `map_output` maps an
+absent block to `None` instead of inventing `supports_json: false`. Only the
+wire enum carries a tolerant fallback: an unrecognized future stdout token
+reads as `unknown`, which establishes no data-returning status. IR decoding
+stays strict. A present block with every member absent is representable as `{}`
+and makes the same claim as no block at all, so do not add production code that
+treats it as a defaulted record.
+
+The policy rule lives in `cargo-orthohelp/src/policy/rules/output.rs` and is
+exposed only as the library call
+`cargo_orthohelp::policy::rules::output::check_output(context, mode)`. It is
+not reachable from `--check-agent-native`, because that path is bridge-free by
+Decision D11 and therefore has no compiled agent context to inspect. The
+finding's message is the entire operator experience — agent context carries no
+source spans, so `location` is always absent — which makes the message wording
+part of the contract: `false` and undeclared JSON support are explained
+differently, and both lead with adding `output(supports_json = true)` once the
+command implements `--json`. Correct a declared `stdout` purpose only when the
+original declaration was inaccurate; a data command that gains JSON keeps
+`data`.
+
+Test entry points:
+
+- `cargo test -p cargo-orthohelp --lib output` for the rule table, equal-path
+  ties, and the off/warn/deny report snapshots;
+- `cargo test -p cargo-orthohelp --test rstest_bdd -- orthohelp_policy` for the
+  scenarios, including the policy-only run that must leave no bridge artefact;
+- `cargo test -p cargo-orthohelp --test cli_dispatch` for the documented process
+  statuses, help, and version; and
+- `cargo test -p cargo-orthohelp --test agent_context_output_end_to_end` for
+  subprocess runs of the shipped binary.
+
 `ortho_l10n::try_normalize_segment` is the single source of truth for strict
 runtime and derive-time Fluent identifier segments. Reuse it, or the
 complete-identifier helpers re-exported beside it, from command localization,

@@ -2410,15 +2410,17 @@ reports one `json_support_missing` finding (rule
 `agent-native.output.json-missing`) for every command whose declared stdout
 purpose is `data` and whose `supports_json` is false or undeclared.
 
-It compares declarations rather than observing a process. A command that emits
-some other structured format but has no JSON mode must declare `stdout` as its
-real purpose instead of `"data"`; the rule is deliberately about JSON because
-that is the capability the product asks for. The finding names `--json` and
-gives the `output(supports_json = true)` annotation to add only if the
-application implements it; the alternative remedy is to correct the data claim.
-A canonical verb such as `get` is never treated as evidence, `path`, `summary`,
-`none`, and the tolerant `unknown` fallback never fire, an absent block never
-becomes a defaulted record, and `PolicyMode::Off` returns an empty report.
+It compares declarations rather than observing a process. The `stdout` purpose
+describes what a command's normal successful result _is_, independently of how
+that result is encoded, so a command returning data in some structured format
+other than JSON still declares `data`. The rule is deliberately about JSON
+because that is the capability the product asks for: the finding names `--json`
+and gives the `output(supports_json = true)` annotation to add once the
+application implements it. Correcting the `stdout` purpose is the remedy only
+when the original declaration was inaccurate. A canonical verb such as `get` is
+never treated as evidence, `path`, `summary`, `none`, and the tolerant
+`unknown` fallback never fire, an absent block never becomes a defaulted
+record, and `PolicyMode::Off` returns an empty report.
 
 Like `check_behaviour`, the rule consumes a compiled agent context, so it is a
 library API rather than part of `--check-agent-native`; see the

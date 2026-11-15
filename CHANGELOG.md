@@ -72,17 +72,42 @@ All notable changes to this project will be documented in this file.
   not. See [ADR-0016](docs/adrs/adr-0016-dual-renderer-metadata-surface.md) and
   [the user's guide](docs/users-guide.md#declare-how-a-command-renders-its-output).
 
+### Added (structured output metadata)
+
+- **Explicit structured-output declarations (roadmap 7.2.3).** Commands can now
+  declare their output contract through a sibling `output(...)` attribute:
+  whether a `--json` capability is claimed, the purpose of the normal
+  successful result on stdout (`data`, `path`, `summary`, or `none`), whether
+  stderr carries diagnostics, and the documented exit classes in declaration
+  order. The declaration flows into documentation IR and, through the
+  `cargo-orthohelp` bridge, into agent context as an `output` object with a
+  tolerant `unknown` stdout fallback. Nothing is inferred: an omitted block
+  stays omitted, an explicit `supports_json = false` stays distinguishable from
+  an undeclared capability, and a subcommand does not inherit its parent's
+  record. `cargo_orthohelp::policy::rules::output::check_output` reports
+  `agent-native.output.json-missing` for a data command that does not claim
+  JSON support. Deriving runtime output (7.2.4) and mapping classes to process
+  statuses (7.2.5) are not part of this change. See
+  [ADR-0020](docs/adrs/adr-0020-explicit-structured-output-declarations.md) and
+  [the user's guide](docs/users-guide.md#lint-declared-structured-output).
+- `cargo-orthohelp` documents its normal-completion process statuses: `0` for
+  success including `--help` and `--version`, `1` for a runtime failure
+  including a deny-mode policy violation, and `2` for Clap's usage rejection.
+  No diagnostic field carries them; a positive `summary.deny` count
+  distinguishes a policy denial from any other failure.
+
 ### Changed (source compatibility)
 
 - **Breaking for struct-literal construction:** documentation IR
   (`ortho_config::docs::DocMetadata`) and the mirrored
-  `cargo_orthohelp::schema::DocMetadata` gained a `renderer` field, and the
-  localized IR used for per-locale artefacts carries it through. Code that
-  assembles these documents by struct literal must name `renderer: None`;
-  `AgentCommand` consumers must supply `renderer: RendererContract::default()`,
-  because the type does not implement `Default`. The field is
-  `#[serde(default)]`, so the wire contract stays additive: JSON without
-  `renderer` still deserializes, wire version 1 and documentation IR 2.0 are
+  `cargo_orthohelp::schema::DocMetadata` gained a `renderer` field and an
+  `output` field, and the localized IR used for per-locale artefacts carries
+  both through. Code that assembles these documents by struct literal must name
+  `renderer: None` and `output: None`; `AgentCommand` consumers must supply
+  `renderer: RendererContract::default()` and `output: None`, because the type
+  does not implement `Default`. Both fields are `#[serde(default)]` and are
+  omitted when absent, so the wire contract stays additive: JSON without either
+  key still deserializes, wire version 1 and documentation IR 2.0 are
   unchanged, and no existing field changed shape, spelling, ordering, or
   null-versus-omission rule. Applications that only derive their configuration
   and read agent context need no change. This is a Rust source break, not a
