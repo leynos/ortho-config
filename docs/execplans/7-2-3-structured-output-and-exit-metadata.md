@@ -462,6 +462,12 @@ migration guide before touching the candidate.
   branch touches by four insertions and one deletion. Hosted run 43697766275 on
   the same head reports the same suite (`whitaker-lints-880939d`) and the same
   11 macros diagnostics, with Windows green.
+- [x] (2026-11-15) Doctests at `b3bf238b` with the tree clean:
+  `cargo test --workspace --doc` under `-D warnings` passed 135 examples across
+  10 suites with 47 ignored and none failed. This closes a gap the earlier
+  certificates left, because `make test` runs the Cargo test targets and never
+  the doctest target, and only an explicit run observes a doc example broken by
+  a changed struct.
 - [ ] Blocked on the prerequisite lint repair, which an installation rollback
   did not clear. Hosted `build-test (linux)` failed only at `lint-whitaker` on
   runs 43686357368, 43696101238 and 43697766275, and the last two installer
