@@ -182,6 +182,54 @@ fn optional_flatten_downgrades_the_child_requirements() -> Result<()> {
 }
 
 #[test]
+fn defaulted_flatten_keeps_the_child_requirements() -> Result<()> {
+    let input: DeriveInput = syn::parse_quote! {
+        struct Root {
+            #[serde(flatten, default)]
+            #[ortho_config(nested, skip_cli)]
+            extra: Extra,
+        }
+    };
+    let tokens = emit_plain(&input)?;
+    ensure!(
+        tokens.contains(concat!(
+            "fields.extend(<Extraasortho_config::RequiredConfigSchema>",
+            "::collect_required_schema(stack)?);"
+        )),
+        "a defaulted flatten still deserializes the child: {tokens}"
+    );
+    ensure!(
+        !tokens.contains("optional_subtree"),
+        "a field default never rescues a flattened child: {tokens}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("lowercase", "api_URL")]
+#[case("UPPERCASE", "API_URL")]
+#[case("PascalCase", "ApiURL")]
+#[case("camelCase", "apiURL")]
+#[case("snake_case", "api_URL")]
+#[case("SCREAMING_SNAKE_CASE", "API_URL")]
+#[case("kebab-case", "api-URL")]
+#[case("SCREAMING-KEBAB-CASE", "API-URL")]
+fn field_rename_rules_match_serde(#[case] rule: &str, #[case] expected: &str) -> Result<()> {
+    let input: DeriveInput = syn::parse_quote! {
+        #[serde(rename_all = #rule)]
+        struct Root {
+            api_URL: String,
+        }
+    };
+    let tokens = emit_plain(&input)?;
+    ensure!(
+        tokens.contains(&format!("key:::std::string::String::from(\"{expected}\")")),
+        "`{rule}` must emit `{expected}` as Serde does: {tokens}"
+    );
+    Ok(())
+}
+
+#[test]
 fn serde_naming_controls_keys_and_aliases() -> Result<()> {
     let input: DeriveInput = syn::parse_quote! {
         #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

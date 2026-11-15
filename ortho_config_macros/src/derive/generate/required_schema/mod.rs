@@ -149,7 +149,7 @@ fn field_statements(args: &RequiredSchemaArgs<'_>) -> syn::Result<Vec<TokenStrea
         }
         let key = serde_deserialized_field_key(field, args.deserialize_rename_all)?;
         if serde_field_is_flattened(&field.attrs)? {
-            statements.push(flatten_statement(args, field, attrs)?);
+            statements.push(flatten_statement(args, field));
             continue;
         }
         statements.push(push_statement(args, field, attrs, &key)?);
@@ -159,41 +159,27 @@ fn field_statements(args: &RequiredSchemaArgs<'_>) -> syn::Result<Vec<TokenStrea
 
 /// Build the statement that appends one flattened composition.
 ///
-/// A flattened field has no key of its own, so its activation cannot gate
-/// anything at this level; Serde decides whether the child exists at all. When
-/// the field tolerates absence (`Option` or a default), Serde resolves a child
-/// it cannot deserialize to that absence rather than to missing required
-/// leaves. Composing the child's requirements unchanged would therefore
-/// invent an error the loader never raises, so the whole composed subtree
-/// becomes optional — including the descendants of any nested object it
-/// contains, because a single failing leaf makes Serde fall back to `None`.
-fn flatten_statement(
-    args: &RequiredSchemaArgs<'_>,
-    field: &Field,
-    attrs: &FieldAttrs,
-) -> syn::Result<TokenStream> {
+/// A flattened field has no key of its own, so no default can be aimed at one
+/// at this level, and Serde only resolves the child to absence when the field
+/// is an `Option`. A defaulted flattened struct is still deserialized from the
+/// unmatched keys, so a missing child leaf propagates instead of falling back
+/// to `Default`; its requirements therefore stay required here. Composing an
+/// `Option` child unchanged would invent an error the loader never raises, so
+/// its whole composed subtree becomes optional — including the descendants of
+/// any nested object it contains, because a single failing leaf is what makes
+/// Serde fall back to `None`.
+fn flatten_statement(args: &RequiredSchemaArgs<'_>, field: &Field) -> TokenStream {
     let krate = args.krate;
     let ty = nested_schema_type(&field.ty);
     let composed = quote! {
         <#ty as #krate::RequiredConfigSchema>::collect_required_schema(stack)?
     };
-    // A flattened field has no key of its own, so no default can be aimed at
-    // one at this level.
-    let is_optional = is_optional(
-        field,
-        attrs,
-        &ActivationFacts {
-            container_default: args.container_default,
-            key: None,
-            aliases: &[],
-        },
-    )?;
-    if is_optional {
-        return Ok(quote! {
+    if option_inner(&field.ty).is_some() {
+        return quote! {
             fields.extend(#composed.into_iter().map(#krate::SchemaField::optional_subtree));
-        });
+        };
     }
-    Ok(quote! { fields.extend(#composed); })
+    quote! { fields.extend(#composed); }
 }
 
 /// Build the statement that appends one leaf or nested requirement.
@@ -210,7 +196,7 @@ fn push_statement(
         attrs,
         &ActivationFacts {
             container_default: args.container_default,
-            key: Some(key),
+            key,
             aliases: &aliases,
         },
     )?;
@@ -262,9 +248,8 @@ fn participates(field: &Field, attrs: &FieldAttrs) -> syn::Result<bool> {
 struct ActivationFacts<'a> {
     /// Whether the container carries `#[serde(default)]`.
     container_default: bool,
-    /// The key the loader reads, or `None` when the field has no key of its
-    /// own.
-    key: Option<&'a str>,
+    /// The key the loader reads for this field.
+    key: &'a str,
     /// Alternative spellings the loader accepts for the same value.
     aliases: &'a [String],
 }
@@ -285,9 +270,7 @@ fn is_optional(
 ) -> syn::Result<bool> {
     let is_optional_by_type = option_inner(&field.ty).is_some();
     let is_optional_by_serde = serde_has_default(&field.attrs)? || facts.container_default;
-    let default_reaches = facts
-        .key
-        .is_none_or(|read_key| default_reaches_field(field, read_key, facts.aliases));
+    let default_reaches = default_reaches_field(field, facts.key, facts.aliases);
     let is_optional_by_default =
         (attrs.default.is_some() || attrs.inferred_clap_default.is_some()) && default_reaches;
     Ok(is_optional_by_type || is_optional_by_serde || is_optional_by_default)

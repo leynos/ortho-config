@@ -6,10 +6,6 @@
 //! pluck individual fields out of the resulting object, so the lookup key must
 //! respect `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`.
 
-use heck::{
-    ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
-    ToUpperCamelCase,
-};
 use syn::ext::IdentExt;
 use syn::meta::ParseNestedMeta;
 use syn::{Attribute, Field, LitStr, Token};
@@ -20,21 +16,21 @@ use syn::{Attribute, Field, LitStr, Token};
 /// compute the same JSON field names that serde uses during serialization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SerdeRenameAll {
-    /// Lowercases every character in the field name.
+    /// Leaves a struct field untouched; Serde lowercases only enum variants.
     Lower,
     /// Uppercases every character in the field name.
     Upper,
-    /// Capitalizes each word and removes separators.
+    /// Capitalizes the first letter of each underscore-separated word.
     Pascal,
-    /// Preserves the first word's lower case and capitalizes later words.
+    /// Applies [`Self::Pascal`], then lowercases the first character.
     Camel,
-    /// Separates words with underscores in lower case.
+    /// Leaves a struct field untouched; Serde reshapes only enum variants.
     Snake,
-    /// Separates words with underscores in upper case.
+    /// Uppercases every character in the field name.
     ScreamingSnake,
-    /// Separates words with hyphens in lower case.
+    /// Replaces underscores with hyphens.
     Kebab,
-    /// Separates words with hyphens in upper case.
+    /// Uppercases every character, then replaces underscores with hyphens.
     ScreamingKebab,
 }
 
@@ -61,19 +57,51 @@ impl SerdeRenameAll {
         }
     }
 
-    /// Applies this naming convention to a Rust field identifier.
+    /// Applies Serde's struct-field rule to a Rust field identifier.
+    ///
+    /// These are Serde's own field rules, not general case conversions. Two of
+    /// them leave the field alone, and `PascalCase` only capitalizes the first
+    /// letter of each underscore-separated word without lowering the rest. A
+    /// general case converter disagrees on mixed-case identifiers such as
+    /// `api_URL`, which would make the schema name a key Serde never reads.
     fn apply(self, field_name: &str) -> String {
         match self {
-            Self::Lower => field_name.to_ascii_lowercase(),
-            Self::Upper => field_name.to_ascii_uppercase(),
-            Self::Pascal => field_name.to_upper_camel_case(),
-            Self::Camel => field_name.to_lower_camel_case(),
-            Self::Snake => field_name.to_snake_case(),
-            Self::ScreamingSnake => field_name.to_shouty_snake_case(),
-            Self::Kebab => field_name.to_kebab_case(),
-            Self::ScreamingKebab => field_name.to_shouty_kebab_case(),
+            Self::Lower | Self::Snake => field_name.to_owned(),
+            Self::Upper | Self::ScreamingSnake => field_name.to_ascii_uppercase(),
+            Self::Pascal => pascal_case(field_name),
+            Self::Camel => lower_first(&pascal_case(field_name)),
+            Self::Kebab => field_name.replace('_', "-"),
+            Self::ScreamingKebab => field_name.to_ascii_uppercase().replace('_', "-"),
         }
     }
+}
+
+/// Capitalize the first letter of each underscore-separated word.
+///
+/// Later characters keep their case, so `api_URL` becomes `ApiURL` rather than
+/// the `ApiUrl` a general-purpose converter would produce.
+fn pascal_case(field_name: &str) -> String {
+    let mut pascal = String::new();
+    let mut is_word_start = true;
+    for character in field_name.chars() {
+        if character == '_' {
+            is_word_start = true;
+        } else if is_word_start {
+            pascal.push(character.to_ascii_uppercase());
+            is_word_start = false;
+        } else {
+            pascal.push(character);
+        }
+    }
+    pascal
+}
+
+/// Lowercase the first character and keep the rest as it is.
+fn lower_first(value: &str) -> String {
+    let mut characters = value.chars();
+    characters.next().map_or_else(String::new, |first| {
+        first.to_ascii_lowercase().to_string() + characters.as_str()
+    })
 }
 
 /// One Serde attribute value separated by serialization direction.

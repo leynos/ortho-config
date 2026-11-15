@@ -14,6 +14,9 @@ use std::sync::Arc;
 #[path = "support/missing_required_supply.rs"]
 mod supply;
 
+#[path = "support/missing_required_keys.rs"]
+mod keys;
+
 /// The invoked program name every case uses.
 const PROGRAM: &str = "missing-required-values";
 

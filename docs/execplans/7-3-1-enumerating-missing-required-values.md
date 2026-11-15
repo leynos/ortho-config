@@ -276,6 +276,23 @@ with a compatibility probe rather than an assumption.
   - Recorded the renamed-default limitation in the design document and the
     migration guide, and corrected the compound spelling the hosted word list
     rejects in the module header of `missing_required_evaluation.rs`.
+- [x] (2026-11-15) Third completeness assessment (round c3,
+  `7-3-1-completeness-2026-11-15-c3`) found two correctness defects against
+  `3f66cb81`. Repaired in this round:
+  - A flattened field is demoted only when its type is `Option`. A
+    `#[serde(default)]` on a flattened struct never rescues a missing child
+    leaf, because Serde deserializes the flattened field from the unmatched
+    keys and propagates the child's failure.
+  - `SerdeRenameAll::apply` now reproduces Serde's own field rules instead of a
+    general case conversion: `lowercase` and `snake_case` leave an identifier
+    unchanged, and `PascalCase` only capitalizes each underscore-separated
+    word.
+  - New evidence: real-loader cases for an absent and a partially supplied
+    defaulted flattening, a `lowercase` rule proved through a discovered
+    configuration file, a quoted dotted key replayed through the same path, a
+    serialize-direction `rename_all` trybuild fixture, the alias file route
+    replayed beside the environment value that produced the report, and a unit
+    table covering all eight rename rules on a mixed-case identifier.
 
 ## Surprises & discoveries
 
@@ -374,6 +391,15 @@ a token stream, which runs to the end of the attribute. In
 the alias was invisible to both the schema and the key check. The value is now
 parsed as one expression, which stops at the comma.
 
+The c3 round added two more Serde details that decide correctness. A field
+default is applied only to a field Serde never saw, so
+`#[serde(flatten, default)]` is inert: the flattened struct is still
+deserialized from the unmatched keys and a missing leaf propagates. And Serde's
+`rename_all` rules for struct fields are not case conversions — `lowercase` and
+`snake_case` leave the identifier alone, and `PascalCase` capitalizes each
+underscore-separated word without lowering the rest. The earlier converter
+matched Serde for snake_case identifiers and diverged for every other shape.
+
 ## Decision log
 
 D1 (2026-10-14, proposed): add structured missing-value data rather than the
@@ -445,6 +471,19 @@ also an accepted alias; otherwise the field stays required and the report says
 so. The alternative — teaching the defaults struct to serialize under the
 deserialized key — would change merge precedence for every renamed field, which
 is a wider behavioural change than this plan covers.
+
+D8 (2026-11-15, accepted, refining D7): treat only an `Option`-typed flatten as
+tolerant of absence, and follow Serde's own field rename rules. A
+`#[serde(default)]` on a flattened struct is inert: Serde applies a field
+default to a field it never saw, and a flattened field is always deserialized
+from the unmatched keys, so a missing child leaf propagates and must be
+reported. Reading "carries a default" as tolerant of absence over-generalized
+D7's first clause. Separately, the `rename_all` rules are Serde's field rules,
+not case conversions: `lowercase` and `snake_case` leave a struct field
+unchanged, and `PascalCase` only capitalizes each underscore-separated word
+without lowering the rest. A general converter matched Serde for snake_case
+identifiers and diverged for every other shape — the same class of defect,
+where the schema names a key the loader never reads.
 
 ## Outcomes & retrospective
 

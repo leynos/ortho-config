@@ -327,6 +327,27 @@ The coverage contract above and the matching risk bullet are retained as
 history. Read both as superseded on this point only; every other limitation
 still applies.
 
+### 2026-11-15 — flatten defaults and field rename rules
+
+Two refinements narrow how a field's own attributes are read. Both follow
+Serde's source rather than an intuitive reading of its documentation.
+
+**A field default never rescues a flatten.** `#[serde(default)]` on a flattened
+field is inert: Serde deserializes the field from the unmatched keys through
+`FlatMapDeserializer`, and `extract_collected` applies no default wrapper, so a
+child that cannot deserialize still fails. The earlier requiredness rule that a
+field default makes a field optional therefore does not extend to a flatten. A
+flattened child resolves to absence exactly when its type is `Option`, which
+keeps the `optional_subtree` demotion on that case alone.
+
+**Field rename rules are not case conversions.** A `rename_all` entry is
+applied to a field by `apply_to_field`, whose table leaves a field name
+unchanged for `lowercase` and `snake_case` and, for `PascalCase`, `camelCase`,
+`kebab-case` and `SCREAMING-KEBAB-CASE`, transforms only the separators and the
+first letter. General-purpose case conversion would rename an identifier Serde
+still reads under its declared spelling, so the schema would name a key no
+loader consumes. The canonical key follows that table exactly.
+
 ## References
 
 - [Execplan: Enumerate missing required configuration values](../execplans/7-3-1-enumerating-missing-required-values.md).

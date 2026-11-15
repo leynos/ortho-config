@@ -258,13 +258,16 @@ fn the_alias_file_route_recovers_the_missing_value() -> Result<()> {
     let file = dir.path().join("config.toml");
     let path = file
         .to_str()
-        .ok_or_else(|| anyhow!("temporary path is not valid UTF-8: {file:?}"))?;
+        .ok_or_else(|| anyhow!("temporary path is not valid UTF-8: {}", file.display()))?;
 
-    let config = load::<AliasNestedRoot>(&[PROGRAM], &[("MRA_CONFIG_PATH", path)])
-        .map_err(|error| anyhow::anyhow!("the advertised file route must recover: {error}"))?;
+    let config = load::<AliasNestedRoot>(
+        &[PROGRAM],
+        &[("MRA_DB__PORT", "1"), ("MRA_CONFIG_PATH", path)],
+    )
+    .map_err(|error| anyhow::anyhow!("the advertised file route must recover: {error}"))?;
     ensure!(
-        config.database.host == "db",
-        "the file route must supply the required leaf, got {:?}",
+        config.database.host == "db" && config.database.port == 1,
+        "the file route must supply the required leaf beside the environment value, got {:?}",
         config.database
     );
     Ok(())

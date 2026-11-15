@@ -97,8 +97,13 @@ Runtime requiredness follows the loader, not the documentation IR:
 | Collections without a default                 | Required      |
 | Any other scalar, map, or opaque type         | Required      |
 
+A `#[serde(default)]` on a flattened field is the one exception to that table:
+Serde always deserializes the field from the unmatched keys, so the default
+applies only to a field it never saw and never rescues the child. A flattened
+child therefore resolves to absence exactly when its type is `Option`.
+
 Nested enumeration is opt-in: only a field marked `#[ortho_config(nested)]`
-composes the child's schema. `#[serde(flatten)]` compose at the current level
+composes the child's schema. `#[serde(flatten)]` composes at the current level
 only when paired with that marker. An arbitrary custom `Deserialize`
 implementation, a flatten without the marker, an enum payload, and a
 selected-subcommand value extracted through Figment stay outside the coverage
