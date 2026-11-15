@@ -267,6 +267,12 @@ all possible public values are validated.
   two wire spellings now form one `rstest` table. All seven gates green at
   `2c9c069f` with the head unchanged and `make fmt` mutating nothing — 113
   result lines, 2872 passed, 43 ignored, pytest 128 passed.
+- [x] (2026-11-15) Hosted CI repair: `build-test (linux)` failed the workflow
+  contract step on run `43655987369` because the new
+  `agent_context_output_end_to_end` target spawns the shipped binary and was
+  not named by the raised `orthohelp_cache` override, so nextest gave it the
+  600-second base allowance over a nested child build. Naming it passes
+  `make test-workflow-contracts` (702 passed, 1 skipped).
 - [x] M3: exit documentation, process regression evidence and completion.
 
 ## Surprises & discoveries
