@@ -333,8 +333,13 @@ with a compatibility probe rather than an assumption.
     provider-expressibility unit table over six rejected spellings beside the
     positive control, a rendering case for quoting and escaping, and a real
     alias replica of a `=` key that keeps only its quoted file route and then
-    recovers from that file. ADR-0022 gains a third amendment; the design
-    document and the improved-error design record the same rules.
+    recovers from that file. The same `=` scenario is replayed through the
+    process environment: the child-process harness
+    (`tests/missing_required_child.rs`) loads from the platform environment
+    with a quoted table as its only input, asserts that no environment section
+    is rendered, and then recovers `host` and `port` from the advertised table.
+    ADR-0022 gains a third amendment; the design document and the
+    improved-error design record the same rules.
 
 ## Surprises & discoveries
 
