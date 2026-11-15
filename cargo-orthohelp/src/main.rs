@@ -22,6 +22,7 @@ mod output;
 pub mod policy;
 pub mod powershell;
 pub mod roff;
+mod root_type;
 pub mod schema;
 #[cfg(test)]
 mod test_support;

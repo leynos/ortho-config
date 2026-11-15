@@ -193,6 +193,7 @@ clear remediation message.
 optional leading `crate::` that is rewritten to the package crate name. The
 value is parsed before the bridge crate is generated: generics
 (`my_app::Config<T>`), tuples, references, qualified self types
-(`<T as Trait>::Assoc`), global paths, and statement- or expression-shaped
-values are rejected with a `failed to parse root type` diagnostic. The same
-rule applies to `--root-type`.
+(`<T as Trait>::Assoc`), global paths, a bare `crate`, module-relative starts
+(`self`, `super`, `Self`), and statement- or expression-shaped values are
+rejected with a `failed to parse root type` diagnostic. The same rule applies to
+`--root-type`.
