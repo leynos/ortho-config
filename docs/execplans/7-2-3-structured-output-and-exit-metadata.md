@@ -317,6 +317,16 @@ all possible public values are validated.
   `cli_dispatch` tests, 2 `compile_fail` cases including the new
   `output_invalid_stdout` fixture after 749 s of cold build, and 13 policy BDD
   scenarios including the strengthened adoption scenario.
+- [x] (2026-11-15) First certificate attempt at `e7845b70` failed the Clippy
+  stage on four diagnostics in the repair itself: `indexing_slicing` on the two
+  `messages[n]` reads in the new tie test, `uninlined_format_args` in
+  `list_tree`, and `shadow_reuse` on the `entry` rebind in `collect_tree`. The
+  other six gates passed at that head — fmt mutating nothing, check-fmt,
+  `make test` (112 result lines, 2881 passed, pytest 128 passed and 5 skipped),
+  markdownlint with spelling, nixie, and 21 doctests. The repair uses
+  `first`/`get(1)`, inlines the capture, and collects the directory entries
+  before recursing so no binding is shadowed and a failed entry surfaces before
+  any recursion appends to the listing.
 
 ## Surprises & discoveries
 

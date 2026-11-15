@@ -273,7 +273,7 @@ pub(super) fn list_tree(root: &Utf8Path) -> StepResult<Vec<String>> {
     match Dir::open_ambient_dir(root, ambient_authority()) {
         Ok(dir) => collect_tree(&dir, "", &mut listing)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(format!("reading {} failed: {error}", root).into()),
+        Err(error) => return Err(format!("reading {root} failed: {error}").into()),
     }
     listing.sort();
     Ok(listing)
@@ -281,8 +281,10 @@ pub(super) fn list_tree(root: &Utf8Path) -> StepResult<Vec<String>> {
 
 /// Appends one directory's descendants to `listing`, depth first.
 fn collect_tree(dir: &Dir, prefix: &str, listing: &mut Vec<String>) -> StepResult<()> {
-    for entry in dir.entries()? {
-        let entry = entry?;
+    // Collect first so a failing entry surfaces before any recursion starts,
+    // rather than after part of the tree has already been appended.
+    let entries = dir.entries()?.collect::<Result<Vec<_>, _>>()?;
+    for entry in entries {
         let name = entry.file_name()?;
         let path = if prefix.is_empty() {
             name.clone()

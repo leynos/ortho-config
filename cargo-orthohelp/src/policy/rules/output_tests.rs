@@ -372,7 +372,12 @@ fn equal_paths_keep_encounter_order_and_stay_distinguishable() {
         "both occurrences must be reported: {messages:?}"
     );
     assert!(
-        messages[0].contains("declines") && messages[1].contains("undeclared"),
+        messages
+            .first()
+            .is_some_and(|message| message.contains("declines"))
+            && messages
+                .get(1)
+                .is_some_and(|message| message.contains("undeclared")),
         "the first-declared command must be reported first: {messages:?}"
     );
 }
