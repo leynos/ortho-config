@@ -1,0 +1,30 @@
+error[E0277]: the trait bound `LookupOnly: ScanEnvSource` is not satisfied
+  --> tests/trybuild/with_env_requires_scan.rs:30:56
+   |
+30 |     let _ = Config::load_from_iter_with_env(["fixed"], Arc::new(LookupOnly));
+   |             -------------------------------            ^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |             |
+   |             required by a bound introduced by this call
+   |
+help: the trait `ScanEnvSource` is not implemented for `LookupOnly`
+  --> tests/trybuild/with_env_requires_scan.rs:14:1
+   |
+14 | struct LookupOnly;
+   | ^^^^^^^^^^^^^^^^^
+help: the following other types implement trait `ScanEnvSource`
+  --> src/env_source.rs
+   |
+   | impl ScanEnvSource for ProcessEnv {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `ProcessEnv`
+...
+   | impl ScanEnvSource for MapEnv {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `MapEnv`
+note: required by a bound in `load_from_iter_with_env`
+  --> src/lib.rs
+   |
+   | pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
+...
+   |     fn load_from_iter_with_env<I, T, E>(iter: I, env: Arc<E>) -> OrthoResult<Self>
+...
+   |         E: EnvSource + ScanEnvSource + 'static,
+   |                        ^^^^^^^^^^^^^ required by this bound in `OrthoConfig::load_from_iter_with_env`

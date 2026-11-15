@@ -4,16 +4,18 @@
 use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::{
-    MapEnv, MergeLayer, MergeProvenance, OrthoConfig, ResultIntoFigment, SharedEnvSource,
-    SharedScanEnvSource,
+    MapEnv, MergeLayer, MergeProvenance, OrthoConfig, SharedEnvSource, SharedScanEnvSource,
 };
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
-use test_helpers::figment as figment_helpers;
 
+#[path = "support/hermetic_env.rs"]
+mod hermetic_env;
 #[path = "support/layer_assertions.rs"]
 mod layer_assertions;
+
+use hermetic_env::hermetic;
 #[path = "support/scoped_fixtures.rs"]
 #[expect(dead_code, reason = "write_config serves sibling suites")]
 mod scoped_fixtures;
@@ -290,60 +292,61 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
 }
 
 /// Exercise generated source-aware composition through its merged config value.
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions expose the composition contract failures directly"
-)]
 #[rstest]
 fn source_aware_composition_uses_distinct_discovery_and_merge_sources() -> Result<()> {
-    figment::Jail::try_with(|jail| {
-        // The jail supplies an empty default project root; the injected XDG
-        // value also prevents discovery from reaching the host's /etc/xdg.
-        jail.clear_env();
-        jail.create_file("selected.toml", "port = 3030")?;
+    let directory = tempfile::tempdir().context("create the configuration directory")?;
+    Dir::open_ambient_dir(directory.path(), ambient_authority())
+        .context("open the configuration directory")?
+        .write("selected.toml", "port = 3030")
+        .context("write the selected file")?;
 
-        let discovery_source: SharedEnvSource = Arc::new(
-            MapEnv::new()
-                .with_var("SOURCE_AWARE_CONFIG_PATH", "selected.toml")
-                .with_var("XDG_CONFIG_DIRS", "/nonexistent/ortho-config-test-xdg"),
-        );
-        let merge_source: SharedScanEnvSource =
-            Arc::new(MapEnv::new().with_var("SOURCE_AWARE_PORT", "9000"));
+    // The injected XDG value prevents discovery from reaching the host's
+    // /etc/xdg; the selector is absolute so no working directory is involved.
+    let discovery_source: SharedEnvSource = Arc::new(
+        MapEnv::new()
+            .with_var(
+                "SOURCE_AWARE_CONFIG_PATH",
+                directory.path().join("selected.toml"),
+            )
+            .with_var("XDG_CONFIG_DIRS", "/nonexistent/ortho-config-test-xdg"),
+    );
+    let merge_source: SharedScanEnvSource =
+        Arc::new(MapEnv::new().with_var("SOURCE_AWARE_PORT", "9000"));
 
-        let composition = SourceAwareConfig::compose_layers_from_iter_with_sources(
-            ["source-aware"],
-            discovery_source,
-            merge_source,
-        );
-        let (layers, errors) = composition.into_parts();
-        assert!(errors.is_empty(), "composition errors: {errors:?}");
+    let composition = SourceAwareConfig::compose_layers_from_iter_with_sources(
+        ["source-aware"],
+        discovery_source,
+        merge_source,
+    );
+    let (layers, errors) = composition.into_parts();
+    ensure!(errors.is_empty(), "composition errors: {errors:?}");
 
-        let file_layer_count = layers
-            .iter()
-            .filter(|layer| layer.provenance() == MergeProvenance::File)
-            .count();
-        assert_eq!(
-            file_layer_count, 1,
-            "the explicit selector should be the only file layer"
-        );
-        let selected_file = layers
-            .iter()
-            .find(|layer| layer.provenance() == MergeProvenance::File)
-            .and_then(|layer| layer.path())
-            .and_then(|path| path.file_name());
-        assert_eq!(
-            selected_file,
-            Some("selected.toml"),
-            "discovery should select the injected file"
-        );
+    let file_layer_count = layers
+        .iter()
+        .filter(|layer| layer.provenance() == MergeProvenance::File)
+        .count();
+    ensure!(
+        file_layer_count == 1,
+        "the explicit selector should be the only file layer, got {file_layer_count}"
+    );
+    let selected_file = layers
+        .iter()
+        .find(|layer| layer.provenance() == MergeProvenance::File)
+        .and_then(|layer| layer.path())
+        .and_then(|path| path.file_name());
+    ensure!(
+        selected_file == Some("selected.toml"),
+        "discovery should select the injected file, got {selected_file:?}"
+    );
 
-        let merged = SourceAwareConfig::merge_from_layers(layers).to_figment()?;
-        assert_eq!(
-            merged.port, 9000,
-            "the distinct merge source should override the file value"
-        );
-        Ok(())
-    })?;
+    let merged = SourceAwareConfig::merge_from_layers(layers)
+        .map_err(|err| anyhow::anyhow!(err))
+        .context("merge the composed layers")?;
+    ensure!(
+        merged.port == 9000,
+        "the distinct merge source should override the file value, got {}",
+        merged.port
+    );
     Ok(())
 }
 
@@ -467,34 +470,34 @@ struct CliLayerCase {
     expected_excited: true,
 })]
 fn compose_layers_tracks_cli_layer_presence(#[case] case: CliLayerCase) -> Result<()> {
-    figment_helpers::with_jail(|jail| {
-        jail.clear_env();
-        jail.set_env("APP_EXCITED", "true");
+    // One hermetic source backs both layers: the working directory and the XDG
+    // bases are pinned to an empty root, so nothing on the host or in the
+    // process's directory can reach the composition.
+    let root = tempfile::tempdir().context("create the empty root")?;
+    let env = Arc::new(hermetic(
+        MapEnv::new().with_var("APP_EXCITED", "true"),
+        root.path(),
+    ));
 
-        let composition =
-            SingleFieldConfig::compose_layers_from_iter(case.cli_args.iter().copied());
-        let (layers, errors) = composition.into_parts();
+    let composition =
+        SingleFieldConfig::compose_layers_from_iter_with_env(case.cli_args.iter().copied(), env);
+    let (layers, errors) = composition.into_parts();
 
-        if !errors.is_empty() {
-            return Err(figment_helpers::figment_error(
-                "expected composition without errors",
-            ));
-        }
-        let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
-        if provenances != case.expected_provenances {
-            return Err(figment_helpers::figment_error(format!(
-                "unexpected provenance stack: {provenances:?}"
-            )));
-        }
+    ensure!(errors.is_empty(), "expected composition without errors");
+    let provenances: Vec<MergeProvenance> = layers.iter().map(MergeLayer::provenance).collect();
+    ensure!(
+        provenances == case.expected_provenances,
+        "unexpected provenance stack: {provenances:?}"
+    );
 
-        let merged = SingleFieldConfig::merge_from_layers(layers).to_figment()?;
-        if merged.excited != case.expected_excited {
-            return Err(figment_helpers::figment_error(format!(
-                "expected excited {}, got {}",
-                case.expected_excited, merged.excited
-            )));
-        }
-        Ok(())
-    })?;
+    let merged = SingleFieldConfig::merge_from_layers(layers)
+        .map_err(|err| anyhow::anyhow!(err))
+        .context("merge the composed layers")?;
+    ensure!(
+        merged.excited == case.expected_excited,
+        "expected excited {}, got {}",
+        case.expected_excited,
+        merged.excited
+    );
     Ok(())
 }

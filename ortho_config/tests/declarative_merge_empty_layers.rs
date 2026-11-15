@@ -12,11 +12,17 @@
 //! no layer, so nothing ever seats the accumulator. Unprefixed structs masked
 //! the defect because `CsvEnv::raw()` always yields a non-empty object.
 
-use anyhow::{Result, ensure};
-use ortho_config::{MergeLayer, OrthoConfig};
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, MergeLayer, OrthoConfig};
 use rstest::rstest;
 use serde::Deserialize;
-use test_helpers::figment as figment_helpers;
+use std::sync::Arc;
+
+#[path = "support/hermetic_env.rs"]
+mod hermetic_env;
+
+use hermetic_env::hermetic;
 
 /// Every field may legitimately be absent, so a merge that supplies nothing
 /// still has a well-defined result: all fields `None`.
@@ -67,17 +73,47 @@ fn no_layers_yields_all_absent_fields() -> Result<()> {
 /// and no configuration file to read.
 #[rstest]
 fn load_without_any_source_leaves_every_field_absent() -> Result<()> {
-    figment_helpers::with_jail(|jail| {
-        jail.clear_env();
-        let config = AllOptional::load_from_iter(["prog"])
-            .map_err(|err| figment_helpers::figment_error(err.to_string()))?;
-        if config.flag.is_some() || config.name.is_some() {
-            return Err(figment_helpers::figment_error(format!(
-                "expected every field absent, got {config:?}"
-            )));
-        }
-        Ok(())
-    })?;
+    // A hermetic source pins the working directory and the XDG bases to an
+    // empty root, so neither the host's files nor the process's directory can
+    // join the load.
+    let root = tempfile::tempdir().context("create the empty root")?;
+    let env = Arc::new(hermetic(MapEnv::new(), root.path()));
+    let config = AllOptional::load_from_iter_with_env(["prog"], env).map_err(|err| anyhow!(err))?;
+    ensure!(
+        config.flag.is_none() && config.name.is_none(),
+        "expected every field absent, got {config:?}"
+    );
+    Ok(())
+}
+
+/// A matching project file in *another* directory must not be found.
+///
+/// A positive control first loads the decoy by pinning the working directory
+/// to the directory that holds it, so the decoy is known to be readable. The
+/// same source then goes through `hermetic` with an empty root, which must
+/// pin the directory away from it again: only that pin keeps it out of the
+/// load.
+#[rstest]
+fn a_project_file_outside_the_pinned_directory_is_ignored() -> Result<()> {
+    let elsewhere = tempfile::tempdir().context("create the directory holding the file")?;
+    Dir::open_ambient_dir(elsewhere.path(), ambient_authority())
+        .context("open the directory holding the file")?
+        .write(".emptylayer.toml", "flag = true\n")
+        .context("write the decoy")?;
+    let root = tempfile::tempdir().context("create the empty root")?;
+    let with_decoy = MapEnv::new().with_current_dir(elsewhere.path());
+
+    let control = AllOptional::load_from_iter_with_env(["prog"], Arc::new(with_decoy.clone()))
+        .map_err(|err| anyhow!(err))?;
+    ensure!(
+        control.flag == Some(true),
+        "the decoy must be readable through its own directory: {control:?}"
+    );
+
+    let pinned = Arc::new(hermetic(with_decoy, root.path()));
+    let config =
+        AllOptional::load_from_iter_with_env(["prog"], pinned).map_err(|err| anyhow!(err))?;
+    ensure!(config.flag.is_none(), "the decoy file was read: {config:?}");
     Ok(())
 }
 

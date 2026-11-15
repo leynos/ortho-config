@@ -1567,7 +1567,6 @@ dependencies = [
  "anyhow",
  "camino",
  "cap-std",
- "figment",
  "nix",
  "parking_lot",
  "process-wrap",

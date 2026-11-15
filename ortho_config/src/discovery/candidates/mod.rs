@@ -8,6 +8,7 @@ use super::{ConfigDiscovery, DiscoveryScope};
 use self::provenance::{CandidateOrigin, XdgDecisions};
 use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
 
+mod anchor;
 mod provenance;
 mod variants;
 
@@ -70,7 +71,9 @@ impl ConfigDiscovery {
         I::Item: Into<PathBuf>,
     {
         for base in bases {
-            let base_path: PathBuf = base.into();
+            let Some(base_path) = self.anchored(base.into()) else {
+                continue;
+            };
             for candidate in self.candidates_for_base(base_path.as_path()) {
                 let _ = acc.push_unique(candidate, origin.source, Some(origin.scope));
             }
@@ -200,7 +203,7 @@ impl ConfigDiscovery {
     /// platform fallback supplied the base.
     fn push_home(&self, acc: &mut CandidateAccumulator) -> &'static str {
         let (home, source) = self.resolve_home();
-        if let Some(home_path) = home {
+        if let Some(home_path) = home.and_then(|path| self.anchored(path)) {
             let config_dir = home_path.join(".config");
             self.push_for_bases(
                 std::iter::once(config_dir),
@@ -230,7 +233,10 @@ impl ConfigDiscovery {
             SelectorValue::Unset => telemetry::SELECTOR_UNSET,
             SelectorValue::Empty => telemetry::SELECTOR_EMPTY,
             SelectorValue::Accepted(value) => {
-                let _ = acc.push_unique(PathBuf::from(value), telemetry::CANDIDATE_SELECTOR, None);
+                let Some(path) = self.anchored(PathBuf::from(value)) else {
+                    return telemetry::SELECTOR_DROPPED;
+                };
+                let _ = acc.push_unique(path, telemetry::CANDIDATE_SELECTOR, None);
                 telemetry::SELECTOR_ACCEPTED
             }
         }

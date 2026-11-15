@@ -72,6 +72,18 @@ All notable changes to this project will be documented in this file.
   [v0.11.0 migration guide](docs/v0-11-0-migration-guide.md) for the exact
   edits and roadmap 13.1 for the constructor-based remedy.
 
+### Removed (test helpers)
+
+- **Breaking for `ortho_config_test_helpers` users:** the `figment` module
+  (`with_jail` and `figment_error`) is gone, along with the crate's `figment`
+  dependency. Migrate each caller to an injected environment: back the
+  derive-generated `load_from_iter_with_sources` or
+  `compose_layers_from_iter_with_sources` with a `MapEnv`, and name the
+  configuration file with an absolute `CONFIG_PATH` selector in the discovery
+  source. Nothing then needs a jail, a working-directory change, or a
+  process-environment write. See
+  [the users' guide](docs/users-guide.md#resolve-discovery-and-merging-without-process-state).
+
 ## [0.10.0] - 2026-10-24
 
 _Applications upgrading from 0.9 should follow the

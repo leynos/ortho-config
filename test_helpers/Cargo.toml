@@ -16,7 +16,6 @@ workspace = true
 [dependencies]
 anyhow = "1"
 camino = "1"
-figment = { version = "0.10", default-features = false, features = ["env", "test"] }
 parking_lot = "0.12"
 process-wrap = { version = "9.0.1", default-features = false, features = ["std"] }
 

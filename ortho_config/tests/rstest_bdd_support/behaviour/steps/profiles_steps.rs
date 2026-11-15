@@ -1,8 +1,8 @@
 //! Steps for profile selection and layering scenarios (`profiles.feature`).
 //!
 //! The scenarios exercise the generated entry point
-//! `ProfilesConfig::load_with_profile_from_iter` against a jailed config file
-//! and environment: the `--profile` flag, the `APP_PROFILE` selector, the
+//! `ProfilesConfig::load_with_profile_from_iter_with_sources` against a
+//! temporary config file and an injected environment: the `--profile` flag, the `APP_PROFILE` selector, the
 //! profile merge layer, and the flag-equals-default fix all run through the
 //! derived CLI. Assertion steps live in the sibling
 //! `profiles_steps_assertions` module.
@@ -17,6 +17,7 @@ use super::profile_file::build_file_value;
 use super::profile_placeholders::{
     BareFlagName, ConfigKey, ConfigValue, FlagSpec, ProfileName, TABLE_SENTINEL,
 };
+use super::profile_sources::{self, ScenarioEnvironment};
 
 /// Appends one `(key, value)` pair to a slot that accumulates them.
 ///
@@ -261,10 +262,11 @@ fn record_load_error(profiles_context: &ProfilesContext, err: &OrthoError) {
 
 /// Runs the profile-aware load through the generated entry point.
 ///
-/// Writes the scenario's config file and environment into a jail, then calls
-/// `ProfilesConfig::load_with_profile_from_iter` so the scenarios exercise the
-/// real derived CLI: the `--profile` flag, the `APP_PROFILE` selector, the
-/// profile merge layer, and the flag-equals-default fix.
+/// Writes the scenario's config file into a temporary directory and its
+/// environment into an injected map, then calls
+/// `ProfilesConfig::load_with_profile_from_iter_with_sources` so the scenarios
+/// exercise the real derived CLI: the `--profile` flag, the `APP_PROFILE`
+/// selector, the profile merge layer, and the flag-equals-default fix.
 fn profile_load(
     profiles_context: &ProfilesContext,
     flags: &[(String, String)],
@@ -278,28 +280,23 @@ fn profile_load(
         None
     };
 
-    let result = test_helpers::figment::with_jail(|j| {
-        if let Some(value) = selector.as_ref() {
-            j.set_env("APP_PROFILE", value);
-        }
-        for (key, value) in &env_keys {
-            j.set_env(format!("APP_{}", key.to_ascii_uppercase()), value);
-        }
-        if let Some(value) = file_value.as_ref() {
-            let content = ortho_config::toml::to_string(value)
-                .map_err(|err| figment::error::Error::from(err.to_string()))?;
-            j.create_file(".app.toml", &content)?;
-        }
-        let composition = ProfilesConfig::compose_layers_from_iter(args.clone());
-        profiles_context.layers.set(composition.into_parts().0);
-        Ok(ProfilesConfig::load_with_profile_from_iter(args.clone()))
-    })
-    .map_err(|err| {
-        std::sync::Arc::new(OrthoError::Validation {
-            key: "jail".to_owned(),
-            message: format!("profile scenario jail setup failed: {err}"),
-        })
-    })?;
+    let scenario = ScenarioEnvironment {
+        selector,
+        keys: env_keys,
+    };
+    let sources = profile_sources::prepare(&scenario, file_value.as_ref())?;
+    let environment = sources.environment.clone();
+    let composition = ProfilesConfig::compose_layers_from_iter_with_sources(
+        args.clone(),
+        environment.clone(),
+        environment.clone(),
+    );
+    profiles_context.layers.set(composition.into_parts().0);
+    let result = ProfilesConfig::load_with_profile_from_iter_with_sources(
+        args.clone(),
+        environment.clone(),
+        environment,
+    );
 
     match &result {
         Ok(outcome) => {

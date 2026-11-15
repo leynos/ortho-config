@@ -462,13 +462,15 @@ process-backed `load_with_profile_from_iter` remains for the ordinary case.
 This completes [issue #412](https://github.com/leynos/ortho-config/issues/412).
 
 Default project-root resolution is a distinct boundary.
-`ConfigDiscoveryBuilder` stores a private resolver closure that defaults to
-`std::env::current_dir` (see `discovery/builder.rs`). When no explicit project
-roots are configured and that resolver fails, discovery does not fail: it omits
-only the implicit default project root and emits the bounded
-`discovery.project_root` event with `state = "cwd_unavailable"`. Configuring
-one or more explicit project roots suppresses the resolver entirely, since a
-caller who names roots has taken responsibility for them.
+`ConfigDiscoveryBuilder` asks its environment source for the working directory
+(`EnvSource::current_dir`, which defaults to `std::env::current_dir` and which
+`MapEnv::with_current_dir` pins; a private test-only resolver closure can
+override it, see `discovery/builder.rs`). When no explicit project roots are
+configured and that lookup fails, discovery does not fail: it omits only the
+implicit default project root and emits the bounded `discovery.project_root`
+event with `state = "cwd_unavailable"`. Configuring one or more explicit
+project roots suppresses the resolver entirely, since a caller who names roots
+has taken responsibility for them.
 
 ### Discovery telemetry and metrics
 
@@ -476,8 +478,9 @@ Configuration discovery emits structured `tracing` events drawn from a closed
 vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
 
 - `discovery.source_selected` — `source`: `process` or `injected`.
-- `discovery.selector` — `state`: `not_configured`, `unset`, `empty`, or
-  `accepted`.
+- `discovery.selector` — `state`: `not_configured`, `unset`, `empty`,
+  `accepted`, or `dropped` (a relative selector whose source reported no
+  working directory to resolve it against).
 - `discovery.xdg` — `config_home` and `dirs`: `absent`, `empty`, or `present`;
   `resolution`: `default` or `list`.
 - `discovery.home` — `source`: `home`, `userprofile`, `fallback`, or `none`.

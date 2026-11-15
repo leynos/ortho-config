@@ -183,22 +183,17 @@ fn injected_candidates_preserve_home_xdg_and_base_order() -> Result<()> {
     Ok(())
 }
 
-/// An empty `HOME` is unset: no candidate may be process-relative.
-///
-/// A relative candidate such as `.app.toml` is resolved against the process
-/// working directory when opened, which would escape an injected one. With the
-/// XDG variables pinned absolute and empty, every candidate that survives must
-/// sit beneath the explicit base.
-#[cfg(any(unix, target_os = "redox"))]
+/// A relative platform configuration directory is refused.
+#[cfg(not(any(unix, target_os = "redox")))]
 #[test]
-fn empty_home_yields_no_process_relative_candidate() -> Result<()> {
-    let base = TempDir::new().context("create base")?;
-    let env = MapEnv::new()
-        .with_var("HOME", "")
-        .with_var("XDG_CONFIG_HOME", base.path().join("xdg-empty"))
-        .with_var("XDG_CONFIG_DIRS", base.path().join("dirs-empty"));
+fn relative_platform_config_root_yields_no_process_relative_candidate() -> Result<()> {
+    let base = PathBuf::from("C:/injected/base");
+    let source = PlatformFallbackEnv {
+        vars: MapEnv::new(),
+        config_dir: Some(PathBuf::from("relative-config")),
+    };
 
-    let paths = candidate_paths_at(&Prefix::new("app"), base.path(), &env)?;
+    let paths = candidate_paths_at(&Prefix::new("app"), &base, &source)?;
 
     ensure!(
         paths.iter().all(|path| path.is_absolute()),

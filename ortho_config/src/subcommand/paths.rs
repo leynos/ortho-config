@@ -15,13 +15,26 @@ use crate::{EnvSource, OrthoResult};
 #[path = "paths_telemetry.rs"]
 mod paths_telemetry;
 
-/// Look `key` up by name, treating an empty value as unset.
+/// Accept a source's fallback directory only when it is not relative.
 ///
-/// An empty home would otherwise produce relative candidates such as
-/// `.app.toml`, which a loader resolves against the process working directory
-/// and so escapes an injected one.
-fn named_nonempty(source: &dyn EnvSource, key: &str) -> Option<std::ffi::OsString> {
-    source.get(key).filter(|value| !value.is_empty())
+/// A fallback is a source's answer to "where is home" when no variable says, so
+/// it is held to the rule the named variables follow: a relative path names no
+/// stable directory and would be probed relative to the process.
+fn usable_fallback(path: PathBuf) -> Option<PathBuf> {
+    (path.is_absolute() || path.has_root()).then_some(path)
+}
+
+/// Look `key` up by name, treating an empty or relative value as unset.
+///
+/// An empty or relative home would otherwise produce relative candidates such
+/// as `.app.toml`, which a loader resolves against the process working
+/// directory and so escapes an injected one. This is the rule the XDG variables
+/// in this module already follow: a relative base names no stable directory.
+fn named_absolute(source: &dyn EnvSource, key: &str) -> Option<std::ffi::OsString> {
+    source.get(key).filter(|value| {
+        let path = std::path::Path::new(value);
+        path.is_absolute() || path.has_root()
+    })
 }
 
 /// Supported suffixes in precedence order; aliases for each optional format stay adjacent.
@@ -106,9 +119,9 @@ fn source_xdg_bases(prefix: &Prefix, source: &dyn EnvSource) -> Vec<PathBuf> {
     let config_home_result = absolute_config_home
         .inspect(|_| paths_telemetry::unix_config_home_from_named())
         .or_else(|| {
-            named_nonempty(source, "HOME")
+            named_absolute(source, "HOME")
                 .map(PathBuf::from)
-                .or_else(|| source.home_fallback())
+                .or_else(|| source.home_fallback().and_then(usable_fallback))
                 .map(|home| home.join(".config"))
                 .inspect(|_| paths_telemetry::unix_config_home_from_fallback())
         });
@@ -211,7 +224,7 @@ fn collect_unix_paths(
     source: &dyn EnvSource,
     paths: &mut Vec<PathBuf>,
 ) -> OrthoResult<()> {
-    if let Some(home) = named_nonempty(source, "HOME") {
+    if let Some(home) = named_absolute(source, "HOME") {
         push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
     }
     push_xdg_candidates(prefix, source, paths)
@@ -225,10 +238,10 @@ fn collect_unix_paths(
 /// is scoped by the prefix only when the prefix is non-empty.
 #[cfg(not(any(unix, target_os = "redox")))]
 fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
-    let configured_home = named_nonempty(source, "HOME")
+    let configured_home = named_absolute(source, "HOME")
         .inspect(|_| paths_telemetry::windows_home_from_named())
         .or_else(|| {
-            let from_userprofile = named_nonempty(source, "USERPROFILE");
+            let from_userprofile = named_absolute(source, "USERPROFILE");
             if from_userprofile.is_some() {
                 paths_telemetry::windows_home_from_userprofile();
             }
@@ -236,14 +249,14 @@ fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut V
         });
     if let Some(home) = configured_home {
         push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
-    } else if let Some(fallback_home) = source.home_fallback() {
+    } else if let Some(fallback_home) = source.home_fallback().and_then(usable_fallback) {
         paths_telemetry::windows_home_from_fallback();
         push_stem_candidates(&fallback_home, &dotted(prefix), paths);
     } else {
         paths_telemetry::windows_home_absent();
     }
 
-    if let Some(config_dir) = source.config_dir_fallback() {
+    if let Some(config_dir) = source.config_dir_fallback().and_then(usable_fallback) {
         paths_telemetry::windows_config_dir_from_platform();
         let scoped_config_dir = if prefix.as_str().is_empty() {
             config_dir

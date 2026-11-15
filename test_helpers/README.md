@@ -11,7 +11,6 @@ This crate provides:
   mutation. Inject an `ortho_config::MapEnv` instead.
 - Deprecated (since 0.11.0) RAII guards for current working directory mutation.
   Pin the directory with `MapEnv::with_current_dir` instead.
-- Helpers for `figment::Jail` setup and error conversion.
 - Shared text normalization functions for behavioural tests.
 
 ## Intended usage

@@ -12,13 +12,11 @@
 //! policy form ignore the very variable the non-policy form consults. Neither
 //! failure is visible from the generated code alone, so both are pinned here.
 //!
-//! The process environment is only ever *cleared* here, never set. A value can
-//! therefore only come from the injected map, which is the property under test.
-//! `Jail::expect_with` performs the clearing and restores the environment after
-//! the closure returns.
+//! The process environment is never touched here. The loaders under test read
+//! only the injected map, so a value can only come from that map, which is the
+//! property under test.
 
 use anyhow::{Context as _, Result, anyhow, ensure};
-use figment::Jail;
 use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -127,30 +125,22 @@ where
 /// leaves the CLI path as the only way a file can be found.
 #[test]
 fn policy_sources_project_root_from_reads_a_cli_path_field() -> Result<()> {
-    let mut test_result = Ok(());
-    Jail::expect_with(|jail| {
-        jail.clear_env();
-        test_result = (|| {
-            let dir = TempDir::new().context("create policy fixture directory")?;
-            let root = dir.path().join("root");
-            write_config(&root.join(".policy-root.toml"), 123)?;
+    let dir = TempDir::new().context("create policy fixture directory")?;
+    let root = dir.path().join("root");
+    write_config(&root.join(".policy-root.toml"), 123)?;
 
-            let root_arg = root
-                .to_str()
-                .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
-            let source = Arc::new(MapEnv::new());
-            let config = load_root_from_map(source, ["policy-root", "--project-root", root_arg])?;
+    let root_arg = root
+        .to_str()
+        .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?;
+    let source = Arc::new(MapEnv::new());
+    let config = load_root_from_map(source, ["policy-root", "--project-root", root_arg])?;
 
-            ensure!(
-                config.value == 123,
-                "the --project-root value must select the project layer, got {}",
-                config.value
-            );
-            Ok(())
-        })();
-        Ok(())
-    });
-    test_result
+    ensure!(
+        config.value == 123,
+        "the --project-root value must select the project layer, got {}",
+        config.value
+    );
+    Ok(())
 }
 
 /// The caller's map supplies the config-path variable, not the process env.
@@ -162,34 +152,26 @@ fn policy_sources_project_root_from_reads_a_cli_path_field() -> Result<()> {
 /// consulted and the sample scope would decide.
 #[test]
 fn policy_discovery_honours_an_injected_config_path_variable() -> Result<()> {
-    let mut test_result = Ok(());
-    Jail::expect_with(|jail| {
-        jail.clear_env();
-        test_result = (|| {
-            let dir = TempDir::new().context("create policy fixture directory")?;
-            let selected = dir.path().join("selected.toml");
-            write_config(&selected, 4242)?;
-            // An empty scope base keeps the selector the only source of a file.
-            let empty_scope = dir.path().join("empty");
+    let dir = TempDir::new().context("create policy fixture directory")?;
+    let selected = dir.path().join("selected.toml");
+    write_config(&selected, 4242)?;
+    // An empty scope base keeps the selector the only source of a file.
+    let empty_scope = dir.path().join("empty");
 
-            let source = Arc::new(
-                MapEnv::new()
-                    .with_var("POLICY_SRC_CONFIG_PATH", &selected)
-                    .with_var("XDG_CONFIG_HOME", &empty_scope)
-                    .with_var("HOME", &empty_scope),
-            );
-            let config = load_from_map(source)?;
+    let source = Arc::new(
+        MapEnv::new()
+            .with_var("POLICY_SRC_CONFIG_PATH", &selected)
+            .with_var("XDG_CONFIG_HOME", &empty_scope)
+            .with_var("HOME", &empty_scope),
+    );
+    let config = load_from_map(source)?;
 
-            ensure!(
-                config.value == 4242,
-                "the injected POLICY_SRC_CONFIG_PATH must select the file, got {}",
-                config.value
-            );
-            Ok(())
-        })();
-        Ok(())
-    });
-    test_result
+    ensure!(
+        config.value == 4242,
+        "the injected POLICY_SRC_CONFIG_PATH must select the file, got {}",
+        config.value
+    );
+    Ok(())
 }
 
 /// The caller's map also drives automatic scope discovery.
@@ -200,29 +182,21 @@ fn policy_discovery_honours_an_injected_config_path_variable() -> Result<()> {
 /// that map to the builder it constructs.
 #[test]
 fn policy_discovery_reads_scopes_from_an_injected_environment() -> Result<()> {
-    let mut test_result = Ok(());
-    Jail::expect_with(|jail| {
-        jail.clear_env();
-        test_result = (|| {
-            let dir = TempDir::new().context("create policy fixture directory")?;
-            let scope = dir.path().join("scope");
-            write_config(&scope.join("policy_src_app/policy-src.toml"), 77)?;
+    let dir = TempDir::new().context("create policy fixture directory")?;
+    let scope = dir.path().join("scope");
+    write_config(&scope.join("policy_src_app/policy-src.toml"), 77)?;
 
-            let source = Arc::new(
-                MapEnv::new()
-                    .with_var("XDG_CONFIG_HOME", &scope)
-                    .with_var("HOME", &scope),
-            );
-            let config = load_from_map(source)?;
+    let source = Arc::new(
+        MapEnv::new()
+            .with_var("XDG_CONFIG_HOME", &scope)
+            .with_var("HOME", &scope),
+    );
+    let config = load_from_map(source)?;
 
-            ensure!(
-                config.value == 77,
-                "the injected XDG_CONFIG_HOME must supply the automatic layer, got {}",
-                config.value
-            );
-            Ok(())
-        })();
-        Ok(())
-    });
-    test_result
+    ensure!(
+        config.value == 77,
+        "the injected XDG_CONFIG_HOME must supply the automatic layer, got {}",
+        config.value
+    );
+    Ok(())
 }
