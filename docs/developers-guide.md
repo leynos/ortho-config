@@ -1832,6 +1832,17 @@ Tests must not reintroduce Figment Jail, `std::env::set_current_dir`, or writes
 outside the temporary root. This work is part of the migration tracked by
 [#452](https://github.com/leynos/ortho-config/issues/452).
 
+The `ortho_config_test_helpers::figment` module (`with_jail` and
+`figment_error`) is removed in v0.11.0. Its replacement is an injected
+environment: stage files through a `cap_std` handle, name the file with an
+absolute `CONFIG_PATH` selector in a `MapEnv`, and call the generated
+`load_from_iter_with_sources` family. The
+[v0.11.0 migration guide](v0-11-0-migration-guide.md) gives the steps. Until
+the working-directory seam of
+[#692](https://github.com/leynos/ortho-config/issues/692) lands, a test that
+expects no discovered file relies on the crate directory holding none, so keep
+fixture files out of it.
+
 ## Snapshot tests
 
 Use `insta` for renderer golden coverage that would be noisy as handwritten
