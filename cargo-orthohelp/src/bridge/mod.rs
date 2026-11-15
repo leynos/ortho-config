@@ -16,6 +16,7 @@ use crate::metadata::{OrthoConfigDependency, PackageSelection};
 mod bridge_build;
 #[path = "../bridge_build_environment.rs"]
 mod bridge_build_environment;
+mod cache_lookup;
 #[path = "../bridge_execution.rs"]
 mod execution;
 mod ir_cache;
@@ -26,8 +27,9 @@ mod telemetry_metrics;
 mod workspace;
 
 use bridge_build_environment::BuildEnvironment;
+use cache_lookup::lookup_cached_ir;
 use execution::run_bridge;
-use ir_cache::{PublishOutcome, PublishStage, read_cached_ir, write_ir_cache};
+use ir_cache::{PublishOutcome, PublishStage, write_ir_cache};
 use workspace::BridgeWorkspace;
 
 /// Stable IR cache identity and Cargo-owned compiler state.
@@ -102,59 +104,47 @@ fn load_or_build_ir_inner(
     should_skip_build: bool,
 ) -> Result<String, OrthohelpError> {
     if should_use_cache || should_skip_build {
-        let lookup_started = Instant::now();
-        match read_cached_ir(paths) {
-            Ok(Some(cached)) => {
-                observability::completed("bridge_cache_lookup", "hit", lookup_started);
-                telemetry::ir_cache_hit();
-                #[cfg(feature = "metrics")]
-                telemetry_metrics::record_cache_event(
-                    telemetry_metrics::CacheOperation::Lookup,
-                    telemetry_metrics::CacheOutcome::Hit,
-                );
-                return Ok(cached);
-            }
-            Ok(None) => {
-                observability::completed("bridge_cache_lookup", "miss", lookup_started);
-                telemetry::ir_cache_miss();
-                #[cfg(feature = "metrics")]
-                telemetry_metrics::record_cache_event(
-                    telemetry_metrics::CacheOperation::Lookup,
-                    telemetry_metrics::CacheOutcome::Miss,
-                );
-            }
-            Err(error) => {
-                observability::failed("bridge_cache_lookup", "read_failed", lookup_started);
-                #[cfg(feature = "metrics")]
-                telemetry_metrics::record_cache_event(
-                    telemetry_metrics::CacheOperation::Lookup,
-                    telemetry_metrics::CacheOutcome::ReadFailed,
-                );
-                return Err(error);
-            }
+        if let Some(cached) = lookup_cached_ir(paths)? {
+            return Ok(cached);
         }
         if should_skip_build {
             return Err(OrthohelpError::MissingCache(paths.ir_path.clone()));
         }
     }
+    build_ir(config, paths)
+}
 
+/// Build the bridge, run it for fresh IR, and publish that IR to the cache.
+fn build_ir(config: &BridgeConfig, paths: &BridgeCache) -> Result<String, OrthohelpError> {
     let workspace = BridgeWorkspace::new(paths, &config.package_root)?;
-    let private_paths = &workspace.paths;
-    ensure_bridge_layout(private_paths)?;
-    workspace.seed_lockfile(config)?;
-    write_bridge_manifest(config, private_paths)?;
-    write_bridge_main(config, private_paths)?;
-    let environment = BuildEnvironment::from_process();
-    let executable = bridge_build::build_and_snapshot(
-        &mut build_bridge_command(private_paths, &environment),
-        &private_paths.target_dir,
-        &private_paths.bridge_dir.join("run"),
-        &private_paths.binary_name,
-    )?;
+    stage_bridge_sources(&workspace, config)?;
+    let executable = build_bridge_executable(&workspace.paths)?;
     let ir_json = run_bridge(&executable)?;
     publish_ir_cache(paths, &ir_json)?;
 
     Ok(ir_json)
+}
+
+/// Lay out the private bridge crate: its directories, lockfile, manifest and entry point.
+fn stage_bridge_sources(
+    workspace: &BridgeWorkspace,
+    config: &BridgeConfig,
+) -> Result<(), OrthohelpError> {
+    ensure_bridge_layout(&workspace.paths)?;
+    workspace.seed_lockfile(config)?;
+    write_bridge_manifest(config, &workspace.paths)?;
+    write_bridge_main(config, &workspace.paths)
+}
+
+/// Build the private bridge crate and snapshot its executable.
+fn build_bridge_executable(paths: &BridgePaths) -> Result<Utf8PathBuf, OrthohelpError> {
+    let environment = BuildEnvironment::from_process();
+    bridge_build::build_and_snapshot(
+        &mut build_bridge_command(paths, &environment),
+        &paths.target_dir,
+        &paths.bridge_dir.join("run"),
+        &paths.binary_name,
+    )
 }
 
 /// Publish generated IR and record the outcome at the orchestration boundary.

@@ -215,24 +215,35 @@ pub(super) enum LockProbe {
 #[cfg(test)]
 pub(super) fn probe_lock(root: &Path) -> std::io::Result<LockProbe> {
     let file = open_existing_lock_file(&lock_path(root))?;
-    let probe = match file.try_lock() {
-        Ok(()) => {
-            // Released explicitly for the reason the production guard records:
-            // a concurrent fork inherits the open file description before exec
-            // closes its descriptor, and the child would otherwise hold a lock
-            // this probe has already finished observing.
-            file.unlock()?;
-            LockProbe::Free
-        }
-        Err(fs::TryLockError::WouldBlock) => LockProbe::Held {
-            metadata: file.metadata()?,
-        },
-        Err(fs::TryLockError::Error(error)) => return Err(error),
-    };
-    // The failed acquisition in the contended arm left nothing to release, so
+    let probe = observe_lock_state(&file)?;
+    // The failed acquisition in the contended case left nothing to release, so
     // closing the handle is enough there.
     drop(file);
     Ok(probe)
+}
+
+/// Tries the lock once and reports what the attempt showed.
+#[cfg(test)]
+fn observe_lock_state(file: &fs::File) -> std::io::Result<LockProbe> {
+    match file.try_lock() {
+        Ok(()) => release_observed_lock(file),
+        Err(fs::TryLockError::WouldBlock) => Ok(LockProbe::Held {
+            metadata: file.metadata()?,
+        }),
+        Err(fs::TryLockError::Error(error)) => Err(error),
+    }
+}
+
+/// Releases a lock the probe just took, then reports the lock as free.
+///
+/// Released explicitly for the reason the production guard records: a
+/// concurrent fork inherits the open file description before exec closes its
+/// descriptor, and the child would otherwise hold a lock this probe has already
+/// finished observing.
+#[cfg(test)]
+fn release_observed_lock(file: &fs::File) -> std::io::Result<LockProbe> {
+    file.unlock()?;
+    Ok(LockProbe::Free)
 }
 
 /// Reports whether the publication lock is currently free.

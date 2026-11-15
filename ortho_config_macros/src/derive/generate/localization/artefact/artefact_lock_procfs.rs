@@ -341,13 +341,27 @@ impl ProcFs for RealProcFs {
 /// process called `a) b` look like a different process entirely.
 #[cfg(target_os = "linux")]
 pub(super) fn parse_stat(stat: &str) -> Option<ProcessStat> {
+    let (command, trailing) = split_command(stat)?;
+    Some(ProcessStat::new(command, parse_parent(trailing)?))
+}
+
+/// Splits a stat line into its command name and the text after it.
+///
+/// The command is delimited by the first `(` and the *last* `)`.
+#[cfg(target_os = "linux")]
+fn split_command(stat: &str) -> Option<(String, &str)> {
     let open = stat.find('(')?;
     let close = stat.rfind(')')?;
     let command = stat.get(open.saturating_add(1)..close)?.to_owned();
-    let mut trailing = stat.get(close.saturating_add(1)..)?.split_whitespace();
-    // Past the command name the first field is the state and the second the
-    // parent pid.
-    let _state = trailing.next()?;
-    let parent = ProcessId::new(trailing.next()?.parse().ok()?);
-    Some(ProcessStat::new(command, parent))
+    Some((command, stat.get(close.saturating_add(1)..)?))
+}
+
+/// Reads the parent pid from the fields after the command name.
+///
+/// Past the command name the first field is the state and the second the
+/// parent pid.
+#[cfg(target_os = "linux")]
+fn parse_parent(trailing: &str) -> Option<ProcessId> {
+    let raw = trailing.split_whitespace().nth(1)?;
+    Some(ProcessId::new(raw.parse().ok()?))
 }

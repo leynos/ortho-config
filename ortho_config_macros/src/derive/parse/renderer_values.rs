@@ -5,6 +5,7 @@
 //! group and record structure lives in the parent module.
 
 use syn::meta::ParseNestedMeta;
+use syn::parse::ParseStream;
 use syn::spanned::Spanned;
 use syn::{LitBool, LitInt, LitStr, Token};
 
@@ -114,48 +115,8 @@ pub(super) fn parse_width(nested: &ParseNestedMeta) -> syn::Result<RenderWidthAt
 pub(super) fn parse_field_entry(nested: &ParseNestedMeta) -> syn::Result<RendererFieldAttr> {
     let content;
     syn::parenthesized!(content in nested.input);
-    let id_lit: LitStr = content.parse()?;
-    let id = id_lit.value();
-    if id.is_empty() {
-        return Err(syn::Error::new(
-            id_lit.span(),
-            "field id must not be empty; it is a stable output field identifier",
-        ));
-    }
-
-    let mut localization = None;
-    while !content.is_empty() {
-        content.parse::<Token![,]>()?;
-        if content.is_empty() {
-            break;
-        }
-        let key: syn::Ident = content.parse()?;
-        if key != "localization" {
-            return Err(syn::Error::new(
-                key.span(),
-                format!("unknown field policy `{key}`; expected `localization`"),
-            ));
-        }
-        content.parse::<Token![=]>()?;
-        let value_lit: LitStr = content.parse()?;
-        let value = value_lit.value();
-        if !LOCALIZATION_VALUES.contains(&value.as_str()) {
-            return Err(syn::Error::new(
-                value_lit.span(),
-                format!(
-                    "unknown localization '{value}'; expected one of {}",
-                    quote_values(LOCALIZATION_VALUES)
-                ),
-            ));
-        }
-        if localization.is_some() {
-            return Err(syn::Error::new(
-                key.span(),
-                "duplicate field policy `localization`; assign it once per field",
-            ));
-        }
-        localization = Some(value);
-    }
+    let id_lit = parse_field_id(&content)?;
+    let localization = parse_field_policies(&content)?;
 
     let declared_localization = localization.ok_or_else(|| {
         syn::Error::new(
@@ -164,9 +125,85 @@ pub(super) fn parse_field_entry(nested: &ParseNestedMeta) -> syn::Result<Rendere
         )
     })?;
     Ok(RendererFieldAttr {
-        id,
+        id: id_lit.value(),
         localization: declared_localization,
     })
+}
+
+/// Parses the leading field identifier, which must not be empty.
+fn parse_field_id(content: ParseStream<'_>) -> syn::Result<LitStr> {
+    let id_lit: LitStr = content.parse()?;
+    if id_lit.value().is_empty() {
+        return Err(syn::Error::new(
+            id_lit.span(),
+            "field id must not be empty; it is a stable output field identifier",
+        ));
+    }
+    Ok(id_lit)
+}
+
+/// Parses the `, localization = "<token>"` policies after the identifier.
+///
+/// Returns the declared localization, or `None` when the entry declares none.
+fn parse_field_policies(content: ParseStream<'_>) -> syn::Result<Option<String>> {
+    let mut localization = None;
+    while let Some(key) = next_policy_key(content)? {
+        let value = parse_localization_policy(content, &key)?;
+        record_localization(&mut localization, value, &key)?;
+    }
+    Ok(localization)
+}
+
+/// Consumes the comma before the next policy and returns its key.
+///
+/// Returns `None` at the end of the entry, including after a trailing comma.
+fn next_policy_key(content: ParseStream<'_>) -> syn::Result<Option<syn::Ident>> {
+    if content.is_empty() {
+        return Ok(None);
+    }
+    content.parse::<Token![,]>()?;
+    if content.is_empty() {
+        return Ok(None);
+    }
+    content.parse().map(Some)
+}
+
+/// Stores the declared localization, rejecting a second declaration.
+fn record_localization(
+    slot: &mut Option<String>,
+    value: String,
+    key: &syn::Ident,
+) -> syn::Result<()> {
+    if slot.replace(value).is_some() {
+        return Err(syn::Error::new(
+            key.span(),
+            "duplicate field policy `localization`; assign it once per field",
+        ));
+    }
+    Ok(())
+}
+
+/// Parses `= "<token>"` after the `localization` key and checks the token.
+fn parse_localization_policy(content: ParseStream<'_>, key: &syn::Ident) -> syn::Result<String> {
+    if key != "localization" {
+        return Err(syn::Error::new(
+            key.span(),
+            format!("unknown field policy `{key}`; expected `localization`"),
+        ));
+    }
+    content.parse::<Token![=]>()?;
+    let value_lit: LitStr = content.parse()?;
+    let value = value_lit.value();
+    if !LOCALIZATION_VALUES.contains(&value.as_str()) {
+        return Err(syn::Error::new(
+            value_lit.span(),
+            format!(
+                "unknown localization '{value}'; expected one of {}",
+                quote_values(LOCALIZATION_VALUES)
+            ),
+        ));
+    }
+    Ok(value)
 }
 
 /// Rejects a repeated output field identifier within one renderer record.

@@ -88,15 +88,21 @@ fn read_documented_examples() -> Result<Vec<DocumentedExample>> {
         examples.extend(parse_document(path, &contents)?);
     }
 
+    ensure_unique_ids(&examples)?;
+    Ok(examples)
+}
+
+/// Requires every example identifier to appear once across all documents.
+fn ensure_unique_ids(examples: &[DocumentedExample]) -> Result<()> {
     let mut ids = HashSet::new();
-    for example in &examples {
+    for example in examples {
         ensure!(
             ids.insert(example.id.as_str()),
             "duplicate tested-example identifier '{}'",
             example.id
         );
     }
-    Ok(examples)
+    Ok(())
 }
 
 /// Borrow the cached documented example identified by `id`.

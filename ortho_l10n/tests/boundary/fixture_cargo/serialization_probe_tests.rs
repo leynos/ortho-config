@@ -42,6 +42,13 @@ use std::sync::{Arc, MutexGuard, TryLockError, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
+#[path = "serialization_probe_checks.rs"]
+mod checks;
+
+use checks::{
+    ensure_charged_wait_was_reported, ensure_runs_were_serialized, ensure_wait_was_reported,
+};
+
 /// Names the probe variant the child should run.
 const PROBE_ID_VARIABLE: &str = "BOUNDARY_SERIALIZATION_PROBE_ID";
 
@@ -143,37 +150,30 @@ fn serialization_probe() -> Result<()> {
 /// Two nested runs must not overlap, and the second must keep its own deadline.
 #[test]
 fn concurrent_runs_are_serialized() -> Result<()> {
-    let scratch = TempDir::new().context("create the serialization scratch directory")?;
-    let directory = Dir::open_ambient_dir(scratch.path(), ambient_authority())
-        .context("open the serialization scratch directory")?;
+    let (scratch, directory) = scratch_directory_for("serialization")?;
     let first = probe_command("first", FIRST_SLEEP, scratch.path())?;
     let second = probe_command("second", SECOND_SLEEP, scratch.path())?;
 
     let first_finished = Arc::new(AtomicBool::new(false));
-    let finished_flag = Arc::clone(&first_finished);
-    let first_run = std::thread::spawn(move || -> Result<Output> {
-        let outcome = run_with_deadline(
-            first,
-            Budget::new(),
-            FIRST_DEADLINE,
-            "first serialization probe",
-        );
-        // Set on every path, so the parent never waits out the bound for a run
-        // that has already returned.
-        finished_flag.store(true, Ordering::SeqCst);
-        outcome
-    });
-    // Start the second run only once the first child is running, so a missing
-    // lock would let the two overlap inside the observation window rather than
-    // depending on which thread happened to reach the runner first.
-    wait_until(FIRST_START_WAIT, "the first probe to start", || {
-        Ok(directory.exists("first.start") || first_finished.load(Ordering::SeqCst))
-    })?;
-    ensure!(
-        directory.exists("first.start"),
-        "the first serialization probe returned without reporting that it started",
-    );
-    let second_output = run_with_deadline(
+    let first_run = spawn_first_probe(first, &first_finished);
+    wait_for_first_probe_to_start(&directory, &first_finished)?;
+    let second_output = run_second_probe(second)?;
+    let first_output = join_first_probe(first_run)?;
+    ensure_runs_were_serialized(&directory, &first_output, &second_output)
+}
+
+/// A fresh scratch directory for one regression, with a capability handle on it.
+fn scratch_directory_for(purpose: &str) -> Result<(TempDir, Dir)> {
+    let scratch =
+        TempDir::new().with_context(|| format!("create the {purpose} scratch directory"))?;
+    let directory = Dir::open_ambient_dir(scratch.path(), ambient_authority())
+        .with_context(|| format!("open the {purpose} scratch directory"))?;
+    Ok((scratch, directory))
+}
+
+/// Run the second probe, which must start after the first and keep its own deadline.
+fn run_second_probe(second: Command) -> Result<Output> {
+    run_with_deadline(
         second,
         Budget::new(),
         SECOND_DEADLINE,
@@ -182,31 +182,48 @@ fn concurrent_runs_are_serialized() -> Result<()> {
     .context(
         "the second serialization probe should start after the first finishes \
          and keep its own full deadline",
-    )?;
-    let first_output = first_run
-        .join()
-        .map_err(|_| anyhow!("the first serialization probe's thread panicked"))??;
+    )
+}
 
+/// Wait for the first probe's thread and unwrap its run.
+fn join_first_probe(first_run: std::thread::JoinHandle<Result<Output>>) -> Result<Output> {
+    first_run
+        .join()
+        .map_err(|_| anyhow!("the first serialization probe's thread panicked"))?
+}
+
+/// Run the first probe on its own thread, flagging `finished` on every path.
+///
+/// The flag is set whether the run succeeds or fails, so the parent never waits
+/// out the bound for a run that has already returned.
+fn spawn_first_probe(
+    first: Command,
+    finished: &Arc<AtomicBool>,
+) -> std::thread::JoinHandle<Result<Output>> {
+    let finished_flag = Arc::clone(finished);
+    std::thread::spawn(move || -> Result<Output> {
+        let outcome = run_with_deadline(
+            first,
+            Budget::new(),
+            FIRST_DEADLINE,
+            "first serialization probe",
+        );
+        finished_flag.store(true, Ordering::SeqCst);
+        outcome
+    })
+}
+
+/// Wait until the first child is running before the second run starts.
+///
+/// A missing lock would then let the two overlap inside the observation window
+/// rather than depending on which thread happened to reach the runner first.
+fn wait_for_first_probe_to_start(directory: &Dir, first_finished: &AtomicBool) -> Result<()> {
+    wait_until(FIRST_START_WAIT, "the first probe to start", || {
+        Ok(directory.exists("first.start") || first_finished.load(Ordering::SeqCst))
+    })?;
     ensure!(
-        first_output.status.success() && second_output.status.success(),
-        "both probes should exit successfully: first {:?}, second {:?}",
-        first_output.status,
-        second_output.status,
-    );
-    let first_exit = read_marker(&directory, "first.exit")?;
-    let second_start = read_marker(&directory, "second.start")?;
-    let second_exit = read_marker(&directory, "second.exit")?;
-    ensure!(
-        second_start >= first_exit,
-        "the second probe started {second_start} ms and the first exited {first_exit} ms; \
-         nested runs overlapped instead of being serialized",
-    );
-    ensure!(
-        second_exit.saturating_sub(second_start) >= SECOND_SLEEP.as_millis(),
-        "the second probe ran for {} ms rather than its own {} ms sleep, so its \
-         deadline covered time spent waiting for the lock",
-        second_exit.saturating_sub(second_start),
-        SECOND_SLEEP.as_millis(),
+        directory.exists("first.start"),
+        "the first serialization probe returned without reporting that it started",
     );
     Ok(())
 }
@@ -221,9 +238,7 @@ fn concurrent_runs_are_serialized() -> Result<()> {
 /// one after the allowance had already been spent.
 #[test]
 fn an_allowance_spent_while_waiting_is_reported() -> Result<()> {
-    let scratch = TempDir::new().context("create the wait-allowance scratch directory")?;
-    let directory = Dir::open_ambient_dir(scratch.path(), ambient_authority())
-        .context("open the wait-allowance scratch directory")?;
+    let (scratch, directory) = scratch_directory_for("wait-allowance")?;
     let held = hold_serialization()?;
     // Created before the thread starts, so the allowance is spent from a known
     // instant rather than from whenever the thread is scheduled.
@@ -244,22 +259,25 @@ fn an_allowance_spent_while_waiting_is_reported() -> Result<()> {
     // cannot have acquired it and spawned a child before returning.
     drop(held);
     reported?;
-    let error = waiter
+    let error = failure_of(
+        waiter,
+        "waiting",
+        "a call that spent its allowance waiting should fail",
+    )?;
+    ensure_wait_was_reported(&error, &directory)
+}
+
+/// Join a probe's thread and take the error its run must have returned.
+fn failure_of(
+    thread: std::thread::JoinHandle<Result<Output>>,
+    name: &str,
+    expectation: &str,
+) -> Result<anyhow::Error> {
+    thread
         .join()
-        .map_err(|_panic| anyhow!("the waiting probe's thread panicked"))?
+        .map_err(|_panic| anyhow!("the {name} probe's thread panicked"))?
         .err()
-        .context("a call that spent its allowance waiting should fail")?;
-    ensure!(
-        error
-            .to_string()
-            .contains("waited for a sibling nested Cargo invocation"),
-        "the error should name the wait that spent the allowance:\n{error:#}",
-    );
-    ensure!(
-        !directory.exists("waiter.start"),
-        "the runner spawned a child after the allowance had been spent waiting",
-    );
-    Ok(())
+        .context(expectation.to_owned())
 }
 
 /// The child's bound must be what is left after the serialization wait.
@@ -271,9 +289,7 @@ fn an_allowance_spent_while_waiting_is_reported() -> Result<()> {
 /// would succeed instead.
 #[test]
 fn a_wait_for_a_sibling_is_charged_to_the_allowance() -> Result<()> {
-    let scratch = TempDir::new().context("create the charged-wait scratch directory")?;
-    let directory = Dir::open_ambient_dir(scratch.path(), ambient_authority())
-        .context("open the charged-wait scratch directory")?;
+    let (scratch, directory) = scratch_directory_for("charged-wait")?;
     let held = hold_serialization()?;
     let budget = Budget::expiring_in(SHARED_ALLOWANCE);
     let command = probe_command("charged", SHARED_SLEEP, scratch.path())?;
@@ -292,23 +308,13 @@ fn a_wait_for_a_sibling_is_charged_to_the_allowance() -> Result<()> {
     outcome
         .recv_timeout(CHARGED_LIMIT)
         .context("the runner should finish once it owns the serialization")?;
-    let error = runner
-        .join()
-        .map_err(|_panic| anyhow!("the charged probe's thread panicked"))?
-        .err()
-        .context(
-            "the remaining allowance should have bounded the child; a bound taken before the \
-             wait would have covered the child's whole sleep",
-        )?;
-    ensure!(
-        error.to_string().contains("allowance"),
-        "the error should report the shared allowance rather than a bare cap:\n{error:#}",
-    );
-    ensure!(
-        !directory.exists("charged.exit"),
-        "the child finished its sleep, so its bound was not the remaining allowance",
-    );
-    Ok(())
+    let error = failure_of(
+        runner,
+        "charged",
+        "the remaining allowance should have bounded the child; a bound taken before the \
+         wait would have covered the child's whole sleep",
+    )?;
+    ensure_charged_wait_was_reported(&error, &directory)
 }
 
 /// Take the in-process serialization for the duration of one regression.

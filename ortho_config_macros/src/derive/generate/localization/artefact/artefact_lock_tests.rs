@@ -83,13 +83,24 @@ fn artefact_lock_is_released_after_publication_returns() -> Result<()> {
 #[test]
 fn each_publication_merges_the_fragments_already_published() -> Result<()> {
     let root = TempRoot::new()?;
-    for variant in VARIANT_CRATES {
-        let writer = spawn_variant(root.path(), "publish-variant", Some(variant))?;
-        wait_for(writer, &format!("{variant} publishing helper"))?;
-    }
+    publish_each_variant_in_sequence(root.path())?;
 
     let combined = fs::read_to_string(root.path().join("cli-identifiers.json"))
         .context("read the merged inventory published by both children")?;
+    ensure_every_publisher_retained(&combined)
+}
+
+/// Runs one publishing child per variant crate, each after the last has exited.
+fn publish_each_variant_in_sequence(root: &std::path::Path) -> Result<()> {
+    for variant in VARIANT_CRATES {
+        let writer = spawn_variant(root, "publish-variant", Some(variant))?;
+        wait_for(writer, &format!("{variant} publishing helper"))?;
+    }
+    Ok(())
+}
+
+/// Requires the merged inventory to name every publisher's entries.
+fn ensure_every_publisher_retained(combined: &str) -> Result<()> {
     for variant in VARIANT_CRATES {
         ensure!(
             combined.contains(&format!("{variant}::Config")),
