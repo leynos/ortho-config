@@ -1,6 +1,6 @@
 # Add profile redaction metadata (9.1.2)
 
-Status: DRAFT — approval required before implementation.
+Status: APPROVED — implementation in progress.
 
 This execution plan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -26,13 +26,48 @@ policy is introduced.
 
 ## Conformance basis
 
-The inspected baseline is commit `dc979878b5728bbb23866df9c05c2570bdb5629e`.
-The governing requirements are [roadmap](../roadmap.md) 9.1.2 and
+The inspected baseline after the 2026-11-13 rebase is `origin/main` commit
+`37452245bf2af9254011dd5eee103866cfff5edc`. It includes
+`ddba3578fae04227e426ea3a61aa2b24aa043232`, the merge of
+[PR #651](https://github.com/leynos/ortho-config/pull/651), which imports Kani
+and Verus tooling, and `eaf4c028440b96eb84469a3bcddf2d9c4be4b371`, the merge of
+[PR #664](https://github.com/leynos/ortho-config/pull/664),
+which supplies nested Cargo test-harness fixes. The original draft used
+`dc979878b5728bbb23866df9c05c2570bdb5629e`; neither its validation nor the
+intermediate temporary-parent runs establish acceptance of this candidate. The
+governing requirements are [roadmap](../roadmap.md) 9.1.2 and
 [agent-native CLI design](../agent-native-cli-design.md) §6.7. There is no
 separate terms-of-reference document for this task. Prerequisite 9.1.1 is
 checked complete and implemented;
-[ADR-012](../adr-012-profile-selection-and-layering.md) controls selection,
-precedence, and static-versus-runtime metadata.
+[ADR-0012](../adrs/adr-0012-profile-selection-and-layering.md) controls
+selection, precedence, and static-versus-runtime metadata.
+[ADR-0017](../adrs/adr-0017-consumer-side-prover-tooling.md), the
+[prover import plan](import-prover-tools.md), and the developers' guide's
+production proof inventory govern the existing verifier boundary. R2's M2 must
+add feature-owned proofs to that boundary, not recreate the tooling.
+
+### Merged prerequisites and implementation hand-off
+
+The PR targets `main`. The temporary parent `issue-644-nested-cargo-timeouts`
+has merged as #664, and the return to `main` is complete. The rebase replayed
+only the profile-plan commit after the preserved parent boundary
+`8309e3b41287f2fb9b70016194b8bfe2235db4fd`; none of the seven inherited parent
+commits was replayed after the squash merge.
+
+Preserve the merged nested Cargo serialization, bounded process-tree cleanup,
+retained timeout diagnostics, shared scenario allowances, and leased reusable
+identifier-fixture target. These are prerequisite test-harness fixes, not
+profile-redaction implementation. Follow the developers' guide's current
+Cargo-backed test conventions and load-sensitive deadline guidance. PR #681
+explicitly documents that host load and cold compilation can still exhaust
+those deadlines; do not interpret a timeout as proof of a semantic defect or as
+a passing gate. Earlier failed or interrupted runs remain historical.
+
+Future rebases must re-establish the exclusive child replay boundary using the
+`rebase` skill, preserve recovery refs, inspect conflicts and range diffs, and
+rerun the required gates. Publication of this plan, including the authorized
+publication of failed validation results, does not grant feature implementation
+approval.
 
 Use these trace identifiers throughout implementation:
 
@@ -67,10 +102,13 @@ for module decomposition and [rstest-bdd guide](../rstest-bdd-users-guide.md)
 for behavioural scenarios.
 
 The requested `docs/rtest-bdd-users-guide.md` is a misspelling of that existing
-BDD guide. The requested `docs/scripting-standards.md` is absent; use
+BDD guide. The [scripting standards](../scripting-standards.md) now exist; use
+them alongside the
 [developers' guide](../developers-guide.md), [repository layout](../repository-layout.md),
-and `AGENTS.md` for existing script conventions. Do not invent a replacement
-standard or claim it was read.
+and `AGENTS.md` for scripts. Follow the current
+[BDD migration guide](../rstest-bdd-v0-6-0-migration-guide.md) and
+[documentation provenance](../rstest-bdd-doc-provenance.md) when adapting
+behavioural fixtures. Do not copy historical step signatures uncritically.
 
 Load the `codegraph-mcp`, `rust-router`, and `execplans` skills first. Route
 verification through `rust-verification` and `verus`, tests through
@@ -87,17 +125,25 @@ and hyphens, rejecting the reserved name `default`. `AvailableProfileNames`
 sorts, deduplicates, and caps diagnostic names at 16; it is not a complete
 profile catalogue and accepts raw strings.
 
-`ortho_config/src/docs/ir.rs` defines the documentation intermediate
-representation (IR), including `FieldMetadata`, `DocProfilesMeta`, and
-`DocMetadata`. The macro builds these in
+`ortho_config/src/docs/ir/mod.rs` defines the documentation intermediate
+representation (IR), including `DocProfilesMeta` and `DocMetadata`.
+`ortho_config/src/docs/ir/field.rs` owns `FieldMetadata`, `CliMetadata`, and
+`ValueType`; sibling `behaviour`, `content`, and `renderer` modules hold the
+remaining contracts. The macro builds these in
 `ortho_config_macros/src/derive/generate/docs/fields/mod.rs` and
 `ortho_config_macros/src/derive/generate/docs/mod.rs`.
 `ortho_config/src/docs/mod.rs` owns exports and IR version `2.0`.
 
 `cargo-orthohelp/src/schema/mod.rs` currently mirrors the library schema as
-separate Rust types; it does not re-export them.
+separate Rust types; it does not re-export the library types. Its private
+`field`, `behaviour`, `content`, and `renderer` modules mirror the runtime
+layout. Preserve the upstream renderer declarations and optional-value CLI
+metadata when consolidating these types or projecting them. Renderer
+declarations are public descriptions with application-defined string
+identifiers; they are outside profile-value redaction and must remain unchanged.
 `cargo-orthohelp/src/agent_context/mod.rs::bridge_ir_to_agent_context` builds
-context; `build_input` currently copies defaults and enumerated values.
+context; `build_input` in `cargo-orthohelp/src/agent_context/input.rs`
+currently copies defaults and enumerated values.
 `cargo-orthohelp/src/ir.rs::localize_doc` and `localize_field` copy defaults
 and examples for human renderers. `roff/` and `powershell/maml/` under
 `cargo-orthohelp/src/` render those structures. Inspect `bridge.rs`,
@@ -155,13 +201,14 @@ values in these public channels.
 
 Replace the generator schema mirror in `cargo-orthohelp/src/schema/mod.rs` with
 explicit public re-exports from `ortho_config::docs`, preserving existing
-module paths. ADR-003 assigns ownership to that library and does not require
-distinct Rust mirror types. Record the pre-1.0 type-identity change in the new
-ADR and developers' guide, and update schema tests to test actual wire
-defaulting and round trips rather than comparing a type with itself. This
-removes schema drift and permits one projection without JSON conversion,
-fallible schema-conversion APIs, or a generic visitor framework. This ownership
-consolidation is part of M1, not a temporary compatibility layer.
+module paths. ADR-0003 assigns ownership to that library. Consolidating the
+mirror types is a new decision proposed for 9.1.2, grounded in that ownership.
+Record this decision and the pre-1.0 type-identity change in the new ADR and
+developers' guide, and update schema tests to test actual wire defaulting and
+round trips rather than comparing a type with itself. This removes schema drift
+and permits one projection without JSON conversion, fallible schema-conversion
+APIs, or a generic visitor framework. This ownership consolidation is part of
+M1, not a temporary compatibility layer.
 
 Propose `DocMetadata::redacted_for_output(&self) -> DocMetadata`, backed by one
 library-owned recursive projection. It returns an owned sanitized copy and
@@ -280,8 +327,9 @@ Sketch these semantic obligations before choosing executable helpers:
 - V1, noninterference: low-equivalent documents have equal P results, for
   arbitrary tree sizes, depths, and protected value contents.
 - V2, projection integrity: P preserves identifiers, labels, ordinary field
-  slots, and command topology; clears exactly the specified protected slots;
-  and P(P(d)) equals P(d).
+  slots, upstream renderer declarations, optional-value CLI metadata, and
+  command topology; clears exactly the specified protected slots; and P(P(d))
+  equals P(d).
 - V3, names independence: catalogues with identical public key sets produce
   equal N results even when every body differs. Output is deterministic and
   contains no body fragments. The implemented builder takes only validated
@@ -365,7 +413,7 @@ logging, and secrets embedded deliberately in public labels are out of scope.
 ### M1 — Deliver the complete disclosure boundary
 
 After explicit approval, record the contract decisions in a new ADR, choosing
-its number from the live ADR inventory. Reference it from
+its number from the live `docs/adrs/` inventory. Reference it from
 `docs/agent-native-cli-design.md` §6.7 and `docs/cargo-orthohelp-design.md`.
 Record ownership and reuse policy in the latter before introducing helpers.
 
@@ -394,20 +442,65 @@ needed for these pre-1.0 source additions.
 ### M2 — Discharge proofs and external workflow contracts
 
 Implement the substantive Verus model and proofs described above, along with
-the documented production mapping. Introduce checksum-pinned
-`tools/verus/VERSION` and `tools/verus/SHA256SUMS` using the current
-`rust-prover-tools` convention, and a `make verus` target invoking:
+the documented production mapping. Reuse PR #651's existing checksum-pinned
+`tools/verus/VERSION` and `tools/verus/SHA256SUMS`, shared runner pin, and
+`make verus` recipe. The current Verus pin is `0.2026.01.30.44ebdee`; the
+shared package is pinned to `592558f7183b554fc749696246984c5d7300d029` and runs
+with Python 3.14 through `uv`. The repository script baseline remains Python
+3.13. Do not introduce a second installer, runner, solver pin, or replacement
+Make target.
+
+Register `verus/profile_redaction.rs` in the existing `VERUS_PROOF_FILES`
+Makefile inventory. Before registration, an explicit focused invocation is:
 
 ```sh
-prover-tools verus run --repo-root . --proof-file verus/profile_redaction.rs
+make verus VERUS_FLAGS='--proof-file verus/profile_redaction.rs'
 ```
 
-Read current official tooling documentation through Firecrawl before choosing
-pins; do not guess versions or checksums. Use the managed compiler admission
-path. If the runner cannot honour it, report that blocker rather than bypassing
-wrappers. `make verus` must fail on failed or missing verification and may not
-claim a skip as acceptance. Keep it a separately invoked gate; make it explicit
-in milestone and release evidence rather than hiding it inside `make test`.
+Once registered, `make verus` without overrides must verify the production
+inventory. A successful fixture-only run is not feature acceptance. Record the
+owning feature (9.1.2), crate (`ortho_config`), production source paths, proof
+file and exact symbols, symbolic domain, all preconditions and model
+abstractions, expected nonzero verification count, and negative controls in the
+feature PR and developers' guide. Refine these names as M1 settles the kernel.
+An empty inventory produces `FORMAL-EMPTY` and fails; neither that result nor a
+skipped integration test discharges V1 or V2.
+
+Use `make install-verus` as the explicit provisioning step when the pinned
+bundle or its embedded Rust toolchain is absent. It installs under `.verus/`
+and reads the required toolchain from the release's `version.json`; do not
+hardcode another toolchain pin. The existing Make boundary supplies the bundled
+Z3 through `VERUS_Z3_PATH`. Do not install the shared package's standalone Z3:
+its version is incompatible with this Verus release. Execution must retain both
+`--no-install-missing` and `--no-ensure-toolchain`; missing tools fail rather
+than being provisioned by a proof run. Pin upgrades require separate evidence
+and are not part of this feature.
+
+PR #651's `tests/fixtures/prover_tools/` and opt-in
+`make test-prover-tools-integration` establish runner acceptance and rejection,
+not configuration correctness. That target needs both tools installed via
+`make install-kani` and `make install-verus`; it emits fixture evidence under
+`target/prover-tools-fixtures/`. Do not register these fixtures as production
+proofs, add a Kani harness solely because Kani is available, or add prover
+installation/execution to `make all`, `make test`, or `make lint`.
+
+Extend the existing `.github/workflows/prover-tools.yml` lane in M2 to run
+registered production Verus proofs after installation and retain their separate
+transcript with the uploaded evidence. Add `verus/**` and the actual production
+kernel/model-mapping paths to its pull-request path filters. Update
+`tests/workflow_contracts/prover_tools_workflow_test.py` to check those paths,
+the production invocation, and upload coverage. Preserve the fixture checks,
+read-only permissions, pinned actions, 30-minute bound, and Linux x86_64 scope.
+Other platforms remain explicitly unvalidated. The existing hosted sccache
+opt-out for Kani is not permission to unset local compiler admission wrappers.
+
+Use the managed compiler admission path locally. If admission is unhealthy,
+report its full status and continue non-compiling work rather than bypassing
+wrappers. `make verus` must fail on failed or missing verification. Keep it a
+separate milestone gate, outside the ordinary Rust gate sequence. Run
+`make test-workflow-contracts` when adding the inventory and CI coverage;
+contract tests prove command wiring, while the real production proof run must
+independently discharge V1 and V2.
 
 Add `cargo-orthohelp/tests/features/profile_redaction.feature`, registering
 steps through its existing `tests/rstest_bdd.rs` support modules. The required
@@ -472,8 +565,9 @@ including the projection, model-to-production relationship, wire additions, and
 public text limitation. Update `docs/design.md` if its interface map needs the
 new shared module. Record test/proof commands, cache invalidation, and
 assertion conventions in `docs/developers-guide.md`. Add the ADR and new
-documents to `docs/contents.md`; update repository layout for proof files and
-pins.
+documents to `docs/contents.md`; update repository layout for the production
+proof files. Existing tooling pins and their ownership already have
+documentation from PR #651.
 
 At every milestone review assigned requirements, architecture, assumptions,
 public interfaces, dependencies, trust boundaries, wire formats, and trace
@@ -530,14 +624,15 @@ not evidence. Add exact new unit/property target commands and red/green
 transcripts to this section as implementation names settle. Before code edits,
 run the affected existing suites; after edits, run focused tests and full gates.
 
-For this plan-only delivery, run `make fmt`, `make check-fmt`,
-`make markdownlint`, and `make nixie` sequentially. No executable code or proof
-is introduced. Code gates and proof discharge are future milestone acceptance,
-not claims made by publishing this draft.
+For this rebased plan-only delivery, run `make fmt`, `make check-fmt`,
+`make test`, `make typecheck`, `make lint`, `make markdownlint`, and
+`make nixie` sequentially. Record results for the exact candidate in the PR. No
+executable feature or proof is introduced; passing existing gates does not
+discharge the future profile-redaction proof obligations.
 
 ## Constraints
 
-Explicit user approval is required before implementation. Preserve ADR-012's
+Explicit user approval is required before implementation. Preserve ADR-0012's
 five-tier precedence, stateless selection, source provenance, and opt-in
 loading. Keep dependency direction from macros to generated runtime APIs and
 from the generator to the library schema. No new runtime dependency, profile
@@ -579,9 +674,12 @@ High severity, medium likelihood: a correct Verus mirror diverges from runtime
 projection. Maintain the mapping, differential tests, and explicit residual
 gap; re-review every slot added to either representation.
 
-Medium severity, medium likelihood: new proof tooling is unavailable or cannot
-use managed admission. Verify runner capability before proof implementation;
-record a blocker instead of reporting a skip as success.
+Medium severity, medium likelihood: the pinned tooling or required toolchain is
+not installed in this checkout, or local admission is unhealthy. Use the
+existing explicit provisioning boundary and report admission failures. PR #651
+provides runner evidence, not installed-state or feature-proof evidence for a
+new worktree. Never report a missing-input failure or fixture pass as proof of
+redaction.
 
 ## Progress
 
@@ -593,7 +691,15 @@ record a blocker instead of reporting a skip as success.
   the proof relation, schema ownership, names invariants, and flattening scope.
 - [x] (2026-10-14) Validate the plan with formatting, Markdown/spelling, and
   Mermaid gates. Publication receipts belong in the draft PR.
-- [ ] Obtain explicit user approval before starting M1.
+- [x] (2026-11-08) Rebase the plan onto PR #651's merge without conflicts;
+  revise M2 to reuse the existing pinned tooling, production inventory, and CI.
+- [x] (2026-11-09) Rebase without conflicts onto #664 and record the temporary
+  PR target and the post-merge return to `main`.
+- [x] (2026-11-13) Return to `main` after #664 merged, replaying only the
+  plan commit and preserving the #651 tooling integration.
+- [x] (2026-11-15) Obtain explicit user approval before starting M1. The
+  implementation request named this plan and instructed implementation to
+  proceed, which supplies execution approval for M1–M3.
 - [ ] M1: complete disclosure boundary.
 - [ ] M2: proofs and external workflow evidence.
 - [ ] M3: documentation, final gates, and roadmap completion.
@@ -603,9 +709,11 @@ record a blocker instead of reporting a skip as success.
 The current context contains selector metadata, not profile bodies or names.
 The concrete exposure paths are defaults, enum members, and examples. Therefore
 this work should sanitize metadata and accept explicit names, not introduce a
-profile reader. Required reference filenames include one typo and one absent
-file, recorded above. No existing Verus setup was found. Assertion libraries
-are already authorized and present in workspace testing dependencies.
+profile reader. The original draft found a misspelled reference and an absent
+scripting guide; the guide now exists. PR #651 has since supplied the pinned
+Kani/Verus setup, command contracts, fixtures, and a dedicated CI lane.
+Production proof inventories remain empty at the rebased baseline. Assertion
+libraries are already authorized and present in workspace testing dependencies.
 
 ## Decision log
 
@@ -667,3 +775,39 @@ in the proposed design; implementation remains subject to approval.
 Validation revision (2026-10-14): record passing documentation gates and
 separate publication receipts from implementation approval. No executable
 feature or proof has been added.
+
+Rebase revision (2026-11-08): incorporate merged PR #651 and ADR-0017. Reuse
+the installed-tool command contract, bundled solver, production inventory, and
+existing CI lane; keep fixture acceptance distinct from V1/V2 proof evidence.
+Refresh moved ADR and IR paths and the scripting/BDD references. All feature
+implementation milestones remain unapproved; this maintenance changes the plan
+only. The requested post-rebase formatting, test, typecheck, and lint results
+belong to the new candidate and are recorded in the PR delivery receipt, not
+inferred from the original draft's checks.
+
+Parent revision (2026-11-09): use #664 as the temporary base to incorporate
+nested Cargo timeout fixes. Preserve the #651 tooling decisions, record the
+exclusive parent boundary, and require fresh validation before publication.
+After #664 merges, the implementing agent may restack onto `main` and update
+the PR target; profile implementation still requires explicit approval.
+
+Validation interruption (2026-11-10): on the temporary parent, `make fmt` and
+`make check-fmt` passed, but `make test` failed in
+`a_second_process_cannot_clean_a_leased_artefact`. The cold identifier fixture
+build exhausted its remaining 878607 ms allowance while compiler admission was
+busy. The following warm-build artefact test passed; this does not replace the
+failed full-suite gate. Subsequent lint and typecheck runs passed with explicit
+zero exit receipts. A full-suite follow-up against the populated fixture target
+passed all eight identifier-artefact tests (one ignored), including the lease
+case. It then failed nine localization-boundary tests: six reported a shared
+package-build timeout and three reported consumer-test timeouts, each at the
+440-second nested Cargo deadline. That boundary suite finished with 29 passed,
+nine failed, and seven ignored; Make exited with status 2. Its output records
+compiler-admission waits and uncached compilation. These results do not
+establish a passing full-suite gate.
+
+Publication revision (2026-11-13): the user explicitly authorized committing
+and publishing the plan even if validation remains red. Rebase onto the PR's
+current `main` target and record fresh gate results in the PR without claiming
+that historical timeout failures passed. This exception applies to delivering
+the plan, not to implementing the feature or marking roadmap 9.1.2 done.
