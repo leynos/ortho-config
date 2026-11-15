@@ -2284,9 +2284,10 @@ The keys to reading the report are:
   suppress them. Vocabulary advice covers a command verb as the reference
   spells it, as well as any canonical verb the surface declares, so an alias
   such as `info` is advised even though a bridge only classifies canonical
-  segments. A one-segment path names the executable rather than a verb, so it
-  receives no vocabulary advice: renaming a program called `info` is not the
-  advice this rule gives.
+  segments. A one-segment path names the executable rather than a verb, so its
+  spelling contributes no verb to advise: renaming a program called `info` is
+  not the advice this rule gives. A surface that declares a canonical verb for
+  such a command is still advised on that metadata.
 - **Coverage** counts what was actually checked. `examples_checked` counts the
   examples the consumer extracted; `examples_bound` counts those that then
   reached their option checks. An example the consumer could not extract is

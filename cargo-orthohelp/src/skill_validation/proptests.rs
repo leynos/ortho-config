@@ -8,11 +8,14 @@
 //! The generator deliberately produces empty, singleton, nested, matching,
 //! missing, and reordered cases: some paths are absent from the surface, some
 //! references declare flags the command does not accept, and manifest IDs may
-//! repeat. The tests at the end of the module mutate a claim and check that the
-//! validator's verdict moves with it: dropping a reference, looking a flag up
-//! on a sibling command, and swapping two commands' option sets each change the
-//! result. A further control corrupts a real report and shows the comparison
-//! above rejects it, so that comparison cannot pass vacuously.
+//! repeat.
+//!
+//! The deterministic controls live in the sibling `proptests_controls` module,
+//! because they hold inputs fixed rather than generating them. One of them runs
+//! [`oracle_matching_paths_by_length`] beside [`oracle`] on a single case, so
+//! the path equality the property compares has a witness on that input rather
+//! than only across different ones; another corrupts a real report and shows
+//! the comparison rejects it, so it cannot pass vacuously.
 
 use proptest::prelude::*;
 
@@ -59,16 +62,16 @@ fn flag_names(mask: u8) -> Vec<&'static str> {
 
 /// One generated validation case.
 #[derive(Debug, Clone)]
-struct Case {
+pub(super) struct Case {
     /// Declared paths, each with its option bitmask.
-    surface: Vec<(usize, u8)>,
+    pub(super) surface: Vec<(usize, u8)>,
     /// Manifests as an ID index plus references of path index and option mask.
-    manifests: Vec<(u8, Vec<(usize, u8)>)>,
+    pub(super) manifests: Vec<(u8, Vec<(usize, u8)>)>,
 }
 
 impl Case {
     /// Builds the effective command surface this case describes.
-    fn to_surface(&self) -> EffectiveCommandSurface {
+    pub(super) fn to_surface(&self) -> EffectiveCommandSurface {
         let commands = self
             .surface
             .iter()
@@ -81,7 +84,7 @@ impl Case {
     }
 
     /// Builds the claim input this case describes.
-    fn to_input(&self) -> SkillValidationInput {
+    pub(super) fn to_input(&self) -> SkillValidationInput {
         let manifests = self
             .manifests
             .iter()
@@ -126,7 +129,7 @@ fn unknown_flags(used: u8, declared: u8) -> Vec<String> {
 }
 
 /// A finding reduced to the fields the oracle can predict.
-type Comparable = (String, usize, String, Option<String>);
+pub(super) type Comparable = (String, usize, String, Option<String>);
 
 /// Returns the surface option mask for one path, if declared.
 fn surface_mask(case: &Case, path_index: usize) -> Option<u8> {
@@ -136,8 +139,40 @@ fn surface_mask(case: &Case, path_index: usize) -> Option<u8> {
         .map(|(_, mask)| *mask)
 }
 
+/// Returns the option mask of the first declared path with the same length.
+///
+/// This is the mutant lookup for [`oracle_matching_paths_by_length`]: it
+/// degrades path equality to a segment count, which is exactly the defect a
+/// comparison of stored path names would miss.
+fn surface_mask_by_length(case: &Case, path_index: usize) -> Option<u8> {
+    let wanted = segments(path_index).len();
+    case.surface
+        .iter()
+        .find(|(index, _)| segments(*index).len() == wanted)
+        .map(|(_, mask)| *mask)
+}
+
 /// Re-derives the expected findings, total references, and resolved count.
-fn oracle(case: &Case) -> (Vec<(usize, Comparable)>, usize, usize) {
+pub(super) fn oracle(case: &Case) -> (Vec<(usize, Comparable)>, usize, usize) {
+    oracle_matching(case, surface_mask)
+}
+
+/// Re-derives the expectations a path-length comparison would produce.
+///
+/// Running this beside [`oracle`] on one fixed input is the control for
+/// [`findings_match_the_linear_oracle`]: it shows the equality under test is
+/// load-bearing on that input rather than only across different cases.
+pub(super) fn oracle_matching_paths_by_length(
+    case: &Case,
+) -> (Vec<(usize, Comparable)>, usize, usize) {
+    oracle_matching(case, surface_mask_by_length)
+}
+
+/// Re-derives the expected findings using `lookup` to resolve a declared path.
+fn oracle_matching(
+    case: &Case,
+    lookup: fn(&Case, usize) -> Option<u8>,
+) -> (Vec<(usize, Comparable)>, usize, usize) {
     let mut findings: Vec<(usize, Comparable)> = Vec::new();
     let mut total: usize = 0;
     let mut resolved: usize = 0;
@@ -163,7 +198,7 @@ fn oracle(case: &Case) -> (Vec<(usize, Comparable)>, usize, usize) {
         for (reference_index, (path_index, mask)) in references.iter().enumerate() {
             total = total.saturating_add(1);
             let ordinal = reference_index.saturating_add(1);
-            let Some(declared) = surface_mask(case, *path_index) else {
+            let Some(declared) = lookup(case, *path_index) else {
                 findings.push((
                     position,
                     (id.clone(), ordinal, "skill.unknown_path".to_owned(), None),
@@ -197,7 +232,7 @@ fn oracle(case: &Case) -> (Vec<(usize, Comparable)>, usize, usize) {
 }
 
 /// Reduces a report's findings to the comparable sequence.
-fn comparable(report: &SkillValidationReport) -> Vec<Comparable> {
+pub(super) fn comparable(report: &SkillValidationReport) -> Vec<Comparable> {
     report
         .findings
         .iter()
@@ -245,115 +280,4 @@ proptest! {
         prop_assert_eq!(comparable(&forward), comparable(&reversed));
         prop_assert_eq!(forward.coverage, reversed.coverage);
     }
-}
-
-#[test]
-fn the_oracle_comparison_rejects_a_corrupted_report() {
-    // `findings_match_the_linear_oracle` compares two sequences; if either side
-    // were constant, every case would pass. This control starts from a genuine
-    // agreement, then drops one finding and shows the comparison notices.
-    let case = Case {
-        surface: vec![(0, 0b001)],
-        manifests: vec![(0, vec![(0, 0b111)])],
-    };
-    let report = validate(
-        &case.to_input(),
-        &case.to_surface(),
-        &policy(PolicyMode::Off),
-    )
-    .expect("the fixed surface is unambiguous");
-    let (expected_with_order, _, _) = oracle(&case);
-    let expected: Vec<Comparable> = expected_with_order
-        .into_iter()
-        .map(|(_, finding)| finding)
-        .collect();
-
-    assert_eq!(
-        comparable(&report),
-        expected,
-        "the control must start agreed"
-    );
-    let mut corrupted = comparable(&report);
-    corrupted.pop();
-    assert_ne!(
-        corrupted, expected,
-        "a dropped finding must break the comparison"
-    );
-}
-
-#[test]
-fn omitting_a_declared_reference_is_detected() {
-    let commands = surface(vec![command(&["tool"], &["json"])]);
-    let full = input(
-        vec![manifest(
-            "m0",
-            vec![
-                reference(&["tool"], &["json"]),
-                reference(&["tool"], &["json"]),
-            ],
-        )],
-        Vec::new(),
-    );
-    let mut trimmed = full.clone();
-    if let Some(claims) = trimmed.manifests.first_mut() {
-        claims.commands.pop();
-    }
-
-    let complete =
-        validate(&full, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
-    let shortened = validate(&trimmed, &commands, &policy(PolicyMode::Off))
-        .expect("the surface is unambiguous");
-
-    assert_eq!(complete.coverage.command_references, 2);
-    assert_eq!(shortened.coverage.command_references, 1);
-}
-
-#[test]
-fn a_flag_accepted_by_a_sibling_command_is_still_unknown() {
-    let commands = surface(vec![
-        command(&["tool", "alpha"], &["json"]),
-        command(&["tool", "beta"], &["color"]),
-    ]);
-    let claims = input(
-        vec![manifest(
-            "m0",
-            vec![
-                reference(&["tool", "beta"], &["json"]),
-                reference(&["tool", "alpha"], &["json"]),
-            ],
-        )],
-        Vec::new(),
-    );
-
-    let report =
-        validate(&claims, &commands, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
-
-    assert_eq!(report.findings.len(), 1);
-    let finding = report.findings.first().expect("one finding was asserted");
-    assert_eq!(finding.code, super::report::codes::UNKNOWN_FLAG);
-    assert_eq!(finding.source_ordinal, 1);
-}
-
-#[test]
-fn swapping_two_commands_option_sets_changes_the_verdict() {
-    let claims = input(
-        vec![manifest(
-            "m0",
-            vec![reference(&["tool", "alpha"], &["json"])],
-        )],
-        Vec::new(),
-    );
-    let accepted = surface(vec![command(&["tool", "alpha"], &["json"])]);
-    let swapped = surface(vec![
-        command(&["tool", "alpha"], &["color"]),
-        command(&["tool", "beta"], &["json"]),
-    ]);
-
-    let without =
-        validate(&claims, &accepted, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
-    let with =
-        validate(&claims, &swapped, &policy(PolicyMode::Off)).expect("the surface is unambiguous");
-
-    assert_eq!(without.findings, Vec::new());
-    assert_eq!(with.findings.len(), 1);
 }

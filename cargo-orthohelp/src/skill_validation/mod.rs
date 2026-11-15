@@ -82,6 +82,8 @@ mod assertions;
 #[cfg(test)]
 mod proptests;
 #[cfg(test)]
+mod proptests_controls;
+#[cfg(test)]
 mod proptests_examples;
 #[cfg(test)]
 mod support;

@@ -1364,13 +1364,16 @@ Four conventions are easy to break and expensive to debug:
 Avoid `expect` and `unwrap` in these modules, including test-only helpers
 outside a `#[test]` body; `support.rs` returns values instead. Test helpers
 live in `support`, `tests`, `tests_examples`, `tests_policy`,
-`tests_policy_exceptions`, `tests_surface`, `proptests`, and
-`proptests_examples`; each module holds one facet, so a table that outgrows the
-400-line cap moves whole rather than losing cases. The property tests use
-independent linear oracles rather than calling the validator's own index.
-Coverage counts extraction (`examples_checked`) separately from binding
-(`examples_bound`), and `ValidationStatus::Complete` requires the two to agree
-with no unsupported examples.
+`tests_policy_exceptions`, `tests_surface`, `proptests`, `proptests_controls`,
+and `proptests_examples`; each module holds one facet, so a table that outgrows
+the 400-line cap moves whole rather than losing cases. The property tests use
+independent linear oracles rather than calling the validator's own index, and
+`proptests_controls` holds the fixed-input mutation controls: a property that
+compares two computations needs a case where a changed rule changes the
+prediction, which a generated comparison alone cannot show. Coverage counts
+extraction (`examples_checked`) separately from binding (`examples_bound`), and
+`ValidationStatus::Complete` requires the two to agree with no unsupported
+examples.
 
 The consumer fixtures in `cargo-orthohelp/tests/fixtures/skills/` are ordinary
 skill directories: one `SKILL.md` per skill, plus the `command-surface.json`

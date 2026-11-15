@@ -414,6 +414,21 @@ original constraint text is left as written.
   delivered, and this plan carries dated addenda for the prerequisite override
   and the final candidate. The six-gate sweep passed on the frozen repair tree;
   the commits are `732bc9a7` and `9241c400`.
+- [x] (2026-11-15) Re-established the whole-plan assessment for the amended
+  plan. The earlier clear verdict was recorded against plan blob `a30c92fc`;
+  the addenda changed the plan to blob `4cac0637`, and a verdict does not carry
+  over to a superseded revision, so the question was asked again for the
+  current head. CodeRabbit raised two evidential items and both were valid. The
+  reference property had no control on a *single* input: the oracle now shares
+  one derivation parameterized by a path lookup, and
+  `proptests_controls::a_length_based_path_match_disagrees_on_the_same_input`
+  runs the honest oracle and a by-length mutant beside the validator on one
+  case, so the equality under test has a witness. The users' guide claimed a
+  one-segment path receives no vocabulary advice, which is false when the
+  surface declares a canonical verb; it now says the *spelling* contributes no
+  verb. The deterministic controls moved whole to `proptests_controls.rs` so
+  `proptests.rs` stays under the 400-line cap, and the developers' guide
+  records that split.
 
 ## Surprises & discoveries
 
@@ -1366,6 +1381,12 @@ OrthoConfig format mandate.
   for the prerequisite override, moved skill manifest validation out of the
   design documents' remaining-work lists, and recorded the final code candidate
   `9241c400`. Scope and design are unchanged.
+
+- 2026-11-15: Added the same-input mutation control for the reference property
+  and corrected the users' guide's one-segment-path sentence after the
+  refreshed completeness assessment; moved the deterministic controls to
+  `proptests_controls.rs` to stay within the module cap. Scope and design are
+  unchanged.
 
 [adr-008]: ../adrs/adr-0008-agent-native-policy-configuration.md
 [adr-0017]: ../adrs/adr-0017-consumer-side-prover-tooling.md
