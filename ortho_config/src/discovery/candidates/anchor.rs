@@ -19,7 +19,10 @@ impl ConfigDiscovery {
     /// working directory: such a candidate could only be read relative to the
     /// process, which is exactly what an injected source must not allow.
     pub(super) fn anchored(&self, path: PathBuf) -> Option<PathBuf> {
-        if path.is_absolute() {
+        // A rooted path with no drive (`/users/x` on Windows) is not
+        // `is_absolute`, but it names a fixed location on whatever drive is
+        // current, so it is not a path to anchor to the working directory.
+        if path.is_absolute() || path.has_root() {
             return Some(path);
         }
         self.env_source

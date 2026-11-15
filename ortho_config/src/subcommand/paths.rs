@@ -22,9 +22,10 @@ mod paths_telemetry;
 /// directory and so escapes an injected one. This is the rule the XDG variables
 /// in this module already follow: a relative base names no stable directory.
 fn named_absolute(source: &dyn EnvSource, key: &str) -> Option<std::ffi::OsString> {
-    source
-        .get(key)
-        .filter(|value| std::path::Path::new(value).is_absolute())
+    source.get(key).filter(|value| {
+        let path = std::path::Path::new(value);
+        path.is_absolute() || path.has_root()
+    })
 }
 
 /// Supported suffixes in precedence order; aliases for each optional format stay adjacent.
