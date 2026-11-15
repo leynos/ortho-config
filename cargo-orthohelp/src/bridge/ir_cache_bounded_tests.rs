@@ -73,14 +73,34 @@ fn poll_mtime_until(
     Ok(mtime)
 }
 
-fn poll_clock_after(reference: SystemTime, timeout: Duration) {
+/// Waits until a probe write is stamped later than `previous`.
+///
+/// A filesystem may stamp modification times in coarse ticks; FAT uses two
+/// seconds. Waiting on the wall clock therefore does not prove that the next
+/// write will be stamped later than `previous`, because the write can still
+/// land inside the same tick. Writing a probe and reading its timestamp
+/// observes the tick itself, so a replacement made afterwards is stamped later
+/// than `previous` on any granularity.
+fn wait_for_a_later_tick(
+    dir: &Dir,
+    previous: SystemTime,
+    timeout: Duration,
+) -> std::io::Result<SystemTime> {
+    const PROBE: &str = "mtime-tick-probe";
+
     let deadline = Instant::now() + timeout;
-    while SystemTime::now() <= reference {
-        assert!(
-            Instant::now() < deadline,
-            "system clock did not advance beyond {reference:?} before timeout"
-        );
-        std::thread::sleep(Duration::from_millis(5));
+    loop {
+        dir.write(PROBE, b"probe")?;
+        let observed = read_mtime(dir, PROBE)?;
+        if observed > previous {
+            return Ok(observed);
+        }
+        if Instant::now() >= deadline {
+            return Err(std::io::Error::other(format!(
+                "filesystem did not stamp a write later than {previous:?} before timeout"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(25));
     }
 }
 
@@ -322,6 +342,9 @@ fn write_ir_cache_is_idempotent(
     const CONTENT: &str = r#"{"ir_version":"1.0.0"}"#;
     const OTHER: &str = r#"{"ir_version":"2.0.0"}"#;
     const MTIME_TIMEOUT: Duration = Duration::from_millis(1_500);
+    // A coarse-timestamp filesystem can take two seconds to stamp a later
+    // tick, so the wait for one needs a longer bound than a plain read.
+    const TICK_TIMEOUT: Duration = Duration::from_secs(5);
 
     let fixture = cache_fixture?;
     let bridge = &fixture.dir;
@@ -345,8 +368,10 @@ fn write_ir_cache_is_idempotent(
         "mtime should not change when content is identical"
     );
 
-    let next_filesystem_tick = mtime2 + Duration::from_secs(1);
-    poll_clock_after(next_filesystem_tick, MTIME_TIMEOUT);
+    // The replacement must be stamped later than the idempotent write. Waiting
+    // for an observed filesystem tick rather than one second of wall clock
+    // keeps the assertion meaningful on filesystems with coarse timestamps.
+    let _later_tick = wait_for_a_later_tick(bridge, mtime2, TICK_TIMEOUT)?;
     assert_eq!(
         write_ir_cache(&fixture.paths, OTHER).expect("write new content"),
         PublishOutcome::Updated,
