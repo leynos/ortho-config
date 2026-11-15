@@ -97,6 +97,34 @@ where
     Ok(fig.merge(Serialized::defaults(cli_value)))
 }
 
+/// Run one source-aware subcommand load, recording its start and finish.
+///
+/// Every exported wrapper runs the same sequence: announce the load, build the
+/// figment, finish it, then announce the outcome. Keeping the order here once
+/// means the recorded duration still covers file discovery and environment
+/// scanning, because the start event precedes the build.
+fn recorded_load<T>(
+    build: impl FnOnce() -> OrthoResult<Figment>,
+    finish: impl FnOnce(&Figment) -> OrthoResult<T>,
+) -> OrthoResult<T> {
+    merge_telemetry::source_aware_subcommand_load_started();
+    let result = build().and_then(|fig| finish(&fig));
+    merge_telemetry::source_aware_subcommand_load_finished(&result);
+    result
+}
+
+/// Run a raw subcommand load, recording it and deserializing the merged result.
+///
+/// The raw entry points carry no [`RequiredConfigSchema`], so they can only
+/// deserialize. Naming that policy here keeps it beside
+/// [`finish_with_required_values`], which is the schema-aware counterpart.
+fn load_extracted<T>(build: impl FnOnce() -> OrthoResult<Figment>) -> OrthoResult<T>
+where
+    T: DeserializeOwned,
+{
+    recorded_load(build, |fig| fig.extract().into_ortho_merge())
+}
+
 /// Finish a subcommand load, enumerating absent required values.
 ///
 /// Only the `_for` entry points call this, because only they carry a derived
@@ -151,11 +179,7 @@ pub fn load_and_merge_subcommand_with_sources_at<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = injected_figment(prefix, cli, files, merge_source)
-        .and_then(|fig| fig.extract().into_ortho_merge());
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
+    load_extracted(|| injected_figment(prefix, cli, files, merge_source))
 }
 
 /// Loads defaults using the configured prefix and explicit file and merge sources.
@@ -179,11 +203,10 @@ where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory + RequiredConfigSchema,
 {
     let prefix = Prefix::new(T::prefix());
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = injected_figment(&prefix, cli, files, merge_source)
-        .and_then(|fig| finish_with_required_values(&fig, &prefix));
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
+    recorded_load(
+        || injected_figment(&prefix, cli, files, merge_source),
+        |fig| finish_with_required_values(fig, &prefix),
+    )
 }
 
 /// Loads defaults using explicit sources and preserves `cli_default_as_absent` values.
@@ -207,11 +230,7 @@ pub fn load_and_merge_subcommand_with_matches_with_sources_at<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory + CliValueExtractor,
 {
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = injected_matches_figment(prefix, cli_matches, files, merge_source)
-        .and_then(|fig| fig.extract().into_ortho_merge());
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
+    load_extracted(|| injected_matches_figment(prefix, cli_matches, files, merge_source))
 }
 
 /// Loads configured-prefix defaults using explicit sources and match metadata.
@@ -240,11 +259,10 @@ where
         + RequiredConfigSchema,
 {
     let prefix = Prefix::new(T::prefix());
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = injected_matches_figment(&prefix, cli_matches, files, merge_source)
-        .and_then(|fig| finish_with_required_values(&fig, &prefix));
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
+    recorded_load(
+        || injected_matches_figment(&prefix, cli_matches, files, merge_source),
+        |fig| finish_with_required_values(fig, &prefix),
+    )
 }
 
 /// Loads defaults with an injected environment merge source, then overlays CLI
@@ -292,16 +310,11 @@ where
 {
     let process_env = ProcessEnv;
     let prefix = Prefix::new(T::prefix());
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = injected_figment(
-        &prefix,
-        cli,
-        SubcommandFileContext::new(Path::new("."), &process_env),
-        merge_source,
+    let files = SubcommandFileContext::new(Path::new("."), &process_env);
+    recorded_load(
+        || injected_figment(&prefix, cli, files, merge_source),
+        |fig| finish_with_required_values(fig, &prefix),
     )
-    .and_then(|fig| finish_with_required_values(&fig, &prefix));
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
 }
 
 /// Loads defaults from files and an injected merge source, respecting fields
@@ -358,14 +371,16 @@ where
 {
     let process_env = ProcessEnv;
     let prefix = Prefix::new(T::prefix());
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = injected_matches_figment(
-        &prefix,
-        &SubcommandCliMatches::new(cli, matches),
-        SubcommandFileContext::new(Path::new("."), &process_env),
-        merge_source,
+    let files = SubcommandFileContext::new(Path::new("."), &process_env);
+    recorded_load(
+        || {
+            injected_matches_figment(
+                &prefix,
+                &SubcommandCliMatches::new(cli, matches),
+                files,
+                merge_source,
+            )
+        },
+        |fig| finish_with_required_values(fig, &prefix),
     )
-    .and_then(|fig| finish_with_required_values(&fig, &prefix));
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
 }
