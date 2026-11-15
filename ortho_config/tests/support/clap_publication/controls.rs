@@ -231,6 +231,31 @@ fn file_level_cfg_is_refused() -> Result<()> {
     ensure_refusal(&error, "conditionally compiles the whole file")
 }
 
+/// A condition applied through a nested `cfg_attr` still counts as conditional.
+///
+/// The compiler expands `#[cfg_attr(all(), cfg_attr(all(), cfg(any())))]`, so a
+/// walk that inspects only immediate attributes would certify a file the build
+/// excludes.
+#[test]
+fn nested_cfg_attr_hop_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/cfg_attr_nested");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "does not unconditionally compile it")
+}
+
+/// A `#[path]` declaration is refused rather than resolved by default names.
+///
+/// The fixture's `error.rs` is the file a default-name walk certifies, while
+/// the compiler loads `decoy.rs`; following the default would invent a count.
+#[test]
+fn path_override_declaration_is_refused() -> Result<()> {
+    let root = fixture_root().join("module_tree/path_override");
+
+    let error = refusal(count_error_kinds_under(&root).map(|_| ()));
+    ensure_refusal(&error, "carries a `#[path]` attribute")
+}
+
 /// An unconditional inline module is followed rather than assumed opaque.
 #[test]
 fn inline_module_hop_is_followed() -> Result<()> {

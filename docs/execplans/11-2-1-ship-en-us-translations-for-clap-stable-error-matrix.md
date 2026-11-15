@@ -390,6 +390,38 @@ stopping and reporting.
         `clap_error_cli::fixture_build_lock` module, exempted through a narrow
         `excluded_paths` entry with its rationale, keeping every other file in
         the suite under the capability policy.
+- [x] (2026-11-15) Second whole-plan assessment (Assessment-ID
+      `EP-11-2-1-whole-plan-2e858de4-20261115T0818Z`, head `2e858de4`)
+      returned "not yet complete" with two findings; it accepted the earlier
+      `trybuild` rebuttal. Both findings are repaired.
+      - F1, the module walk certified two shapes it could not establish. A
+        condition applied through a nested `cfg_attr` — which the compiler
+        expands recursively — was read as unconditional, and a `#[path]`
+        declaration was resolved by default file names, so a file the build
+        excludes could be counted and the file the build really loads could be
+        missed. The walk now searches a `cfg_attr` recursively for a `cfg`, and
+        refuses a `mod` declaration carrying a `#[path]` instead of guessing
+        which file the compiler loads. `module_tree/cfg_attr_nested` and
+        `module_tree/path_override` are the durable controls. Both were proved
+        non-vacuous: with the two behaviours temporarily reverted, each control
+        failed with an empty refusal, and the file was restored to a `cmp`-
+        identical copy before any further work.
+      - F2, M2's durable matrix-drift fixtures were recorded mutations rather
+        than committed data. `tests/fixtures/clap_matrix/drifted_rows.rs` now
+        holds a sixteen-row table and a seventeen-row duplicate-plus-omission
+        table, independent of `CLAP_ERROR_IDS`. The four matrix invariants were
+        factored into row-taking functions, so the live matrix and both
+        fixtures run the same checks; the duplicate table passes the length
+        check and only the uniqueness check catches it.
+      - Documentation: the v0.11.0 migration guide gains §9 and an impact row
+        for `CLAP_ERROR_IDS` and `ClapErrorTranslation`; the developers' guide
+        gains a subsection on the CLI suite's fixture build and lock, plus the
+        two new refusals in its troubleshooting table; the repository layout
+        lists the `clap_error_matrix` and `clap_error_cli` targets.
+      - Compile-time/UI check: `tests/ui/clap_error_translation_non_exhaustive.rs`
+        pins the crate's own `#[non_exhaustive]` contract — a downstream match
+        without a wildcard must fail with E0004 — so the check is satisfied by
+        a contract this change introduces, not by compiling unrelated code.
 
 ## Surprises & discoveries
 

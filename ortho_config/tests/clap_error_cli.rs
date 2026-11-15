@@ -37,8 +37,8 @@ const FIXTURE_RUN_DEADLINE: Duration = Duration::from_secs(30);
 /// Guards the fixture build within one test process.
 ///
 /// nextest runs every test in its own process, so this cache saves work only
-/// within a process; the advisory lock in [`acquire_build_lock`] is what
-/// prevents concurrent builds across processes.
+/// within a process; the advisory lock in [`fixture_build_lock::acquire`] is
+/// what prevents concurrent builds across processes.
 static FIXTURE_BINARY: OnceLock<std::result::Result<PathBuf, String>> = OnceLock::new();
 
 /// Returns the fixture executable, building it once per test process.

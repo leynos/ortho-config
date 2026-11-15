@@ -1414,9 +1414,12 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   `source` locates and counts `ErrorKind`, and `files` confines reads to
   capability handles. `controls` and `properties` are their unit and property
   tests. `source` also walks `mod` declarations from `lib.rs` and certifies the
-  declaring file only when every hop is unconditional: a `cfg`-gated module, or
-  a module file that gates its own contents, makes the count describe a build
-  the gate cannot see, so it refuses instead.
+  declaring file only when every hop is unconditional: a `cfg`-gated module, an
+  equivalent condition reached through a nested `cfg_attr`, or a module file
+  that gates its own contents, makes the count describe a build the gate cannot
+  see, so it refuses instead. A `#[path]` declaration is refused for the same
+  reason: the walk resolves default file names, and the compiler may load a
+  different file.
 - `ortho_config/tests/support/clap_reviewed.rs` holds
   `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
   `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
@@ -1424,6 +1427,16 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   the reviewed total disagree.
 - `ortho_config/tests/fixtures/clap_publication/` holds the lock and source
   fixtures the negative controls consume. They are data, not compiled targets.
+  Its `module_tree/` trees each drive one refusal of the module walk.
+- `ortho_config/tests/fixtures/clap_matrix/drifted_rows.rs` holds the matrix
+  drift fixtures. It is a committed module rather than loose data because the
+  checks it exercises are typed over `ErrorKind` and `ClapErrorTranslation`;
+  `tests/clap_error_matrix.rs` includes it and runs the real invariants over
+  both tables.
+- `ortho_config/tests/ui/clap_error_translation_non_exhaustive.rs` pins the
+  compile-time contract of the public API: `ClapErrorTranslation` is
+  `#[non_exhaustive]`, so a downstream match without a wildcard must not
+  compile. `tests/compile_fail.rs` builds it and compares the diagnostic.
 
 ### Prerequisites
 
@@ -1459,26 +1472,50 @@ The shared runner owns process-tree cleanup and stream draining, and it retains
 the complete output of each stream; the deadline bounds time, not bytes, so the
 captured memory grows with whatever the child writes.
 
+### The CLI suite's fixture build
+
+`ortho_config/tests/clap_error_cli.rs` (target `clap_error_cli`) drives the
+error paths through a built fixture binary rather than `clap`'s in-process API,
+so its assertions cover the process-visible contract: stdout, stderr, and exit
+status. Two details keep that build honest inside nextest:
+
+- nextest runs every case in its own process, so a process-local `OnceLock`
+  serializes nothing. Builds instead take an exclusive advisory `fs4` lock on
+  an empty file beside the test binary — the one path every process of a run
+  already shares — through
+  `ortho_config/tests/support/clap_error_fixture_lock.rs`. A second process
+  waits for the first build to finish instead of nesting Cargo beside it.
+- One 600-second budget covers both the wait for that lock and the build, and
+  the pair fits inside nextest's 960-second allowance for the binary. A lock
+  held by a stuck process therefore fails with a message naming the lock file,
+  rather than consuming the allowance the fixture runs still need.
+
+`fs4` locks a `std::fs::File` and `cap-std` exposes no locking API, so that one
+module steps outside the capability policy. The root `dylint.toml` records the
+exemption under `no_std_fs_operations` as a narrow path, with its rationale;
+the rest of the suite keeps capability-scoped file handling.
+
 ### Troubleshooting a refusal
 
 Every refusal names the check that failed. The repair is always a review
 decision, never widening the gate.
 
-| Refusal                                                                  | Meaning                                                                    | Repair                                                                           |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `clap_builder declares N ErrorKind variants but the reviewed total is M` | Upstream added, removed, or merged a variant                               | Review the release, then follow "When clap adds a variant"                       |
-| `... but the reviewed version is ...`                                    | The lock moved to a new release                                            | Review that release, then update `ReviewedPackage`                               |
-| `... but the reviewed checksum is ...`                                   | A different artefact for the same version                                  | Treat it as a new identity: review it, or restore the intended version           |
-| `... but the reviewed source is ...`                                     | A `[patch]`, path, or git override                                         | Remove the override, or review it deliberately and record why                    |
-| `Cargo.lock has no package named ...`                                    | The lock lost an expected entry                                            | Rebuild the lock; confirm the facade edge still resolves                         |
-| `Cargo.lock lists more than one package named ...`                       | Two versions are locked                                                    | Make one version apply, or the review must cover both                            |
-| `records no clap_builder dependency for clap`                            | The facade edge changed                                                    | Check the resolved `clap` features and the lock's dependency entries             |
-| `conditionally compiles ...`                                             | A `cfg`-gated enum or variant                                              | The gate fails closed; redesign it for that shape, do not drop the audit         |
-| `does not unconditionally compile it from lib.rs ...`                    | The declaring file sits behind a conditional `mod`, or no `mod` reaches it | Fail closed: a conditional chain proves nothing about the resolved build         |
-| `expected a crate root lib.rs ...`                                       | The resolved `src/` has no crate root to walk from                         | Check the resolved package; a moved library entry point needs a reviewed locator |
-| `... should be valid Rust`                                               | `syn` could not parse the resolved source                                  | Inspect the file: a vendor patch or an unexpected `src/` file explains it        |
-| `declares more than one top-level ErrorKind enum`                        | The definition moved or split                                              | Update the locator in `source` with a covered change                             |
-| `declares no top-level ErrorKind enum to inventory`                      | The definition left the files the gate scans                               | Update the locator in `source` with a covered change                             |
+| Refusal                                                                  | Meaning                                                                                                               | Repair                                                                           |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `clap_builder declares N ErrorKind variants but the reviewed total is M` | Upstream added, removed, or merged a variant                                                                          | Review the release, then follow "When clap adds a variant"                       |
+| `... but the reviewed version is ...`                                    | The lock moved to a new release                                                                                       | Review that release, then update `ReviewedPackage`                               |
+| `... but the reviewed checksum is ...`                                   | A different artefact for the same version                                                                             | Treat it as a new identity: review it, or restore the intended version           |
+| `... but the reviewed source is ...`                                     | A `[patch]`, path, or git override                                                                                    | Remove the override, or review it deliberately and record why                    |
+| `Cargo.lock has no package named ...`                                    | The lock lost an expected entry                                                                                       | Rebuild the lock; confirm the facade edge still resolves                         |
+| `Cargo.lock lists more than one package named ...`                       | Two versions are locked                                                                                               | Make one version apply, or the review must cover both                            |
+| `records no clap_builder dependency for clap`                            | The facade edge changed                                                                                               | Check the resolved `clap` features and the lock's dependency entries             |
+| `conditionally compiles ...`                                             | A `cfg`-gated enum or variant                                                                                         | The gate fails closed; redesign it for that shape, do not drop the audit         |
+| `does not unconditionally compile it from lib.rs ...`                    | The declaring file sits behind a conditional `mod` (directly, or through a nested `cfg_attr`), or no `mod` reaches it | Fail closed: a conditional chain proves nothing about the resolved build         |
+| `... carries a #[path] attribute`                                        | A `mod` declaration names the file it loads instead of the default name                                               | Fail closed, or extend the walk to resolve `#[path]` under review                |
+| `expected a crate root lib.rs ...`                                       | The resolved `src/` has no crate root to walk from                                                                    | Check the resolved package; a moved library entry point needs a reviewed locator |
+| `... should be valid Rust`                                               | `syn` could not parse the resolved source                                                                             | Inspect the file: a vendor patch or an unexpected `src/` file explains it        |
+| `declares more than one top-level ErrorKind enum`                        | The definition moved or split                                                                                         | Update the locator in `source` with a covered change                             |
+| `declares no top-level ErrorKind enum to inventory`                      | The definition left the files the gate scans                                                                          | Update the locator in `source` with a covered change                             |
 
 The `conditionally compiles` refusal is deliberate. Counting a conditional
 variant would report an inventory that may not be compiled, so the gate stops

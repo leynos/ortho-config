@@ -98,11 +98,22 @@ targets. Each directory-style suite needs its own `[[test]]` stanza in
   `tests/support/clap_publication/`, its reviewed data in
   `tests/support/clap_reviewed.rs`, and its lock and source fixtures in
   `tests/fixtures/clap_publication/`.
+- `ortho_config/tests/clap_error_matrix.rs` (target `clap_error_matrix`) is the
+  hand-enumerated inventory of the public clap-error matrix, independent of
+  `CLAP_ERROR_IDS`. It holds the compile-time length assertion and the
+  invariants the committed drift tables in `tests/fixtures/clap_matrix/` are
+  run against.
+- `ortho_config/tests/clap_error_cli.rs` (target `clap_error_cli`) drives the
+  `clap-error-fixture` binary as a subprocess. Its one-time fixture build is
+  serialized across nextest's processes by the advisory lock in
+  `tests/support/clap_error_fixture_lock.rs`.
 
 Run any target independently with
 `cargo test -p ortho_config --test subcommand`,
-`cargo test -p ortho_config --test clap_integration`, or
-`cargo test -p ortho_config --test clap_error_coverage`.
+`cargo test -p ortho_config --test clap_integration`,
+`cargo test -p ortho_config --test clap_error_coverage`,
+`cargo test -p ortho_config --test clap_error_matrix`, or
+`cargo test -p ortho_config --test clap_error_cli`.
 
 ## Behavioural test inventory
 
