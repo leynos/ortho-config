@@ -3056,9 +3056,12 @@ footprint standard's DF-003 setting. On a dated nightly from
 `nightly-2026-07-31` it keeps metadata out of the rlibs (Cargo still writes the
 `.rmeta` files), which shrinks `target/`. It is a nightly-only key, so it
 depends on the pinned toolchain, and it applies to every profile. A tool that
-reads a standalone rlib needs the `.rmeta` file beside it.
-`tests/workflow_contracts/build_standard_routing_test.py` asserts the key stays
-set.
+reads a standalone rlib needs the `.rmeta` file as well. Cargo does not copy
+that file to the top-level profile output directory, and placing it beside the
+rlib is not enough when `rustc` is invoked by hand with an explicit rlib path:
+pass the `.rmeta` file from the `deps` directory with an additional `--extern`
+argument. `tests/workflow_contracts/build_standard_routing_test.py` asserts the
+key stays set.
 
 `mold` ships for Linux only, so it appears under the Linux target table alone.
 It is never in `[build]`, and never under `cfg(unix)`, which macOS builds also
