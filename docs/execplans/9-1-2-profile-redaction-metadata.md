@@ -813,6 +813,16 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
     `test-workflow-contracts`; logs are `/tmp/gate3-*-9-1-2.out`. The last
     tracked edits were plan-status lines, so the Markdown gates were re-run
     after them and the documentation commit follows immediately.
+- [x] (2026-11-16) Rebase onto `main` at `d11a0797` before publication. Two
+  files conflicted. In `docs/contents.md`, main had taken ADR-0018 through
+  ADR-0022 while this branch had used ADR-0018 for the redaction contract. In
+  `ortho_config_macros/src/derive/parse/field_attrs.rs`, main had extracted each
+  attribute case into a `set_*` helper. The resolution keeps main's ADR list,
+  routes `profile_field` through the same helper shape, and keeps main's
+  extracted `cache_tests.rs`, whose pinned cache-key vector was recomputed for
+  the disclosure salt (`v1-9a0f5582851e611582e4dd0ddf4ea78e`). The redaction
+  record is renumbered ADR-0023 and every reference follows it. No delivered
+  behaviour changed.
 
 ## Surprises & discoveries
 
@@ -1043,6 +1053,17 @@ the negative controls, and the residual boundary. Roadmap 9.1.2 and its three
 subitems are ticked with evidence; 9.1.3 remains untouched. The eight ordinary
 gates passed on the pre-commit documentation candidate, and the Markdown gates
 were re-run after the final plan-status lines.
+
+After M3, publication required a rebase onto `main` at `d11a0797`, seventeen
+commits ahead of the branch base. The rebase exposed two collisions that no
+gate could have caught before it: main had claimed ADR-0018 for the development
+build standard, and main had restructured the field-attribute parser and
+extracted the cache unit tests. The ADR moved to 0023, the `profile_field` case
+adopts main's extracted-setter shape, and the cache-key vector was recomputed
+with the disclosure salt still folded in. These are integration repairs, not
+scope changes: the disclosure boundary, its proofs, and its documented
+behaviour are untouched, and the full gate set was re-run on the rebased
+candidate.
 
 ## Research and review evidence
 
