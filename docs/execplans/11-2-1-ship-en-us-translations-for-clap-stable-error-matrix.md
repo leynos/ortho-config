@@ -697,6 +697,30 @@ stopping and reporting.
         translation suite (48), `clap_error_coverage` (24), and
         `clap_error_matrix` (25).
 
+- [x] (2026-11-16) The nine commit gates pass in one sequential run on frozen
+      candidate `a0ba5f1b`, with the head and change set identical at the start
+      and end of the run.
+      - `make check-fmt` (106 files unchanged), `make typecheck` (19 s), and
+        `make lint` (221 s: rustdoc, Clippy, Whitaker, then `interrogate` at
+        100.0%, 1044/1044 items).
+      - `make docstring-coverage` (100.0%, run separately so a Whitaker abort
+        cannot mask it) and `make boundary` (44 passed, 0 failed, 10 ignored in
+        297 s). This is the first standalone `make boundary` pass after the
+        earlier deadline reds, and it confirms they were host load rather than
+        code.
+      - `make test-workflow-contracts` (729 passed, 1 skipped) and `make test`
+        (2781 passed, 0 failed, 44 ignored across 118 `test result:` lines,
+        then 128 passed and 5 skipped under pytest; 2170 s in total).
+      - `make markdownlint` (0 issues; the spelling gate clean and `typos.toml`
+        unchanged) and `make nixie` (all diagrams validated).
+      - This round's own cases are inside that run:
+        `a_held_build_lock_blocks_a_second_acquisition`, the three
+        `translated_context` cases, `symlink_alias_is_counted_once`, all nine
+        `module_tree_is_refused` cases, and
+        `argument_conflict_message_names_the_conflict_shape`.
+      - Compile admission queued several compiles during the run. A queued
+        build is not a failure, and no gate was duplicated or retried.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -997,15 +1021,22 @@ byte-identical to `origin/main`, and main answered it in `1f4a5775`; the branch
 took main's version by merging rather than duplicating the refactor, so no
 branch-owned source carries the finding.
 
-Two blockers remain, both outside the acceptance criteria. Locally,
-`make boundary` and `make test` exhaust wall-clock allowances while the host's
-compile-admission pool is saturated by unrelated work; every failure observed
-in those runs is a deadline or allowance kill with no assertion or output
-mismatch, and the same suites pass on hosted Windows. Separately, the
+One blocker remains, and it is outside the acceptance criteria. The
 dispatch-only `Publish dry run` fails on Windows for a release-ordering reason
 this branch cannot own: `cargo-orthohelp` verifies against the registry's
 published `ortho_config` 0.10.0, which predates the agent-context policy types.
-Both are recorded rather than papered over.
+It is recorded rather than papered over.
+
+The local wall-clock reds recorded in earlier rounds are superseded. Every one
+was a deadline or allowance kill with no assertion, output or exit-status
+mismatch, and they occurred while the host's compile-admission pool was
+saturated by unrelated work. On the frozen candidate `a0ba5f1b` all nine gates
+pass in one sequential run, `make boundary` among them at 44 passed, 0 failed
+and 10 ignored in 297 s, so the load attribution holds and no allowance,
+deadline or admission setting was changed. The one in-repo source of that
+contention is also gone: the build-lock regression test now contends on a lock
+it stages itself, not on the lock every test process of the suite shares for
+its 600-second build budget.
 
 The plan incorporates the merged prover tooling from PR #651, and the nested
 Cargo timeout fix that blocked validation on main has since landed from
