@@ -87,6 +87,13 @@ pub struct OutputContract {
 ///
 /// The tolerant wire enum: an unrecognized future token reads as
 /// [`StdoutPurpose::Unknown`], which establishes no data-returning status.
+///
+/// Marked `#[non_exhaustive]` because the design document requires every public
+/// agent-context type to be, so a later semantic variant is an additive change
+/// rather than a break for downstream exhaustive matches. Unlike the structs
+/// beside it, an enum needs no constructor to stay constructible, so this
+/// attribute does not depend on the constructor work roadmap 13.1 tracks.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StdoutPurpose {

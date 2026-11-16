@@ -142,13 +142,22 @@ fn output_member_count(output: &OutputContract) -> usize {
 }
 
 /// Returns the wire token for a tolerant stdout purpose.
+///
+/// The enum is `#[non_exhaustive]`, so the wildcard arm keeps this helper
+/// compiling when a future variant lands. A variant with no token of its own
+/// reads back as the tolerant `unknown`, which is exactly what the agent-context
+/// reader does with a token it does not recognize.
 fn agent_token(purpose: AgentStdoutPurpose) -> &'static str {
     match purpose {
         AgentStdoutPurpose::Data => "data",
         AgentStdoutPurpose::Path => "path",
         AgentStdoutPurpose::Summary => "summary",
         AgentStdoutPurpose::None => "none",
-        AgentStdoutPurpose::Unknown => "unknown",
+        // `Unknown` and every future variant share the tolerant token. The
+        // wildcard arm is what the `#[non_exhaustive]` attribute requires, and
+        // it reads the same way the agent-context reader treats an
+        // unrecognized token.
+        _ => "unknown",
     }
 }
 

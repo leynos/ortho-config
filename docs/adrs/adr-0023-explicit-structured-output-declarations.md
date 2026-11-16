@@ -220,6 +220,13 @@ JSON compatibility is preserved; the Rust source API is not.
   fields neither side declares.
 - Adding fields to public structs breaks downstream exhaustive struct literals.
   This is accepted and documented, consistent with ADR-0016 and roadmap 13.1.
+- `StdoutPurpose` in agent context is `#[non_exhaustive]`, so a later semantic
+  token is additive for downstream matches. The new public structs stay
+  exhaustive, because [the design](../cargo-orthohelp-design.md) bundles that
+  attribute with the constructors roadmap 13.1 adds; an enum needs no
+  constructor, so it does not wait on that work. The authoring-IR enum keeps
+  its strict exhaustive reading, where an unrecognized token is a schema error
+  rather than a tolerated value.
 
 ## Outstanding decisions
 
