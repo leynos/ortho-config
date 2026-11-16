@@ -24,15 +24,22 @@ use proptest::prelude::*;
 
 use crate::docs::{DefaultValue, DocMetadata, Example, FieldMetadata, ValueType};
 
+#[path = "proptest_assertions.rs"]
+mod assertions;
+#[path = "proptest_model.rs"]
+mod model;
 #[path = "proptests_support.rs"]
 mod support;
-use support::*;
+
+use assertions::assert_projection_integrity;
+use model::{has_protected_literal, model_has_protected, model_project};
+use support::{PROTECTED_SENTINEL, any_doc};
 
 /// Builds a document that differs from `base` only in protected value slots
 /// and, when one exists, every command-level example.
 fn low_variant(base: &DocMetadata) -> DocMetadata {
     let mut variant = base.clone();
-    if !support::model_has_protected(base) {
+    if !model_has_protected(base) {
         return variant;
     }
     rewrite_node(&mut variant);
@@ -87,7 +94,7 @@ proptest! {
     #[test]
     fn low_equivalent_documents_project_equal(base in any_doc()) {
         let variant = low_variant(&base);
-        if support::model_has_protected(&base) {
+        if model_has_protected(&base) {
             prop_assert_ne!(&variant, &base, "the variant must differ somewhere");
             prop_assert_eq!(base.redacted_for_output(), variant.redacted_for_output());
         } else {

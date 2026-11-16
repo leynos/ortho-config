@@ -163,38 +163,24 @@ fn protected_field_clears_every_literal_slot(#[case] exposure: ProfileFieldExpos
     let projected = doc("demo", vec![marked], Vec::new()).redacted_for_output();
     let projected_field = only_field(&projected);
 
-    assert_eq!(projected_field.default, None);
-    assert_eq!(projected_field.examples, [] as [Example; 0]);
-    assert_eq!(
-        projected_field
-            .cli
-            .as_ref()
-            .map(|meta| meta.possible_values.len()),
-        Some(0)
-    );
-    assert_eq!(
-        projected_field.value,
-        Some(ValueType::List {
-            of: Box::new(ValueType::Map {
-                of: Box::new(ValueType::Enum {
-                    variants: Vec::new()
-                }),
+    // The expected field is the original with exactly the value-bearing slots
+    // the rule removes; comparing whole fields also proves every public slot
+    // and the label survived, without listing them one at a time.
+    let mut expected = original.clone();
+    expected.default = None;
+    expected.examples.clear();
+    if let Some(cli) = expected.cli.as_mut() {
+        cli.possible_values.clear();
+    }
+    expected.value = Some(ValueType::List {
+        of: Box::new(ValueType::Map {
+            of: Box::new(ValueType::Enum {
+                variants: Vec::new(),
             }),
-        })
-    );
-    // The public descriptor and the label survive in full.
-    assert_eq!(projected_field.profile_field, Some(exposure));
-    assert_eq!(projected_field.name, original.name);
-    assert_eq!(projected_field.help_id, original.help_id);
-    assert_eq!(projected_field.long_help_id, original.long_help_id);
-    assert_eq!(projected_field.required, original.required);
-    assert_eq!(
-        projected_field.cli,
-        original.cli.map(|mut c| {
-            c.possible_values.clear();
-            c
-        })
-    );
+        }),
+    });
+
+    assert_eq!(projected_field, &expected);
 }
 
 #[test]
@@ -218,22 +204,18 @@ fn projection_is_idempotent_on_a_mixed_tree() {
 fn protected_field_suppresses_command_examples_throughout_the_tree() {
     let projected = mixed_tree().redacted_for_output();
 
-    assert!(projected.sections.examples.is_empty(), "root examples");
-    assert!(
-        first_subcommand(&projected).sections.examples.is_empty(),
-        "child"
+    // Command examples are suppressed at every node; field examples are cleared
+    // only on the protected field, so the two ordinary fields keep theirs.
+    let example_counts = (
+        projected.sections.examples.len(),
+        first_subcommand(&projected).sections.examples.len(),
+        second_subcommand(&projected).sections.examples.len(),
+        only_field(&projected).examples.len(),
+        only_field(first_subcommand(&projected)).examples.len(),
+        only_field(second_subcommand(&projected)).examples.len(),
     );
-    assert!(
-        second_subcommand(&projected).sections.examples.is_empty(),
-        "sibling"
-    );
-    // Field-level examples are cleared only on protected fields.
-    assert_eq!(
-        only_field(first_subcommand(&projected)).examples,
-        [] as [Example; 0]
-    );
-    assert_eq!(only_field(second_subcommand(&projected)).examples.len(), 1);
-    assert_eq!(only_field(&projected).examples.len(), 1);
+
+    assert_eq!(example_counts, (0, 0, 0, 1, 0, 1));
 }
 
 #[test]
@@ -294,13 +276,21 @@ fn document_level_metadata_is_preserved() {
 
     let projected = original.redacted_for_output();
 
-    assert_eq!(projected.profiles, original.profiles);
-    assert_eq!(projected.sections.links, original.sections.links);
     assert_eq!(
-        projected.sections.headings_ids,
-        original.sections.headings_ids
+        (
+            &projected.profiles,
+            &projected.sections.links,
+            &projected.sections.headings_ids,
+            &projected.app_name,
+        ),
+        (
+            &original.profiles,
+            &original.sections.links,
+            &original.sections.headings_ids,
+            &original.app_name,
+        ),
+        "document-level metadata must survive projection"
     );
-    assert_eq!(projected.app_name, original.app_name);
 }
 
 #[rstest]
@@ -342,25 +332,21 @@ fn redacted_wire_output_carries_the_label_but_no_literals() {
     .redacted_for_output();
     let encoded = serde_json::to_value(only_field(&projected)).expect("field serializes");
 
-    assert_eq!(encoded.get("profile_field"), Some(&json!("secret")));
     // `FieldMetadata` has no `skip_serializing_if` on `default`, so an absent
     // default is an explicit null rather than an omitted key.
-    assert!(
-        encoded
-            .get("default")
-            .is_some_and(serde_json::Value::is_null)
-    );
-    assert!(
+    let wire_facts = (
+        encoded.get("profile_field"),
+        encoded.get("default").is_some_and(serde_json::Value::is_null),
         encoded
             .get("examples")
             .and_then(serde_json::Value::as_array)
-            .is_some_and(Vec::is_empty)
+            .is_some_and(Vec::is_empty),
+        encoded.get("cli").and_then(|cli| cli.get("possible_values")),
     );
+
     assert_eq!(
-        encoded
-            .get("cli")
-            .and_then(|cli| cli.get("possible_values")),
-        Some(&json!([]))
+        wire_facts,
+        (Some(&json!("secret")), true, true, Some(&json!([])))
     );
 }
 
