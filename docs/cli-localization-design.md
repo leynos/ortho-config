@@ -578,6 +578,26 @@ A `ClapErrorCoverage` builder consumes the constant, filters to `Translated`
 entries, and returns a report listing identifiers the consumer's `Localizer`
 fails to resolve.
 
+#### 6.2.1 Contextual arguments
+
+Each translated message is rendered with the context `clap` supplies for its
+kind, plus two details `clap` keeps outside the context map. A value parser's
+rejection reason is carried on the error's `std::error::Error::source`, so
+`clap-error-value-validation` receives it as `reason`; without it the
+translation would drop the reason the user needs and say only that a parser
+declined the value. An `ArgumentConflict` distinguishes a repeated flag from a
+collision between distinct arguments only by whether the offending argument is
+also the prior one, so the extractor adds `prior` and sets `conflict_kind` to
+`repeated` or `conflict`. The embedded messages select on that value, because a
+single message blaming "another argument" would misdescribe a flag supplied
+twice.
+
+A Fluent pattern with an unbound variable does not format, so an override
+catalogue that omits one of these arguments resolves to no message and takes
+the §6.3 fallback to `clap`'s own text. That is the intended direction: a
+catalogue written against an earlier release degrades to a usable stock
+diagnostic rather than printing a half-formed sentence.
+
 ### 6.3 Observable fallback
 
 The `localize_clap_error_with_command` path emits tracing events at severities

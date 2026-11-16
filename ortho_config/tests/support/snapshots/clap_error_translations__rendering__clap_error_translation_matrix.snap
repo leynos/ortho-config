@@ -28,7 +28,7 @@ Usage: prog [OPTIONS]
 
 For more information, try '--help'.
 --- ValueValidation
-error: Invalid value for ⁨[num]⁩: ⁨NotANumber⁩ was rejected by the value parser
+error: Invalid value for ⁨[num]⁩: ⁨NotANumber⁩ was rejected by the value parser: ⁨invalid digit found in string⁩
 
 For more information, try '--help'.
 --- TooManyValues
@@ -50,7 +50,7 @@ Usage: prog [OPTIONS]
 
 For more information, try '--help'.
 --- ArgumentConflict
-error: The argument ⁨--debug⁩ cannot be used with another argument
+error: The argument ⁨--debug⁩ cannot be used with ⁨--color⁩
 
 Usage: prog --debug
 

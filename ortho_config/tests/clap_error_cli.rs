@@ -17,6 +17,11 @@ use test_helpers::process::run_with_deadline;
 #[path = "support/clap_error_fixture_lock.rs"]
 mod fixture_build_lock;
 
+// The translated-detail cases live in their own file so this target stays
+// within the repository's line limit.
+#[path = "clap_error_cli/translated_context.rs"]
+mod translated_context;
+
 /// The fixture binary name, without a platform executable suffix.
 const FIXTURE_BIN: &str = "clap-error-fixture";
 

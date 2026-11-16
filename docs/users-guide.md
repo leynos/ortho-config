@@ -1317,6 +1317,17 @@ keeps `clap`'s error exit status. A translated identifier that neither the
 embedded catalogue nor an override defines falls back to `clap`'s own text and
 emits a warning event, so an incomplete catalogue still produces a usable error.
 
+Two rows carry detail `clap` keeps outside its context map, and an override
+resource must use the same placeholder names:
+
+- `clap-error-value-validation` receives `reason`, the text the value parser
+  returned for the rejected value, alongside `argument` and `value`.
+- `clap-error-argument-conflict` receives `argument`, `prior` (the argument it
+  collided with, as `clap` itself names it) and `conflict_kind`. The last is
+  `repeated` when a flag was supplied more than once and `conflict` when two
+  distinct arguments collide. Both are the same `ErrorKind`, so the embedded
+  message selects on it rather than blaming a second argument for a repeat.
+
 The matrix describes the `clap_builder` this release resolved. The test-only
 check that keeps it aligned with that dependency runs in this repository, not
 in consumer builds; the
