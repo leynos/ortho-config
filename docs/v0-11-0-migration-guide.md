@@ -36,9 +36,9 @@ omitted when undeclared.
 | **Optional**           | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
 | **Optional**           | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.                 |
 | **Optional**           | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.             |
-| **Review if matched** | Absent-required errors     | Match `OrthoError::MissingRequiredValues`, not a Serde error.                |
-| **Required if used**  | Subcommand merge helpers   | The `_for_*` helpers now also require `RequiredConfigSchema`.                |
-| **Optional**          | Nested requirement schemas | Mark a child `nested` and derive `RequiredConfigSchema` on it.               |
+| **Review if matched**  | Absent-required errors     | Match `OrthoError::MissingRequiredValues`, not a Serde error.                        |
+| **Required if used**   | Subcommand merge helpers   | The `_for_*` helpers now also require `RequiredConfigSchema`.                        |
+| **Optional**           | Nested requirement schemas | Mark a child `nested` and derive `RequiredConfigSchema` on it.                       |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 

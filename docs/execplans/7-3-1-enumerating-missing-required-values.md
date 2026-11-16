@@ -1079,9 +1079,9 @@ decision record was renumbered from 0018 to 0020; its file name, title, and
 every reference were updated during the same replay. The range-diff audit
 showed only that renumbering and `docs/contents.md` context as differences from
 the pre-rebase series. A later rebase onto `f086edc9` took the numbers to 0022
-and 0023, because main took 0020 and 0021 for the artefact-lock records; a final
-rebase onto `7b750601` took them to 0024 and 0025, because main took 0023 for
-the structured-output record. See
+and 0023, because main took 0020 and 0021 for the artefact-lock records; a
+final rebase onto `7b750601` took them to 0024 and 0025, because main took 0023
+for the structured-output record. See
 [ADR-0024](../adrs/adr-0024-enumerate-missing-required-values.md).
 
 ## Conformance basis
