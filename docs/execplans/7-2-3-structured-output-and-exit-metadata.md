@@ -641,6 +641,13 @@ migration guide before touching the candidate.
   the gate's own `RUSTFLAGS` then passed 136 doctests across 10 suites with 47
   ignored at `f8b39efc`, which is the explicit doctest result the a9 assessment
   asked for; `make test` never reaches doctests.
+- [x] (2026-11-16) CodeRabbit a10 assessment at `4e4370a9` found no correctness
+  defect and one documentation defect: the migration guide had two sections
+  numbered 8, because the rebase that unioned main's process-state section with
+  this branch's output sections kept both numbers and renumbered nothing after
+  them. The shared-helper section keeps 8 and the three following sections are
+  now 9, 10 and 11. A union resolution has to reconcile a numbered list, not
+  only its entries.
 
 ## Surprises & discoveries
 
