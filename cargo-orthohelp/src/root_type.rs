@@ -124,5 +124,9 @@ fn invalid_root_type(value: &str, message: impl Into<String>) -> OrthohelpError 
 }
 
 #[cfg(test)]
+#[path = "root_type_proptests.rs"]
+mod proptests;
+
+#[cfg(test)]
 #[path = "root_type_tests.rs"]
 mod tests;
