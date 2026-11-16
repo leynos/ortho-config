@@ -129,6 +129,9 @@ fn policy_check_commands_match_the_executed_flow() -> Result<()> {
     ensure!(
         denial.body
             == concat!(
+                // Deleting the previous report is what stops a shell that
+                // continues after a failure from asserting on a stale count.
+                "rm -f out/policy-report.json\n",
                 "cargo orthohelp --check-agent-native --policy-mode deny ",
                 "--package my-cli --out-dir out\n",
                 "jq -e '.summary.deny == 0' out/policy-report.json\n",
