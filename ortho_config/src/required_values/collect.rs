@@ -326,7 +326,10 @@ fn routes_for(
 ///
 /// Both the segments and the path they form are checked, because the provider
 /// splits the *joined* name: a segment edge can merge with the separator and
-/// produce a path no individual segment check can predict.
+/// produce a path no individual segment check can predict. The prefix is
+/// checked as part of the completed name, because the provider trims a
+/// variable's name before matching the prefix and because a prefix can carry a
+/// byte no name may contain.
 fn environment_variable(path: &ConfigPath, prefix: Option<&str>) -> Option<String> {
     let segments = path.segments();
     if !segments.iter().all(|segment| is_expressible(segment)) {
@@ -337,10 +340,25 @@ fn environment_variable(path: &ConfigPath, prefix: Option<&str>) -> Option<Strin
         return None;
     }
     let variable = joined.to_ascii_uppercase();
-    Some(match prefix {
+    let name = match prefix {
         Some(configured) => format!("{configured}{variable}"),
         None => variable,
-    })
+    };
+    name_can_be_observed(&name).then_some(name)
+}
+
+/// Report whether a completed variable name can exist in a process environment.
+///
+/// The provider trims each variable's name before it applies the prefix
+/// transform, and trims the remainder afterwards, so a completed name with
+/// whitespace at either end is never observed: a leading space breaks the
+/// prefix match, and a trailing one is removed before the key is derived, so
+/// the key no longer ends the way the path does. The two byte exclusions match
+/// [`is_expressible`]'s: `=` separates name from value and NUL terminates the C
+/// string, so neither can appear in any environment at all. Checking the
+/// completed name subsumes the per-component prefix cases.
+fn name_can_be_observed(name: &str) -> bool {
+    !name.is_empty() && name == name.trim() && !name.bytes().any(|byte| byte == b'=' || byte == 0)
 }
 
 /// Replay the provider's split transform and require it to reproduce `path`.

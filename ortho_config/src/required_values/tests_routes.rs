@@ -74,6 +74,53 @@ fn keys_the_provider_cannot_express_have_no_environment_route(
     assert_no_environment_route(key, reason);
 }
 
+/// Return the environment variable advertised for the leaf `key` under `prefix`.
+fn leaf_environment_variable(key: &str, prefix: Option<&str>) -> Option<String> {
+    let fields = vec![required_leaf(key)];
+    let hints = RouteHints {
+        prefix: prefix.map(String::from),
+        cli_flags: Vec::new(),
+    };
+    let report = collect_missing(&fields, &json!({}), &hints, None).expect("the leaf is absent");
+    report
+        .items()
+        .first()
+        .expect("the leaf is the only reported requirement")
+        .routes()
+        .iter()
+        .find_map(|route| match route {
+            SupplyRoute::Environment { variable } => Some(variable.clone()),
+            _ => None,
+        })
+}
+
+/// A prefix is part of the name, so an unusable prefix loses the route.
+///
+/// The provider trims a variable's name before matching the prefix and no name
+/// may contain `=` or NUL, so a prefix carrying either, or one that only
+/// matches an untrimmed name, names a variable the loader can never read. The
+/// first three cases are the positive controls: the same leaf keeps a truthful
+/// route whenever its prefix forms an observable name, including no prefix at
+/// all and an empty one, which matches every variable without stripping
+/// anything.
+#[rstest]
+#[case::prefixed(Some("DEMO_"), Some("DEMO_HOST"))]
+#[case::no_prefix(None, Some("HOST"))]
+#[case::empty_prefix(Some(""), Some("HOST"))]
+#[case::equals(Some("DEMO="), None)]
+#[case::nul(Some("DEMO\0"), None)]
+#[case::untrimmed(Some(" DEMO_"), None)]
+fn a_prefix_that_cannot_name_a_variable_has_no_environment_route(
+    #[case] prefix: Option<&str>,
+    #[case] expected: Option<&str>,
+) {
+    assert_eq!(
+        leaf_environment_variable("host", prefix).as_deref(),
+        expected,
+        "unexpected environment route for prefix {prefix:?}"
+    );
+}
+
 /// Return the environment variable advertised for a nested leaf under `parent`.
 fn nested_environment_variable(parent: &str) -> Option<String> {
     let fields = vec![required_object(parent, vec![required_leaf("host")])];
