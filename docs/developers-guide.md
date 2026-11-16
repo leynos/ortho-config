@@ -587,7 +587,7 @@ Test entry points:
 ### Structured output metadata ownership
 
 Structured-output metadata
-([ADR-0022](adrs/adr-0022-explicit-structured-output-declarations.md)) is
+([ADR-0023](adrs/adr-0023-explicit-structured-output-declarations.md)) is
 declared through the sibling `output(...)` attribute and is owned in the same
 three places as the renderer block, which it sits beside in every document:
 

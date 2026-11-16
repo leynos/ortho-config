@@ -4,8 +4,8 @@
 
 IMPLEMENTED, IN REVIEW — approved on 2026-11-14 and implemented in M1–M3. The
 temporary #664 prerequisite merged on 2026-11-11 as `eaf4c028`, and the branch
-has been rebased onto `origin/main` three times since, most recently onto
-`934c4c99`, so all three milestones have recorded local certificates. The
+has been rebased onto `origin/main` four times since, most recently onto
+`b1ee6974`, so all three milestones have recorded local certificates. The
 prerequisite lint repair landed on `main` as `1f4a5775` (PR #698), and the
 branch's hosted Lint stage is green, so no delivery gate remains blocked on
 another branch's work. The one hosted step that still fails, `Publish dry run`,
@@ -266,7 +266,7 @@ migration guide before touching the candidate.
 - [x] (2026-11-15) M3 documentation: the users'-guide exit-status section with
   the registered `guide-policy-deny` recipe, design §6.1.1 and §9, the
   developers'-guide policy-API testing section, the agent-native design's
-  delivered/deferred boundary, ADR-0022's delivery note, and roadmap 7.2.3.
+  delivered/deferred boundary, ADR-0023's delivery note, and roadmap 7.2.3.
 - [x] (2026-11-15) M3 certificate: all seven gates green at `24c04193` with the
   head unchanged and `make fmt` mutating nothing — fmt, check-fmt, lint
   (rustdoc, Clippy, Whitaker, interrogate 100%), test (109 targets, 2871
@@ -517,7 +517,7 @@ migration guide before touching the candidate.
 - [x] (2026-11-15) Formal-review repair and its gates at head `51118715`, with
   eight modified files and no other change. The substantive finding was real:
   agent context read an explicit `null` for the output block, or for one of its
-  scalar members, as absence, which ADR-0022 and the design reject. Two serde
+  scalar members, as absence, which ADR-0023 and the design reject. Two serde
   helpers now deserialize the present value and wrap it in `Some`,
   `exit_classes` keeps rejecting `null`, and four regression cases assert the
   rejection; the focused `cargo test -p ortho_config --lib agent_context` run
@@ -533,7 +533,7 @@ migration guide before touching the candidate.
   nothing about the hosted leg. The review's failed Developer Documentation row
   is covered by the same work: the guide now counts twelve binaries, names
   `agent_context_output_end_to_end` with the reason it is serialized, and links
-  ADR-0022 from its ownership section. `documentation_budget_test.py` still
+  ADR-0023 from its ownership section. `documentation_budget_test.py` still
   passes (5 passed), so the named subset and the `.config/nextest.toml` filter
   still agree at this head.
 - [x] (2026-11-15) The `make test` red is host contention, and the item is
@@ -605,6 +605,26 @@ migration guide before touching the candidate.
   unmodified `origin/main`, so the red tracks host load in both directions. The
   hosted coverage lanes, which run the same target on an unloaded runner, are
   the certification for this gate.
+- [x] (2026-11-16) Rebased the 43-commit series from `8d73c0d9` onto
+  `b1ee6974`, main's v0.11.0 release preparation. Recovery refs
+  `refs/recovery/7-2-3-r4-old-head`, `-old-base` and `-target` hold `8d73c0d9`,
+  `934c4c99` and `b1ee6974`. Three commits stopped on conflicts.
+  `docs/contents.md` conflicted because main had taken ADR-0022 for the
+  coverage-target-root decision, so this plan's ADR moved once more, to
+  `adr-0023-explicit-structured-output-declarations.md`, with its heading, the
+  index entry and every cross-reference following. The plan's own 80-column
+  rewrap then conflicted on the two sentences that record former numbers, and
+  the ADR-heading commit conflicted on the heading itself; both resolutions
+  keep the renumbered text inside the wrap. `git diff --check` is clean, and
+  `range-diff` reports the other commits as identical text.
+- [x] (2026-11-16) Swept the structured-output ADR references the replay
+  restored. The earlier sweep recorded above, which pointed four references at
+  ADR-0022, is superseded: the replayed commits carry their original ADR-0022
+  text, so `CHANGELOG.md`, `docs/v0-11-0-migration-guide.md`,
+  `docs/developers-guide.md`, `agent_context/output.rs` and
+  `tests_output_wire.rs` name ADR-0023 again, and this plan's current-state
+  mentions follow. A rebase re-applies old text, so a reference sweep has to be
+  repeated against the replayed tree rather than assumed to survive.
 
 ## Surprises & discoveries
 
@@ -1154,7 +1174,7 @@ Delivered in three milestones on `7-2-3-structured-output-and-exit-metadata`.
   optional `output` block from the derive through documentation IR, the
   tool-side schema mirror, the bridge, and agent context. Absence stays absent,
   `supports_json: false` stays distinct from undeclared, and a present empty
-  block round-trips as `{}`. ADR-0022 records the surface; the design and
+  block round-trips as `{}`. ADR-0023 records the surface; the design and
   users' guide describe it.
 - M2 (`946013b2`, documented in `4d698172`) added
   `policy::rules::output::check_output`. The complete 3 × 6 × 3 table, the
@@ -1164,7 +1184,7 @@ Delivered in three milestones on `7-2-3-structured-output-and-exit-metadata`.
 - M3 pinned the process statuses in `cli_dispatch.rs`,
   `policy_report_contract.rs`, and `documented_command.rs`, and documented
   0/1/2 in the users' guide, design §6.1.1, the agent-native design, and
-  ADR-0022. Roadmap 7.2.3 and its three bullets are checked.
+  ADR-0023. Roadmap 7.2.3 and its three bullets are checked.
 
 Proof inventory: not applicable. No Kani, Verus, CrossHair, LemmaScript, or
 comparable proof is introduced or affected. The one predicate is finite and is

@@ -17,7 +17,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// Deserializes a declared member, rejecting an explicit `null`.
 ///
 /// `Option<T>` alone cannot tell an omitted member from a present `null`,
-/// because serde maps both to `None`. Inside agent context ADR-0022 reserves
+/// because serde maps both to `None`. Inside agent context ADR-0023 reserves
 /// `None` for omission, so a present `null` is a decode error rather than a
 /// second spelling of "undeclared". The field keeps `#[serde(default)]` so an
 /// omitted member still yields `None` without calling this function.
@@ -33,7 +33,7 @@ where
 ///
 /// Omission is the only way to say a command declared nothing. A present
 /// `null` would make "declared nothing" and a decode accident
-/// indistinguishable, which ADR-0022 forbids for agent context.
+/// indistinguishable, which ADR-0023 forbids for agent context.
 pub(crate) fn deserialize_contract<'de, D>(
     deserializer: D,
 ) -> Result<Option<OutputContract>, D::Error>

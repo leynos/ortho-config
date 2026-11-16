@@ -62,7 +62,7 @@ fn omitted_output_stays_none() {
 ///
 /// Without this rejection `null` would decode to `None` through `Option`,
 /// making a decode accident look like an author who declared nothing, which
-/// ADR-0022 forbids inside agent context.
+/// ADR-0023 forbids inside agent context.
 #[rstest]
 #[case::block(json!({"path": ["wire-cli"], "output": null}), "the output block")]
 #[case::supports_json(
