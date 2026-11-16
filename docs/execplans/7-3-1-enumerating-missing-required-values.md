@@ -570,6 +570,35 @@ with a compatibility probe rather than an assumption.
   `#[cfg(feature = "toml")]` as of `c37c8807`, which answers the finding; the
   remaining failure belongs to the feature-matrix gap tracked by #468.
 
+- [x] (2026-11-16) Cleared the hosted CodeScene failure and recorded what is
+  inherited. The check reported one advisory violation, Code Duplication in
+  `required_values/tests_routes.rs`, where `cs review` paired
+  `environment_routes_uppercase_and_nest_segments` with
+  `nested_environment_variable`: each rebuilt the same collector call before
+  inspecting the routes. `15f33eca` replaces both with one `requirement_routes`
+  helper that hints the collector, insists that a single requirement is
+  reported, and returns its routes; the cases keep their six key spellings, six
+  prefixes and three segment edges. The file now scores 10.0 with no findings,
+  and `cs delta b1ee6974` reports nothing for it.
+
+  The full local delta does report one further finding: Code Duplication in
+  `subcommand/sources.rs` between `load_and_merge_subcommand_with_sources_at`
+  and `load_and_merge_subcommand_with_matches_with_sources_at`. It is marked
+  `change-type: unchanged` with `old-pp` and `new-pp` both 3.0, both functions
+  exist at `b1ee6974` with the same one-line body, and the hosted check did not
+  flag it. It is inherited, so it is recorded rather than repaired under this
+  task.
+
+  The gates were re-run from the top after the refactor, because the first
+  `make check-fmt` caught a missing final newline in the rewritten file.
+  `make check-fmt` (106 files unchanged), `make lint` (1044/1044 docstring
+  coverage), `make typecheck`, `make test` (2827 passed and 0 failed over 117
+  harness summaries; pytest 128 passed with 5 skipped), `make markdownlint` and
+  `make nixie` all exited 0 against `2bb6d3fc` plus the edit that became
+  `15f33eca`. Hosted CI run 43803867311 is green on `2bb6d3fc` for both
+  `build-test` legs, msrv, the three packaging legs and the two advisory Clippy
+  legs.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -755,6 +784,15 @@ whole change. The same gate run taught that Whitaker's `module_max_lines`
 counts each module *file* and reports the offending file's `mod` declaration,
 so splitting a module into sibling files is the sanctioned repair and a second
 oversized module surfaces only once the first is fixed; no `#[allow]` was used.
+
+Clearing one CodeScene advisory can expose the next. Removing the duplication
+from `tests_routes.rs` lifted the file from 9.38 to 9.68, which was still not
+clean: the same file then breached "String Heavy Function Arguments" at 52.9%
+against a 39.0% threshold, because helper functions that took only a key had
+inflated the share of string parameters. CodeScene counts a plain `&str` but
+not an `Option<&str>`, and it counts test functions like any other, so the
+number cannot be read off the signatures by eye. `cs review` reports the exact
+ratio and threshold, and only an empty `review` list means the file is clean.
 
 ## Decision log
 
