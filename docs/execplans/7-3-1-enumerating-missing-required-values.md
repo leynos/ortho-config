@@ -599,6 +599,34 @@ with a compatibility probe rather than an assumption.
   `build-test` legs, msrv, the three packaging legs and the two advisory Clippy
   legs.
 
+- [x] (2026-11-16) Answered the review's two remaining findings and restored
+  the line-count headroom. The first is substantive: a field carrying
+  `#[ortho_config(default = ...)]` was classified optional for every reader,
+  but only the declaring type's own loader materializes that default, so a
+  parent composing the type reported no absence at all. The derive now
+  distinguishes the case as `FieldActivation::DefaultBacked`, the schema
+  mirrors it as `Activation::DefaultBacked`, and `SchemaChildren::compose`
+  demotes it to `Required` because composition is exactly where the child's
+  loader stops being the active one. The repair was driven red first: the new
+  `declared::a_declared_default_supplies_only_its_own_loader` case failed with
+  `got ["child.name"]` against `<LoaderParent>` before the change and now
+  expects `["child.name", "child.port"]`, while `<LoaderChild>` read on its own
+  still reports only `["name"]`. The second finding is coverage: the eight
+  unconventional keys that a bare TOML key cannot express now live in one
+  `UNCONVENTIONAL_KEYS` constant that both the diagnostic fixture and the
+  round-trip assertion read, so the two cannot drift, and the assertion indexes
+  the parsed table by the exact spelling.
+
+  The added documentation pushed `required_values/collect.rs` to 402 lines,
+  past Whitaker's `module_max_lines` ceiling. Rather than trim the explanations
+  or suppress the lint, the environment-route spelling rules
+  (`environment_variable` and its three predicates) moved to a sibling
+  `required_values/env_route.rs`, which both answers the lint and gives the
+  provider-replay rules a module of their own.
+  `cargo test -p ortho_config --lib --all-features required_values` then passed
+  43 tests, including the six key spellings, six prefixes and three segment
+  edges the moved helpers own.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
@@ -793,6 +821,16 @@ inflated the share of string parameters. CodeScene counts a plain `&str` but
 not an `Option<&str>`, and it counts test functions like any other, so the
 number cannot be read off the signatures by eye. `cs review` reports the exact
 ratio and threshold, and only an empty `review` list means the file is clean.
+
+Optionality is a property of the reading, not of the type. The first activation
+model asked whether *some* layer could supply a field's value, which made a
+declared default look unconditionally optional. It is optional only for the
+loader that materializes the defaults struct — the type's own — and required
+for any loader that reads the same fields through a merged value it did not
+build. Encoding that as a third state, rather than a `bool` flag threaded
+through collection, keeps the demotion at the one boundary that knows which
+loader is active, and leaves the property-tested activation model untouched
+apart from the extra case.
 
 ## Decision log
 
