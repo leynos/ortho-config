@@ -323,4 +323,3 @@ fn sections(examples: Vec<Example>) -> SectionsMetadata {
         notes: Vec::new(),
     }
 }
-

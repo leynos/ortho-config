@@ -145,4 +145,3 @@ pub(super) fn value_has_member(value: &ValueType) -> bool {
         _ => false,
     }
 }
-
