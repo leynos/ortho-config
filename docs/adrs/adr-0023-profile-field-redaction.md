@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0018: Profile field redaction
+# Architectural decision record (ADR) 0023: Profile field redaction
 
 ## Status
 

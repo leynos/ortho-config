@@ -484,7 +484,7 @@ helpers, while downstream applications own domain behaviour.
 - [x] 9.1.2. Add profile redaction metadata.
   - Requires 9.1.1.
   - See agent-native-cli-design.md §6.7.
-  - See [ADR-0018](adrs/adr-0018-profile-field-redaction.md) for the accepted
+  - See [ADR-0023](adrs/adr-0023-profile-field-redaction.md) for the accepted
     contract: `profile_field = "secret"` or `"reference_only"`, one structural
     projection owned by `ortho_config::docs`, and the
     `profile-redaction-v1` cache salt.

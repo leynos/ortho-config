@@ -747,7 +747,7 @@ derive, by the `cargo-orthohelp` pipeline, by the generated bridge, and again
 at the agent-context boundary, and the agent-context cache identity includes
 the disclosure-policy salt. The full contract, including the
 flattened-container rejection, is recorded in
-[ADR-0018](adrs/adr-0018-profile-field-redaction.md).
+[ADR-0023](adrs/adr-0023-profile-field-redaction.md).
 
 Agent context also carries a names-only catalogue: validated `ProfileName`
 values, sorted and deduplicated, with no profile body. Supplying names
@@ -776,7 +776,7 @@ setting it must not echo while remaining unable to read it. Suppression is
 structural: help text, custom type names, links, and notes are published
 verbatim, so the author remains responsible for what those strings say. The
 projection's semantics are proved over a model in `verus/profile_redaction.rs`;
-[ADR-0018](adrs/adr-0018-profile-field-redaction.md)
+[ADR-0023](adrs/adr-0023-profile-field-redaction.md)
 records the contract and the residual testing boundary.
 
 ### 6.8 Delivery and feedback

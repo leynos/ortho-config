@@ -107,7 +107,7 @@
   review the accepted `output(...)` derive group, the refusal-versus-silence
   distinction, the omission rules for a declared block, and the deferred stream
   framing and numeric exit taxonomy.
-- [ADR-0018: Profile field redaction](adrs/adr-0018-profile-field-redaction.md):
+- [ADR-0023: Profile field redaction](adrs/adr-0023-profile-field-redaction.md):
   review the shared disclosure projection, its boundaries and cache salt, the
   protected-field records, the names-only catalogue, and the Verus model's
   residual testing boundary.

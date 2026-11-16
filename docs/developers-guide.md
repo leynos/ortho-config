@@ -1634,7 +1634,7 @@ from `std::env::args_os()` while taking the environment sources from the caller,
 
 An author classifies a field with `profile_field = "secret"` or
 `profile_field = "reference_only"`. The contract is
-[ADR-0018](adrs/adr-0018-profile-field-redaction.md) and the user-facing view is
+[ADR-0023](adrs/adr-0023-profile-field-redaction.md) and the user-facing view is
 [the users' guide](users-guide.md#keep-profile-values-out-of-generated-documentation).
 
 `ortho_config::docs::profile_redaction` owns the single projection,

@@ -1202,7 +1202,7 @@ integrity over an unbounded preorder encoding of the command tree. It reasons
 about a mirror of the projection rather than the runtime types, so the
 differential property tests and the generator's golden and contract suites
 remain the evidence that production implements the model. See
-[ADR-0018](adrs/adr-0018-profile-field-redaction.md).
+[ADR-0023](adrs/adr-0023-profile-field-redaction.md).
 
 ## 5. Dependency Strategy
 
@@ -1530,7 +1530,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
   `profile-redaction-v1` salt so an entry produced under another policy is
   never reused. Public descriptors survive, including help identifiers, flag
   and file spellings, and the label, so consumers can still name the setting
-  they must not echo. ADR-0018 records the contract, the wire additions, and
+  they must not echo. ADR-0023 records the contract, the wire additions, and
   the residual testing boundary; `verus/profile_redaction.rs` is the first
   registered production proof and establishes noninterference and projection
   integrity over the model.

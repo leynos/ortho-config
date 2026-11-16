@@ -730,7 +730,7 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
   - [x] (2026-11-15) Record non-vacuity evidence by seeding three faults
     (retained default, retained nested enum member, skipped child), observing
     failures, restoring the module byte-for-byte, and rerunning green.
-  - [x] (2026-11-15) Record the contract in ADR-0018 and reference it from the
+  - [x] (2026-11-15) Record the contract in ADR-0023 and reference it from the
     agent-native and cargo-orthohelp design documents.
   - [x] (2026-11-16) Ordinary gates and gated M1 commit: formatting, Clippy,
     docstring coverage, Markdown, Mermaid, spelling, and the workspace test
@@ -795,7 +795,7 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
     2.2.1 of the cargo-orthohelp design records the wire additions, the
     structural boundary, and the model-to-production relationship; section 6.7
     of the agent-native design carries the `profiles.redaction` shape and the
-    public-text limitation; ADR-0018 gains a Formal evidence subsection
+    public-text limitation; ADR-0023 gains a Formal evidence subsection
     covering the flat preorder encoding and the residual boundary; the design
     decision log records the decision; the developers' guide replaces the empty
     production inventory with the registered Verus entry, its obligations,
@@ -980,7 +980,7 @@ the enum.
 2026-11-15, implemented: keep one projection in `ortho_config::docs` and make
 `cargo-orthohelp::schema` re-export it. This supersedes the hand-maintained
 mirror noted as a residual risk in ADR-0016 and gives the bridge and renderers
-one type identity. Recorded in ADR-0018.
+one type identity. Recorded in ADR-0023.
 
 2026-11-15, implemented: decide command-example suppression once per document
 before projecting, then run a single projection pass. This keeps the global
@@ -1001,7 +1001,7 @@ all, and the plan allowed the lemma boundaries to be revised while verification
 conditions were discovered. The encoding is total for topology and for slot
 reachability, so V1 and V2 keep their full strength; only the traversal shape
 is modelled differently, and the correspondence to the production recursion
-stays with the differential tests recorded in ADR-0018.
+stays with the differential tests recorded in ADR-0023.
 
 ## Outcomes & retrospective
 
