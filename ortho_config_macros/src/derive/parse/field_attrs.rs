@@ -149,38 +149,19 @@ fn apply_field_attr(
         return Ok(false);
     };
     let key = ident.to_string();
-    match key.as_str() {
+    let recognised = match key.as_str() {
         "localized_default" => Err(reject_localized_default(&meta.path)),
-        "cli_long" => {
-            let s = lit_str(meta, "cli_long")?;
-            out.cli_long = Some(s.value());
-            Ok(true)
-        }
-        "cli_short" => {
-            let c = lit_char(meta, "cli_short")?;
-            out.cli_short = Some(c);
-            Ok(true)
-        }
-        "default" => {
-            out.default = Some(meta.value()?.parse()?);
-            Ok(true)
-        }
-        "merge_strategy" => {
-            let s = lit_str(meta, "merge_strategy")?;
-            out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
-            Ok(true)
-        }
-        "skip_cli" => {
-            out.skip_cli = true;
-            Ok(true)
-        }
-        "cli_default_as_absent" => {
-            out.cli_default_as_absent = parse_cli_default_as_absent(meta)?;
-            Ok(true)
-        }
-        "profile_field" => set_profile_field(meta, out).map(|()| true),
-        _ => apply_field_doc_attr(meta, out),
-    }
+        "cli_long" => set_cli_long(meta, out),
+        "cli_short" => set_cli_short(meta, out),
+        "default" => set_default(meta, out),
+        "merge_strategy" => set_merge_strategy(meta, out),
+        // A bare flag: there is no value to parse, so it cannot fail.
+        "skip_cli" => Ok(()).inspect(|()| out.skip_cli = true),
+        "cli_default_as_absent" => set_cli_default_as_absent(meta, out),
+        "profile_field" => set_profile_field(meta, out),
+        _ => return apply_field_doc_attr(meta, out),
+    };
+    recognised.map(|()| true)
 }
 
 /// Records the `cli_long` flag name.
