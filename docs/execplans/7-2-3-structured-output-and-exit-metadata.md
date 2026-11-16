@@ -648,6 +648,14 @@ migration guide before touching the candidate.
   them. The shared-helper section keeps 8 and the three following sections are
   now 9, 10 and 11. A union resolution has to reconcile a numbered list, not
   only its entries.
+- [x] (2026-11-16) Codex's one unresolved thread (finding 4578053153, anchored
+  at `51118715`) read the ADR's null rule as contradicting the implementation
+  in both directions. Half of it was already stale: agent context began
+  rejecting a present `null` in `e19e39b5`, which is what the bullet's second
+  sentence says. The other half was valid: IR `exit_classes` is a list, so
+  `null` there is a type error rather than absence, and "the block or any
+  member" overstated the rule. The ADR now separates the optional members from
+  the list.
 
 ## Surprises & discoveries
 
