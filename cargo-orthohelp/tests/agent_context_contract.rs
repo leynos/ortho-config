@@ -9,6 +9,7 @@ mod fixtures;
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
+use fixtures::profile_redaction_sentinels::{REDACTION_ROOT_TYPE, all_protected_sentinels};
 use ortho_config::AGENT_CONTEXT_KIND_SUFFIX;
 use rstest::rstest;
 use serde_json::Value;
@@ -54,6 +55,62 @@ fn emitted_agent_context_has_stable_contract(
         return Err("agent-context stdout should match its generated artefact".into());
     }
     Ok(())
+}
+
+/// Protected values must stay out of every readable surface, including traces.
+///
+/// The binary runs with `RUST_LOG=debug`, so a tracing event that formatted a
+/// default or an example would be captured here alongside the artefact.
+#[test]
+fn redaction_keeps_protected_values_out_of_streams_and_artefact() -> TestResult {
+    let out_dir = tempfile::tempdir()?;
+    let output = run_agent_context(&out_dir, Some(REDACTION_ROOT_TYPE))?;
+    ensure_success(&output)?;
+    assert_debug_trace_is_stderr(&output)?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let artefact = read_agent_context_text(&out_dir)?;
+    assert_no_protected_sentinel(&[
+        ("stdout", &stdout),
+        ("stderr", &stderr),
+        ("artefact", &artefact),
+    ])?;
+
+    let context = read_stdout_agent_context(&output)?;
+    let redaction = context
+        .get("profiles")
+        .and_then(|profiles| profiles.get("redaction"))
+        .and_then(Value::as_array)
+        .ok_or("profiles.redaction should be an array")?;
+    if redaction.len() != 5 {
+        return Err(format!("expected 5 redaction records, got {}", redaction.len()).into());
+    }
+    // Non-vacuity: the same document keeps the public description and default.
+    for expected in ["Redaction fixture command tree.", "eu-west"] {
+        if !stdout.contains(expected) {
+            return Err(format!("stdout should retain {expected:?}").into());
+        }
+    }
+    Ok(())
+}
+
+fn assert_no_protected_sentinel(streams: &[(&str, &str)]) -> TestResult {
+    for sentinel in all_protected_sentinels() {
+        for (label, content) in streams {
+            if content.contains(sentinel) {
+                return Err(format!("protected sentinel {sentinel} leaked into {label}").into());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn read_agent_context_text(out_dir: &TempDir) -> TestResult<String> {
+    let out_path = Utf8PathBuf::from_path_buf(out_dir.path().to_path_buf())
+        .map_err(|path| format!("non-UTF-8 output path: {}", path.display()))?;
+    let directory = Dir::open_ambient_dir(out_path, ambient_authority())?;
+    Ok(directory.read_to_string("agent-context.json")?)
 }
 
 fn run_agent_context(out_dir: &TempDir, root_type: Option<&str>) -> TestResult<Output> {

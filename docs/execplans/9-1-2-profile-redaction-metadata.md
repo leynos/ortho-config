@@ -748,11 +748,27 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
     retained nested enum member, and a skipped child each fail the corresponding
     Verus obligation. The modules were then restored byte-for-byte (checked with
     `sha256sum -c`) and rerun green.
-  - [ ] Recreate the production-proof CI lane and its workflow contract test.
-  - [ ] Add the `profile_redaction.feature` behavioural contract and its
-    unhappy paths.
-  - [ ] Extend the golden, renderer, and end-to-end sentinel suites, including
-    cache-hit and pre-change-cache cases.
+  - [x] (2026-11-16) Recreate the production-proof CI lane and its workflow
+    contract test. `8593b35e` restored `.github/workflows/prover-tools.yml`
+    with `pipefail` around `make verus`; `2742558b` added the fake-tool
+    contract fixtures. Running
+    `tests/workflow_contracts/prover_tools_workflow_test.py` reports 12
+    passed.
+  - [x] (2026-11-16) Add the `profile_redaction.feature` behavioural contract
+    and its unhappy paths. Eight scenarios: the four required contracts plus
+    unsupported profiles, hidden/file-only fields, a sanitized cache, and a
+    pre-change cache entry that must not be reused. A focused run reports
+    9 passed (`/tmp/restore-bdd-9-1-2.out`) using
+    `cargo test -p cargo-orthohelp --test rstest_bdd profile_redaction`.
+  - [x] (2026-11-16) Extend the golden, renderer, and end-to-end sentinel
+    suites, including cache-hit and pre-change-cache cases.
+    `agent_context__profile_redaction.json.snap` pins the context,
+    `redaction_roff_en_us.snap` and `redaction_maml_en_us.snap` pin the
+    rendered artefacts, the artefact scan covers agent context, both IR
+    documents, both man pages, and both MAML files, and
+    `redaction_keeps_protected_values_out_of_streams_and_artefact` checks the
+    debug-tracing streams. `cache_key_hash_matches_the_documented_vector`
+    pins the disclosure salt into the cache identity.
 - [ ] M3: documentation, final gates, and roadmap completion.
 
 ## Surprises & discoveries
@@ -777,6 +793,21 @@ M1 discoveries, 2026-11-15:
 
 M2 discoveries, 2026-11-16:
 
+- Only `#[ortho_config(default = ...)]` literals reach the macro-modelled
+  `FieldMetadata::default` slot. A `#[arg(long, default_value = ...)]` literal
+  is clap-only and never appears in any generated artefact, even before the
+  projection. The sentinel catalogue therefore over-states what the default
+  clearing actually removes; `credential_file` is the one protected field whose
+  default the projection has to clear, and it is the literal the seeded fault
+  exposed. Enum members and examples are modelled for both classifications, so
+  those slots do exercise every field.
+- `cargo test --test <target>` does not rebuild the package's binary target, so
+  a golden test that spawns `target/debug/cargo-orthohelp` can execute a stale
+  binary. The fault experiment only became observable in the subprocess suites
+  after an explicit `cargo build -p cargo-orthohelp --bin cargo-orthohelp`. CI
+  runs a bare `cargo test`, which builds every target, but a local focused run
+  must remember the binary.
+
 - Verus 0.2026.01.30.44ebdee cannot verify structural recursion through a
   sequence of child nodes. A recursive call inside a `Seq::new` closure never
   discharges its termination check, a mutual pair of spec functions is rejected
@@ -794,7 +825,18 @@ M2 discoveries, 2026-11-16:
   `skip_serializing_if`), and the traversal probe used a process-global counter
   that concurrent property tests also incremented. The fixtures were corrected
   and the probe made thread-local.
-- Non-vacuity evidence (logs under `/tmp/fault{1,2,3}-*-9-1-2.out`):
+- Non-vacuity evidence for the artefact suites (2026-11-16): seeding a
+  retained protected default in `FieldMetadata::redact_protected_values` made
+  `profile_redaction_protected_metadata_is_omitted_from_every_output_format` and
+  `profile_redaction_the_cache_stores_only_sanitized_ir` fail with
+  `FILE-ONLY-DEFAULT-SENTINEL` (`/tmp/fault-bdd-9-1-2.out`). The golden suite
+  initially still passed, because it scanned only roff and MAML and the
+  `skip_cli` field's default survives into the IR alone; the scan was widened
+  to every emitted family and then failed with `leaked into en-US IR`
+  (`/tmp/fault-golden3-9-1-2.out`). The source was restored byte-for-byte
+  (`sha256sum` 440a2800…) and all three suites reran green.
+- Non-vacuity evidence from the M1 property suite (logs under
+  `/tmp/fault{1,2,3}-*-9-1-2.out`):
   - retained protected default: 9 tests failed, including
     `projection_matches_independent_model`,
     `projection_preserves_and_clears_exactly`, and
