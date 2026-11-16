@@ -61,68 +61,50 @@ fn absent_annotation_leaves_the_field_ordinary() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn unknown_label_is_rejected() -> Result<()> {
+/// Every rejection shares one shape: a field carries a fault and the diagnostic
+/// names it. A table keeps the four cases from drifting into four copies of the
+/// same assertion, and the expected fragment is the assertion's own evidence.
+#[rstest]
+#[case::unknown_label(
+    quote! { #[ortho_config(profile_field = "public")] token: String },
+    "unknown profile_field label"
+)]
+#[case::duplicate_annotation(
+    quote! {
+        #[ortho_config(profile_field = "secret", profile_field = "reference_only")]
+        token: String
+    },
+    "duplicate profile_field"
+)]
+#[case::clap_flattened_container(
+    quote! {
+        #[command(flatten)]
+        #[ortho_config(profile_field = "secret")]
+        common: CommonArgs
+    },
+    "flattened container"
+)]
+#[case::serde_flattened_container(
+    quote! {
+        #[serde(flatten)]
+        #[ortho_config(profile_field = "reference_only")]
+        common: CommonArgs
+    },
+    "flattened container"
+)]
+fn invalid_annotations_are_rejected(
+    #[case] field: TokenStream,
+    #[case] expected: &str,
+) -> Result<()> {
     let message = parse_error(quote! {
         struct Demo {
-            #[ortho_config(profile_field = "public")]
-            token: String,
+            #field
         }
     })?;
 
     ensure!(
-        message.contains("unknown profile_field label"),
-        "unexpected diagnostic: {message}"
-    );
-    Ok(())
-}
-
-#[test]
-fn duplicate_annotation_is_rejected() -> Result<()> {
-    let message = parse_error(quote! {
-        struct Demo {
-            #[ortho_config(profile_field = "secret", profile_field = "reference_only")]
-            token: String,
-        }
-    })?;
-
-    ensure!(
-        message.contains("duplicate profile_field"),
-        "unexpected diagnostic: {message}"
-    );
-    Ok(())
-}
-
-#[test]
-fn clap_flattened_container_is_rejected() -> Result<()> {
-    let message = parse_error(quote! {
-        struct Demo {
-            #[command(flatten)]
-            #[ortho_config(profile_field = "secret")]
-            common: CommonArgs,
-        }
-    })?;
-
-    ensure!(
-        message.contains("flattened container"),
-        "unexpected diagnostic: {message}"
-    );
-    Ok(())
-}
-
-#[test]
-fn serde_flattened_container_is_rejected() -> Result<()> {
-    let message = parse_error(quote! {
-        struct Demo {
-            #[serde(flatten)]
-            #[ortho_config(profile_field = "reference_only")]
-            common: CommonArgs,
-        }
-    })?;
-
-    ensure!(
-        message.contains("flattened container"),
-        "unexpected diagnostic: {message}"
+        message.contains(expected),
+        "expected {expected:?} in diagnostic: {message}"
     );
     Ok(())
 }
