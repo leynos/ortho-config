@@ -5,7 +5,7 @@
 IMPLEMENTED, ACCEPTED BY ASSESSMENT, REVIEW ROUND REPAIRED — approved on
 2026-11-14 and implemented in M1–M3. The temporary #664 prerequisite merged on
 2026-11-11 as `eaf4c028`, and the branch has been rebased onto `origin/main`
-four times since, most recently onto `b1ee6974`, so all three milestones have
+five times since, most recently onto `eea7273f`, so all three milestones have
 recorded local certificates. The prerequisite lint repair landed on `main` as
 `1f4a5775` (PR #698), and the branch's hosted Lint stage is green, so no
 delivery gate remains blocked on another branch's work. CodeRabbit's
@@ -16,7 +16,10 @@ reproduces on unmodified `main`: it is the release-ordering drift issue #414
 records, not a branch defect. Delivery is therefore published with a clear
 assessment. CodeRabbit's first full review of the published head raised four
 findings, all minor or trivial; each was verified against the source, repaired,
-and answered in its thread, and the review decision awaits the refreshed round.
+and answered in its thread, and CodeRabbit approved that repaired head. Two
+documentation statements named in the approval were then corrected, and the
+resulting rebase onto current `main` carries its own local certificate, so the
+branch awaits a hosted run and a review decision covering the rebased head.
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -682,6 +685,39 @@ migration guide before touching the candidate.
   once the reply landed. A doc claim and the code it describes are separate
   obligations: the golden snapshot showed `renderer` present for an undeclared
   command, which is what made the layer split visible.
+- [x] (2026-11-16) The two documentation statements that review asked for,
+  recorded at `c724b60a`, are the paragraph after the policy-deny recipe, which
+  now names the `cargo orthohelp` invocation rather than "the first command"
+  now that the recipe opens with `rm -f`, and the migration guide's §4, whose
+  blanket omission claim is replaced by the per-leaf statement beside it.
+  `make check-fmt` and `make markdownlint` covered the delta, CI run
+  43876420445 concluded `success`, and CodeRabbit approved `c724b60a` as review
+  5920822025.
+- [x] (2026-11-16) `main` then advanced to `eea7273f` (`d11a0797` added the
+  orthohelp check-and-gen design; `eea7273f` landed 6.3.2 skill-manifest
+  validation), and the PR became `CONFLICTING`. The 57-commit series was
+  replayed onto `eea7273f` with the reviewable boundary `b1ee6974..c724b60a`,
+  preserved as `refs/recovery/661-old-{base,head}` and
+  `refs/recovery/661-target`. Four replay steps conflicted and each resolution
+  kept both sides rather than choosing one: the design's §8.1 defaulting table
+  now carries this branch's realized `output.*` rows *and* main's 6.3.2
+  validator wording; the users' guide keeps main's skill-manifest section above
+  this branch's structured-output section; and the impact table keeps main's
+  "Skill manifest validation" row inside this branch's regrouped "Required if
+  called" ordering.
+- [x] (2026-11-16) The replay exposed the shared-fixture trap: `typecheck`
+      failed
+  with E0063 because main's new
+  `cargo-orthohelp/src/skill_validation/tests_surface.rs` builds an
+  `AgentCommand` literal that predates the `output` field. The merge was
+  textually clean, so only the compiler could find it. `cd01b44a` supplies
+  `output: None` there. Gates at `cd01b44a`: `make check-fmt` (109 files
+  unchanged), `make markdownlint` (0 issues, spelling clean), `make nixie`,
+  `make typecheck`, `make lint` (`cargo doc`, Clippy, Whitaker, docstring
+  coverage 1044/1044) and `make test BUILD_JOBS=--no-fail-fast` (117 binaries,
+  3070 passed, 0 failed, 44 ignored, then pytest 128 passed and 5 skipped). A
+  `range-diff` of the series reports four commits changed by hand and two by
+  the merge driver, and every other commit identical.
 
 ## Surprises & discoveries
 
