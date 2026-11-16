@@ -151,9 +151,12 @@ _Table 2: Accepted structured-output attribute keys and vocabulary._
 - Every member of a present block is omitted when undeclared, and
   `exit_classes` is omitted when empty. A present empty block serializes as
   `{}` and claims nothing.
-- An IR `null` for the block or any member reads as absence, as elsewhere in the
-  IR. A present `null` inside agent context is invalid; `null` for
-  `exit_classes` is rejected rather than read as an empty list.
+- An IR `null` for the block or for an optional member reads as absence, as
+  elsewhere in the IR. `exit_classes` is a list rather than an optional member,
+  so `null` there is a type error and absence is spelled by omitting the key. A
+  present `null` inside agent context is invalid for the block and for every
+  optional member, and `null` for `exit_classes` is rejected rather than read
+  as an empty list.
 - The agent-context stdout enum carries `#[serde(other)] Unknown` so a future
   token leaves the rest of the document readable. `Unknown` never counts as
   data-returning. The IR has no such variant: authoring and IR input reject an
