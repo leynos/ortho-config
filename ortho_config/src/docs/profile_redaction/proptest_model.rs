@@ -109,7 +109,7 @@ fn model_cli(cli: &CliMetadata, is_protected: bool) -> CliMetadata {
 /// Rebuilds a value type, clearing enum members only when protected.
 fn model_value(value: &ValueType, is_protected: bool) -> ValueType {
     match value {
-        ValueType::Enum { variants } if is_protected => ValueType::Enum {
+        ValueType::Enum { .. } if is_protected => ValueType::Enum {
             variants: Vec::new(),
         },
         ValueType::List { of } => ValueType::List {
