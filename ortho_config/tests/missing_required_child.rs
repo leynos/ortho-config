@@ -17,6 +17,7 @@ use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::time::Duration;
 
 /// The ignored probe test the parent invokes by exact name.
 const PROBE: &str = "consumer_probe";
@@ -26,6 +27,11 @@ const MODE_VAR: &str = "MRQ_CHILD_MODE";
 const CONFIG_PATH_VAR: &str = "MRQ_CHILD_CONFIG_PATH";
 /// Marks a successful load on standard output.
 const SUCCESS_MARKER: &str = "MRQ_CHILD_LOADED";
+/// Upper bound for one child run, including process-tree cleanup.
+///
+/// A probe that hangs would otherwise hold the test binary until the harness
+/// kills it, reporting a timeout far from the behaviour under test.
+const CHILD_DEADLINE: Duration = Duration::from_secs(120);
 
 /// A consumer configuration with two independent required values.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -105,7 +111,8 @@ fn run_probe(mode: &str, variables: &[(&OsStr, &OsStr)]) -> Result<Output> {
 ///
 /// `Command::env` scopes every variable to the child, so the test process
 /// environment is never mutated and the probe sees exactly what a consumer
-/// would see from the platform.
+/// would see from the platform. The run is deadline-bounded, so a probe that
+/// hangs fails here naming its own probe rather than stalling the whole binary.
 fn run_ignored(probe: &str, variables: &[(&OsStr, &OsStr)]) -> Result<Output> {
     let executable = std::env::current_exe().context("locate the test executable")?;
     let mut command = Command::new(executable);
@@ -121,7 +128,8 @@ fn run_ignored(probe: &str, variables: &[(&OsStr, &OsStr)]) -> Result<Output> {
     for (key, value) in variables {
         command.env(key, value);
     }
-    command.output().context("run the consumer probe")
+    let description = format!("consumer probe `{probe}`");
+    test_helpers::process::run_with_deadline(command, CHILD_DEADLINE, &description)
 }
 
 /// Decode both captured streams for assertions.
