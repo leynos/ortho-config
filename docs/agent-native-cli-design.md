@@ -756,6 +756,29 @@ cannot carry names or protected-field records. Protected-field records name the
 `(command_path, field_name)` identity, the optional file key path, and the
 label; duplicate identities are rejected.
 
+On the wire those records are an additive `profiles.redaction` array:
+
+```json
+"redaction": [
+  {
+    "command_path": ["app"],
+    "field_name": "token",
+    "key_path": "token",
+    "exposure": "secret"
+  }
+]
+```
+
+`key_path` is omitted when the field has no file key, and records are sorted by
+identity. The record carries no value-bearing slot, and the field keeps its
+public descriptor elsewhere in the context, so an agent can still name the
+setting it must not echo while remaining unable to read it. Suppression is
+structural: help text, custom type names, links, and notes are published
+verbatim, so the author remains responsible for what those strings say. The
+projection's semantics are proved over a model in `verus/profile_redaction.rs`;
+[ADR-0018](adrs/adr-0018-profile-field-redaction.md)
+records the contract and the residual testing boundary.
+
 ### 6.8 Delivery and feedback
 
 Two-way I/O has two separate contracts:

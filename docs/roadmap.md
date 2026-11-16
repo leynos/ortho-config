@@ -481,14 +481,33 @@ helpers, while downstream applications own domain behaviour.
     `ProfileLoadOutcome` reports the selected profile at runtime, keeping the
     static contract free of per-invocation state.
 
-- [ ] 9.1.2. Add profile redaction metadata.
+- [x] 9.1.2. Add profile redaction metadata.
   - Requires 9.1.1.
   - See agent-native-cli-design.md §6.7.
-  - [ ] Mark secret and reference-only profile fields.
-  - [ ] Redact sensitive profile values from context output and generated
-    documentation examples.
-  - [ ] Validate that profile names can be exposed without leaking profile
-    contents.
+  - See [ADR-0018](adrs/adr-0018-profile-field-redaction.md) for the accepted
+    contract: `profile_field = "secret"` or `"reference_only"`, one structural
+    projection owned by `ortho_config::docs`, and the
+    `profile-redaction-v1` cache salt.
+  - [x] Mark secret and reference-only profile fields. The derive parses and
+    emits both labels, rejects unknown labels, duplicate annotations, and
+    annotations on flattened containers, and keeps the label in the
+    documentation IR.
+  - [x] Redact sensitive profile values from context output and generated
+    documentation examples. `DocMetadata::redacted_for_output` removes
+    protected defaults, field examples, CLI `possible_values`, and nested enum
+    members, and suppresses command-level examples once any field in the tree
+    is protected; the derive, the `cargo-orthohelp` pipeline, the generated
+    bridge, and the agent-context boundary apply it, so IR, man pages, MAML,
+    agent context, and cached metadata carry no protected literal. Evidence:
+    unit and differential property tests, eight behavioural scenarios, golden
+    and sentinel suites over both locales, and the Verus model in
+    `verus/profile_redaction.rs`.
+  - [x] Validate that profile names can be exposed without leaking profile
+    contents. `ProfilesDeclaration` carries a names-only catalogue of validated,
+    sorted, deduplicated `ProfileName` values with no body data, and protected
+    fields appear only as `(command_path, field_name, key_path, exposure)`
+    records; a declaration that is not supported cannot carry names or
+    records.
 
 - [ ] 9.1.3. Decide whether OrthoConfig ships a profile store helper.
   - Requires 9.1.1.
