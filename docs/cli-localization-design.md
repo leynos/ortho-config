@@ -499,6 +499,20 @@ whether a conditional module is present, and a condition can hold, so refusing
 only the unconditional shape would let a decoy pass behind a condition that is
 true.
 
+Two further shapes hide the same way and are refused rather than followed. Rust
+substitutes the items a macro produces after parsing, so an item-level macro
+invocation can declare the exported inventory while a decoy beside it is the
+only declaration the parse shows; `include!` is the plausible form, because its
+payload is a file the source walk does not read. The gate establishes an
+expansion only for a macro the declaring file defines with `macro_rules!`,
+whose transcription and call arguments it scans for the inventory's name, and
+it refuses every other invocation, including imported macros and `include!`.
+`compile_error!` is allowed because it produces no item. Separately, a `mod`
+declaration whose file the walk cannot read is refused: the walk reads regular
+`.rs` files only, so that a symlink alias is not counted as a second
+declaration, which also means a declared module file that is a symlink leaves
+the compiler loading source the walk never parses.
+
 The count is the total declared variant count for that builder package, not
 only the raisable variants; classification as translated or `DisplayOnly`
 remains in `CLAP_ERROR_IDS`. The reviewed identity and its total are explicit

@@ -3,9 +3,14 @@
 Status: M3 complete — the matrix, the en-US strings, the runtime consultation,
 the pre-publication gate, the consumer and developer documentation, and the
 roadmap checkbox are all in place. The branch has been replayed onto
-`origin/main` after PR #664 merged, its local review findings are
-dispositioned, and the rebased candidate is awaiting its full gate certificate
-before publication (2026-11-15).
+`origin/main` after PR #664 merged and the review findings of `5912818894` are
+dispositioned. Candidate `a0ba5f1b` passed the full nine-gate certificate; its
+two documentation successors `6d421d5f` and `5ab1e7e9` are green in hosted CI
+and were certified for the Markdown gates alone, as Progress records. A
+whole-plan assessment of `5ab1e7e9` then returned "not yet complete" with two
+fail-closed gaps in the source walk, both repaired in the candidate this
+document now tracks; that repair awaits its own nine-gate certificate before
+the assessment reply (2026-11-16).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -734,6 +739,65 @@ stopping and reporting.
       - The seven review threads of `5912818894` each have a disposition reply
         on this head, and the ExecPlan records the repairs those replies name.
 
+- [x] (2026-11-16) The whole-plan assessment of `5ab1e7e9` returned "not yet
+      complete" and named two source shapes that still let the walk accept a
+      decoy count, plus this document's stale status line. All three are
+      repaired; the repair candidate is what the gate run below measures.
+      - **Item-level macros could declare the inventory after the parse.**
+        `syn` reads `include!("inventory.inc")` as one item and Rust splices
+        its contents afterwards, so a crate could compile a seventeen-variant
+        decoy beside an eighteen-variant included inventory. `audit` now
+        refuses every item-level invocation it cannot expand, and proves the
+        expansion only for a `macro_rules!` this file defines: the
+        transcription is walked for the identifier `ErrorKind` and for the
+        macro names it invokes, and the call's own arguments are scanned with
+        it. `compile_error!` stays allowed because it declares no item.
+      - **A declared module file staged as a symlink was skipped silently.**
+        The walk reads regular `.rs` files only, which is what keeps an alias
+        of the declaring module from being counted twice, but the same filter
+        let `mod error;` resolve to nothing at all. An empty candidate set is
+        now refused rather than accepted, so the compiler's file cannot be
+        one the gate never parsed.
+      - The new `module_tree/macro_generated_definition/` fixture compiles a
+        decoy and an included inventory; four cases in `classes` pin the
+        refusal and the two shapes that must still pass, and `controls` gains
+        the fixture case. The two staged symlink trees moved to a `symlinks`
+        module whose second test stages the reachable symlink, keeps the alias
+        control beside it, and requires the new refusal text.
+      - Focused evidence: `cargo test -p ortho_config --test
+        clap_error_coverage` reports 54 passed and 0 failed, and
+        `cargo clippy -p ortho_config --tests --all-features -- -D warnings`
+        is clean. Non-vacuity was proved twice: removing the macro refusal
+        fails the two invocation cases and the fixture case, and removing the
+        empty-set refusal fails the reachable-symlink control while the alias
+        control still passes. Both probes were reversed byte-identically.
+      - Documentation follows the behaviour: the developers' guide describes
+        the item-macro and module-file refusals and the new fixture, design
+        §6.1.1 records both shapes, and ADR-0023's negative-control paragraph
+        names the new controls.
+      - The nine commit gates pass in one sequential run on this repair
+        candidate, each started once and none retried.
+        - `make check-fmt` (106 files unchanged) and `make typecheck` (5 m 22 s
+          to a finished dev profile) passed first.
+        - `make lint` passed on a second attempt: rustdoc, Clippy, then
+          Whitaker, which refused a three-branch `if let` chain in
+          `local_macro_bodies` under `conditional_max_n_branches`. Extracting
+          `macro_rules_definition` and folding with `filter_map`/`extend`
+          cleared it; the rerun reached `interrogate` at 100.0% (1044/1044).
+        - `make docstring-coverage` (100.0%, run separately) and `make
+          boundary` (44 passed, 0 failed, 10 ignored in 190 s).
+        - `make test-workflow-contracts` (729 passed, 1 skipped) and `make
+          test` (118 `test result:` lines with no failure, then 128 passed and
+          5 skipped under pytest) passed.
+        - `make markdownlint` then failed on the spelling gate over one new
+          word in the developers' guide, which the -ize convention corrected,
+          and the rerun was clean with `typos.toml` unchanged; `make nixie`
+          validated every diagram.
+      - This entry is the only change made after that run. It is prose, and no
+        code gate reads this document, so the code gates transfer on content
+        identity while the Markdown gates were rerun on the committed
+        candidate.
+
 ## Surprises & discoveries
 
 The plan first incorporated merged PR #651 at
@@ -944,6 +1008,26 @@ contain. A branch that documents an unreleased change has to re-read the
 release block it is writing into at merge time, and treat a new tag as a reason
 to re-version even when `git merge` reports no conflict.
 
+A parse is a lower bound on a crate's items, not on its inventory. `syn` reads
+a macro invocation as one item and Rust substitutes the items it produces only
+after parsing, so `pub mod error { include!("inventory.inc"); }` compiles an
+inventory no file-level scan ever sees while a decoy beside it supplies the
+count. The same holds for an imported macro whose body lives in another crate.
+A fail-closed gate therefore has to treat "the parse saw no `ErrorKind` here"
+as unproven rather than as a fact.
+
+A refusal rule sound enough to close that gap can be strict enough to reject
+the package it guards. Refusing every item-level macro invocation refused the
+real `clap_builder` 4.6.7, which invokes a locally defined `test_find_words!`
+at item level inside its own `#[cfg(test)] mod tests`. The rule that both
+catches the decoy and admits the package is scoped to evidence: a
+`macro_rules!` transcription in an enclosing item list is visible, so it can be
+walked for the inventory's identifier and for the names it invokes, and every
+other invocation stays refused. Reading the resolved crate confirmed the shape
+the gate has to admit: no `include!` anywhere, one column-0 item macro,
+`#[cfg(not(feature = "std"))] compile_error!(..)`, and the assertions macro
+nested inside a function rather than at item level.
+
 ## Decision log
 
 - 2026-10-14: propose the design's build-script mechanism, with M0 as an
@@ -1008,6 +1092,22 @@ to re-version even when `git merge` reports no conflict.
   `docs/v0-12-0-migration-guide.md`. The published v0.11.0 guide is left as
   released apart from its own miscount, and ADR-0022 is left to main's
   coverage-root decision, renumbering this branch's gate to 0023.
+- 2026-11-16: refuse an item-level macro invocation whose expansion the gate
+  cannot read, rather than counting what the parse happens to show. The
+  provable subset is narrow on purpose: a `macro_rules!` transcription defined
+  in the same crate is walked for the inventory's identifier and for the macros
+  it invokes, its call's arguments are scanned with it, and `compile_error!` is
+  admitted because it declares no item. Everything else — every `include!` and
+  every imported macro — fails closed. Admitting a locally defined macro is
+  what keeps the resolved `clap_builder` certifiable, so the decision is
+  evidence-scoped rather than a blanket ban.
+- 2026-11-16: refuse a `mod` declaration whose default file names resolve to
+  nothing the walk reads. The walk's regular-file filter exists so a symlink
+  alias of the declaring module is not counted twice, and that same filter
+  silently dropped a declared module file staged as a symlink, leaving the
+  compiler to load source the gate never parsed. The empty candidate set now
+  fails closed, and the alias control stays beside the new control so the two
+  directions of the filter are pinned together.
 
 ## Outcomes & retrospective
 

@@ -12,9 +12,11 @@
 //! every shape the gate must refuse. Variant order, doc comments, explicit
 //! discriminants, and the three variant shapes must not change the count; an
 //! empty enum counts zero; a conditional variant, a nested declaration whether
-//! or not its module is conditional, a malformed source, a duplicate
-//! declaration, and a file with no declaration must each be refused for the
-//! reason recorded beside it.
+//! or not its module is conditional, an item-level macro invocation whose
+//! expansion the walk cannot read, a malformed source, a duplicate declaration,
+//! and a file with no declaration must each be refused for the reason recorded
+//! beside it. A `macro_rules!` definition and an inert `compile_error!` declare
+//! nothing at item level, so both are exercised as counted rather than refused.
 
 use anyhow::{Result, ensure};
 use camino::Utf8Path;
@@ -79,6 +81,22 @@ const ORIGIN: &str = "classes/error_kind.rs";
 #[case::nested_cfg_attr_declaration(
     "#[cfg_attr(all(), cfg(all()))]\npub mod error {\n    pub enum ErrorKind {\n        Alpha,\n    }\n}\n",
     Classification::Refused("inside `mod error`")
+)]
+#[case::macro_rules_definition(
+    "macro_rules! declare {\n    () => {\n        pub enum ErrorKind {\n            Alpha,\n        }\n    };\n}\n\npub enum ErrorKind {\n    Alpha,\n    Beta,\n}\n",
+    Classification::Counted(2)
+)]
+#[case::inert_item_macro(
+    "#[cfg(not(feature = \"std\"))]\ncompile_error!(\"std is required\");\n\npub enum ErrorKind {\n    Alpha,\n    Beta,\n}\n",
+    Classification::Counted(2)
+)]
+#[case::macro_invocation(
+    "macro_rules! declare {\n    () => {\n        pub enum ErrorKind {\n            Alpha,\n        }\n    };\n}\n\ndeclare!();\n",
+    Classification::Refused("its expansion can declare items this walk cannot read")
+)]
+#[case::include_in_inline_module(
+    "pub enum ErrorKind {\n    Alpha,\n}\n\npub mod error {\n    include!(\"inventory.inc\");\n}\n",
+    Classification::Refused("its expansion can declare items this walk cannot read")
 )]
 #[case::malformed_source(
     "pub enum ErrorKind {\n    Alpha,\n",

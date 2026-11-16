@@ -1801,24 +1801,37 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   functions, split by subject. `lock` parses `Cargo.lock` and selects entries,
   `identity` holds the reviewed identities and the metadata cross-checks,
   `library` selects the crate root Cargo reports, `source` locates and counts
-  `ErrorKind`, `audit` holds the attribute and declaration-shape refusals, and
-  `files` confines reads to capability handles. `controls`, `properties`, and
-  `classes` are their unit, property, and class-classification tests. `source`
-  walks `mod` declarations from that reported crate root and certifies the
-  declaring file only when every hop is unconditional: a `cfg`-gated module, an
-  equivalent condition reached through a nested `cfg_attr`, or a module file
-  that gates its own contents, makes the count describe a build the gate cannot
-  see, so it refuses instead. A `#[path]` declaration is refused for the same
-  reason: the walk resolves default file names, and the compiler may load a
-  different file. The root is the file metadata reports for the unique library
-  target, not `src/lib.rs`: a package may set `[lib] path` and keep an unused
-  `src/lib.rs` beside the file it really compiles. A package with no library
-  target, or with more than one, is refused rather than guessed at. A
-  declaration nested inside an inline module is refused too: the count is a
-  file-level scan, so it cannot bind a nested declaration to the inventory the
-  crate exports, and a compiled file-level decoy would otherwise let the count
-  describe the wrong enum. A condition on the module does not exempt it — the
-  compiler decides whether the module is present, and a condition can hold.
+  `ErrorKind`, `audit` holds the attribute, declaration-shape, and item-macro
+  refusals, `symlinks` stages the trees that prove which symlinks the walk may
+  ignore and which it must refuse, and `files` confines reads to capability
+  handles. `controls`, `properties`, and `classes` are their unit, property,
+  and class-classification tests. `source` walks `mod` declarations from that
+  reported crate root and certifies the declaring file only when every hop is
+  unconditional: a `cfg`-gated module, an equivalent condition reached through
+  a nested `cfg_attr`, or a module file that gates its own contents, makes the
+  count describe a build the gate cannot see, so it refuses instead. A
+  `#[path]` declaration is refused for the same reason: the walk resolves
+  default file names, and the compiler may load a different file. The root is
+  the file metadata reports for the unique library target, not `src/lib.rs`: a
+  package may set `[lib] path` and keep an unused `src/lib.rs` beside the file
+  it really compiles. A package with no library target, or with more than one,
+  is refused rather than guessed at. A declaration nested inside an inline
+  module is refused too: the count is a file-level scan, so it cannot bind a
+  nested declaration to the inventory the crate exports, and a compiled
+  file-level decoy would otherwise let the count describe the wrong enum. A
+  condition on the module does not exempt it — the compiler decides whether the
+  module is present, and a condition can hold. Two further shapes are refused
+  rather than counted around. An item-level macro invocation is refused unless
+  the gate can read its transcription: Rust substitutes the items a macro
+  produces after parsing, so `include!` could splice the exported inventory
+  from a file the walk never reads while a decoy beside it is counted. Only a
+  macro this file defines with `macro_rules!` has tokens the gate can scan, and
+  it accepts one when neither the transcription nor the call's arguments can
+  spell `ErrorKind`; `compile_error!` is allowed because it produces no item. A
+  `mod` declaration whose file the walk cannot read is refused as well: the
+  walk skips symlinks so an alias is not counted twice, which means a module
+  file that is a symlink leaves the compiler loading source the walk never
+  parses.
 - `ortho_config/tests/support/clap_reviewed.rs` holds
   `CLAP_ERROR_KIND_COUNT`, the reviewed total. The gate and
   `tests/clap_error_matrix.rs` both read it, so the two cannot drift: the
@@ -1836,6 +1849,13 @@ build script, writes no `rustc-env` value, and runs in no consumer build.
   through `#[cfg_attr(all(), cfg(all()))]`. Its `targets/` files are
   `cargo metadata` target lists, so crate-root selection and both of its
   refusals are proved against the shape metadata actually emits.
+  `module_tree/macro_generated_definition/` pairs a decoy with an inventory that
+  `include!` splices from a contained `inventory.inc`, which the Rust source
+  walk does not read. The symlink trees cannot be committed — a symlink
+  materializes as a text file on a Windows checkout — so `symlinks` stages them
+  in a temporary directory: one aliases the declaring module and must stay
+  uncounted, the other makes a declared module file a symlink and must be
+  refused.
 - `ortho_config/tests/fixtures/clap_matrix/drifted_rows.rs` holds the matrix
   drift fixtures. It is a committed module rather than loose data because the
   checks it exercises are typed over `ErrorKind` and `ClapErrorTranslation`;

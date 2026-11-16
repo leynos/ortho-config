@@ -238,6 +238,12 @@ fn unconditional_module_chain_is_counted() -> Result<()> {
 #[case::conditional_nested_definition("conditional_nested_definition", "inside `mod error`")]
 // A condition applied through a nested `cfg_attr` does not exempt it either.
 #[case::cfg_attr_nested_definition("cfg_attr_nested_definition", "inside `mod error`")]
+// `include!` splices a contained file the walk never reads, so the merged
+// inventory is invisible and the decoy beside it must not be counted.
+#[case::macro_generated_definition(
+    "macro_generated_definition",
+    "its expansion can declare items this walk cannot read"
+)]
 // A tree without a reported crate root is refused rather than guessed at.
 #[case::no_crate_root("no_crate_root", "expected a crate root lib.rs")]
 fn module_tree_is_refused(#[case] fixture: &str, #[case] expected: &str) -> Result<()> {
@@ -317,55 +323,3 @@ fn count_follows_the_reported_library_root() -> Result<()> {
     );
     Ok(())
 }
-
-/// A symlink alias is not read as a second declaration.
-///
-/// The inventory covers every regular `.rs` file under the crate root. A
-/// symlink named `alias.rs` pointing at `error.rs` is not one of them: reading
-/// it would report the same `ErrorKind` twice and refuse a package that is
-/// perfectly valid. The tree is staged at test time because a committed
-/// symlink does not survive a Windows checkout, where it materialises as a
-/// text file naming its target.
-#[cfg(unix)]
-#[test]
-fn symlink_alias_is_counted_once() -> Result<()> {
-    use cap_std::ambient_authority;
-    use cap_std::fs_utf8::Dir;
-    use tempfile::TempDir;
-
-    let directory = TempDir::new().context("create a directory for the alias tree")?;
-    let root = Utf8Path::from_path(directory.path())
-        .context("the temporary directory should be valid UTF-8")?;
-    let tree = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open {root} to stage the alias"))?;
-    tree.write("lib.rs", "mod error;\n")
-        .context("write the crate root")?;
-    tree.write("error.rs", ALIASED_ERROR_KIND)
-        .context("write the declaring module")?;
-    tree.symlink("error.rs", "alias.rs")
-        .context("alias the declaring module")?;
-
-    let count = count_error_kinds_under(root)?;
-    ensure!(
-        count == 3,
-        "the alias must not be counted as a second declaration, found {count}",
-    );
-    Ok(())
-}
-
-/// The declaring module [`symlink_alias_is_counted_once`] aliases.
-#[cfg(unix)]
-const ALIASED_ERROR_KIND: &str = concat!(
-    "//! The declaring module of a synthetic crate.\n",
-    "\n",
-    "/// Kinds of error produced while parsing command-line arguments.\n",
-    "#[non_exhaustive]\n",
-    "pub enum ErrorKind {\n",
-    "    /// A value was supplied that failed validation.\n",
-    "    InvalidValue,\n",
-    "    /// An argument was supplied that the command does not define.\n",
-    "    UnknownArgument,\n",
-    "    /// A subcommand was supplied that the command does not define.\n",
-    "    InvalidSubcommand,\n",
-    "}\n",
-);
