@@ -9,8 +9,8 @@ two documentation successors `6d421d5f` and `5ab1e7e9` are green in hosted CI
 and were certified for the Markdown gates alone, as Progress records. A
 whole-plan assessment of `5ab1e7e9` then returned "not yet complete" with two
 fail-closed gaps in the source walk, both repaired in the candidate this
-document now tracks; that repair awaits its own nine-gate certificate before
-the assessment reply (2026-11-16).
+document now tracks. That repair passed its nine-gate certificate and a hosted
+run that includes CodeScene, and it awaits the assessment reply (2026-11-16).
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -797,6 +797,29 @@ stopping and reporting.
         code gate reads this document, so the code gates transfer on content
         identity while the Markdown gates were rerun on the committed
         candidate.
+
+- [x] (2026-11-16) Hosted checks on the repair head `18c53fdd` were green
+      except CodeScene, whose single finding was this branch's own. Run
+      `43813202184` passed all eight CI jobs, and the dispatch run
+      `43815862535` exercised `Publish dry run` green on both legs. CodeScene's
+      PR check failed `audit.rs` with Bumpy Road Ahead and Complex Method on
+      `invoked_macro_names`.
+      - That function walked the rendered tokens with a peekable character
+        iterator and a nested loop to find an identifier followed by `!`.
+        Splitting on `!` and keeping the last whitespace-delimited word before
+        each separator answers the same question without the nesting, and a
+        bare identifier is the only word a macro name can be.
+      - `cargo test -p ortho_config --test clap_error_coverage` still reports
+        54 passed, and a local `cs review` of the file scores 10.0 where the
+        PR check had failed it. The nine gates were rerun in full on the
+        repaired content: formatting, typecheck, lint (rustdoc, Clippy,
+        Whitaker, `interrogate` 100.0%), docstring coverage, `boundary` (44
+        passed, 0 failed, 10 ignored), the workflow contracts (729 passed, 1
+        skipped), `make test` (118 `test result:` lines, then 128 pytest
+        passed and 5 skipped), `markdownlint` and `nixie`.
+      - Hosted run `43823049487` on the repaired head is fully green,
+        CodeScene included. This entry is again the only change after that
+        run, so the same transfer applies.
 
 ## Surprises & discoveries
 
