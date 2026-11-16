@@ -736,6 +736,23 @@ operator. Never modify the installation or `dylint.toml` to buy a green gate.
     suite except the load-sensitive boundary target, whose saturation
     attribution is recorded below. Whitaker remains escalated, not repaired.
 - [ ] M2: proofs and external workflow evidence.
+  - [x] (2026-11-16) Model and prove V1/V2 in `verus/profile_redaction.rs` and
+    its three modules, split to stay under the 400-line cap:
+    `profile_redaction_model` (types, projection, value lemmas),
+    `profile_redaction_integrity` (V2), and
+    `profile_redaction_noninterference` (V1). `make verus` reports
+    `27 verified, 0 errors`.
+  - [x] (2026-11-16) Register the proof in `VERUS_PROOF_FILES`, so a bare
+    `make verus` verifies the production inventory.
+  - [x] (2026-11-16) Record negative controls: a retained protected default, a
+    retained nested enum member, and a skipped child each fail the corresponding
+    Verus obligation. The modules were then restored byte-for-byte (checked with
+    `sha256sum -c`) and rerun green.
+  - [ ] Recreate the production-proof CI lane and its workflow contract test.
+  - [ ] Add the `profile_redaction.feature` behavioural contract and its
+    unhappy paths.
+  - [ ] Extend the golden, renderer, and end-to-end sentinel suites, including
+    cache-hit and pre-change-cache cases.
 - [ ] M3: documentation, final gates, and roadmap completion.
 
 ## Surprises & discoveries
@@ -757,6 +774,19 @@ M1 discoveries, 2026-11-15:
 - `cargo-orthohelp/src/schema/` was a hand-maintained mirror of the IR types,
   as ADR-0016 recorded. Consolidating it into re-exports was required to give
   the projection one type identity; the mirror's drift risk disappears.
+
+M2 discoveries, 2026-11-16:
+
+- Verus 0.2026.01.30.44ebdee cannot verify structural recursion through a
+  sequence of child nodes. A recursive call inside a `Seq::new` closure never
+  discharges its termination check, a mutual pair of spec functions is rejected
+  with an ill-typed AIR panic, and an explicit `decreases` measure computed
+  from a child sequence crashes the verifier the same way. The model therefore
+  encodes the command tree as a preorder sequence whose `parent` index carries
+  the edge, and `is_tree_like` asserts a single root plus every parent strictly
+  earlier than its child. Depth stays unbounded and the parent index is what
+  the topology obligation quantifies over; the recursive traversal this
+  replaces remains covered by the differential property tests.
 - The first focused run of the new property suite exposed three existing unit
   tests: two encoded wrong expectations (changing `ValueType::String` to
   `ValueType::Enum` is a public shape change, not a protected-slot change; an
@@ -880,6 +910,15 @@ cannot be mapped to them; authors mark the leaves instead.
 deleted `prover-tools.yml`. Reuse the pinned Verus invocation and command
 contracts from ADR-0017 rather than inventing new tooling.
 
+2026-11-16, decided for M2: encode the command tree as a preorder sequence with
+a parent index instead of nested children. Verus rejects structural recursion
+through a sequence of nodes, so the nested encoding cannot be proved there at
+all, and the plan allowed the lemma boundaries to be revised while verification
+conditions were discovered. The encoding is total for topology and for slot
+reachability, so V1 and V2 keep their full strength; only the traversal shape
+is modelled differently, and the correspondence to the production recursion
+stays with the differential tests recorded in ADR-0018.
+
 ## Outcomes & retrospective
 
 M1 implemented on 2026-11-15 under the user's execution approval. No formal
@@ -887,6 +926,13 @@ proof, external workflow evidence, or roadmap completion is claimed. The expert
 review corrected a counterexample in the draft proof relation and removed an
 unsupported flattened-descendant assumption. The plan-only formatting,
 format-check, Markdown/spelling, and Mermaid gates passed on 2026-10-14.
+
+M2 proof status, 2026-11-16: V1 and V2 are discharged. The proof is split into
+a crate root plus three modules under the 400-line cap and verifies 27
+obligations with no `assume`, `admit`, or trusted proof body. Three seeded
+model faults each break a named obligation, so the obligations are not vacuous.
+The external workflow lane, the behavioural contract, and the sentinel suites
+remain outstanding, so M2 is not complete.
 
 M1 retrospectively: the largest surprises were the deleted proof lane and the
 hand-maintained schema mirror, both addressed above. The differential model and
