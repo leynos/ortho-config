@@ -22,20 +22,20 @@ omitted when undeclared.
 
 ## Impact at a glance
 
-| Priority             | Area                       | What to do                                                                           |
-| -------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
-| **Required**         | Dependency versions        | Update every OrthoConfig crate requirement to v0.11.0 together.                      |
-| **Required if used** | Documentation-IR literals  | Name `renderer: None` and `output: None`, or the declared records, in `DocMetadata`. |
-| **Required if used** | `AgentCommand` literals    | Supply `renderer: RendererContract::default()` and `output: None`.                   |
-| **Optional**         | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.                 |
-| **Optional**         | Output declarations        | Add `output(supports_json = true, stdout = "data", ...)` to a command that needs it. |
-| **Optional**         | Agent-native policy checks | Read the projected `renderer` and `output` blocks from agent context.                |
-| **Optional**         | Skill manifest validation  | Supply an explicit effective command surface to the validator.                       |
-| **Optional**         | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.             |
-| **Optional**         | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
-| **Required if used** | Figment Jail test helpers  | Replace `figment::with_jail` and `figment_error` with injected sources.              |
-| **Optional**         | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.                 |
-| **Optional**         | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.             |
+| Priority               | Area                       | What to do                                                                           |
+| ---------------------- | -------------------------- | ------------------------------------------------------------------------------------ |
+| **Required**           | Dependency versions        | Update every OrthoConfig crate requirement to v0.11.0 together.                      |
+| **Required if called** | Documentation-IR literals  | Name `renderer: None` and `output: None`, or the declared records, in `DocMetadata`. |
+| **Required if called** | `AgentCommand` literals    | Supply `renderer: RendererContract::default()` and `output: None`.                   |
+| **Required if called** | Figment Jail test helpers  | Replace `figment::with_jail` and `figment_error` with injected sources.              |
+| **Optional**           | Renderer declarations      | Add `renderer(human(...), machine(...))` to a command that needs it.                 |
+| **Optional**           | Output declarations        | Add `output(supports_json = true, stdout = "data", ...)` to a command that needs it. |
+| **Optional**           | Agent-native policy checks | Read the projected `renderer` and `output` blocks from agent context.                |
+| **Optional**           | Skill manifest validation  | Supply an explicit effective command surface to the validator.                       |
+| **Optional**           | Bridge-cache metrics       | Enable the `metrics` feature; the CLI exports the counters as `tracing`.             |
+| **Optional**           | Test subprocesses          | Depend on `ortho_config_test_helpers` and call `run_with_deadline`.                  |
+| **Optional**           | Process-mutating helpers   | Replace `env::set_var`, `env::lock`, `cwd::set_dir` with a `MapEnv`.                 |
+| **Optional**           | Injected environment       | Load with `load_from_iter_with_env` and pin the directory on a `MapEnv`.             |
 
 _Table 1: Application-facing work when moving from v0.10.0 to v0.11.0._
 
@@ -138,7 +138,10 @@ instead of a default.
 ## 4. The wire contract is unchanged
 
 Both fields are `#[serde(default)]` on the authoring IR and the agent-context
-wire, and both are omitted when absent. As a result:
+wire, and each layer omits what the author did not declare. `output` is omitted
+when absent on both layers. `renderer` is omitted from `DocMetadata` when
+absent, but `AgentCommand::renderer` is a plain `RendererContract` that is
+always serialized, carrying its documented legacy defaults. As a result:
 
 - JSON produced by v0.10.0 still decodes, and the `renderer` and `output` keys
   are simply absent;
