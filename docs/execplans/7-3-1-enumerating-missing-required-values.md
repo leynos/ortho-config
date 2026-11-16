@@ -548,6 +548,28 @@ with a compatibility probe rather than an assumption.
   `clippy::nonminimal_bool` in the new case table, and rounds 2 and 3 caught
   the two module sizes in turn.
 
+- [x] (2026-11-16) Closed the last two review cases in `c2780bc8` and checked
+  the feature-gated build one finding cited. The escaping test now pins the
+  carriage return its implementation already handled, and the environment-route
+  cases assert that the configuration-file route survives a prefix no variable
+  name can carry; a helper returns the whole route list so both promises are
+  checked per case rather than inferred from the absence of the environment
+  route. All six gates passed again on `c2780bc8`: 2827 passed and 0 failed
+  over 117 binaries, pytest 128 passed with 5 skipped, and each gate's exit
+  status was captured in a `.out.status` file because a backgrounded `make`
+  cannot report it through the log alone.
+
+  The no-`toml` library unit-test build the review cited still fails, but not
+  at the module it named. Running the review's own command
+  (`cargo test -p
+  ortho_config --lib --no-default-features --features serde_json --no-run`)
+  reports two unresolved `toml::` references at
+  `ortho_config/src/file/parser.rs:70`; that file is byte-identical to the base
+  commit `b1ee6974`, so the defect predates this branch and stays out of its
+  diff. The two helpers the finding named already carry
+  `#[cfg(feature = "toml")]` as of `c37c8807`, which answers the finding; the
+  remaining failure belongs to the feature-matrix gap tracked by #468.
+
 ## Surprises & discoveries
 
 The full local suite aborted once at round c7 on
