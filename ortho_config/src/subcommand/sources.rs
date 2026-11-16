@@ -144,6 +144,11 @@ where
 /// the projection would silently report `None` for an `Option<f64>` the user
 /// really set. The final extraction therefore reads the original figment, as
 /// the raw helpers do.
+///
+/// Every layer this loader reads is already JSON-bounded: CLI values pass
+/// through [`sanitized_provider`], TOML integers are `i64`s, and the
+/// environment provider yields only `bool`, `usize`/`isize`, float, string,
+/// array, and table values, so no route can carry a `u128` above `u64::MAX`.
 pub(super) fn finish_with_required_values<T>(fig: &Figment, prefix: &Prefix) -> OrthoResult<T>
 where
     T: DeserializeOwned + CommandFactory + RequiredConfigSchema,

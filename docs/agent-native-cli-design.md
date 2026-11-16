@@ -637,9 +637,12 @@ Roadmap item 7.3.1 realized the missing-required-values design. A load that
 reaches the merged value with required keys absent now returns
 `OrthoError::MissingRequiredValues`, whose payload enumerates every absent key
 in declaration order and lists the command-line flags, environment variables,
-and file keys the real loader accepts for each one. Invalid values remain
-deserialization errors, and the library itself never exits, so a caller decides
-how to present and act on the diagnostic.
+and file keys the real loader accepts for each one. The guarantee covers
+declared fields whose requiredness the derive can decide from attribute
+metadata; a required leaf inside an unmarked `#[serde(flatten)]` payload, a
+custom `Deserialize`, or an enum payload still fails through Serde's own error.
+Invalid values remain deserialization errors, and the library itself never
+exits, so a caller decides how to present and act on the diagnostic.
 
 ### 6.4 Mutation boundaries and retries
 

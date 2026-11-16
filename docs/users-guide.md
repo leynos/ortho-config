@@ -1131,6 +1131,10 @@ loader of the type that declares it: a nested type's default is materialized by
 that type's own loader, which a parent composing it never runs, so the parent
 reports the key and expects the caller to supply it.
 
+Serde-skipped fields (`#[serde(skip)]` and `#[serde(skip_deserializing)]`) are
+outside this rule. The loader never reads them, so their absence is never
+reported, whatever their type.
+
 When required values are absent, the loader returns
 `OrthoError::MissingRequiredValues` with every missing value in declaration
 order, rather than reporting only the first one that Serde notices:

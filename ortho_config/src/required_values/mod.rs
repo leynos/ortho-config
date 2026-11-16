@@ -39,7 +39,7 @@
 //!
 //! let schema = Service::collect_required_schema(&mut RequiredSchemaStack::new())
 //!     .expect("schema composition cannot cycle for a leaf field");
-//! assert_eq!(schema.len(), 1);
+//! assert_eq!(schema.len(), 1, "one declared field yields one schema entry");
 //! ```
 
 mod collect;
@@ -105,8 +105,14 @@ const SCHEMA_ERROR_KEY: &str = "required_values_schema";
 /// let absent = json!({});
 /// let error = ensure_no_missing_required_values::<Endpoint>(&absent, "demo")
 ///     .expect_err("an empty object cannot satisfy a required field");
-/// assert!(error.to_string().contains("Missing required configuration"));
-/// assert!(ensure_no_missing_required_values::<Endpoint>(&json!({"url": "x"}), "demo").is_ok());
+/// assert!(
+///     error.to_string().contains("Missing required configuration"),
+///     "the report must name the problem it detected"
+/// );
+/// assert!(
+///     ensure_no_missing_required_values::<Endpoint>(&json!({"url": "x"}), "demo").is_ok(),
+///     "a supplied required value must pass"
+/// );
 /// ```
 pub fn ensure_no_missing_required_values<T: RequiredConfigSchema>(
     value: &Value,
@@ -173,8 +179,16 @@ fn schema_failure(error: &RequiredSchemaError) -> Arc<OrthoError> {
 /// use ortho_config::program_label_from_args;
 ///
 /// let args = vec![OsString::from("/usr/local/bin/demo")];
-/// assert_eq!(program_label_from_args(&args).as_deref(), Some("demo"));
-/// assert_eq!(program_label_from_args(&[]), None);
+/// assert_eq!(
+///     program_label_from_args(&args).as_deref(),
+///     Some("demo"),
+///     "the file name of argv[0] is the label a user typed"
+/// );
+/// assert_eq!(
+///     program_label_from_args(&[]),
+///     None,
+///     "no first argument means no label"
+/// );
 /// ```
 #[must_use]
 pub fn program_label_from_args(args: &[std::ffi::OsString]) -> Option<String> {

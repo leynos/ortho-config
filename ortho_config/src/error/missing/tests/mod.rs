@@ -2,6 +2,9 @@
 
 use super::{ConfigPath, MissingRequiredValue, MissingRequiredValues, SupplyRoute};
 
+/// Path-rendering cases, split out to keep this file within the line budget.
+mod path_rendering;
+
 /// Build a leaf report entry with the given routes.
 fn leaf(path: &[&str], routes: Vec<SupplyRoute>) -> MissingRequiredValue {
     MissingRequiredValue::new(ConfigPath::new(path.iter().copied()), routes, false)
@@ -142,7 +145,11 @@ fn display_groups_routes_by_supply_method() {
         "     [database]\n",
         "     host = \"<value>\"\n",
     );
-    assert_eq!(demo_report().to_string(), expected);
+    assert_eq!(
+        demo_report().to_string(),
+        expected,
+        "the report must group routes by supply method in precedence order"
+    );
 }
 
 #[cfg(feature = "toml")]
@@ -292,12 +299,20 @@ fn display_reports_an_absent_object_without_a_cli_route() {
         "  2. Configuration File:\n",
         "     [database]\n",
     );
-    assert_eq!(report.to_string(), expected);
+    assert_eq!(
+        report.to_string(),
+        expected,
+        "an object-shaped requirement must render as a file table with no CLI flag"
+    );
 }
 
 #[test]
 fn an_empty_report_is_not_constructible() {
-    assert_eq!(MissingRequiredValues::try_new(None, Vec::new()), None);
+    assert_eq!(
+        MissingRequiredValues::try_new(None, Vec::new()),
+        None,
+        "a report with no entries must not be constructible"
+    );
 }
 
 #[test]
@@ -313,71 +328,13 @@ fn a_boolean_flag_renders_without_a_value_placeholder() {
         )],
     )
     .expect("one entry forms a non-empty report");
-    assert!(report.to_string().contains("     --verbose\n"));
-    assert!(!report.to_string().contains("--verbose <value>"));
-}
-
-#[test]
-fn dotted_segments_are_quoted_to_keep_paths_unambiguous() {
-    let path = ConfigPath::new(["a.b", "c"]);
-    assert_eq!(path.render(), "\"a.b\".c");
-    assert_eq!(ConfigPath::new(["a", "b"]).render(), "a.b");
-    assert_eq!(ConfigPath::new(["with space"]).render(), "\"with space\"");
-    assert_eq!(ConfigPath::new(Vec::<String>::new()).render(), "");
-}
-
-#[test]
-fn keys_outside_the_bare_alphabet_are_quoted_and_escaped() {
-    assert_eq!(
-        ConfigPath::new(["Host=Name"]).render(),
-        "\"Host=Name\"",
-        "`=` is outside TOML's bare-key alphabet, so the key needs quotes"
+    assert!(
+        report.to_string().contains("     --verbose\n"),
+        "a boolean flag must render on its own line without a placeholder"
     );
-    assert_eq!(
-        ConfigPath::new(["say \"hi\""]).render(),
-        "\"say \\\"hi\\\"\"",
-        "a quote inside a quoted key must be escaped"
-    );
-    assert_eq!(
-        ConfigPath::new(["a_b-c9"]).render(),
-        "a_b-c9",
-        "the bare alphabet must stay unquoted"
-    );
-}
-
-/// Control characters inside a quoted key are escaped, never emitted raw.
-///
-/// The rendered report and the suggested file section spell keys through one
-/// routine, so a key that reaches a terminal, a log, or a TOML document must
-/// not carry a raw newline or NUL through either. The named escapes are the
-/// ones TOML defines; every other control character, including DEL, uses the
-/// `\u` form.
-#[test]
-fn control_characters_in_a_quoted_key_are_escaped() {
-    assert_eq!(
-        ConfigPath::new(["line\nbreak"]).render(),
-        "\"line\\nbreak\"",
-        "a newline must be escaped rather than breaking the rendered line"
-    );
-    assert_eq!(
-        ConfigPath::new(["tab\there"]).render(),
-        "\"tab\\there\"",
-        "a tab must use TOML's short escape"
-    );
-    assert_eq!(
-        ConfigPath::new(["carriage\rreturn"]).render(),
-        "\"carriage\\rreturn\"",
-        "a carriage return must be escaped rather than returning the cursor"
-    );
-    assert_eq!(
-        ConfigPath::new(["nul\0byte"]).render(),
-        "\"nul\\u0000byte\"",
-        "a NUL must be escaped rather than truncating the rendered text"
-    );
-    assert_eq!(
-        ConfigPath::new(["del\u{7f}"]).render(),
-        "\"del\\u007F\"",
-        "DEL is a control character, so a quoted key escapes it too"
+    assert!(
+        !report.to_string().contains("--verbose <value>"),
+        "a boolean flag takes no value, so it must not gain a placeholder"
     );
 }
 
@@ -387,8 +344,19 @@ fn parts_round_trip_through_into_parts() {
     let missing = vec![leaf(&["url"], Vec::new())];
     let report = MissingRequiredValues::try_new(program.clone(), missing.clone())
         .expect("one entry forms a non-empty report");
-    assert_eq!(report.program(), Some("demo"));
-    assert_eq!(report.len(), 1);
-    assert!(!report.is_empty());
-    assert_eq!(report.into_parts(), (program, missing));
+    assert_eq!(
+        report.program(),
+        Some("demo"),
+        "the program label must survive report construction"
+    );
+    assert_eq!(report.len(), 1, "one entry must count as one requirement");
+    assert!(
+        !report.is_empty(),
+        "a report holding one entry is not empty"
+    );
+    assert_eq!(
+        report.into_parts(),
+        (program, missing),
+        "disassembly must return exactly the parts the report was built from"
+    );
 }

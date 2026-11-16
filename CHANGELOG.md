@@ -118,10 +118,15 @@ All notable changes to this project will be documented in this file.
   keys, `skip_cli` fields, and nested leaves advertise only the routes that can
   actually populate them, and an object-shaped requirement is rendered as a
   file table. The payload carries key paths and routes, never configuration
-  values, so rendering it cannot leak a secret. Child types opt into nested
-  composition with `#[ortho_config(nested)]` plus `skip_cli`, or derive
-  `RequiredConfigSchema` directly. A selected subcommand is covered as well,
-  and its report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
+  values, so rendering it cannot leak a secret. Enumeration covers declared
+  fields whose requiredness is decidable from attribute metadata; a required
+  leaf inside an unmarked `#[serde(flatten)]` payload, a custom `Deserialize`,
+  or an enum payload still fails through Serde's own error. Child types take
+  part in nested composition through two complementary steps: derive
+  `RequiredConfigSchema` on the child, and mark the parent field
+  `#[ortho_config(nested)]`, adding `skip_cli` when the parent should not
+  expose the child's flags. A selected subcommand is covered as well, and its
+  report names that command's `PREFIX_CMDS_<NAME>_<FIELD>` variables and
   `[cmds.<name>]` file paths, so the advertised spellings are the ones the
   loader really reads; only the selected variant contributes requirements. The
   library never exits; callers decide how to present the report. See

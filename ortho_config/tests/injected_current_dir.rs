@@ -115,6 +115,25 @@ fn assert_reports_the_absent_reference<T>(result: ortho_config::OrthoResult<T>) 
         "the report must offer {STRICT_REFERENCE_VAR}, got {:?}",
         item.routes()
     );
+    ensure!(
+        !item
+            .routes()
+            .iter()
+            .any(|route| matches!(route, ortho_config::SupplyRoute::CommandLine { .. })),
+        "a skip_cli field must not advertise a command-line route, got {:?}",
+        item.routes()
+    );
+    ensure!(
+        item.routes().iter().any(|route| matches!(
+            route,
+            ortho_config::SupplyRoute::ConfigurationFile {
+                expects_object: false,
+                ..
+            }
+        )),
+        "the report must offer a scalar configuration-file route, got {:?}",
+        item.routes()
+    );
     Ok(())
 }
 

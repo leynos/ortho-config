@@ -59,6 +59,10 @@ mod merge;
 mod merge_telemetry;
 mod post_merge;
 pub mod profile;
+// The schema model and collector are expressed over `serde_json::Value`, which
+// is the projection every loader already merges through, so the module has no
+// meaning when that optional dependency is absent.
+#[cfg(feature = "serde_json")]
 mod required_values;
 mod result_ext;
 pub mod subcommand;
@@ -174,6 +178,8 @@ pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_wit
 pub use ortho_l10n::{LanguageIdentifier, langid};
 pub use post_merge::{PostMergeContext, PostMergeHook};
 pub use profile::{ProfileLoadOutcome, ProfileName, ProfileSource, SelectedProfile};
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use required_values::{
     Activation, CliFlagHint, RequiredConfigSchema, RequiredSchemaError, RequiredSchemaStack,
     RouteHints, SchemaChildren, SchemaField, ensure_no_missing_required_values,
